@@ -48,12 +48,13 @@ def write_tree(root: Path, files: dict[str, str]) -> None:
         path.write_text(text, encoding="utf-8")
 
 
-def ledger(rows: dict[str, tuple[str, str]]) -> str:
-    """rows: id -> (status, extra toml lines)."""
-    return "".join(
-        f'[[bug]]\nid = "{row_id}"\ntitle = "t"\narea = "gameplay"\nseverity = "major"\n'
-        f'status = "{status}"\nsource = "s"\nrepro = "cargo"\nregression = []\n{extra}\n'
-        for row_id, (status, extra) in rows.items())
+def ledger(rows: dict[str, tuple[str, str]]) -> dict[str, str]:
+    """rows: id -> (status, extra toml lines), as one `docs/bugs/rows/<ID>.toml` per row."""
+    return {
+        f"docs/bugs/rows/{row_id}.toml": (
+            f'[[bug]]\nid = "{row_id}"\ntitle = "t"\narea = "gameplay"\nseverity = "major"\n'
+            f'status = "{status}"\nsource = "s"\nrepro = "cargo"\nregression = []\n{extra}\n')
+        for row_id, (status, extra) in rows.items()}
 
 
 class RustTests(unittest.TestCase):
@@ -207,10 +208,12 @@ class ChangedGateTests(unittest.TestCase):
 
 class LedgerTests(unittest.TestCase):
     def ledger_plan(self, before: dict, after: dict) -> dict:
-        with git_tree({"docs/bugs/ledger.toml": ledger(before)}) as tmp:
+        files = ledger(before)
+        with git_tree(files) as tmp:
             root = Path(tmp)
-            write_tree(root, {"docs/bugs/ledger.toml": ledger(after)})
-            return build(["docs/bugs/ledger.toml"], root)
+            changed = ledger(after)
+            write_tree(root, changed)
+            return build(sorted(changed), root)
 
     def test_edit_without_status_change_runs_regressions_only(self):
         result = self.ledger_plan({"A-ONE": ("open", "")}, {"A-ONE": ("open", "")})
@@ -239,11 +242,26 @@ class LedgerTests(unittest.TestCase):
     def test_client_row_promotion_adds_the_client_regressions(self):
         extra = 'fix_commit = "abc"\npromotion = "p"\n'
         before = ledger({"A-ONE": ("open", "")})
-        after = ledger({"A-ONE": ("fixed", extra)}).replace('repro = "cargo"', 'repro = "client"')
-        with git_tree({"docs/bugs/ledger.toml": before}) as tmp:
+        after = {path: text.replace('repro = "cargo"', 'repro = "client"')
+                 for path, text in ledger({"A-ONE": ("fixed", extra)}).items()}
+        with git_tree(before) as tmp:
             root = Path(tmp)
-            write_tree(root, {"docs/bugs/ledger.toml": after})
-            self.assertIn(f"{PY} regressions-client", gates(build(["docs/bugs/ledger.toml"], root)))
+            write_tree(root, after)
+            self.assertIn(f"{PY} regressions-client", gates(build(sorted(after), root)))
+
+    def test_the_one_time_split_is_a_gate_not_a_promotion_batch(self):
+        # The single-file ledger leaves and every row file arrives in one change: no row status moved.
+        single = ''.join(f'[[bug]]\nid = "{row_id}"\ntitle = "t"\narea = "gameplay"\nseverity = "major"\n'
+                         f'status = "fixed"\nsource = "s"\nrepro = "cargo"\nregression = []\n'
+                         f'promotion = "docs/bugs/promotions/{row_id}.json"\n'
+                         for row_id in ("A-ONE", "A-TWO"))
+        rows = ledger({"A-ONE": ("fixed", 'promotion = "p"\n'), "A-TWO": ("fixed", 'promotion = "p"\n')})
+        with git_tree({"docs/bugs/ledger.toml": single}) as tmp:
+            root = Path(tmp)
+            (root / "docs/bugs/ledger.toml").unlink()
+            write_tree(root, rows)
+            found = gates(build(sorted(rows) + ["docs/bugs/ledger.toml"], root))
+        self.assertEqual(list(found), [f"{PY} regressions"])
 
 
 class InnovationTests(unittest.TestCase):

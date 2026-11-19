@@ -420,6 +420,7 @@ fn tagged_ids(state: &TickState) -> Vec<EntityId> {
 
 fn reset(state: &mut TickState, changes: &mut ChangeSet) -> usize {
     let ids = tagged_ids(state);
+    crate::battle::halt_exposure(state);
     for id in &ids {
         if let Some(slot) = state.entities.slot_of_any(*id) {
             state.remove_entity(slot);

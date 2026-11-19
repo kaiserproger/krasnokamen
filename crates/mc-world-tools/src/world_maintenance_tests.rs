@@ -71,6 +71,73 @@ fn prune_forgets_far_pregenerated_chunks_and_they_regenerate_on_demand() {
     std::fs::remove_dir_all(dir).ok();
 }
 
+fn published_checkpoint_tick(config: &CoreConfig) -> u64 {
+    let store = mc_world::native::NativeReadOnlyStore::open_with_cache(
+        &config.world_dir.join("native/state.redb"),
+        mc_core::native_checkpoint::native_identity(config),
+        16 * 1024 * 1024,
+    )
+    .expect("read-only store");
+    let reader = store.checkpoint_reader().expect("reader");
+    mc_core::native_checkpoint::published_manifest(config, &reader)
+        .expect("manifest")
+        .tick
+}
+
+/// Publish a journal batch above the checkpoint, as a stop whose final
+/// checkpoint failed leaves one.
+fn append_block_tail(config: &CoreConfig) {
+    let durable = published_checkpoint_tick(config);
+    let mut journal = mc_core::journal::JournalWriter::open(&config.world_dir, 1).expect("journal");
+    journal
+        .append(
+            durable + 1,
+            durable + 1,
+            &[mc_core::journal::JournalEntry::Block {
+                pos: [0, 64, 0],
+                state: 1,
+            }],
+        )
+        .expect("publish the tail");
+}
+
+/// A store whose published WAL tail the checkpoint does not cover is not
+/// judged: prune refuses with the named error, dry run included, and classifies
+/// or deletes nothing. The open/shutdown cycle `prune_world` runs folds the same
+/// tail in and then proceeds.
+#[test]
+fn prune_refuses_a_published_tail_the_checkpoint_does_not_cover() {
+    let dir = world_dir("mc-core-prune-uncheckpointed-tail");
+    let config = config(&dir, 11);
+    let request = PregenerateRequest {
+        radius: 64,
+        center: Some([0, 0]),
+    };
+    let first = pregenerate(&config, &request, &mut no_progress).expect("pregenerate");
+    assert_eq!(first.chunks, 81);
+    append_block_tail(&config);
+
+    for dry_run in [false, true] {
+        let error = prune_stopped(&config, &prune_request(16, dry_run), [0, 0])
+            .expect_err("a store without its published tail is not judged");
+        assert!(
+            error
+                .to_string()
+                .contains(mc_core::native_checkpoint::UNCHECKPOINTED_TAIL),
+            "{error}"
+        );
+    }
+
+    // Nothing was classified or deleted: every chunk is still stored.
+    let rerun = pregenerate(&config, &request, &mut no_progress).expect("rerun");
+    assert_eq!(rerun.already_stored, first.chunks);
+    assert_eq!(rerun.generated, 0);
+
+    let report = prune_world(&config, &prune_request(16, false)).expect("recovered store");
+    assert_eq!(report.chunks.pruned, 72);
+    std::fs::remove_dir_all(dir).ok();
+}
+
 #[test]
 fn compact_world_keeps_every_chunk_and_never_grows_the_file() {
     let dir = world_dir("mc-core-compact");
@@ -112,4 +179,91 @@ fn prune_refuses_a_negative_inhabited_limit() {
     let mut request = prune_request(16, true);
     request.max_inhabited_ticks = -1;
     assert!(prune_world(&config(&world_dir("mc-core-prune-neg"), 1), &request).is_err());
+}
+
+/// The committed records a refused write must leave as they were. redb rewrites
+/// its own header on any writable open, so raw bytes are not the invariant.
+fn checkpoint_fingerprint(config: &CoreConfig) -> Vec<(String, u64, usize)> {
+    let store = mc_world::native::NativeReadOnlyStore::open_with_cache(
+        &config.world_dir.join("native/state.redb"),
+        mc_core::native_checkpoint::native_identity(config),
+        16 * 1024 * 1024,
+    )
+    .expect("read-only store");
+    let image = store
+        .checkpoint_reader()
+        .expect("reader")
+        .read_checkpoint_metadata()
+        .expect("metadata");
+    image
+        .globals
+        .into_iter()
+        .map(|(key, record)| (key, record.captured_tick, record.payload.len()))
+        .collect()
+}
+
+/// Books R4-P1: `world compact` opens the store outside `Core::open`, so the
+/// shared entry must run the same marker refusal before `repack_rows`/`compact`
+/// write anything.
+#[test]
+fn compact_refuses_a_store_that_disagrees_with_its_checkpoint_marker() {
+    use mc_world::store_marker;
+    let dir = world_dir("mc-core-compact-marker");
+    let config = config(&dir, 5);
+    Core::open(config.clone()).expect("fresh world").shutdown();
+    let marker = store_marker::read(&config.world_dir)
+        .unwrap()
+        .expect("a Core world has a marker");
+    let fingerprint = checkpoint_fingerprint(&config);
+
+    // Missing marker next to a store that has a checkpoint.
+    std::fs::remove_file(store_marker::path(&config.world_dir)).unwrap();
+    let error = compact_world(&config)
+        .expect_err("missing marker")
+        .to_string();
+    assert!(
+        error.contains("is missing but this store has checkpoint"),
+        "{error}"
+    );
+    assert_eq!(
+        checkpoint_fingerprint(&config),
+        fingerprint,
+        "a refused compact changes no committed record"
+    );
+
+    // A marker from another store.
+    store_marker::write(&config.world_dir, [0x42; 16], marker.checkpoint_tick).unwrap();
+    let error = compact_world(&config)
+        .expect_err("foreign marker")
+        .to_string();
+    assert!(error.contains("belong to different worlds"), "{error}");
+    assert_eq!(checkpoint_fingerprint(&config), fingerprint);
+
+    // A store behind its own marker: redb rolled it back.
+    store_marker::write(
+        &config.world_dir,
+        marker.store_uuid,
+        marker.checkpoint_tick + 1,
+    )
+    .unwrap();
+    let error = compact_world(&config)
+        .expect_err("store behind marker")
+        .to_string();
+    assert!(error.contains("behind checkpoint marker"), "{error}");
+    assert_eq!(checkpoint_fingerprint(&config), fingerprint);
+
+    // The pair restored: compact runs and keeps the world readable.
+    store_marker::write(&config.world_dir, marker.store_uuid, marker.checkpoint_tick).unwrap();
+    compact_world(&config).expect("a consistent pair compacts");
+    assert_eq!(
+        store_marker::read(&config.world_dir).unwrap(),
+        Some(marker),
+        "compact leaves the pair as it found it"
+    );
+    assert_eq!(
+        checkpoint_fingerprint(&config),
+        fingerprint,
+        "compact rewrites no records"
+    );
+    std::fs::remove_dir_all(dir).ok();
 }

@@ -1,0 +1,13 @@
+[[bug]]
+id = "SCENARIO-VANILLA-CRAFT-ACK"
+title = "Differential seed 19 completes the Solaris crafting action but times out waiting for an inventory transition on vanilla; the adapter or protocol cause is unclassified."
+area = "harness"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/FuzzE2E/analysis/.analysis/validation/20261107T172634-matrix-random-u9k17kiz/result.json"
+regression = ["python:tools.harness.test_matrix_random:RandomMatrixTests.test_seed19_adapter_consumes_received_packet_transitions", "python:tools.harness.test_matrix_random:RandomMatrixTests.test_vanilla_craft_cursor_correction_uses_transmitted_prediction"]
+repro_check = "The new socket peer decodes actual ProtocolMatrixClient -> PlayObserver -> click_body output and sends cursor corrections only for mismatching transmitted predictions. Real run_player_script enables sync. Keeping click_slot/send/encoder intact, independently reversing the player flag or wire behavior reproduces the stale craft cursor; craft-player-flag.red.log and craft-wire.red.log under receipts/HarnessFix4Proof. Corresponding green logs pass after restoration. The retained earlier test separately proves the early-result/input/cursor fence. Full patch craft.red.log/green.log covers both. This is protocol-fixture evidence, not another live vanilla differential run."
+failing_first = "reported"
+fix_commit = "patch:a370a7e5baf6296aae0cbd080f572550611f1d8b25aeaed64b33185aa1f00c52"
+promotion = "docs/bugs/promotions/SCENARIO-VANILLA-CRAFT-ACK.json"

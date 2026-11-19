@@ -1,0 +1,11 @@
+[[bug]]
+id = "MODEL-DYNAMIC-CONTEXT"
+title = "Clock/compass: item frames, dropped items, shelves, mob/other-player hands never receive the new world context → still frozen"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:32"
+regression = ["harness:scene-shot:native-shelf-clock", "harness:scene-shot:native-dynamic-context"]
+proving_assertions = { "harness:scene-shot:native-shelf-clock" = "clock_face_changed", "harness:scene-shot:native-dynamic-context" = "dropped_clock_face_changed" }
+repro_check = "Scenario checks cover shelf and dropped clock changes; full item-frame, mob and other-player hand coverage remains unproven."

@@ -1,0 +1,10 @@
+[[bug]]
+id = "MERCHANT-HURT-CLOSE"
+title = "A nonlethal hit leaves a living, in-reach merchant menu open and usable; the merchant remains treated as busy rather than ending the transaction as vanilla requires."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MERCHANT-HURT-CLOSE"
+regression = ["cargo:mc-core:tick::merchant::tests::nonlethal_environmental_damage_closes_merchant_menu"]
+failing_first = "reported"

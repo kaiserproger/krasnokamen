@@ -1,0 +1,10 @@
+[[bug]]
+id = "BORDER-OPTIONS"
+title = "Border damage buffer/amount and warning distance/time commands and fields absent."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BORDER-OPTIONS"
+regression = ["cargo:mc-core:command_border::tests::damage_and_warning_options_mutate_named_fields", "cargo:mc-core:command_execution::tests::worldborder_damage_options_hurt_players_outside_buffer", "cargo:mc-edge:plan::plan_tests::world_border_init_changes_and_credit_deferral_use_vanilla_packet"]
+failing_first = "not recorded"

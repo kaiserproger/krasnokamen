@@ -6,7 +6,12 @@ use crate::villager::{Activity, building};
 use mc_data::ItemStack;
 
 pub(crate) fn fixture() -> (TickState, SettlementId, EntitySlot) {
-    let mut state = test_state();
+    fixture_in(test_state())
+}
+
+/// The builder settlement on `state`, whose chunk 0,0 is resident with a stone
+/// floor at y=200.
+pub(crate) fn fixture_in(mut state: TickState) -> (TickState, SettlementId, EntitySlot) {
     for x in 0..16 {
         for z in 0..16 {
             for y in 201..224 {
@@ -77,13 +82,10 @@ fn admitted_birch_camp_can_finish_from_the_same_mixed_stock() {
         &bill,
         &executor::source_images(&state, id)
     ));
-    let outcome = request_build(&mut state, id, "lumber_camp").unwrap();
-    assert!(
-        state.settlements.get(id).unwrap().project.is_some(),
-        "funded admission: {outcome:?}"
-    );
+    // Funded admission.
+    request_started(&mut state, id, "lumber_camp");
     for _ in 0..4096 {
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
         attempt(&mut state, id, builder);
@@ -99,7 +101,7 @@ fn admitted_birch_camp_can_finish_from_the_same_mixed_stock() {
             )
         })
         .collect();
-    if let Some(project) = state.settlements.get(id).unwrap().project.as_ref() {
+    if let Some(project) = state.settlements.get(id).unwrap().projects.first() {
         panic!(
             "remaining stock: {stock:?}; status={:?}; next={:?}; material={:?}; carry={:?}",
             project_status(&state, id),
@@ -146,8 +148,8 @@ fn storage_order_uses_acacia_logs_without_oak() {
     {
         chest.slots[slot] = ItemStack::new(item, count);
     }
-    request_build(&mut state, id, "storage").unwrap();
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    request_started(&mut state, id, "storage");
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!(project.blueprint, "storage");
     complete(&mut state, id, builder);
     let building = state
@@ -214,6 +216,51 @@ pub(crate) fn open_plan(state: &mut TickState) {
     state.world.fold_overlay();
 }
 
+/// Planning passes until no owner order still waits for its site or its
+/// admission: the order's command only queues it and the passes search its
+/// site, one bounded slice each, or admit the upgrade (owner D42).
+pub(crate) fn finish_sweep(state: &mut TickState, id: SettlementId) {
+    let waiting = |state: &TickState| {
+        (0..access::orders(state.settlements.get(id).unwrap()).count()).any(|index| {
+            pending_reason_at(state, id, index)
+                .is_some_and(|reason| reason == site_refusals::WAITING_FOR_SITE || reason == READY)
+        })
+    };
+    for _ in 0..64 {
+        if !waiting(state) {
+            return;
+        }
+        plan(state, id);
+    }
+    panic!("a queued owner order still waits for its site after 64 planning passes");
+}
+
+/// An owner order run to its start: the command queues it, planning passes
+/// search its site.
+pub(crate) fn request_started(state: &mut TickState, id: SettlementId, blueprint: &str) {
+    match request_build(state, id, blueprint).unwrap() {
+        OrderOutcome::Queued { reason } if reason == site_refusals::WAITING_FOR_SITE => {
+            finish_sweep(state, id);
+        }
+        other => panic!("{blueprint} was not admitted: {other:?}"),
+    }
+}
+
+/// An owner upgrade run to its start: the command queues it, a planning pass
+/// admits it.
+pub(crate) fn upgrade_started(state: &mut TickState, id: SettlementId, building: BuildingId) {
+    match request_upgrade(state, id, building).unwrap() {
+        OrderOutcome::Queued { reason } if reason == READY => finish_sweep(state, id),
+        other => panic!("upgrade of {building:?} was not admitted: {other:?}"),
+    }
+}
+
+/// The site lots a tick leaves the replanting proofs when its site work
+/// examined none: a whole tick's budget; the villages' lot scans carry over.
+pub(crate) fn fresh_site_budget(state: &mut TickState) {
+    state.settlements.site_budget.refill();
+}
+
 /// World position of the first oak log the project's rotated level places.
 pub(crate) fn first_log(state: &TickState, project: &Project) -> [i32; 3] {
     let level = blueprints::get(&state.registry, &project.blueprint)
@@ -247,7 +294,8 @@ pub(crate) fn start(
             building,
             structure: String::new(),
             ordered: true,
-            borrowed_builder: None,
+            builder: None,
+            order_seq: None,
         },
         "oak",
         0,
@@ -255,6 +303,15 @@ pub(crate) fn start(
 }
 
 pub(crate) fn fund(state: &mut TickState, blueprint: &str, level: u8) -> Vec<(u32, u32)> {
+    if level > 1 {
+        // Upgrade removal tests require the real world's canonical loot tables.
+        state.registry = std::sync::Arc::new(
+            crate::registry::CoreRegistry::load(Some(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+            ))
+            .unwrap(),
+        );
+    }
     fund_at(state, (1, 201, 1), blueprint, level)
 }
 
@@ -284,14 +341,50 @@ pub(crate) fn fund_at(
     materials
 }
 
+pub(crate) fn bind_project(
+    state: &mut TickState,
+    id: SettlementId,
+    handle: &str,
+    slot: EntitySlot,
+) {
+    let uuid = state.entities.row(slot).uuid;
+    if let Some(record) = state.settlements.get_mut(id) {
+        crate::settlements::construction::bind_builder(record, handle, Some((uuid, None)));
+        record.revision = record.revision.saturating_add(1);
+    }
+}
+
 pub(crate) fn attempt(state: &mut TickState, id: SettlementId, slot: EntitySlot) {
+    // This shared driver stands in for the planner: bind the acting resident to
+    // every active project the way `assign_builder` does, because the executor
+    // only advances a project for the builder bound to it and the admission
+    // clock visits them in turn. An existing binding keeps its borrowed
+    // profession, which the completion path restores.
+    let uuid = state.entities.row(slot).uuid;
+    // Bind the resident to every unbound project: one resident cannot hold two,
+    // so an already-bound project keeps its own builder (D8 review P1-2).
+    let bindings: Vec<String> = state
+        .settlements
+        .get(id)
+        .map(|record| {
+            crate::settlements::construction::projects(record)
+                .filter(|project| project.builder.is_none())
+                .map(|project| project.structure.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+    if let Some(record) = state.settlements.get_mut(id) {
+        for handle in bindings {
+            crate::settlements::construction::bind_builder(record, &handle, Some((uuid, None)));
+        }
+    }
     let mut v = state.entities.row_mut(slot).villager.take().unwrap();
     let pickup = state
         .settlements
         .get(id)
         .unwrap()
-        .project
-        .as_ref()
+        .projects
+        .first()
         .and_then(|project| {
             executor::next_material(state, id, &project.structure)
                 .ok()
@@ -328,14 +421,26 @@ pub(crate) fn attempt(state: &mut TickState, id: SettlementId, slot: EntitySlot)
     building::tick(state, id);
 }
 
+/// Run bounded planning passes until a project starts. A whole cursor sweep
+/// may need several 64-candidate passes, so one `plan` call is not enough.
+pub(crate) fn plan_until_project(state: &mut TickState, id: SettlementId) {
+    for _ in 0..256 {
+        plan(state, id);
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
+            return;
+        }
+    }
+    panic!("the planner started no project within 256 bounded passes");
+}
+
 pub(crate) fn complete(state: &mut TickState, id: SettlementId, slot: EntitySlot) {
     for _ in 0..4096 {
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             return;
         }
         attempt(state, id, slot);
     }
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     panic!(
         "construction did not finish: {:?}; next={:?}; material={:?}; builder={:?}; carry={:?}",
         project_status(state, id),
@@ -369,14 +474,8 @@ fn storage_uses_available_acacia_logs_for_real_acacia_blocks() {
     chest[0] = ItemStack::new(acacia, 64);
     chest[1] = ItemStack::new(acacia, 64);
     chest[2] = ItemStack::new(cobble, 64);
-    plan(&mut state, id);
-    let project = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .expect("acacia stock funds storage");
+    plan_until_project(&mut state, id);
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.blueprint, "storage");
     let log = first_log(&state, project);
     complete(&mut state, id, slot);
@@ -415,17 +514,11 @@ fn funded_oak_storage_survives_larger_acacia_stack_and_stock_changes() {
         state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[25] =
             ItemStack::new(acacia_planks, 64);
         if ordered {
-            request_build(&mut state, id, "storage").expect("oak bill funds owner order");
+            request_started(&mut state, id, "storage");
         } else {
-            plan(&mut state, id);
+            plan_until_project(&mut state, id);
         }
-        let project = state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .expect("oak bill funds storage despite acacia stock");
+        let project = &state.settlements.get(id).unwrap().projects[0];
         assert_eq!(project.blueprint, "storage");
         let log = first_log(&state, project);
         state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[25] =
@@ -457,19 +550,12 @@ fn planner_prioritizes_storage_then_housing() {
     fund(&mut state, "storage", 1);
     for _ in 0..128 {
         plan(&mut state, id);
-        if state.settlements.get(id).unwrap().project.is_some() {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .blueprint,
+        state.settlements.get(id).unwrap().projects[0].blueprint,
         "storage"
     );
     complete(&mut state, id, slot);
@@ -480,19 +566,12 @@ fn planner_prioritizes_storage_then_housing() {
     fund(&mut state, "house", 1);
     for _ in 0..4096 {
         plan(&mut state, id);
-        if state.settlements.get(id).unwrap().project.is_some() {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .blueprint,
+        state.settlements.get(id).unwrap().projects[0].blueprint,
         "house"
     );
 }
@@ -513,9 +592,11 @@ fn site_selection_rejects_overlap_steep_paths_and_unloaded() {
         [5, 200, 5],
         [3, 4, 3]
     ));
+    // Village paths are work, not a refusal: an isolated path cell on the lot
+    // is admitted and retired (owner D10, `relayout::plan`).
     let path = block(&state, "minecraft:dirt_path", &[]);
     state.world.set_block(6, 200, 6, path);
-    assert!(!site_free(
+    assert!(site_free(
         &state,
         state.settlements.get(id).unwrap(),
         [5, 200, 5],
@@ -556,13 +637,15 @@ fn site_selection_rejects_overlap_steep_paths_and_unloaded() {
 #[test]
 fn native_site_clearance_refuses_fluid_states_and_paid_or_authored_blocks() {
     let (mut state, id, _) = fixture();
+    // Owner D27 p.4: everything on a village's territory, fields included, is
+    // village property and may be cleared, so a crop is no longer refused here;
+    // the outside-territory protection rule belongs to PrepTerritory.
     for name in [
         "water",
         "bubble_column",
         "seagrass",
         "tall_seagrass",
         "lava",
-        "wheat",
         "light",
         "structure_void",
     ] {
@@ -617,7 +700,7 @@ fn builder_hauls_before_shared_executor_debits_and_journals_a_single_cell() {
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "house", 1, None);
     fund(&mut state, "house", 1);
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     let item = executor::next_material(&state, id, &project.structure)
         .unwrap()
         .unwrap()
@@ -743,8 +826,8 @@ fn builder_haul_fits_the_real_carry_and_moves_exactly_what_it_loads() {
 fn builder_stalls_without_stock_then_consumes_exact_materials_in_order_and_certifies() {
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "house", 1, None);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
-    let (_, planned) = planned_cells(&state, &project, "oak").unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
+    let (_, planned) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
     let before = executor::status(&state, id, &project.structure).unwrap();
     for _ in 0..4 {
         attempt(&mut state, id, slot);
@@ -822,8 +905,8 @@ fn upgrade_uses_diff_and_certifies_level_two() {
         .unwrap();
     let old_writes = state.plugin_block_writes.len();
     start(&mut state, id, "house", 2, Some(building));
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
-    let (_, planned) = planned_cells(&state, &project, "oak").unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
+    let (_, planned) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
     fund(&mut state, "house", 2);
     complete(&mut state, id, slot);
     assert_eq!(
@@ -898,23 +981,24 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     for _ in 0..5 {
         attempt(&mut state, id, slot);
     }
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let snapshot = executor::status(&state, id, &project.structure).unwrap();
     assert!(snapshot.completed_work_units > 0);
+    // Neither request may preempt or join the running house (D8 joint proof).
     assert!(matches!(
         request_build(&mut state, id, "watch_tower").unwrap(),
-        OrderOutcome::Queued { reason } if reason == "busy"
+        OrderOutcome::Queued { .. }
     ));
-    assert_eq!(
-        request_build(&mut state, id, "farm").unwrap_err(),
-        "Construction queue is full: watch_tower is already pending. Cancel it before another order."
-    );
+    assert!(matches!(
+        request_build(&mut state, id, "farm").unwrap(),
+        OrderOutcome::Queued { .. }
+    ));
     let rows = super::super::persistence::checkpoint_rows(&state, state.tick).unwrap();
     let ledger = serde_json::to_vec(
-        state
+        &state
             .plugins
-            .get_domain("@native-structures", "ledger")
-            .unwrap(),
+            .domain_entries("@native-structures")
+            .collect::<std::collections::BTreeMap<_, _>>(),
     )
     .unwrap();
     let carry = serde_json::to_vec(state.entities.row(slot).villager.as_ref().unwrap()).unwrap();
@@ -929,11 +1013,13 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
         id.0,
     )
     .unwrap();
-    restored.plugins.set_domain(
-        "@native-structures",
-        "ledger",
-        serde_json::from_slice(&ledger).unwrap(),
-    );
+    let ledger: std::collections::BTreeMap<String, serde_json::Value> =
+        serde_json::from_slice(&ledger).unwrap();
+    for (key, value) in ledger {
+        restored
+            .plugins
+            .set_domain("@native-structures", &key, value);
+    }
     restored.entities.row_mut(restored_slot).villager =
         Some(serde_json::from_slice(&carry).unwrap());
     crate::settlements::rebuild_counts(&mut restored);
@@ -950,7 +1036,7 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     );
     assert_eq!(restored.settlements.get(id), state.settlements.get(id));
     complete(&mut restored, id, restored_slot);
-    assert!(restored.settlements.get(id).unwrap().project.is_none());
+    assert!(restored.settlements.get(id).unwrap().projects.is_empty());
     assert!(
         restored.block_entities[&(1, 201, 1)]
             .slots
@@ -960,16 +1046,21 @@ fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     fund(&mut restored, "watch_tower", 1);
     for _ in 0..128 {
         plan(&mut restored, id);
-        if restored.settlements.get(id).unwrap().project.is_some() {
+        if !restored.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
     let record = restored.settlements.get(id).unwrap();
-    assert!(record.pending_order.is_none());
-    let next = record
-        .project
-        .as_ref()
-        .expect("the restored FIFO order starts first");
+    assert_eq!(
+        record
+            .orders
+            .iter()
+            .map(|order| order.blueprint.as_str())
+            .collect::<Vec<_>>(),
+        ["farm"],
+        "the request behind the started one keeps its place"
+    );
+    let next = &record.projects[0];
     assert_eq!(next.blueprint, "watch_tower");
     assert!(next.ordered);
 }
@@ -1018,7 +1109,7 @@ fn removing_settlement_cancels_canonical_work_without_destroying_carried_materia
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "house", 1, None);
     fund(&mut state, "house", 1);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     building::tick(&mut state, id);
     let carry = state
         .entities
@@ -1067,7 +1158,7 @@ fn native_clear_and_build_stages_validate_before_and_after_a_restart_boundary() 
     let grass = block(&state, "minecraft:short_grass", &[]);
     state.world.set_block(4, 201, 4, grass);
     start(&mut state, id, "house", 1, None);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     crate::plugin_structures::validate(&state).expect("clear+build stages have unique cells");
     building::tick(&mut state, id);
     crate::plugin_structures::validate(&state)
@@ -1084,13 +1175,7 @@ fn builder_places_carried_cells_on_four_tick_admissions() {
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "storage", 1, None);
     fund(&mut state, "storage", 1);
-    let handle = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .unwrap()
+    let handle = state.settlements.get(id).unwrap().projects[0]
         .structure
         .clone();
     let (item, quantity) = executor::next_material(&state, id, &handle)
@@ -1136,14 +1221,7 @@ fn builder_leaves_future_footprint_before_first_placement() {
     let (mut state, id, slot) = fixture();
     start(&mut state, id, "storage", 1, None);
     fund(&mut state, "storage", 1);
-    let project = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .unwrap()
-        .clone();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let size = blueprints::get(&state.registry, &project.blueprint)
         .unwrap()
         .footprint(blueprints::Rotation::from_quarter_turns(project.rotation));
@@ -1198,19 +1276,15 @@ fn builder_walks_to_solid_storage_then_selects_exact_site_target() {
     start(&mut state, id, "storage", 1, None);
     fund(&mut state, "storage", 1);
     state.entities.set_pos(slot, [14.5, 201.0, 14.5]);
-    let handle = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .unwrap()
+    let handle = state.settlements.get(id).unwrap().projects[0]
         .structure
         .clone();
     let (item, _) = executor::next_material(&state, id, &handle)
         .unwrap()
         .unwrap();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    // The planner binds the builder; a direct work call needs the same authority.
+    bind_project(&mut state, id, &handle, slot);
     let mut v = state.entities.row_mut(slot).villager.take().unwrap();
     let target = building::work(&mut state, slot, &mut v, &mut ChangeSet::default()).unwrap();
     state.entities.row_mut(slot).villager = Some(v);
@@ -1275,13 +1349,7 @@ fn builder_perimeter_goal_keeps_body_outside_footprint_at_arrival_tolerance() {
         let (mut state, id, slot) = fixture();
         start(&mut state, id, "house", 1, None);
         fund(&mut state, "house", 1);
-        let handle = state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
+        let handle = state.settlements.get(id).unwrap().projects[0]
             .structure
             .clone();
         // Fetch the real first stack at the chest, then take the exact goal.
@@ -1327,13 +1395,13 @@ fn builder_finishes_a_house_through_real_movement() {
         state.tick_budget.reset(now);
         let mut changes = ChangeSet::default();
         crate::settlements::tick(&mut state, &mut changes);
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             return;
         }
         crate::villager::brain::tick(&mut state, &mut changes);
         state.world.fold_overlay();
     }
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let v = state.entities.row(slot).villager.as_ref().unwrap();
     panic!(
         "house stalled: {:?}\nnext={:?} material={:?} builder={:?} target={:?} path={:?} activity={:?} carry={:?}",
@@ -1428,7 +1496,7 @@ fn builder_builds_a_house_from_remote_shell_storage_within_ten_minutes() {
         state.tick_budget.reset(now);
         changes = ChangeSet::default();
         crate::settlements::tick(&mut state, &mut changes);
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             eprintln!("house finished at tick {now}");
             return;
         }
@@ -1436,7 +1504,7 @@ fn builder_builds_a_house_from_remote_shell_storage_within_ten_minutes() {
         state.world.fold_overlay();
     }
     let _ = changes;
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let v = state.entities.row(slot).villager.as_ref().unwrap();
     let door = |y| {
         state
@@ -1489,6 +1557,267 @@ fn one_haul_trip_carries_several_item_types_for_the_next_cells() {
     assert!(units >= 50, "one trip carries a real load, got {units}");
 }
 
+/// Spain seed 100 (trace pin 3068dfb1b857-34aa00ea): a house 110 blocks from
+/// storage took a 2,300-tick round trip for its two-dirt fill stage, then
+/// another for its walls. A haul carries the next stage's materials too while
+/// they fit the carry.
+#[test]
+fn one_haul_trip_carries_the_next_stages_materials_too() {
+    let (mut state, id, slot) = fixture();
+    let item = |state: &TickState, name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap()
+    };
+    let (dirt, log) = (
+        item(&state, "minecraft:dirt"),
+        item(&state, "minecraft:oak_log"),
+    );
+    let log_state = block(&state, "minecraft:oak_log", &[]);
+    let bounds = mc_script::ScriptWorldBounds::new([3, 201, 4], [7, 201, 4]).unwrap();
+    let cells = [
+        (
+            executor::PortionKind::Fill,
+            5,
+            state.registry.states.dirt,
+            "minecraft:dirt",
+        ),
+        (
+            executor::PortionKind::Build,
+            6,
+            log_state,
+            "minecraft:oak_log",
+        ),
+        (
+            executor::PortionKind::Build,
+            7,
+            log_state,
+            "minecraft:oak_log",
+        ),
+    ]
+    .into_iter()
+    .map(|(portion, x, state, resource)| executor::PlannedCell {
+        portion,
+        at: [x, 201, 4],
+        state,
+        resource: Some(resource.to_owned()),
+        quantity: 1,
+    })
+    .collect();
+    let handle = executor::prepare(&mut state, id, "house".into(), bounds, bounds, cells).unwrap();
+    let uuid = state.entities.row(slot).uuid;
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
+        settlement: id,
+        blueprint: "house".into(),
+        level: 1,
+        origin: bounds.min,
+        rotation: 0,
+        building: None,
+        structure: handle.clone(),
+        ordered: false,
+        builder: Some((uuid, None)),
+        order_seq: None,
+    }];
+    let chest = state.block_entities.get_mut(&(1, 201, 1)).unwrap();
+    chest.slots[0] = ItemStack::new(dirt, 8);
+    chest.slots[1] = ItemStack::new(log, 8);
+    assert_eq!(
+        executor::next_material(&state, id, &handle).unwrap(),
+        Some((dirt, 1)),
+        "fixture: the current stage needs only dirt"
+    );
+    building::tick(&mut state, id);
+    let carried = |item: u32| {
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .filter(|stack| stack.item_id == item)
+            .map(|stack| stack.count)
+            .sum::<i32>()
+    };
+    assert_eq!(
+        (carried(dirt), carried(log)),
+        (1, 2),
+        "one trip loads the fill and the walls after it"
+    );
+}
+
+/// A paid street work at x 5..=7, z 4: a dirt fill stage, then two oak logs,
+/// with eight of each in storage. Returns its handle, dirt and log.
+fn fill_then_logs(state: &mut TickState, id: SettlementId) -> (String, u32, u32) {
+    let item = |state: &TickState, name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap()
+    };
+    let (dirt, log) = (
+        item(state, "minecraft:dirt"),
+        item(state, "minecraft:oak_log"),
+    );
+    let log_state = block(state, "minecraft:oak_log", &[]);
+    let bounds = mc_script::ScriptWorldBounds::new([3, 201, 4], [7, 201, 4]).unwrap();
+    let cells = [
+        (
+            executor::PortionKind::Fill,
+            5,
+            state.registry.states.dirt,
+            "minecraft:dirt",
+        ),
+        (
+            executor::PortionKind::Build,
+            6,
+            log_state,
+            "minecraft:oak_log",
+        ),
+        (
+            executor::PortionKind::Build,
+            7,
+            log_state,
+            "minecraft:oak_log",
+        ),
+    ]
+    .into_iter()
+    .map(|(portion, x, state, resource)| executor::PlannedCell {
+        portion,
+        at: [x, 201, 4],
+        state,
+        resource: Some(resource.to_owned()),
+        quantity: 1,
+    })
+    .collect();
+    let handle = executor::prepare(state, id, layout::ROAD.into(), bounds, bounds, cells).unwrap();
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
+        settlement: id,
+        blueprint: layout::ROAD.into(),
+        level: 1,
+        origin: bounds.min,
+        rotation: 0,
+        building: None,
+        structure: handle.clone(),
+        ordered: false,
+        builder: None,
+        order_seq: None,
+    }];
+    let chest = state.block_entities.get_mut(&(1, 201, 1)).unwrap();
+    chest.slots[0] = ItemStack::new(dirt, 8);
+    chest.slots[1] = ItemStack::new(log, 8);
+    (handle, dirt, log)
+}
+
+fn carried(state: &TickState, slot: EntitySlot, item: u32) -> i32 {
+    state
+        .entities
+        .row(slot)
+        .villager
+        .as_ref()
+        .unwrap()
+        .inventory
+        .iter()
+        .flatten()
+        .filter(|stack| stack.item_id == item)
+        .map(|stack| stack.count)
+        .sum()
+}
+
+fn stored(state: &TickState, item: u32) -> i32 {
+    state.block_entities[&(1, 201, 1)]
+        .slots
+        .iter()
+        .filter(|stack| stack.item_id == item)
+        .map(|stack| stack.count)
+        .sum()
+}
+
+/// Review P1 (custody, wt/SpainLand): one trip loads the next stages'
+/// materials too. When that builder's chunk leaves simulation it is released,
+/// and another builder finishes the work from storage; the released builder's
+/// load goes back to storage instead of staying on its body.
+#[test]
+fn a_released_builders_load_goes_back_when_another_builder_finishes() {
+    use crate::settlements::allocator::tests::villager;
+    let (mut state, id, first) = fixture();
+    open_plan(&mut state);
+    let (handle, dirt, log) = fill_then_logs(&mut state, id);
+    bind_project(&mut state, id, &handle, first);
+    building::tick(&mut state, id);
+    assert_eq!(
+        (carried(&state, first, dirt), carried(&state, first, log)),
+        (1, 2),
+        "fixture: one trip holds the fill and the logs after it"
+    );
+    // An unticketed neighbour chunk: loaded, not simulated.
+    state.entities.set_pos(first, [20.5, 201.0, 20.5]);
+    let second = villager(&mut state, [2.5, 201.0, 2.5]);
+    let entity = state.entities.body(second).id;
+    crate::settlements::bind(&mut state, id, entity).unwrap();
+    {
+        let v = state.entities.row_mut(second).villager.as_mut().unwrap();
+        v.data.profession = Profession::Builder;
+        v.activity = Activity::Work;
+    }
+    assign_builder(&mut state, id);
+    assert_eq!(
+        state.settlements.get(id).unwrap().projects[0].builder,
+        Some((state.entities.row(second).uuid, None)),
+        "the released work takes the other builder"
+    );
+    complete(&mut state, id, second);
+    // The next pass pays the recorded return duty.
+    assign_builder(&mut state, id);
+    assert_eq!(
+        (carried(&state, first, dirt), carried(&state, first, log)),
+        (0, 0),
+        "the released builder keeps no project stock"
+    );
+    assert_eq!(
+        (stored(&state, dirt), stored(&state, log)),
+        (7, 6),
+        "storage paid one fill and two logs, once"
+    );
+    assert!(state.settlements.get(id).unwrap().carry_pending.is_empty());
+}
+
+/// Review P1 (custody), completion: a builder whose load outlasts the work
+/// hands the rest back once every cell is placed.
+#[test]
+fn a_finished_works_leftover_load_goes_back_to_storage() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    let (handle, dirt, log) = fill_then_logs(&mut state, id);
+    bind_project(&mut state, id, &handle, slot);
+    // Three logs on the body for the two log cells.
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory[0] = Some(ItemStack::new(log, 3));
+    complete(&mut state, id, slot);
+    assign_builder(&mut state, id);
+    assert_eq!(
+        carried(&state, slot, log),
+        0,
+        "the leftover log is not kept"
+    );
+    assert_eq!(
+        (stored(&state, dirt), stored(&state, log)),
+        (7, 9),
+        "storage paid the fill and got back the log the work did not use"
+    );
+    assert!(state.settlements.get(id).unwrap().carry_pending.is_empty());
+}
+
 /// A Builder places every authored cell of a level in every rotation, not only
 /// enough of them to certify: the gate's pillars flank an open passage that a
 /// certificate never inspects.
@@ -1507,7 +1836,8 @@ fn gate_level_one_is_built_cell_for_cell_in_every_rotation() {
                 building: None,
                 structure: String::new(),
                 ordered: true,
-                borrowed_builder: None,
+                builder: None,
+                order_seq: None,
             },
             "oak",
             0,

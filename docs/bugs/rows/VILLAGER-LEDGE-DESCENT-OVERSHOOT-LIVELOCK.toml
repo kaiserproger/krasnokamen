@@ -1,0 +1,10 @@
+[[bug]]
+id = "VILLAGER-LEDGE-DESCENT-OVERSHOOT-LIVELOCK"
+title = "A fast-walking villager waiting to descend from a ledge overshoots its waypoint, steps back up and shakes in place for tens of ticks"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "D6 unit-jitter classification 2026-11-17 (receipts/UnitJitter/CLASSIFY.md, design review receipts/UnitJitter/REVIEW-DESIGN-fable.md F1/F2): on a hash-verified copy of a Spain trial world, 399 of 411 villager reversals follow a horizontal step longer than the remaining distance to the waypoint centre (crates/mc-core/src/villager/brain/motion.rs resolve_body_motion); 100 are one Idle villager in runs of 10/24/30/36 ticks where the full step carries the body back onto the ledge and the stale ground flag allows step-up, so the descent waits for the 40-tick stroll deadline. Speeds above 4 blocks/s (Idle, Panic) are affected."
+repro = "source"
+regression = []
+failing_first = "not recorded"

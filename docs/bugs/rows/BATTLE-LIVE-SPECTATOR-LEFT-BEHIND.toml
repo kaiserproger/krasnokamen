@@ -1,0 +1,11 @@
+[[bug]]
+id = "BATTLE-LIVE-SPECTATOR-LEFT-BEHIND"
+title = "The spectator bound to the live player stays where the player died after his respawn and loses sight of him"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "G2R calibration trial-7: CamSpec ('battle spectate CamSpec PovRed') stayed underground at PovRed's death spot after PovRed respawned about 230 blocks away; the camera recording was a dark cave for four minutes. Initial placement and later behind-player repositioning did not provide continuous entity-camera following. Native /spectate and battle named intent now share real Set Camera binding, with death/disconnect release and battle respawn/reconnect rebind. Acceptance and ledger promotion remain pending."
+regression = ["cargo:mc-core:battle::live_players::tests::the_bound_spectator_follows_the_holder_after_a_respawn_and_a_rearm", "cargo:mc-core:tick::spectator::tests::spectator_tick_follows_target_and_publishes_tracking_anchor_without_teleport_spam", "cargo:mc-edge:plan::plan_tests::camera_tests::camera_binding_follows_pairing_and_release_precedes_target_removal"]
+failing_first = "reported"
+fix_commit = "c6fa94da3eb7d41830992e6e2a00818e2813e9f4"

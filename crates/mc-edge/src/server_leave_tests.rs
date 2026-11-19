@@ -9,6 +9,13 @@ use super::*;
 use mc_vanilla::wire_client::Client;
 
 fn server(root: &std::path::Path) -> EdgeServer {
+    server_with(root, |_| {})
+}
+
+pub(super) fn server_with(
+    root: &std::path::Path,
+    edit: impl FnOnce(&mut crate::config::EdgeConfig),
+) -> EdgeServer {
     let content = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
     let mut config = mc_core::CoreConfig::new(root.join("world"), 81);
     config.vanilla_data_dir = Some(content.clone());
@@ -27,12 +34,13 @@ fn server(root: &std::path::Path) -> EdgeServer {
     cfg.data.world_dir = root.join("world");
     cfg.data.vanilla_data_dir = content;
     cfg.auth.online_mode = false;
+    edit(&mut cfg);
     let data = crate::server::load_vanilla_data(&cfg).unwrap();
     let tags = crate::server::load_tags(&cfg, &data).unwrap();
     EdgeServer::new(core, data, tags, cfg).unwrap()
 }
 
-async fn wait_snapshot(
+pub(super) async fn wait_snapshot(
     ticks: &mut tokio::sync::broadcast::Receiver<mc_core::boundary::TickOutput>,
     timeout: Duration,
     mut predicate: impl FnMut(&mc_core::boundary::WorldSnapshot) -> bool,
@@ -72,7 +80,16 @@ async fn client_dying_during_join_burst_leaves_core() {
         let (stream, _) = listener.accept().await.unwrap();
         let stream = stream.into_std().unwrap();
         socket_tx.send(stream.try_clone().unwrap()).unwrap();
-        super::handle_connection(TcpStream::from_std(stream).unwrap(), connection_server).await
+        let slot = connection_server
+            .pre_play
+            .try_acquire()
+            .expect("pre-play slot");
+        super::handle_connection(
+            TcpStream::from_std(stream).unwrap(),
+            connection_server,
+            slot,
+        )
+        .await
     });
 
     let mut client = Client::connect(addr).await.unwrap();
@@ -143,7 +160,11 @@ async fn cancellation_while_waiting_for_join_retires_native_player() {
     let connection_server = Arc::clone(&server);
     let accepted = tokio::spawn(async move {
         let (socket, _) = listener.accept().await.unwrap();
-        handle_connection(socket, connection_server).await
+        let slot = connection_server
+            .pre_play
+            .try_acquire()
+            .expect("pre-play slot");
+        handle_connection(socket, connection_server, slot).await
     });
     let mut client = Client::connect(address).await.unwrap();
     let login = client.drive_login(address, "WaitVictim").await.unwrap();
@@ -174,7 +195,8 @@ async fn configuration_can_continue_past_login_deadline() {
     let address = listener.local_addr().unwrap();
     let accepted = tokio::spawn(async move {
         let (socket, _) = listener.accept().await.unwrap();
-        handle_connection(socket, server).await
+        let slot = server.pre_play.try_acquire().expect("pre-play slot");
+        handle_connection(socket, server, slot).await
     });
     let mut client = Client::connect(address).await.unwrap();
     client.drive_login(address, "Deadline").await.unwrap();
@@ -223,7 +245,11 @@ async fn velocity_proxy_can_start_more_than_eight_logins() {
     for index in 0..9 {
         let mut client = Client::connect(address).await.unwrap();
         let (socket, _) = listener.accept().await.unwrap();
-        tasks.push(tokio::spawn(handle_connection(socket, Arc::clone(&server))));
+        tasks.push(tokio::spawn(handle_connection(
+            socket,
+            Arc::clone(&server),
+            server.pre_play.try_acquire().expect("pre-play slot"),
+        )));
         client
             .write_packet(&Handshake {
                 protocol_version: mc_protocol::PROTOCOL_VERSION,
@@ -257,17 +283,25 @@ async fn velocity_proxy_can_start_more_than_eight_logins() {
 #[tokio::test]
 async fn stalled_configurations_do_not_take_player_slots_and_are_bounded_per_ip() {
     let dir = tempfile::tempdir().unwrap();
-    let mut server = server(dir.path());
+    // A non-default cap proves `[network] max_pre_play_connections_per_ip`
+    // reaches the live limiter, not only the parser.
+    let mut server = server_with(dir.path(), |cfg| {
+        cfg.network.max_pre_play_connections_per_ip = 2;
+    });
     server.cfg.server.max_players = 1;
     let server = Arc::new(server);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let mut clients = Vec::new();
     let mut tasks = Vec::new();
-    for index in 0..8 {
+    for index in 0..2 {
         let mut client = Client::connect(address).await.unwrap();
         let (socket, _) = listener.accept().await.unwrap();
-        tasks.push(tokio::spawn(handle_connection(socket, Arc::clone(&server))));
+        tasks.push(tokio::spawn(handle_connection(
+            socket,
+            Arc::clone(&server),
+            server.pre_play.try_acquire().expect("pre-play slot"),
+        )));
         client
             .drive_login(address, &format!("Pending{index}"))
             .await
@@ -277,7 +311,11 @@ async fn stalled_configurations_do_not_take_player_slots_and_are_bounded_per_ip(
     assert!(server.connections.inner.lock().admitted.is_empty());
     let mut refused = Client::connect(address).await.unwrap();
     let (socket, _) = listener.accept().await.unwrap();
-    let denied = tokio::spawn(handle_connection(socket, Arc::clone(&server)));
+    let denied = tokio::spawn(handle_connection(
+        socket,
+        Arc::clone(&server),
+        server.pre_play.try_acquire().expect("pre-play slot"),
+    ));
     assert!(refused.drive_login(address, "Denied").await.is_err());
     assert!(
         denied
@@ -291,7 +329,11 @@ async fn stalled_configurations_do_not_take_player_slots_and_are_bounded_per_ip(
     assert!(tasks.remove(0).await.unwrap().is_err());
     let mut replacement = Client::connect(address).await.unwrap();
     let (socket, _) = listener.accept().await.unwrap();
-    tasks.push(tokio::spawn(handle_connection(socket, Arc::clone(&server))));
+    tasks.push(tokio::spawn(handle_connection(
+        socket,
+        Arc::clone(&server),
+        server.pre_play.try_acquire().expect("pre-play slot"),
+    )));
     replacement
         .drive_login(address, "Replacement")
         .await
@@ -300,6 +342,19 @@ async fn stalled_configurations_do_not_take_player_slots_and_are_bounded_per_ip(
     drop(clients);
     for task in tasks {
         let _ = task.await;
+    }
+    server.hub.shutdown();
+}
+
+#[tokio::test]
+async fn zero_pre_play_cap_admits_any_number_from_one_address() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = server_with(dir.path(), |cfg| {
+        cfg.network.max_pre_play_connections_per_ip = 0;
+    });
+    let address: std::net::IpAddr = std::net::Ipv4Addr::LOCALHOST.into();
+    for _ in 0..9 {
+        assert!(server.pre_play_addresses.admit(address));
     }
     server.hub.shutdown();
 }

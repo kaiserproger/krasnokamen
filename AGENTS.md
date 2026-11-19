@@ -153,8 +153,16 @@ python3 -m tools.harness list
   absolute path: `<work>/solaris/tools/dev/mem-run.sh -m 6G <command>`
   (`-m 12G` for full `test`/`correctness`; at most 12G each), never a worktree's
   or sibling repo's copy. There are no memory slots: a compile command waits for
-  one of three host-wide build tokens (a nested compile reuses its parent's),
-  every other command starts at once; the heavy-watchdog pauses plain cargo
+  one of three host-wide build tokens (a four-token owner trial, D27, ended on
+  2026-11-18 when the 15-minute load stayed above 20; a nested compile reuses its parent's),
+  every other command starts at once. One agent holds at most one token: it
+  starts its next compile command only after the previous one finished (laptop
+  proposal 2026-11-18, pending the owner's confirmation: one agent with two
+  parallel runs held two thirds of the build capacity). The priority slice named
+  by Main and battle-video work (takes, render, live-take pins; owner 2026-11-12:
+  the battle video gets resources first) keep the normal lane; every other agent
+  compiles with `env KRASNOKAMEN_BUILD_LANE=background` (any token, but a freed
+  token goes to a waiting normal-lane compile first). The heavy-watchdog pauses plain cargo
   builds under real memory pressure and resumes them, never tests, servers or
   harness runs. The runner points
   `RUSTC_WRAPPER` at `tools/dev/sccache.sh` (shared sccache; empty when its daemon is
@@ -217,11 +225,13 @@ python3 -m tools.harness list
   output. Verbose output goes to ignored `.analysis/codex-logs/`; report
   status, failures and receipt paths.
 - Long work is event-driven: launch once, do independent work, consume the
-  completion once. A command the tool runs in the background (async, or moved
-  there after 60 s) needs no wait: with no other work, end the turn without a
-  tool call; the job's result arrives as the next message. Never poll process,
-  status or agent lists, and never repeat wait: each wait turn re-reads the
-  whole context (23% of fleet tokens on 2026-11-12). Never add
+  completion once. Main (the top-level session) may end its turn while its own
+  background job runs; the job's result arrives as the next message. A
+  subagent never ends its turn while a background job it started is running:
+  an ended subagent is disposed and its jobs die with it (Perf1M's pins,
+  CutTick's L0 and CutEdgePlan's re-check, 2026-11-17; owner, 2026-11-18). With
+  nothing else to do it calls `wait` on that job. Never poll process, status or
+  agent lists. Never add
   wall-clock sleeps in production, tests, harnesses or tools: wait for the exact
   message, packet, notification or process/world/simulation state (push, not pull).
 - Main has standing authorization to spawn within the

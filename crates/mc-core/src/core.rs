@@ -44,8 +44,61 @@ mod stop;
 #[path = "core_stop_tests.rs"]
 mod stop_tests;
 
-type OutboxBatch = Vec<(ConnectionId, Vec<PlayerChange>)>;
-pub(crate) type TimedOutboxBatch = (u64, OutboxBatch);
+mod outbox;
+pub(crate) use outbox::*;
+
+/// Minimum interval between two "input queue full" warnings.
+const INPUT_DROP_WARN_INTERVAL_MS: u64 = 10_000;
+
+/// Rate limiter for the input-drop warning: at most one warning per
+/// [`INPUT_DROP_WARN_INTERVAL_MS`] across every submitting thread.
+///
+/// Time is read from one monotonic [`Instant`] origin, never the wall clock,
+/// so an NTP step can neither re-arm nor mute the warning, and there is no
+/// zero-clock case: the first claim always warns. One atomic load on the drop
+/// path and a CAS only when the interval has expired, so the full-queue path
+/// never takes a lock and never logs per input.
+#[derive(Debug)]
+struct DropWarn {
+    origin: std::time::Instant,
+    /// Milliseconds since `origin` of the last emitted warning;
+    /// [`DropWarn::NEVER`] until the first one.
+    last_ms: AtomicU64,
+}
+
+impl DropWarn {
+    /// `last_ms` value meaning "never warned".
+    const NEVER: u64 = u64::MAX;
+
+    fn new() -> Self {
+        Self {
+            origin: std::time::Instant::now(),
+            last_ms: AtomicU64::new(Self::NEVER),
+        }
+    }
+
+    /// True when this drop should warn; claims the interval when so.
+    fn claim(&self) -> bool {
+        self.claim_at(
+            self.origin
+                .elapsed()
+                .as_millis()
+                .min(u128::from(Self::NEVER - 1)) as u64,
+        )
+    }
+
+    /// [`DropWarn::claim`] at `now_ms` after the origin, so the interval
+    /// contract is testable without sleeping.
+    fn claim_at(&self, now_ms: u64) -> bool {
+        let last = self.last_ms.load(Ordering::Relaxed);
+        if last != Self::NEVER && now_ms.saturating_sub(last) < INPUT_DROP_WARN_INTERVAL_MS {
+            return false;
+        }
+        self.last_ms
+            .compare_exchange(last, now_ms, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+    }
+}
 
 /// Publish impulse epochs after travel, resolving stable entity ids in their
 /// current world rather than only the world where the explosion happened.
@@ -76,6 +129,13 @@ pub(crate) fn observe_explosion_knockback(
         worlds().any(|world| world.connections.entity_of(*connection).is_some())
     };
     if !affected.is_empty() || knockback_ticks.keys().any(|id| !live(id)) {
+        // `Arc::make_mut` walks the tree once (O(K) nodes, K = tracked
+        // connections) because every published snapshot of the retained
+        // broadcast window holds this map. It runs only on a tick that carries
+        // an impulse or prunes a dead connection; an unchanged tick keeps the
+        // same `Arc` (same pointer, same content). Measured and kept: the
+        // alternative (a private map cloned only on change) copies on exactly
+        // the same ticks.
         let epochs = Arc::make_mut(knockback_ticks);
         epochs.retain(|id, _| live(id));
         for connection in affected {
@@ -84,9 +144,24 @@ pub(crate) fn observe_explosion_knockback(
             epoch.1 = output.tick;
         }
     }
-    Arc::get_mut(&mut output.snapshot)
-        .expect("tick output is not shared before publication")
-        .player_knockback_ticks = Arc::clone(knockback_ticks);
+    // Publish the epoch map into this tick's snapshot. Unconditionally: a
+    // fresh `run_tick` snapshot starts with an empty map, so an unchanged tick
+    // must still carry the current (non-empty) one.
+    let epochs = Arc::clone(knockback_ticks);
+    match Arc::get_mut(&mut output.snapshot) {
+        // The tick loop's own snapshot is unique here.
+        Some(snapshot) => snapshot.player_knockback_ticks = epochs,
+        // A second holder exists (a reader that cloned this tick's snapshot
+        // before publication, or a caller outside the tick loop). Never panic
+        // the tick owner and never mutate a snapshot a reader holds: rebuild
+        // this tick's snapshot with the current map and leave the held one as
+        // it was.
+        None => {
+            let mut snapshot = (*output.snapshot).clone();
+            snapshot.player_knockback_ticks = epochs;
+            output.snapshot = Arc::new(snapshot);
+        }
+    }
 }
 
 #[path = "core_session.rs"]
@@ -97,46 +172,9 @@ pub use session::PlayerSession;
 #[path = "core_session_tests.rs"]
 mod session_tests;
 
-/// Only edge consumers share this receiver; the tick owns its sender.
-#[derive(Debug)]
-struct ReliableOutbox(parking_lot::Mutex<OutboxReceiver>);
-
-#[derive(Debug)]
-struct OutboxReceiver {
-    receiver: std::sync::mpsc::Receiver<TimedOutboxBatch>,
-    pending: Option<TimedOutboxBatch>,
-}
-
-impl ReliableOutbox {
-    fn drain(&self, through: u64) -> OutboxBatch {
-        let mut receiver = self.0.lock();
-        let mut store: HashMap<ConnectionId, Vec<PlayerChange>> = HashMap::new();
-        while let Some((tick, batch)) = receiver
-            .pending
-            .take()
-            .or_else(|| receiver.receiver.try_recv().ok())
-        {
-            if tick > through {
-                receiver.pending = Some((tick, batch));
-                break;
-            }
-            for (connection, queue) in batch {
-                let slot = store.entry(connection).or_default();
-                if !slot
-                    .last()
-                    .is_some_and(|change| matches!(change, PlayerChange::Disconnect { .. }))
-                {
-                    slot.extend(queue);
-                }
-            }
-        }
-        store
-            .into_iter()
-            .filter(|(_, queue)| !queue.is_empty())
-            .collect()
-    }
-}
-
+#[cfg(test)]
+#[path = "core_input_drop_tests.rs"]
+mod input_drop_tests;
 use mc_world::ChunkGenerator;
 
 /// Tick period: 20 TPS.
@@ -183,6 +221,13 @@ pub(crate) static PANIC_CHECKPOINT_COMMIT: parking_lot::Mutex<Option<std::path::
 static FAIL_CHECKPOINT_AFTER_NATIVE_COMMIT: std::sync::Mutex<Option<std::path::PathBuf>> =
     std::sync::Mutex::new(None);
 
+/// Per-world fault injection: the next checkpoint marker write for each armed
+/// world fails once, after a successful native commit. The writer must then
+/// send no positive ACK, prune nothing and stop (fail closed).
+#[cfg(test)]
+pub(crate) static FAIL_CHECKPOINT_MARKER: std::sync::Mutex<Vec<std::path::PathBuf>> =
+    std::sync::Mutex::new(Vec::new());
+
 /// Test hook: when armed with a world dir, every [`JournalWriter::append`]
 /// for THAT dir fails with a storage error (simulates a torn/failed WAL
 /// batch). The journal thread returns (receiver dropped); the tick loop's
@@ -191,6 +236,17 @@ static FAIL_CHECKPOINT_AFTER_NATIVE_COMMIT: std::sync::Mutex<Option<std::path::P
 /// tests never poison each other's journals).
 #[cfg(test)]
 pub static FAIL_JOURNAL_APPEND: std::sync::Mutex<Option<std::path::PathBuf>> =
+    std::sync::Mutex::new(None);
+
+/// Test hook: armed with a world dir and a `skip` count, [`JournalWriter::flush`]
+/// for THAT dir lets `skip` flushes through and then fails every one with a
+/// storage error (simulates a failed journal-directory fsync). A checkpoint
+/// gate or a pre-backup flush then halts the world (fail closed, no retry).
+/// The skip makes the two branches independently reachable: a backup command
+/// flushes once for its forced checkpoint and once before the copy. Unit tests
+/// only.
+#[cfg(test)]
+pub static FAIL_JOURNAL_FLUSH: std::sync::Mutex<Option<(std::path::PathBuf, u32)>> =
     std::sync::Mutex::new(None);
 
 /// Test-only, world-scoped rendezvous after a successful durable append.
@@ -340,6 +396,7 @@ mod recovery;
 pub(crate) use recovery::*;
 
 mod moderation_selector;
+pub(crate) mod session_mirror;
 mod tick_loop;
 /// A currently joined player selected for an edge moderation command.
 pub type ModerationPlayer = (ConnectionId, uuid::Uuid, String);
@@ -380,6 +437,8 @@ struct CoreInner {
         )>,
     >,
     input_dropped: AtomicU64,
+    /// Rate limiter for the "input queue full" warning beside the counter.
+    input_drop_warn: DropWarn,
     /// Weak: only the tick thread owns the `Sender`, so its exit (halt or
     /// shutdown) closes every subscriber instead of leaving them waiting.
     tick_tx: broadcast::WeakSender<TickOutput>,
@@ -391,6 +450,8 @@ struct CoreInner {
     #[cfg(test)]
     pause_state: tokio::sync::watch::Receiver<Option<u64>>,
     outbox: ReliableOutbox,
+    /// The halt's reason, set by the tick owner before its broadcast closes.
+    halt_reason: Arc<std::sync::OnceLock<String>>,
     shutdown_tx: std::sync::Mutex<Option<std::sync::mpsc::Sender<()>>>,
     tick_handle: std::sync::Mutex<Option<std::thread::JoinHandle<()>>>,
     journal_handle: std::sync::Mutex<Option<std::thread::JoinHandle<()>>>,
@@ -411,7 +472,7 @@ struct CoreInner {
     build_gate: crate::build_precommit::Gateway,
     /// Fail-closed edge projection: only tick-observed unlocked sessions pass.
     require_plugin_login: bool,
-    unlocked_sessions: Arc<parking_lot::RwLock<BTreeSet<ConnectionId>>>,
+    unlocked_sessions: Arc<session_mirror::SessionMirror>,
     /// Overworld far-terrain LOD tiles, read beside the chunk workers.
     lod: crate::lod::LodSource,
     /// Bounded immutable real-chunk terrain sources per dimension.
@@ -716,7 +777,10 @@ impl Core {
                 "unpublished conversion staging directory cannot be opened by the runtime".into(),
             ));
         }
-        std::fs::create_dir_all(&config.world_dir)
+        // R4-P2: creating the world directory must persist its own entry, or a
+        // power loss after the first durable store/ journal publication can
+        // remove the whole world (Books R4-P2).
+        mc_world::atomic_file::create_dir_all_durable(&config.world_dir)
             .map_err(|e| CoreError::Storage(e.to_string()))?;
         let world_lease = lock_world_lease(&config.world_dir)?;
         let path = config.world_dir.join("native/state.redb");
@@ -797,6 +861,7 @@ impl Core {
                 .map_err(|e| CoreError::Storage(e.to_string()))?;
         }
         let identity = crate::native_checkpoint::native_identity(&config);
+        let repairs_before = mc_world::native::redb_repairs();
         if fresh && !path.exists() {
             // Created under a temporary name and renamed once redb has committed
             // it, so `state.redb` is never a partly written file. A temporary
@@ -825,8 +890,57 @@ impl Core {
             && !store
                 .has_checkpoint()
                 .map_err(|e| CoreError::Storage(e.to_string()))?;
+        // Books R4-P1 (logging half). Every repair is reported as a possible
+        // rollback: redb may have switched to an earlier commit (a damaged
+        // header slot or newest commit) and the store cannot tell which, and
+        // the WAL behind an acknowledged checkpoint is already pruned.
+        let repairs = mc_world::native::redb_repairs().saturating_sub(repairs_before);
+        if repairs > 0 {
+            tracing::error!(
+                repairs,
+                "redb repaired the native store (unclean stop or damaged commit); it may \
+                 have rolled back to an earlier commit. WAL replay restores what the \
+                 journal still covers; a repair after a clean stop points at the disk"
+            );
+        }
         #[cfg(test)]
         crate::native_checkpoint::tests::register_store(&config, &store)?;
+        // Books R4-P1: before any replay, refuse a store that the checkpoint
+        // marker proves lost a committed checkpoint. A store ahead of the
+        // marker is the crash window between the commit and the marker write;
+        // it is accepted and the marker is rewritten.
+        let store_tick = store
+            .checkpoint_tick()
+            .map_err(|e| CoreError::Storage(e.to_string()))?;
+        // A first start interrupted between its tick-0 commit and the first
+        // marker write never served a player. The first-start file is the
+        // bootstrap proof: exactly that state (first-start present, no marker,
+        // checkpoint 0) publishes the pair once from the store it just created.
+        // Every other missing or corrupt marker is refused by the check below.
+        if resumed
+            && store_tick == Some(0)
+            && mc_world::store_marker::read(&config.world_dir)
+                .map_err(|e| CoreError::Storage(e.to_string()))?
+                .is_none()
+        {
+            mc_world::store_marker::write(&config.world_dir, store.store_uuid(), 0).map_err(
+                |error| {
+                    CoreError::Storage(format!(
+                        "world {}: interrupted first start could not publish its checkpoint \
+                         marker: {error}",
+                        config.world_dir.display()
+                    ))
+                },
+            )?;
+        }
+        mc_world::store_marker::check(&config.world_dir, store.store_uuid(), store_tick).map_err(
+            |error| {
+                CoreError::Storage(format!(
+                    "world {}: {error}; refusing to open",
+                    config.world_dir.display()
+                ))
+            },
+        )?;
         let base_registry = Arc::clone(&registry);
         let (mut tick_state, mut root_manifest, salt_minted) = recover_tick_state(
             &config,
@@ -936,6 +1050,9 @@ impl Core {
         let (moderation_selector_tx, moderation_selector_rx) = mpsc_channel(32);
         let (tick_tx, _) = broadcast::channel::<TickOutput>(config.broadcast_cap.max(1));
         let (timing_tx, _) = broadcast::channel::<(u64, TickTimes)>(16384);
+        // Bound the one presented-to-edge queue in bytes; the tick charges each
+        // batch and the edge releases it (see `core/outbox.rs`).
+        let outbox_budget = Arc::new(OutboxBudget::new(config.outbox_queue_bytes));
         let (outbox_tx, outbox_rx) = std::sync::mpsc::channel();
         let (work_tx, work_rx) = journal_work_channel();
         let (shutdown_tx, shutdown_rx) = std::sync::mpsc::channel::<()>();
@@ -972,9 +1089,16 @@ impl Core {
             })
             .map_err(|err| CoreError::Storage(err.to_string()))?;
 
+        // Owners are alive from here on. This guard is declared after
+        // `world_lease` above, so on any later startup error it drops first and
+        // stops and joins them while the lease is still held: the world never
+        // becomes leasable while a journal/tick owner is still writing it.
+        let mut owners = stop::StartupOwners::new(shutdown_tx, work_tx, journal_handle);
+
         // Only known unlocked sessions pass the edge fence; a connection not
         // processed by the tick yet must never inherit administrative access.
-        let unlocked_sessions = Arc::new(parking_lot::RwLock::new(BTreeSet::new()));
+        let unlocked_sessions = Arc::new(session_mirror::SessionMirror::new());
+        let halt_reason = Arc::new(std::sync::OnceLock::new());
         let input_log = if config.input_log {
             // Plugin commands and async plugin results enter `run_tick` from
             // wasm threads and are not logged: say so in the header.
@@ -1006,10 +1130,14 @@ impl Core {
             timing_broadcast: timing_tx.clone(),
             #[cfg(test)]
             pause_state: pause_state_tx,
-            outbox: outbox_tx,
-            work_tx,
+            outbox: OutboxSender::new(outbox_tx, Arc::clone(&outbox_budget)),
+            outbox_stall: StallWatch::new(std::time::Duration::from_millis(
+                config.outbox_stall_ms.max(1),
+            )),
+            work_tx: owners.take_work(),
             journal_budget,
             unlocked_sessions: Arc::clone(&unlocked_sessions),
+            halt_reason: Arc::clone(&halt_reason),
             shutdown_rx,
             checkpoint_rx,
             backup_rx,
@@ -1026,10 +1154,16 @@ impl Core {
                 tick_loop(tick_state, channels);
             })
             .map_err(|err| CoreError::Storage(err.to_string()))?;
-        build_gate.set_tick_owner(tick_handle.thread().clone(), input_tx.clone());
+        owners.set_tick(tick_handle);
+        build_gate.set_tick_owner(owners.tick_thread(), input_tx.clone());
 
         // Snapshot the worker count once.
         let worker_count = crate::tick::worker_threads();
+        let stop::StartedOwners {
+            shutdown,
+            tick,
+            journal,
+        } = owners.started();
         Ok(Self {
             inner: Arc::new(CoreInner {
                 #[cfg(test)]
@@ -1043,18 +1177,16 @@ impl Core {
                 #[cfg(test)]
                 backup_admission_pause: std::sync::Mutex::new(None),
                 input_dropped: AtomicU64::new(0),
+                input_drop_warn: DropWarn::new(),
                 tick_tx: tick_tx.downgrade(),
                 knockback_publication,
                 timing_tx: timing_tx.downgrade(),
                 #[cfg(test)]
                 pause_state: pause_state_rx,
-                outbox: ReliableOutbox(parking_lot::Mutex::new(OutboxReceiver {
-                    receiver: outbox_rx,
-                    pending: None,
-                })),
-                shutdown_tx: std::sync::Mutex::new(Some(shutdown_tx)),
-                tick_handle: std::sync::Mutex::new(Some(tick_handle)),
-                journal_handle: std::sync::Mutex::new(Some(journal_handle)),
+                outbox: ReliableOutbox::new(outbox_rx, outbox_budget),
+                shutdown_tx: std::sync::Mutex::new(Some(shutdown)),
+                tick_handle: std::sync::Mutex::new(Some(tick)),
+                journal_handle: std::sync::Mutex::new(Some(journal)),
                 world_lease: std::sync::Mutex::new(Some(world_lease)),
                 worker_count,
                 world_spawn,
@@ -1067,6 +1199,7 @@ impl Core {
                 build_gate,
                 require_plugin_login: config.require_plugin_login,
                 unlocked_sessions,
+                halt_reason,
                 lod,
                 terrain,
                 terrain_epoch,
@@ -1176,13 +1309,20 @@ impl Core {
     }
 
     /// Submit one decoded player input. Bounded and push-woken: returns
-    /// `false` (and counts the drop) when the queue is full. Never blocks.
-    /// Safe to call from Tokio I/O threads.
+    /// `false` (and counts and rate-limitedly warns about the drop) when the
+    /// queue is full. Never blocks. Safe to call from Tokio I/O threads.
     pub fn submit(&self, input: PlayerInput) -> bool {
         match self.inner.input_tx.try_send(input) {
             Ok(()) => true,
             Err(_) => {
-                self.inner.input_dropped.fetch_add(1, Ordering::Relaxed);
+                let dropped = self.inner.input_dropped.fetch_add(1, Ordering::Relaxed) + 1;
+                if self.inner.input_drop_warn.claim() {
+                    tracing::warn!(
+                        dropped,
+                        capacity = self.inner.input_tx.max_capacity(),
+                        "input queue full: the refused input is lost and the server corrects the client"
+                    );
+                }
                 false
             }
         }
@@ -1334,8 +1474,7 @@ impl Core {
     /// when authentication is required; configuration-off is unchanged.
     #[must_use]
     pub fn session_locked(&self, connection: ConnectionId) -> bool {
-        self.inner.require_plugin_login
-            && !self.inner.unlocked_sessions.read().contains(&connection)
+        self.inner.require_plugin_login && !self.inner.unlocked_sessions.contains(connection)
     }
 
     /// Add a remote ticket. Over-budget requests are refused explicitly.
@@ -1390,6 +1529,15 @@ impl Core {
             .map_err(|_| "Selector resolution unavailable".to_owned())?
     }
 
+    /// The reason the tick owner halted with, once it has halted fail-closed;
+    /// `None` while it runs, after a requested shutdown, or if it panicked.
+    /// Set before the tick broadcast closes, so a subscriber that saw `Closed`
+    /// reads it without taking any lock.
+    #[must_use]
+    pub fn halt_reason(&self) -> Option<String> {
+        self.inner.halt_reason.get().cloned()
+    }
+
     /// Try-drain reliably queued per-connection changes (never skipped).
     /// The tick hands off owned batches before broadcasting; per-connection
     /// order is preserved even when the edge misses world publications.
@@ -1400,6 +1548,25 @@ impl Core {
     /// Drain only batches represented in the published snapshot, preserving newer batches.
     pub fn try_drain_outbox_through(&self, tick: u64) -> Vec<(ConnectionId, Vec<PlayerChange>)> {
         self.inner.outbox.drain(tick)
+    }
+
+    /// Estimated bytes queued in the tick→edge reliable handoff right now.
+    ///
+    /// The configured hard cap (`outbox_queue_bytes`) bounds normal pushes. Two
+    /// exceptions can exceed it briefly: a single batch larger than the whole
+    /// cap is admitted alone into an empty queue, and a halt's terminal
+    /// `Disconnect` batch is admitted past the cap so every live connection
+    /// still learns why. A non-empty queue that consumes no batch for
+    /// `outbox_stall_ms` halts the tick fail-closed instead of growing further.
+    #[must_use]
+    pub fn outbox_queued_bytes(&self) -> usize {
+        self.inner.outbox.budget().queued_bytes()
+    }
+
+    /// Peak queued reliable bytes since this core opened.
+    #[must_use]
+    pub fn outbox_peak_bytes(&self) -> usize {
+        self.inner.outbox.budget().peak_bytes()
     }
 
     /// Force a durable checkpoint through the tick capture and journal writer.
@@ -1564,6 +1731,10 @@ mod native_checkpoint_crash_tests;
 mod checkpoint_custody_tests;
 
 #[cfg(test)]
+#[path = "store_marker_tests.rs"]
+mod store_marker_tests;
+
+#[cfg(test)]
 #[path = "native_component_26_3_tests.rs"]
 mod native_component_26_3_tests;
 
@@ -1669,3 +1840,7 @@ mod village_generation_tests;
 #[cfg(test)]
 #[path = "core/startup_freeze_tests.rs"]
 mod startup_freeze_tests;
+
+#[cfg(test)]
+#[path = "core/session_mirror_tests.rs"]
+mod session_mirror_tests;

@@ -1,0 +1,11 @@
+[[bug]]
+id = "CLIENT-BABY-CHICKEN-LAYOUT"
+title = "Baby chickens use an inflated adult-style stack and lose their proper feet"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 clean 26.3 native/Java cold-baby pair on 2026-11-11, UUID ending 0fa400000011: the native chick is an oversized floating gray stack with no proper visible toes. The shared chicken_baby layout also serves temperate/warm babies. Main explicitly assigned that shared caller; local BabyChickenModel anatomy and the three supplied 16-pixel skin nets ground a body/beak assembly with planar shanks, toes and wings. Raw original pairs remain under ClientQ04Variants/final-native-r1-clean and final-java-r1. Client tests: entities::solaris_models::tests::baby_chicken_body_and_planar_feet_follow_the_26_3_texture_net."
+repro = "client"
+regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::baby_chicken_body_and_planar_feet_follow_the_26_3_texture_net"]
+failing_first = "reported"
+repro_check = "candidate: in-tree code and a passing unit ref, no control; area=client, real-client check required"

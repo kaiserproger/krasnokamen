@@ -1,0 +1,12 @@
+[[bug]]
+id = "EDGE-RECIPE-RELOAD-CATALOG-SENT-TWICE"
+title = "A recipe reload announces the catalog twice, so the client applies the same recipe book update in two consecutive frames"
+area = "gameplay"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "Found by Stage2Edge while auditing the mc-edge datapack reload path: the reload handler sent the recipe catalog once for the datapack event and once more after re-projecting it; the fix is in crates/mc-edge/src/plan/player_changes.rs and the ref lives in crates/mc-edge/src/advancements_tests.rs, declared as advancements::tests."
+regression = ["cargo:mc-edge:advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book"]
+failing_first = "reported"
+fix_commit = "patch:8b8ac42337fbd5b2de83f105991a134dc367b2a1bc00aa46908815ce676f2973"
+repro_check = "candidate: receipt patch docs/bugs/fix-patches/EDGE-RECIPE-RELOAD-CATALOG-SENT-TWICE.patch (patch:8b8ac42337fbd5b2) for commit 3c2124c08, digest verified and reverse-ok on this tree; control: the ref is red with it reversed (control4-EDGE-RECIPE-RELOAD-*.log). reliable_recipe_reload_uses_each_event_catalog_and_reuses_wire_projection stays green when reversed, so it does not catch this bug and is not a ref for the row. gameplay row, repro cargo: no real-client receipt needed"

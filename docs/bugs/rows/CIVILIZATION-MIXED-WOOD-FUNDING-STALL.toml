@@ -1,0 +1,12 @@
+[[bug]]
+id = "CIVILIZATION-MIXED-WOOD-FUNDING-STALL"
+title = "A funded mixed-wood building can consume its selected wood on generic recipes and stall before completion."
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "open"
+source = "Mixed birch/oak lumber-camp construction: 176/183 cells complete, seven birch planks missing while 34 oak logs remain."
+failing_first = "reported"
+regression = ["cargo:mc-core:settlements::construction::tests::admitted_birch_camp_can_finish_from_the_same_mixed_stock"]
+fix_commit = "patch:1d0f3fb02785d3fa6dae0487338ad0fbbe1da62d66cbdc9cf4c9548f9275487f"
+repro_check = "round-final: receipt patch docs/bugs/fix-patches/CIVILIZATION-MIXED-WOOD-FUNDING-STALL.patch (patch:1d0f3fb02785d3fa), non-test hunks only so the helpers the refs call stay; supersedes commit e2a61744 as the reversal target; control red at construction_tests.rs:103 (control2-CIVILIZATION-MIXED-WOOD-*.log)"

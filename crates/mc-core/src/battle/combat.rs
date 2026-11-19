@@ -14,6 +14,15 @@ use crate::intent::{DamageSource, Footprint, IntentKind};
 // The 21..25-tick action cycle skips one 20-tick decision after each attack.
 // Count that recovery before deriving odds; do not shorten the action clocks.
 const ATTACK_DECISION_TICKS: u64 = 20;
+/// A fugitive's guard deadline while he flees: he cannot act at all (the attack
+/// pass skips him on `routing` before it reads the deadline), so the value is a
+/// marker stamped once per flight, never a clock. Re-stamping `frame.tick + 20`
+/// every tick journaled every fugitive's fighter record in every WAL patch of a
+/// mass rout (D20 `Guard churn`, 2026-11-17: 62 % of the battle WAL).
+const ROUTING_HOLD: u64 = u64::MAX;
+/// Ticks a man who leaves flight still stands guard: what the old per-tick
+/// `frame.tick + 20` stamp had left on the tick before the first readable pass.
+const ROUTING_HESITATION: u64 = ATTACK_DECISION_TICKS - 1;
 /// Human reaction: a man who first finds an enemy within his melee range
 /// stands guard 4..=8 ticks (seeded per man) before his first decision.
 const REACTION_TICKS_MIN: u64 = 4;
@@ -441,6 +450,18 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
     // Ordered execution columns avoid per-fighter hash lookups.
     for bi in 0..battle.columns.ids.len() {
         if !battle.columns.active[bi] || battle.columns.carried[bi] {
+            // A fighter this pass cannot visit keeps the deadline the old
+            // per-tick re-stamp had left on the tick before: stamping stopped
+            // here, so `frame.tick + ROUTING_HESITATION` is exactly the value a
+            // later pass must read, even after the hold expires off-chunk.
+            if let Action::Guard {
+                until: ROUTING_HOLD,
+            } = combat.fighters[bi].action
+            {
+                combat.fighters[bi].action = Action::Guard {
+                    until: frame.tick.saturating_add(ROUTING_HESITATION),
+                };
+            }
             continue;
         }
         let slot = battle.columns.slots[bi].expect("active column");
@@ -455,9 +476,19 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             continue;
         }
         if context(battle, bi).is_some_and(|c| c.routing) && !battle.formation.cornered_at(bi) {
-            fighter.action = Action::Guard {
-                until: frame.tick + 20,
-            };
+            // One stamp per flight: the deadline is unread while he flees (the
+            // attack pass skips him on `routing`), so only the value the first
+            // readable pass resolves matters.
+            if !matches!(
+                fighter.action,
+                Action::Guard {
+                    until: ROUTING_HOLD
+                }
+            ) {
+                fighter.action = Action::Guard {
+                    until: ROUTING_HOLD,
+                };
+            }
             fighter.block = None;
             continue;
         }
@@ -539,6 +570,16 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         let fighter = &mut combat.fighters[bi];
         let Action::Guard { until } = fighter.action else {
             continue;
+        };
+        // First readable pass of a flight (back in order, or pinned at bay):
+        // take the deadline the old per-tick re-stamp had left on the previous
+        // tick, so an uninterrupted flight decides on exactly the same tick.
+        let until = if until == ROUTING_HOLD {
+            let deadline = frame.tick.saturating_add(ROUTING_HESITATION);
+            fighter.action = Action::Guard { until: deadline };
+            deadline
+        } else {
+            until
         };
         // Two main weapons: no windup while the drawn weapon comes up.
         if fighter.arms.swapping(frame.tick) {
@@ -998,6 +1039,34 @@ fn strike(
             ..Default::default()
         },
     });
+}
+
+/// Test seams for fixtures outside the battle module.
+#[cfg(test)]
+impl CombatRuntime {
+    /// `id` (made a fighter if it is not one) charged at battle tick `tick`:
+    /// its bonus lasts `CHARGE_DECAY_TICKS` from there.
+    pub(crate) fn charge_from(&mut self, id: EntityId, tick: u64) {
+        if !self.ids.contains(&id) {
+            let mut ids = self.ids.clone();
+            ids.push(id);
+            self.prepare(&ids);
+        }
+        let bi = self.ids.iter().position(|&fighter| fighter == id).unwrap();
+        self.fighters[bi].charge = serde_json::from_value(
+            serde_json::json!({"impact": tick, "refused": false, "reform_until": 0}),
+        )
+        .unwrap();
+    }
+
+    /// The fighter `id`'s windup: its target and start tick.
+    pub(crate) fn windup_of(&self, id: EntityId) -> Option<(EntityId, u64)> {
+        let bi = self.ids.iter().position(|&fighter| fighter == id)?;
+        match self.fighters[bi].action {
+            Action::Windup { target, start, .. } => Some((target, start)),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]

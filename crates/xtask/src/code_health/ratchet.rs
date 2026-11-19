@@ -36,7 +36,11 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // Books is a pure encoding leaf: 184 modules, 2026-11-09.
     // Merge ec3a463a (LedgerMobsB01) adds the sniffer, parrot and strider tick
     // modules, all of which drive TickState: 187 modules, 2026-11-12.
-    cycle_modules: 187,
+    // D9 entity-view ownership, 2026-11-17: `entity_views` was the page
+    // container for `boundary::EntityView` records with a single out-edge back
+    // to `boundary` and no algorithm of its own; as `boundary::views` it stops
+    // being a false top-level cycle node: 186 modules.
+    cycle_modules: 186,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
     // Canonical ITEM_REGISTRY cutover, 2026-11-11: measured 2598, no spare headroom.
@@ -53,22 +57,70 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // Drowned joins the `hunts_villagers` capability table next to zombie,
     // zombie_villager and husk (vanilla Drowned targets AbstractVillager),
     // 2026-11-13: 2632.
-    vanilla_id_literals: 2_632,
+    // R6 G1 (CrowdPush, 2026-11-18): the player and falling-block body sizes are
+    // contract lookups, and their type names live once as
+    // `blueprint::PLAYER_TYPE_NAME` / `FALLING_BLOCK_TYPE_NAME`, which the
+    // existing loot and falling-block sites reuse: no headroom taken.
+    // D10 whole-tree evidence resolves log/soil tags at load; BLOCK_REGISTRY
+    // reuse and the already-resolved dirt state remove one net literal, 2026-11-17: 2631.
+    // MotionYaw 2026-11-18: the head-controller capability names shulker,
+    // phantom and happy_ghast once, whose vanilla BodyRotationControl overrides
+    // keep the head on the body: +3, 2634.
+    // canonical extraction-tool data table (31 tools), PrepPortions 2026-11-18:
+    // +29, 2663 with MotionYaw; moves to mc-data with typed CoreRegistry
+    // resolution after the 19:00 cut (PLAN post-cut queue).
+    vanilla_id_literals: 2_663,
     // Measured 113 on 87c33206, 2026-11-13.
     path_equality: 113,
     panics: 5,
     merge_block_write_pushes: 17,
-    // D9 baseline on b58021e61, 2026-11-17; no spare headroom.
-    construction_field_accesses: 31,
-    // Owner-module extraction (ADR 0021 Step 3, D9-EXTRACTION), 2026-11-17 on
-    // de660fabd: the entity-phase coreperf/rest/prepare/step owners move into
-    // `tick/entity_phase/*` and the connection registry, state impl and dimension
-    // driver into `tick/*`, so both hot files measure 259 with no spare headroom.
+    // D9 baseline on b58021e61, 2026-11-17, was 31 field accesses; D8 moved
+    // every read outside the construction module behind
+    // `settlements/construction_access.rs` and renamed the fields to
+    // `projects`/`orders` in the same change, so the matcher follows the names
+    // in use. 0 on the D8 branch; any new access outside
+    // `settlements/construction*.rs` fails.
+    construction_field_accesses: 0,
     hot_files: &[
-        ("tick/entity_phase.rs", 259),
-        ("settlements/construction.rs", 1_076),
-        ("tick.rs", 259),
-        ("entities.rs", 924),
+        // MotionYaw 2026-11-18: the early-rest head guard, the ReadRow
+        // head-controller capability and its initializer: 737.
+        ("tick/entity_phase.rs", 737),
+        // D8 moved the record's construction fields behind
+        // `settlements/construction_access.rs`; 1028 after the split, measured
+        // on the D8 branch, 2026-11-17. The store flip and the queue rules
+        // (S1b) took it to 1058. S2 (joint per-project bills, binding liveness,
+        // per-project stall watch, addressed queue API) adds 69: 1127. The
+        // wave-1 site refactor (SpainLevel's whole-plan sweep, SpainD7Rest's
+        // candidate ranking) merged in adds 23: 1150. Review round 1
+        // (binding-only incumbent, a joint gate for walls and lamps, and a
+        // submission-sequenced retry) adds 51: 1201. The relayout slice
+        // (SpainRoads, D10 village re-lay) adds its module declaration and the
+        // re-lay vetoes inside the scan: 1214. D8 review round 2 adds 54 (the
+        // neighbour-footprint helpers, the per-project summary split, the
+        // submission-sequence stamp, the joint-proof funding cause), round 4
+        // adds 41 (the persisted carry debt) and the liquid ledger key adds its
+        // scan hooks: 1320. The next extraction candidate is the stall watch
+        // plus carry recovery, which belong in a construction_recovery module.
+        // D8S3's extracted upgrade guard adds six residual statements/items: 1326.
+        // Measured 1279 on the PreFinal main+Prep merge, 2026-11-18; 1272
+        // after the PrepTerritory/PrepRollover/PrepPortions finals. D42 moves
+        // owner-order admission turns into construction_site_turn.rs: 1228;
+        // its replanting proof into construction_replant.rs: 1209. Measured
+        // 1136 on main 31c50392e (drift after the 1209 entry: the SpainBuilders
+        // site withdrawal and the wave-1 relayout merges), 2026-11-19.
+        ("settlements/construction.rs", 1_136),
+        // B3 (EdgeScale, 2026-11-18): the edge-visible unlocked-session mirror
+        // is projected only when its inputs move, so `Connections` carries one
+        // membership generation and advances it in `insert`,
+        // `remove_by_connection` and `transfer_to` (834 -> 841). The lock set's
+        // own type was extracted to `tick/session_locks.rs` instead.
+        ("tick.rs", 841),
+        // MotionYaw 2026-11-18: `set_facing`, the full [yaw, pitch, head]
+        // setter that `set_rot` now delegates to: 925.
+        // D9 motion-gate extraction, 2026-11-17: the native motion gate policy
+        // moved byte-for-byte to its owner `entities/motion_gate.rs`; measured
+        // 864 on the CutLand integration tree (main 31c50392e + D9), 2026-11-19.
+        ("entities.rs", 864),
     ],
 };
 
@@ -116,7 +168,7 @@ fn describe(counter: Counter) -> (&'static str, &'static str, &'static str) {
              any receiver named `merge_block_writes` whatever its type",
         ),
         Counter::ConstructionFieldAccess => (
-            "`.project`/`.pending_order` accesses outside construction",
+            "`.projects`/`.orders` accesses outside construction",
             "construction state escapes its owner; use the construction interface",
             "field names are a structural proxy for SettlementRecord, without \
              receiver type resolution; unrelated same-named fields count too",

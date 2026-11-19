@@ -1,0 +1,11 @@
+[[bug]]
+id = "MODEL-OPUS-N2"
+title = "Magma cube eyes are split and sit too low. Confirmed at runtime."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:99"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::magma_cube_eyes_stay_on_the_vanilla_one_pixel_layers"]
+fix_commit = "client:4092ac53"
+repro_check = "candidate: same real revert run (red); no split eye bones, 8x8x1x8 layers plus the 4^3 inside cube; area=client, real-client check required"

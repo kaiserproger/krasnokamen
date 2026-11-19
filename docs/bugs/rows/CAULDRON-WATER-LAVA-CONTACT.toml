@@ -1,0 +1,10 @@
+[[bug]]
+id = "CAULDRON-WATER-LAVA-CONTACT"
+title = "Water and lava cauldrons fail to extinguish or burn a player inside their contents."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAULDRON-CONTACT-EFFECTS"
+regression = ["cargo:mc-core:tick_tests::contact_hazards_tests::burning_player_inside_water_cauldron_is_extinguished_for_one_level", "cargo:mc-core:tick_tests::contact_hazards_tests::lava_cauldron_burns_the_entity_standing_inside"]
+failing_first = "not recorded"

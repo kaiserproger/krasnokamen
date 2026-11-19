@@ -11,7 +11,6 @@ import shutil
 import shlex
 import subprocess
 import sys
-import tomllib
 
 from .ledger_base_fixed import BASE_FIXED
 from tools.dev.wtlib import PINS
@@ -142,6 +141,14 @@ _PROFILE_VERDICTS = {
         'door_walk', 'sleep_return', 'night_door', 'farmer_harvest', 'miner_deposit', 'lumberjack',
     })),
     'village-autonomy-qa': ('autonomy_acceptance', _AUTONOMY_VERDICTS),
+    # D8 control: run the unchanged profile on its own reverted tree/pin with
+    # MAX_PROJECTS=1. `two_projects_advance` must fail; never skip a player
+    # command via environment. _release_server enforces the control tree's pin.
+    'village-owner-order-qa': ('owner_order_acceptance', frozenset({
+        'two_orders_pending', 'funded_later_starts', 'unfunded_head_fences_autonomy',
+        'two_projects_advance', 'all_sites_on_map', 'parallel_restart',
+        'queue_limit_named', 'cancel_by_index',
+    })),
     # backends/screens_voice_qa.py verdicts: consent, audio, respawn and SVC proximity/group voice.
     'screens-voice-qa': ('screens_voice', frozenset({
         'native_loads_computer_monitor', 'owner_consent_names_app_audio', 'owner_deny_sends_no_audio',
@@ -172,7 +179,8 @@ _PROFILE_OVERRIDES = {
     'village-autonomy-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE'),
     'civilization-seed-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE',
                              'VILLAGE_AUTONOMY_SEED', 'VILLAGE_AUTONOMY_CENTER'),
-    'village-owner-order-qa': ('D5_QUEUE_CONTROL',),
+    'village-owner-order-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE',
+                             'VILLAGE_AUTONOMY_SEED', 'VILLAGE_AUTONOMY_CENTER'),
 }
 
 
@@ -514,13 +522,10 @@ def is_graphical_ref(ref):
 
 
 def run(ctx):
+    from . import ledger as ledger_tool
     from . import profiles
 
-    with (REPO_ROOT / 'docs/bugs/ledger.toml').open('rb') as file:
-        ledger = tomllib.load(file)
-    if set(ledger) != {'bug'} or not isinstance(ledger['bug'], list) or not ledger['bug']:
-        raise ValueError('ledger must contain a nonempty [[bug]] array and no other tables')
-    bugs = ledger['bug']
+    bugs = ledger_tool.load_rows(REPO_ROOT)
     ids = set()
     cargo = defaultdict(lambda: defaultdict(set))
     clients = defaultdict(set)
@@ -528,13 +533,7 @@ def run(ctx):
     client_tests = defaultdict(set)
     errors = []
     for bug in bugs:
-        if not isinstance(bug, dict):
-            errors.append('bug entry must be a table')
-            continue
-        ident = bug.get('id')
-        if not isinstance(ident, str) or not ident or ident in ids:
-            errors.append(f'invalid or duplicate bug id: {ident!r}')
-            continue
+        ident = bug['id']
         ids.add(ident)
         errors.extend(_promotion_errors(ident, bug))
         if REQUIRED - bug.keys() or bug.keys() - REQUIRED - OPTIONAL:
@@ -594,7 +593,6 @@ def run(ctx):
     # Refuse before any unit/Cargo gates: a missing pin cannot be repaired by this run.
     binary = _release_server(ctx, profiles) if ctx.include_regression_client and clients else None
     failures = []
-    from . import ledger as ledger_tool
     for refs, execute in ((python_refs, ledger_tool._run_python),
                           (client_tests if ctx.include_regression_client else {}, ledger_tool._run_client)):
         if refs:

@@ -11,13 +11,13 @@ fn copy_world(
 ) -> Result<crate::hot_backup::HotBackup, crate::config::CoreError> {
     let mut database = std::fs::File::open(world.join("native/state.redb")).unwrap();
     database.try_lock().unwrap();
-    crate::hot_backup::copy_world(world, out, &mut database, checkpoint, through)
+    crate::hot_backup::copy_world(world, out, &mut database, checkpoint, through, [9; 16])
 }
 
 fn batch(dir: &std::path::Path, lo: u64, hi: u64) {
     std::fs::write(
         dir.join(format!("batch-{lo:020}-{hi:020}.bin")),
-        format!("{lo}-{hi}"),
+        crate::journal::frame_batch(lo, hi, b"").unwrap(),
     )
     .unwrap();
 }
@@ -27,6 +27,8 @@ fn fake_world() -> tempfile::TempDir {
     std::fs::create_dir_all(world.path().join("native")).unwrap();
     std::fs::create_dir_all(world.path().join("journal")).unwrap();
     std::fs::write(world.path().join("native/state.redb"), b"database").unwrap();
+    // The marker travels with the store; a store with a checkpoint always has one.
+    mc_world::store_marker::write(world.path(), [9; 16], 10).unwrap();
     world
 }
 
@@ -52,6 +54,7 @@ fn copy_takes_database_and_only_the_wal_between_checkpoint_and_through() {
     assert_eq!(
         names,
         [
+            "checkpoint.marker",
             "journal/batch-00000000000000000011-00000000000000000011.bin",
             "journal/batch-00000000000000000012-00000000000000000012.bin",
             "native/state.redb",
@@ -60,6 +63,11 @@ fn copy_takes_database_and_only_the_wal_between_checkpoint_and_through() {
     assert_eq!(
         std::fs::read(out.path().join("native/state.redb")).unwrap(),
         b"database"
+    );
+    assert_eq!(
+        mc_world::store_marker::read(out.path()).unwrap(),
+        mc_world::store_marker::read(world.path()).unwrap(),
+        "the marker travels with the store"
     );
     use sha2::{Digest, Sha256};
     assert_eq!(
@@ -73,9 +81,15 @@ fn copy_reads_the_owned_database_snapshot_not_a_second_path_handle() {
     let world = fake_world();
     let out = tempfile::tempdir().unwrap();
     let bytes = b"lease-holder snapshot";
-    let backup =
-        crate::hot_backup::copy_world(world.path(), out.path(), &mut bytes.as_slice(), 10, 10)
-            .unwrap();
+    let backup = crate::hot_backup::copy_world(
+        world.path(),
+        out.path(),
+        &mut bytes.as_slice(),
+        10,
+        10,
+        [9; 16],
+    )
+    .unwrap();
     assert_eq!(
         std::fs::read(out.path().join("native/state.redb")).unwrap(),
         bytes
@@ -84,6 +98,51 @@ fn copy_reads_the_owned_database_snapshot_not_a_second_path_handle() {
     assert_eq!(
         backup.files["native/state.redb"],
         format!("{:x}", Sha256::digest(bytes))
+    );
+}
+
+/// Books R4-P1: a copy whose store is behind its own marker is a rolled-back
+/// store; the backup is refused instead of producing a copy that restore and
+/// startup would reject.
+#[test]
+fn copy_refuses_a_marker_ahead_of_the_committed_checkpoint() {
+    let world = fake_world();
+    let out = tempfile::tempdir().unwrap();
+    let error = crate::hot_backup::copy_world(
+        world.path(),
+        out.path(),
+        &mut b"database".as_slice(),
+        9,
+        9,
+        [9; 16],
+    )
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("ahead of the committed checkpoint"),
+        "{error}"
+    );
+}
+
+#[test]
+fn copy_refuses_a_marker_from_another_store() {
+    let world = fake_world();
+    let out = tempfile::tempdir().unwrap();
+    let error = crate::hot_backup::copy_world(
+        world.path(),
+        out.path(),
+        &mut b"database".as_slice(),
+        10,
+        10,
+        [8; 16],
+    )
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("would pair two different worlds"),
+        "{error}"
     );
 }
 
@@ -220,4 +279,39 @@ fn backup_of_a_running_core_restores_the_state_at_its_tick() {
     assert_eq!(block(&output, before), before_changed);
     assert_eq!(block(&output, after), after_original);
     restored.shutdown();
+}
+
+/// Books R5 G3: the copy must prove the SOURCE is intact, not only that the copy
+/// matches it. A batch whose payload no longer matches its CRC fails the backup
+/// and names the file, instead of being copied into a silently unrestorable
+/// backup.
+#[test]
+fn copy_refuses_a_source_batch_that_fails_its_crc() {
+    let world = fake_world();
+    let journal = world.path().join("journal");
+    batch(&journal, 11, 11);
+    let damaged = journal.join("batch-00000000000000000012-00000000000000000012.bin");
+    let mut frame = crate::journal::frame_batch(12, 12, b"{}\n").unwrap();
+    frame[32] ^= 0xff; // flip one payload byte; the frame's CRC stays the old one
+    std::fs::write(&damaged, frame).unwrap();
+    let out = tempfile::tempdir().unwrap();
+
+    let error = copy_world(world.path(), out.path(), 10, 12).unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("batch-00000000000000000012-00000000000000000012"),
+        "the refusal must name the damaged batch: {error}"
+    );
+    assert!(
+        error.to_string().contains("CRC mismatch"),
+        "the refusal must name the failed check: {error}"
+    );
+    assert!(
+        !out.path()
+            .join("journal/batch-00000000000000000012-00000000000000000012.bin")
+            .exists(),
+        "the damaged batch is never published into the backup"
+    );
 }

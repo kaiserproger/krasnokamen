@@ -1,0 +1,9 @@
+[[bug]]
+id = "ISSUE-1-17"
+title = "Automatic settlement layout and infrastructure missing"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1 (ledger title: automatic settlement layout and infrastructure). Partial on main 747e2cc6, split into the rows below instead of promoting: AUTOMATIC LAYOUT exists in the planner (docs/settlements/construction.md#planning-and-streets: the planner picks storage, houses, farm, lumber camp, mine, Builder hut, barracks from 6 residents, tower from 8, wall from 10 by itself; street grid, lots in walking order, road/lamp projects; crates/mc-core/src/settlements/layout.rs, layout_tests.rs, construction_planner_tests.rs) and was seen on a real client (seed-24 civilization-seed-qa timeline: road L1, lamp L1, mason L1/L2, lumber camp, mine projects, receipts/CivSimSeed24/REPORT-2.md), but a real-client house never completed in any recorded civilization-seed-qa receipt (ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME); INFRASTRUCTURE exists as roads, paving and lamps (layout.rs) and a single wall section, with no perimeter wall, gate or well (ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL). Receipts: receipts/Issue1EvidenceE/REPORT.md"
+regression = []

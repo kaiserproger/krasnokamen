@@ -1,0 +1,11 @@
+[[bug]]
+id = "DATAPACK-CREATE"
+title = "`/datapack create <id> <description>` always falls through to unsupported syntax, preventing creation of the vanilla empty directory pack from the command interface."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-CREATE Fix patch: reversing it removes the create arm from datapack_management::dispatch, so `/datapack create` falls through to the usage error."
+regression = ["cargo:mc-core:datapacks::command_tests::create_writes_an_empty_directory_pack_with_a_description", "harness:datapack-reload:native-datapack-reload"]
+fix_commit = "patch:6c685109e11e0daa60136fd4f8bfb0a436aba0fb05329897927e9f4ef779afe9"
+promotion = "docs/bugs/promotions/DATAPACK-CREATE.json"

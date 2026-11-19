@@ -1,0 +1,11 @@
+[[bug]]
+id = "MODEL-OPUS-N4"
+title = "`camel_husk` is the camel rig and inherits every camel finding."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:115"
+regression = ["client:krasnokamen-client:entities::animation_tests::camel_back_and_saddle_carry_the_received_standing_and_sitting_seat"]
+fix_commit = "client:ee258651"
+repro_check = "round 6 (client:ee258651): the camel and camel_husk rigs are exact against 26.3 (receipts/XHarnessGates/models263/audit-r6-before.json) and the ref is red with the fix reverted - receipts/XHarnessGates/client-r6-revert-red.log (this ref among the three failures). candidate: area=client, real-client check required"

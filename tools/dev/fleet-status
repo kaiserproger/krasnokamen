@@ -21,12 +21,24 @@ import argparse
 import fcntl
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import wtlib as w  # noqa: E402
+
+
+def build_token_limit() -> int | None:
+    """The runner's own `build_tokens=N`: lock files of a lowered limit stay on disk (deleting one
+    would race its waiters), so the file count is not the limit."""
+    runner = Path(os.path.realpath(__file__)).parent / "mem-run.sh"
+    try:
+        found = re.search(r"^build_tokens=(\d+)$", runner.read_text(), re.M)
+    except OSError:
+        return None
+    return int(found.group(1)) if found else None
 
 
 def now() -> int:
@@ -93,12 +105,12 @@ def waiters(wait_dir: Path) -> list[dict]:
     return sorted(found, key=lambda r: r.get("since", 0))
 
 
-def slot_lines(title: str, lock_dir: Path, pattern: str, wait_dir: Path) -> list[str]:
+def slot_lines(title: str, lock_dir: Path, pattern: str, wait_dir: Path, limit: int | None = None) -> list[str]:
     paths = sorted(lock_dir.glob(pattern), key=lambda p: (len(p.name), p.name)) if lock_dir.is_dir() else []
     held = [(path, holder(path)) for path in paths]
     held = [(path, record) for path, record in held if record is not None]
     queued = waiters(wait_dir)
-    lines = [f"{title} ({len(held)}/{len(paths)} in use, {len(queued)} waiting)"]
+    lines = [f"{title} ({len(held)}/{len(paths) if limit is None else limit} in use, {len(queued)} waiting)"]
     at = now()
     prefix, suffix = pattern.split("*")
     for path, record in held:
@@ -161,7 +173,8 @@ def main(argv: list[str] | None = None) -> None:
     fleet = Path(os.environ.get("KRASNOKAMEN_FLEET_DIR") or w.WORK / "fleet")
     lines = [f"fleet-status {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now()))}"]
     lines += claim_lines(fleet)
-    lines += slot_lines("BUILD TOKENS", args.mem_dir / "tokens", "token-*.lock", args.mem_dir / "tokens" / "wait")
+    lines += slot_lines("BUILD TOKENS", args.mem_dir / "tokens", "token-*.lock", args.mem_dir / "tokens" / "wait",
+                        build_token_limit())
     lines += slot_lines("SCENE SLOTS", scene_dir, "solaris-scene-slot-*.lock", scene_dir / "solaris-scene-slot-wait")
     lines.append(host_line(args.mem_dir))
     print("\n".join(lines))

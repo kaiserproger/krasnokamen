@@ -1,0 +1,10 @@
+[[bug]]
+id = "PLUGIN-OPERATION-RECEIPTS-GROW-WITHOUT-BOUND"
+title = "Plugin operation receipts form a dedup table keyed by an opaque plugin-chosen id with no expiry, watermark or cap, and every checkpoint re-serialises all of them, so a guest that mints one id per action grows RSS, checkpoint payload and commit time for the life of the world."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R5.md section 2b G4 (Petrov ch. 8 p. 184-185 deduplication needs a monotonic sequence and a watermark; ch. 12 p. 243). PluginDelta.receipts: BTreeMap<owner, BTreeMap<operation_id, OperationReceipt>> (crates/mc-core/src/plugin.rs) is keyed by an opaque guest string (crates/mc-script/src/inventory_operations.rs, npc_operations.rs); nothing removes a receipt (grep finds only a test harness), the whole state is serialised into the plugins native domain on every checkpoint (crates/mc-core/src/core/journal.rs serde_json::to_vec(plugins)) and priced into the journal queue budget (plugin.rs heap estimate). About 200-800 B per receipt, permanent; chest custody and NPC adoption are the likely minters [INFERENCE: the default plugin set is not in this tree]. Slow growth, no loss or crash; the report keeps it out of the freeze but wants it recorded because every default-plugin action during the announcement is permanent. Verified open on main 5bdc02911. Fix options in the report: (a) monotonic u64 per owner with a watermark (plugin ABI break), (b) wall-clock TTL keeping ids opaque, (c) a [plugins] max_receipts cap that refuses new operations. Measure by logging the receipt count at checkpoint next to entity_payload_bytes."
+regression = []
+failing_first = "not recorded"

@@ -10,7 +10,7 @@ async fn chunk_batch_edge_ack_validates_before_mutation_and_is_connection_local(
         let id = server.connections.joining_id();
         let (reliable, rx) = mpsc::channel(16);
         let (world, world_rx) = world_queue(32, 1 << 20);
-        let handles = ConnectionHandles::new(reliable, world);
+        let handles = ConnectionHandles::new(reliable, world, crate::plan::CHUNKS_PER_TICK);
         let state = Arc::clone(&handles.chunk_batches);
         assert_eq!(state.lock().allowance(), 9);
         state.lock().sent(9);

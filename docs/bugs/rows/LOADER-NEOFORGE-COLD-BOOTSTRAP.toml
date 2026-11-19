@@ -1,0 +1,16 @@
+[[bug]]
+id = "LOADER-NEOFORGE-COLD-BOOTSTRAP"
+title = "The harness game heap cap also limits NeoForm's cold Java compiler"
+area = "harness"
+severity = "major"
+status = "fixed"
+source = "Stage3 S3Loader cold bootstrap: NeoForm recompile reports Java heap space with inherited JDK_JAVA_OPTIONS=-Xmx512M"
+repro = "source"
+regression = [
+  "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_neoforge_client_heap_does_not_limit_gradle",
+  "python:tools.harness.test_java_clients:JavaClientsTests.test_group_does_not_cap_gradle_and_compiler_jvms",
+]
+fix_commit = "f645ca39a"
+repro_check = "S3LoaderCore 20261114T233700-loader-v2-settlements-smoke-mn7qespn failed compiling 7301 sources; its client log and S3Loader REPORT.md:100 confirm the game-wide JDK_JAVA_OPTIONS cap reached NeoForm. Both runtime and client_group injected the cap. Runtime now configures maxHeapSize only on the resolved runClientMcp JavaExec task via a private Gradle init script; prepared/plain Java commands retain their direct cap. Explicit operator JDK_JAVA_OPTIONS remains untouched. Only the two automatic environment injections restored: receipts/HarnessFix2/red-neoforge-heap.log fails both environment assertions. Restore: receipts/HarnessFix2/green-final-units.log. Cold NeoForge compilation was not rerun here; no timeout change (already fixed by a39164dc9)."
+failing_first = "not recorded"
+promotion = "docs/bugs/promotions/LOADER-NEOFORGE-COLD-BOOTSTRAP.json"

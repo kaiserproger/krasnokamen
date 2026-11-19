@@ -23,6 +23,9 @@ Free roofed beds, food in storage, vacant jobs and safe, developed towns attract
 residents. Once per game day, a simulated settlement can receive adults from the
 outside world or exchange a whole household with a more attractive settlement.
 Newcomers join without a household; ordinary breeding can form their first family.
+A resident without a family who has a child with a member of a family of three or
+more starts a new family with that partner and the child, so towns keep the small
+families that can found outposts.
 
 Residents walk in physically. Nearby reachable moves change membership first;
 longer moves walk to the simulated edge, travel offscreen with their identities

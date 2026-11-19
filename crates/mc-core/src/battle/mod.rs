@@ -7,12 +7,18 @@
 //! not swing. It covers every battle row that is not standing: foot soldiers,
 //! horses and mounted riders. Remaining cavalry residual: horse turns at
 //! gallop speed are steering and still swing.
+//!
+//! A battle row with a target and zero drive takes its facing from `facing.rs`
+//! (D36): head and body apart, published once per tick for both the rest guard
+//! and the step.
 
 pub(crate) mod archery;
 pub(crate) mod cavalry;
 mod columns;
+pub(crate) mod exposure;
 pub(crate) use columns::Columns;
 pub(crate) mod combat;
+pub(crate) mod facing;
 mod faction;
 pub(crate) mod formation;
 mod ground;
@@ -20,6 +26,7 @@ pub(crate) mod ids;
 pub(crate) mod live_players;
 pub(crate) mod morale;
 pub(crate) mod persistence;
+mod probe;
 pub(crate) mod retaliation;
 pub mod staging;
 pub(crate) mod steering;
@@ -59,6 +66,9 @@ pub(crate) struct BattleState {
     pub combat: combat::CombatRuntime,
     #[serde(skip)]
     pub columns: Columns,
+    /// Facing of standing soldiers (D36), rebuilt from the rows after a restore.
+    #[serde(skip)]
+    pub facing: facing::FacingState,
     #[serde(skip)]
     grid: TargetGrid,
     #[serde(skip)]
@@ -77,6 +87,13 @@ pub(crate) struct BattleState {
     pub live: live_players::LiveState,
     /// Soldiers answering an enemy who hurt them or a friend (retaliation.rs).
     pub retaliation: retaliation::Retaliation,
+    /// At-risk exposure of dismounted sweep riders (exposure.rs): bounded
+    /// `info` lines for the campaign bound, runtime-only and never persisted.
+    #[serde(skip)]
+    pub exposure: exposure::Exposure,
+    /// Facing counters of the phase log (probe.rs), runtime-only.
+    #[serde(skip)]
+    pub probe: probe::Probe,
     #[serde(skip)]
     pub(crate) journaled: Option<persistence::Journaled>,
     #[cfg(test)]
@@ -346,6 +363,23 @@ pub(crate) struct Output {
     pub counters: UnitCounters,
 }
 
+/// A run boundary the battle step does not own — `battle reset`, server
+/// shutdown, the journal halt — closes the exposure tracker with the body
+/// positions of that moment and reports the run's summary, so an episode is
+/// never lost or left to be misread as zero exposure. `BattleState::exposure`
+/// is runtime-only, so a recovered battle starts a fresh tracker; the summary's
+/// `start=` names the tick each run began.
+pub(crate) fn halt_exposure(state: &mut TickState) {
+    let mut exposure = std::mem::take(&mut state.hostile.battle.exposure);
+    let sample = exposure::Sample {
+        entities: &state.entities,
+        formation: &state.hostile.battle.formation,
+        columns: &state.hostile.battle.columns,
+    };
+    exposure.halt(Some(&sample));
+    state.hostile.battle.exposure = exposure;
+}
+
 /// The only battle tick call. Ordered kernels read a frozen world/entity store
 /// and write only battle runtime + private output; native effects apply after
 /// the frozen borrow ends. Spawned arrows enter ordinary projectile simulation.
@@ -359,6 +393,7 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     let mut mark = start;
     let mut battle = std::mem::take(&mut state.hostile.battle);
     battle.work = Work::default();
+    battle.probe.counts = probe::Counts::default();
     let mut output = std::mem::take(&mut battle.output);
     if !battle.running {
         battle
@@ -372,14 +407,23 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
         ..Default::default()
     };
     if !battle.running {
+        battle.probe.reset();
+        let sample = exposure::Sample {
+            entities: &state.entities,
+            formation: &battle.formation,
+            columns: &battle.columns,
+        };
+        battle.exposure.halt(Some(&sample));
         battle.columns.drive_by_slot.clear();
         battle.columns.look_by_slot.clear();
+        battle.facing.release(&state.entities);
         battle.output = output;
         timings.total_us = start.map_or(0, |start| start.elapsed().as_micros() as u64);
         battle.timings = timings;
         state.hostile.battle = battle;
         return Vec::new();
     }
+    battle.exposure.begin(state.tick);
     let frame = Frame {
         entities: &state.entities,
         registry: &state.registry,
@@ -412,10 +456,18 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     morale::step(&frame, &mut battle, &mut output);
     timings.morale_us = phase_us(&mut mark);
     battle.columns.project();
+    facing::project(&frame, &battle.columns, &battle.combat, &mut battle.facing);
     timings.projection_us = phase_us(&mut mark);
     #[cfg(test)]
     if battle.trace.is_some() {
         battle.trace = Some(trace_tests::frame_digest(&battle, &output));
+    }
+    if start.is_some() {
+        let mut probe = std::mem::take(&mut battle.probe);
+        probe.observe(&frame, &battle);
+        battle.probe = probe;
+        // Not timed: the next phase starts after the counters.
+        phase_us(&mut mark);
     }
     battle.elapsed_ticks += 1;
     state.hostile.events.append(&mut output.events);
@@ -446,11 +498,22 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     intents
 }
 
+/// Phase log only: the battle part of the entity phase's line, this tick's
+/// timings and facing counters, with the windups counted after the entity
+/// phase wrote the tick's rotations (probe.rs).
+pub(crate) fn phase_log_detail(state: &mut TickState) -> (Timings, probe::Counts) {
+    let mut probe = std::mem::take(&mut state.hostile.battle.probe);
+    probe.windups(state);
+    let counts = probe.counts;
+    state.hostile.battle.probe = probe;
+    (state.hostile.battle.timings, counts)
+}
+
 /// Vanilla `LivingEntity.DATA_LIVING_ENTITY_FLAGS` (javap 26.3): index 8, a
 /// byte where 1 is `isUsingItem` and 2 selects the off hand. A raised battle
 /// shield is the off-hand use a blocking mob or player shows; native
 /// appearance custody journals and publishes it like any metadata change.
-const LIVING_FLAGS: u8 = 8;
+pub(crate) const LIVING_FLAGS: u8 = 8;
 const USING_OFF_HAND: i8 = 0b11;
 
 fn show_shield(state: &mut TickState, id: EntityId, raised: bool) {

@@ -1,0 +1,10 @@
+[[bug]]
+id = "TEST-WINQA-OBSERVATION-TRIGGERS"
+title = "`winqa-8796727.yaml:37-61` could not frame falling sand or discover the screen-share trigger; neither acceptance action was observed. Earlier Loading resources retry claim was second-hand and final join passed."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-WINQA-OBSERVATION-TRIGGERS Blocked (stage 2): the only artifact is the untracked <work>/winqa-8796727.yaml outside the repo, and the two acceptance actions need the Windows VM under dockur/noVNC (owner hardware): a ground-level observer pose for the falling-sand column (mouse-look over noVNC never framed it and the server has no console block query) and the exact share-dialog trigger (no share/consent UI match in the client sources, so the trigger is a client-repo decision)."
+regression = []
+repro_check = "blocked: needs the Windows VM under dockur/noVNC (owner hardware) and the untracked <work>/winqa-8796727.yaml"

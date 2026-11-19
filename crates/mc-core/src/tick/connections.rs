@@ -28,6 +28,10 @@ pub struct Connections {
     /// (which precedes Join), moved with the connection across dimensions,
     /// and cleared on leave/remove. Never persisted; absent means `Full`.
     pub(in crate::tick) chat_visibilities: HashMap<ConnectionId, crate::boundary::ChatVisibility>,
+    /// Advances on every join, leave and dimension move. The tick's
+    /// edge-visible session mirror is re-projected only when this or
+    /// [`SessionLocks::generation`] moved (see `core::session_mirror`).
+    membership_generation: u64,
 }
 
 impl Connections {
@@ -42,6 +46,7 @@ impl Connections {
         self.by_entity.insert(entity, connection);
         self.names.insert(connection, name);
         self.uuids.insert(connection, uuid);
+        self.membership_generation += 1;
     }
 
     /// Connection for a player entity, if joined.
@@ -112,6 +117,7 @@ impl Connections {
         self.by_entity.remove(&entity);
         self.names.remove(&connection);
         self.uuids.remove(&connection);
+        self.membership_generation += 1;
         Some(entity)
     }
 
@@ -123,6 +129,9 @@ impl Connections {
         self.by_entity.remove(&entity);
         let uuid = self.uuids.remove(&connection).expect("joined UUID");
         let name = self.names.remove(&connection).expect("joined name");
+        // Destination `insert` advances its own generation; the source lost a
+        // member here.
+        self.membership_generation += 1;
         destination.insert(connection, entity, uuid, name);
         if let Some(view_distance) = self.view_distances.remove(&connection) {
             destination.view_distances.insert(connection, view_distance);
@@ -144,5 +153,12 @@ impl Connections {
     /// All joined connections (reliable fan-out targets).
     pub fn all_connections(&self) -> impl Iterator<Item = ConnectionId> + '_ {
         self.by_connection.keys().copied()
+    }
+
+    /// Advances on every join, leave and dimension move (see
+    /// `core::session_mirror` for the reader).
+    #[must_use]
+    pub(crate) fn membership_generation(&self) -> u64 {
+        self.membership_generation
     }
 }

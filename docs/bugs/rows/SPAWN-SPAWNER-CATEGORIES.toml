@@ -1,0 +1,11 @@
+[[bug]]
+id = "SPAWN-SPAWNER-CATEGORIES"
+title = "Cow/passive spawner rejected by Monster-only category admission. Custom rules/potentials rejection also documented, not separately runtime-proven."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-SPAWNER-CATEGORIES"
+regression = ["cargo:mc-core:monster_spawner::tests::fix_mobs_passive_spawner_hydrates_and_spawns_in_peaceful", "cargo:mc-core:monster_spawner::tests::fix_mobs_spawner_accepts_custom_light_rules", "cargo:mc-core:monster_spawner::tests::fix_mobs_weighted_spawn_potential_replaces_current_data_on_reset", "cargo:mc-core:monster_spawner::tests::fix_mobs_placed_spawner_default_record_does_not_poison_chunk_hydration", "harness:entities:native-v2-spawner-egg"]
+fix_commit = "patch:438f217eadec02dc71b53c1e41d2bd96a2f3049d3d1862528ec743603195f044"
+promotion = "docs/bugs/promotions/SPAWN-SPAWNER-CATEGORIES.json"

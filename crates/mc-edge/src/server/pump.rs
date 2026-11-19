@@ -7,6 +7,38 @@ use std::collections::BTreeMap;
 
 const COREPERF_COLD_PAIR_LIMIT: usize = 1_000_000;
 
+/// A test's pump gate callback.
+#[cfg(test)]
+type PumpGate = std::sync::Arc<dyn Fn() + Send + Sync>;
+
+/// Test-only pump gate: set by a test for one server, called by that server's
+/// pump after recording a tick and before it takes the registry lock.
+#[cfg(test)]
+static PUMP_GATE: std::sync::LazyLock<std::sync::Mutex<Option<(usize, PumpGate)>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
+
+/// Park this server's pump in the gate until the test's gate returns.
+#[cfg(test)]
+pub(crate) fn arm_pump_gate(server: &Arc<EdgeServer>, gate: PumpGate) {
+    *PUMP_GATE.lock().expect("pump gate") = Some((Arc::as_ptr(server) as usize, gate));
+}
+
+/// Disarm the gate (every test that arms one must).
+#[cfg(test)]
+pub(crate) fn disarm_pump_gate() {
+    *PUMP_GATE.lock().expect("pump gate") = None;
+}
+
+#[cfg(test)]
+fn pump_gate(server: &Arc<EdgeServer>) {
+    let armed = PUMP_GATE.lock().expect("pump gate").clone();
+    if let Some((address, gate)) = armed
+        && address == Arc::as_ptr(server) as usize
+    {
+        gate();
+    }
+}
+
 /// Vanilla 26.3 `PlayerList.tick()` (javap) increments `sendAllPlayerInfoIn`
 /// and, once it exceeds 600, broadcasts one `UPDATE_LATENCY` player-info packet
 /// listing every player and resets it to 0: one packet per 601 ticks.
@@ -58,6 +90,11 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
         let mut latest_roster: Arc<[mc_core::dimensions::RosterPlayer]> = Arc::from(Vec::new());
         let coreperf = std::env::var_os("KRASNOKAMEN_COREPERF_REGIONS").is_some();
         let mut knockback_ticks = BTreeMap::new();
+        // Routing view kept across ticks: refreshed only when a connection
+        // registered or left (`ConnectionRegistry::routing_snapshot`), so an
+        // unchanged tick clones no handles at all.
+        let mut connections: HashMap<ConnectionId, ConnectionHandles> = HashMap::new();
+        let mut connections_generation = 0u64;
         loop {
             let out = match rx.recv().await {
                 Ok(out) => out,
@@ -74,7 +111,7 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                 Err(broadcast::error::RecvError::Closed) => {
                     // Drain terminal reliable disconnects before closing, both
                     // for graceful shutdown and for an authoritative failure.
-                    let (mut connections, _) = server.connections.routing_snapshot();
+                    refresh_routing(&server, &mut connections, &mut connections_generation);
                     route_outbox(
                         &server,
                         &mut viewers,
@@ -97,7 +134,12 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                 }
             };
             server.tick_stats.record(out.tick);
-            let (mut connections, roster) = server.connections.routing_snapshot();
+            // Test-only: a test parks the real pump here, in a synchronous
+            // section before the registry lock, the shape a fanout `install`
+            // takes.
+            #[cfg(test)]
+            pump_gate(&server);
+            let roster = refresh_routing(&server, &mut connections, &mut connections_generation);
             route_outbox(
                 &server,
                 &mut viewers,
@@ -224,6 +266,25 @@ pub(super) fn configured_viewer(
         viewer.advancements = Arc::clone(&packets.advancements);
     }
     viewer
+}
+
+/// Refresh the pump's routing view when a connection registered or left.
+///
+/// The view outlives a tick, so the pump no longer rebuilds every handle
+/// triplet per tick: a registration, a disconnect and a refusing write all
+/// move the registry's generation, and the next refresh replaces the view
+/// wholesale — the same content the per-tick clone used to produce.
+fn refresh_routing(
+    server: &Arc<EdgeServer>,
+    connections: &mut HashMap<ConnectionId, ConnectionHandles>,
+    generation: &mut u64,
+) -> Option<Vec<String>> {
+    let (handles, roster) = server.connections.routing_snapshot(generation);
+    if let Some(handles) = handles {
+        connections.clear();
+        connections.extend(handles);
+    }
+    roster
 }
 
 pub(super) fn route_outbox(
@@ -381,6 +442,12 @@ pub(super) fn route_outbox_batches(
                 )
                 .is_err()
         {
+            // Move the registry generation so the next refresh cannot
+            // re-adopt this connection with a viewer that never got its
+            // command tree.
+            server
+                .connections
+                .close(connection, "command-tree-send-failed");
             connections.remove(&connection);
             viewers.remove(&connection);
             continue;
@@ -845,9 +912,11 @@ mod roster_seed_tests {
         let (world_tx, _world_rx) = world_queue(bound, WORLD_QUEUE_BYTES);
         server
             .connections
-            .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-                server.hub.published_knockback_count(id)
-            })
+            .register(
+                id,
+                ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+                || server.hub.published_knockback_count(id),
+            )
             .unwrap();
         reliable_rx
     }

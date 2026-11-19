@@ -1,0 +1,12 @@
+[[bug]]
+id = "CLIENT-SERVER-RESOURCE-PACK-PUSH-DECLINED"
+title = "The native client declines every server resource-pack push, so a player joining a server that ships a pack (for example the battle armour and weapons pack) never gets it and sees plain vanilla items unless the pack was installed locally through SOLARIS_CLIENT_RESOURCE_PACKS. Vanilla accepts the push, downloads the pack from its URL, checks the hash, applies it and answers with the status sequence."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "solaris-client src/session/packets.rs:96 (configuration RESOURCE_PACK_PUSH) and :657 (play RESOURCE_PACK_PUSH) both call decline_resource_pack; battle-video client line 6eac8021 lines 96 and 105 likewise; the client loads packs only from SOLARIS_CLIENT_RESOURCE_PACKS. Found while preparing live laptop clients for the G2 battle video (owner 2026-11-13: fix right after the video). Follow-up to P2, which only stopped optional offers from disconnecting the join. Gate: a live native client joins a server that pushes the battle pack, with no local pack folder, and shows the battle armour and weapons."
+regression = ["client:krasnokamen-client:session::packets::tests::resource_pack_push_accepted_downloaded_applied_in_both_phases", "client:krasnokamen-client:session::packets::tests::resource_pack_push_hash_mismatch_reports_failed_download"]
+failing_first = "reported"
+fix_commit = "client:54b79f73d2c48928ddc60fb82b60c33d7581d11b"
+repro_check = "round 2 (XClientSession): control receipts/XClientSession/control-w8.log (red with client:54b79f73 reversed). candidate: area=client, real-client check required - the gate is a live native client joining a server that pushes the pack with no local pack folder and showing the battle armour and weapons"

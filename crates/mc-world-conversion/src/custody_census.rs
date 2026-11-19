@@ -84,8 +84,11 @@ fn invalid(reason: impl std::fmt::Display) -> CoreError {
 fn census(config: &CoreConfig, receipt: &mut CustodyReceipt) -> Result<(), CoreError> {
     let path = config.world_dir.join("native/state.redb");
     drop(
-        mc_world::native::NativeStore::open(&path, native::native_identity(config))
-            .map_err(|error| native::open_refusal(config, &path, error))?,
+        mc_world::native::NativeStore::open_checked(
+            &config.world_dir,
+            native::native_identity(config),
+        )
+        .map_err(|error| native::open_refusal(config, &path, error))?,
     );
     let world = native::recover_offline(config)?;
     receipt.checkpoint_tick = Some(world.manifest.tick);

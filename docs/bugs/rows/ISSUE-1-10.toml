@@ -1,0 +1,12 @@
+[[bug]]
+id = "ISSUE-1-10"
+title = "Villagers fail to acquire available jobs"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1 (settlement villagers should take free jobs automatically and walk there without dropping the route); fixed by 8a1c5453 (2026-10-19: bound settlements discover free job sites across their whole radius). Fix patch docs/bugs/fix-patches/ISSUE-1-10.patch is the claim route window at the candidate (settlements/allocator.rs acquire: the search window follows the settlement claim); reversing it brings back the flat 48x16 stroll window, so a free settlement job farther away is never claimed. The distant-claim fixture puts the job's nearest standing cell 52 blocks from the villager (it was 48, still inside the flat window)"
+regression = ["cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_settlement_job_is_claimed_beyond_vanilla_reach", "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_claim_keeps_walking_without_forty_tick_abandon", "harness:scene-shot:native-village-distant-job"]
+failing_first = "reported"
+fix_commit = "patch:fe58612e34bab7e5ae287f4c9d0dd604420d495b59408b7e31133a7f587aa9ee"
+promotion = "docs/bugs/promotions/ISSUE-1-10.json"

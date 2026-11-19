@@ -1,0 +1,10 @@
+[[bug]]
+id = "WRITE-INTO-QUARANTINED-CHUNK-STILL-JOURNALED"
+title = "A block write into a chunk whose admission already failed returns before the overlay insert but still enters the tick's change list and the WAL, so after the storage is repaired replay can apply a block without its block entity or owner."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "receipts/ArchDesign/DESIGN-RESIDENCY-R11.md section 2 and VOTE-RESIDENCY-R10-astra.md / VOTE-RESIDENCY-R11-astra.md (read-only). On main 3068dfb1b the setter returns before the overlay insert for a failed chunk while write_block still records the change (crates/mc-core/src/world.rs:1168-1180,1210-1216; crates/mc-core/src/tick.rs:697-700); WAL Block entries change only the block map and the old NBT is removed by a separate RemoveBlockEntity (journal/replay.rs:732-734,843-868), and recovery reinstalls the prior opaque block-entity image after folding blocks (core/recovery.rs:78-103,116-128). Fix (accepted design, not implemented): a producer that can refuse or wait does so before mutating; one that already mutated while its write chunk is refused halts the tick before the journal send and broadcast (core/tick_loop.rs:281-303, halt_authority), detected from the write list, never from overlay presence or the new block type."
+regression = []
+failing_first = "not recorded"

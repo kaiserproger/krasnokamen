@@ -1,0 +1,11 @@
+[[bug]]
+id = "TICK-FROZEN-GAME-AGE-WIRE"
+title = "SET_TIME advances client game age during tick freeze by sending the WAL frame counter"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Native freeze/teleport/local-input scene: the old server advances received game age while daylight holds. The candidate projects TickControl simulated age; actual native repeats and source controls exist, but graphical ledger promotion remains pending."
+regression = ["cargo:mc-core:tick_control::tests::game_time_stands_still_while_frozen_and_counts_stepped_ticks", "cargo:mc-edge:server::admin_tests::clock_queue_tests::queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer", "cargo:mc-edge:play::tests::join_burst_carries_load_start_before_center", "harness:scene-shot:native-frozen-game-age"]
+failing_first = "reported"
+fix_commit = "2a315d20f4d69e82802e1ab1bd9d5a20bf29736d"

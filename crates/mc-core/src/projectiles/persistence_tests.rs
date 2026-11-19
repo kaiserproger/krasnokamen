@@ -942,6 +942,10 @@ fn battle_arrow_support_loss_clears_anchor_across_checkpoint_and_wal_restart() {
     );
     let directory = tempfile::tempdir().unwrap();
     let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    // The tail starts here (the pre-fall ticks are not journaled), and a compact
+    // record is a delta of an image in the same tail, so this state emits the
+    // image exactly as it does right after a checkpoint capture.
+    crate::journal_touched::clear_field_baselines(&mut live);
     let (output, _, _) = crate::tick::run_tick(&mut live, &[]);
     let entries = crate::core::journal_entries_for_tick(&mut live, &output).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();

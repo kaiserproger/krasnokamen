@@ -36,7 +36,16 @@ pub(crate) mod ui_text;
 pub(crate) fn tick(state: &mut TickState, changes: &mut crate::boundary::ChangeSet) -> u64 {
     forestry::retire_missing(state);
     let elapsed = allocator::tick(state, changes);
+    let writes = state.plugin_block_writes.len();
     construction::tick(state);
+    // Executor writes land after this tick's `fluids::schedule`. A builder
+    // filling a liquid source leaves the flow it used to feed without a due
+    // fluid tick, so the remaining flow would never recede; schedule the cells
+    // the settlements phase wrote in this same tick.
+    for index in writes..state.plugin_block_writes.len() {
+        let pos = state.plugin_block_writes[index].0;
+        crate::fluids::schedule_around(state, pos);
+    }
     army::tick(state);
     let arrivals = transit::tick(state, changes);
     migration::tick(state, changes, &arrivals);
@@ -215,6 +224,19 @@ pub(crate) fn remove(state: &mut TickState, id: SettlementId) -> bool {
         clear(world, id);
     }
     true
+}
+
+/// The online connection of the settlement's owner, if any.
+pub(crate) fn owner_connection(
+    state: &TickState,
+    id: SettlementId,
+) -> Option<crate::boundary::ConnectionId> {
+    let owner = state.settlements.get(id)?.owner.as_deref()?;
+    let uuid = owner.parse::<uuid::Uuid>().ok()?;
+    state
+        .connections
+        .all_connections()
+        .find(|connection| state.connections.uuid_of(*connection) == Some(uuid))
 }
 
 /// Retain authenticated names for offline presentation without changing the

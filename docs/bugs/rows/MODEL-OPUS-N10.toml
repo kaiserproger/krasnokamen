@@ -1,0 +1,11 @@
+[[bug]]
+id = "MODEL-OPUS-N10"
+title = "Glow squid tentacle texture yaw, cow and mooshroom front-leg alignment, and bed right-leg mirroring differ from vanilla"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:156"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::cow_horn_cube_and_humanoid_hat_follow_the_26_3_layers"]
+repro_check = "round 7 (client:6d4540e3, test 23a158e9): the ref is red with the fix reverted - receipts/XHarnessGates/client-r7-revert-red.log (24 passed, 1 failed) - and the row text overstated the deltas: only the cow/mooshroom horn mirror and the skeleton/stray hat cube differed from 26.3. candidate: area=client, real-client check required"
+fix_commit = "client:6d4540e3"

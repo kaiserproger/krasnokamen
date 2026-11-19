@@ -1,0 +1,11 @@
+[[bug]]
+id = "LOADER-OBSERVATION-EQUIPMENT"
+title = "The Java agent's received-state observation omits hands, item models, blocking and vehicle, stopping the Java battle gate"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 S3Scenes Java battle: java-agent MinecraftClientObservation.java:292-366 lacked main_hand/off_hand/vehicle_id/blocking (receipts/Stage3/S3Scenes/REPORT.md)"
+repro = "source"
+regression = []
+failing_first = "reported"
+repro_check = "Fixed in Loader commit 7343bd38 (no ledger fix_commit kind for the Loader repository). Loader Java test MinecraftClientObservationTest (no ledger ref kind): red receipts/LoaderObs/equipment-red.log, green equipment-green.log. Real clients receipts/LoaderObs/fabric-46-cached/java-battle.json and neoforge-46-toolchains/java-battle.json pass the original failing observation and horse/rider assertions. Not promoted."

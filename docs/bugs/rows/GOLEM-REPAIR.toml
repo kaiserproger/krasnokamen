@@ -1,0 +1,11 @@
+[[bug]]
+id = "GOLEM-REPAIR"
+title = "Original interaction with a60-health iron golem using an iron ingot left health60 instead of healing25. Both hands/creative/no-overheal are required by the retained failing test."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-REPAIR"
+regression = ["cargo:mc-core:golems::tests::iron_ingot_repairs_golem_from_either_hand_without_overhealing", "harness:entities:native-v2-golem"]
+fix_commit = "patch:451207291bdb4b360460fba745bb0e51bf416587a08df4355c939bbf3fff4efe"
+promotion = "docs/bugs/promotions/GOLEM-REPAIR.json"

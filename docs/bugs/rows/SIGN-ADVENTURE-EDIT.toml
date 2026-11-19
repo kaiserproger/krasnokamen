@@ -1,0 +1,10 @@
+[[bug]]
+id = "SIGN-ADVENTURE-EDIT"
+title = "Adventure players can open and rewrite ordinary unwaxed signs, bypassing vanilla's mayBuild restriction; dye/glow mutation likewise lacks a game-mode gate."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SIGN-ADVENTURE-EDIT"
+regression = ["cargo:mc-core:farming_tests::signs_tests::adventure_cannot_edit_or_decorate_signs"]
+failing_first = "reported"

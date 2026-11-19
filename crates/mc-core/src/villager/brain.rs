@@ -294,7 +294,15 @@ fn roofed(state: &TickState, pos: BlockPos) -> bool {
 /// Vanilla `stopSleeping`: the woken body takes its standing size on a free
 /// cell beside the bed.
 fn stand_up(state: &mut TickState, slot: EntitySlot, baby: bool) {
-    let (width, height) = if baby { (0.15, 0.975) } else { (0.3, 1.95) };
+    // Vanilla `LivingEntity#getDefaultDimensions` from the type's own blueprint
+    // (a baby is exactly half), the same source summon and recovery write.
+    let EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
+        return;
+    };
+    let Some(blueprint) = state.registry.blueprint(type_id) else {
+        return;
+    };
+    let (width, height) = crate::blueprint::blueprint_dimensions(blueprint, baby, false);
     state.entities.set_half_width(slot, width);
     state.entities.body_mut(slot).height = height;
     let cell = at(state.entities.pos(slot));
@@ -988,6 +996,10 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         #[cfg(test)]
         let full_start = std::time::Instant::now();
         let pos = state.entities.pos(slot);
+        // A bound Builder's shift belongs to its project: a breeding ration
+        // waits for the shift's end. Taken mid-haul it turned builders back to
+        // storage 20-60 blocks short of a site 110 blocks away, and the stall
+        // watch released them (Spain seed 100, ticks 85800-86850).
         let needs_ration = state.entities.row(slot).villager.as_ref().is_some_and(|v| {
             v.settlement.is_some()
                 && v.home.is_some()
@@ -1000,6 +1012,11 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                     v.settlement,
                     state.entities.row(slot).uuid,
                 )
+                && !(super::building::working(state, v)
+                    && crate::settlements::construction::bound_builder(
+                        &state.settlements,
+                        state.entities.row(slot).uuid,
+                    ))
                 && available_food(state, slot, &cache.food, v) < 12
         });
         // A ration trip owns its destination separately from worker hauling.

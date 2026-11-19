@@ -267,6 +267,78 @@ restore a pre-upgrade native checkpoint and its matching WAL with the old binary
 or continue with the compatible binary. Do not strip the field or rewrite the
 save to make an older reader accept it.
 
+### Durability failures and publication order
+
+A failed WAL `write`, `sync_all`, `rename` or journal-directory `sync_all` is
+fatal: the journal owner acknowledges nothing, closes its queue and the tick
+owner halts. There is no retry, because the batch sequence cannot be repaired
+after a hole. The checkpoint gate and the pre-backup flush obey the same rule
+for I/O (`GateError::Io`: a failed directory fsync or WAL-tail verification
+stops the world); the single non-fatal refusal is a **coverage hole**
+(`GateError::Hole`), which skips that checkpoint, refuses its ACK and keeps
+serving with the appended batches intact. A backup copy error stays local to its
+backup job. Publication order stays WAL file fsync, rename, journal directory
+fsync (every `journal_fsync_every_batches` published batches, default 10),
+checkpoint gate, `Durability::Immediate` commit, checkpoint marker, ACK, then
+prune, so a committed checkpoint never outruns its WAL and a pruned WAL never
+outruns the durable witness that its checkpoint existed. The checkpoint marker
+is `<world>/checkpoint.marker`: a fixed-size file outside redb with the store's
+immutable random `store_uuid` (a required native header key, minted at store
+creation and import) and the acknowledged checkpoint tick, installed through a
+temporary file, `sync_all`, rename and directory fsync (there is no directory
+fsync on Windows, so the rename there survives a process crash but not a power
+loss). A marker write error
+publishes no ACK, prunes nothing and stops the writer. Before replay, startup
+refuses a missing or corrupt marker next to a store with a checkpoint, a foreign
+store id, or a store tick behind the marker tick — a redb repair rolled the store
+back behind an acknowledged, already pruned checkpoint; a store ahead of the
+marker is the commit-to-marker crash window and rewrites it. The one exception is
+an interrupted first start: the first-start file plus a tick-0 store with no
+marker is bootstrap proof of a world that never served, and the pair is
+published once from that store; without the first-start file the same state is
+refused. Hot backup copies
+the marker, and `world restore` refuses a restored pair whose store id or tick
+disagrees with it. Offline tools that open a store without `Core::open` (prune,
+compact, pregeneration, worldgen upgrade, censuses, probe) run the same check
+before their first write or reported read, and a read-only tool never rewrites
+the marker. There is no converter for worlds written before the store id
+and marker. The journal directory's own entry
+is persisted through `atomic_file::create_dir_all_durable` when the writer opens
+it. Close errors are not observable through Rust's `File` drop, so durability
+rests on the explicit fsync before the rename, not on close, and the later
+directory fsync publishes the name rather than re-checking that closed file's
+writeback errors. A tick reaches clients once its batch is queued, before it is
+published, so any crash can lose the unpublished batches (up to 128 queued, 256
+MiB, plus the one being written), and a host power loss can also drop up to
+`journal_fsync_every_batches` published batches. Removing covered journal batches is
+best effort: a refused removal is warned and counted (dashboard `/metrics` and
+`/stats`) rather than fatal, because batches at or below the committed
+checkpoint are replay-inert and only the WAL grows, while an unwritable journal
+directory still halts the world on the next append. Unpublished
+`batch-*.bin.tmp` leftovers of a failed or interrupted append are removed by the
+next journal open under the exclusive world lease, and a leftover the sweep
+cannot remove is warned about with its path and reason. Every redb repair is
+logged at `error!` as a possible rollback to an earlier commit (Books R4-P1):
+the repair callback cannot tell an unclean stop from a damaged commit or header slot, and the
+WAL behind an acknowledged checkpoint is already pruned, which is why the marker
+exists. Policy and drills:
+[persistence](../architecture/persistence.md).
+The native structure ledger is one plugin-domain key per structure, survey and
+worksite plus a schema-2 meta key; a tick journals only the records it wrote and
+the meta key, never the whole ledger. Structure work receipts are not stored:
+each record's watermark is the only count of its advances. The single-image
+ledger of older binaries and this one refuse each other (fail closed, no
+converter); see [structure ledger keys](../architecture/persistence.md#structure-ledger-keys).
+
+Settlement preparation certificates live in that same required record shape:
+one per ordered stage, with persisted per-cell expected raw IDs and registered
+roots used by grown-sapling recertification. Every unprocessed cell is checked at commit;
+village-territory edits are locally re-derived with conserved live-block loot.
+Certificate rewrites, repair, custody, blocks and cursor share the existing
+tick/WAL/checkpoint boundary. Missing `portions` refuses a record, while plugin
+records explicitly store an empty array. This joins the schema-2 LedgerSplit/D8
+reset, without a global plugins-version bump or an old-record adapter.
+
 ### Immutable datapack worldgen inputs
 
 The startup boundary folds checkpoint and contiguous WAL metadata before it
@@ -447,6 +519,40 @@ residency; dirty pins do not by themselves activate gameplay. Active chunks
 must be resident and legible. Durable tickets restore after restart; ephemeral
 pearl tickets do not. Activation clocks and debt have native persisted custody;
 no downtime catch-up is inferred. See [residency](../architecture/residency.md).
+
+## Scale target and the hot set (owner decision, 2026-11-18)
+
+By default the core is sized for about one million of whatever is hot, in any
+scenario: plugins can make creatures or data hot that vanilla never does. The hot
+set is chosen by access, measured or declared, never by a list of vanilla types.
+Plugin components and entities get the same hot/cold split, pages, ordering,
+residency and collective representation as built-in ones; a plugin keeps its
+state across offload through materialization. A layout or fast path keyed on
+vanilla types or on one workload is rejected in review. The architecture
+committee works out the full design after the freeze.
+
+## Far-away simulation and journal policy (owner decision D45, 2026-11-19)
+
+Owner answers to the residency and journal design questions. They are design
+input, not implemented; implementation follows the committee designs after GO.
+
+- Beyond what is already accepted (game-time settlement accrual in
+  [ADR 0023](0023-offscreen-settlement-simulation.md), catch-up of resident
+  inactive chunks, nothing accrued during downtime or `/tick freeze`), all
+  creatures far from players are simulated, wild mobs included, and births and
+  deaths may happen far away. This changes vanilla farms, spawn limits and
+  "what you left is what you find".
+- The per-namespace custom-mob credit of [ADR 0016](0016-mob-capabilities.md#cost-accounting)
+  may be revised after measurements, keeping the shared-tick protection.
+- The journal redesign's store format change may reset the world again; no
+  offline conversion is required.
+- A warm standby's generation lag is accepted per durability class (custody
+  from `wal_tick`, checkpoint-only state from the last verified generation's
+  `checkpoint_tick`) without a fixed maximum, to be measured later. The host and
+  date, service and re-seed times, and warning age remain open.
+- Plugins may declare new state durable only at checkpoints: after a crash it
+  rolls back to the last successful checkpoint. Existing custody and plugin
+  storage guarantees do not weaken.
 
 ## Rejected alternatives
 

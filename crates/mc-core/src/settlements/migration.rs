@@ -37,6 +37,8 @@ const WALK_TIMEOUT: u64 = DAY_TICKS;
 pub(crate) struct Facts {
     pub(crate) members: usize,
     pub(crate) beds: usize,
+    /// Certified beds open to newcomers; caps arrivals and destinations.
+    pub(crate) free_beds: usize,
     pub(crate) inbound: usize,
     pub(crate) food_points: u64,
     pub(crate) open_jobs: usize,
@@ -222,42 +224,76 @@ fn horizontal(a: [i32; 3], b: [i32; 3]) -> f64 {
     )
 }
 
-fn in_bounds(bounds: mc_script::ScriptWorldBounds, pos: BlockPos) -> bool {
-    [pos.x, pos.y, pos.z]
-        .into_iter()
-        .enumerate()
-        .all(|(i, p)| p >= bounds.min[i] && p <= bounds.max[i])
+/// Roofed bed pairs inside a settlement's certified houses.
+fn certified_beds(
+    state: &TickState,
+    record: &super::SettlementRecord,
+) -> rustc_hash::FxHashSet<BlockPos> {
+    allocator::house_beds(&state.villager_pois, record)
+        .map(|(_, poi)| poi.pos)
+        .filter(|&pos| {
+            record.contains([pos.x, pos.y, pos.z])
+                && allocator::bed_pair(&state.world, &state.registry, pos).is_some()
+                && allocator::roofed(&state.world, &state.registry, pos)
+        })
+        .collect()
 }
 
-fn physical_beds(state: &TickState, record: &super::SettlementRecord) -> usize {
-    let mut beds = BTreeSet::new();
-    for building in record
-        .buildings
-        .values()
-        .filter(|b| b.kind == super::buildings::BuildingKind::House)
-    {
-        for x in building.bounds.min[0].div_euclid(16)..=building.bounds.max[0].div_euclid(16) {
-            for z in building.bounds.min[2].div_euclid(16)..=building.bounds.max[2].div_euclid(16) {
-                if let Some(chunk) = state
-                    .villager_pois
-                    .chunks
-                    .get(&crate::boundary::ChunkPos { x, z })
-                {
-                    for poi in &chunk.pois {
-                        if poi.kind == allocator::PoiKind::Home
-                            && record.contains([poi.pos.x, poi.pos.y, poi.pos.z])
-                            && in_bounds(building.bounds, poi.pos)
-                            && allocator::bed_pair(&state.world, &state.registry, poi.pos).is_some()
-                            && allocator::roofed(&state.world, &state.registry, poi.pos)
-                        {
-                            beds.insert((poi.pos.x, poi.pos.y, poi.pos.z));
-                        }
-                    }
-                }
-            }
-        }
+/// The resident holding `bed` in the claim index: its sleeper, else its first
+/// home claimant (the one `PoiCache::claimed` honours).
+fn bed_holder(state: &TickState, bed: BlockPos) -> Option<EntityId> {
+    let claims = &state.villager_pois;
+    if claims.occupied_beds.contains(&bed) {
+        return state
+            .sleepers
+            .iter()
+            .find_map(|(&id, sleeper)| (sleeper.bed == bed).then_some(id));
     }
-    beds.len()
+    claims.homes.get(&bed)?.first().copied()
+}
+
+/// Roofed bed pairs in certified houses, and those of them open to newcomers:
+/// the beds nobody claims (the claim index counts unbound residents too), less
+/// one for each member who has no home or no loaded body. Members of
+/// uncertified generated houses keep their own beds; savanna houses, for one,
+/// fail House certification (Spain seed 100: three certified beds, two of them
+/// empty, against eight members, so `beds - members` admitted no migrant for
+/// 60k ticks).
+fn physical_beds(state: &TickState, record: &super::SettlementRecord) -> (usize, usize) {
+    let beds = certified_beds(state, record);
+    let claimed = beds
+        .iter()
+        .filter(|&&pos| {
+            state.villager_pois.occupied_beds.contains(&pos) || bed_holder(state, pos).is_some()
+        })
+        .count();
+    let homeless = state
+        .settlements
+        .member_ids(record.id)
+        .filter(|&entity| {
+            state.entities.slot_of(entity).is_none_or(|slot| {
+                state
+                    .entities
+                    .row(slot)
+                    .villager
+                    .as_ref()
+                    .is_some_and(|v| v.home.is_none())
+            })
+        })
+        .count();
+    (beds.len(), beds.len().saturating_sub(claimed + homeless))
+}
+
+/// The destination's certified beds the moving unit's own members already
+/// hold: free for that unit, though the claim index keeps them from everyone
+/// else's quota.
+fn own_beds(state: &TickState, destination: SettlementId, members: &[EntityId]) -> usize {
+    state.settlements.get(destination).map_or(0, |record| {
+        certified_beds(state, record)
+            .into_iter()
+            .filter(|&pos| bed_holder(state, pos).is_some_and(|id| members.contains(&id)))
+            .count()
+    })
 }
 
 fn facts(state: &TickState, id: SettlementId, now: u64) -> Facts {
@@ -309,9 +345,11 @@ fn facts(state: &TickState, id: SettlementId, now: u64) -> Facts {
                 .filter(|&&tick| now.saturating_sub(tick) < SAFETY_DAYS * DAY_TICKS)
                 .count()
         });
+    let (beds, free_beds) = physical_beds(state, record);
     Facts {
         members: super::member_count(state, id),
-        beds: physical_beds(state, record),
+        beds,
+        free_beds,
         inbound: transit::inbound(state, id),
         food_points,
         open_jobs: jobs.len(),
@@ -337,14 +375,21 @@ fn capacity(state: &TickState, destination: SettlementId) -> usize {
         .migration
         .observation(destination)
         .map_or(0, |observation| {
-            let beds = state
+            state
                 .settlements
                 .get(destination)
                 .filter(|record| simulated(state, record.anchor))
-                .map_or(observation.facts.beds, |record| {
-                    physical_beds(state, record)
-                });
-            beds.saturating_sub(super::member_count(state, destination))
+                .map_or_else(
+                    // The observation's free beds, less one for each member
+                    // who arrived since: a transit that took a bed after it is
+                    // no longer inbound.
+                    || {
+                        let arrived = super::member_count(state, destination)
+                            .saturating_sub(observation.facts.members);
+                        observation.facts.free_beds.saturating_sub(arrived)
+                    },
+                    |record| physical_beds(state, record).1,
+                )
                 .saturating_sub(transit::inbound(state, destination))
                 .saturating_sub(pending(state, destination))
         })
@@ -392,12 +437,7 @@ fn eligible(
             // without a commercial employment contract. Release it before
             // automatic migration rather than silently dismantling production.
             || super::buildings::building_for_job(state, v).is_some()
-            || state.settlements.records().any(|town| {
-                town.project
-                    .as_ref()
-                    .and_then(|project| project.borrowed_builder)
-                    .is_some_and(|(builder, _)| builder == row.uuid)
-            })
+            || super::construction::bound_builder(&state.settlements, row.uuid)
             || record
                 .economy
                 .commerce
@@ -744,7 +784,9 @@ fn depart_decision(state: &mut TickState, source: SettlementId, rng: &mut Rng) {
             None,
         );
         for &(destination, free_beds, score) in &destinations {
-            if free_beds >= members.len() && score > best.0 {
+            // The beds the unit already holds there are its own.
+            if score > best.0 && free_beds + own_beds(state, destination, &members) >= members.len()
+            {
                 best = (score, Some(destination));
             }
         }
@@ -974,7 +1016,9 @@ fn advance_walks(state: &mut TickState, changes: &mut ChangeSet) {
                     return Err("household changed during outbound walk");
                 }
                 if let Some(destination) = walk.destination {
-                    if capacity(state, destination) < members.len() {
+                    if capacity(state, destination) + own_beds(state, destination, &members)
+                        < members.len()
+                    {
                         return Err("destination has no free beds");
                     }
                     transit::depart(

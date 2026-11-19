@@ -61,6 +61,24 @@ _PROFILE_SCENARIO_SOURCES = {
     'inventory': ('compatibility.py',),
     'entities': ('backends/entities_probe.py',),
     'native-lifecycle': ('backends/native_lifecycle.py',),
+    # The two hottest backends are split into owner modules; the profile's module file is only the
+    # forwarding entry, so the MCP call names are validated in the owners that issue them.
+    'buildings-qa': (
+        'backends/buildings_qa_probe.py',
+        'backends/buildings_qa_build.py',
+        'backends/buildings_qa_project.py',
+        'backends/buildings_qa_flows.py',
+        'backends/buildings_qa_verify.py',
+        'backends/buildings_qa_functions.py',
+        'backends/buildings_qa_scenarios.py',
+    ),
+    'scene-shot': (
+        'backends/scene_shot_execute.py',
+        'backends/scene_shot_steps.py',
+        'backends/scene_shot_checks.py',
+        'backends/scene_shot_client.py',
+        'backends/scene_shot_scenario.py',
+    ),
 }
 _JAVA_MCP_PROFILES = {
     'survival', 'scene-shot', 'settlement-map-qa', 'core-client',

@@ -37,7 +37,7 @@ process to 15 GiB RSS; an OOM killed all agents, while worktrees survived.
   requests above 12 GiB without `-x` are lowered to 12 GiB. These are runner defaults,
   not a promise about every machine's effective parent budget.
 - **Build tokens** (owner, 2026-11-11): at most three compile commands run
-  host-wide; the fleet's "3 concurrent builders" is enforced here, not by
+  host-wide; the fleet's concurrent-builder limit is enforced here, not by
   convention. Compile is decided once from argv, after leading
   `env`/`nice`/`ionice`/`timeout` words: `cargo` with any subcommand except
   `fmt`, `fetch`, `tree`, `metadata`, `clean`, `update` and similar, `gradle`
@@ -50,10 +50,17 @@ process to 15 GiB RSS; an OOM killed all agents, while worktrees survived.
   on all three locks `/tmp/solaris-mem-slots/tokens/token-{1,2,3}.lock` at once
   and takes whichever frees first: no polling, no CPU while waiting, and the
   runner prints `mem-run: build tokens 1,2,3 are in use; waiting`. With
-  `KRASNOKAMEN_BUILD_LANE=background` in the runner's environment a compile waits
-  only for tokens 1-2, so token 3 stays free for priority work (owner,
-  2026-11-12: the battle video gets resources first); Main exports it for
-  every agent outside the priority task. The lock
+  `KRASNOKAMEN_BUILD_LANE=background` in the runner's environment a compile may
+  take any token, but a freed token goes to a waiting normal-lane compile first
+  (laptop proposals 2026-11-18, pending the owner's confirmation: the priority
+  gate, and removing the token-3 reserve the owner set on 2026-11-12 so that the
+  battle video gets resources first): every normal-lane
+  waiter holds a shared lock on `tokens/priority.gate`, and a background waiter
+  that wins a token while the gate is held gives it back and queues again once
+  every waiting priority compile has won. Main exports the background lane for
+  every agent outside the priority slice and outside battle-video work (takes,
+  render, live-take pins), which keeps the normal lane and so still gets the next
+  freed token first. The lock
   stays at fd 9 of the runner and its scope guardian, never the command, so
   the token returns once the scope is empty: on any exit, kill or OOM. The
   `mem-run: scope` line shows `token=<n>`, `token=<n>(reused)` or
@@ -382,6 +389,7 @@ Cleanup while agents run:
 | 2026-10-28 | no slots or queue; watchdog freezer; shared jobserver; measured peaks | current |
 | 2026-11-04 | pooled target dirs with per-tree marker and touch on switch | current; fixes false greens |
 | 2026-11-11 | three build tokens for compile commands (`slot-lock.py`), reused by nested compiles | current; the 3-builder limit was convention only and the fleet still ran more |
+| 2026-11-18 | four build tokens (owner D27 trial); token-3 battle-video reserve stays removed | ended the same day: the 15-minute load stayed above 20 (21.3, 24.1, 23.9); back to three tokens, the reserve stays removed |
 
 Skills or prompts that mention slots, "3 x 5G", "-m 5G", exit 75 as a memory
 refusal, or CPU 2/3 windows are obsolete; AGENTS.md and this page win.

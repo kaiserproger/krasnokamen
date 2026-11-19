@@ -281,6 +281,9 @@ fn generation_global_revision_mismatch_refuses_without_advancing_checkpoint() {
             &registry.items,
         )
         .unwrap();
+    // A world this build wrote carries its checkpoint marker; the subject here
+    // is the generation descriptor refusal, not the store identity.
+    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), image.tick).unwrap();
     drop(store);
     let error = Core::open(config.clone()).unwrap_err().to_string();
     assert_eq!(

@@ -75,6 +75,9 @@ mod connection;
 use connection::*;
 mod pump;
 use pump::*;
+mod halt_watchdog;
+mod pre_play_limit;
+use pre_play_limit::PrePlayLimit;
 
 /// Next-connection-id counter start (1-based; 0 is reserved as "none").
 const FIRST_CONNECTION_ID: u64 = 1;
@@ -258,6 +261,9 @@ pub struct EdgeServer {
     /// Live connection registry (for pump routing + dashboard roster).
     pub connections: Arc<ConnectionRegistry>,
     pre_play_addresses: crate::conn_limit::AddressLimiter,
+    /// Server-wide cap on concurrent pre-play connections, independent of the
+    /// per-address limits above.
+    pre_play: Arc<PrePlayLimit>,
     /// Dashboard state (updated off the tick path).
     pub dashboard: Arc<DashboardState>,
     /// Tick stats for the dashboard rollup.
@@ -345,6 +351,7 @@ impl EdgeServer {
     ) -> anyhow::Result<Self> {
         cfg.computer.validate()?;
         cfg.voice.validate()?;
+        crate::startup_warnings::warn_unsafe_startup(&cfg, hub.as_ref());
         let voice = crate::voice_service::Service::new(&cfg.voice);
         let dashboard = dashboard_state(&cfg);
         let loader_manifest = loader_manifest(&hub.registry().plugin_client_bundles)?;
@@ -365,6 +372,12 @@ impl EdgeServer {
         }
         let connections = Arc::new(ConnectionRegistry::new());
         dashboard.set_queue_source(Arc::clone(&connections));
+        // Cumulative input drops live in the core's submit path; the dashboard
+        // polls the counter instead of threading it through the pump.
+        dashboard.set_input_source(Arc::new({
+            let hub = Arc::clone(&hub);
+            move || hub.dropped_inputs()
+        }));
         let biomes = data.registry("worldgen/biome").cloned().ok_or_else(|| {
             anyhow::anyhow!("worldgen/biome registry missing: chunk encoding impossible")
         })?;
@@ -440,6 +453,10 @@ impl EdgeServer {
             .transpose()?;
         let computer_processes = Arc::new(tokio::sync::Semaphore::new(cfg.computer.max_processes));
         let protocols = crate::translation::Catalog::discover(&data);
+        // Built from the config before the struct literal moves it.
+        let pre_play = Arc::new(PrePlayLimit::resolve(&cfg));
+        let pre_play_addresses =
+            crate::conn_limit::AddressLimiter::new(0, cfg.network.max_pre_play_connections_per_ip);
         Ok(Self {
             admin,
             console_state: crate::console::ConsoleState::load(data.root())?,
@@ -465,7 +482,8 @@ impl EdgeServer {
             wire,
             cfg,
             connections,
-            pre_play_addresses: crate::conn_limit::AddressLimiter::new(0, 8),
+            pre_play_addresses,
+            pre_play,
             dashboard,
             tick_stats: Arc::new(TickStats::new()),
             net_counters: Arc::new(NetCounters::new()),
@@ -1554,15 +1572,44 @@ pub async fn serve_with_console(
     server: EdgeServer,
     console: bool,
 ) -> anyhow::Result<()> {
-    let server = Arc::new(server);
+    serve_with_pump(listener, Arc::new(server), console, None).await
+}
+
+/// Test seam: serve with a caller-owned pump task, so a test can wedge the pump
+/// and prove the halt path does not depend on it.
+#[cfg(test)]
+pub(crate) async fn serve_with_wedged_pump(
+    listener: TcpListener,
+    server: Arc<EdgeServer>,
+    pump: tokio::task::JoinHandle<()>,
+) -> anyhow::Result<()> {
+    serve_with_pump(listener, server, false, Some(pump)).await
+}
+
+async fn serve_with_pump(
+    listener: TcpListener,
+    server: Arc<EdgeServer>,
+    console: bool,
+    pump: Option<tokio::task::JoinHandle<()>>,
+) -> anyhow::Result<()> {
     let _remote_admin = crate::remote_admin::start(Arc::clone(&server)).await?;
-    let mut pump = spawn_pump(Arc::clone(&server))?;
+    let mut pump = match pump {
+        Some(pump) => pump,
+        None => spawn_pump(Arc::clone(&server))?,
+    };
     server.console_state.running.store(true, Ordering::Relaxed);
     let screen_ticks = crate::screen_service::spawn_tick_task(Arc::clone(&server));
     let voice_ticks = crate::voice_service::spawn_tick_task(Arc::clone(&server));
     let svc_udp = crate::svc_service::spawn(Arc::clone(&server)).await;
     let load_metrics = spawn_load_metrics(&server);
     let mut stop = server.stop.subscribe();
+    // The tick owner's own closing signal, independent of the pump: the
+    // broadcast closes when the tick thread exits, whether it halted or the
+    // handle stopped it.
+    let mut core_closed = server.hub.subscribe();
+    // The halt path below runs on runtime timers; this OS thread ends the
+    // process when no runtime worker is left to drive them.
+    let _halt_watchdog = halt_watchdog::spawn_halt_watchdog(Arc::clone(&server.hub))?;
     let addresses = std::sync::Arc::new(crate::conn_limit::AddressLimiter::new(
         server.cfg.network.connection_throttle_ms,
         server.cfg.network.max_connections_per_ip,
@@ -1592,6 +1639,8 @@ pub async fn serve_with_console(
     // Set when accept hit descriptor/buffer exhaustion: retried only after one of
     // our own sessions ends and releases its socket (no timer).
     let mut accept_blocked = false;
+    // Last pre-play-cap refusal log line: rate-limited to one per second.
+    let mut last_refusal_log: Option<Instant> = None;
     loop {
         tokio::select! {
             _ = async { let _ = stop.wait_for(|stopping| *stopping).await; } => {
@@ -1608,7 +1657,8 @@ pub async fn serve_with_console(
                 }
                 let hub = Arc::clone(&server.hub);
                 tokio::task::spawn_blocking(move || hub.shutdown()).await?;
-                let (mut connections, _) = server.connections.routing_snapshot();
+                let mut connections: HashMap<ConnectionId, ConnectionHandles> =
+                    server.connections.snapshot().into_iter().collect();
                 let mut latest_roster: Arc<[mc_core::dimensions::RosterPlayer]> = Arc::from(Vec::new());
                 route_outbox(&server, &mut HashMap::new(), &mut connections, None, &mut latest_roster);
                 if let Some(console) = &console {
@@ -1647,10 +1697,41 @@ pub async fn serve_with_console(
                 };
                 // Refused before the handshake: the throttle and the per-address
                 // cap answer like an absent listener instead of buffering work.
+                // Vanilla Netty sets `TCP_NODELAY` on every child channel: a
+                // small frame must not wait behind Nagle for a world batch ACK.
+                if let Err(error) = tune_game_socket(&stream) {
+                    warn!(%peer, %error, "could not set TCP_NODELAY; connection closed");
+                    drop(stream);
+                    continue;
+                }
+                // Server-wide backstop first: the per-address knobs cannot
+                // bound a flood from many addresses. Taking the slot before
+                // `addresses.admit` keeps the two counters independent — every
+                // refusal path below drops the socket without holding an
+                // address slot, so no refusal can leak one. One line per
+                // second while saturated; the close itself is the answer to
+                // the client.
+                let Some(pre_play) = server.pre_play.try_acquire() else {
+                    let now = Instant::now();
+                    if last_refusal_log.is_none_or(|last: Instant| {
+                        now.duration_since(last) >= std::time::Duration::from_secs(1)
+                    }) {
+                        last_refusal_log = Some(now);
+                        warn!(
+                            %peer,
+                            cap = server.pre_play.cap(),
+                            live = server.pre_play.live(),
+                            "pre-play connections at the server-wide cap; connection closed"
+                        );
+                    }
+                    drop(stream);
+                    continue;
+                };
                 let address = Some(peer.ip());
                 if let Some(address) = address
                     && !addresses.admit(address)
                 {
+                    // `pre_play` drops here, before the task exists.
                     debug!(%peer, "connection refused by the per-address limit");
                     drop(stream);
                     continue;
@@ -1659,13 +1740,79 @@ pub async fn serve_with_console(
                 let server = Arc::clone(&server);
                 let addresses = Arc::clone(&addresses);
                 tasks.spawn(async move {
-                    if let Err(error) = handle_connection(stream, server).await {
+                    if let Err(error) = handle_connection(stream, server, pre_play).await {
                         debug!(%error, "connection closed");
                     }
                     if let Some(address) = address {
                         addresses.release(address);
                     }
                 });
+            }
+            // The core stopped without a shutdown request: it halted, and its
+            // terminal Disconnects ride the reliable outbox that only the pump
+            // drains. A wedged pump would leave every client frozen and this
+            // task alive forever, so the halt path never waits for it.
+            _ = async {
+                // Ticks and lag are not the signal; only `Closed` ends this.
+                while let Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) =
+                    core_closed.recv().await
+                {}
+            }, if !server.hub.shutdown_requested() => {
+                // A shutdown that started meanwhile owns the cleanup: its
+                // branch returns once the core has stopped.
+                if server.hub.shutdown_requested() {
+                    continue;
+                }
+                // A healthy pump gets the bounded chance the `ended` branch
+                // gives: up to 5 s for the connections to close once it routed
+                // the terminal batch and their writers flushed.
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                    while tasks.join_next().await.is_some() {}
+                })
+                .await;
+                pump.abort();
+                // The tick owner recorded its reason before the broadcast
+                // closed; reading it takes no lock a wedged pump could hold.
+                // `None` only when the tick thread died without a halt.
+                let reason = server
+                    .hub
+                    .halt_reason()
+                    .unwrap_or_else(|| "the core halted".to_owned());
+                // The kicks take the registry lock the wedged pump may hold: run
+                // them on a blocking thread and bound them, so a pump parked in a
+                // synchronous section cannot stall the halt either.
+                let kicking = {
+                    let server = Arc::clone(&server);
+                    let reason = reason.clone();
+                    tokio::task::spawn_blocking(move || {
+                        for (id, _) in server.connections.snapshot() {
+                            if let Err(error) =
+                                server.kick(id, serde_json::json!({"text": &reason}))
+                            {
+                                warn!(%error, connection = id.0, "halt kick delivery failed");
+                            }
+                        }
+                    })
+                };
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(10), kicking).await;
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+                    while tasks.join_next().await.is_some() {}
+                })
+                .await;
+                tasks.abort_all();
+                if let Some(console) = &console {
+                    console.abort();
+                }
+                screen_ticks.abort();
+                voice_ticks.abort();
+                if let Some(svc_udp) = &svc_udp {
+                    svc_udp.abort();
+                }
+                load_metrics.abort();
+                if let Some(msmp) = &msmp {
+                    msmp.abort();
+                }
+                anyhow::bail!("core halted: {reason}")
             }
             // Without its pump the server never delivers another tick.
             ended = &mut pump => match ended {
@@ -1749,6 +1896,8 @@ pub fn core_config(cfg: &EdgeConfig) -> mc_core::config::CoreConfig {
     core.input_log = cfg.server.input_log;
     core.worldgen_gpu = cfg.server.worldgen_gpu;
     core.checkpoint_every_ticks = cfg.data.checkpoint_every_ticks;
+    core.journal_fsync_every_batches = cfg.data.journal_fsync_every_batches;
+    core.outbox_queue_bytes = cfg.data.outbox_queue_bytes;
     core.test_acceleration = cfg.test_acceleration;
     core.mob_griefing = mc_core::config::MobGriefingRules {
         creeper_block_damage: cfg.mob_griefing.creeper_block_damage,
@@ -1847,6 +1996,18 @@ fn supports_screen_sharing(platform: Option<mc_loader::LoaderPlatform>) -> bool 
 mod tests;
 
 #[cfg(test)]
+#[path = "server/connection_tests.rs"]
+mod connection_tests;
+
+#[cfg(test)]
+#[path = "server/pre_play_limit_tests.rs"]
+mod pre_play_limit_tests;
+
+#[cfg(test)]
+#[path = "server/serve_guard_tests.rs"]
+mod serve_guard_tests;
+
+#[cfg(test)]
 #[path = "admin_tests.rs"]
 pub(crate) mod admin_tests;
 
@@ -1877,6 +2038,10 @@ mod transfer_tests;
 #[cfg(test)]
 #[path = "server_leave_tests.rs"]
 mod leave_tests;
+
+#[cfg(test)]
+#[path = "server_chunk_rate_tests.rs"]
+mod chunk_rate_tests;
 
 #[cfg(test)]
 #[path = "server_duplicate_login_tests.rs"]

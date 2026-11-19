@@ -1,0 +1,11 @@
+[[bug]]
+id = "MODEL-OPUS-5"
+title = "Slime has no face."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:96"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::slime_face_parts_sit_on_the_inner_cube_under_a_separate_shell"]
+fix_commit = "client:4092ac53"
+repro_check = "candidate: same real revert run (red); the shell stays a separate EntityTranslucent rig; area=client, real-client check required"

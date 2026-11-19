@@ -1,0 +1,10 @@
+[[bug]]
+id = "BED-MONSTER-ELIGIBILITY"
+title = "A non-hostile zombified piglin near a bed incorrectly prevents sleeping."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BED-MONSTER-ELIGIBILITY"
+regression = ["cargo:mc-core:sleep::tests::peaceful_zombified_piglin_does_not_prevent_sleep"]
+failing_first = "not recorded"

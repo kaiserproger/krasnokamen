@@ -62,10 +62,10 @@ class RegressionLedgerTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, name):
                     regressions._profile_command('civilization-seed-qa', 'new_house')
 
-    def test_owner_order_ref_rejects_d5_diagnostic_overrides(self):
-        with patch.dict('os.environ', {'D5_QUEUE_CONTROL': 'no-second-order'}):
-            with self.assertRaisesRegex(ValueError, 'D5_QUEUE_CONTROL'):
-                regressions._profile_command('village-owner-order-qa', 'all')
+    def test_owner_order_d8_control_runs_the_unchanged_parallel_gate(self):
+        # The control changes MAX_PROJECTS on its own tree/pin, not this argv.
+        command = regressions._profile_command('village-owner-order-qa', 'two_projects_advance')
+        self.assertEqual(command, regressions._profile_command('village-owner-order-qa', 'all'))
 
     def test_building_verdict_is_keyed_by_blueprint(self):
         command = regressions._profile_command('buildings-qa', 'wall.L1_built')
@@ -157,7 +157,7 @@ class RegressionLedgerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'docs/bugs').mkdir(parents=True)
-            (root / 'docs/bugs/ledger.toml').write_text(''.join(
+            ledger.write_rows(root, ''.join(
                 f'''[[bug]]
 id = "{ident}"
 title = "visible"
@@ -203,7 +203,7 @@ regression = ["harness:village-qa:{verdict}"]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'docs/bugs').mkdir(parents=True)
-            (root / 'docs/bugs/ledger.toml').write_text('''[[bug]]
+            ledger.write_rows(root, '''[[bug]]
 id = "EXAMPLE"
 title = "missing test"
 area = "harness"
@@ -219,8 +219,7 @@ regression = ["cargo:mc-core:missing::test"]
             with patch.object(regressions, 'REPO_ROOT', root), patch.object(profiles, '_run_command', list_empty):
                 with self.assertRaisesRegex(RuntimeError, 'EXAMPLE.*unknown'):
                     regressions.run(ctx)
-            ledger = root / 'docs/bugs/ledger.toml'
-            ledger.write_text(ledger.read_text().replace('status = "fixed"', 'status = "open"'))
+            ledger.write_rows(root, ledger.document(root).replace('status = "fixed"', 'status = "open"'))
             with patch.object(regressions, 'REPO_ROOT', root), patch.object(regressions, 'BASE_FIXED', frozenset()), patch.object(profiles, '_run_command', list_empty):
                 with self.assertRaisesRegex(RuntimeError, 'EXAMPLE.*unknown'):
                     regressions.run(ctx)
@@ -229,7 +228,7 @@ regression = ["cargo:mc-core:missing::test"]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'docs/bugs').mkdir(parents=True)
-            (root / 'docs/bugs/ledger.toml').write_text('''[[bug]]
+            ledger.write_rows(root, '''[[bug]]
 id = "GAMEPLAY"
 title = "gameplay"
 area = "gameplay"
@@ -249,7 +248,7 @@ regression = ["cargo:mc-core:some_test"]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'docs/bugs').mkdir(parents=True)
-            (root / 'docs/bugs/ledger.toml').write_text('''[[bug]]
+            ledger.write_rows(root, '''[[bug]]
 id = "OWNER"
 title = "manual repro"
 area = "gameplay"
@@ -267,7 +266,7 @@ regression = ["cargo:mc-core:some_test"]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'docs/bugs').mkdir(parents=True)
-            (root / 'docs/bugs/ledger.toml').write_text('''[[bug]]
+            ledger.write_rows(root, '''[[bug]]
 id = "OWNER"
 title = "manual repro"
 area = "gameplay"
@@ -285,7 +284,7 @@ regression = ["harness:inventory:inventory-client"]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'docs/bugs').mkdir(parents=True)
-            (root / 'docs/bugs/ledger.toml').write_text('''[[bug]]
+            ledger.write_rows(root, '''[[bug]]
 id = "PRUNE"
 title = "offline command"
 area = "gameplay"
@@ -303,7 +302,7 @@ regression = ["python:tools.harness.test_example:Example.test_case"]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'docs/bugs').mkdir(parents=True)
-            (root / 'docs/bugs/ledger.toml').write_text('''[[bug]]
+            ledger.write_rows(root, '''[[bug]]
 id = "CLIENT"
 title = "visible"
 area = "client"
@@ -321,7 +320,7 @@ regression = ["cargo:mc-core:some_test"]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'docs/bugs').mkdir(parents=True)
-            (root / 'docs/bugs/ledger.toml').write_text('''[[bug]]
+            ledger.write_rows(root, '''[[bug]]
 id = "VISIBLE"
 title = "visible"
 area = "client"
@@ -369,11 +368,13 @@ regression = []
         ]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / 'docs/bugs').mkdir(parents=True)
-            ledger = root / 'docs/bugs/ledger.toml'
+            (root / 'docs/bugs/rows').mkdir(parents=True)
             for text in cases:
                 with self.subTest(text=text):
-                    ledger.write_text(text)
+                    # Written raw: the point is what the loader and the gate say about a bad row file.
+                    shutil.rmtree(root / 'docs/bugs/rows')
+                    (root / 'docs/bugs/rows').mkdir(parents=True)
+                    (root / 'docs/bugs/rows/B.toml').write_text(text)
                     with patch.object(regressions, 'REPO_ROOT', root):
                         with self.assertRaises(ValueError):
                             regressions.run(profiles.ProfileContext(root))
@@ -503,7 +504,7 @@ regression = []
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'docs/bugs').mkdir(parents=True)
-            (root / 'docs/bugs/ledger.toml').write_text('''[[bug]]
+            ledger.write_rows(root, '''[[bug]]
 id = "OPEN"
 title = "partial"
 area = "gameplay"
@@ -531,7 +532,7 @@ regression = ["cargo:mc-core:some_test"]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'docs/bugs').mkdir(parents=True)
-            (root / 'docs/bugs/ledger.toml').write_text('''[[bug]]
+            ledger.write_rows(root, '''[[bug]]
 id = "BROKEN"
 title = "broken"
 area = "gameplay"
@@ -566,7 +567,7 @@ regression = ["cargo:mc-core:module::other"]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'docs/bugs').mkdir(parents=True)
-            (root / 'docs/bugs/ledger.toml').write_text('''[[bug]]
+            ledger.write_rows(root, '''[[bug]]
 id = "RED"
 title = "known red"
 area = "gameplay"
@@ -673,11 +674,9 @@ class LedgerRefContractTests(unittest.TestCase):
     """Every ref in the real ledger resolves: a ref nobody can run is not a regression guard."""
 
     def test_every_ledger_ref_parses(self):
-        import tomllib
         from pathlib import Path
 
-        ledger = Path(__file__).resolve().parents[2] / 'docs/bugs/ledger.toml'
-        rows = tomllib.loads(ledger.read_text())['bug']
+        rows = ledger.load_rows(Path(__file__).resolve().parents[2])
         broken = []
         for row in rows:
             for ref in row['regression']:
@@ -727,7 +726,7 @@ class LedgerToolTests(unittest.TestCase):
         self.git(root, 'commit', '-qm', 'fix')
         self.fix = self.git(root, 'rev-parse', 'HEAD')
         extra = f'fix_commit = "{self.fix}"\n' if with_fix_commit else ''
-        (root / 'docs/bugs/ledger.toml').write_text(ROW.format(area=area, ref=ref, extra=extra))
+        ledger.write_rows(root, ROW.format(area=area, ref=ref, extra=extra))
         self.git(root, 'add', '-A')
         self.git(root, 'commit', '-qm', 'ledger')
         self.head = self.git(root, 'rev-parse', 'HEAD')
@@ -827,11 +826,11 @@ class LedgerToolTests(unittest.TestCase):
     def client_row(self, client_sha=None, ref='harness:entities:native-v2-craft-drag'):
         root = self.scratch(area='client', ref=ref)
         fix = f'client:{client_sha}' if client_sha else ''
-        text = (root / 'docs/bugs/ledger.toml').read_text().replace(
+        text = ledger.document(root).replace(
             f'fix_commit = "{self.fix}"', f'fix_commit = "{fix}"')
         if ref == 'harness:entities:native-v2-craft-drag':
             text += '\nproving_assertions = { "harness:entities:native-v2-craft-drag" = "initial_drag_keeps_server_cursor" }\n'
-        (root / 'docs/bugs/ledger.toml').write_text(text)
+        ledger.write_rows(root, text)
         self.git(root, 'commit', '-qam', 'client row')
         return root
 
@@ -907,7 +906,7 @@ class LedgerToolTests(unittest.TestCase):
         # The runner is never invoked: receipts are the evidence for a client fix.
         self.assertEqual(self.runner().seen, [])
         self.promote(root, self.runner(), client_control_receipt=control, client_receipt=restore)
-        self.assertIn('status = "fixed"', (root / 'docs/bugs/ledger.toml').read_text())
+        self.assertIn('status = "fixed"', ledger.document(root))
 
     def test_client_control_is_candidate_with_only_fix_reversed(self):
         client = self.client_repo()
@@ -1078,7 +1077,7 @@ class LedgerToolTests(unittest.TestCase):
         self.assertEqual(seen, [('u2\n', 'n1\n', True), ('u2\n', 'n1\n', False)])
         self.assertTrue(receipt['tree_dirty'])
         self.assertEqual(receipt['tree_sha256'], ledger.tree_fingerprint(root)['sha256'])
-        self.assertIn('status = "fixed"', (root / 'docs/bugs/ledger.toml').read_text())
+        self.assertIn('status = "fixed"', ledger.document(root))
         self.assertEqual(self.git(root, 'rev-parse', 'HEAD'), self.head)
 
     def test_uncommitted_regression_in_the_candidate_refuses_promotion(self):
@@ -1089,10 +1088,10 @@ class LedgerToolTests(unittest.TestCase):
 
     def test_negative_control_that_stays_green_is_refused(self):
         root = self.scratch()
-        before = (root / 'docs/bugs/ledger.toml').read_text()
+        before = ledger.document(root)
         with self.assertRaisesRegex(ledger.Refused, 'negative control .* did not go red'):
             self.promote(root, self.runner(red_when_buggy=False))
-        self.assertEqual((root / 'docs/bugs/ledger.toml').read_text(), before)
+        self.assertEqual(ledger.document(root), before)
 
     def test_restored_check_that_is_not_green_is_refused(self):
         root = self.scratch()
@@ -1103,7 +1102,7 @@ class LedgerToolTests(unittest.TestCase):
 
     def test_promotion_succeeds_and_dry_run_writes_nothing(self):
         root = self.scratch()
-        before = (root / 'docs/bugs/ledger.toml').read_text()
+        before = ledger.document(root)
         runner = self.runner()
         receipt = self.promote(root, runner, dry_run=True)
         self.assertEqual(receipt['reversed_files'], ['src/engine.rs'])
@@ -1111,12 +1110,12 @@ class LedgerToolTests(unittest.TestCase):
         # Control: only the non-test hunks reversed (test file kept); restore: the fix itself.
         self.assertEqual(runner.seen, [('value = buggy\n', True), ('value = fixed\n', True)])
         self.assertEqual((receipt['control_tree'], receipt['tree_head']), ('head', self.head))
-        self.assertEqual((root / 'docs/bugs/ledger.toml').read_text(), before)
+        self.assertEqual(ledger.document(root), before)
         self.assertFalse((root / 'docs/bugs/promotions').exists())
         self.assertEqual(self.git(root, 'status', '--porcelain'), '')
         self.assertEqual(self.git(root, 'worktree', 'list').count('\n'), 0)
         self.promote(root, self.runner())
-        text = (root / 'docs/bugs/ledger.toml').read_text()
+        text = ledger.document(root)
         self.assertIn('status = "fixed"', text)
         self.assertIn('promotion = "docs/bugs/promotions/BUG.json"', text)
         bug = tomllib.loads(text)['bug'][0]
@@ -1211,8 +1210,8 @@ class LedgerToolTests(unittest.TestCase):
 
     def test_hand_flipped_row_fails_the_ledger_run(self):
         root = self.scratch()
-        text = (root / 'docs/bugs/ledger.toml').read_text().replace('status = "open"', 'status = "fixed"')
-        (root / 'docs/bugs/ledger.toml').write_text(text)
+        text = ledger.document(root).replace('status = "open"', 'status = "fixed"')
+        ledger.write_rows(root, text)
         with patch.object(regressions, 'REPO_ROOT', root), patch.object(regressions, 'BASE_FIXED', frozenset()), patch.object(profiles, '_run_command', side_effect=AssertionError('must reject before executing')):
             with self.assertRaisesRegex(ValueError, 'BUG: fixed without a promotion receipt'):
                 regressions.run(profiles.ProfileContext(self.artifacts))
@@ -1225,7 +1224,7 @@ class LedgerToolTests(unittest.TestCase):
 
     def test_probe_classifies_rows_and_never_skips_silently(self):
         root = self.scratch(ref='harness:entities:native-v2-craft-drag')
-        bugs = ledger._load_bugs(root)
+        bugs = ledger.load_rows(root)
         bugs.append({'id': 'EMPTY', 'status': 'open', 'regression': []})
         bugs.append({'id': 'BAD', 'status': 'open', 'regression': ['cargo:mc-core:mod::t', 'nonsense']})
         ctx = profiles.ProfileContext(self.artifacts)
@@ -1476,11 +1475,8 @@ class LedgerToolTests(unittest.TestCase):
         return root, patch
 
     def record(self, root, value):
-        ledger_file = root / 'docs/bugs/ledger.toml'
-        if not hasattr(self, 'ledger_base'):
-            self.ledger_base = ledger_file.read_text()
-        ledger_file.write_text(self.ledger_base + f'fix_commit = "{value}"\n')
-        return ledger_file
+        ledger.edit(root, 'BUG', [f'fix_commit = "{value}"'])
+        return ledger.row_path(root, 'BUG')
 
     def test_uncommitted_fix_patch_is_promoted_without_a_commit(self):
         root, fix_file = self.uncommitted_fix()

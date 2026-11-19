@@ -124,6 +124,7 @@ fn natural_black_and_red_glazed_states_keep_their_vanilla_drops() {
             placed,
             &tool,
             0,
+            true,
         )
         .expect("vanilla glazed drops");
         let vanilla_item = state
@@ -268,6 +269,7 @@ fn custom_item_places_a_carrier_state_that_drops_the_custom_item() {
         placed,
         &ItemStack::EMPTY,
         0,
+        true,
     )
     .expect("drops");
     assert_eq!(drops, vec![monitor_stack(&state)]);

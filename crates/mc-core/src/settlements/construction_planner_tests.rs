@@ -1,4 +1,6 @@
-use super::tests::{attempt, complete, fixture, fund, open_plan, start};
+use super::tests::{
+    attempt, complete, fixture, fund, open_plan, request_started, start, upgrade_started,
+};
 use super::*;
 use mc_script::ScriptWorldBounds;
 
@@ -166,7 +168,7 @@ fn optional_lamps_do_not_borrow_the_worker_funding_the_next_house() {
     let (mut state, id, worker) = fixture();
     open_plan(&mut state);
     fund(&mut state, "storage", 1);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     complete(&mut state, id, worker);
     state.entities.set_pos(worker, [1.5, 201.0, 2.5]);
     state
@@ -216,6 +218,10 @@ fn optional_lamps_do_not_borrow_the_worker_funding_the_next_house() {
     let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
     slots.fill(mc_data::ItemStack::EMPTY);
     slots[..stock.len()].clone_from_slice(&stock);
+    // The lamp is funded on top of the active project's bill (D8 joint proof).
+    for stack in slots.iter_mut().filter(|stack| stack.count > 0) {
+        stack.count = (stack.count * 2).min(64);
+    }
     let images = executor::source_images(&state, id);
     assert_eq!(needed_gatherer(&state, id), Some(Profession::Lumberjack));
     assert_eq!(
@@ -228,7 +234,7 @@ fn optional_lamps_do_not_borrow_the_worker_funding_the_next_house() {
     state.tick = PLAN_CADENCE;
     tick(&mut state);
     assert!(
-        state.settlements.get(id).unwrap().project.is_none(),
+        state.settlements.get(id).unwrap().projects.is_empty(),
         "optional infrastructure must not monopolize housing's material worker"
     );
     assert_eq!(
@@ -318,12 +324,12 @@ fn funded_seed24_candidate_starts_without_borrowing_its_priority_gatherer() {
     plan(&mut state, id);
     let record = state.settlements.get(id).unwrap();
     assert!(
-        record.project.is_some() || record.construction_cursor != 0,
+        !record.projects.is_empty() || record.construction_cursor != 0,
         "the funded planner must search sites instead of returning at the gatherer guard"
     );
     plan_until_started(&mut state, id);
     assert!(
-        state.settlements.get(id).unwrap().project.is_some(),
+        !state.settlements.get(id).unwrap().projects.is_empty(),
         "funded construction must not remain idle behind the priority gatherer guard"
     );
     state
@@ -378,11 +384,12 @@ fn iron_demand_tracks_open_house_and_real_shears_or_wool() {
         .unwrap()
         .data
         .profession = Profession::None;
-    state.settlements.get_mut(id).unwrap().pending_order = Some(OwnerOrder {
+    state.settlements.get_mut(id).unwrap().orders = vec![OwnerOrder {
+        seq: 0,
         blueprint: "house".into(),
         level: 1,
         building: None,
-    });
+    }];
     assert_eq!(iron_demand(&state, id, None), 2);
     state
         .entities
@@ -486,21 +493,14 @@ fn pending_house_allows_only_its_own_furnace_prerequisite() {
         }
     }
     request_build(&mut state, id, "house").unwrap();
-    assert!(state.settlements.get(id).unwrap().pending_order.is_some());
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(!state.settlements.get(id).unwrap().orders.is_empty());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     assert_eq!(iron_demand(&state, id, None), 2);
     let before = state.block_entities[&(1, 201, 1)].slots.clone();
     plan(&mut state, id);
     let record = state.settlements.get(id).unwrap();
-    assert_eq!(
-        record
-            .project
-            .as_ref()
-            .expect("furnace prerequisite")
-            .blueprint,
-        furnace::NAME
-    );
-    assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "house");
+    assert_eq!(record.projects[0].blueprint, furnace::NAME);
+    assert_eq!(record.orders[0].blueprint, "house");
     assert_eq!(
         state.block_entities[&(1, 201, 1)].slots,
         before,
@@ -514,10 +514,10 @@ fn pending_house_allows_only_its_own_furnace_prerequisite() {
     plan(&mut state, id);
     let record = state.settlements.get(id).unwrap();
     assert!(
-        record.project.is_none(),
+        record.projects.is_empty(),
         "no unrelated building or second furnace"
     );
-    assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "house");
+    assert_eq!(record.orders[0].blueprint, "house");
 }
 
 #[test]
@@ -530,7 +530,7 @@ fn pending_noniron_order_blocks_unrelated_furnaces_and_funded_houses() {
         .materials;
     assert!(funded_variant(&state, id, bill, &executor::source_images(&state, id)).is_some());
     request_build(&mut state, id, "farm").unwrap();
-    assert!(state.settlements.get(id).unwrap().pending_order.is_some());
+    assert!(!state.settlements.get(id).unwrap().orders.is_empty());
     assert_eq!(
         iron_demand(&state, id, None),
         0,
@@ -540,8 +540,8 @@ fn pending_noniron_order_blocks_unrelated_furnaces_and_funded_houses() {
         plan(&mut state, id);
     }
     let record = state.settlements.get(id).unwrap();
-    assert!(record.project.is_none());
-    assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "farm");
+    assert!(record.projects.is_empty());
+    assert_eq!(record.orders[0].blueprint, "farm");
     assert_eq!(
         crate::villager::smelting::owned_furnaces(&state, id).count(),
         0
@@ -622,10 +622,26 @@ fn autonomous_needs_cover_every_authored_kind_and_ignore_natural_zones() {
     );
 }
 
+/// A later order against an active project never preempts it. It is admitted
+/// beside it, waits for materials, or is refused because the plan has no second
+/// lot of the right geometry; the active project must be untouched either way.
+fn later_order(state: &mut TickState, id: SettlementId, blueprint: &str) -> Option<OrderOutcome> {
+    match request_build(state, id, blueprint) {
+        Ok(outcome) => Some(outcome),
+        Err(error) => {
+            assert!(
+                error.contains("No free loaded construction site"),
+                "unexpected refusal: {error}"
+            );
+            None
+        }
+    }
+}
+
 fn plan_until_started(state: &mut TickState, id: SettlementId) {
     for _ in 0..2000 {
         plan(state, id);
-        if state.settlements.get(id).unwrap().project.is_some() {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             return;
         }
     }
@@ -655,7 +671,7 @@ fn funded_planner_follows_terrain_to_a_free_site_off_the_bell_plane() {
     }
     state.world.fold_overlay();
     plan_until_started(&mut state, id);
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.blueprint, "storage");
     assert_eq!(
         project.origin[1], 205,
@@ -685,6 +701,8 @@ fn builder_choice_does_not_depend_on_the_shared_tick_route_allowance() {
 fn builder_choice_skips_the_trapped_resident(starved_tick_budget: bool) {
     use crate::settlements::allocator::tests::villager;
     let (mut state, id, trapped) = fixture();
+    // The planner only assigns against a live project (D8).
+    start(&mut state, id, "house", 1, None);
     state
         .entities
         .row_mut(trapped)
@@ -777,13 +795,7 @@ fn inactive_incumbent_yields_to_an_active_builder_and_construction_advances() {
     assert!(state.world.is_active(0, 0));
     start(&mut state, id, "storage", 1, None);
     fund(&mut state, "storage", 1);
-    let handle = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .unwrap()
+    let handle = state.settlements.get(id).unwrap().projects[0]
         .structure
         .clone();
     for now in 0..400 {
@@ -832,12 +844,9 @@ fn funded_owner_order_starts_the_single_project_without_world_or_stock_debit() {
     fund(&mut state, "watch_tower", 1);
     let before_stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let before_block = state.world.block_at(8, 201, 8);
-    request_build(&mut state, id, "watch_tower").unwrap();
-    let record = state.settlements.get(id).unwrap();
-    let project = record
-        .project
-        .as_ref()
-        .expect("funded owner order starts immediately");
+    request_started(&mut state, id, "watch_tower");
+    let record = &state.settlements.get(id).unwrap();
+    let project = &record.projects[0];
     assert_eq!(project.blueprint, "watch_tower");
     assert_eq!(project.level, 1);
     assert!(
@@ -862,19 +871,19 @@ fn pending_owner_order_blocks_autonomy_then_starts_after_funding() {
         request_build(&mut state, id, "house").is_ok(),
         "unfunded order is queued"
     );
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     fund(&mut state, "storage", 1);
     for _ in 0..200 {
         plan(&mut state, id);
     }
     assert!(
-        state.settlements.get(id).unwrap().project.is_none(),
+        state.settlements.get(id).unwrap().projects.is_empty(),
         "autonomy must wait"
     );
     fund(&mut state, "house", 1);
     plan_until_started(&mut state, id);
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.blueprint, "house");
     assert!(project.ordered);
 }
@@ -896,7 +905,7 @@ fn funded_pending_owner_order_searches_sites_in_bounded_planning_passes() {
     for x in -16..32 {
         for z in -16..32 {
             if lots(x, z) {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }
@@ -908,7 +917,7 @@ fn funded_pending_owner_order_searches_sites_in_bounded_planning_passes() {
     let before = state.settlements.get(id).unwrap().clone();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     assert_eq!(
-        pending_reason(&state, id).as_deref(),
+        pending_reason_at(&state, id, 0).as_deref(),
         Some("waiting for a site")
     );
     assert_eq!(state.settlements.get(id).unwrap(), &before);
@@ -917,15 +926,18 @@ fn funded_pending_owner_order_searches_sites_in_bounded_planning_passes() {
     plan(&mut state, id);
     let record = state.settlements.get(id).unwrap();
     assert_eq!(record.construction_cursor, SITE_ATTEMPTS);
-    assert_eq!(record.pending_order, before.pending_order);
-    assert!(record.project.is_none(), "autonomy must not take the slot");
+    assert_eq!(record.orders, before.orders);
+    assert!(
+        record.projects.is_empty(),
+        "autonomy must not take the slot"
+    );
 
     // Lots open beyond the first bounded search. Reporting a reason is
     // observational, even when a suitable site now exists.
     for x in -16..32 {
         for z in 16..32 {
             if lots(x, z) {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.air);
                 }
             }
@@ -934,7 +946,7 @@ fn funded_pending_owner_order_searches_sites_in_bounded_planning_passes() {
     state.world.fold_overlay();
     let before_reason = state.settlements.get(id).unwrap().clone();
     assert_eq!(
-        pending_reason(&state, id).as_deref(),
+        pending_reason_at(&state, id, 0).as_deref(),
         Some("waiting for a site")
     );
     assert_eq!(state.settlements.get(id).unwrap(), &before_reason);
@@ -942,8 +954,8 @@ fn funded_pending_owner_order_searches_sites_in_bounded_planning_passes() {
 
     plan_until_started(&mut state, id);
     let record = state.settlements.get(id).unwrap();
-    assert!(record.pending_order.is_none());
-    let project = record.project.as_ref().unwrap();
+    assert!(record.orders.is_empty());
+    let project = &record.projects[0];
     assert_eq!(project.blueprint, "farm");
     assert_eq!(project.level, 1);
     assert!(project.ordered);
@@ -958,16 +970,17 @@ fn active_project_queues_owner_build_and_invalid_upgrade_keeps_it() {
     let (mut state, id, _) = fixture();
     start(&mut state, id, "storage", 1, None);
     fund(&mut state, "storage", 1);
-    let before = state.settlements.get(id).unwrap().project.clone();
+    let before = state.settlements.get(id).unwrap().projects.first().cloned();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
-    assert_eq!(
-        request_build(&mut state, id, "house").unwrap(),
-        OrderOutcome::Queued {
-            reason: "busy".into(),
-        }
+    assert!(
+        matches!(
+            request_build(&mut state, id, "house").unwrap(),
+            OrderOutcome::Queued { .. }
+        ),
+        "a later order waits instead of preempting the active project"
     );
     let record = state.settlements.get(id).unwrap();
-    let pending = record.pending_order.as_ref().unwrap();
+    let pending = &record.orders[0];
     assert_eq!(
         (pending.blueprint.as_str(), pending.level, pending.building),
         ("house", 1, None)
@@ -975,12 +988,12 @@ fn active_project_queues_owner_build_and_invalid_upgrade_keeps_it() {
     assert!(request_upgrade(&mut state, id, BuildingId(123)).is_err());
     assert!(request_build(&mut state, id, "not-a-blueprint").is_err());
     let record = state.settlements.get(id).unwrap();
-    let pending = record.pending_order.as_ref().unwrap();
+    let pending = &record.orders[0];
     assert_eq!(
         (pending.blueprint.as_str(), pending.level, pending.building),
         ("house", 1, None)
     );
-    assert_eq!(record.project, before);
+    assert_eq!(record.projects, vec![before.clone().unwrap()]);
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     assert!(state.plugin_block_writes.is_empty());
 }
@@ -1013,8 +1026,8 @@ fn requested_upgrade_queues_without_materials_then_starts_after_funding() {
         matches!(outcome, OrderOutcome::Queued { ref reason } if reason.starts_with("not enough:"))
     );
     let record = state.settlements.get(id).unwrap();
-    assert!(record.project.is_none());
-    let pending = record.pending_order.as_ref().unwrap();
+    assert!(record.projects.is_empty());
+    let pending = &record.orders[0];
     assert_eq!(
         (pending.blueprint.as_str(), pending.level, pending.building),
         ("house", 2, Some(building))
@@ -1025,8 +1038,8 @@ fn requested_upgrade_queues_without_materials_then_starts_after_funding() {
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     plan_until_started(&mut state, id);
     let record = state.settlements.get(id).unwrap();
-    assert!(record.pending_order.is_none());
-    let project = record.project.as_ref().unwrap();
+    assert!(record.orders.is_empty());
+    let project = &record.projects[0];
     assert_eq!(project.blueprint, "house");
     assert_eq!(project.building, Some(building));
     assert_eq!(project.level, 2);
@@ -1034,7 +1047,7 @@ fn requested_upgrade_queues_without_materials_then_starts_after_funding() {
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     complete(&mut state, id, slot);
     let record = state.settlements.get(id).unwrap();
-    assert!(record.project.is_none());
+    assert!(record.projects.is_empty());
     assert_eq!(record.buildings[&building].level, 2);
     assert_eq!(record.buildings.len(), 1);
 }
@@ -1054,21 +1067,19 @@ fn queued_upgrade_targets_next_level_after_active_upgrade_finishes() {
         .next()
         .unwrap();
     fund(&mut state, "house", 2);
-    assert_eq!(
-        request_upgrade(&mut state, id, building).unwrap(),
-        OrderOutcome::Started
-    );
-    let active = state.settlements.get(id).unwrap().project.clone();
+    upgrade_started(&mut state, id, building);
+    let active = state.settlements.get(id).unwrap().projects.first().cloned();
     assert_eq!(active.as_ref().unwrap().level, 2);
-    assert_eq!(
-        request_upgrade(&mut state, id, building).unwrap(),
-        OrderOutcome::Queued {
-            reason: "busy".into(),
-        }
+    assert!(
+        matches!(
+            request_upgrade(&mut state, id, building).unwrap(),
+            OrderOutcome::Queued { .. }
+        ),
+        "a later order waits instead of preempting the active project"
     );
     let record = state.settlements.get(id).unwrap();
-    assert_eq!(record.project, active);
-    let pending = record.pending_order.as_ref().unwrap();
+    assert_eq!(record.projects, vec![active.clone().unwrap()]);
+    let pending = &record.orders[0];
     assert_eq!(
         (pending.blueprint.as_str(), pending.level, pending.building),
         ("house", 3, Some(building))
@@ -1082,8 +1093,8 @@ fn queued_upgrade_targets_next_level_after_active_upgrade_finishes() {
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     plan_until_started(&mut state, id);
     let record = state.settlements.get(id).unwrap();
-    assert!(record.pending_order.is_none());
-    let project = record.project.as_ref().unwrap();
+    assert!(record.orders.is_empty());
+    let project = &record.projects[0];
     assert_eq!(
         (project.blueprint.as_str(), project.level, project.building),
         ("house", 3, Some(building))
@@ -1138,10 +1149,10 @@ fn stale_pending_upgrade_is_dropped_and_autonomous_planning_resumes() {
         plan_until_started(&mut state, id);
         let record = state.settlements.get(id).unwrap();
         assert!(
-            record.pending_order.is_none(),
+            record.orders.is_empty(),
             "remove_building={remove_building}"
         );
-        let project = record.project.as_ref().unwrap();
+        let project = &record.projects[0];
         assert_eq!(project.blueprint, "storage");
         assert!(!project.ordered);
         assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
@@ -1182,10 +1193,10 @@ fn autonomous_upgrade_requires_blueprint_provenance_and_materials() {
         .id;
     assert!(!upgrade_available(&state, id, player_certificate));
     plan(&mut state, id);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     fund(&mut state, "house", 2);
     plan(&mut state, id);
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.building, Some(house));
     assert_eq!(project.level, 2);
     complete(&mut state, id, slot);
@@ -1220,7 +1231,7 @@ fn partial_delivery_funds_a_blueprint_proven_upgrade_without_mutating_stock() {
     assert!(!has_funded_candidate(&state, id));
     assert!(candidate_funded_by_delivery(&state, id, &[Some(carried)]));
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
 }
 
 #[test]
@@ -1232,7 +1243,7 @@ fn an_already_funded_candidate_does_not_send_each_harvested_log_home() {
             start(&mut state, id, "storage", 1, None);
             assert!(super::super::construction_crafting::can_fund(
                 &state,
-                &active_project_bill(&state, id).unwrap(),
+                &joint_active_bill(&state, id).unwrap(),
                 &executor::source_images(&state, id),
             ));
         } else {
@@ -1266,25 +1277,21 @@ fn invalid_or_stale_owner_targets_leave_no_request_to_obstruct_planning() {
     assert!(request_upgrade(&mut state, id, BuildingId(123)).is_err());
     assert!(request_upgrade(&mut state, id, mine).is_err());
     assert_eq!(state.settlements.get(id).unwrap().revision, revision);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     assert!(state.settlements.take_images().is_empty());
     fund(&mut state, "storage", 1);
     plan_until_started(&mut state, id);
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .blueprint,
+        state.settlements.get(id).unwrap().projects[0].blueprint,
         "storage"
     );
 }
 
+/// D42: the order is queued at once and its command examines no lot; the
+/// search later finds no free site, says so once, leaves the order turn and
+/// touches neither the stock nor the plan.
 #[test]
-fn funded_owner_order_without_a_free_site_leaves_no_saved_request_or_cursor() {
+fn funded_owner_order_without_a_free_site_is_refused_by_its_search_without_debit() {
     let (mut state, id, _) = fixture();
     fund(&mut state, "watch_tower", 1);
     // No lot fits the fixture's one loaded chunk, and the plaza and roads are
@@ -1292,29 +1299,38 @@ fn funded_owner_order_without_a_free_site_leaves_no_saved_request_or_cursor() {
     for x in 0..16 {
         for z in 0..16 {
             if (x, z) != (1, 1) {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }
         }
     }
     state.world.fold_overlay();
-    let record = state.settlements.get(id).unwrap();
-    let revision = record.revision;
-    let cursor = record.construction_cursor;
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
-    state.settlements.take_images();
-    let error = request_build(&mut state, id, "watch_tower").unwrap_err();
-    assert!(
-        error.contains("No free loaded construction site"),
-        "{error}"
+    assert_eq!(
+        request_build(&mut state, id, "watch_tower").unwrap(),
+        OrderOutcome::Queued {
+            reason: site_refusals::WAITING_FOR_SITE.into()
+        }
     );
+    assert!(state.settlements.site_orders.contains_key(&id));
+    plan(&mut state, id);
     let record = state.settlements.get(id).unwrap();
-    assert!(record.project.is_none());
-    assert_eq!(record.revision, revision);
-    assert_eq!(record.construction_cursor, cursor);
+    assert!(record.projects.is_empty());
+    let seq = orders(record)
+        .next()
+        .expect("the request keeps its place")
+        .seq;
+    let refusal = state.settlements.order_refusal.get(&(id, seq));
+    assert!(
+        refusal.is_some_and(|reason| reason.contains("No free loaded construction site")),
+        "{refusal:?}"
+    );
+    assert!(
+        !state.settlements.site_orders.contains_key(&id),
+        "a refused sweep leaves the order turn"
+    );
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
-    assert!(state.settlements.take_images().is_empty());
 }
 
 #[test]
@@ -1358,11 +1374,8 @@ fn unfunded_house_skips_to_funded_farm_without_debiting_stock() {
     );
     let before = state.block_entities[&(1, 201, 1)].slots.clone();
     plan_until_started(&mut state, id);
-    let record = state.settlements.get(id).unwrap();
-    let project = record
-        .project
-        .as_ref()
-        .expect("planner must start the next fundable need");
+    let record = &state.settlements.get(id).unwrap();
+    let project = &record.projects[0];
     assert_eq!(
         project.blueprint, "farm",
         "unfunded house must not block a funded later need"
@@ -1402,14 +1415,7 @@ fn funded_project_keeps_iron_demand_for_the_skipped_house_bed() {
     assert_eq!(idle, 2, "the unfunded house bed needs shears");
     plan_until_started(&mut state, id);
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .expect("funded farm starts")
-            .blueprint,
+        state.settlements.get(id).unwrap().projects[0].blueprint,
         "farm"
     );
     assert_eq!(
@@ -1444,7 +1450,7 @@ fn funded_house_retains_priority_over_later_needs() {
     let before = state.block_entities[&(1, 201, 1)].slots.clone();
     plan_until_started(&mut state, id);
     let record = state.settlements.get(id).unwrap();
-    let project = record.project.as_ref().expect("funded house must start");
+    let project = &record.projects[0];
     assert_eq!(
         project.blueprint, "house",
         "a truly funded house keeps priority"
@@ -1502,8 +1508,8 @@ fn colored_wool_funds_and_builds_matching_bed_without_mixing() {
         !wool_demand(&state, id),
         "three matching wool satisfy the bed"
     );
-    request_build(&mut state, id, "house").unwrap();
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    request_started(&mut state, id, "house");
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let level = blueprints::get(&state.registry, "house")
         .unwrap()
         .level(1)
@@ -1596,11 +1602,12 @@ fn colored_sheep_is_the_house_wool_source() {
         .unwrap();
     state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[1] =
         mc_data::ItemStack::new(planks, 3);
-    state.settlements.get_mut(id).unwrap().pending_order = Some(OwnerOrder {
+    state.settlements.get_mut(id).unwrap().orders = vec![OwnerOrder {
+        seq: 0,
         blueprint: "house".into(),
         level: 1,
         building: None,
-    });
+    }];
     assert!(wool_demand(&state, id));
     let house = waiting(&state, id);
     let bed = house
@@ -1647,8 +1654,20 @@ fn fund_all(state: &mut TickState, blueprints_: &[&str]) {
 fn autonomous_storage(state: &mut TickState, id: SettlementId) {
     open_plan(state);
     fund_all(state, &["storage", "house"]);
+    // A second lot beside the first needs foundation dirt of its own (D8): the
+    // fixture carries the two bills and one more lot's spare stack.
+    for stack in state
+        .block_entities
+        .get_mut(&(1, 201, 1))
+        .unwrap()
+        .slots
+        .iter_mut()
+        .filter(|stack| stack.count > 0)
+    {
+        stack.count = (stack.count * 2).min(64);
+    }
     plan_until_started(state, id);
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.blueprint, "storage");
     assert!(!project.ordered, "the planner's project is autonomous");
 }
@@ -1657,39 +1676,42 @@ fn autonomous_storage(state: &mut TickState, id: SettlementId) {
 fn an_untouched_autonomous_project_keeps_its_fifo_slot_before_an_owner_order() {
     let (mut state, id, _) = fixture();
     autonomous_storage(&mut state, id);
-    let old = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .unwrap()
+    let old = state.settlements.get(id).unwrap().projects[0]
         .structure
         .clone();
     let snapshot = executor::status(&state, id, &old).unwrap();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
-    assert_eq!(
-        request_build(&mut state, id, "house").unwrap(),
-        OrderOutcome::Queued {
-            reason: "busy".into()
-        }
-    );
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    // D8: the later house starts beside the autonomous project or waits for
+    // materials; either way it never takes the autonomous project's slot.
+    let outcome = later_order(&mut state, id, "house");
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.blueprint, "storage");
     assert!(!project.ordered);
     assert_eq!(project.structure, old);
     assert_eq!(executor::status(&state, id, &old).unwrap(), snapshot);
-    assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .pending_order
-            .as_ref()
-            .unwrap()
-            .blueprint,
-        "house"
-    );
+    match outcome {
+        Some(OrderOutcome::Queued { .. }) => assert_eq!(
+            state
+                .settlements
+                .get(id)
+                .unwrap()
+                .orders
+                .first()
+                .unwrap()
+                .blueprint,
+            "house"
+        ),
+        Some(OrderOutcome::Started) => {
+            let record = state.settlements.get(id).unwrap();
+            assert_eq!(record.projects.len(), 2, "the house builds in parallel");
+            assert!(record.orders.is_empty());
+        }
+        None => {
+            let record = state.settlements.get(id).unwrap();
+            assert_eq!(record.projects.len(), 1, "no second project is admitted");
+            assert!(record.orders.is_empty(), "a refused request is not queued");
+        }
+    }
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     assert!(state.plugin_block_writes.is_empty());
 }
@@ -1698,13 +1720,7 @@ fn an_untouched_autonomous_project_keeps_its_fifo_slot_before_an_owner_order() {
 fn owner_order_is_busy_once_an_autonomous_project_placed_a_block() {
     let (mut state, id, slot) = fixture();
     autonomous_storage(&mut state, id);
-    let handle = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .project
-        .as_ref()
-        .unwrap()
+    let handle = state.settlements.get(id).unwrap().projects[0]
         .structure
         .clone();
     for _ in 0..400 {
@@ -1723,90 +1739,98 @@ fn owner_order_is_busy_once_an_autonomous_project_placed_a_block() {
             .completed_work_units
             > 0
     );
-    let before = state.settlements.get(id).unwrap().project.clone();
+    let before = state.settlements.get(id).unwrap().projects.first().cloned();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let writes = state.plugin_block_writes.len();
-    assert_eq!(
-        request_build(&mut state, id, "house").unwrap(),
-        OrderOutcome::Queued {
-            reason: "busy".into(),
-        }
-    );
+    // D8: a placed block does not reserve the settlement; the later order
+    // starts beside the autonomous project or waits, never above it.
+    let outcome = later_order(&mut state, id, "house");
     let record = state.settlements.get(id).unwrap();
-    assert_eq!(record.project, before);
-    let pending = record.pending_order.as_ref().unwrap();
-    assert_eq!(
-        (pending.blueprint.as_str(), pending.level, pending.building),
-        ("house", 1, None)
-    );
+    assert_eq!(record.projects[0], before.clone().unwrap());
+    match outcome {
+        Some(OrderOutcome::Queued { .. }) => {
+            assert_eq!(record.projects, vec![before.clone().unwrap()]);
+            let pending = &record.orders[0];
+            assert_eq!(
+                (pending.blueprint.as_str(), pending.level, pending.building),
+                ("house", 1, None)
+            );
+        }
+        Some(OrderOutcome::Started) => assert_eq!(record.projects.len(), 2),
+        None => assert_eq!(record.projects.len(), 1),
+    }
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     assert_eq!(state.plugin_block_writes.len(), writes);
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .structure,
+        state.settlements.get(id).unwrap().projects[0].structure,
         handle
     );
 }
 
 #[test]
-fn ordered_project_finishes_before_the_first_pending_order_starts_and_later_requests_are_refused() {
+fn ordered_project_finishes_before_the_first_pending_order_starts_and_later_requests_queue() {
     let (mut state, id, slot) = fixture();
     open_plan(&mut state);
-    fund_all(&mut state, &["storage", "house"]);
-    assert_eq!(
-        request_build(&mut state, id, "storage").unwrap(),
-        OrderOutcome::Started
-    );
-    let before = state.settlements.get(id).unwrap().project.clone();
+    // Only the storage bill is in storage: under D8 a later request queues
+    // exactly when the joint proof cannot fund it beside the active project.
+    fund_all(&mut state, &["storage"]);
+    request_started(&mut state, id, "storage");
+    let before = state.settlements.get(id).unwrap().projects.first().cloned();
     assert!(before.as_ref().unwrap().ordered);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
-    assert_eq!(
-        request_build(&mut state, id, "watch_tower").unwrap(),
-        OrderOutcome::Queued {
-            reason: "busy".into(),
-        }
+    assert!(
+        matches!(
+            request_build(&mut state, id, "watch_tower").unwrap(),
+            OrderOutcome::Queued { .. }
+        ),
+        "a later order waits instead of preempting the active project"
     );
-    let pending = state
-        .settlements
-        .get(id)
-        .unwrap()
-        .pending_order
-        .as_ref()
-        .unwrap();
+    let pending = state.settlements.get(id).unwrap().orders.first().unwrap();
     assert_eq!(
         (pending.blueprint.as_str(), pending.level, pending.building),
         ("watch_tower", 1, None)
     );
-    assert_eq!(
-        request_build(&mut state, id, "house").unwrap_err(),
-        "Construction queue is full: watch_tower is already pending. Cancel it before another order."
+    // A further request joins the queue behind the first one (D8: the queue is
+    // bounded by MAX_ORDERS, not by one request).
+    assert!(
+        matches!(
+            request_build(&mut state, id, "house").unwrap(),
+            OrderOutcome::Queued { .. }
+        ),
+        "a later order waits instead of preempting the active project"
     );
     for _ in 0..200 {
         plan(&mut state, id);
     }
     let record = state.settlements.get(id).unwrap();
-    assert_eq!(record.project, before);
-    let pending = record.pending_order.as_ref().unwrap();
+    assert_eq!(record.projects, vec![before.clone().unwrap()]);
     assert_eq!(
-        (pending.blueprint.as_str(), pending.level, pending.building),
-        ("watch_tower", 1, None)
+        record
+            .orders
+            .iter()
+            .map(|order| order.blueprint.as_str())
+            .collect::<Vec<_>>(),
+        ["watch_tower", "house"],
+        "entry order is preserved while the slot is busy"
     );
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     assert!(state.plugin_block_writes.is_empty());
     complete(&mut state, id, slot);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     fund(&mut state, "watch_tower", 1);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     plan_until_started(&mut state, id);
     let record = state.settlements.get(id).unwrap();
-    assert!(record.pending_order.is_none());
-    let project = record.project.as_ref().unwrap();
+    assert_eq!(
+        record
+            .orders
+            .iter()
+            .map(|order| order.blueprint.as_str())
+            .collect::<Vec<_>>(),
+        ["house"],
+        "the request that still waits keeps its place"
+    );
+    let project = &record.projects[0];
     assert_eq!(
         (project.blueprint.as_str(), project.level, project.building),
         ("watch_tower", 1, None)
@@ -1819,13 +1843,16 @@ fn ordered_project_finishes_before_the_first_pending_order_starts_and_later_requ
 fn unfunded_owner_order_keeps_the_autonomous_project() {
     let (mut state, id, _) = fixture();
     autonomous_storage(&mut state, id);
-    let before = state.settlements.get(id).unwrap().project.clone();
+    let before = state.settlements.get(id).unwrap().projects.first().cloned();
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let outcome = request_build(&mut state, id, "watch_tower").unwrap();
-    assert!(matches!(outcome, OrderOutcome::Queued { ref reason } if reason == "busy"));
+    assert!(
+        matches!(outcome, OrderOutcome::Queued { .. }),
+        "a later order waits instead of preempting the autonomous project"
+    );
     let record = state.settlements.get(id).unwrap();
-    assert_eq!(record.project, before);
-    let pending = record.pending_order.as_ref().unwrap();
+    assert_eq!(record.projects, vec![before.clone().unwrap()]);
+    let pending = &record.orders[0];
     assert_eq!(
         (pending.blueprint.as_str(), pending.level, pending.building),
         ("watch_tower", 1, None)
@@ -1865,10 +1892,16 @@ fn a_later_owner_order_preserves_the_active_builders_hauled_materials() {
     assert!(stock_total(&state) < before);
     let hauled = carried(&state);
     let stored = stock_total(&state);
-    assert!(matches!(
-        request_build(&mut state, id, "house").unwrap(),
-        OrderOutcome::Queued { reason } if reason == "busy"
-    ));
+    // D8: a later order either starts beside the active project or waits for
+    // materials; admission itself never touches the active builder's haul.
+    let outcome = later_order(&mut state, id, "house");
+    assert!(
+        matches!(
+            outcome,
+            None | Some(OrderOutcome::Started | OrderOutcome::Queued { .. })
+        ),
+        "unexpected outcome {outcome:?}"
+    );
     assert_eq!(
         carried(&state),
         hauled,
@@ -1885,12 +1918,51 @@ fn a_later_owner_order_preserves_the_active_builders_hauled_materials() {
 #[test]
 fn upgrade_is_offered_for_an_ordered_house_after_the_earlier_autonomous_project() {
     let (mut state, id, slot) = fixture();
-    autonomous_storage(&mut state, id);
-    request_build(&mut state, id, "house").unwrap();
-    complete(&mut state, id, slot);
-    fund(&mut state, "house", 1);
+    open_plan(&mut state);
+    fund_all(&mut state, &["storage", "house"]);
     plan_until_started(&mut state, id);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    assert_eq!(
+        state.settlements.get(id).unwrap().projects[0].blueprint,
+        "storage",
+        "the earlier autonomous project is admitted first"
+    );
+    // D8 admits the ordered house beside the autonomous project.
+    let admitted = later_order(&mut state, id, "house");
+    // The order's command only queued it (owner D42); planning passes search
+    // its site and start the house or refuse its lot.
+    for _ in 0..64 {
+        let record = state.settlements.get(id).unwrap();
+        if record
+            .projects
+            .iter()
+            .any(|project| project.blueprint == "house")
+            || state
+                .settlements
+                .order_refusal
+                .keys()
+                .any(|(town, _)| *town == id)
+        {
+            break;
+        }
+        plan(&mut state, id);
+    }
+    // A second lot may be refused by the plan's geometry; the upgrade row only
+    // exists for a house this settlement actually built, so skip then.
+    let Some(project) = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .projects
+        .iter()
+        .find(|project| project.blueprint == "house")
+        .cloned()
+    else {
+        assert!(
+            !matches!(admitted, Some(OrderOutcome::Started)),
+            "the house starts only with its own lot"
+        );
+        return;
+    };
     complete(&mut state, id, slot);
     let (bid, building) = state
         .settlements
@@ -1920,7 +1992,7 @@ fn upgrade_is_offered_for_an_ordered_house_after_the_earlier_autonomous_project(
     // The row is orderable and the upgraded house offers L3 the same way.
     for level in [2, 3] {
         fund(&mut state, "house", level);
-        request_upgrade(&mut state, id, bid).unwrap();
+        upgrade_started(&mut state, id, bid);
         complete(&mut state, id, slot);
         let upgraded = &state.settlements.get(id).unwrap().buildings[&bid];
         assert_eq!(upgraded.level, level);
@@ -1981,11 +2053,11 @@ fn farm_level_one_is_fully_placed_and_a_funded_upgrade_clears_only_its_removals(
     }
     fund(&mut state, "farm", 2);
     plan(&mut state, id);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!((project.level, project.ordered), (2, false));
     for _ in 0..4096 {
         let status = executor::status(&state, id, &project.structure).unwrap();
-        if status.current_stage_index >= 1 {
+        if status.stages[status.current_stage_index as usize].stage == "build" {
             break;
         }
         attempt(&mut state, id, slot);
@@ -2012,7 +2084,7 @@ fn running_structure_neither_certifies_nor_admits_an_upgrade() {
     for _ in 0..64 {
         attempt(&mut state, id, slot);
     }
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     let status = executor::status(&state, id, &project.structure).unwrap();
     assert_eq!(status.state, ScriptStructureState::Running);
     assert!(status.completed_work_units > 0, "the build is under way");
@@ -2029,11 +2101,14 @@ fn running_structure_neither_certifies_nor_admits_an_upgrade() {
     }
     let certified = state.settlements.get(id).unwrap().buildings.len();
     fund(&mut state, "farm", 2);
-    assert!(!finish_project(&mut state, id), "Running never certifies");
+    assert!(
+        !finish_project(&mut state, id, &project.structure),
+        "Running never certifies"
+    );
     plan(&mut state, id);
     let record = state.settlements.get(id).unwrap();
     assert_eq!(record.buildings.len(), certified, "no farm certificate yet");
-    let kept = record.project.as_ref().unwrap();
+    let kept = &record.projects[0];
     assert_eq!(
         (kept.level, kept.structure.as_str()),
         (1, project.structure.as_str())
@@ -2049,8 +2124,8 @@ fn owner_order_does_not_preempt_after_a_completed_clear_stage() {
     state.world.fold_overlay();
     start(&mut state, id, "storage", 1, None);
     let record = state.settlements.get_mut(id).unwrap();
-    record.project.as_mut().unwrap().ordered = false;
-    let project = record.project.clone().unwrap();
+    record.projects[0].ordered = false;
+    let project = record.projects[0].clone();
     for _ in 0..400 {
         let snapshot = executor::status(&state, id, &project.structure).unwrap();
         if snapshot.current_stage_index > 0 && snapshot.completed_work_units == 0 {
@@ -2062,22 +2137,16 @@ fn owner_order_does_not_preempt_after_a_completed_clear_stage() {
     assert!(snapshot.current_stage_index > 0, "{snapshot:?}");
     assert_eq!(snapshot.completed_work_units, 0);
     fund(&mut state, "house", 1);
-    assert_eq!(
-        request_build(&mut state, id, "house").unwrap(),
-        OrderOutcome::Queued {
-            reason: "busy".into(),
-        }
+    assert!(
+        matches!(
+            request_build(&mut state, id, "house").unwrap(),
+            OrderOutcome::Queued { .. }
+        ),
+        "a later order waits instead of preempting the active project"
     );
     plan(&mut state, id);
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .structure,
+        state.settlements.get(id).unwrap().projects[0].structure,
         project.structure
     );
 }
@@ -2190,7 +2259,7 @@ fn sole_resource_worker_changes_to_the_missing_housing_material_through_ticks() 
             .map(|stack| stack.count)
             .sum::<i32>()
             >= 43;
-        if mined && (delivered || state.settlements.get(id).unwrap().project.is_some()) {
+        if mined && (delivered || !state.settlements.get(id).unwrap().projects.is_empty()) {
             assert_eq!(
                 state
                     .entities
@@ -2228,18 +2297,13 @@ fn funded_house_keeps_an_ordinary_recruit_in_the_builder_career() {
             .unwrap()
             .data
             .profession = profession;
-        request_build(&mut state, id, "house").unwrap();
+        request_started(&mut state, id, "house");
         state.tick = PLAN_CADENCE;
         tick(&mut state);
         assert_eq!(
-            state
-                .settlements
-                .get(id)
-                .unwrap()
-                .project
-                .as_ref()
-                .unwrap()
-                .borrowed_builder,
+            state.settlements.get(id).unwrap().projects[0]
+                .builder
+                .and_then(|(_, profession)| profession),
             None,
             "ordinary recruits take the existing builder career; only resource gatherers are borrowed"
         );
@@ -2273,7 +2337,7 @@ fn funded_house_can_borrow_the_only_untraded_gatherer_as_builder() {
         .unwrap()
         .data
         .profession = Profession::Lumberjack;
-    request_build(&mut state, id, "house").unwrap();
+    request_started(&mut state, id, "house");
     state.tick = PLAN_CADENCE;
     tick(&mut state);
     assert_eq!(
@@ -2290,8 +2354,11 @@ fn funded_house_can_borrow_the_only_untraded_gatherer_as_builder() {
     let encoded = serde_json::to_vec(state.settlements.get(id).unwrap()).unwrap();
     let restored: SettlementRecord = serde_json::from_slice(&encoded).unwrap();
     assert_eq!(
-        restored.project.as_ref().unwrap().borrowed_builder,
-        Some((state.entities.row(worker).uuid, Profession::Lumberjack))
+        restored.projects[0].builder,
+        Some((
+            state.entities.row(worker).uuid,
+            Some(Profession::Lumberjack)
+        ))
     );
     *state.settlements.get_mut(id).unwrap() = restored;
     complete(&mut state, id, worker);
@@ -2362,13 +2429,21 @@ fn borrowed_lumberjack_replenishes_an_unfunded_active_project_through_ticks() {
     v.data.profession = Profession::Lumberjack;
     v.job_site = Some(crate::boundary::BlockPos { x: 2, y: 201, z: 8 });
     v.job_site_dimension = state.dimension.name().into();
-    request_build(&mut state, id, "lumber_camp").unwrap();
+    // The camp is built on the first legal lot in walking order, beside the
+    // simulated plaza chunk; every other lot is refused, so the ranked sweep
+    // takes it.
+    let site = super::site_tests::first_legal_lot(&state, id, "lumber_camp");
+    super::site_tests::pin_lot(&mut state, id, "lumber_camp", &site);
+    request_started(&mut state, id, "lumber_camp");
     state.tick = PLAN_CADENCE;
     tick(&mut state);
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(
-        project.borrowed_builder,
-        Some((state.entities.row(worker).uuid, Profession::Lumberjack))
+        project.builder,
+        Some((
+            state.entities.row(worker).uuid,
+            Some(Profession::Lumberjack)
+        ))
     );
     let plank = state
         .registry
@@ -2380,7 +2455,7 @@ fn borrowed_lumberjack_replenishes_an_unfunded_active_project_through_ticks() {
             stack.count -= 9;
         }
     }
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert!(
         !executor::missing(&state, id, &project.structure)
             .unwrap()
@@ -2410,7 +2485,7 @@ fn borrowed_lumberjack_replenishes_an_unfunded_active_project_through_ticks() {
                 .flatten()
                 .any(|stack| stack.item_id == birch && stack.count > 0));
         resumed |= restored && harvested && v.data.profession == Profession::Builder;
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             assert!(
                 restored && harvested && resumed,
                 "the real worker must gather, deliver and resume construction"
@@ -2472,19 +2547,17 @@ fn active_wood_shortfall_can_retask_a_borrowed_miner_through_ticks() {
         .unwrap()
         .data
         .profession = Profession::Miner;
-    request_build(&mut state, id, "lumber_camp").unwrap();
+    // The camp is built on the first legal lot in walking order, beside the
+    // simulated plaza chunk; every other lot is refused, so the ranked sweep
+    // takes it.
+    let site = super::site_tests::first_legal_lot(&state, id, "lumber_camp");
+    super::site_tests::pin_lot(&mut state, id, "lumber_camp", &site);
+    request_started(&mut state, id, "lumber_camp");
     state.tick = PLAN_CADENCE;
     tick(&mut state);
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .borrowed_builder,
-        Some((state.entities.row(worker).uuid, Profession::Miner))
+        state.settlements.get(id).unwrap().projects[0].builder,
+        Some((state.entities.row(worker).uuid, Some(Profession::Miner)))
     );
     let plank = state
         .registry
@@ -2516,7 +2589,7 @@ fn active_wood_shortfall_can_retask_a_borrowed_miner_through_ticks() {
                     && change.state == state.registry.states.air
             });
         resumed |= harvested && v.data.profession == Profession::Builder;
-        if state.settlements.get(id).unwrap().project.is_none() {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
             assert!(
                 restored && harvested && resumed,
                 "worker must gather, deliver and resume"

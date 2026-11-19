@@ -56,6 +56,8 @@ const APPLIED: TableDefinition<&[u8], u64> = TableDefinition::new("applied_lsn")
 const GENERATED: TableDefinition<&[u8], ()> = TableDefinition::new("generated_baselines");
 /// Independent of the unchanged vanilla-like WORLDGEN_REVISION.
 pub const NATIVE_PROTOTYPE_SCHEMA: u32 = 3;
+/// Store path relative to the world directory every native world uses.
+pub const NATIVE_DATABASE: &str = "native/state.redb";
 const DB_CACHE_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Error)]
@@ -76,6 +78,10 @@ pub enum NativeError {
     /// another Krasnokamen storage format); callers turn this into operator guidance.
     #[error("native global: unknown or missing required domain")]
     GlobalDomains,
+    /// The checkpoint marker disagrees with the store (Books R4-P1). Operator
+    /// text: names the path, both ids or both ticks.
+    #[error("{0}")]
+    Marker(String),
     #[error("unsupported native schema {0}; explicit offline conversion required")]
     UnsupportedSchema(u32),
 }
@@ -144,8 +150,7 @@ fn read_only_database(
     path: &Path,
     cache_bytes: usize,
 ) -> Result<redb::ReadOnlyDatabase, NativeError> {
-    Database::builder()
-        .set_cache_size(cache_bytes)
+    database_builder(cache_bytes)
         .open_read_only(path)
         .map_err(|error| match error {
             redb::DatabaseError::RepairAborted => NativeError::Source(
@@ -154,6 +159,36 @@ fn read_only_database(
             ),
             error => NativeError::Database(error.into()),
         })
+}
+
+static REDB_REPAIRS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// redb repairs this process performed (`Database` open/create), one per
+/// repaired open. A repair can include a rollback to an earlier commit that
+/// this crate cannot tell apart (a damaged header slot is switched before the
+/// callback runs), so the serving caller logs every repair as a possible
+/// rollback (Books R4-P1). This crate has no logging dependency.
+#[must_use]
+pub fn redb_repairs() -> u64 {
+    REDB_REPAIRS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// redb builder for every serving and offline path.
+///
+/// redb calls the repair callback several times per repair with the scan
+/// progress (0.0 first, then 0.3 when the newest commit fails its checksum,
+/// 0.6, 0.9); only the first call of a repair is counted (see
+/// [`redb_repairs`]). It never aborts, because aborting would turn every
+/// unclean stop into a refusal to serve.
+pub(crate) fn database_builder(cache_bytes: usize) -> redb::Builder {
+    let mut builder = redb::Builder::new();
+    builder.set_cache_size(cache_bytes);
+    builder.set_repair_callback(|session| {
+        if session.progress() < 0.1 {
+            REDB_REPAIRS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    });
+    builder
 }
 
 /// A bounded off-thread snapshot, borrowed from the existing world owner.
@@ -184,6 +219,7 @@ pub struct NativeRecordCounts {
 pub struct NativeStore {
     database: Database,
     identity: [u8; 32],
+    store_uuid: [u8; 16],
     file: std::sync::Arc<std::fs::File>,
 }
 
@@ -244,6 +280,29 @@ impl NativeReadOnlyStore {
         let database = read_only_database(path, cache_bytes)?;
         validate_header(&db(database.begin_read())?, identity)?;
         Ok(Self { database })
+    }
+
+    /// The store's immutable id and committed checkpoint tick.
+    pub fn marker_fields(&self) -> Result<([u8; 16], Option<u64>), NativeError> {
+        let tx = db(self.database.begin_read())?;
+        let header = db(tx.open_table(HEADER))?;
+        let store_uuid = db(header.get("store_uuid"))?
+            .ok_or(NativeError::Invalid("native store id missing"))?
+            .value()
+            .try_into()
+            .map_err(|_| NativeError::Invalid("invalid native store id"))?;
+        Ok((store_uuid, checkpoint::tick_from(&tx)?))
+    }
+
+    /// Refuse a store that disagrees with the world's checkpoint marker before
+    /// a read-only tool reports it as truth (Books R4-P1). Same refusal rules as
+    /// [`NativeStore::check_marker`], but it never writes: a store ahead of the
+    /// marker (the commit-to-marker crash window) is accepted and the source
+    /// world stays byte-identical.
+    pub fn verify_marker(&self, world_dir: &Path) -> Result<(), NativeError> {
+        let (store_uuid, tick) = self.marker_fields()?;
+        crate::store_marker::verify(world_dir, store_uuid, tick)
+            .map_err(|error| NativeError::Marker(error.to_string()))
     }
 
     pub fn block_origin(
@@ -447,6 +506,46 @@ impl NativeStore {
         self.identity
     }
 
+    /// Immutable random id of this store instance, written once at creation.
+    /// The checkpoint marker repeats it so a marker and a store from different
+    /// worlds cannot be paired (Books R4-P3).
+    #[must_use]
+    pub fn store_uuid(&self) -> [u8; 16] {
+        self.store_uuid
+    }
+
+    /// The checkpoint-marker refusal for callers that open a store outside
+    /// `Core::open` (Books R4-P1). A missing or corrupt marker next to a store
+    /// with a checkpoint, a foreign store id, and a store behind the marker are
+    /// refused; a store ahead of the marker is the commit-to-marker crash window
+    /// and is **accepted without rewriting the marker**: only server start
+    /// publishes a newer marker.
+    pub fn verify_marker(&self, world_dir: &Path) -> Result<(), NativeError> {
+        let tick = self.checkpoint_tick()?;
+        crate::store_marker::verify(world_dir, self.store_uuid, tick)
+            .map_err(|error| NativeError::Marker(error.to_string()))
+    }
+
+    /// Open a world's store for writing outside `Core::open` (world tools,
+    /// maintenance, offline censuses) and run [`verify_marker`] before the
+    /// caller's first write or reported read. One entry so no tool path can
+    /// skip the pair check; none of them rewrites the marker.
+    pub fn open_checked(world_dir: &Path, identity: [u8; 32]) -> Result<Self, NativeError> {
+        let store = Self::open(&world_dir.join(NATIVE_DATABASE), identity)?;
+        store.verify_marker(world_dir)?;
+        Ok(store)
+    }
+
+    /// Marker check for a store whose identity cannot be compared yet (the
+    /// worldgen-revision upgrade rewrites it). Repairs the store first if redb
+    /// requires it, exactly as the first serve would, then refuses a store that
+    /// disagrees with its marker, without touching the marker file.
+    pub fn check_marker_file(world_dir: &Path, path: &Path) -> Result<(), NativeError> {
+        let (store_uuid, tick) = Self::read_marker_fields(path)?;
+        crate::store_marker::verify(world_dir, store_uuid, tick)
+            .map_err(|error| NativeError::Marker(error.to_string()))
+    }
+
     /// Read durable database bytes through its lease-holding handle.
     /// The caller must serialize the entire read with all database writes and
     /// use it only after an Immediate commit, with no write transaction open.
@@ -479,14 +578,20 @@ impl NativeStore {
             .open(path)?;
         let backend = NativeFile::acquire(file)?;
         let file = std::sync::Arc::clone(&backend.0);
-        let database = db(Database::builder()
-            .set_cache_size(cache_bytes)
-            .create_with_backend(backend))?;
+        // A new file has no allocator state yet, so redb initializes it through
+        // its repair path; that is not a repair of a world.
+        let mut builder = database_builder(cache_bytes);
+        builder.set_repair_callback(|_| {});
+        let database = db(builder.create_with_backend(backend))?;
+        // Immutable instance identity: random, written once, never derived from
+        // the world seed or the build (Books R4-P3).
+        let store_uuid = *uuid::Uuid::new_v4().as_bytes();
         let mut transaction = db(database.begin_write())?;
         db(transaction.set_durability(Durability::Immediate))?;
         {
             let mut header = db(transaction.open_table(HEADER))?;
             db(header.insert("identity", identity.as_slice()))?;
+            db(header.insert("store_uuid", store_uuid.as_slice()))?;
             db(header.insert("schema", NATIVE_PROTOTYPE_SCHEMA.to_be_bytes().as_slice()))?;
             drop(header);
             db(transaction.open_table(IMPORTED))?;
@@ -503,6 +608,7 @@ impl NativeStore {
         Ok(Self {
             database,
             identity,
+            store_uuid,
             file,
         })
     }
@@ -529,16 +635,15 @@ impl NativeStore {
             .into());
         }
         let file = std::sync::Arc::clone(&backend.0);
-        let database = db(Database::builder()
-            .set_cache_size(cache_bytes)
-            .create_with_backend(backend))?;
-        {
+        let database = db(database_builder(cache_bytes).create_with_backend(backend))?;
+        let store_uuid = {
             let transaction = db(database.begin_read())?;
-            validate_header(&transaction, identity)?;
-        }
+            validate_header(&transaction, identity)?
+        };
         Ok(Self {
             database,
             identity,
+            store_uuid,
             file,
         })
     }
@@ -1077,7 +1182,7 @@ fn compose(
 fn validate_header(
     transaction: &redb::ReadTransaction,
     identity: [u8; 32],
-) -> Result<(), NativeError> {
+) -> Result<[u8; 16], NativeError> {
     let header = db(transaction.open_table(HEADER))?;
     let schema = db(header.get("schema"))?.ok_or(NativeError::Invalid("native schema missing"))?;
     let schema = u32::from_be_bytes(
@@ -1092,6 +1197,14 @@ fn validate_header(
     if db(header.get("identity"))?.is_none_or(|value| value.value() != identity) {
         return Err(NativeError::Invalid("identity mismatch"));
     }
+    // Required: an absent id means a store written before this format, which is
+    // refused rather than given a fresh identity (a repaired or later world
+    // must never be able to adopt one, Books R4-P3).
+    let store_uuid: [u8; 16] = db(header.get("store_uuid"))?
+        .ok_or(NativeError::Invalid("native store id missing"))?
+        .value()
+        .try_into()
+        .map_err(|_| NativeError::Invalid("invalid native store id"))?;
     db(transaction.open_table(IMPORTED))?;
     db(transaction.open_table(OVERLAYS))?;
     db(transaction.open_table(METADATA))?;
@@ -1101,7 +1214,7 @@ fn validate_header(
     db(transaction.open_table(state::INITIALIZED))?;
     db(transaction.open_table(state::ENTITY_LSN))?;
     checkpoint::validate_tables(transaction)?;
-    Ok(())
+    Ok(store_uuid)
 }
 
 fn count_records(transaction: &redb::ReadTransaction) -> Result<NativeRecordCounts, NativeError> {

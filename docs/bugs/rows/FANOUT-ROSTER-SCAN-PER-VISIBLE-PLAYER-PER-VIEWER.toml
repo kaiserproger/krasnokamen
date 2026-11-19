@@ -1,0 +1,10 @@
+[[bug]]
+id = "FANOUT-ROSTER-SCAN-PER-VISIBLE-PLAYER-PER-VIEWER"
+title = "broadcast_to answers 'is this recipient a spectator and may it see this entity' by scanning player_roster linearly, twice, for every visible player entity of every viewer on every publish, so the cost is O(viewers x visible players x roster) with a new cache line per step."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R3.md rule table R3-19 (Fabian, Searching / Tables: never re-derive a relation by scanning when it can be an index; perf). crates/mc-edge/src/plan/entity_interest.rs broadcast_to scans snapshot.player_roster (RosterPlayer carries a String name, about 56 B, crates/mc-core/src/dimensions_globals.rs), called from changed() and enter_leave(); the answer is a pure function of per-snapshot data. Verified open on main 5bdc02911 (player_roster iterated in entity_interest.rs). Fix direction: build a per-snapshot game-mode index once per publish. Measure fanout-thread self time (perf record -g) at 100 and 1000 observers with many players. No loss, crash or security consequence; Perf1M scale item, not freeze-relevant."
+regression = []
+failing_first = "not recorded"

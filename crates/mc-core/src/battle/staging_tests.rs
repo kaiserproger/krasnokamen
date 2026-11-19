@@ -164,6 +164,39 @@ fn layout(seed: u64) -> Vec<([u64; 3], u16, String)> {
 }
 
 #[test]
+fn the_battle_step_stamps_exposure_with_the_tick_the_publish_counts_past() {
+    // The phase contract of `battle::exposure`: the guard set of server tick T is
+    // evaluated during that tick and published under T+1 (the recorder's
+    // `krasnokamen:tick` marker carries `TickOutput::tick`), so an episode's
+    // `tick`/`motion` pair joins the wire with no empirical offset.
+    let mut state = fixture();
+    let mut changes = ChangeSet::default();
+    setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 42, 100).unwrap();
+    state.hostile.battle.running = true;
+    state.tick = 4242;
+    crate::battle::step(&mut state);
+    assert_eq!(
+        state.hostile.battle.exposure.run_start(),
+        Some(4242),
+        "the tracker is stamped with the tick whose guards the step evaluated"
+    );
+    let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+    assert_eq!(
+        output.tick, 4243,
+        "the publish of tick 4242 carries the next counter"
+    );
+    assert_eq!(
+        output.snapshot.tick, output.tick,
+        "the marker value is the snapshot tick"
+    );
+    assert_eq!(
+        state.hostile.battle.exposure.run_start(),
+        Some(4242),
+        "the next condition tick is the one just published, not a new run"
+    );
+}
+
+#[test]
 fn first_battle_tick_after_setup_reuses_staged_shield_appearances() {
     let mut state = fixture();
     let mut changes = ChangeSet::default();

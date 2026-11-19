@@ -28,6 +28,11 @@ pub struct SettlementRecord {
     pub anchor: [i32; 3],
     pub radius: u32,
     pub revision: u64,
+    /// Last submission sequence handed to an owner request; the queue is
+    /// ordered by it so a restored request keeps its place (D8 review P2-3).
+    /// No default: a row written before this field refuses to decode
+    /// (DESIGN.md:25), because a silent 0 would re-order the restored queue.
+    pub order_seq: u64,
     #[serde(default)]
     pub household_sequence: u64,
     #[serde(default)]
@@ -36,8 +41,8 @@ pub struct SettlementRecord {
     pub building_sequence: u64,
     #[serde(default)]
     pub buildings: BTreeMap<super::buildings::BuildingId, super::buildings::Building>,
-    /// Lumberjack sapling roots survive growth and restart; site preparation
-    /// never clears a tree growing from one of these positions.
+    /// Lumberjack roots survive growth and restart. Felling their exact root
+    /// cell retires the planting in the same transaction as conserved drops.
     #[serde(default)]
     pub planted_trees: std::collections::BTreeSet<[i32; 3]>,
     #[serde(default)]
@@ -49,18 +54,25 @@ pub struct SettlementRecord {
     pub village_source: Option<String>,
     #[serde(default)]
     pub bootstrap_storage: Option<[i32; 3]>,
-    #[serde(default)]
-    pub project: Option<super::construction::Project>,
+    /// Active construction projects, in admission order. D8: several projects
+    /// build at once; no `serde(default)`, so a row without this key refuses.
+    pub projects: Vec<super::construction::Project>,
     /// Reference to the canonical committed one-cell furnace structure.
     /// Discovery validates the ledger record and live block, not this pointer alone.
     #[serde(default)]
     pub(crate) furnace_workstation: Option<String>,
-    /// One owner request. Fundable growth housing precedes optional orders;
-    /// otherwise the request is retried before autonomous planning.
-    #[serde(default)]
-    pub pending_order: Option<super::construction::OwnerOrder>,
+    /// Owner requests in submission order. The planner starts the head unless a
+    /// later request is funded; no `serde(default)`, so a row without this key
+    /// refuses.
+    pub orders: Vec<super::construction::OwnerOrder>,
     #[serde(default)]
     pub construction_cursor: u32,
+    /// Material debts of released builders, per item: the exact load each body
+    /// still owes storage. The slot is freed at once; the debt survives a
+    /// restart and is drained by the construction pass, independent of which
+    /// project is active (R4-1). No `serde(default)`: a row without the key
+    /// refuses (DESIGN.md:25).
+    pub carry_pending: std::collections::BTreeMap<uuid::Uuid, Vec<(u32, u32)>>,
     #[serde(default)]
     pub founding: Option<super::construction::FoundingExpedition>,
 }
@@ -104,11 +116,32 @@ pub struct Registry {
     /// Exact-input funding and wood-reservation proof results; derived,
     /// bounded and never persisted (a hit re-checks the whole key).
     pub(super) funding: std::sync::Mutex<super::construction_crafting::FundingMemo>,
-    /// The active project's work counter per settlement, for replacing a
-    /// builder that cannot advance it; runtime only, never persisted.
-    pub(super) builder_watch: BTreeMap<SettlementId, super::construction::BuilderWatch>,
+    /// Stalled-work watch, one entry per active project: progress, refusal and
+    /// recovery are per project so one stuck site never masks another.
+    /// Runtime only, never persisted.
+    pub(super) builder_watch: BTreeMap<(SettlementId, String), super::construction::BuilderWatch>,
+    /// Residents whose last route to storage failed, with the tick that
+    /// failure stops standing (`construction::builders`). Runtime only, never
+    /// persisted.
+    pub(super) storage_unreached: BTreeMap<uuid::Uuid, u64>,
     /// Pending-site refusal sweeps, derived and never persisted.
     pub(super) site_watch: BTreeMap<SettlementId, super::construction::site_refusals::Watch>,
+    /// Last refusal reported to the owner per queued request, so a queue slot
+    /// retried every planning pass pages the owner once per distinct reason.
+    /// Runtime only, never persisted.
+    pub(super) order_refusal: BTreeMap<(SettlementId, u64), String>,
+    /// Whole-sweep cheapest-lot scratch, derived and never persisted. A restart
+    /// discards it and restarts the sweep from the persisted cursor.
+    pub(super) site_sweep: BTreeMap<SettlementId, super::construction::site_refusals::Sweeps>,
+    /// Settlements whose funded new building searches for a site, with the
+    /// sequence of the order searched last; derived and never persisted
+    /// (`construction::site_turn`).
+    pub(super) site_orders: BTreeMap<SettlementId, u64>,
+    /// The settlement the last order turn served.
+    pub(super) site_turn: Option<SettlementId>,
+    /// The site lots this tick's site work left for the replanting proofs;
+    /// runtime only, never persisted (`construction::site_turn`).
+    pub(super) site_budget: super::construction::site_turn::SiteBudget,
     /// Migration transit custody (ADR 0023), owned and encoded by the transit
     /// module: `transit/<uuid>` rows and Transit WAL images.
     pub(super) transit: super::transit::Ledger,
@@ -283,13 +316,7 @@ impl SettlementRecord {
             + opt(&self.village_source)
             + opt(&self.owner_name)
             + opt(&self.furnace_workstation)
-            + self.project.as_ref().map_or(0, |project| {
-                project.blueprint.capacity() + project.structure.capacity()
-            })
-            + self
-                .pending_order
-                .as_ref()
-                .map_or(0, |order| order.blueprint.capacity())
+            + super::construction::record_heap_bytes(self)
             + self
                 .founding
                 .as_ref()
@@ -498,6 +525,7 @@ impl Registry {
         }
         let id = self.next_id(*sequence)?;
         let record = SettlementRecord {
+            order_seq: 0,
             id,
             name,
             owner: Some(owner),
@@ -514,10 +542,11 @@ impl Registry {
             economy: super::economy::State::default(),
             village_source: None,
             bootstrap_storage: None,
-            project: None,
+            projects: Vec::new(),
             furnace_workstation: None,
-            pending_order: None,
+            orders: Vec::new(),
             construction_cursor: 0,
+            carry_pending: Default::default(),
             founding: None,
         };
         validate_record(&record)?;
@@ -549,6 +578,7 @@ impl Registry {
             return Err("generated village name already exists");
         }
         let record = SettlementRecord {
+            order_seq: 0,
             id,
             name,
             owner: None,
@@ -565,10 +595,11 @@ impl Registry {
             economy: super::economy::State::default(),
             village_source: Some(source.to_owned()),
             bootstrap_storage: None,
-            project: None,
+            projects: Vec::new(),
             furnace_workstation: None,
-            pending_order: None,
+            orders: Vec::new(),
             construction_cursor: 0,
+            carry_pending: Default::default(),
             founding: None,
         };
         validate_record(&record)?;
@@ -641,6 +672,10 @@ impl Registry {
         self.counts.remove(&id);
         self.economic_active.remove(&id);
         self.site_watch.remove(&id);
+        self.site_sweep.remove(&id);
+        self.site_orders.remove(&id);
+        self.order_refusal
+            .retain(|(settlement, _), _| *settlement != id);
         self.resident_settlement.retain(|_, sid| *sid != id);
         self.resident_ids.remove(&id);
         self.household_counts.remove(&id);
@@ -690,6 +725,10 @@ impl Registry {
         } else {
             self.economic_active.remove(&image.id);
             self.site_watch.remove(&image.id);
+            self.site_sweep.remove(&image.id);
+            self.site_orders.remove(&image.id);
+            self.order_refusal
+                .retain(|(settlement, _), _| *settlement != image.id);
             if let Some(record) = self.records.remove(&image.id) {
                 for household in record.households.keys() {
                     self.household_sizes.remove(household);

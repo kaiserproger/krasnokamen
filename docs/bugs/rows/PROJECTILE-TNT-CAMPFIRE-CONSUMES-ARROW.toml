@@ -1,0 +1,12 @@
+[[bug]]
+id = "PROJECTILE-TNT-CAMPFIRE-CONSUMES-ARROW"
+title = "A burning arrow that primes TNT or relights a campfire is deleted instead of sticking"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 TntBlock/CampfireBlock/AbstractArrow javap: the block reaction runs inside Projectile.onHitBlock and AbstractArrow.onHitBlock then sticks the arrow; crates/mc-core/src/projectiles/flight.rs returned true (remove) after prime_block or relight."
+regression = ["cargo:mc-core:projectiles::flight_tests::burning_arrow_primes_exact_tnt_cell_once_on_negative_axis_impact", "cargo:mc-core:projectiles::flight_tests::flaming_arrow_relights_dry_but_not_waterlogged_campfire"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-TNT-CAMPFIRE-CONSUMES-ARROW.json"

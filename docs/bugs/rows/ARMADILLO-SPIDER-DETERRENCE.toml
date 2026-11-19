@@ -1,0 +1,11 @@
+[[bug]]
+id = "ARMADILLO-SPIDER-DETERRENCE"
+title = "Spiders and cave spiders avoid unrolled armadillos, not scared/rolled armadillos."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMADILLO-THREAT-ROLL,ARMADILLO-ROLL-ABSENT"
+regression = ["cargo:mc-core:vanilla_mob_behavior_tests::spiders_avoid_only_unrolled_armadillos"]
+fix_commit = "patch:f466510fd50481c9932101bf17c150c3e08990d2f48850cc4c23a65f3e7f1081"
+promotion = "docs/bugs/promotions/ARMADILLO-SPIDER-DETERRENCE.json"

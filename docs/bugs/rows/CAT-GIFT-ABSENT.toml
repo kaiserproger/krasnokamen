@@ -1,0 +1,11 @@
+[[bug]]
+id = "CAT-GIFT-ABSENT"
+title = "Cats never bring morning gifts: no `morning_gift/MorningGift` logic exists in core. Vanilla tamed cats give the player items (rabbit foot, string, phantom membrane, etc.) after sleeping. (Hunt-only filing per freeze; no fix requested.)"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAT-GIFT-ABSENT"
+regression = ["cargo:mc-core:vanilla_mob_behavior_tests::tamed_cat_gives_one_morning_gift_not_an_arbitrary_wake_gift"]
+fix_commit = "patch:7bba9a462bce17ac86f6ed568d778aff0eeafa453b0c9990cb99b17e8488b19e"
+promotion = "docs/bugs/promotions/CAT-GIFT-ABSENT.json"

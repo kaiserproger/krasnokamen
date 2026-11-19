@@ -292,7 +292,10 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
                 impulse: state.entities.horizontal_impulse(slot),
                 rotation: state.entities.rot(slot),
                 look_target: destination,
+                facing: None,
                 battle_facing: false,
+                legacy_facing: false,
+                head_follows_body: false,
                 climbs_walls: false,
                 aquatic_control: crate::species::AquaticControl::Other,
                 air_supply: state.entities.body(slot).air_supply,
@@ -324,9 +327,7 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
                 motion.body.velocity.z,
             ],
         );
-        state
-            .entities
-            .set_rot(slot, motion.rotation[0], motion.rotation[1]);
+        state.entities.set_facing(slot, motion.rotation);
         state.entities.set_ground(slot, motion.body.on_ground);
         state.entities.set_horizontal_impulse(slot, motion.impulse);
         state.entities.body_mut(slot).air_supply = motion.air_supply;

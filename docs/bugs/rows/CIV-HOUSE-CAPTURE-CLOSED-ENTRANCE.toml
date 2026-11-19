@@ -1,0 +1,12 @@
+[[bug]]
+id = "CIV-HOUSE-CAPTURE-CLOSED-ENTRANCE"
+title = "Civilization house milestone tries to reach an interior bed without opening its received entrance"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "The seed-24 fresh scenario built and received the new house and bed but its milestone capture navigated directly through a closed door, aborting the run. The wt/CivSim5 correction uses ordinary entrance approach/use, awaits both open halves, preserves the exact bed raycast and rendered capture, and returns to the observer. Three canonical saved-world closed/open flows passed, with the unprepared closed route and missing/stale entrance controls refusing capture; 72 affected contracts and doclinks passed. Source and commands are retained in receipts/CivSimStallFix/house-harness-capture.json. Full original fresh acceptance remains 0/3; integration and formal ledger promotion remain pending."
+regression = ["harness:civilization-seed-qa:new_house", "python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_house_capture_opens_both_halves_before_exact_bed_and_returns_outside", "python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_house_capture_refuses_missing_or_changed_entrance_before_capture"]
+fix_commit = "4e6874de"
+repro_check = "negative control receipts/XHarnessGates/neg-civ-house.log (door open/both-half wait removed -> 3 failures); candidate: no exact revert - only 2 of 8 hunks apply, the capture_house hunks conflict; control is fix-lines-only (door lookup/open/both-half wait removed), receipts/XHarnessGates/neg-civ-house.log"
+failing_first = "reported"

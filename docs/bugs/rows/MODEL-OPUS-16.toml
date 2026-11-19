@@ -1,0 +1,12 @@
+[[bug]]
+id = "MODEL-OPUS-16"
+title = "Happy ghast baby renders mostly pink"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:174"
+regression = ["harness:scene-shot:native-entity-visuals", "client:krasnokamen-client:entities::krasnokamen_models::tests::post_rc4_reauthored_rigs_keep_their_reference_silhouettes"]
+fix_commit = "client:ee258651"
+proving_assertions = { "harness:scene-shot:native-entity-visuals" = "ghastling_not_pink" }
+repro_check = "Round 6 client:ee258651 rig control red (receipts/XHarnessGates/client-r6-revert-red.log); native-entity-visuals checks ghastling coloration."

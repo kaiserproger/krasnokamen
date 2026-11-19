@@ -414,8 +414,12 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
     let expected = EntityStateImage::from_row(state.entities.body(slot), state.entities.row(slot));
     let tail = journal_entries_for_tick(&mut state, &output).unwrap();
+    // The controls image rides `EntityState` (the touched-set record) or a full
+    // image; an appearance-only change may now be a compact delta that carries no
+    // state, so the record kind is not the contract.
     assert!(tail.iter().any(|entry| matches!(entry,
-        JournalEntry::Entity { id: entity, state: image, .. }
+        JournalEntry::EntityState { id: entity, state: image, .. }
+        | JournalEntry::Entity { id: entity, state: image, .. }
             if *entity == id.0 && image.controls.no_gravity && image.controls.invulnerable)));
     writer.append(output.tick, output.tick, &tail).unwrap();
     writer.flush().unwrap();
@@ -472,7 +476,13 @@ fn native_falling_checkpoint_restores_block_state_and_stationary_control() {
     let row = state.entities.row(slot);
     assert_eq!(row.falling, Some(falling));
     assert_eq!(body.movement, crate::blueprint::MovementClass::Stationary);
-    assert_eq!((body.half_width, body.height), (0.49, 0.98));
+    assert_eq!(
+        (body.half_width, body.height),
+        (
+            crate::blueprint::FALLING_BLOCK_BODY.half_width(),
+            crate::blueprint::FALLING_BLOCK_BODY.height
+        )
+    );
     assert_eq!(row.appearance.spawn_data, sand as i32);
     let (_, checkpoint, _) = checkpoint_data_for(&state, 1);
     let native = &checkpoint[&(0, 0)].entities[0];

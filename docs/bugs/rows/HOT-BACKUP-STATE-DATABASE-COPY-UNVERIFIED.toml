@@ -1,0 +1,10 @@
+[[bug]]
+id = "HOT-BACKUP-STATE-DATABASE-COPY-UNVERIFIED"
+title = "A backup is reported successful without proving it restores: the journal batches are CRC-checked and state.redb is only hashed, but no one restores the copy into an empty directory and runs ordinary recovery and replay, so a damaged store or semantically unreplayable records surface only at disaster time."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "receipts/Books/REPORT-R5.md section 1 G3 (Petrov ch. 3 checksumming p. 59: do not propagate corrupt data; the backup must be restorable); committee receipts/Books/ARCH-PERSIST6-astra.md (G3) and ARCH-PERSIST6-fable.md. Partly closed on main by 4e060c76c: copy_world (crates/mc-core/src/hot_backup.rs) runs journal::verify_batch_file (decode_batch + CRC) on every WAL batch it copies. Not closed: the checkpoint database is copied with copy_reader_hashed (a SHA-256 of the copied bytes only); offline backup and run_restore (crates/mc-edge/src/backup.rs) check files and digests only. CRC-clean batches plus a store that opens still do not prove restorability: recovery also checks record semantics (crates/mc-core/src/journal/replay.rs:403-475). Verified on main 5bdc02911. Fix direction: after writing a backup, restore exactly that copy into an empty temporary directory and run the ordinary native recovery and replay with the same pin and config up to the expected tick, without opening the archive itself for writing; a failure is reported as an unverified backup, never as a verified one. Tests: a byte flipped in the copied database, and a semantically invalid but CRC-clean batch, each refuse verification. No format change."
+regression = []
+failing_first = "not recorded"

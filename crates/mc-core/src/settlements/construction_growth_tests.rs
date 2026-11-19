@@ -1,4 +1,7 @@
-use super::tests::{complete, fixture, fund, open_plan, start};
+use super::tests::{
+    attempt, bind_project, complete, fixture, fund, open_plan, plan_until_project, request_started,
+    start,
+};
 use super::*;
 use crate::settlements::allocator::tests::block;
 use std::sync::{Arc, Mutex};
@@ -41,8 +44,7 @@ fn housing_fixture(spare_bed: bool) -> (TickState, SettlementId) {
             .is_some(),
         "the resident must actually claim its bed"
     );
-    assert!(state.settlements.get(id).unwrap().project.is_none());
-    stock_buildings(&mut state, &[("spanish_house", 1), ("spanish_church", 1)]);
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     (state, id)
 }
 
@@ -74,8 +76,22 @@ fn stock_buildings(state: &mut TickState, levels: &[(&str, u8)]) {
 #[test]
 fn an_autonomous_house_selected_first_keeps_its_slot_before_a_later_cultural_order() {
     let (mut state, id) = housing_fixture(false);
-    plan(&mut state, id);
-    let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+    // One house's worth of stock, doubled so a second lot's foundation can be
+    // paid: the later church is still refused by the joint proof, so the
+    // earlier house keeps its slot (D8).
+    stock_buildings(&mut state, &[("spanish_house", 1)]);
+    for stack in state
+        .block_entities
+        .get_mut(&(1, 201, 1))
+        .unwrap()
+        .slots
+        .iter_mut()
+        .filter(|stack| stack.count > 0)
+    {
+        stack.count = (stack.count * 2).min(64);
+    }
+    plan_until_project(&mut state, id);
+    let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.blueprint, "spanish_house");
     assert!(!project.ordered);
     // Keep the earlier autonomous house untouched across later order passes.
@@ -87,22 +103,19 @@ fn an_autonomous_house_selected_first_keeps_its_slot_before_a_later_cultural_ord
     );
     for _ in 0..40 {
         crate::tick::run_tick(&mut state, &[]);
-        if state.settlements.get(id).unwrap().project.is_some() {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
     let record = state.settlements.get(id).unwrap();
-    let structure = record.project.as_ref().unwrap().structure.clone();
+    let structure = record.projects[0].structure.clone();
     for _ in 0..80 {
         crate::tick::run_tick(&mut state, &[]);
     }
     let record = state.settlements.get(id).unwrap();
-    assert_eq!(record.project.as_ref().unwrap().structure, structure);
-    assert_eq!(record.project.as_ref().unwrap().blueprint, "spanish_house");
-    assert_eq!(
-        record.pending_order.as_ref().unwrap().blueprint,
-        "spanish_church"
-    );
+    assert_eq!(record.projects[0].structure, structure);
+    assert_eq!(record.projects[0].blueprint, "spanish_house");
+    assert_eq!(record.orders[0].blueprint, "spanish_church");
 }
 
 #[test]
@@ -122,36 +135,24 @@ fn a_pending_cultural_order_starts_before_a_later_autonomous_house() {
     state.day_time = 0;
     for _ in 0..256 {
         crate::tick::run_tick(&mut state, &[]);
-        if state.settlements.get(id).unwrap().project.is_some() {
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
     }
-    let record = state.settlements.get(id).unwrap();
-    let project = record
-        .project
-        .as_ref()
-        .expect("the queued funded order starts");
+    let record = &state.settlements.get(id).unwrap();
+    let project = &record.projects[0];
     assert_eq!(project.blueprint, "spanish_fortress");
     assert!(project.ordered);
-    assert!(record.pending_order.is_none());
+    assert!(record.orders.is_empty());
 }
 
 #[test]
 fn a_real_spare_roofed_bed_keeps_the_cultural_order_reachable() {
     let (mut state, id) = housing_fixture(true);
+    stock_buildings(&mut state, &[("spanish_church", 1)]);
+    request_started(&mut state, id, "spanish_church");
     assert_eq!(
-        request_build(&mut state, id, "spanish_church").unwrap(),
-        OrderOutcome::Started
-    );
-    assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .blueprint,
+        state.settlements.get(id).unwrap().projects[0].blueprint,
         "spanish_church"
     );
 }
@@ -170,10 +171,19 @@ fn house_without_site() -> (TickState, SettlementId) {
     let record = state.settlements.get(id).unwrap();
     let images = executor::source_images(&state, id);
     let house = priority_house(&state, record, &images).expect("a funded housing need");
+    let mut sweeps = site_refusals::Sweeps::default();
     assert!(
-        site_project(&state, record, std::iter::once(house), 0, u32::MAX, &images)
-            .0
-            .is_none(),
+        site_project(
+            &state,
+            record,
+            std::iter::once(house),
+            &mut sweeps,
+            0,
+            u32::MAX,
+            &images
+        )
+        .site
+        .is_none(),
         "no loaded House site fits"
     );
     assert!(
@@ -181,13 +191,14 @@ fn house_without_site() -> (TickState, SettlementId) {
             &state,
             record,
             std::iter::once(blueprints::get(&state.registry, "farm").unwrap()),
+            &mut sweeps,
             0,
-            SITE_ATTEMPTS,
+            u32::MAX,
             &images,
         )
-        .0
+        .site
         .is_some(),
-        "the funded Farm has a legal site in this planning pass"
+        "a complete sweep finds the funded Farm a legal site"
     );
     (state, id)
 }
@@ -195,16 +206,9 @@ fn house_without_site() -> (TickState, SettlementId) {
 #[test]
 fn a_house_without_a_site_does_not_hide_a_funded_autonomous_farm() {
     let (mut state, id) = house_without_site();
-    plan(&mut state, id);
+    plan_until_project(&mut state, id);
     assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .blueprint,
+        state.settlements.get(id).unwrap().projects[0].blueprint,
         "farm"
     );
 }
@@ -212,24 +216,31 @@ fn a_house_without_a_site_does_not_hide_a_funded_autonomous_farm() {
 #[test]
 fn a_house_without_a_site_does_not_hold_a_direct_farm_order() {
     let (mut state, id) = house_without_site();
-    assert_eq!(
-        request_build(&mut state, id, "farm").unwrap(),
-        OrderOutcome::Started
-    );
+    request_started(&mut state, id, "farm");
 }
 
 #[test]
 fn a_house_without_a_site_does_not_hold_a_pending_farm_order() {
     let (mut state, id) = house_without_site();
-    state.settlements.get_mut(id).unwrap().pending_order = Some(OwnerOrder {
+    state.settlements.get_mut(id).unwrap().orders = vec![OwnerOrder {
+        seq: 0,
         blueprint: "farm".into(),
         level: 1,
         building: None,
-    });
-    assert!(plan_order(&mut state, id));
+    }];
+    for _ in 0..256 {
+        assert!(plan_order(
+            &mut state,
+            id,
+            &mut site_turn::SiteBudget::default()
+        ));
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
+            break;
+        }
+    }
     let record = state.settlements.get(id).unwrap();
-    assert_eq!(record.project.as_ref().unwrap().blueprint, "farm");
-    assert!(record.pending_order.is_none());
+    assert_eq!(record.projects[0].blueprint, "farm");
+    assert!(record.orders.is_empty());
 }
 
 fn roofed_house_beds(state: &TickState, id: SettlementId) -> usize {
@@ -258,6 +269,14 @@ fn roofed_house_beds(state: &TickState, id: SettlementId) -> usize {
 fn funded_housing_upgrades_gain_spare_beds_when_new_buildings_have_no_lot() {
     for level in 1..=2 {
         let (mut state, id, builder) = fixture();
+        // Autonomous upgrades bypass fund(level > 1), but still need real
+        // canonical destruction loot for the standing house's replaced cells.
+        state.registry = std::sync::Arc::new(
+            crate::registry::CoreRegistry::load(Some(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+            ))
+            .unwrap(),
+        );
         open_plan(&mut state);
         fund(&mut state, "spanish_house", 1);
         start(&mut state, id, "spanish_house", 1, None);
@@ -304,15 +323,24 @@ fn funded_housing_upgrades_gain_spare_beds_when_new_buildings_have_no_lot() {
         let images = executor::source_images(&state, id);
         let farm = blueprints::get(&state.registry, "farm").unwrap();
         assert!(funded_variant(&state, id, &farm.level(1).unwrap().materials, &images).is_some());
+        let mut sweeps = site_refusals::Sweeps::default();
         assert!(
-            site_project(&state, record, std::iter::once(farm), 0, u32::MAX, &images)
-                .0
-                .is_none(),
+            site_project(
+                &state,
+                record,
+                std::iter::once(farm),
+                &mut sweeps,
+                0,
+                u32::MAX,
+                &images
+            )
+            .site
+            .is_none(),
             "the funded missing kind has no legal lot"
         );
         let stock = state.block_entities[&(1, 201, 1)].slots.clone();
         plan(&mut state, id);
-        let project = state.settlements.get(id).unwrap().project.as_ref().unwrap();
+        let project = &state.settlements.get(id).unwrap().projects[0];
         assert_eq!(project.blueprint, "spanish_house");
         assert_eq!(project.building, Some(house));
         assert_eq!(project.level, level + 1);
@@ -413,7 +441,7 @@ fn protected_preparation() -> (
     super::super::forestry::tests::grown_world(&mut state, vec![root], "birch");
     fund(&mut state, "storage", 1);
     start(&mut state, id, "storage", 1, None);
-    let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
     assert!(executor::clearing(&state, id, &project.structure));
     state
         .settlements
@@ -452,6 +480,11 @@ fn stall_preparation(state: &mut TickState, id: SettlementId) -> Warnings {
 #[test]
 fn a_protected_regrown_tree_requeues_unpaid_preparation_without_destroying_it() {
     let (mut state, id, builder, project, root) = protected_preparation();
+    let next = executor::next_cell(&state, id, &project.structure)
+        .unwrap()
+        .unwrap();
+    retain_player_edit(&mut state, next);
+    territory_elsewhere(&mut state, id, next);
     let tree = state.world.block_at(root[0], root[1], root[2]);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     // A rotated builder may still carry an older load during preparation.
@@ -469,10 +502,10 @@ fn a_protected_regrown_tree_requeues_unpaid_preparation_without_destroying_it() 
     let warnings = stall_preparation(&mut state, id);
     let record = state.settlements.get(id).unwrap();
     assert!(
-        record.project.is_none(),
+        record.projects.is_empty(),
         "a permanently protected tree must not retain the project slot"
     );
-    assert_eq!(record.pending_order.as_ref().unwrap().blueprint, "storage");
+    assert_eq!(record.orders[0].blueprint, "storage");
     assert_eq!(
         executor::status(&state, id, &project.structure)
             .unwrap()
@@ -502,18 +535,22 @@ fn a_protected_regrown_tree_requeues_unpaid_preparation_without_destroying_it() 
 #[test]
 fn a_protected_tree_never_cancels_preparation_with_consumed_materials() {
     let (mut state, id, _, project, root) = protected_preparation();
+    let next = executor::next_cell(&state, id, &project.structure)
+        .unwrap()
+        .unwrap();
+    retain_player_edit(&mut state, next);
+    territory_elsewhere(&mut state, id, next);
     // Clear cells are normally free. Exercise the defensive paid-work guard
-    // using the canonical persisted ledger image, without changing its stage.
-    let mut ledger = state
+    // using the canonical persisted structure record, without changing its stage.
+    let key = format!("structure/{}", project.structure);
+    let mut record = state
         .plugins
-        .get_domain("@native-structures", "ledger")
+        .get_domain("@native-structures", &key)
         .unwrap()
         .clone();
-    ledger["structures"][&project.structure]["snapshot"]["consumed"] =
+    record["snapshot"]["consumed"] =
         serde_json::json!([{"resource": "minecraft:oak_log", "quantity": 1}]);
-    state
-        .plugins
-        .set_domain("@native-structures", "ledger", ledger);
+    state.plugins.set_domain("@native-structures", &key, record);
     let before = executor::status(&state, id, &project.structure).unwrap();
     assert!(!before.consumed.is_empty());
     assert!(executor::clearing(&state, id, &project.structure));
@@ -521,11 +558,8 @@ fn a_protected_tree_never_cancels_preparation_with_consumed_materials() {
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let warnings = stall_preparation(&mut state, id);
     let record = state.settlements.get(id).unwrap();
-    assert_eq!(
-        record.project.as_ref().unwrap().structure,
-        project.structure
-    );
-    assert!(record.pending_order.is_none());
+    assert_eq!(record.projects[0].structure, project.structure);
+    assert!(record.orders.is_empty());
     let after = executor::status(&state, id, &project.structure).unwrap();
     assert_ne!(after.state, ScriptStructureState::Cancelled);
     assert_eq!(after.consumed, before.consumed);
@@ -572,7 +606,7 @@ fn planted_sapling_before_admission(corridor: bool) {
             }
         }
     }
-    assert!(planned_cells(&state, &project, "oak").is_some());
+    assert!(planned_cells(&state, &project, "oak", &mut Default::default()).is_ok());
     let dirt = block(&state, "minecraft:dirt", &[]);
     let sapling = block(&state, "minecraft:oak_sapling", &[("stage", "1")]);
     state.world.set_block(root[0], root[1] - 1, root[2], dirt);
@@ -584,10 +618,36 @@ fn planted_sapling_before_admission(corridor: bool) {
         .planted_trees
         .insert(root);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
-    assert!(
-        planned_cells(&state, &project, "oak").is_none(),
-        "future planted crown must exclude this site/corridor before it grows"
-    );
+    let planned = planned_cells(&state, &project, "oak", &mut Default::default());
+    if corridor {
+        // Owner D7: a planted sapling on the walking corridor is felled like a
+        // tree on the lot, as the first sapling cell of the preparation.
+        let (_, cells) = planned.expect("the corridor sapling is clearance work");
+        assert!(cells.iter().any(|cell| {
+            cell.at == root
+                && cell.portion
+                    == crate::plugin_structures::settlement_builds::PortionKind::Saplings
+        }));
+    } else {
+        // The sapling beside the lot is no corridor work; its future crown over
+        // the lot is the site check's refusal.
+        let size = blueprints::get(&state.registry, &project.blueprint)
+            .unwrap()
+            .footprint(Rotation::from_quarter_turns(project.rotation));
+        assert_eq!(
+            site_refusals::check(
+                &state,
+                state.settlements.get(id).unwrap(),
+                project.origin,
+                size,
+                None,
+                &mut Default::default(),
+                None,
+            ),
+            Err(site_refusals::Reason::PlantingProvenance),
+            "future planted crown must exclude this site before it grows"
+        );
+    }
     assert_eq!(
         state.world.block_at(root[0], root[1], root[2]),
         Some(sapling),
@@ -608,11 +668,11 @@ fn planted_sapling_before_admission(corridor: bool) {
     }
     assert!(super::super::forestry::protected_tree(&state, root));
     assert!(
-        !super::super::forestry::clearable(&state, root),
+        !super::super::forestry::clearable(&state, root, true),
         "grown managed tree remains protected"
     );
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
 }
 
 #[test]
@@ -621,7 +681,7 @@ fn a_sapling_planted_first_keeps_its_future_crown_out_of_the_house_site() {
 }
 
 #[test]
-fn a_sapling_planted_first_keeps_its_future_crown_out_of_the_access_corridor() {
+fn a_sapling_planted_first_on_the_access_corridor_is_felled_with_the_preparation() {
     planted_sapling_before_admission(true);
 }
 
@@ -652,9 +712,11 @@ fn managed_crown_in_empty_access_envelope_does_not_block_paid_house() {
                 building: None,
                 structure: String::new(),
                 ordered: true,
-                borrowed_builder: None,
+                builder: None,
+                order_seq: None,
             };
-            let (bounds, _) = planned_cells(&state, &project, "oak")?;
+            let (bounds, _) =
+                planned_cells(&state, &project, "oak", &mut Default::default()).ok()?;
             let route = network.construction_access(&project)?;
             let crown = super::super::forestry::PLANTED_CROWN_RADIUS as i32;
             let root = (bounds.min[0]..=bounds.max[0]).find_map(|x| {
@@ -696,8 +758,16 @@ fn managed_crown_in_empty_access_envelope_does_not_block_paid_house() {
         project.origin,
         size
     ));
-    assert!(super::super::forestry::cells(&state, &project, size).is_some());
-    let (bounds, cells) = planned_cells(&state, &project, "oak")
+    assert!(
+        super::super::forestry::cells(
+            &state,
+            &project,
+            size,
+            &mut super::super::forestry::Clearance::default()
+        )
+        .is_some()
+    );
+    let (bounds, cells) = planned_cells(&state, &project, "oak", &mut Default::default())
         .expect("a crown outside the lot and actual access walk must not veto their envelope");
     fund(&mut state, "spanish_house", 1);
     assert!(begin_cells(&mut state, project, bounds, cells));
@@ -725,4 +795,649 @@ fn managed_crown_in_empty_access_envelope_does_not_block_paid_house() {
             .planted_trees
             .contains(&root)
     );
+}
+
+fn retain_player_edit(state: &mut TickState, at: [i32; 3]) {
+    state.block_log = crate::block_log::BlockLog::restore(
+        crate::config::BlockLogSettings {
+            retention_secs: 0,
+            ..Default::default()
+        },
+        vec![crate::block_log::Delta {
+            records: vec![crate::block_log::Record {
+                seq: 0,
+                tick: Some(1),
+                time: 0,
+                actor: Arc::from("player"),
+                pos: at,
+                change: crate::block_log::Change::Block {
+                    before: state.registry.states.air,
+                    after: state.world.block_at(at[0], at[1], at[2]).unwrap(),
+                    entity: None,
+                },
+                rolled_back: false,
+            }],
+            marks: Vec::new(),
+            coverage: 0,
+        }],
+    );
+}
+
+/// After admission, move the settlement's territory away from `at`: a player
+/// edit there is outside the territory and keeps its protection (owner D27.4).
+fn territory_elsewhere(state: &mut TickState, id: SettlementId, at: [i32; 3]) {
+    let record = state.settlements.get_mut(id).unwrap();
+    assert!(record.contains(at));
+    record.anchor = [at[0] + 1_000, at[1], at[2]];
+    record.radius = 8;
+}
+
+fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
+    let (mut state, id, builder) = fixture();
+    open_plan(&mut state);
+    // The tree grows on the first legal lot in walking order; once the world
+    // is regrown, every other lot is refused, so the ranked sweep takes it.
+    let site = super::site_tests::first_legal_lot(&state, id, "spanish_fortress");
+    let (lot, size) = (site.lot, site.size);
+    let expected = Project {
+        settlement: id,
+        blueprint: "spanish_fortress".into(),
+        level: 1,
+        origin: lot.origin,
+        rotation: lot.rotation,
+        building: None,
+        structure: String::new(),
+        ordered: true,
+        builder: None,
+        order_seq: None,
+    };
+    let root = [
+        lot.origin[0] + i32::from(size[0]) / 2,
+        201,
+        lot.origin[2] + i32::from(size[2]) / 2,
+    ];
+    super::super::forestry::tests::grown_world(&mut state, vec![root], "birch");
+    if native {
+        super::super::forestry::tests::grown_world(&mut state, Vec::new(), "birch");
+        super::super::forestry::native_tree_tests::grow(&mut state, root, 5);
+    } else if sapling {
+        for x in root[0] - 1..=root[0] + 1 {
+            for z in root[2] - 1..=root[2] + 1 {
+                for y in root[1]..=root[1] + 4 {
+                    state.world.set_block(x, y, z, state.registry.states.air);
+                }
+            }
+        }
+        let block = block(&state, "minecraft:birch_sapling", &[]);
+        state.world.set_block(root[0], root[1], root[2], block);
+    } else {
+        // A grown, nonpersistent leaf where regeneration had air must use its
+        // own placement-state evidence, not the agreeing trunk baseline.
+        let at = [root[0] + 3, root[1] + 3, root[2]];
+        let leaves = block(&state, "minecraft:birch_leaves", &[("persistent", "false")]);
+        state.world.set_block(at[0], at[1], at[2], leaves);
+    }
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    super::site_tests::pin_lot(&mut state, id, "spanish_fortress", &site);
+    let bounds = super::super::forestry::lot_bounds(&state, &expected).unwrap();
+    assert!(!super::super::forestry::clearable(&state, root, true));
+    assert!(!super::super::forestry::Clearance::default().clearable(&state, root, None));
+    assert!(super::super::forestry::Clearance::default().clearable(&state, root, Some(bounds)));
+    assert_eq!(
+        surface_y_for_lot(
+            &state,
+            200,
+            root[0],
+            root[2],
+            Some(bounds),
+            &mut super::super::forestry::Clearance::default()
+        ),
+        Some(200)
+    );
+    assert!(site_free(
+        &state,
+        state.settlements.get(id).unwrap(),
+        lot.origin,
+        size
+    ));
+    retain_player_edit(&mut state, root);
+    assert!(!super::super::forestry::Clearance::default().clearable(&state, root, Some(bounds)));
+    assert!(
+        site_free(&state, state.settlements.get(id).unwrap(), lot.origin, size),
+        "inside the territory the player's edit is the village's property (owner D27.4)"
+    );
+    state.block_log = Default::default();
+    fund(&mut state, "spanish_fortress", 1);
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    let original = state.world.block_at(root[0], root[1], root[2]);
+    request_started(&mut state, id, "spanish_fortress");
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
+    assert_eq!(
+        (project.origin, project.rotation),
+        (expected.origin, expected.rotation)
+    );
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    assert_eq!(state.world.block_at(root[0], root[1], root[2]), original);
+    assert!(executor::clearing(&state, id, &project.structure));
+
+    // Proven natural cells and registered saplings must not trigger protected
+    // cancellation when no adult can advance their preparation.
+    state
+        .entities
+        .row_mut(builder)
+        .villager
+        .as_mut()
+        .unwrap()
+        .age = -1;
+    let warnings = stall_preparation(&mut state, id);
+    assert_eq!(
+        state.settlements.get(id).unwrap().projects[0].structure,
+        project.structure
+    );
+    assert!(
+        !warnings
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|event| event.contains("protected_tree_in_preparation"))
+    );
+    let villager = state.entities.row_mut(builder).villager.as_mut().unwrap();
+    villager.age = 0;
+    villager.data.profession = Profession::Builder;
+
+    let next = executor::next_cell(&state, id, &project.structure)
+        .unwrap()
+        .unwrap();
+    let previous = state.world.block_at(next[0], next[1], next[2]);
+    retain_player_edit(&mut state, next);
+    // Outside the territory the edit stops the debit (owner D27.4 keeps the
+    // veto there); inside it the debit credits the cell.
+    let record = state.settlements.get(id).unwrap().clone();
+    territory_elsewhere(&mut state, id, next);
+    let uuid = state.entities.row(builder).uuid;
+    // The executor only advances a project for its bound builder (P2-5).
+    bind_project(&mut state, id, &project.structure, builder);
+    assert_eq!(
+        executor::advance(&mut state, id, &project.structure, uuid),
+        Err(mc_script::ScriptOperationFailure::Blocked)
+    );
+    assert_eq!(state.world.block_at(next[0], next[1], next[2]), previous);
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    *state.settlements.get_mut(id).unwrap() = record;
+    state.block_log = Default::default();
+    let revision = state.settlements.get(id).unwrap().revision;
+
+    for _ in 0..4096 {
+        if !executor::clearing(&state, id, &project.structure) {
+            break;
+        }
+        let next = executor::next_cell(&state, id, &project.structure)
+            .unwrap()
+            .unwrap();
+        let previous = state.world.block_at(next[0], next[1], next[2]).unwrap();
+        let counts = |state: &TickState| {
+            let mut counts = std::collections::BTreeMap::<u32, i32>::new();
+            for stack in &state.block_entities[&(1, 201, 1)].slots {
+                if !stack.is_empty() {
+                    *counts.entry(stack.item_id).or_default() += stack.count;
+                }
+            }
+            counts
+        };
+        let mut expected_stock = counts(&state);
+        state.tick += 20;
+        for stack in super::super::forestry::drops(
+            &state,
+            next,
+            previous,
+            Some(bounds),
+            &mut super::super::forestry::Clearance::verify(),
+        )
+        .unwrap()
+        {
+            *expected_stock.entry(stack.item_id).or_default() += stack.count;
+        }
+        state.tick -= 20;
+        attempt(&mut state, id, builder);
+        assert_eq!(
+            counts(&state),
+            expected_stock,
+            "managed-tree drops at {next:?}"
+        );
+        if next == root {
+            // The root keeps its registration until its whole trunk column is
+            // empty; the retire pass after the loop removes it.
+            let record = state.settlements.get(id).unwrap();
+            assert!(
+                record.planted_trees.contains(&root),
+                "a partially felled trunk keeps its registered root"
+            );
+        }
+    }
+    assert!(!executor::clearing(&state, id, &project.structure));
+    // The root keeps its registration until its whole trunk column is empty;
+    // then the ordinary retire pass removes it.
+    state.tick = 20;
+    super::super::forestry::retire_missing(&mut state);
+    assert!(
+        state.settlements.get(id).unwrap().revision > revision,
+        "root retirement is journaled"
+    );
+    assert!(
+        !state
+            .settlements
+            .get(id)
+            .unwrap()
+            .planted_trees
+            .contains(&root)
+    );
+    complete(&mut state, id, builder);
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+    assert!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .buildings
+            .values()
+            .any(|building| {
+                placement(&state, id, building)
+                    .is_some_and(|(blueprint, _, _)| blueprint.id == "spanish_fortress")
+            })
+    );
+}
+
+#[test]
+fn natural_baseline_tree_in_planted_halo_is_felled_conserved_and_built() {
+    proven_lot_is_felled_and_built(false, false);
+}
+
+#[test]
+fn managed_sapling_on_needed_lot_is_felled_conserved_and_built() {
+    proven_lot_is_felled_and_built(true, false);
+}
+
+#[test]
+fn native_grown_registered_tree_is_felled_conserved_and_built() {
+    proven_lot_is_felled_and_built(false, true);
+}
+
+#[test]
+fn upgrade_clear_accepts_a_proven_natural_cell_and_refuses_the_fence() {
+    use crate::settlements::forestry;
+    let (mut state, id, _) = fixture();
+    let root = [8, 201, 8];
+    // The generator itself grows the birch here, so baseline evidence agrees.
+    forestry::tests::grown_world(&mut state, vec![root], "birch");
+    let at = [8, 203, 8];
+    let lot = ScriptWorldBounds::new([4, 201, 4], [14, 222, 14]).unwrap();
+    let cell = executor::PlannedCell {
+        portion: executor::PortionKind::Trees,
+        at,
+        state: state.registry.states.air,
+        resource: None,
+        quantity: 0,
+    };
+    // No committed build on this site yet: the tree fence has no authored beam
+    // to defer to, exactly as before the evidence map became a parameter.
+    let evidence =
+        executor::previous_committed(&state, id, "house", root).expect("committed chain");
+    let cleared = executor::upgrade_trees_clear(
+        &state,
+        &evidence,
+        std::slice::from_ref(&cell),
+        Some(lot),
+        &mut forestry::Clearance::default(),
+    )
+    .expect("proven natural forest in an upgrade's new cells is clear work");
+    assert_eq!(cleared.len(), 1);
+    assert_eq!(cleared[0].at, at);
+    assert_eq!(cleared[0].state, state.registry.states.air);
+    assert!(cleared[0].resource.is_none());
+
+    // A retained player placement is never natural forest.
+    retain_player_edit(&mut state, at);
+    assert!(matches!(
+        executor::upgrade_trees_clear(
+            &state,
+            &evidence,
+            std::slice::from_ref(&cell),
+            Some(lot),
+            &mut forestry::Clearance::default(),
+        ),
+        Err(mc_script::ScriptOperationFailure::Forbidden)
+    ));
+
+    // Persistent leaves are a player-facing veto, not clearance work.
+    state.block_log = Default::default();
+    let persistent = block(&state, "minecraft:birch_leaves", &[("persistent", "true")]);
+    state.world.set_block(at[0], at[1], at[2], persistent);
+    assert!(matches!(
+        executor::upgrade_trees_clear(
+            &state,
+            &evidence,
+            std::slice::from_ref(&cell),
+            Some(lot),
+            &mut forestry::Clearance::default(),
+        ),
+        Err(mc_script::ScriptOperationFailure::Blocked)
+    ));
+
+    // Without generator evidence a tree cell is unproven and refuses.
+    state
+        .world
+        .set_block(at[0], at[1], at[2], state.registry.states.air);
+    let unproven = block(&state, "minecraft:oak_log", &[]);
+    state.world.set_block(at[0], at[1], at[2], unproven);
+    assert!(matches!(
+        executor::upgrade_trees_clear(
+            &state,
+            &evidence,
+            std::slice::from_ref(&cell),
+            Some(lot),
+            &mut forestry::Clearance::default(),
+        ),
+        Err(mc_script::ScriptOperationFailure::Blocked)
+    ));
+}
+
+#[test]
+fn upgrades_never_overwrite_tree_or_sapling_cells_in_their_diff() {
+    let (mut state, id, builder) = fixture();
+    start(&mut state, id, "house", 1, None);
+    fund(&mut state, "house", 1);
+    complete(&mut state, id, builder);
+    let building = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    start(&mut state, id, "house", 2, Some(building));
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
+    let (_, planned) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
+    let at = planned
+        .iter()
+        .find(|cell| {
+            state
+                .world
+                .block_at(cell.at[0], cell.at[1], cell.at[2])
+                .is_some_and(|current| !super::super::forestry::tree_or_sapling(&state, current))
+        })
+        .expect("upgrade has a cell that was not an authored beam")
+        .at;
+    let original = state.world.block_at(at[0], at[1], at[2]).unwrap();
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    // Unproven cells (no generator evidence, not the building's own authored
+    // state) still refuse; a proven natural cell is clear work instead.
+    for name in [
+        "minecraft:birch_sapling",
+        "minecraft:oak_log",
+        "minecraft:birch_log",
+        "minecraft:birch_leaves",
+    ] {
+        let tree = block(&state, name, &[]);
+        state.world.set_block(at[0], at[1], at[2], tree);
+        // Inside the territory (owner D27.4) the unproven cell is the
+        // village's property: clear work with conserved drops.
+        let (_, cells) = planned_cells(&state, &project, "oak", &mut Default::default())
+            .unwrap_or_else(|reason| panic!("inside the territory {name}: {reason:?}"));
+        assert!(
+            cells
+                .iter()
+                .any(|cell| cell.at == at && cell.state == state.registry.states.air),
+            "inside the territory {name} is clear work"
+        );
+        let record = state.settlements.get(id).unwrap().clone();
+        territory_elsewhere(&mut state, id, at);
+        assert!(
+            matches!(
+                planned_cells(&state, &project, "oak", &mut Default::default()),
+                Err(site_refusals::Reason::ProtectedObstruction)
+            ),
+            "outside the territory an unproven tree cell in the upgrade work diff is refused as ProtectedObstruction: {name}"
+        );
+        *state.settlements.get_mut(id).unwrap() = record;
+        assert_eq!(state.world.block_at(at[0], at[1], at[2]), Some(tree));
+        assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    }
+    state.world.set_block(at[0], at[1], at[2], original);
+    assert!(planned_cells(&state, &project, "oak", &mut Default::default()).is_ok());
+}
+
+fn upgrade_beam() -> (
+    TickState,
+    SettlementId,
+    crate::entities::EntitySlot,
+    Project,
+    [i32; 3],
+) {
+    let (mut state, id, builder) = fixture();
+    start(&mut state, id, "house", 1, None);
+    let original = state.settlements.get(id).unwrap().projects[0].clone();
+    fund(&mut state, "house", 1);
+    complete(&mut state, id, builder);
+    let building = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    let project = Project {
+        level: 2,
+        building: Some(building),
+        structure: String::new(),
+        ..original
+    };
+    // L1's horizontal oak beam is replaced by L2 cobblestone.
+    let beam = [
+        project.origin[0] + 5,
+        project.origin[1] + 4,
+        project.origin[2],
+    ];
+    let current = state.world.block_at(beam[0], beam[1], beam[2]).unwrap();
+    assert_eq!(
+        crate::farming::prop(&state.registry.blocks, current, "axis"),
+        Some("x")
+    );
+    assert_eq!(
+        state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(current))
+            .unwrap()
+            .block
+            .id
+            .path(),
+        "oak_log"
+    );
+    let (_, cells) = planned_cells(&state, &project, "oak", &mut Default::default()).unwrap();
+    assert!(cells.iter().any(|cell| {
+        cell.at == beam
+            && state
+                .registry
+                .blocks
+                .by_id(mc_world::BlockStateId(cell.state))
+                .unwrap()
+                .block
+                .id
+                .path()
+                == "cobblestone"
+    }));
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert([beam[0] + 1, beam[1], beam[2] + 1]);
+    (state, id, builder, project, beam)
+}
+
+/// Owner D27.4: inside the territory a retained player edit of the building's
+/// own beam is the village's property; outside it the attribution still
+/// refuses before the authored exemption, until the attribution expires.
+#[test]
+fn retained_identical_player_beam_refuses_upgrade_outside_the_territory_only() {
+    let (mut state, id, _, project, beam) = upgrade_beam();
+    retain_player_edit(&mut state, beam);
+    assert!(planned_cells(&state, &project, "oak", &mut Default::default()).is_ok());
+    territory_elsewhere(&mut state, id, beam);
+    assert!(matches!(
+        planned_cells(&state, &project, "oak", &mut Default::default()),
+        Err(site_refusals::Reason::ProtectedObstruction)
+    ));
+    fund(&mut state, "house", 2);
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    assert_eq!(
+        start_upgrade(&mut state, id, project.building.unwrap()),
+        Err("Construction admission refused: ProtectedObstruction.".into())
+    );
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
+    // Main's explicit upgrade contract: an indistinguishable authored-state
+    // replacement may upgrade once its player attribution is no longer live.
+    state.block_log = super::super::forestry::tests::player_history(&state, beam, 1);
+    state.block_log.evict(u64::MAX);
+    assert!(!state.block_log.player_touched(beam));
+    assert!(planned_cells(&state, &project, "oak", &mut Default::default()).is_ok());
+}
+
+#[test]
+fn disabled_history_with_live_player_refuses_upgrade_outside_the_territory_only() {
+    let (mut state, id, slot, project, beam) = upgrade_beam();
+    let entity = state.entities.body(slot).id;
+    let connection = crate::boundary::ConnectionId(999);
+    state
+        .entities
+        .set_kind(slot, crate::entities::EntityKind::Player { connection });
+    state.entities.row_mut(slot).villager = None;
+    state.players.insert(
+        entity,
+        crate::player::PlayerState::new(connection, crate::commands::GameMode::Survival),
+    );
+    state.entities.set_pos(slot, beam.map(f64::from));
+    assert!(!state.block_log.enabled());
+    assert!(
+        planned_cells(&state, &project, "oak", &mut Default::default()).is_ok(),
+        "inside the territory the live-player veto is not consulted (owner D27.4)"
+    );
+    territory_elsewhere(&mut state, id, beam);
+    assert!(matches!(
+        planned_cells(&state, &project, "oak", &mut Default::default()),
+        Err(site_refusals::Reason::ProtectedObstruction)
+    ));
+    state.entities.set_pos(
+        slot,
+        [
+            f64::from(beam[0]) + 33.0,
+            f64::from(beam[1]),
+            f64::from(beam[2]),
+        ],
+    );
+    assert!(planned_cells(&state, &project, "oak", &mut Default::default()).is_ok());
+}
+
+/// Committee ruling: an unfinished sweep holds the project slot only while it
+/// already holds a legal candidate. An empty one must not starve the upgrade,
+/// meadow, fortification or street planning.
+#[test]
+fn an_empty_unfinished_sweep_does_not_hold_the_slot() {
+    let (mut state, id, builder) = fixture();
+    // A plan wider than one pass's share of candidates.
+    super::terrain_tests::wide_plan(&mut state);
+    super::terrain_tests::restore_stock(&mut state);
+    fund(&mut state, "spanish_house", 1);
+    start(&mut state, id, "spanish_house", 1, None);
+    complete(&mut state, id, builder);
+    let house = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    // Keep the standing house's maximum footprint and dry Builder approaches;
+    // every other lot column is solid through the terrain window. Roads,
+    // verges and the plaza stay walkable, so the sweep still walks every
+    // frontage and refuses each lot.
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    for x in -48..64 {
+        for z in -48..64 {
+            if layout::cell(anchor, x, z) == layout::Cell::Lot
+                && !((0..17).contains(&x) && (0..14).contains(&z))
+            {
+                for y in 201..=250 {
+                    state.world.set_block(x, y, z, state.registry.states.stone);
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+    stock_buildings(
+        &mut state,
+        &[("spanish_house", 1), ("spanish_house", 2), ("farm", 1)],
+    );
+    // Premise: one planning pass cannot finish the funded Farm's sweep, that
+    // pass finds nothing legal, and the whole sweep has no legal lot either.
+    {
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(&state, id);
+        let farm = blueprints::get(&state.registry, "farm").unwrap();
+        assert!(funded_variant(&state, id, &farm.level(1).unwrap().materials, &images).is_some());
+        let pass = site_project(
+            &state,
+            record,
+            std::iter::once(farm),
+            &mut site_refusals::Sweeps::default(),
+            record.construction_cursor,
+            SITE_ATTEMPTS,
+            &images,
+        );
+        assert!(
+            pass.site.is_none() && pass.running,
+            "one pass leaves the sweep unfinished"
+        );
+        assert!(
+            !pass.waiting,
+            "that unfinished sweep holds no legal candidate"
+        );
+        let whole = site_project(
+            &state,
+            record,
+            std::iter::once(farm),
+            &mut site_refusals::Sweeps::default(),
+            0,
+            u32::MAX,
+            &images,
+        );
+        assert!(
+            whole.site.is_none(),
+            "the funded Farm has no legal lot at all"
+        );
+    }
+    assert!(upgrade_available(&state, id, house));
+    let stock = state.block_entities[&(1, 201, 1)].slots.clone();
+    plan(&mut state, id);
+    let project = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .projects
+        .first()
+        .expect("the empty unfinished sweep left the slot to the funded upgrade");
+    assert_eq!(project.blueprint, "spanish_house");
+    assert_eq!(project.building, Some(house));
+    assert_eq!(project.level, 2);
+    assert!(!project.ordered, "the autonomous planner admitted it");
+    assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
 }

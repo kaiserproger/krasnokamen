@@ -1,0 +1,13 @@
+[[bug]]
+id = "WORLDGEN-RUINED-PORTAL-FLOATS-ON-SLOPE"
+title = "A generated ruined portal floats over a village farm: its netherrack platform hangs above two or more air layers"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Seed 100 (village-autonomy-qa world), seen in the native client approach frame. A fresh offline pregenerate of seed 100 around block (146,2) has the same blocks as the played world, so worldgen placed it, not a settlement build or the harness. Ruined portal origin (144,84,0): netherrack platform x144-149 z0-5 at y=84, stone/stone-slab ring at y=85, obsidian frame at x=147 y=86-90; below it y=82-83 are air and the village farm (farmland y=80, wheat y=81) lies under the platform. crates/mc-worldgen/src/overworld_structures.rs OverworldStructures::visit places every Height::Surface template (ruined portals included, catalog.rs) at the surface height of the start chunk's center (152,8) plus one, so a template on a slope floats wherever its own footprint is lower than that center sample. The vanilla placement rule must be taken from the local 26.3 jar before the fix; the fix changes generated chunks and needs a worldgen revision bump."
+regression = ["cargo:mc-worldgen:overworld_structures::tests::floating_surface_structure_rests_on_a_support_column", "cargo:mc-worldgen:overworld_structures::tests::ruined_portal_support_columns_never_copy_template_material"]
+repro_check = "Stage2X SLICES.md:119,131: support fill is air-only, bounded to four blocks and uses natural ground below or stone, never template material; WORLDGEN_REVISION 33. Original support reversal fails (receipts/XCoreBlocks/nc-support-column.log); restoring the min/last-state template-material bug fails the real 13-template check (receipts/XPortalSupport/nc-template-material.log). The fix spans 81a2b6bb8 and fee158398; a combined forward patch is needed for promotion."
+failing_first = "reported"
+fix_commit = "patch:f68a0a8f9e5b90a4363af71ee49751983a1cf167224a58a2553f7c19134b103c"
+promotion = "docs/bugs/promotions/WORLDGEN-RUINED-PORTAL-FLOATS-ON-SLOPE.json"

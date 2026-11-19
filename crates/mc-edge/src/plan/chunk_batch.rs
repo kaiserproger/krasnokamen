@@ -9,34 +9,41 @@ pub(crate) struct ChunkBatchState {
     unacknowledged: VecDeque<(u64, usize)>,
     next_batch: u64,
     limit: usize,
+    /// Chunk packets per publish at most (`[network] chunks_per_tick_per_player`).
+    cap: usize,
 }
 
 impl Default for ChunkBatchState {
     fn default() -> Self {
+        Self::with_cap(super::CHUNKS_PER_TICK)
+    }
+}
+
+impl ChunkBatchState {
+    pub(crate) fn with_cap(cap: usize) -> Self {
         Self {
             desired: 9.0,
             quota: 0.0,
             unacknowledged: VecDeque::new(),
             next_batch: 0,
             limit: 1,
+            cap,
         }
     }
-}
 
-impl ChunkBatchState {
     /// One publication advances credit only while another batch is allowed.
     pub(crate) fn allowance(&mut self) -> usize {
         if self.unacknowledged.len() >= self.limit {
             return 0;
         }
         self.quota = (self.quota + self.desired).min(self.desired.max(1.0));
-        (self.quota.floor() as usize).min(super::CHUNKS_PER_TICK)
+        (self.quota.floor() as usize).min(self.cap)
     }
 
     /// Recheck the actual queue admission, after any intervening ACK.
     pub(crate) fn can_send(&self, chunks: usize) -> bool {
         chunks > 0
-            && chunks <= super::CHUNKS_PER_TICK
+            && chunks <= self.cap
             && self.unacknowledged.len() < self.limit
             && chunks as f32 <= self.quota
     }

@@ -1,0 +1,10 @@
+[[bug]]
+id = "DOC-CHISEL"
+title = "ScenarioMatrix reports README says vanilla refused while optional manifest allows join."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DOC-CHISEL"
+regression = []
+repro_check = "doc-only fix in the plugins repository, branch wt/XInfraPlugins 2ed597a1 (not merged until M3): chisel/README.md now says the bundle is optional (required = false) and documents the probe/hello rule, the vanilla carrier fallback and the required-bundle refusal. Checked against the deployed manifest and the core behaviour in configuration_tests::vanilla_client_completes_configuration_with_only_optional_bundles, loader_hello_before_known_packs_starts_negotiation_of_optional_bundles, mc-protocol with_vanilla_item_models, mc-edge server/connection.rs:353-359 and mc-core carrier_blocks custom_stack. No revertable hunk (a doc), repro=manual so a real-client check would still be required for promotion; the evidence wait for the plugins merge"

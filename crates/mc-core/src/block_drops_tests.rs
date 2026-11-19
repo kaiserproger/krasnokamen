@@ -92,7 +92,7 @@ impl Data {
             loot: &self.loot,
             mining: &self.mining,
         };
-        block_drops(&drops, &rules, self.stone_state, tool, 7, None).unwrap()
+        block_drops(&drops, &rules, self.stone_state, tool, 7, None, true).unwrap()
     }
 }
 

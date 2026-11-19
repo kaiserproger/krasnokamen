@@ -1,0 +1,10 @@
+[[bug]]
+id = "WATER-BOTTLE-IMPACT"
+title = "Water-bottle impacts omit environmental extinguishing, water-sensitive damage and axolotl rehydration, and lingering water creates an empty cloud."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#WATER-BOTTLE-IMPACT"
+regression = ["cargo:mc-core:projectiles::payloads::tests::splash_water_douses_burning_entity", "cargo:mc-core:projectiles::payloads::tests::water_bottles_damage_endermen_rehydrate_axolotls_and_leave_no_cloud", "cargo:mc-core:projectiles::flight_tests::splash_water_douses_nearby_fire_and_candle_without_changing_furnace", "cargo:mc-core:projectiles::flight_tests::water_bottles_extinguish_the_hit_campfire"]
+failing_first = "reported"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "ENTITY-COLUMNS-NEVER-REQUEST-HUGE-PAGES"
+title = "Transparent huge pages are madvise on the host and the tree never calls madvise(MADV_HUGEPAGE), so every entity column, the id_index and rows hash tables and the cold column run on 4 KiB pages although the access pattern is sparse reads."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-8 (Slotin Impact of Huge Pages: 10-15 % latency for arrays beyond L2, almost never hurts; Bakhvalov 8.4.2; Drepper 4.3.2; perf). /sys/kernel/mm/transparent_hugepage/enabled is 'always [madvise] never' on the box and a grep for madvise, MADV_ and hugepage over crates/ finds nothing (verified again on main 5bdc02911); the Perf1M prep log banner shows allow_large_os_pages: 0. Measure first: perf stat -t $tid -e ls_l1_d_tlb_miss.tlb_reload_2m_l2_hit,ls_l1_d_tlb_miss.tlb_reload_4k_l2_hit (2 MiB reloads near zero means THP is not in effect), with a zero-build arm LD_PRELOAD=libmimalloc.so.3 MIMALLOC_ALLOW_LARGE_OS_PAGES=1; the build arm is a one-line madvise on the big columns behind a feature flag (post-freeze). Report p95, not only the mean: defrag=madvise can stall on compaction."
+regression = []
+failing_first = "not recorded"

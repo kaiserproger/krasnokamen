@@ -1,0 +1,11 @@
+[[bug]]
+id = "DATAPACK-LIST-HIDES-BROKEN-SELECTED-PACK"
+title = "/datapack list hid a selected pack whose pack.mcmeta became unreadable while its recipes were still active and the next start would refuse it."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "BreakB10Commands round 3 H3 (REBREAK3.md). The listing now keeps a selected pack that failed to scan, with the load error as its hover."
+regression = ["cargo:mc-core:datapacks::command_tests::the_list_keeps_a_selected_pack_whose_pack_mcmeta_broke", "harness:datapack-reload:native-datapack-reload"]
+fix_commit = "patch:4b74ef2fefca7443e10acdf6e42eb5d4a52250cb4d7b4674b0c54b97dc5246fb"
+repro_check = "round 2: patch docs/bugs/fix-patches/DATAPACK-LIST-HIDES-BROKEN-SELECTED-PACK.patch (digest verified). Control negative-control.log: reversed -> red `commands.datapack.list.enabled.success[1, vanilla]` (file/gems dropped)"

@@ -1,0 +1,12 @@
+[[bug]]
+id = "DEATH-MESSAGE-OUTSIDE-BORDER-KEY"
+title = "Death by the world border sends the key death.attack.outside_border; the vanilla language key is death.attack.outsideBorder, so players see the raw key"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Probe of every DamageKind through the real death path (HarnessRows): death_message.rs maps message ids to camelCase keys but omits outside_border; en_us.json has no death.attack.outside_border."
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::parity_death_message_keys_match_the_damage_type_registry_and_language_file"]
+repro_check = "round 2, complete: fix da9bca085, control negative-control.log - all non-test hunks of da9bca08 (contact_hazards.rs, tick/death_message.rs) reversed -> red at the key parity assertion (`want death.attack.outsideBorder, got death.attack.outside_border`)"
+failing_first = "reported"
+fix_commit = "da9bca085da0c0c542cac42f95f38b373849bd99"

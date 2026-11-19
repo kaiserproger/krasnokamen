@@ -30,6 +30,21 @@ port = 25565
 # closed before the handshake.
 connection_throttle_ms = 0
 max_connections_per_ip = 0
+# Server-wide cap on concurrent pre-play connections (handshake, status,
+# login before Play); 0 derives `max_players * 2 + 64`. The cap counts only peers
+# still connecting (a Play session drops its slot), and the per-address knobs
+# above cannot bound a flood from many addresses. A connection over the cap is
+# closed before its handshake. The cap bounds memory, not time: each pre-play
+# stage has its own deadline (see OPERATING.md under "Connection admission").
+max_pre_play_connections = 0
+# Concurrent pre-play connections from one address (direct clients; Play
+# sessions do not count); 0 disables it. Raise it when many clients connect
+# from one address (load tests, NAT). Ignored in Velocity mode.
+max_pre_play_connections_per_ip = 8
+# Chunk packets sent to one player per tick (1-64); the client's acknowledged
+# rate lowers it further. Raise for faster world loading on a server with spare
+# CPU and bandwidth.
+chunks_per_tick_per_player = 16
 
 [auth]
 # Enable Mojang session authentication for public play.
@@ -167,6 +182,12 @@ world_dir = "world"
 # a longer cadence means fewer capture ticks but a longer journal replay after a
 # crash. Stop and the empty-server pause still checkpoint.
 # checkpoint_every_ticks = 1200
+# Journal directory fsync every N published batches (ticks), 1..=1200; 1 is the
+# safest, 10 is the default. A host power loss can drop up to N published
+# batches. Any crash can also lose the unpublished ones (up to 128 queued /
+# 256 MiB, ~6.4 s, plus the batch being written); this setting does not change
+# that. See docs/architecture/persistence.md "Write errors and publication order".
+# journal_fsync_every_batches = 10
 # Changing the seed requires a fresh world directory.
 seed = 0
 

@@ -1,0 +1,11 @@
+[[bug]]
+id = "NATIVE-FRAMED-MAP"
+title = "The native client never draws a map inside an item frame: src/entities/render_special/item_frame.rs:84-91 draws only the baked item model, and the frame render path has no map state."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/MapMarkers (agent finding, client 815c708)"
+regression = ["client:krasnokamen-client:entities::render_special::item_frame::map_tests::framed_map_uses_received_identity_replacement_and_removal", "client:krasnokamen-client:entities::render_special::item_frame::map_tests::framed_map_quarter_turns_face_outward_on_all_surfaces"]
+fix_commit = "client:83994480"
+repro_check = "candidate: no control - reversing 83994480's item_frame.rs hunks removes ItemFrameResources.maps, which the regression fixture constructs, so the ref stops compiling instead of going red; area=client, real-client check required"

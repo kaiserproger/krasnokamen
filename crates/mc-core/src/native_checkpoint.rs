@@ -209,8 +209,16 @@ pub fn dimension_id(dimension: Dimension) -> u32 {
     }
 }
 
+/// The manifest format this build writes. `crates/mc-world/src/native/checkpoint.rs`
+/// carries the same constant for readers that open a store without mc-core.
+pub const MANIFEST_VERSION: u32 = 1;
+
+/// Required manifest image versions. `manifest` versions the manifest schema
+/// itself: it is the only gate against a binary opening a manifest it does not
+/// understand, so any incompatible manifest change bumps it. There is no
+/// converter; a manifest written under another version refuses startup.
 pub fn domain_versions() -> BTreeMap<String, u32> {
-    [
+    let mut versions: BTreeMap<String, u32> = [
         "climate",
         "gamerules",
         "block_ticks",
@@ -224,7 +232,9 @@ pub fn domain_versions() -> BTreeMap<String, u32> {
     ]
     .into_iter()
     .map(|key| (key.into(), 1))
-    .collect()
+    .collect();
+    versions.insert("manifest".into(), MANIFEST_VERSION);
+    versions
 }
 
 pub fn record(tick: u64, payload: Vec<u8>) -> NativeDomainRecord {
@@ -516,6 +526,12 @@ pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError>
     let store =
         NativeReadOnlyStore::open_with_cache(&path, native_identity(config), 16 * 1024 * 1024)
             .map_err(|e| open_refusal(config, &path, e))?;
+    // Books R4-P1: every offline reader (export, censuses, tools) refuses a store
+    // that disagrees with its checkpoint marker before reading checkpoint or WAL;
+    // nothing is rewritten here.
+    store
+        .verify_marker(&config.world_dir)
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
     let reader = store
         .checkpoint_reader()
         .map_err(|e| CoreError::Storage(e.to_string()))?;
@@ -628,6 +644,93 @@ pub(crate) fn read_refusal(config: &CoreConfig, error: mc_world::native::NativeE
     }
 }
 
+/// Marker of [`require_checkpointed_tail`]'s refusal: the published WAL tail is
+/// not covered by the store's checkpoint. Named so tests, docs and the operator
+/// message cannot drift apart.
+pub const UNCHECKPOINTED_TAIL: &str =
+    "the last shutdown did not checkpoint the published journal tail";
+
+/// The manifest a store publishes, without materialising chunks or entities.
+pub fn published_manifest(
+    config: &CoreConfig,
+    reader: &NativeCheckpointReader,
+) -> Result<CheckpointManifest, CoreError> {
+    let checkpoint = reader
+        .read_checkpoint_metadata()
+        .map_err(|e| read_refusal(config, e))?;
+    manifest_of(&checkpoint.globals)
+}
+
+/// Decode the checkpoint manifest from the store's `checkpoint` global record.
+fn manifest_of(
+    globals: &std::collections::BTreeMap<String, mc_world::native::NativeDomainRecord>,
+) -> Result<CheckpointManifest, CoreError> {
+    let record = globals
+        .get("checkpoint")
+        .ok_or_else(|| CoreError::Storage("native checkpoint: missing checkpoint record".into()))?;
+    serde_json::from_slice(&record.payload)
+        .map_err(|e| CoreError::Storage(format!("native checkpoint: {e}")))
+}
+
+/// Refuse a store whose published journal batches end above its checkpoint
+/// manifest: the shutdown that should have folded them in did not publish.
+///
+/// The scan reads batch names only, which is enough right after a successful
+/// [`Core::open`](crate::core::Core::open): recovery already refused gaps, torn
+/// frames and batches it could not replay (`crate::journal`), so a surviving
+/// batch is a real published part of this world. A batch ending at or below the
+/// manifest is covered or waiting for a best-effort unlink and is ignored, the
+/// same predicate [`crate::journal::prune_batches_through`] deletes by; what
+/// remains is the tail, `hi > manifest_tick`. Foreign or gapped names above the
+/// manifest are refused conservatively.
+///
+/// The guard writes nothing; the caller must not classify or delete chunks when
+/// it refuses.
+pub fn require_checkpointed_tail(config: &CoreConfig, manifest_tick: u64) -> Result<(), CoreError> {
+    let journal = config.world_dir.join("journal");
+    let entries = match std::fs::read_dir(&journal) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(CoreError::Storage(format!(
+                "journal {}: {error}",
+                journal.display()
+            )));
+        }
+    };
+    let mut tail: Option<(u64, u64)> = None;
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            CoreError::Storage(format!("journal {}: {error}", journal.display()))
+        })?;
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        // Unpublished `.bin.tmp` files and foreign names are not batches.
+        let Some((lo, hi)) = crate::journal::parse_batch_name(name) else {
+            continue;
+        };
+        if hi <= manifest_tick {
+            continue;
+        }
+        tail = Some(match tail {
+            Some((low, high)) => (low.min(lo), high.max(hi)),
+            None => (lo, hi),
+        });
+    }
+    let Some((lo, hi)) = tail else {
+        return Ok(());
+    };
+    Err(CoreError::Storage(format!(
+        "{UNCHECKPOINTED_TAIL}: journal ticks {lo}..={hi} are above the store checkpoint at tick \
+         {manifest_tick} (the shutdown during this prune did not checkpoint them; see the \
+         checkpoint error logged above). Nothing was pruned; the journal is kept and replays on the \
+         next start. Fix the logged cause, start the server and stop it until the stop logs \
+         \"checkpoint committed\", then rerun prune."
+    )))
+}
+
 /// Validate and hydrate one stored native entity exactly as recovery does,
 /// with the identifying context (dimension, store path, chunk, wire-id, UUID,
 /// type) on every refusal. Shared by recovery and the read-only census.
@@ -708,9 +811,7 @@ pub fn recover_with_reader(
     let checkpoint = reader
         .read_checkpoint_metadata()
         .map_err(|e| read_refusal(config, e))?;
-    let manifest: CheckpointManifest =
-        serde_json::from_slice(&checkpoint.globals["checkpoint"].payload)
-            .map_err(|e| CoreError::Storage(format!("native checkpoint: {e}")))?;
+    let manifest = manifest_of(&checkpoint.globals)?;
     validate_manifest(&manifest)?;
     let expected = generation_records(config)?;
     for key in ["generation", "dimensions"] {
@@ -929,6 +1030,10 @@ pub fn recover_with_reader(
             ))
         })?;
         crate::mounts::persistence::validate_replay(replay)?;
+        // Offline recovery is a shared entry point (export, conversion, census):
+        // a compact entity record without its tail image must refuse here too,
+        // not only in the live startup path.
+        crate::journal::validate_replay(replay)?;
         crate::battle::persistence::validate_replay(replay, &registry)?;
     }
     let root = &dimensions[&Dimension::Overworld];

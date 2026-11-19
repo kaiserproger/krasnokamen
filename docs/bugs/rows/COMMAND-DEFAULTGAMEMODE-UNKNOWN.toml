@@ -1,0 +1,12 @@
+[[bug]]
+id = "COMMAND-DEFAULTGAMEMODE-UNKNOWN"
+title = "defaultgamemode is an unknown command (vanilla DefaultGameModeCommands: level 2, one gamemode argument, commands.defaultgamemode.success)."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "fixed"
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md 'Noticed', single run). The command sets an in-memory default that players without a saved record join in; persisting it (level.dat GameType) is COMMAND-DEFAULTGAMEMODE-NOT-PERSISTED."
+fix_commit = "patch:0965bf5edd61ea165094fae17cb4a56b14b3c8dbfb95f036889fdbcc907f85ac"
+regression = ["cargo:mc-core:command_context::tests::defaultgamemode_sets_the_mode_new_players_join_in", "cargo:mc-core:commands::tests::defaultgamemode_takes_exactly_one_mode_and_needs_operator", "harness:entities:native-v2-command-rows"]
+failing_first = "not recorded"
+promotion = "docs/bugs/promotions/COMMAND-DEFAULTGAMEMODE-UNKNOWN.json"

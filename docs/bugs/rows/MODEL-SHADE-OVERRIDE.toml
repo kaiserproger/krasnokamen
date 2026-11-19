@@ -1,0 +1,12 @@
+[[bug]]
+id = "MODEL-SHADE-OVERRIDE"
+title = "26.3 `shade_direction_override` is not implemented. 190/1,288 blockstates (all cross plants incl. short/tall grass, ferns, flowers, saplings, crops, sugar cane, vines, kelp, seagrass, corals; torches, lanterns, chains, fire, campfire, redstone wire, repeater/comparator, tripwire, cobweb, snow layer 2, flowerbeds, poplar sapling) get directional face shading that vanilla 26.3 does not apply"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:84"
+regression = ["harness:scene-shot:native-shade-override", "client:krasnokamen-client:terrain::border_tests::shade_direction_override_replaces_the_faces_cardinal_weight", "client:krasnokamen-client:terrain::border_tests::shade_direction_override_wins_over_the_legacy_flat_shade_flag", "client:krasnokamen-client:terrain::border_tests::shade_direction_override_reads_the_dimensions_weights"]
+fix_commit = "client:43362918"
+proving_assertions = { "harness:scene-shot:native-shade-override" = "poppy_no_directional_shading" }
+repro_check = "Real shade-expression revert reds the emitted per-face shade refs (receipts/XClientBlocks/10-negative-control.log); the scene compares poppy luminance."

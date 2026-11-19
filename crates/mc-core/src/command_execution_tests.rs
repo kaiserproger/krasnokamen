@@ -3232,7 +3232,7 @@ fn settlement_layout_follows_a_flooded_then_open_avenue_without_changes() {
     assert_eq!(build_last_chat(&state, ConnectionId(2)), open);
     let record = state.settlements.get(id).unwrap();
     assert_eq!(record.revision, revision);
-    assert!(record.project.is_none());
+    assert!(record.projects.is_empty());
     assert_eq!(state.plugin_block_writes.len(), writes);
     assert_eq!(
         state.world.block_at(8, 200, 13),
@@ -3416,7 +3416,7 @@ fn settlement_build_starts_funded_order_without_touching_blocks_or_stock() {
         "unfunded order is accepted with its shortage"
     );
     assert!(
-        state.settlements.get(id).unwrap().project.is_none(),
+        state.settlements.get(id).unwrap().projects.is_empty(),
         "queued order has not started"
     );
     command(&mut state, alice, "settlement build cancel");
@@ -3429,35 +3429,33 @@ fn settlement_build_starts_funded_order_without_touching_blocks_or_stock() {
         build_last_chat(&state, ConnectionId(1)),
         "No pending construction order."
     );
-    // Full house L1 funding starts the single project with no debit here.
+    // Full house L1 funding queues the order while its bounded site sweep
+    // runs; the planner finishes it and starts the project with no debit here.
     fund_at(&mut state, (1, 201, 1), "house", 1);
     let before_writes = state.plugin_block_writes.len();
     let before_stock = build_chest_stock(&state);
     command(&mut state, alice, "settlement build house");
     assert_eq!(
         build_last_chat(&state, ConnectionId(1)),
-        "Started house construction."
+        "Queued house: waiting for a site"
     );
+    crate::settlements::construction::tests::finish_sweep(&mut state, id);
     let record = state.settlements.get(id).unwrap();
-    assert_eq!(record.project.as_ref().unwrap().blueprint, "house");
-    assert_eq!(record.project.as_ref().unwrap().level, 1);
+    assert_eq!(record.projects[0].blueprint, "house");
+    assert_eq!(record.projects[0].level, 1);
     assert_eq!(state.plugin_block_writes.len(), before_writes);
     assert_eq!(build_chest_stock(&state), before_stock);
     // A second order queues without changing the active project or stock.
     command(&mut state, alice, "settlement build house");
+    let queued = build_last_chat(&state, ConnectionId(1));
+    assert!(queued.starts_with("Queued house: not enough:"), "{queued}");
+    let reason = crate::settlements::construction::pending_reason_at(&state, id, 0)
+        .expect("queued funding refusal");
+    let missing = reason.strip_prefix("not enough: ").expect("funding cause");
+    let shortage = missing.split_whitespace().next().expect("named shortage");
+    assert!(queued.contains(shortage), "{queued}: missing {shortage}");
     assert_eq!(
-        build_last_chat(&state, ConnectionId(1)),
-        "Queued house: busy"
-    );
-    assert_eq!(
-        state
-            .settlements
-            .get(id)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
-            .blueprint,
+        state.settlements.get(id).unwrap().projects[0].blueprint,
         "house"
     );
     assert_eq!(state.plugin_block_writes.len(), before_writes);
@@ -3481,10 +3479,12 @@ fn settlement_build_starts_funded_order_without_touching_blocks_or_stock() {
     assert_eq!(build_chest_stock(&state), before_stock);
     state.plugin_players.observe_permission(ConnectionId(2), 2);
     command(&mut state, bob, "settlement build house");
-    assert_eq!(
-        build_last_chat(&state, ConnectionId(2)),
-        "Construction queue is full: house is already pending. Cancel it before another order."
-    );
+    let queued = build_last_chat(&state, ConnectionId(2));
+    assert!(queued.starts_with("Queued house: not enough:"), "{queued}");
+    assert!(queued.contains(shortage), "{queued}: missing {shortage}");
+    assert_eq!(state.settlements.get(id).unwrap().orders.len(), 2);
+    assert_eq!(state.plugin_block_writes.len(), before_writes);
+    assert_eq!(build_chest_stock(&state), before_stock);
     // Execution outside every settlement radius selects nothing.
     state.entities.set_pos(bob_slot, [200.0, 80.0, 0.0]);
     command(&mut state, bob, "settlement build house");
@@ -3509,7 +3509,7 @@ fn settlement_build_upgrade_refuses_stale_foreign_and_unowned_targets() {
         alice,
         &format!("settlement build upgrade {}", ghost.0),
     );
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     assert_eq!(
         build_last_chat(&state, ConnectionId(1)),
         "Building not found."
@@ -3523,7 +3523,7 @@ fn settlement_build_upgrade_refuses_stale_foreign_and_unowned_targets() {
         alice,
         &format!("settlement build upgrade {foreign}"),
     );
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     assert_eq!(
         build_last_chat(&state, ConnectionId(1)),
         "Building not found."
@@ -3534,7 +3534,7 @@ fn settlement_build_upgrade_refuses_stale_foreign_and_unowned_targets() {
         bob,
         &format!("settlement build upgrade {}", ghost.0),
     );
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     assert_eq!(
         build_last_chat(&state, ConnectionId(2)),
         "Only the owner or an operator orders construction."
@@ -3555,7 +3555,7 @@ fn settlement_build_upgrade_refuses_stale_foreign_and_unowned_targets() {
     state.plugin_players.observe_permission(ConnectionId(1), 2);
     command(&mut state, alice, "settlement build house");
     assert!(
-        state.settlements.get(unowned).unwrap().project.is_none(),
+        state.settlements.get(unowned).unwrap().projects.is_empty(),
         "unowned records refuse even operators"
     );
     assert_eq!(
@@ -3568,7 +3568,7 @@ fn settlement_build_upgrade_refuses_stale_foreign_and_unowned_targets() {
     let mut changes = ChangeSet::default();
     let stock = build_chest_stock(&state);
     super::execute(&mut state, ghost_connection, alice, &parsed, &mut changes);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     assert_eq!(build_chest_stock(&state), stock);
     // Positive admission lives with the planner owner: only a ledger
     // entry marked committed plus matching L1 geometry makes a building
@@ -3619,6 +3619,10 @@ fn settlement_build_upgrade_owner_command_starts_a_real_blueprint_upgrade() {
     start(&mut state, id, "house", 1, None);
     fund(&mut state, "house", 1);
     complete(&mut state, id, builder);
+    // The fixture captures block history (the production default), so the
+    // building's own authored beams pass the upgrade fence as authored state
+    // instead of tripping the disabled-history live-player veto.
+    state.block_log = crate::block_log::BlockLog::new(crate::config::BlockLogSettings::default());
     let building = *state
         .settlements
         .get(id)
@@ -3636,8 +3640,16 @@ fn settlement_build_upgrade_owner_command_starts_a_real_blueprint_upgrade() {
         alice,
         &format!("settlement build upgrade {}", building.0),
     );
+    // Owner D42: the command queues the funded upgrade at once and its order
+    // turn admits it, without a block write or a debit.
+    assert_eq!(
+        build_last_chat(&state, ConnectionId(1)),
+        "Queued house L2: ready"
+    );
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+    crate::settlements::construction::tests::finish_sweep(&mut state, id);
     let record = state.settlements.get(id).unwrap();
-    let project = record.project.as_ref().unwrap();
+    let project = &record.projects[0];
     assert_eq!(project.building, Some(building));
     assert_eq!(project.level, 2);
     assert_eq!(project.blueprint, "house");
@@ -3649,10 +3661,9 @@ fn settlement_build_upgrade_owner_command_starts_a_real_blueprint_upgrade() {
     );
     // Another order queues while the upgrade runs, preserving active work.
     command(&mut state, alice, "settlement build house");
-    assert_eq!(
-        build_last_chat(&state, ConnectionId(1)),
-        "Queued house: busy"
-    );
+    let queued = build_last_chat(&state, ConnectionId(1));
+    assert!(queued.starts_with("Queued house: not enough:"), "{queued}");
+    assert!(queued.contains("minecraft:cobblestone"), "{queued}");
     assert_eq!(state.plugin_block_writes.len(), before_writes);
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, before_stock);
 }

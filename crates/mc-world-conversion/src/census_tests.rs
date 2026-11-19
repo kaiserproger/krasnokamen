@@ -3,6 +3,9 @@ use crate::test_support::{fixture_store, read_manifest, write_manifest};
 use mc_core::dimensions::Dimension;
 use mc_core::journal::JournalWriter;
 use mc_core::native_checkpoint::record;
+use mc_core::settlements::households::{Household, HouseholdOrigin};
+use mc_core::settlements::persistence::Row;
+use mc_core::settlements::{Registry, SettlementId};
 use mc_nbt::{ListTag, Tag, tag_type};
 use mc_world::native::{NativeCheckpoint, NativeEntitySnapshot};
 use mc_world::{BlockStateId, Chunk, ChunkPos};
@@ -42,17 +45,33 @@ pub(crate) fn member(
 }
 
 fn settlement_row(id: u64) -> Vec<u8> {
-    serde_json::to_vec(&serde_json::json!({
-        "dimension": Dimension::Overworld,
-        "value": {
-            "id": id, "name": "Falcon", "owner": "operator", "anchor": [0, 80, 0],
-            "radius": 32, "revision": 1, "household_sequence": 1,
-            "households": {format!("{id}-1"): {
-                "id": format!("{id}-1"), "revision": 1, "origin": "adoption",
-                "home": null, "needs": null, "policy": null
-            }}
-        }
-    }))
+    let mut settlements = Registry::default();
+    let mut sequence = id - 1;
+    let created = settlements
+        .create(
+            &mut sequence,
+            "Falcon".into(),
+            "operator".into(),
+            [0, 80, 0],
+            32,
+        )
+        .unwrap();
+    assert_eq!(created, SettlementId(id));
+    let mut value = settlements.get(created).unwrap().clone();
+    let household = Household {
+        id: format!("{id}-1"),
+        revision: 1,
+        origin: HouseholdOrigin::Adoption,
+        home: None,
+        needs: None,
+        policy: None,
+    };
+    value.household_sequence = 1;
+    value.households.insert(household.id.clone(), household);
+    serde_json::to_vec(&Row {
+        dimension: Dimension::Overworld,
+        value,
+    })
     .unwrap()
 }
 
@@ -178,13 +197,13 @@ pub(crate) fn world_with(
 
 fn populated() -> Fixture {
     let registry = crate::test_support::registry().unwrap();
+    // The rider is the household's baby: the census counts it a member, not an adult.
+    let mut rider = fields(&registry, "minecraft:villager", 0x30, 30);
+    rider.retain(|(name, _)| name != "Age");
+    rider.push(("Age".into(), Tag::Int(-24_000)));
     let cow_rider = Tag::List(ListTag {
         element_type: tag_type::COMPOUND,
-        elements: vec![Tag::Compound(member(
-            fields(&registry, "minecraft:villager", 0x30, 30),
-            7,
-            Some("7-1"),
-        ))],
+        elements: vec![Tag::Compound(member(rider, 7, Some("7-1")))],
     });
     let mut cow = fields(&registry, "minecraft:cow", 0x20, 20);
     cow.push(("Passengers".into(), cow_rider));
@@ -351,6 +370,14 @@ fn census_counts_entities_passengers_villagers_chunks_and_persisted_settlements(
             households: 1,
             members: 3,
             household_members: 2,
+            household_details: BTreeMap::from([(
+                "7-1".into(),
+                HouseholdCensus {
+                    origin: HouseholdOrigin::Adoption,
+                    members: 2,
+                    adults: 1,
+                },
+            )]),
         }]
     );
     assert_eq!(
@@ -462,4 +489,86 @@ fn census_receipt_inside_source_is_refused_without_writing() {
     let path = fixture.world.join("census.json");
     assert!(census_native(&fixture.config, &fixture.world, &path).is_err());
     assert!(!path.exists());
+}
+
+/// Books R4-P1 / advisor R2: a census promises a byte-identical source, so a
+/// store ahead of its marker (the commit-to-marker crash window) is accepted
+/// without rewriting the marker, and a disagreeing pair is refused.
+#[test]
+fn census_keeps_a_store_ahead_of_its_marker_byte_identical_and_refuses_a_bad_pair() {
+    let fixture = populated();
+    let marker = mc_world::store_marker::read(&fixture.world)
+        .unwrap()
+        .expect("fixture marker");
+    mc_world::store_marker::write(
+        &fixture.world,
+        marker.store_uuid,
+        marker.checkpoint_tick.saturating_sub(1),
+    )
+    .unwrap();
+    let ahead = mc_world::store_marker::read(&fixture.world)
+        .unwrap()
+        .unwrap();
+    let before = hashes(&fixture.world).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let receipt = census_native(
+        &fixture.config,
+        &fixture.world,
+        &out.path().join("ahead.json"),
+    )
+    .unwrap();
+    assert_eq!(receipt.status, "PASS");
+    assert_eq!(receipt.source_unchanged, Some(true));
+    assert_eq!(
+        hashes(&fixture.world).unwrap(),
+        before,
+        "a read-only census must not rewrite the source, marker included"
+    );
+    assert_eq!(
+        mc_world::store_marker::read(&fixture.world).unwrap(),
+        Some(ahead),
+        "the marker stays as it was"
+    );
+
+    // Missing, foreign and behind markers are refused before any count.
+    for (marker_write, expected) in [
+        (None, "is missing but this store has checkpoint"),
+        (Some([0x33; 16]), "belong to different worlds"),
+    ] {
+        let fixture = world(vec![], false);
+        let ours = mc_world::store_marker::read(&fixture.world)
+            .unwrap()
+            .unwrap();
+        match marker_write {
+            None => std::fs::remove_file(mc_world::store_marker::path(&fixture.world)).unwrap(),
+            Some(uuid) => {
+                mc_world::store_marker::write(&fixture.world, uuid, ours.checkpoint_tick).unwrap()
+            }
+        }
+        let out = tempfile::tempdir().unwrap();
+        let error = census_native(
+            &fixture.config,
+            &fixture.world,
+            &out.path().join("bad.json"),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains(expected), "{expected:?} in {error}");
+    }
+
+    let fixture = world(vec![], false);
+    let ours = mc_world::store_marker::read(&fixture.world)
+        .unwrap()
+        .unwrap();
+    mc_world::store_marker::write(&fixture.world, ours.store_uuid, ours.checkpoint_tick + 1)
+        .unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let error = census_native(
+        &fixture.config,
+        &fixture.world,
+        &out.path().join("behind.json"),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("behind checkpoint marker"), "{error}");
 }

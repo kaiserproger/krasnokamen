@@ -1,0 +1,10 @@
+[[bug]]
+id = "CAULDRON-POWDER-SNOW-BUCKET"
+title = "Players cannot collect a full powder-snow cauldron into an empty bucket; a powder-snow bucket also has no cauldron fill interaction. Snow collected naturally in a cauldron cannot be harvested."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAULDRON-POWDER-SNOW-BUCKET"
+regression = ["cargo:mc-core:fluids_tests::empty_bucket_collects_full_powder_snow_cauldron_and_refills_it"]
+failing_first = "not recorded"

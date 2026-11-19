@@ -17,6 +17,39 @@ fn checkpoint_stage(world_dir: &std::path::Path, stage: &'static str) {
     }
 }
 
+/// Test-only hold on the journal owner's exit path: `(world_dir, entered,
+/// release)`. The owner signals `entered` and waits for `release` before it
+/// returns, so a test can prove a failed start joined the owner before
+/// returning instead of racing its own exit.
+#[cfg(test)]
+pub(super) type ExitHold = (
+    std::path::PathBuf,
+    std::sync::mpsc::Sender<()>,
+    std::sync::mpsc::Receiver<()>,
+);
+
+#[cfg(test)]
+pub(super) static JOURNAL_EXIT_HOLD: parking_lot::Mutex<Option<ExitHold>> =
+    parking_lot::const_mutex(None);
+
+#[cfg(test)]
+fn hold_exit(world_dir: &std::path::Path) {
+    // Only this world's exit is held: other tests' owners exit normally, and the
+    // lock is released before the wait.
+    let taken = {
+        let mut hold = JOURNAL_EXIT_HOLD.lock();
+        if hold.as_ref().is_some_and(|(dir, _, _)| dir == world_dir) {
+            hold.take()
+        } else {
+            None
+        }
+    };
+    if let Some((_, entered, release)) = taken {
+        let _ = entered.send(());
+        let _ = release.recv();
+    }
+}
+
 /// One checkpoint frozen on the tick thread for the journal thread.
 pub(super) struct CheckpointJob {
     pub(super) tick: u64,
@@ -135,8 +168,13 @@ pub(super) fn start_checkpoint_with_reply(
     // Writes from here on stamp above `tick`, so whatever this capture misses
     // stays dirty after its acknowledgement (ADR 0020).
     state.entities.checkpoint_captured(tick);
+    // Compact entity records are deltas of a full image in the same tail; a
+    // checkpoint stores neither the WAL's transient appearance nor a replayed
+    // projectile, so the next record per body is a full image again.
+    crate::journal_touched::clear_field_baselines(state);
     for world in state.other_dimensions.values_mut() {
         world.entities.checkpoint_captured(tick);
+        crate::journal_touched::clear_field_baselines(world);
     }
     let (players, entities, block_entities) = changed_checkpoint_data_for(state, tick);
     let data_time = capture_start.elapsed();
@@ -770,7 +808,26 @@ pub(super) fn journal_loop(
                             "gate_refused"
                         },
                     );
-                    let plugins = gate.map(|()| Box::new(plugins.clone()));
+                    let plugins = match gate {
+                        Ok(()) => Ok(Box::new(plugins.clone())),
+                        // A coverage hole refuses this checkpoint only: the
+                        // appended batches stay durable, nothing is pruned and
+                        // the world keeps serving (drilled contract). The
+                        // native writer logs the refusal and answers with a
+                        // negative ACK.
+                        Err(crate::journal::GateError::Hole(error)) => Err(error),
+                        // A journal fsync/tail failure means durability is no
+                        // longer provable. No retry: return, which drops the
+                        // queue and halts the tick owner.
+                        Err(crate::journal::GateError::Io(error)) => {
+                            tracing::error!(
+                                tick = job.tick,
+                                error = %stop::Chain(&error),
+                                "journal gate fsync failed; world halting (fail closed)"
+                            );
+                            return;
+                        }
+                    };
                     if native_tx
                         .send(NativeWork::Checkpoint { job, plugins })
                         .is_err()
@@ -795,8 +852,18 @@ pub(super) fn journal_loop(
                             return;
                         }
                     }
+                    // The WAL directory fsync failed, so the backup could copy a
+                    // tail that is not durable, and the journal can no longer
+                    // promise durability at all. Report to the console command,
+                    // then halt instead of retrying the fsync. A COPY error
+                    // stays local to its backup job (see `NativeWork::Backup`).
                     Err(error) => {
+                        tracing::error!(
+                            error = %stop::Chain(&error),
+                            "journal flush before backup failed; world halting (fail closed)"
+                        );
                         let _ = job.reply.send(Err(error));
+                        return;
                     }
                 },
                 JournalWork::RequireGenerated(chunks) => {
@@ -841,6 +908,9 @@ pub(super) fn journal_loop(
             "core journal owner stopped"
         );
     });
+    // Test-only: hold the exit so a failed start's join is measurable.
+    #[cfg(test)]
+    hold_exit(world_dir);
 }
 
 /// Native writer thread: the single redb writer for checkpoints and generated
@@ -877,15 +947,13 @@ pub(super) fn native_writer_loop(
                 world_dir,
                 &store,
                 committed_tick,
+                native_failed,
                 &mut prev_manifest,
                 &mut block_log,
             )
         }));
-        if matches!(outcome, Ok(std::ops::ControlFlow::Break(()))) {
-            tracing::info!(
-                cause = "shutdown requested",
-                "native checkpoint writer stopped"
-            );
+        if let Ok(std::ops::ControlFlow::Break(cause)) = outcome {
+            tracing::info!(cause, "native checkpoint writer stopped");
             return;
         }
         if let Err(payload) = outcome {
@@ -914,11 +982,12 @@ pub(super) fn run_native_work(
     world_dir: &std::path::Path,
     store: &mc_world::native::NativeStore,
     committed_tick: &std::sync::atomic::AtomicU64,
+    native_failed: &std::sync::atomic::AtomicBool,
     prev_manifest: &mut CheckpointManifest,
     block_log: &mut crate::block_log::Backlog,
-) -> std::ops::ControlFlow<()> {
+) -> std::ops::ControlFlow<&'static str> {
     match work {
-        NativeWork::Shutdown => return std::ops::ControlFlow::Break(()),
+        NativeWork::Shutdown => return std::ops::ControlFlow::Break("shutdown requested"),
         NativeWork::Checkpoint { mut job, plugins } => {
             let started = std::time::Instant::now();
             // Block-log rows join the table before the commit that may prune
@@ -935,7 +1004,6 @@ pub(super) fn run_native_work(
             let committed = written.is_ok();
             match &written {
                 Ok((_, _, io)) => {
-                    committed_tick.store(prev_manifest.tick, std::sync::atomic::Ordering::Release);
                     tracing::info!(
                         tick = job.tick,
                         total_ms = started.elapsed().as_millis() as u64,
@@ -956,6 +1024,27 @@ pub(super) fn run_native_work(
                     tracing::warn!(tick = job.tick, %error, "checkpoint skipped; journal retained");
                 }
             }
+            // Books R4-P1: the marker must be durable before the ACK and before
+            // any covered WAL batch is pruned. A marker failure is a durability
+            // failure: report the checkpoint as failed and halt the writer.
+            let mut durable = committed;
+            if durable {
+                match write_checkpoint_marker(world_dir, store, prev_manifest.tick) {
+                    Ok(()) => {
+                        committed_tick
+                            .store(prev_manifest.tick, std::sync::atomic::Ordering::Release);
+                    }
+                    Err(error) => {
+                        tracing::error!(
+                            tick = prev_manifest.tick,
+                            error = %stop::Chain(&error),
+                            "checkpoint marker write failed; no ACK, no WAL prune, world halting (fail closed)"
+                        );
+                        durable = false;
+                        native_failed.store(true, std::sync::atomic::Ordering::Release);
+                    }
+                }
+            }
             let CheckpointJob {
                 tick,
                 block_ticks,
@@ -965,24 +1054,26 @@ pub(super) fn run_native_work(
                 reply,
                 ..
             } = *job;
-            let ack = written.ok().map(|(written, mut child_written, _)| {
-                let dimensions = dimensions
-                    .into_iter()
-                    .map(|(dimension, capture)| {
-                        (
-                            dimension,
-                            crate::dimensions::checkpoint::Ack {
-                                written: child_written
-                                    .remove(&dimension)
-                                    .expect("completed dimension write"),
-                                block_ticks: capture.block_ticks,
-                                fluid_ticks: capture.fluid_ticks,
-                            },
-                        )
-                    })
-                    .collect();
-                (tick, written, block_ticks, fluid_ticks, dimensions)
-            });
+            let ack = (if durable { written.ok() } else { None }).map(
+                |(written, mut child_written, _)| {
+                    let dimensions = dimensions
+                        .into_iter()
+                        .map(|(dimension, capture)| {
+                            (
+                                dimension,
+                                crate::dimensions::checkpoint::Ack {
+                                    written: child_written
+                                        .remove(&dimension)
+                                        .expect("completed dimension write"),
+                                    block_ticks: capture.block_ticks,
+                                    fluid_ticks: capture.fluid_ticks,
+                                },
+                            )
+                        })
+                        .collect();
+                    (tick, written, block_ticks, fluid_ticks, dimensions)
+                },
+            );
             #[cfg(test)]
             let positive_ack = ack.is_some();
             #[cfg(test)]
@@ -1003,12 +1094,16 @@ pub(super) fn run_native_work(
                 },
             );
             if let Some(reply) = reply {
-                let _ = reply.send(committed);
+                let _ = reply.send(durable);
             }
-            if committed {
+            if durable {
                 prune_batches_through(&world_dir.join("journal"), prev_manifest.tick);
                 #[cfg(test)]
                 checkpoint_stage(world_dir, "pruned");
+            } else if committed {
+                // A committed checkpoint whose marker is not durable cannot be
+                // acknowledged or pruned; stop the writer (fail closed).
+                return std::ops::ControlFlow::Break("checkpoint marker not durable");
             }
         }
         NativeWork::RequireGenerated { chunks, done } => {
@@ -1024,6 +1119,7 @@ pub(super) fn run_native_work(
                 &mut store.snapshot_reader(),
                 prev_manifest.tick,
                 through,
+                store.store_uuid(),
             );
             match &result {
                 Ok(backup) => tracing::info!(
@@ -1051,7 +1147,37 @@ pub(super) fn write_checkpoint(
     prev_manifest: &mut CheckpointManifest,
 ) -> Result<CheckpointWrite, CoreError> {
     writer.gate(prev_manifest.tick, job.tick)?;
-    commit_checkpoint(world_dir, job, plugins, prev_manifest)
+    let written = commit_checkpoint(world_dir, job, plugins, prev_manifest)?;
+    let store = job
+        .regions
+        .store()
+        .ok_or_else(|| CoreError::Storage("checkpoint has no native store".into()))?;
+    write_checkpoint_marker(world_dir, store, prev_manifest.tick)?;
+    Ok(written)
+}
+
+/// Durably publish `(store id, checkpoint tick)` after the native commit and
+/// before the checkpoint is acknowledged or its WAL is pruned (Books R4-P1).
+/// A failure here is reported as a failed checkpoint by every caller.
+pub(super) fn write_checkpoint_marker(
+    world_dir: &std::path::Path,
+    store: &mc_world::native::NativeStore,
+    tick: u64,
+) -> Result<(), CoreError> {
+    #[cfg(test)]
+    if FAIL_CHECKPOINT_MARKER.lock().is_ok_and(|mut armed| {
+        armed
+            .iter()
+            .position(|dir| dir == world_dir)
+            .map(|index| armed.remove(index))
+            .is_some()
+    }) {
+        return Err(CoreError::Storage(
+            "injected checkpoint marker failure".to_owned(),
+        ));
+    }
+    mc_world::store_marker::write(world_dir, store.store_uuid(), tick)
+        .map_err(|error| CoreError::Storage(format!("checkpoint marker: {error}")))
 }
 
 /// Native commit of a checkpoint whose WAL coverage is already gated durable.

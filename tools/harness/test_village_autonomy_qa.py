@@ -17,6 +17,30 @@ def setUpModule() -> None:
     (qa.runtime.REPO_ROOT / ".analysis").mkdir(exist_ok=True)
 
 
+def construction_screen(*projects: str, orders: tuple[str, ...] = ()) -> dict:
+    body = [f"Active projects: {len(projects)}/8", f"Pending orders: {len(orders)}/8",
+            f"Head: {orders[0].split(' · ')[0] if orders else 'none'}"]
+    body.extend(f"{project}\nBuilder: builder-{index}" for index, project in enumerate(projects, 1))
+    body.extend(f"Pending #{index}: {order}" for index, order in enumerate(orders, 1))
+    return {"ui_nodes": [{"id": f"dialog/body/{index}", "label": text}
+                         for index, text in enumerate(body)]}
+
+
+def status_view(*texts: str) -> dict:
+    """The client's Status dialog at GUI scale 3 (solaris-client ui/dialog.rs, laptop 22:28 geometry):
+    body text from y=99, 27 px per line, 30 px apart; Close at y=639 with the viewport ending
+    at y=621. Body nodes starting below the viewport are not observed."""
+    nodes, y = [{"id": "dialog/action/3", "label": "Close", "role": "button",
+                 "bounds": [414.0, 639.0, 450.0, 60.0]}], 99.0
+    for index, text in enumerate(texts):
+        height = 27.0 * (text.count("\n") + 1)
+        if y < 621.0:
+            nodes.append({"id": f"dialog/body/{index}", "label": text, "role": "text",
+                          "bounds": [339.0, y, 600.0, height]})
+        y += height + 30.0
+    return {"ui_nodes": nodes}
+
+
 class VillageAutonomyQaTests(unittest.TestCase):
     def test_walk_uses_path_planner_for_the_final_loaded_leg(self) -> None:
         probe = Mock()
@@ -144,49 +168,98 @@ class VillageAutonomyQaTests(unittest.TestCase):
         state = {"recent_chat": ["Claimed village_c31fe52b.", *[f"older {n}" for n in range(12)]]}
         self.assertEqual(qa._recent_chat(state, 1), ["Claimed village_c31fe52b."])
 
-    def test_project_progress_comes_from_live_projects_dialog(self) -> None:
-        observed = {"ui_nodes": [{
-            "id": "dialog/body/0",
-            "label": "Mason's workshop L1 · Building\n5/100\n-12 70 24",
-        }]}
-        self.assertEqual(qa._project_progress(observed), {
-            "blueprint": "mason", "level": 1, "done": 5, "total": 100, "origin": [-12, 70, 24],
-        })
-        self.assertIsNone(qa._project_progress({"ui_nodes": []}))
-        self.assertIsNone(qa._project_progress({
-            "ui_nodes": [{"id": "dialog/body/0", "label": "No active project: no residents."}],
-        }))
+    def test_project_progress_comes_from_every_live_project(self) -> None:
+        observed = construction_screen(
+            "Mason's workshop L1 · Building\n5/100\n-12 70 24",
+            "Storage L2 · Preparing site\n7/200\n24 71 -12",
+        )
+        self.assertEqual(qa._project_progress(observed), [
+            {"blueprint": "mason", "level": 1, "phase": "Building", "done": 5,
+             "total": 100, "origin": [-12, 70, 24], "builder": "builder-1"},
+            {"blueprint": "storage", "level": 2, "phase": "Preparing site", "done": 7,
+             "total": 200, "origin": [24, 71, -12], "builder": "builder-2"},
+        ])
+        self.assertEqual(qa._project_progress(construction_screen()), [])
+        with self.assertRaisesRegex(RuntimeError, "count"):
+            qa._project_progress({"ui_nodes": []})
+        observed["ui_nodes"].pop()
+        with self.assertRaisesRegex(RuntimeError, "count"):
+            qa._project_progress(observed)
 
     def test_project_progress_names_street_work_and_refuses_unknown_projects(self) -> None:
-        for label, kind, level, site in (
-            ("Road", "road", "level", "Site"), ("Дорога", "road", "уровень", "Место"),
-            ("Street lamp", "lamp", "level", "Site"), ("Фонарь", "lamp", "уровень", "Место"),
-            ("Meadow clearing", "meadow", "level", "Site"), ("Расчистка луга", "meadow", "уровень", "Место"),
-        ):
-            observed = {"ui_nodes": [{
-                "id": "dialog/body/0", "label": f"{label} L1 · Building\n7/42\n7 200 10",
-            }]}
+        for label, kind in (("Road", "road"), ("Дорога", "road"),
+                            ("Street lamp", "lamp"), ("Фонарь", "lamp"),
+                            ("Meadow clearing", "meadow"), ("Расчистка луга", "meadow"),
+                            ("Building", "unlabelled"), ("Здание", "unlabelled")):
             with self.subTest(label=label):
-                self.assertEqual(qa._project_progress(observed), {
-                    "blueprint": kind, "level": 1, "done": 7, "total": 42, "origin": [7, 200, 10],
-                })
-        # The server uses this generic label for otherwise unlabelled projects;
-        # retain it without guessing which blueprint it denotes.
-        for label, level, site in (("Building", "level", "Site"), ("Здание", "уровень", "Место")):
-            observed = {"ui_nodes": [{
-                "id": "dialog/body/0", "label": f"{label} L1 · Building\n1/9\n1 2 3",
-            }]}
-            self.assertEqual(qa._project_progress(observed), {
-                "blueprint": "unlabelled", "label": label, "level": 1,
-                "done": 1, "total": 9, "origin": [1, 2, 3],
-            })
+                projects = qa._project_progress(construction_screen(f"{label} L1 · Building\n7/42\n7 200 10"))
+                self.assertEqual(len(projects), 1)
+                self.assertEqual(projects[0]["blueprint"], kind)
+                self.assertEqual(projects[0]["origin"], [7, 200, 10])
+                if kind == "unlabelled":
+                    self.assertEqual(projects[0]["label"], label)
         with self.assertRaisesRegex(RuntimeError, "'Mystery'"):
-            qa._project_progress({"ui_nodes": [{
-                "id": "dialog/body/0", "label": "Mystery L1 · Building\n1/9\n1 2 3",
-            }]})
+            qa._project_progress(construction_screen("Mystery L1 · Building\n1/9\n1 2 3"))
+        with self.assertRaisesRegex(RuntimeError, "identities"):
+            qa._project_progress(construction_screen(
+                "House L1 · Building\n1/9\n1 2 3", "House L1 · Building\n2/9\n1 2 3"))
+
+    def test_cut_status_dialog_is_accepted_only_as_a_proven_clipped_view(self) -> None:
+        # Laptop 2026-11-18 22:28, pin 38c3f1cdf358: the rendered body ends inside the third project.
+        road = [f"Road L1 · Prepared\n0/9\n115 68 {z}\nBuilder: b{z}" for z in (4, 7, 10, 13)]
+        summary = "Active projects: {}/8\nPending orders: {}/8\nHead: {}"
+        for active, pending, shown_projects in ((4, 1, 3), (3, 1, 3), (3, 2, 3)):
+            with self.subTest(active=active, pending=pending):
+                orders = [f"Pending #{i}: spanish_plaza L1 · busy" for i in range(1, pending + 1)]
+                state = status_view(summary.format(active, pending, "spanish_plaza L1"), *road[:active], *orders)
+                with self.assertRaisesRegex(RuntimeError, "count"):
+                    qa._pending_dialog(state)
+                seen = qa._pending_dialog(state, clipped_ok=True)
+                self.assertEqual((seen["clipped"], seen["pending_count"], seen["head"], len(seen["projects"]),
+                                  seen["orders"]), (True, pending, "spanish_plaza L1", shown_projects, []))
+        # A visible prefix of the pending lines is kept, numbered from #1.
+        orders = [f"Pending #{i}: spanish_house L1 · busy" for i in range(1, 5)]
+        seen = qa._pending_dialog(status_view(summary.format(2, 4, "spanish_house L1"), *road[:2], *orders),
+                                  clipped_ok=True)
+        self.assertEqual(([o["index"] for o in seen["orders"]], seen["pending_count"]), ([1, 2, 3], 4))
+        # Lines missing from a body that ends well above the action row are not a cut tail.
+        with self.assertRaisesRegex(RuntimeError, "pending order list"):
+            qa._pending_dialog(status_view(summary.format(2, 1, "spanish_plaza L1"), *road[:2]), clipped_ok=True)
+        with self.assertRaisesRegex(RuntimeError, "active project list"):
+            qa._pending_dialog(status_view(summary.format(3, 0, "none"), *road[:2]), clipped_ok=True)
+        # A gap in the visible pending numbers is refused even when cut.
+        with self.assertRaisesRegex(RuntimeError, "pending order list"):
+            qa._pending_dialog(status_view(summary.format(2, 4, "spanish_house L1"), *road[:2],
+                                           *orders[1:]), clipped_ok=True)
+
+    def test_spanish_construction_dialog_passes_every_parser(self) -> None:
+        # Laptop 2026-11-18 22:35, pin 38c3f1cdf358: culture blueprints have no display
+        # name in settlements/ui.rs blueprint_label, so the dialog shows the raw id.
+        projects = ("spanish_house L1 · Building\n3/40\n120 70 7", "spanish_church L1 · Prepared\n0/90\n140 70 7",
+                    "Gate L1 · Building\n2/12\n100 70 7", "Road L1 · Prepared\n0/9\n115 68 4")
+        orders = ("spanish_plaza L1 · waiting for forest evidence", "spanish_fortress L1 · busy")
+        state = construction_screen(*projects, orders=orders)
+        seen = qa._pending_dialog(state)
+        self.assertEqual([(p["blueprint"], p["level"], p["origin"]) for p in seen["projects"]], [
+            ("spanish_house", 1, [120, 70, 7]), ("spanish_church", 1, [140, 70, 7]),
+            ("gate", 1, [100, 70, 7]), ("road", 1, [115, 68, 4])])
+        self.assertEqual([(o["index"], o["blueprint"], o["reason"]) for o in seen["orders"]], [
+            (1, "spanish_plaza", "waiting for forest evidence"), (2, "spanish_fortress", "busy")])
+        self.assertFalse(qa._head_waits(seen))
+        clipped = status_view(*(n["label"] for n in state["ui_nodes"]))
+        cut = qa._pending_dialog(clipped, clipped_ok=True)
+        self.assertEqual((cut["clipped"], cut["pending_count"], cut["head"], len(cut["projects"]), cut["orders"]),
+                         (True, 2, "spanish_plaza L1", 3, []))
+        sites = {"ui_nodes": [{"id": "dialog/body/0", "label":
+                 "Active site: spanish_house L1 · 120 70 7\nActive site: spanish_church L1 · 140 70 7"}]}
+        self.assertTrue(qa._map_has_sites(sites, seen["projects"][:2]))
+        listed = qa._listed_buildings(["#7 spanish_plaza level 1 [110, 68, 0]-[124, 75, 14]"])
+        self.assertEqual((listed[0]["kind"], listed[0]["level"]), ("spanish_plaza", 1))
+        with self.assertRaisesRegex(RuntimeError, "'Spanish house'"):
+            qa._project_progress(construction_screen("Spanish house L1 · Building\n1/9\n1 2 3"))
 
     def test_road_restart_subject_records_the_street_plan_before_restart(self) -> None:
-        status = {"ui_nodes": [{"id": "dialog/body/0", "label": "Road L1 · Building\n5/42\n7 200 10"}]}
+        status = construction_screen("Road L1 · Building\n5/42\n7 200 10")
         layout = ("Roads: 40/120 columns reachable on foot from the bell; 0/3 reachable stretches paved."
                   "\nNext street work: pave road x 7..9 z 10..23.")
         with patch.object(qa, "_project_status", return_value=status), patch.object(
@@ -209,7 +282,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
         ]}
         detail = {"settlement_name": "village_7", "final_info_chat": [info]}
         with patch.object(qa, "_send", return_value={"recent_chat": [info]}), patch.object(
-            qa, "_project_status", return_value={"ui_nodes": []},
+            qa, "_project_status", return_value=construction_screen(),
         ), patch.object(qa.time, "monotonic", side_effect=[0.0, 0.0]):
             self.assertTrue(qa._wait_project_resumed(probe, detail, before))
         self.assertEqual(detail["restart_after"], {"completed_street_work": before})
@@ -235,7 +308,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
         probe = Mock()
         detail = {"settlement_name": "village_7", "final_info_chat": [info]}
         with patch.object(qa, "_send", side_effect=send), patch.object(
-            qa, "_project_status", return_value={"ui_nodes": []},
+            qa, "_project_status", return_value=construction_screen(),
         ), patch.object(qa.time, "monotonic", side_effect=[0.0, 0.0, 1.0]):
             self.assertTrue(qa._wait_project_resumed(probe, detail, before))
         # The first look still offers the stretch: the harness waits once.
@@ -244,29 +317,26 @@ class VillageAutonomyQaTests(unittest.TestCase):
         self.assertEqual(detail["restart_after"], {"completed_street_work": before})
 
     def test_planner_diagnostic_reads_status_instead_of_stale_chat(self) -> None:
-        observed = {"ui_nodes": [{
-            "id": "dialog/body/0",
-            "label": "Mason's workshop L1 · Building\n5/100\n-12 70 24",
-        }], "recent_chat": ["Buildings: stale list"]}
+        observed = construction_screen("Mason's workshop L1 · Building\n5/100\n-12 70 24")
+        observed["recent_chat"] = ["Buildings: stale list"]
         with patch.object(qa, "_project_status", return_value=observed) as project, patch.object(
             qa, "_send", return_value={"recent_chat": ["Buildings: current list"]},
         ), patch.object(qa, "_settlement_stock", return_value={"minecraft:coal": 4}):
             status = qa._planner_status(Mock(), {}, (1, 2, 3), Mock())
         project.assert_called_once()
-        self.assertEqual(status["project"], {
-            "blueprint": "mason", "level": 1, "done": 5, "total": 100, "origin": [-12, 70, 24],
-        })
+        self.assertEqual(status["projects"], [{
+            "blueprint": "mason", "level": 1, "phase": "Building", "done": 5,
+            "total": 100, "origin": [-12, 70, 24], "builder": "builder-1",
+        }])
         self.assertEqual(status["project_ui"], observed["ui_nodes"])
 
     def test_owner_order_waits_for_started_blueprint(self) -> None:
         probe = Mock()
         detail = {}
-        other = {"ui_nodes": [{"id": "dialog/body/0", "label":
-                 "House L1 · Building\n0/100\n12 70 24"}]}
-        wrong_level = {"ui_nodes": [{"id": "dialog/body/0", "label":
-                       "Storage L2 · Building\n0/100\n12 70 24"}]}
-        target = {"ui_nodes": [{"id": "dialog/body/0", "label":
-                  "Storage L1 · Building\n0/100\n12 70 24"}]}
+        other = construction_screen("House L1 · Building\n0/100\n12 70 24")
+        wrong_level = construction_screen("Storage L2 · Building\n0/100\n12 70 24")
+        target = construction_screen("House L1 · Building\n0/100\n12 70 24",
+                                     "Storage L1 · Building\n0/100\n24 70 12")
         with patch.object(qa, "_send", return_value={
             "recent_chat": ["Started storage construction."],
         }) as send, patch.object(
@@ -283,8 +353,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
         probe = Mock()
         old_chat = ["Queued storage: busy", "Started storage construction."]
         probe.observe.return_value = {"recent_chat": old_chat}
-        target = {"ui_nodes": [{"id": "dialog/body/0", "label":
-                  "Storage L1 · Building\n0/100\n12 70 24"}]}
+        target = construction_screen("Storage L1 · Building\n0/100\n12 70 24")
         with patch.object(qa, "_send", return_value={"recent_chat": old_chat}) as send, patch.object(
             qa, "_project_status", return_value=target,
         ), patch.object(qa.time, "monotonic", side_effect=[0.0, 0.0, 1.0, 2.0]):
@@ -298,8 +367,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
             {"recent_chat": ["Started storage construction.", "Queued storage: busy",
                              "Started storage construction."]},
         ]
-        target = {"ui_nodes": [{"id": "dialog/body/0", "label":
-                  "Storage L1 · Building\n0/100\n12 70 24"}]}
+        target = construction_screen("Storage L1 · Building\n0/100\n12 70 24")
         with patch.object(qa, "_send", return_value={
             "recent_chat": ["Queued storage: busy", "Started storage construction."],
         }) as send, patch.object(qa, "_project_status", return_value=target), patch.object(
@@ -321,8 +389,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
     def test_owner_order_times_out_without_matching_level_one_project(self) -> None:
         probe = Mock()
         detail = {}
-        wrong = {"ui_nodes": [{"id": "dialog/body/0", "label":
-                 "Storage L2 · Building\n0/100\n12 70 24"}]}
+        wrong = construction_screen("Storage L2 · Building\n0/100\n12 70 24")
         with patch.object(qa, "_send", return_value={
             "recent_chat": ["Started storage construction."],
         }) as send, patch.object(qa, "_project_status", return_value=wrong), patch.object(
@@ -330,7 +397,8 @@ class VillageAutonomyQaTests(unittest.TestCase):
         ):
             self.assertFalse(qa._wait_owner_order(probe, detail, "storage", 2.0))
         send.assert_called_once_with(probe, "settlement build storage")
-        self.assertEqual(detail["owner_order_project"]["level"], 2)
+        self.assertIsNone(detail["owner_order_project"])
+        self.assertEqual(detail["owner_order_projects"][0]["level"], 2)
         self.assertEqual(probe.call.call_count, 2)
 
     def test_failed_second_player_check_still_closes_owned_clients(self) -> None:
@@ -601,10 +669,8 @@ class VillageAutonomyQaTests(unittest.TestCase):
         # Projects menu (chest) -> Status slot -> Construction page (chest) -> clock slot -> status dialog.
         menu = {"screen": {"class": qa.CONTAINER_CLASS, "title": "Projects"}, "container": {"slot_count": 90}}
         page = {"screen": {"class": qa.CONTAINER_CLASS, "title": "Construction"}, "container": {"slot_count": 90}}
-        status = {
-            "screen": {"class": qa.DIALOG_CLASS, "title": "Status"},
-            "ui_nodes": [{"id": "dialog/body/0", "label": "Storage L1 · Building\n3/25\n1 70 2"}],
-        }
+        status = construction_screen("Storage L1 · Building\n3/25\n1 70 2")
+        status["screen"] = {"class": qa.DIALOG_CLASS, "title": "Status"}
         probe = Mock()
         probe.call.return_value = {"status": "ok"}
         probe.remaining.return_value = 60.0
@@ -615,7 +681,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
         slots = [call.args[1]["slot"] for call in probe.call.call_args_list
                  if call.args[0] == "minecraft_click_container_slot"]
         self.assertEqual(slots, [qa.PROJECTS_STATUS_SLOT, qa.CONSTRUCTION_STATUS_SLOT])
-        progress = qa._project_progress(observed)
+        progress = qa._project_progress(observed)[0]
         self.assertEqual(
             (progress["blueprint"], progress["level"], progress["done"], progress["total"], progress["origin"]),
             ("storage", 1, 3, 25, [1, 70, 2]),
@@ -752,7 +818,7 @@ class RotatedBlueprintObservationTests(unittest.TestCase):
                 def send(_probe, text):
                     return {"recent_chat": ["town | owner=owner"] if text.startswith("settlement info") else lines}
                 with patch.object(qa, "_authored_blueprints", return_value=[self.blueprint()]), patch.object(
-                    qa, "_project_status", return_value={},
+                    qa, "_project_status", return_value=construction_screen(),
                 ), patch.object(qa, "_send", side_effect=send), patch.object(
                     qa.time, "monotonic", side_effect=[0.0, 0.0, 1301.0],
                 ):
@@ -769,7 +835,7 @@ class RotatedBlueprintObservationTests(unittest.TestCase):
             return {"recent_chat": ["town | owner=owner"] if text.startswith("settlement info")
                     else [f"Buildings: #2 wall level 1 {record['min']}-{record['max']}."]}
         with patch.object(qa, "_authored_blueprints", return_value=[self.blueprint()]), patch.object(
-            qa, "_project_status", return_value={},
+            qa, "_project_status", return_value=construction_screen(),
         ), patch.object(qa, "_send", side_effect=send), patch.object(
             qa.time, "monotonic", side_effect=[0.0, 0.0, 1301.0],
         ):
@@ -849,28 +915,258 @@ class UpgradeSpeciesObservationTests(unittest.TestCase):
 
 
 class OwnerOrderScenarioTests(unittest.TestCase):
-    def test_pending_dialog_requires_order_and_records_material_labels_and_counts(self) -> None:
-        state = {"ui_nodes": [
-            {"id": "dialog/body/0", "label": "Pending: House L1 — waiting for materials"},
-            {"id": "dialog/body/1", "label": "House:\nWhite Wool 0/3 — no source\nOak Log 2/12 — awaiting production"},
-            {"id": "other", "label": "Ignored 1/2"},
-        ]}
-        pending = qa._pending_dialog(state)
-        self.assertTrue(pending["pending"])
-        self.assertEqual(pending["missing"], [
-            "White Wool 0/3 — no source", "Oak Log 2/12 — awaiting production",
+    @staticmethod
+    def detail():
+        return {"behaviour": {}, "evidence": {}, "repro": {}}
+
+    @staticmethod
+    def probe():
+        probe = Mock()
+        probe.remaining.return_value = 3000.0
+        probe.report = {"fixture_commands": []}
+        def check(name, condition):
+            if not condition:
+                raise RuntimeError(f"assertion failed: {name}")
+        probe.check.side_effect = check
+        return probe
+
+    def test_parallel_progress_requires_both_sites_and_distinct_builders(self):
+        before = qa._project_progress(construction_screen(
+            "Farm L1 · Building\n1/100\n1 70 2", "Storage L1 · Building\n2/100\n20 70 2"))
+        after = [dict(p, done=p["done"] + 1) for p in before]
+        self.assertTrue(qa._parallel_advanced(before, after))
+        self.assertFalse(qa._parallel_advanced(before[:1], after[:1]))
+        self.assertFalse(qa._parallel_advanced(before, [after[0], before[1]]))
+        self.assertFalse(qa._parallel_advanced(before, [after[0], dict(after[1], builder=after[0]["builder"])]))
+        self.assertFalse(qa._parallel_advanced(before, [after[0], dict(after[1], origin=[99, 70, 2])]))
+
+    def test_restart_requires_the_whole_set_bindings_progress_and_order_sequence(self):
+        from copy import deepcopy
+        before = qa._pending_dialog(construction_screen(
+            "Farm L1 · Building\n1/100\n1 70 2", "Storage L1 · Building\n2/100\n20 70 2",
+            orders=("House L1 · not enough: wool", "Barracks L1 · not enough: wool")))
+        self.assertTrue(qa._same_construction(before, deepcopy(before)))
+        for change in ("drop_project", "move_site", "builder", "rewind", "drop_order", "reorder"):
+            after = deepcopy(before)
+            if change == "drop_project":
+                after["projects"].pop()
+            elif change == "move_site":
+                after["projects"][1]["origin"][0] += 1
+            elif change == "builder":
+                after["projects"][1]["builder"] = "another-builder"
+            elif change == "rewind":
+                after["projects"][1]["done"] -= 1
+            elif change == "drop_order":
+                after["orders"].pop()
+            else:
+                after["orders"].reverse()
+            with self.subTest(change=change):
+                self.assertFalse(qa._same_construction(before, after))
+
+    def test_unfunded_head_is_not_a_busy_or_later_unfunded_order(self):
+        for orders, expected in (
+            ((), False), (("House L1 · busy",), False),
+            (("Farm L1 · busy", "House L1 · not enough: wool"), False),
+            (("House L1 · not enough: wool",), True),
+        ):
+            self.assertEqual(qa._head_waits(qa._pending_dialog(construction_screen(orders=orders))), expected)
+
+    def test_map_requires_all_active_site_corners_not_just_blueprint_names(self):
+        projects = qa._project_progress(construction_screen(
+            "Farm L1 · Building\n1/100\n1 70 2", "Storage L1 · Building\n2/100\n20 70 2"))
+        state = {"ui_nodes": [{"id": "dialog/body/0", "label":
+                 "Active site: Farm L1 · 1 70 2\nActive site: Storage L1 · 20 70 2"}]}
+        self.assertTrue(qa._map_has_sites(state, projects))
+        state["ui_nodes"][0]["label"] = "Active site: Farm L1 · 1 70 2\nStorage L1"
+        self.assertFalse(qa._map_has_sites(state, projects))
+
+    def test_all_d8_verdicts_are_registered_and_fail_closed(self):
+        from . import regressions
+        section, names = regressions._PROFILE_VERDICTS["village-owner-order-qa"]
+        self.assertEqual(section, "owner_order_acceptance")
+        self.assertEqual(names, frozenset(qa.OWNER_ORDER_VERDICTS))
+        for name in names:
+            detail = self.detail()
+            probe = self.probe()
+            qa._owner_check(probe, detail, name, True)
+            receipt = {"details": {"scenario": {section: detail}}}
+            regressions._profile_verdict(receipt, "village-owner-order-qa", name)
+            with self.assertRaisesRegex(RuntimeError, name):
+                qa._owner_check(probe, detail, name, False)
+            with self.assertRaises(regressions.VerdictNotMet):
+                regressions._profile_verdict(receipt, "village-owner-order-qa", name)
+            self.assertEqual(detail["behaviour"][name], "FAIL")
+
+    def _run_before_restart(self, detail, *, extra_farm_at=None, initial_count=0, cap_one=False, clock=None):
+        probe = self.probe()
+        head = "House L1 · not enough: minecraft:white_wool x3"
+        one = "Farm L1 · Building\n1/100\n1 70 2"
+        two = "Storage L1 · Building\n2/100\n20 70 2"
+        incumbents = tuple(f"House L1 · Building\n1/100\n{index * 3} 70 -12"
+                           for index in range(initial_count))
+        def screen(*projects, orders=()):
+            observed = construction_screen(*incumbents, *projects, orders=orders)
+            if cap_one:
+                observed["ui_nodes"][0]["label"] = f"Active projects: {len(projects)}/1"
+            return qa._pending_dialog(observed)
+        pending = screen(orders=(head, "Farm L1 · not enough: dirt"))
+        funded = screen(one, orders=(head,))
+        pair = screen(one, two, orders=(head,))
+        advanced = screen(one.replace("1/100", "3/100"), two.replace("2/100", "4/100"), orders=(head,))
+        snapshot = screen(one, two, orders=(head, "Barracks L1 · not enough: wool"))
+        mapping = {"screen": {"class": qa.DIALOG_CLASS, "title": "Map"},
+                   "ui_nodes": [{"id": "dialog/body/0", "label":
+                     "Active site: Farm L1 · 1 70 2\nActive site: Storage L1 · 20 70 2"}]}
+        probe.wait.return_value = mapping
+        def send(_probe, command):
+            replies = {"settlement list": "Settlements: town.",
+                       "settlement info town": "town | anchor=[0, 70, 0]", "settlement claim": "Claimed town."}
+            return {"recent_chat": [replies.get(command, f"Queued {command.split()[-1]}: not enough: wool")]}
+        def observe(_probe, _detail, key, _artifact):
+            state = next(states)
+            if cap_one and key == "parallel_status" and state["projects"][0]["blueprint"] == "storage":
+                clock.return_value = 1201.0
+            if key == extra_farm_at:
+                from copy import deepcopy
+                state = deepcopy(state)
+                extra = qa._project_progress(construction_screen("Farm L1 · Building\n9/100\n40 70 2"))[0]
+                extra["builder"] = "autonomous-builder"
+                state["projects"].append(extra)
+            _detail[key] = state
+            return state
+        states = iter(
+            [screen(), pending, funded, screen(one, orders=(head, "Storage L1 · busy")),
+             screen(two, orders=(head,))] if cap_one else
+            [screen(), pending, funded, pair, advanced, advanced, advanced, advanced, snapshot])
+        with (patch.object(qa, "_walk_to"), patch.object(qa, "_founding_storage", return_value=(1, 70, 1)),
+              patch.object(qa, "_read_storage_container", return_value={}),
+              patch.object(qa, "_send", side_effect=send), patch.object(qa, "_owner_projects", side_effect=observe),
+              patch.object(qa, "_fund_parallel_fixture"), patch.object(qa.native_client, "capture")):
+            qa._owner_order_before_restart(probe, detail, Path("/receipt"), Mock(), Path("/log"))
+        return snapshot
+
+    def test_before_restart_observes_two_sites_and_keeps_head_pending(self):
+        detail = self.detail()
+        snapshot = self._run_before_restart(detail)
+        for name in ("two_orders_pending", "funded_later_starts", "two_projects_advance",
+                     "unfunded_head_fences_autonomy", "all_sites_on_map"):
+            self.assertEqual(detail["behaviour"][name], "PASS")
+        self.assertEqual(detail["parallel_before_restart"]["orders"], snapshot["orders"])
+        self.assertEqual(len(detail["ordered_project_keys"]), 2)
+
+    def test_extra_autonomous_farm_of_ordered_blueprint_fails_fence(self):
+        for stage in ("funded_later_status", "parallel_status", "head_wait_status"):
+            with self.subTest(stage=stage):
+                detail = self.detail()
+                with self.assertRaisesRegex(RuntimeError, "unfunded_head_fences_autonomy"):
+                    self._run_before_restart(detail, extra_farm_at=stage)
+                self.assertEqual(detail["behaviour"]["unfunded_head_fences_autonomy"], "FAIL")
+
+    def test_owner_fence_requires_a_free_project_slot_during_the_interval(self):
+        detail = self.detail()
+        with self.assertRaisesRegex(RuntimeError, "unfunded_head_fences_autonomy"):
+            self._run_before_restart(detail, initial_count=6)
+        self.assertEqual(detail["behaviour"]["unfunded_head_fences_autonomy"], "FAIL")
+
+    def test_cap_one_control_reaches_two_projects_advance_failure(self):
+        detail = self.detail()
+        with patch.object(qa.time, "monotonic", return_value=0.0) as clock:
+            with self.assertRaisesRegex(RuntimeError, "two_projects_advance"):
+                self._run_before_restart(detail, cap_one=True, clock=clock)
+        self.assertEqual(detail["behaviour"]["funded_later_starts"], "PASS")
+        self.assertEqual(detail["behaviour"]["two_projects_advance"], "FAIL")
+
+    def test_owner_admission_requires_queue_transition_and_a_unique_new_site(self):
+        current = qa._pending_dialog(construction_screen(
+            "Farm L1 · Building\n1/100\n1 70 2",
+            orders=("House L1 · not enough: wool", "Farm L1 · busy")))
+        remaining = [("house", 1)]
+        self.assertIsNone(qa._owner_project_admission(current, set(), remaining, "farm"))
+        current["orders"].pop()
+        farm = qa._project_key(current["projects"][0])
+        self.assertEqual(qa._owner_project_admission(current, set(), remaining, "farm"), farm)
+        self.assertIsNone(qa._owner_project_admission(current, {farm}, remaining, "farm"))
+        current["projects"].append(dict(current["projects"][0], origin=[20, 70, 2]))
+        self.assertIsNone(qa._owner_project_admission(current, set(), remaining, "farm"))
+
+    def test_construction_count_parsers_accept_the_controls_declared_limits(self):
+        observed = construction_screen("Farm L1 · Building\n1/100\n1 70 2", orders=("House L1 · busy",))
+        observed["ui_nodes"][0]["label"] = "Active projects: 1/1"
+        observed["ui_nodes"][1]["label"] = "Pending orders: 1/2"
+        parsed = qa._pending_dialog(observed)
+        self.assertEqual(len(parsed["projects"]), 1)
+        self.assertEqual(len(parsed["orders"]), 1)
+
+    def test_after_restart_fills_queue_refuses_overflow_and_cancels_second_not_head(self):
+        probe, detail = self.probe(), self.detail()
+        head, tail = "House L1 · not enough: wool", "Barracks L1 · not enough: wool"
+        first, second = "Farm L1 · Building\n1/100\n1 70 2", "Storage L1 · Building\n2/100\n20 70 2"
+        before = qa._pending_dialog(construction_screen(first, second, orders=(head, tail)))
+        full = qa._pending_dialog(construction_screen(first, second, orders=(head, tail, *([head] * 6))))
+        remaining = qa._pending_dialog(construction_screen(first, second, orders=tuple([head] * 7)))
+        detail["parallel_before_restart"] = before
+        detail["behaviour"].update(dict.fromkeys(qa.OWNER_ORDER_VERDICTS, "PASS"))
+        def send(_probe, command):
+            if command == "settlement build farm":
+                return {"recent_chat": ["Construction queue is full: MAX_ORDERS=8."]}
+            if command == "settlement build cancel 2":
+                return {"recent_chat": ["Cancelled pending construction order."]}
+            return {"recent_chat": ["Queued house: not enough: wool"]}
+        with patch.object(qa, "_owner_projects", side_effect=[before, full, full, remaining]), \
+             patch.object(qa, "_send", side_effect=send) as sent:
+            qa._owner_order_after_restart(probe, detail, Path("/receipt"), Mock(), Path("/log"))
+        self.assertIn("settlement build cancel 2", [call.args[1] for call in sent.call_args_list])
+        for name in ("parallel_restart", "queue_limit_named", "cancel_by_index"):
+            self.assertEqual(detail["behaviour"][name], "PASS")
+
+    def test_parallel_fixture_funds_real_bills_without_funding_the_wool_head(self):
+        from collections import Counter
+        probe, detail, server = self.probe(), self.detail(), Mock()
+        detail["founding_chest"] = [1, 70, 2]
+        stock = Counter()
+        def read(*args):
+            for command in detail["material_fixture_commands"]:
+                parts = command.split()
+                stock[parts[-2]] += int(parts[-1])
+            return stock
+        with patch.object(qa, "_read_storage_container", side_effect=read):
+            qa._fund_parallel_fixture(probe, detail, server, Path("/log"), [])
+        self.assertGreater(stock["minecraft:oak_log"], 128)
+        self.assertGreater(stock["minecraft:cobblestone"], 128)
+        self.assertGreater(stock["minecraft:dirt"], 256)
+        self.assertEqual(stock["minecraft:white_wool"], 0)
+        self.assertLessEqual(len(detail["material_fixture_commands"]), 27)
+        self.assertTrue(all("item replace block 1 70 2 container." in command
+                            for command in detail["material_fixture_commands"]))
+        server.stdin.write.assert_called_once()
+        server.stdin.flush.assert_called_once()
+
+    def test_pending_dialog_reads_all_orders_and_their_own_reasons(self) -> None:
+        state = construction_screen(orders=("House L1 · not enough: minecraft:white_wool x3",
+                                             "Farm L1 · busy"))
+        state["ui_nodes"].append({"id": "other", "label": "Pending #3: Mine L1 · fake"})
+        parsed = qa._pending_dialog(state)
+        self.assertEqual(parsed["orders"], [
+            {"index": 1, "blueprint": "house", "level": 1, "reason": "not enough: minecraft:white_wool x3"},
+            {"index": 2, "blueprint": "farm", "level": 1, "reason": "busy"},
         ])
-        self.assertFalse(qa._pending_dialog({"ui_nodes": []})["pending"])
+        self.assertTrue(qa._head_waits(parsed))
+        self.assertEqual(qa._pending_dialog(construction_screen())["orders"], [])
+        for bad in ({"ui_nodes": []}, construction_screen(orders=("Mystery L1 · busy",))):
+            with self.assertRaises(RuntimeError):
+                qa._pending_dialog(bad)
+        state["ui_nodes"][4]["label"] = "Pending #3: Farm L1 · busy"
+        with self.assertRaisesRegex(RuntimeError, "count/indices"):
+            qa._pending_dialog(state)
 
     def test_owner_projects_observes_current_status_dialog(self) -> None:
         probe, detail = Mock(), {}
-        state = {"ui_nodes": [{"id": "dialog/body/0", "label": "Pending: Farm L1 — busy"}]}
+        state = construction_screen(orders=("Farm L1 · busy",))
         with patch.object(qa, "_project_status", return_value=state) as status, \
-             patch.object(qa, "_send", return_value=state), \
              patch.object(qa.native_client, "capture"):
             observed = qa._owner_projects(probe, detail, "farm", Path("/receipt"))
         status.assert_called_once()
-        self.assertEqual(observed["body"], "Pending: Farm L1 — busy")
+        self.assertEqual(observed["orders"][0]["blueprint"], "farm")
         self.assertEqual(detail["farm"], observed)
 
     def test_only_fresh_started_chat_can_certify_admission(self) -> None:

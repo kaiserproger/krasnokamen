@@ -14,6 +14,10 @@ All paths below are under `crates/mc-core/src/settlements/` unless noted:
   `crates/mc-core/src/villager/` owns resident brains and state.
 - `buildings.rs`, `construction.rs`, `autonomy.rs`, `blueprints.rs`: certified
   buildings, construction and generated-village adoption.
+- `construction_access.rs`: the construction module's narrow surface (owner
+  D9.3). Code outside `construction*.rs` reads the record's projects and
+  pending orders only through it; the `code-health` ratchet counts direct field
+  accesses and its ceiling is zero.
 - `households.rs`, `districts.rs`, `production.rs`, `economy.rs`, `commerce.rs`,
   `caravan.rs`, `army.rs`: native domain policy and execution.
 - `inventory.rs`: physical container custody; `commands.rs`, `ui.rs` and
@@ -194,8 +198,14 @@ Unsimulated destinations need a cached observation from this runtime. Units
 are whole households or household-less individuals. Founding families and
 military, conversion, economic or construction reservations refuse before
 mutation. Destination beds cover the whole unit, including inbound transit
-and pending walks. One unit per source may leave daily; only one outbound
-walk may be active. Proven loaded routes relocate membership immediately;
+and pending walks. Those are free beds: certified-house beds that no resident,
+member or not, claims in the bed claim index, less one for each member who has
+no home or has no loaded body. Members sleeping in uncertified generated houses
+(savanna houses fail House certification) do not use them. An unsimulated
+destination uses its observation's free beds less one for each member who
+arrived since. Beds the moving unit's own members already hold there count as
+free for that unit. One unit per source may leave daily; only
+one outbound walk may be active. Proven loaded routes relocate membership immediately;
 otherwise bodies walk to a route-proven simulated edge before transit takes
 custody. The civil radius does not constrain that edge. Outside emigration
 rechecks empty carry/equipment at departure and leaves no transit record.
@@ -203,8 +213,15 @@ rechecks empty carry/equipment at departure and leaves no transit record.
 Outside immigration creates ordinary adult villagers only at a route-proven
 simulated entry. The shared bind admission omits presence only for this
 internal path; manual bind still requires the civil sphere. Newcomers are
-members from their spawn tick and have no household, so normal first-birth
-adoption can form a family. Daily arrivals have expectation
+members from their spawn tick and have no household. A birth between two
+household-less adults adopts them into a new household with the child. A birth
+between a household-less adult and a member of a household of three or more
+founds a new `split` household instead: that member leaves the old household
+(ordinary detach) and the parents form one with the child. Smaller households
+still take the co-parent and child, and parents from different households
+never breed. The split refuses before food, spawn or membership change while
+the member's household leads a founding expedition or either parent walks a
+migration exit. Daily arrivals have expectation
 `(1 + min(0.5, (gain - 10) / 100)) × migration_rate`, capped by free beds.
 Owner chat and structured INFO events report arrivals, departures and
 cancellations. `settlement info` displays observations, components, reasons
@@ -293,17 +310,21 @@ The parent persists only an optional `founding` object containing a ground-level
 `destination` and the existing `household` key. It reserves a loaded, buildable
 site outside the parent's radius against other towns, expeditions and structure
 claims. Four ordinary paid projects build three Spanish houses and a Spanish
-plaza. Construction progress, receipts and stage remain in the existing structure
-ledger. An outpost is not yet a civil settlement, and its beds are not available
-to the parent allocator.
+plaza. Construction progress (stages, completed work and the advance watermark)
+remains in the existing structure ledger. An outpost is not yet a civil
+settlement, and its beds are not available to the parent allocator.
 
-After all four physical structures and payment receipts validate, one native
+After all four physical structures are committed and validate, one native
 tick prepares and publishes the parent, daughter, reissued daughter building
 IDs, transferred structure-ledger ownership, unchanged resident bodies and
 inventories, household membership, and cleared expedition. The daughter shares
 the original owner and therefore inherits committed culture. Its anchor is the
 actual outpost plaza bell. No teleport, inventory copy or free block paste is
-part of handover. The native daughter audit supplies chronicle lineage.
+part of handover. The native daughter audit supplies chronicle lineage and
+names the household; `settlement_founding_admitted` records the admitted
+household's id, origin, members, adults and destination. `settlement_birth`
+names the origin of the household the child joined, and the offline census
+lists each settlement's households with origin, stored members and adults.
 
 Recovery rejects invalid or overlapping persisted claims. Losing the selected
 household or moving it elsewhere cancels its active expedition; an interrupted

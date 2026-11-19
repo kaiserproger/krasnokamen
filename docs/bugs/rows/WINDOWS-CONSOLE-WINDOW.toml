@@ -1,0 +1,12 @@
+[[bug]]
+id = "WINDOWS-CONSOLE-WINDOW"
+title = "The Windows client and launcher open a console window on desktop start"
+area = "client"
+severity = "major"
+status = "open"
+source = "Stage3 S3WindowsVM/WinConsole: both entrypoints were PE console-subsystem binaries (receipts/WinConsole/old-objdump.log)"
+repro = "source"
+regression = []
+fix_commit = "client:c7f4d239982bb4e9c8a2ec7f0e6cf3ae8c6e074c"
+failing_first = "reported"
+repro_check = "Both entrypoints use windows_subsystem = \"windows\" and AttachConsole(ATTACH_PARENT_PROCESS) before CLI output. PE subsystem 2 on debug client, debug launcher and release client pin (receipts/WinConsole/debug-client-objdump.log, debug-launcher-objdump.log, release-client-objdump.log); packaging/check-windows-subsystem.py accepts them and rejects the old console artifact (positive-pe-regression.log, negative-control.log). Launcher integration tests launcher/tests/cli_console.rs (help_survives_redirected_stdout, argument_errors_survive_redirected_stderr) are not ledger refs: client refs run --lib and the launcher is bin-only (LEDGER-LAUNCHER-NO-LIB). Explorer start, terminal attachment and redirected output on Windows unverified (no Windows host). Not promoted."

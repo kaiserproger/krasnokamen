@@ -37,7 +37,7 @@ impl TickState {
             entities: EntityStore::default(),
             connections: Connections::default(),
             require_plugin_login: false,
-            locked_sessions: BTreeSet::new(),
+            locked_sessions: SessionLocks::default(),
             max_airtime_ticks: 80,
             enable_command_block: false,
             spawn_protection: 16,
@@ -341,6 +341,7 @@ impl TickState {
                     broken,
                     &mc_data::ItemStack::EMPTY,
                     self.tick ^ ((pos.x as u64) << 40) ^ ((pos.z as u64) << 16) ^ pos.y as u64,
+                    false,
                 )
             } else {
                 Ok(Vec::new())

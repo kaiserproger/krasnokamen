@@ -1,0 +1,12 @@
+[[bug]]
+id = "COREPERF-PINS-OWNER-HOST-ONLY"
+title = "Coreperf profiles reject valid release pins on other Linux hosts"
+area = "harness"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "tools/coreperf/profiles.py pinned_binary unconditionally required the owner's absolute pin store. The relocated-pin regression failed before correction. Owner-host store and exact manifest path checks remain strict; other hosts verify the original manifest, binary name and SHA-256. Both host-boundary tests and a real release idle CLI lifecycle passed with the owner-host marker absent in a controlled local simulation, not on a second machine. Formal ledger promotion remains pending."
+regression = ["python:tools.coreperf.test_profiles:ProfilesTests.test_remote_host_accepts_relocated_pin_and_checks_manifest_and_hash", "python:tools.coreperf.test_profiles:ProfilesTests.test_incremental_pin_is_refused_but_pre_field_and_full_pins_pass", "python:tools.coreperf.test_profiles:ProfilesTests.test_capacity_ladder_refuses_incremental_or_mismatched_pins_before_any_rung"]
+failing_first = "reported"
+fix_commit = "patch:0857f91e78dc482212e855cdc26161ea8f81371f64d15c863f84e891311d41c2"
+promotion = "docs/bugs/promotions/COREPERF-PINS-OWNER-HOST-ONLY.json"

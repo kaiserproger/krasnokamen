@@ -42,6 +42,10 @@ pub(crate) const WELL: &str = "well";
 pub(crate) const PAVED: &str = "paved";
 
 /// First lot row, counted from a road centre line (road ±1, verge 2).
+/// What a villager walks between two neighbouring columns: up one block, down
+/// three (`allocator` path search). Street steps, verge and door steps keep it.
+const STEP_UP: i32 = 1;
+const STEP_DOWN: i32 = 3;
 const LOT_FRONT: i32 = 3;
 /// Deepest lot: the largest blueprint extent across its front (the wall's
 /// 13-block length runs along the road).
@@ -181,7 +185,7 @@ pub(crate) fn meadow_work(state: &TickState, record: &SettlementRecord) -> Optio
                         && !vacant(state, block)
                         && construction::clearable(state, block)
                     {
-                        cells.push(free([x, above, z], air));
+                        cells.push(cleared([x, above, z], air));
                         low = low.min(above);
                         high = high.max(above);
                     }
@@ -337,12 +341,27 @@ fn level_inside(record: &SettlementRecord, x: i32, z: i32) -> bool {
     inside(record, [x, record.anchor[1], z])
 }
 
-fn sample(
+pub(super) fn sample(
     state: &TickState,
     record: &SettlementRecord,
     x: i32,
     z: i32,
     prepare_forest: bool,
+) -> Column {
+    sample_near(state, record, x, z, prepare_forest, None)
+}
+
+/// A column's ground. Within eight blocks of the bell's elevation it is the
+/// highest standing surface there; beyond that band (a hillside village) only a
+/// column next to a reached one is found, within what a villager walks from
+/// `hint`: one block up, three down (owner 2026-11-17, bell-elevation limit).
+pub(super) fn sample_near(
+    state: &TickState,
+    record: &SettlementRecord,
+    x: i32,
+    z: i32,
+    prepare_forest: bool,
+    hint: Option<i32>,
 ) -> Column {
     let anchor_y = record.anchor[1];
     if state.world.physics_block_at(x, anchor_y, z).is_none() {
@@ -356,17 +375,28 @@ fn sample(
     }) {
         return Column::Occupied;
     }
-    let Some(y) = construction::surface_y(state, anchor_y, x, z) else {
+    // Owner D27.4: inside the territory a player's history neither hides the
+    // street column's ground nor blocks its headroom. Owner D7: a registered
+    // planted tree on the route is felled whole like a tree on the lot, so a
+    // construction forecast walks through it (the proposed crown of a planting
+    // preview still blocks, see `Network::column`).
+    let mut street = super::forestry::Clearance::street(record, prepare_forest);
+    let Some(y) = construction::surface_y_for_lot(state, anchor_y, x, z, None, &mut street)
+        .or_else(|| {
+            hint.and_then(|near| {
+                construction::surface_y_between(
+                    state,
+                    near - STEP_DOWN..=near + STEP_UP,
+                    x,
+                    z,
+                    None,
+                    &mut street,
+                )
+            })
+        })
+    else {
         return Column::Blocked;
     };
-    if prepare_forest
-        && super::forestry::planted_crown_overlaps(
-            state,
-            ScriptWorldBounds::new([x, y, z], [x, y + 2, z]).expect("street headroom"),
-        )
-    {
-        return Column::Occupied;
-    }
     if state.block_entities.contains_key(&(x, y, z))
         || state.block_entities.contains_key(&(x, y + 1, z))
     {
@@ -389,7 +419,7 @@ fn sample(
             .physics_block_at(x, above, z)
             .is_some_and(|block| {
                 construction::clearable(state, block)
-                    || (prepare_forest && super::forestry::clearable(state, [x, above, z]))
+                    || (prepare_forest && street.clearable(state, [x, above, z], None))
             })
     });
     if ground.has_fluid()
@@ -407,53 +437,156 @@ fn sample(
 
 /// A new crown may change the preferred route or lot, but must not remove
 /// existing building access or the last feasible lot of a housing blueprint.
-pub(super) fn planting_blocks_access(
+/// The proof takes one slice of the tick's site `budget` (owner D42): its
+/// walks and at most the slice's lot checks. Per house blueprint the crown
+/// spares the blueprint's housing when
+/// - the last free lot found (the village's hint) is still free on the
+///   crowned walk: one check; or
+/// - no lot the crown takes from the plain walk is free now
+///   (`construction::takes_free_lot`), all checked in this proof.
+///
+/// Otherwise the crowned walk must keep another free lot: this crown's own
+/// scan looks for one with a fair share of the slice and its next proof
+/// continues it (`construction::crowned_house_lot`); a walk without one
+/// refuses. Every verdict that plants is proved in the proof that plants.
+/// Without a slice, or while a scan runs, the verdict is "not yet".
+pub(super) fn planting_verdict(
     state: &TickState,
     record: &SettlementRecord,
     crown: ScriptWorldBounds,
-) -> bool {
-    let misses = state
-        .settlements
-        .forest
-        .lock()
-        .expect("forest cache poisoned")
-        .misses();
-    let mut before = None;
-    let mut after = Network::build(state, record, true, Some(crown));
+    budget: &mut construction::site_turn::SiteBudget,
+) -> construction::Replant {
+    let lots = budget.take();
+    if lots == 0 {
+        return construction::Replant::NotYet;
+    }
+    crown_verdict(state, record, crown, lots, budget)
+}
+
+fn crown_verdict(
+    state: &TickState,
+    record: &SettlementRecord,
+    crown: ScriptWorldBounds,
+    lots: u32,
+    budget: &mut construction::site_turn::SiteBudget,
+) -> construction::Replant {
+    use construction::{HouseLot, Replant};
+    let misses = forest_misses(state);
+    let crowned = Network::build(state, record, true, Some(crown));
+    let mut proof = CrownProof {
+        crown,
+        plain: None,
+        fronts: crowned.frontage(),
+        crowned,
+        checks: construction::LotChecks::new(lots),
+    };
     if record.buildings.values().any(|building| {
         !building.natural_zone
-            && after.access(building).is_none()
-            && before
+            && proof.crowned.access(building).is_none()
+            && proof
+                .plain
                 .get_or_insert_with(|| Network::for_construction(state, record))
                 .access(building)
                 .is_some()
     }) {
-        return true;
+        return Replant::Refused;
     }
-    for blueprint in blueprints::all(&state.registry)
+    let scans: Vec<&'static Blueprint> = blueprints::all(&state.registry)
         .iter()
         .filter(|blueprint| blueprint.kind == BuildingKind::House)
-    {
-        if !construction::has_house_lot(state, record, &mut after, blueprint)
-            && (construction::has_house_lot(
-                state,
-                record,
-                before.get_or_insert_with(|| Network::for_construction(state, record)),
-                blueprint,
-            ) || state
-                .settlements
-                .forest
-                .lock()
-                .expect("forest cache poisoned")
-                .misses()
-                != misses)
-        {
-            return true;
+        .filter(|&blueprint| !spares_housing(state, record, &mut proof, blueprint, budget, misses))
+        .collect();
+    let mut verdict = Replant::Plant;
+    let mut waiting = u32::try_from(scans.len()).unwrap_or(u32::MAX);
+    for blueprint in scans {
+        // Each scan takes a fair share of what the slice has left, so one
+        // long scan cannot starve the next blueprint's scan.
+        let share = proof.checks.lots / waiting;
+        let rest = proof.checks.lots - share;
+        proof.checks.lots = share;
+        waiting -= 1;
+        let (hint, progress) = budget.house(record.id, &blueprint.id, crown.min, state.tick);
+        let found = construction::crowned_house_lot(
+            state,
+            &mut proof.crowned,
+            &proof.fronts,
+            blueprint,
+            progress,
+            &mut proof.checks,
+        );
+        proof.checks.lots += rest;
+        match found {
+            Some(HouseLot::Free(front)) => *hint = Some(front),
+            Some(HouseLot::None) => return Replant::Refused,
+            None => verdict = Replant::NotYet,
         }
     }
     // A proved remaining lot and its loaded access are enough. Unrelated
     // cache misses elsewhere must not discard this grove's renewal.
-    false
+    verdict
+}
+
+fn forest_misses(state: &TickState) -> u64 {
+    state
+        .settlements
+        .forest
+        .lock()
+        .expect("forest cache poisoned")
+        .misses()
+}
+
+/// A crown proof: the crown, the crowned walk and its frontages, the plain
+/// walk (built only when needed) and the proof's lot checks.
+struct CrownProof<'a> {
+    crown: ScriptWorldBounds,
+    plain: Option<Network<'a>>,
+    crowned: Network<'a>,
+    fronts: Vec<construction::Front>,
+    checks: construction::LotChecks,
+}
+
+/// Whether the crown spares `blueprint`'s housing without a scan: the hint
+/// lot is still free on the crowned walk, or the crown takes no lot of the
+/// blueprint that is free now (proved with forest evidence at hand). A crown
+/// whose scan for another free lot runs already took a free lot.
+fn spares_housing<'a>(
+    state: &'a TickState,
+    record: &'a SettlementRecord,
+    proof: &mut CrownProof<'a>,
+    blueprint: &'static Blueprint,
+    budget: &mut construction::site_turn::SiteBudget,
+    misses: u64,
+) -> bool {
+    let (hint, progress) = budget.house(record.id, &blueprint.id, proof.crown.min, state.tick);
+    if let Some(front) = *hint {
+        match construction::keeps_free_lot(
+            state,
+            &mut proof.crowned,
+            &proof.fronts,
+            blueprint,
+            front,
+            &mut proof.checks,
+        ) {
+            Some(true) => return true,
+            Some(false) => *hint = None,
+            None => return false,
+        }
+    }
+    if !progress.idle() {
+        return false;
+    }
+    let plain = proof
+        .plain
+        .get_or_insert_with(|| Network::for_construction(state, record));
+    construction::takes_free_lot(
+        state,
+        plain,
+        &proof.fronts,
+        proof.crown,
+        blueprint,
+        &mut proof.checks,
+    ) == Some(false)
+        && forest_misses(state) == misses
 }
 
 fn vacant(state: &TickState, block: u32) -> bool {
@@ -466,6 +599,11 @@ fn vacant(state: &TickState, block: u32) -> bool {
         })
 }
 
+/// The state street paving turns soil into: the one `dirt_path` block.
+pub(crate) fn paved_state(state: &TickState) -> Option<u32> {
+    default_state(state, "minecraft:dirt_path")
+}
+
 fn default_state(state: &TickState, name: &str) -> Option<u32> {
     let id = mc_data::Identifier::parse(name).ok()?;
     Some(state.registry.blocks.block(&id)?.default.0)
@@ -475,6 +613,7 @@ fn paid(state: &TickState, at: [i32; 3], block: u32) -> Option<PlannedCell> {
     let (item, quantity) =
         blueprints::material_for(&state.registry, mc_world::BlockStateId(block))?;
     Some(PlannedCell {
+        portion: crate::plugin_structures::settlement_builds::PortionKind::Build,
         at,
         state: block,
         resource: Some(state.registry.items.name_of(item)?.to_string()),
@@ -484,11 +623,18 @@ fn paid(state: &TickState, at: [i32; 3], block: u32) -> Option<PlannedCell> {
 
 fn free(at: [i32; 3], block: u32) -> PlannedCell {
     PlannedCell {
+        portion: crate::plugin_structures::settlement_builds::PortionKind::Build,
         at,
         state: block,
         resource: None,
         quantity: 0,
     }
+}
+
+fn cleared(at: [i32; 3], air: u32) -> PlannedCell {
+    let mut cell = free(at, air);
+    cell.portion = crate::plugin_structures::settlement_builds::PortionKind::Cut;
+    cell
 }
 
 /// A finished lamp post: a fence topped by a torch anywhere in the band.
@@ -549,6 +695,71 @@ fn facing(blueprint: &Blueprint, normal: [i32; 2]) -> Option<u8> {
     u8::try_from((outward + 4 - front(blueprint)?) % 4).ok()
 }
 
+/// The geometry of the blueprint's lot facing a frontage across the verge,
+/// before any terrain is read.
+struct LotPlan {
+    rotation: u8,
+    /// Minimum x and z of the footprint.
+    origin: [i32; 2],
+    /// The rotated footprint.
+    size: [i32; 3],
+    verge: [i32; 2],
+    door: [i32; 2],
+}
+
+fn lot_plan(blueprint: &Blueprint, front: [i32; 3], normal: [i32; 2]) -> Option<LotPlan> {
+    let verge = [front[0] + normal[0], front[2] + normal[1]];
+    let door = [front[0] + 2 * normal[0], front[2] + 2 * normal[1]];
+    let rotation = facing(blueprint, normal)?;
+    let turn = Rotation::from_quarter_turns(rotation);
+    let entrance = blueprint.level(1)?.rotated(turn).entrance.map(i32::from);
+    let size = blueprint.footprint(turn).map(i32::from);
+    let [sx, _, sz] = size;
+    let origin = match normal {
+        [0, -1] => [door[0] - entrance[0], door[1] - (sz - 1)],
+        [0, _] => [door[0] - entrance[0], door[1]],
+        [-1, _] => [door[0] - (sx - 1), door[1] - entrance[2]],
+        _ => [door[0], door[1] - entrance[2]],
+    };
+    Some(LotPlan {
+        rotation,
+        origin,
+        size,
+        verge,
+        door,
+    })
+}
+
+/// Whether `crown` covers a column the blueprint's lot facing `front` reads
+/// (its footprint, door or verge): only such a lot can differ between a walk
+/// and the same walk with the crown planted ([`Network::lot`]).
+pub(crate) fn crown_touches_lot(
+    blueprint: &Blueprint,
+    front: [i32; 3],
+    normal: [i32; 2],
+    crown: ScriptWorldBounds,
+) -> bool {
+    let Some(LotPlan {
+        origin: [ox, oz],
+        size: [sx, _, sz],
+        verge,
+        door,
+        ..
+    }) = lot_plan(blueprint, front, normal)
+    else {
+        return false;
+    };
+    let covers = |[x, z]: [i32; 2]| {
+        (crown.min[0]..=crown.max[0]).contains(&x) && (crown.min[2]..=crown.max[2]).contains(&z)
+    };
+    covers(verge)
+        || covers(door)
+        || (crown.min[0] < ox + sx
+            && ox <= crown.max[0]
+            && crown.min[2] < oz + sz
+            && oz <= crown.max[2])
+}
+
 /// Street columns reachable on foot from the bell, including verge detours.
 pub(crate) struct Network<'a> {
     state: &'a TickState,
@@ -575,6 +786,11 @@ impl<'a> Network<'a> {
         Self::build(state, record, true, None)
     }
 
+    /// The settlement this walk belongs to.
+    pub(crate) fn record(&self) -> &'a SettlementRecord {
+        self.record
+    }
+
     fn build(
         state: &'a TickState,
         record: &'a SettlementRecord,
@@ -599,7 +815,7 @@ impl<'a> Network<'a> {
                 for dz in -ring..=ring {
                     if dx.abs().max(dz.abs()) == ring
                         && level_inside(record, ax + dx, az + dz)
-                        && let Column::Ground { y, .. } = network.column(ax + dx, az + dz)
+                        && let Column::Ground { y, .. } = network.column(ax + dx, az + dz, None)
                     {
                         network.reach([ax + dx, y, az + dz], SEED);
                     }
@@ -620,7 +836,7 @@ impl<'a> Network<'a> {
                 {
                     continue;
                 }
-                if let Column::Ground { y: ny, .. } = network.column(nx, nz)
+                if let Column::Ground { y: ny, .. } = network.column(nx, nz, Some(y))
                     && (ny - y).abs() <= 1
                 {
                     network.reach([nx, ny, nz], next);
@@ -637,11 +853,11 @@ impl<'a> Network<'a> {
         self.parents.push(parent);
     }
 
-    fn column(&mut self, x: i32, z: i32) -> Column {
+    fn column(&mut self, x: i32, z: i32, hint: Option<i32>) -> Column {
         let (state, record, prepare_forest, planting) =
             (self.state, self.record, self.prepare_forest, self.planting);
         *self.columns.entry((x, z)).or_insert_with(|| {
-            let column = sample(state, record, x, z, prepare_forest);
+            let column = sample_near(state, record, x, z, prepare_forest, hint);
             if let Column::Ground { y, .. } = column
                 && planting.is_some_and(|crown| {
                     (crown.min[0]..=crown.max[0]).contains(&x)
@@ -692,25 +908,21 @@ impl<'a> Network<'a> {
         normal: [i32; 2],
     ) -> Option<Lot> {
         let anchor = self.record.anchor;
-        let verge = [front[0] + normal[0], front[2] + normal[1]];
-        let door = [front[0] + 2 * normal[0], front[2] + 2 * normal[1]];
-        let rotation = facing(blueprint, normal)?;
-        let turn = Rotation::from_quarter_turns(rotation);
-        let entrance = blueprint.level(1)?.rotated(turn).entrance.map(i32::from);
-        let [sx, sy, sz] = blueprint.footprint(turn).map(i32::from);
-        let [ox, oz] = match normal {
-            [0, -1] => [door[0] - entrance[0], door[1] - (sz - 1)],
-            [0, _] => [door[0] - entrance[0], door[1]],
-            [-1, _] => [door[0] - (sx - 1), door[1] - entrance[2]],
-            _ => [door[0], door[1] - entrance[2]],
-        };
+        let LotPlan {
+            rotation,
+            origin: [ox, oz],
+            size: [sx, sy, sz],
+            verge,
+            door,
+        } = lot_plan(blueprint, front, normal)?;
         if !(ox..ox + sx).all(|x| (oz..oz + sz).all(|z| cell(anchor, x, z) == Cell::Lot)) {
             return None;
         }
-        let Column::Ground { y: verge_y, .. } = self.column(verge[0], verge[1]) else {
+        let Column::Ground { y: verge_y, .. } = self.column(verge[0], verge[1], Some(front[1]))
+        else {
             return None;
         };
-        let Column::Ground { y: floor, .. } = self.column(door[0], door[1]) else {
+        let Column::Ground { y: floor, .. } = self.column(door[0], door[1], Some(verge_y)) else {
             return None;
         };
         if self.planting.is_some_and(|crown| {
@@ -720,7 +932,11 @@ impl<'a> Network<'a> {
         }) {
             return None;
         }
-        ((verge_y - front[1]).abs() <= 1 && (floor - verge_y).abs() <= 1).then_some(Lot {
+        // Owner 2026-11-17: inside the settlement the one-block step limit is
+        // lifted; what stays is what a villager walks from the road across the
+        // verge to the door (up one, down three), so the door stays reachable.
+        let walkable = |from: i32, to: i32| to - from <= STEP_UP && from - to <= STEP_DOWN;
+        (walkable(front[1], verge_y) && walkable(verge_y, floor)).then_some(Lot {
             origin: [ox, floor, oz],
             rotation,
         })
@@ -745,11 +961,31 @@ impl<'a> Network<'a> {
             at = self.parents[at];
         }
         route.reverse();
+        // Owner D7: the forecast walks through a registered planted tree on the
+        // door step as it does on the street (see `sample`).
+        let mut clearance = if self.prepare_forest {
+            super::forestry::Clearance::street(self.record, true)
+        } else {
+            super::forestry::Clearance::prepared()
+        };
         for [cx, cz] in [[x + nx, z + nz], [x, z]] {
-            let y = construction::surface_y(self.state, self.record.anchor[1], cx, cz)?;
+            let y = construction::surface_y_for_lot(
+                self.state,
+                self.record.anchor[1],
+                cx,
+                cz,
+                None,
+                &mut clearance,
+            )?;
             route.push([cx, y, cz]);
         }
         Some(route)
+    }
+
+    /// The reached street column behind `building`'s door, exactly the column
+    /// [`Self::access`] indexes: the road graph a route must keep connected.
+    pub(crate) fn access_column(&self, building: &Building) -> Option<[i32; 3]> {
+        self.access(building).map(|index| self.cells[index])
     }
 
     /// A verge may carry a detour, but a door still fronts an actual street.
@@ -935,7 +1171,7 @@ impl<'a> Network<'a> {
     pub(crate) fn road_work(&mut self, tile: &Tile) -> Option<Work> {
         let state = self.state;
         let air = state.registry.states.air;
-        let path = default_state(state, "minecraft:dirt_path")?;
+        let path = paved_state(state)?;
         let mut cells = Vec::new();
         let (mut low, mut high) = (i32::MAX, i32::MIN);
         for x in tile.min[0]..=tile.max[0] {
@@ -944,7 +1180,7 @@ impl<'a> Network<'a> {
                     continue;
                 };
                 let y = self.cells[index][1];
-                let Column::Ground { soil, .. } = self.column(x, z) else {
+                let Column::Ground { soil, .. } = self.column(x, z, None) else {
                     continue;
                 };
                 low = low.min(y);
@@ -954,7 +1190,7 @@ impl<'a> Network<'a> {
                         && !vacant(state, block)
                         && construction::clearable(state, block)
                     {
-                        cells.push(free([x, above, z], air));
+                        cells.push(cleared([x, above, z], air));
                     }
                 }
                 if soil {
@@ -988,7 +1224,7 @@ impl<'a> Network<'a> {
         {
             return None;
         }
-        let Column::Ground { y, .. } = self.column(x, z) else {
+        let Column::Ground { y, .. } = self.column(x, z, None) else {
             return None;
         };
         let top = state.world.physics_block_at(x, y + 3, z)?;
@@ -1002,7 +1238,7 @@ impl<'a> Network<'a> {
         for above in y + 1..=y + 3 {
             let block = state.world.physics_block_at(x, above, z)?;
             if !vacant(state, block) {
-                cells.push(free([x, above, z], air));
+                cells.push(cleared([x, above, z], air));
             }
         }
         cells.push(paid(state, [x, y + 1, z], fence)?);
@@ -1248,7 +1484,7 @@ fn column_cells(
             if !construction::clearable(state, have) {
                 return nothing;
             }
-            cells.push(free([x, y, z], air));
+            cells.push(cleared([x, y, z], air));
         }
         cells.push(placed(state, [x, y, z], want));
     }
@@ -1345,7 +1581,7 @@ fn well_cells(state: &TickState, record: &SettlementRecord, span: Span) -> Optio
             if !construction::clearable(state, have) {
                 return None;
             }
-            cells.push(free([x, ground + 1, z], air));
+            cells.push(cleared([x, ground + 1, z], air));
         }
         cells.push(placed(state, [x, ground + 1, z], cobble));
     }
@@ -1354,7 +1590,7 @@ fn well_cells(state: &TickState, record: &SettlementRecord, span: Span) -> Optio
         if !construction::clearable(state, above) {
             return None;
         }
-        cells.push(free([cx, centre + 1, cz], air));
+        cells.push(cleared([cx, centre + 1, cz], air));
     }
     cells.push(free([cx, centre, cz], water));
     Some(work_of(cells))
@@ -1468,7 +1704,7 @@ pub(crate) fn report(state: &TickState, record: &SettlementRecord) -> String {
             if network.index.contains_key(&(x, z)) {
                 continue;
             }
-            match network.column(x, z) {
+            match network.column(x, z, None) {
                 Column::Unloaded => unloaded += 1,
                 Column::Occupied => occupied += 1,
                 Column::Blocked | Column::Ground { .. } => blocked += 1,

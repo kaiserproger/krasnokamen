@@ -1,0 +1,12 @@
+[[bug]]
+id = "PROJECTILE-BREAK-NO-BLOCK-DESTROY-VIBRATION"
+title = "A projectile breaking a pot, chorus flower or speleothem emits no BLOCK_DESTROY vibration"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review: 26.3 Level.destroyBlock emits GameEvent.BLOCK_DESTROY at the cell; crates/mc-core/src/projectiles/block_impact.rs destroy() staged the break and level event 2001 without a vibration (review ReviewProjectileBreak low)."
+regression = ["cargo:mc-core:projectiles::flight_tests::projectile_pot_break_emits_block_destroy"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-BREAK-NO-BLOCK-DESTROY-VIBRATION.json"

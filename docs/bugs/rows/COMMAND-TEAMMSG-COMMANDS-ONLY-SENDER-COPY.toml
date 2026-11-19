@@ -1,0 +1,11 @@
+[[bug]]
+id = "COMMAND-TEAMMSG-COMMANDS-ONLY-SENDER-COPY"
+title = "/teammsg shows a Commands-only sender its own `chat.type.team.sent` copy; vanilla TeamMsgCommand sends every copy, the sender's included, as chat (TEAM_MSG_COMMAND_OUTGOING), which a Commands-only client does not accept (same class as the fixed /msg F2)."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "fixed"
+source = "BreakB10Commands round 3 H1 (receipts/BreakB10Commands/REBREAK3.md); vanilla 26.1.2 TeamMsgCommand javap: ServerPlayer.sendChatMessage for each member."
+regression = ["cargo:mc-core:chat_visibility_tests::team_messages_are_chat_for_every_copy_the_senders_included", "harness:chat-visibility:native-chat-visibility"]
+fix_commit = "patch:d1239b8456cf4e82c2700078ad70693c22cb91add90039a882b258d9cbd74c48"
+promotion = "docs/bugs/promotions/COMMAND-TEAMMSG-COMMANDS-ONLY-SENDER-COPY.json"

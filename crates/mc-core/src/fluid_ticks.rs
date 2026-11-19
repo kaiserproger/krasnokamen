@@ -78,6 +78,9 @@ impl FluidTicksImage {
 pub struct FluidTicks {
     due: BTreeMap<Order, FluidTickImage>,
     queued: HashMap<(BlockPos, Fluid, bool, u64, i32), u64>,
+    /// Tick count per queued position, so a waiting gate tests its seven-cell
+    /// neighbourhood without walking the whole queue.
+    positions: HashMap<BlockPos, u32>,
     covered: BTreeSet<[i32; 2]>,
     /// Native projection backlog, independent of the WAL `dirty` flag below.
     /// Every accepted schedule/hydrate/consume marks its chunk; only a
@@ -160,6 +163,7 @@ impl FluidTicks {
                 )
                 .is_none()
             {
+                *queue.positions.entry(pos).or_insert(0) += 1;
                 queue.due.insert(order, tick);
             }
         }
@@ -190,6 +194,28 @@ impl FluidTicks {
         }
         queue
     }
+    /// Any queued tick at `pos` or one of its six neighbours. A waiting gate
+    /// uses this to schedule an orphan flow exactly once: while a tick is still
+    /// outstanding for that neighbourhood there is nothing to wake.
+    pub(crate) fn queued_around(&self, pos: BlockPos) -> bool {
+        const STEPS: [[i32; 3]; 7] = [
+            [0, 0, 0],
+            [0, 1, 0],
+            [0, -1, 0],
+            [1, 0, 0],
+            [-1, 0, 0],
+            [0, 0, 1],
+            [0, 0, -1],
+        ];
+        STEPS.iter().any(|step| {
+            self.positions.contains_key(&BlockPos {
+                x: pos.x + step[0],
+                y: pos.y + step[1],
+                z: pos.z + step[2],
+            })
+        })
+    }
+
     pub(crate) fn schedule(
         &mut self,
         pos: BlockPos,
@@ -216,6 +242,7 @@ impl FluidTicks {
         let order = (deadline, priority, sequence);
         self.queued
             .insert((pos, family, flowing, deadline, priority), sequence);
+        *self.positions.entry(pos).or_insert(0) += 1;
         self.due.insert(
             order,
             FluidTickImage {
@@ -269,17 +296,21 @@ impl FluidTicks {
         for order in selected {
             let tick = self.due.remove(&order).expect("selected tick");
             let (fluid, flowing) = identity(&tick.fluid).expect("validated fluid tick identifier");
-            self.queued.remove(&(
-                BlockPos {
-                    x: tick.pos[0],
-                    y: tick.pos[1],
-                    z: tick.pos[2],
-                },
-                fluid,
-                flowing,
-                tick.deadline,
-                tick.priority,
-            ));
+            let pos = BlockPos {
+                x: tick.pos[0],
+                y: tick.pos[1],
+                z: tick.pos[2],
+            };
+            self.queued
+                .remove(&(pos, fluid, flowing, tick.deadline, tick.priority));
+            if let std::collections::hash_map::Entry::Occupied(mut entry) =
+                self.positions.entry(pos)
+            {
+                *entry.get_mut() -= 1;
+                if *entry.get() == 0 {
+                    entry.remove();
+                }
+            }
             self.checkpoint_dirty
                 .insert([tick.pos[0].div_euclid(16), tick.pos[2].div_euclid(16)]);
             ticks.push(tick);

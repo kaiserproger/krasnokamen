@@ -28,7 +28,7 @@ pub(crate) fn native_store(
         "climate":{},"border":{},"difficulty":"Normal","gamerules":{},
         "block_ticks":{"next_sequence":0,"chunks":[]},
         "fluid_ticks":{"next_sequence":0,"covered":[],"due":[]},
-        "domain_versions":{"climate":1,"gamerules":1,"block_ticks":1,"fluid_ticks":1,
+        "domain_versions":{"manifest":1,"climate":1,"gamerules":1,"block_ticks":1,"fluid_ticks":1,
             "claims":1,"tickets":1,"raids":1,"end_fight":1}
     });
     let mut checkpoint = manifest.clone();

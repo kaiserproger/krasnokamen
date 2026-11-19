@@ -1,0 +1,12 @@
+[[bug]]
+id = "PROJECTILE-CANDLE-NOT-LIT"
+title = "A burning projectile does not light candles or candle cakes"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 AbstractCandleBlock/CandleBlock/CandleCakeBlock javap (.analysis/codex-logs/impact-parity/parity.javap): onProjectileHit with projectile.isOnFire() and canBeLit (unlit; a candle also dry) calls setLit (setBlock flags 11). crates/mc-core/src/projectiles had no candle reaction."
+regression = ["cargo:mc-core:projectiles::flight_tests::burning_arrow_lights_dry_candles_and_candle_cakes", "cargo:mc-core:projectiles::flight_tests::small_fireball_lights_a_candle_but_a_wind_charge_does_not"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-CANDLE-NOT-LIT.json"

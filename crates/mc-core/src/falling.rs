@@ -22,7 +22,7 @@ pub struct FallingState {
 /// falling body must never checkpoint as an unrecoverable nonliving Walker.
 pub(crate) fn initialize(state: &mut TickState, slot: crate::entities::EntitySlot, type_id: u32) {
     if mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id)
-        .is_none_or(|contract| contract.name != "minecraft:falling_block")
+        .is_none_or(|contract| contract.name != crate::blueprint::FALLING_BLOCK_TYPE_NAME)
     {
         return;
     }
@@ -48,10 +48,12 @@ pub(crate) fn configure(state: &mut TickState, id: EntityId) {
     let Some(slot) = state.entities.slot_of(id) else {
         return;
     };
-    state.entities.set_half_width(slot, 0.49);
+    state
+        .entities
+        .set_half_width(slot, crate::blueprint::FALLING_BLOCK_BODY.half_width());
     let (body, row) = state.entities.parts_mut(slot);
     body.movement = crate::blueprint::MovementClass::Stationary;
-    body.height = 0.98;
+    body.height = crate::blueprint::FALLING_BLOCK_BODY.height;
     row.speed = 0.0;
     row.persistent = true;
     if let Some(falling) = row.falling {
@@ -265,10 +267,11 @@ pub(crate) fn run(
             removed.push(id);
             continue;
         }
-        let min_x = (old[0].min(old[0] + desired.x) - 0.49).floor() as i32;
-        let max_x = (old[0].max(old[0] + desired.x) + 0.49).floor() as i32;
-        let min_z = (old[2].min(old[2] + desired.z) - 0.49).floor() as i32;
-        let max_z = (old[2].max(old[2] + desired.z) + 0.49).floor() as i32;
+        let half_width = crate::blueprint::FALLING_BLOCK_BODY.half_width();
+        let min_x = (old[0].min(old[0] + desired.x) - half_width).floor() as i32;
+        let max_x = (old[0].max(old[0] + desired.x) + half_width).floor() as i32;
+        let min_z = (old[2].min(old[2] + desired.z) - half_width).floor() as i32;
+        let max_z = (old[2].max(old[2] + desired.z) + half_width).floor() as i32;
         // Missing columns pause the entire retained step, never form a floor.
         if (min_x.div_euclid(16)..=max_x.div_euclid(16)).any(|cx| {
             (min_z.div_euclid(16)..=max_z.div_euclid(16)).any(|cz| !state.world.has_chunk(cx, cz))
@@ -283,8 +286,8 @@ pub(crate) fn run(
             &sampler,
             mc_physics::Vec3::new(old[0], old[1], old[2]),
             mc_physics::Aabb {
-                half_width: 0.49,
-                height: 0.98,
+                half_width: crate::blueprint::FALLING_BLOCK_BODY.half_width(),
+                height: crate::blueprint::FALLING_BLOCK_BODY.height,
             },
             desired,
             false,
@@ -317,12 +320,16 @@ pub(crate) fn run(
                 old[1] + resolved.delta.y * t,
                 old[2] + resolved.delta.z * t,
             ];
-            for x in
-                ((center[0] - 0.49).floor() as i32)..=((center[0] + 0.49 - 1e-7).floor() as i32)
+            let half_width = crate::blueprint::FALLING_BLOCK_BODY.half_width();
+            for x in ((center[0] - half_width).floor() as i32)
+                ..=((center[0] + half_width - 1e-7).floor() as i32)
             {
-                for y in (center[1].floor() as i32)..=((center[1] + 0.98 - 1e-7).floor() as i32) {
-                    for z in ((center[2] - 0.49).floor() as i32)
-                        ..=((center[2] + 0.49 - 1e-7).floor() as i32)
+                for y in (center[1].floor() as i32)
+                    ..=((center[1] + crate::blueprint::FALLING_BLOCK_BODY.height - 1e-7).floor()
+                        as i32)
+                {
+                    for z in ((center[2] - half_width).floor() as i32)
+                        ..=((center[2] + half_width - 1e-7).floor() as i32)
                     {
                         let block = state.world.block_at(x, y, z);
                         let wet = block
@@ -471,7 +478,8 @@ fn impact(
     if amount == 0.0 {
         return;
     }
-    let reach = state.entities.max_half_width() + 0.49;
+    let falling_half_width = crate::blueprint::FALLING_BLOCK_BODY.half_width();
+    let reach = state.entities.max_half_width() + falling_half_width;
     let mut targets = Vec::new();
     for x in ((position[0] - reach).floor() as i32).div_euclid(16)
         ..=((position[0] + reach).floor() as i32).div_euclid(16)
@@ -486,9 +494,9 @@ fn impact(
                     let p = state.entities.pos(slot);
                     if slot != falling
                         && body.alive
-                        && (p[0] - position[0]).abs() < body.half_width + 0.49
-                        && (p[2] - position[2]).abs() < body.half_width + 0.49
-                        && p[1] < position[1] + 0.98
+                        && (p[0] - position[0]).abs() < body.half_width + falling_half_width
+                        && (p[2] - position[2]).abs() < body.half_width + falling_half_width
+                        && p[1] < position[1] + crate::blueprint::FALLING_BLOCK_BODY.height
                         && p[1] + body.height > position[1]
                     {
                         targets.push(slot);
@@ -527,6 +535,7 @@ fn drop(state: &mut TickState, pos: BlockPos, block: u32, spawned: &mut Vec<Enti
         &mc_data::ItemStack::EMPTY,
         state.tick,
         None,
+        false,
     ) {
         Ok(stacks) => stacks,
         Err(error) => {

@@ -1,0 +1,11 @@
+[[bug]]
+id = "WINDOWS-BACKUP-CONVERSION"
+title = "On Windows, offline backup/restore fail reading native/state.redb through a second handle while the same process holds an exclusive LockFileEx on it (error 33); console /backup opens directories unguarded and copies the live redb; world import-anvil/export-anvil/census build relative paths with '\\' and fail validate_relative_path."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "WinFixReview (history://WinFixReview) on RC5 hotfix a76e1e80: mc-edge backup.rs ExclusiveLease, mc-core hot_backup.rs:123-127, world_conversion.rs:673-679, import.rs session.lock skip"
+regression = ["cargo:mc-core:hot_backup_tests::copy_reads_the_owned_database_snapshot_not_a_second_path_handle", "cargo:mc-core:hot_backup_tests::backup_of_a_running_core_restores_the_state_at_its_tick", "cargo:mc-core:core::stop_tests::shutdown_releases_database_while_backup_admission_is_paused", "cargo:mc-edge:backup::tests::offline_backup_restore_copies_database_under_real_file_leases", "cargo:mc-edge:backup::tests::hot_backup_of_a_running_core_is_a_verified_restorable_backup", "cargo:mc-world-conversion:path_tests::walked_paths_are_portable_metadata_keys_and_exclude_world_lease", "cargo:mc-world-conversion:path_tests::syncing_staged_nested_files_preserves_every_byte", "cargo:mc-world-conversion:roundtrip_tests::nested_paths_import_export_and_census_under_world_leases", "cargo:mc-world:native::backup_tests::snapshot_reads_lease_holding_handle_without_releasing_database_custody"]
+fix_commit = "c1f387bbcb3c1f09d61c9e04c6d114b1b1e3cf0c"
+repro_check = "Stage2X SLICES.md:133: removing the lease-cursor code makes offline_backup_restore_copies_database_under_real_file_leases red on Linux (receipts/XWorldLoader/row2-negctl-lease-cursor.log). Reverting the second-handle path does not go red on Linux (row2-negctl-second-handle-reverted.log); the original Windows LockFileEx sharing violation still needs a Windows VM control. mc-world test build was repaired by 7c7a5dc16."

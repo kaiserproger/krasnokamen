@@ -1,0 +1,10 @@
+[[bug]]
+id = "PHANTOM-SPAWN-ABSENT"
+title = "Phantoms never spawn from insomnia: the `spawn_phantoms` gamerule is registered (`command_rules.rs:159`) but no consumer reads it — no sleepless-night clock, sky-access/sea-level check, or growing-chance roll exists in core. `TimeSinceRest` is tracked (reset on sleep/bed-enter) but nothing reads it for spawning. Vanilla spawns after 3+ sleepless days at night/thunderstorm above sea level with sky access, chance scaling with insomnia."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PHANTOM-SPAWN-ABSENT"
+regression = ["cargo:mc-core:natural_spawn_tests::insomnia_spawns_phantoms_above_an_awake_player", "cargo:mc-core:natural_spawn_tests::insomnia_spawn_respects_rest_sky_gamerule_and_peaceful"]
+failing_first = "reported"

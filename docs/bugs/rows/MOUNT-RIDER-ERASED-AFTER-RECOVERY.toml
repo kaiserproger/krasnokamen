@@ -1,0 +1,12 @@
+[[bug]]
+id = "MOUNT-RIDER-ERASED-AFTER-RECOVERY"
+title = "Recovered happy ghast loses a rider before the player reconnects"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage2X SLICES.md:176,180"
+repro = "cargo"
+regression = ["cargo:mc-core:core::mounts_persistence_tests::happy_ghast_admission_leave_and_reconnect_survive_wal_recovery"]
+fix_commit = "94f312783"
+repro_check = "Introduced by 7d30f2991: the first tick after WAL recovery pruned the absent player's UUID before reconnect. Recovery preserved the mount image, but tick reconciliation treated a disconnected rider as invalid; the missing recovery-and-reconnect test failed to catch their interaction. The fix retains absent UUIDs, and the WAL recovery test provides a regression defense. Fix-reverted red receipts/M3FixState/product-negative-controls.log. Independent persistence review (receipts/Stage2Review/fable-mounts.md) found that a retained absent claim could block a vehicle forever and allow double seating; follow-up f8cdf9468 makes absent claims not consume seats, releases them on a new Ride, steers by the first live passenger and reconciles the actor out of other vehicles (regressions mounts::tests::absent_single_seat_rider_can_be_replaced_and_the_vehicle_steered, mounts::tests::first_live_passenger_steers_past_an_absent_primary_claim, core::mounts_persistence_tests::mounts_new_ride_reconciles_other_vehicle_claim_and_native_recovery, core::mounts_persistence_tests::mounts_plugin_unlock_restores_pending_seat_without_waiting_for_active_tick; reds receipts/M3FixState/r2/red.log). A clean Core shutdown also keeps the absent rider's UUID, and gameplay still read the raw claim list as occupancy (AI, breeding, leash follow, portal admission, battle carried facts, seat attachment); follow-up 16a0e7937 derives live occupancy from live bodies only, removes the stale mounted flag, lets a vehicle with only absent claims travel through a portal (the claims end there) and re-seats a returning player otherwise (regressions core::mounts_persistence_tests::mounts_absent_claim_after_core_restart_* (3), mounts::tests::removed_mob_rider_claim_has_no_gameplay_occupancy, mounts::tests::absent_claim_does_not_reserve_a_live_passenger_seat, battle::tests::native_cached_facts_release_carried_when_the_rider_row_disappears; reds receipts/M3FixState/r3/negative-controls.log and seat-negative.log). Promotion needs a committed patch spanning 94f312783, f8cdf9468 and 16a0e7937."
+failing_first = "reported"

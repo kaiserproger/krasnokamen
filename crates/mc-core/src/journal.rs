@@ -4,7 +4,8 @@
 //! Layout under `<world_dir>/`:
 //! - `journal/batch-<first_tick>-<last_tick>.bin`: framed batches. One batch
 //!   holds whole ticks: `[magic u32][version u32][tick_lo u64][tick_hi u64][len u32][crc32 u32][payload]`.
-//!   Payload is JSON lines of [`JournalEntry`]. Unpublished `.tmp` files are ignored.
+//!   Payload is JSON lines of [`JournalEntry`]. Unpublished `.tmp` files are ignored
+//!   when reading and removed by the next [`JournalWriter::open`].
 //! - `native/state.redb`: one atomic checkpoint of chunks, entities, players,
 //!   globals and the committed tick across all dimensions.
 //!
@@ -17,6 +18,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
@@ -345,6 +347,56 @@ pub enum JournalEntry {
     BattlePatch {
         value: serde_json::Value,
     },
+    /// Compact post-image of one live body whose appearance changed: the parts
+    /// of its last `Entity` image that differ, instead of the whole image.
+    /// Replay refuses one without an earlier `Entity` record for the id in the
+    /// same tail: the changed appearance parts, the age and the scalars the
+    /// image would have set, but no state or villager image. Replay lands the
+    /// clock projection the image would have baked in, then moves the anchor.
+    /// Appended to preserve variant order.
+    EntityAppearance {
+        id: i32,
+        tick: u64,
+        age: u32,
+        health: f32,
+        alive: bool,
+        #[serde(default)]
+        active_effects: crate::effects::ActiveEffects,
+        appearance: EntityAppearanceDelta,
+    },
+    /// Compact post-image of one projectile flight tick: the authoritative pose
+    /// and the projectile state delta, instead of the whole entity image.
+    /// `state` carries the whole state when any field but the age and the
+    /// landing transition changed. Appended to preserve variant order.
+    ProjectileFlight {
+        id: i32,
+        tick: u64,
+        age: u32,
+        health: f32,
+        alive: bool,
+        #[serde(default)]
+        active_effects: crate::effects::ActiveEffects,
+        appearance: EntityAppearanceDelta,
+        pos: [f64; 3],
+        vel: [f64; 3],
+        yaw: f32,
+        pitch: f32,
+        /// Absolute `ProjectileState::age` when `state` is absent.
+        projectile_age: u32,
+        /// Landing transition, only when it changed this tick.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stuck: Option<bool>,
+        /// Ground clock: unchanged, cleared when the arrow leaves the ground, or
+        /// set on landing.
+        #[serde(default, skip_serializing_if = "DeltaValue::is_unchanged")]
+        grounded_at_age: DeltaValue<u32>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            deserialize_with = "deserialize_optional_projectile_image"
+        )]
+        state: Option<Box<crate::projectiles::ProjectileState>>,
+    },
 }
 
 fn deserialize_statistics_changes<'de, D: serde::Deserializer<'de>>(
@@ -433,10 +485,67 @@ fn wal_stage(stage: &str) {
     }
 }
 
+/// Why a checkpoint's WAL gate refused.
+///
+/// The two kinds have different consequences: a checkpoint asking past the
+/// writer's known append coverage refuses this one checkpoint and keeps serving
+/// (the appended batches stay durable and pruning removes nothing), while a
+/// filesystem failure means the journal can no longer promise durability and
+/// the caller must stop the world instead of retrying the fsync (CS341/Books
+/// review F1). A hole or damage that tail verification finds on disk is `Io`.
+#[derive(Debug)]
+pub enum GateError {
+    /// The WAL does not cover `(prev_tick, through]`; nothing was written.
+    Hole(CoreError),
+    /// `flush`'s directory fsync or the tail verification failed.
+    Io(CoreError),
+}
+
+impl GateError {
+    /// The underlying error, for callers that treat both kinds alike.
+    pub fn into_core(self) -> CoreError {
+        match self {
+            Self::Hole(error) | Self::Io(error) => error,
+        }
+    }
+}
+
+impl From<GateError> for CoreError {
+    fn from(error: GateError) -> Self {
+        error.into_core()
+    }
+}
+
 impl JournalWriter {
     pub fn open(world_dir: &Path, fsync_every: u32) -> Result<Self, CoreError> {
         let dir = world_dir.join("journal");
-        std::fs::create_dir_all(&dir).map_err(|err| CoreError::Storage(err.to_string()))?;
+        // R4-P2: the shared helper persists every directory entry it creates,
+        // including a journal directory left unflushed by an interrupted first
+        // start, so no batch rename can claim durability inside a directory a
+        // later recovery cannot find.
+        mc_world::atomic_file::create_dir_all_durable(&dir)
+            .map_err(|err| CoreError::Storage(err.to_string()))?;
+        // Safe here and only here: the caller holds the exclusive world lease
+        // and no append exists yet, so every `*.bin.tmp` is a leftover of a
+        // failed or interrupted append. Pruning must not sweep them, because a
+        // live append writes its tmp between create and rename.
+        let sweep = sweep_unpublished_batches(&dir);
+        if sweep.removed_files > 0 {
+            tracing::warn!(
+                dir = %dir.display(),
+                files = sweep.removed_files,
+                bytes = sweep.removed_bytes,
+                "removed unpublished journal batches left by a failed or interrupted append"
+            );
+        }
+        if sweep.failed > 0 {
+            tracing::warn!(
+                dir = %dir.display(),
+                failed = sweep.failed,
+                error = sweep.first_error.as_deref().unwrap_or("unknown"),
+                "unpublished journal batches could not be removed; they stay on disk"
+            );
+        }
         Ok(Self {
             dir,
             pending_fsync: 0,
@@ -465,20 +574,21 @@ impl JournalWriter {
     /// are contiguous (an append failure ends the journal), so coverage is
     /// tracked in process; batches from before open are verified on disk
     /// once. Batch files are fsynced at append, so only the directory
-    /// needs a final fsync.
-    pub fn gate(&mut self, prev_tick: u64, through: u64) -> Result<(), CoreError> {
+    /// needs a final fsync. A coverage [hole](GateError::Hole) refuses this
+    /// checkpoint only; an [I/O failure](GateError::Io) must stop the world.
+    pub fn gate(&mut self, prev_tick: u64, through: u64) -> Result<(), GateError> {
         // Recovery may already cover the whole save without a new tick/append.
         if through == prev_tick
             || self
                 .pre_open_verified
                 .is_some_and(|(from, hi)| from <= prev_tick && hi >= through)
         {
-            return self.flush();
+            return self.flush().map_err(GateError::Io);
         }
         let hole = |from: u64| {
-            Err(CoreError::Storage(format!(
+            Err(GateError::Hole(CoreError::Storage(format!(
                 "journal hole: ticks {from}..={through} have no batch"
-            )))
+            ))))
         };
         let first_appended = match self.appended {
             Some((lo, hi)) if hi >= through => lo,
@@ -490,10 +600,11 @@ impl JournalWriter {
                 .pre_open_verified
                 .is_some_and(|(from, through)| from <= prev_tick && through >= first_appended - 1)
         {
-            verify_batches_through(&self.dir, prev_tick, first_appended - 1)?;
+            verify_batches_through(&self.dir, prev_tick, first_appended - 1)
+                .map_err(GateError::Io)?;
             self.pre_open_verified = Some((prev_tick, first_appended - 1));
         }
-        self.flush()
+        self.flush().map_err(GateError::Io)
     }
 
     /// Append one batch covering ticks `tick_lo..=tick_hi`.
@@ -553,25 +664,43 @@ impl JournalWriter {
                     return Err(CoreError::Storage("nonfinite projectile motion".into()));
                 }
             }
+            match entry {
+                JournalEntry::EntityAppearance { health, .. } => {
+                    if !health.is_finite() {
+                        return Err(CoreError::Storage("nonfinite entity health".into()));
+                    }
+                }
+                JournalEntry::ProjectileFlight {
+                    health,
+                    pos,
+                    vel,
+                    yaw,
+                    pitch,
+                    state,
+                    ..
+                } => {
+                    if !health.is_finite()
+                        || pos.iter().chain(vel.iter()).any(|value| !value.is_finite())
+                        || !yaw.is_finite()
+                        || !pitch.is_finite()
+                    {
+                        return Err(CoreError::Storage(
+                            "nonfinite projectile flight post-image".into(),
+                        ));
+                    }
+                    if let Some(state) = state {
+                        crate::projectiles::persistence::validate_state(state)
+                            .map_err(|error| CoreError::Storage(error.to_owned()))?;
+                    }
+                }
+                _ => {}
+            }
             payload.push_str(
                 &serde_json::to_string(entry).map_err(|err| CoreError::Storage(err.to_string()))?,
             );
             payload.push('\n');
         }
-        let bytes = payload.into_bytes();
-        let crc = crc32fast::hash(&bytes);
-        let mut frame = Vec::with_capacity(HEADER_LEN + bytes.len());
-        frame.extend_from_slice(&BATCH_MAGIC.to_le_bytes());
-        frame.extend_from_slice(&BATCH_VERSION.to_le_bytes());
-        frame.extend_from_slice(&tick_lo.to_le_bytes());
-        frame.extend_from_slice(&tick_hi.to_le_bytes());
-        frame.extend_from_slice(
-            &u32::try_from(bytes.len())
-                .map_err(|_| CoreError::Storage("batch too large".to_owned()))?
-                .to_le_bytes(),
-        );
-        frame.extend_from_slice(&crc.to_le_bytes());
-        frame.extend_from_slice(&bytes);
+        let frame = frame_batch(tick_lo, tick_hi, payload.as_bytes())?;
         let name = format!("batch-{tick_lo:020}-{tick_hi:020}.bin");
         let tmp = self.dir.join(format!("{name}.tmp"));
         let final_path = self.dir.join(&name);
@@ -619,6 +748,22 @@ impl JournalWriter {
 
     /// Fsync the journal directory so all appended batches are durable.
     pub fn flush(&mut self) -> Result<(), CoreError> {
+        // Test hook (loop-level tests only): for the armed world dir, let the
+        // first `skip` flushes through and then fail every flush — per-dir so
+        // parallel tests never poison each other's journals (same pattern as
+        // `FAIL_JOURNAL_APPEND`).
+        #[cfg(test)]
+        if let Ok(mut armed) = crate::core::FAIL_JOURNAL_FLUSH.lock()
+            && let Some((dir, skip)) = armed.as_mut()
+            && *dir == self.dir.parent().unwrap_or(&self.dir).to_path_buf()
+        {
+            if *skip == 0 {
+                return Err(CoreError::Storage(
+                    "injected journal flush failure".to_owned(),
+                ));
+            }
+            *skip -= 1;
+        }
         fsync_dir(&self.dir).map_err(|err| CoreError::Storage(err.to_string()))?;
         self.pending_fsync = 0;
         Ok(())
@@ -978,23 +1123,217 @@ pub struct CheckpointManifest {
     pub gamerules: BTreeMap<String, String>,
 }
 
-/// Prune batches fully at or below `manifest_tick`.
-pub fn prune_batches_through(journal_dir: &Path, manifest_tick: u64) {
-    let Ok(entries) = std::fs::read_dir(journal_dir) else {
-        return;
-    };
-    for entry in entries {
-        let Ok(entry) = entry else { continue };
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if !(name.starts_with("batch-") && name.ends_with(".bin")) {
-            continue;
-        }
-        if let Some((_, hi)) = parse_batch_name(&name)
-            && hi <= manifest_tick
-        {
-            let _ = std::fs::remove_file(journal_dir.join(&name));
+/// Frame one batch payload:
+/// `[magic][version][tick_lo][tick_hi][len][crc32][payload]`.
+///
+/// [`JournalWriter::append`] is the only production writer; fixtures (the hot
+/// backup tests) use this instead of hand-rolling bytes that would not decode.
+pub(crate) fn frame_batch(
+    tick_lo: u64,
+    tick_hi: u64,
+    payload: &[u8],
+) -> Result<Vec<u8>, CoreError> {
+    let mut frame = Vec::with_capacity(HEADER_LEN + payload.len());
+    frame.extend_from_slice(&BATCH_MAGIC.to_le_bytes());
+    frame.extend_from_slice(&BATCH_VERSION.to_le_bytes());
+    frame.extend_from_slice(&tick_lo.to_le_bytes());
+    frame.extend_from_slice(&tick_hi.to_le_bytes());
+    frame.extend_from_slice(
+        &u32::try_from(payload.len())
+            .map_err(|_| CoreError::Storage("batch too large".to_owned()))?
+            .to_le_bytes(),
+    );
+    frame.extend_from_slice(&crc32fast::hash(payload).to_le_bytes());
+    frame.extend_from_slice(payload);
+    Ok(frame)
+}
+
+/// Unpublished batch file name (`batch-<lo>-<hi>.bin.tmp`).
+fn is_unpublished_batch(name: &str) -> bool {
+    name.strip_suffix(".tmp")
+        .is_some_and(|name| parse_batch_name(name).is_some())
+}
+
+/// What one [`sweep_unpublished_batches`] attempt did, including the failures it
+/// must not hide: an unremovable leftover is an operator warning, not a reason to
+/// refuse startup, and it must never be attempted again from the prune path.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct SweepOutcome {
+    pub removed_files: u64,
+    pub removed_bytes: u64,
+    /// Failures: one per directory read/iteration error and per removal that failed.
+    pub failed: u64,
+    /// First failure, already carrying the path and the reason.
+    pub first_error: Option<String>,
+}
+
+impl SweepOutcome {
+    fn fail(&mut self, path: &Path, error: impl std::fmt::Display) {
+        self.failed += 1;
+        if self.first_error.is_none() {
+            self.first_error = Some(format!("{}: {error}", path.display()));
         }
     }
+}
+
+/// Remove `batch-*.bin.tmp` leftovers of failed or interrupted appends and report
+/// what happened. Nothing else in the directory is touched: published batches are
+/// immutable and unpublished readers ignore `.tmp`.
+pub(crate) fn sweep_unpublished_batches(dir: &Path) -> SweepOutcome {
+    let mut outcome = SweepOutcome::default();
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(error) => {
+            outcome.fail(dir, error);
+            return outcome;
+        }
+    };
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                outcome.fail(dir, error);
+                continue;
+            }
+        };
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if !is_unpublished_batch(name) {
+            continue;
+        }
+        let path = dir.join(name);
+        let len = entry.metadata().map(|meta| meta.len()).unwrap_or(0);
+        match std::fs::remove_file(&path) {
+            Ok(()) => {
+                outcome.removed_files += 1;
+                outcome.removed_bytes += len;
+            }
+            Err(error) => outcome.fail(&path, error),
+        }
+    }
+    outcome
+}
+
+/// Outcome of one [`prune_batches_through`] attempt.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct PruneReport {
+    /// Published batches removed by this attempt.
+    pub removed: u64,
+    /// Failures in this attempt: an unreadable directory counts once, and so
+    /// does every batch that could not be removed.
+    pub failed: u64,
+    /// Bytes of covered batches that stayed on disk because removal failed.
+    pub retained_bytes: u64,
+    /// First failure of this attempt, for the log line.
+    pub error: Option<String>,
+}
+
+/// Process-wide prune counters. One process serves one world, as with the
+/// component-host counters the dashboard already reads on demand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct JournalPruneStats {
+    /// Failed removals (plus one per unreadable journal directory) since start.
+    pub failures_total: u64,
+    /// Bytes the latest attempt could not remove; zero when it succeeded.
+    pub retained_bytes: u64,
+}
+
+static PRUNE_FAILURES: AtomicU64 = AtomicU64::new(0);
+static PRUNE_RETAINED_BYTES: AtomicU64 = AtomicU64::new(0);
+
+/// Read the process-wide prune counters; cheap, no allocation.
+#[must_use]
+pub fn journal_prune_stats() -> JournalPruneStats {
+    JournalPruneStats {
+        failures_total: PRUNE_FAILURES.load(Ordering::Relaxed),
+        retained_bytes: PRUNE_RETAINED_BYTES.load(Ordering::Relaxed),
+    }
+}
+
+/// Record one failed attempt: counted for the dashboard and warned once, so a
+/// read-only or EIO journal directory cannot grow the WAL silently.
+fn record_prune_failure(journal_dir: &Path, report: &PruneReport) {
+    PRUNE_FAILURES.fetch_add(report.failed, Ordering::Relaxed);
+    PRUNE_RETAINED_BYTES.store(report.retained_bytes, Ordering::Relaxed);
+    tracing::warn!(
+        dir = %journal_dir.display(),
+        failed = report.failed,
+        retained_bytes = report.retained_bytes,
+        error = report.error.as_deref().unwrap_or("unknown"),
+        "journal prune failed; covered batches stay on disk and the WAL grows"
+    );
+}
+
+/// Prune batches fully at or below `manifest_tick`.
+///
+/// A failure here is warned and counted, never fatal: batches at or below the
+/// committed checkpoint are ignored on replay, so only the WAL grows. A
+/// directory that cannot be written at all still fails closed on the next
+/// append (`journal append failed; world halting`), which is the fatal path.
+pub fn prune_batches_through(journal_dir: &Path, manifest_tick: u64) -> PruneReport {
+    let mut report = PruneReport::default();
+    let entries = match std::fs::read_dir(journal_dir) {
+        Ok(entries) => entries,
+        Err(error) => {
+            report.failed += 1;
+            report.error = Some(error.to_string());
+            record_prune_failure(journal_dir, &report);
+            return report;
+        }
+    };
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                report.failed += 1;
+                report.error.get_or_insert_with(|| error.to_string());
+                continue;
+            }
+        };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some((_, hi)) = parse_batch_name(&name) else {
+            continue;
+        };
+        if hi > manifest_tick {
+            continue;
+        }
+        match std::fs::remove_file(entry.path()) {
+            Ok(()) => report.removed += 1,
+            Err(error) => {
+                report.failed += 1;
+                report.retained_bytes += entry.metadata().map(|meta| meta.len()).unwrap_or(0);
+                report
+                    .error
+                    .get_or_insert_with(|| format!("{}: {error}", entry.path().display()));
+            }
+        }
+    }
+    if report.failed == 0 {
+        PRUNE_RETAINED_BYTES.store(0, Ordering::Relaxed);
+    } else {
+        record_prune_failure(journal_dir, &report);
+    }
+    report
+}
+
+/// Decode one published batch file and return its tick range and entry count.
+///
+/// Recovery already refuses a damaged batch; the hot backup calls this on every
+/// batch it copies so a backup is not merely byte-identical to a **damaged**
+/// source (Books R5 G3). Memory is one batch, and the WAL tail since the last
+/// checkpoint bounds how many calls a backup makes.
+pub fn verify_batch_file(path: &Path) -> Result<(u64, u64, usize), CoreError> {
+    let name = path
+        .file_name()
+        .and_then(std::ffi::OsStr::to_str)
+        .unwrap_or_default();
+    let (lo, hi) = parse_batch_name(name).ok_or_else(|| {
+        CoreError::Storage(format!("journal {}: not a batch file name", path.display()))
+    })?;
+    let bytes = std::fs::read(path)
+        .map_err(|error| CoreError::Storage(format!("journal {}: {error}", path.display())))?;
+    let entries = decode_batch(&bytes, lo, hi).map_err(|error| error.at_path(path))?;
+    Ok((lo, hi, entries.len()))
 }
 
 /// Compact player post-image shared by the journal and checkpoints.
@@ -1214,6 +1553,223 @@ pub enum EntityDataValueImage {
     CowVariant(u32),
     PigVariant(u32),
     ZombieNautilusVariant(u32),
+}
+
+/// A field a compact appearance record leaves alone, clears or sets.
+///
+/// `Option<Option<T>>` cannot express this in JSON: `null` decodes to the outer
+/// `None`, so a cleared field would silently keep its old value. The derived
+/// enum encoding is unambiguous (`"Unchanged"`, `"Clear"`, `{"Set": value}`) and
+/// is covered by tests through a real batch encode/decode.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum DeltaValue<T> {
+    #[default]
+    Unchanged,
+    Clear,
+    Set(T),
+}
+
+impl<T> DeltaValue<T> {
+    fn is_unchanged(&self) -> bool {
+        matches!(self, Self::Unchanged)
+    }
+}
+
+/// The delta of one optional live field against the image the record follows.
+fn delta_of<T: Clone + PartialEq>(base: &Option<T>, live: &Option<T>) -> DeltaValue<T> {
+    if base == live {
+        DeltaValue::Unchanged
+    } else {
+        match live {
+            Some(value) => DeltaValue::Set(value.clone()),
+            None => DeltaValue::Clear,
+        }
+    }
+}
+
+/// Apply one optional delta onto a replayed field.
+pub(crate) fn apply_delta<T: Clone>(delta: &DeltaValue<T>, target: &mut Option<T>) {
+    match delta {
+        DeltaValue::Unchanged => {}
+        DeltaValue::Clear => *target = None,
+        DeltaValue::Set(value) => *target = Some(value.clone()),
+    }
+}
+
+/// Part-delta of [`EntityAppearanceImage`] against the last image of the same
+/// body emitted in the same WAL tail. An `Unchanged` field kept its image;
+/// `extra` carries only the metadata entries that changed, unless the surviving
+/// entry order changed (then the whole list rides in `extra`). Every field is an
+/// absolute value, so folding one record is idempotent. Unknown fields refuse
+/// decoding: a newer writer's field must not be dropped silently.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct EntityAppearanceDelta {
+    #[serde(default, skip_serializing_if = "DeltaValue::is_unchanged")]
+    pub item: DeltaValue<mc_data::ItemStack>,
+    #[serde(default, skip_serializing_if = "DeltaValue::is_unchanged")]
+    pub experience_orb: DeltaValue<(i32, i32)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spawn_data: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub equipment: Option<Vec<Option<mc_data::ItemStack>>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baby: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pose: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_flags: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health: Option<f32>,
+    #[serde(default, skip_serializing_if = "DeltaValue::is_unchanged")]
+    pub custom_name: DeltaValue<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_name_visible: Option<bool>,
+    /// Whole metadata list; set only when the surviving entry order changed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra: Option<Vec<(u8, EntityDataValueImage)>>,
+    /// Per-index updates in change order: `Some` sets, `None` removes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra_changes: Vec<(u8, Option<EntityDataValueImage>)>,
+}
+
+impl EntityAppearanceDelta {
+    /// The parts of `live` that differ from the image `base`, borrowing both
+    /// native appearances: only changed payloads are cloned, and nothing is
+    /// materialised for an unchanged field or an unchanged metadata entry.
+    pub(crate) fn diff(
+        base: &crate::boundary::EntityAppearance,
+        live: &crate::boundary::EntityAppearance,
+    ) -> Self {
+        let mut delta = Self {
+            item: delta_of(&base.item, &live.item),
+            experience_orb: delta_of(&base.experience_orb, &live.experience_orb),
+            spawn_data: (base.spawn_data != live.spawn_data).then_some(live.spawn_data),
+            equipment: None,
+            baby: (base.baby != live.baby).then_some(live.baby),
+            pose: (base.pose != live.pose).then_some(live.pose),
+            shared_flags: (base.shared_flags != live.shared_flags).then_some(live.shared_flags),
+            health: (base.health != live.health).then_some(live.health),
+            custom_name: delta_of(&base.custom_name, &live.custom_name),
+            custom_name_visible: (base.custom_name_visible != live.custom_name_visible)
+                .then_some(live.custom_name_visible),
+            extra: None,
+            extra_changes: Vec::new(),
+        };
+        if base.equipment != live.equipment {
+            delta.equipment = Some(live.equipment.to_vec());
+        }
+        // Per-index updates are exact when the entries that survive keep their
+        // relative order: existing indices update in place, new ones append in
+        // the order they appear here. A reordered or duplicated list needs the
+        // whole image instead. No temporary index vectors.
+        let mut reordered = false;
+        let mut previous: Option<usize> = None;
+        for (index, _) in &live.extra {
+            let Some(position) = base.extra.iter().position(|(other, _)| other == index) else {
+                continue;
+            };
+            if previous.is_some_and(|previous| position <= previous) {
+                reordered = true;
+                break;
+            }
+            previous = Some(position);
+        }
+        let duplicated = |entries: &[(u8, crate::boundary::EntityDataValue)]| {
+            entries
+                .iter()
+                .enumerate()
+                .any(|(at, (index, _))| entries[..at].iter().any(|(other, _)| other == index))
+        };
+        if reordered || duplicated(&base.extra) || duplicated(&live.extra) {
+            let differs = base.extra.len() != live.extra.len()
+                || live
+                    .extra
+                    .iter()
+                    .any(|(index, value)| !base_has(base, *index, value));
+            if differs {
+                delta.extra = Some(
+                    live.extra
+                        .iter()
+                        .map(|(index, value)| (*index, EntityDataValueImage::from(value)))
+                        .collect(),
+                );
+            }
+            return delta;
+        }
+        for (index, value) in &live.extra {
+            if !base_has(base, *index, value) {
+                delta
+                    .extra_changes
+                    .push((*index, Some(EntityDataValueImage::from(value))));
+            }
+        }
+        for (index, _) in &base.extra {
+            if !live.extra.iter().any(|(other, _)| other == index) {
+                delta.extra_changes.push((*index, None));
+            }
+        }
+        delta
+    }
+
+    /// Apply onto the replayed image.
+    pub(crate) fn apply(&self, image: &mut EntityAppearanceImage) {
+        if !self.item.is_unchanged() {
+            apply_delta(&self.item, &mut image.item);
+        }
+        if !self.experience_orb.is_unchanged() {
+            apply_delta(&self.experience_orb, &mut image.experience_orb);
+        }
+        if let Some(spawn_data) = self.spawn_data {
+            image.spawn_data = spawn_data;
+        }
+        if let Some(equipment) = &self.equipment {
+            image.equipment = equipment.clone();
+        }
+        if let Some(baby) = self.baby {
+            image.baby = baby;
+        }
+        if let Some(pose) = self.pose {
+            image.pose = pose;
+        }
+        if let Some(shared_flags) = self.shared_flags {
+            image.shared_flags = shared_flags;
+        }
+        if let Some(health) = self.health {
+            image.health = health;
+        }
+        if !self.custom_name.is_unchanged() {
+            apply_delta(&self.custom_name, &mut image.custom_name);
+        }
+        if let Some(custom_name_visible) = self.custom_name_visible {
+            image.custom_name_visible = custom_name_visible;
+        }
+        if let Some(extra) = &self.extra {
+            image.extra = extra.clone();
+            return;
+        }
+        for (index, value) in &self.extra_changes {
+            match value {
+                Some(value) => match image.extra.iter_mut().find(|(other, _)| other == index) {
+                    Some(entry) => entry.1 = value.clone(),
+                    None => image.extra.push((*index, value.clone())),
+                },
+                None => image.extra.retain(|(other, _)| other != index),
+            }
+        }
+    }
+}
+
+/// Whether the baseline carries this metadata entry with this value. Both sides
+/// are native values, so no image is built for an unchanged entry.
+fn base_has(
+    base: &crate::boundary::EntityAppearance,
+    index: u8,
+    live: &crate::boundary::EntityDataValue,
+) -> bool {
+    base.extra
+        .iter()
+        .any(|(other, value)| *other == index && value == live)
 }
 
 impl From<&crate::boundary::EntityAppearance> for EntityAppearanceImage {

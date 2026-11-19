@@ -1,0 +1,15 @@
+[[bug]]
+id = "KNOCKBACK-EPOCH-MAP-COPY"
+title = "The knockback epoch observer turned the tick output's snapshot uniqueness into a tick-owner panic (`Arc::get_mut(&mut output.snapshot).expect(..)`); publishing now rebuilds a shared snapshot instead, while the O(K) epoch-map copy per impulse tick (K = tracked connections) is measured and accepted rather than removed."
+area = "gameplay"
+severity = "minor"
+status = "fixed"
+source = "crates/mc-core/src/core.rs:115-148 (observe_explosion_knockback): the pre-fix code assigned the epoch map through `Arc::get_mut(&mut output.snapshot).expect(\"tick output is not shared before publication\")`, so any second holder of the tick's snapshot panicked the tick owner; the shared map is WorldSnapshot.player_knockback_ticks (crates/mc-core/src/boundary.rs:671) and the broadcast retains up to broadcast_cap=32 outputs (crates/mc-core/src/config.rs:137) while the tick seeds its handle at crates/mc-core/src/core/tick_loop.rs:66. Fix: assign in place when the snapshot is unique (every tick the loop publishes), and otherwise rebuild this tick's snapshot by cloning it (`WorldSnapshot`'s `Clone` is documented fallback-only) and leave a snapshot a reader holds untouched; the epoch assignment also stays outside the 'epochs changed' condition, because a fresh run_tick snapshot starts empty, so an unchanged tick republishes the same `Arc` (same pointer, same non-empty content). Kept deliberately: the `Arc::make_mut` copy on impulse ticks, an O(K) node walk where K = tracked connections (players), measured at K=100 (12.5 us/clone) and K=1000 (61.6 us/clone) in this change's debug test build (debug, shared host, informative; printed by cargo:mc-core:dimensions::tests::knockback_epoch_clone_cost_is_informative_not_a_gate); the audit's suggested alternative (a private map cloned only on the change path) copies on exactly the same ticks, so it is not a fix. Negative control: reverting the non-test hunks restores the `.expect` and the registered shared-snapshot check panics at core.rs:125 'tick output is not shared before publication'. Found by read-only audit CS341/REPORT-B.md B6; no production failure observed."
+repro = "source"
+regression = [
+  "cargo:mc-core:dimensions::tests::shared_tick_snapshot_never_panics_the_knockback_observer",
+  "cargo:mc-core:dimensions::tests::unchanged_knockback_ticks_republish_the_same_map_without_a_copy",
+]
+failing_first = "not recorded"
+fix_commit = "215e1d9212729dc2415a45e71c4c45b31c989e1e"
+promotion = "docs/bugs/promotions/KNOCKBACK-EPOCH-MAP-COPY.json"

@@ -1,0 +1,11 @@
+[[bug]]
+id = "ISSUE-1-02"
+title = "Held tool floats rather than sitting in hand"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = ["client:krasnokamen-client:motion::tests::view_motion_hand_is_perfectly_still_at_rest"]
+fix_commit = "client:db2e7986"
+repro_check = "Stage2X SLICES.md:125,151: the idle-sway unit check detects the sub-pixel defect; the graphical scene remained green on ca63bdf28b3d, so it is not discriminating. That control pin is also not an exact non-test reversal; promotion requires a clean exact reversal and a real-client symptom assertion."

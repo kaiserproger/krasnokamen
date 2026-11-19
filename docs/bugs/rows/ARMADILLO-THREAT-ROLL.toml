@@ -1,0 +1,9 @@
+[[bug]]
+id = "ARMADILLO-THREAT-ROLL"
+title = "An armadillo threatened by an undead mob fails to reduce incoming damage."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ARMADILLO-THREAT-ROLL,ARMADILLO-ROLL-ABSENT"
+regression = ["cargo:mc-core:mounts::tests::armadillo_curls_against_undead_and_halves_melee_damage"]

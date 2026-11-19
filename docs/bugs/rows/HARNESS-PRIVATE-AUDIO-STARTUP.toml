@@ -1,0 +1,17 @@
+[[bug]]
+id = "HARNESS-PRIVATE-AUDIO-STARTUP"
+title = "Private audio preflight accepts a WirePlumber graph that failed to connect"
+area = "harness"
+severity = "major"
+status = "fixed"
+source = "ScreensVoiceStart: screens-voice-qa voice leg recorded zero samples after WirePlumber started before PipeWire; the inner shell ignored the failed sm-settings wait."
+repro = "source"
+regression = [
+  "python:tools.harness.test_screen_audio_graph:PrivateGraphCleanupTests.test_wireplumber_starts_only_after_pipewire_registry",
+  "python:tools.harness.test_screen_audio_graph:PrivateGraphCleanupTests.test_missing_wireplumber_settings_fails_before_child",
+  "python:tools.harness.test_screen_audio_graph:PrivateGraphCleanupTests.test_failed_registry_wait_fails_before_child",
+]
+repro_check = "ScreensVoiceStart/audio-red.log: original wrapper fails all three retained assertions; audio-endpoint-green.log passes after socket/registry ordering and fail-closed waits."
+failing_first = "reported"
+fix_commit = "patch:5d744b47d4ed61e6b67f2f5692b2c5980017551b9c6cbcee180fc56d1c5981f5"
+promotion = "docs/bugs/promotions/HARNESS-PRIVATE-AUDIO-STARTUP.json"

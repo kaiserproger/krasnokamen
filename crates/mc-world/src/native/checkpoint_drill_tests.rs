@@ -226,6 +226,7 @@ fn enospc_checkpoint_backend_refuses_and_recovers_last_durable_image() {
         let store = NativeStore {
             database,
             identity: [1; 32],
+            store_uuid: [1; 16],
             file,
         };
         writes_left.store(cut, Ordering::SeqCst);

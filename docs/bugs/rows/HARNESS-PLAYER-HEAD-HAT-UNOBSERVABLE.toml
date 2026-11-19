@@ -1,0 +1,15 @@
+[[bug]]
+id = "HARNESS-PLAYER-HEAD-HAT-UNOBSERVABLE"
+title = "Player-head gate cannot distinguish a missing hat layer"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Stage3 S3Issue1 F2: default Steve has no contrasting hat, and the gate has no hat pixel assertion"
+repro = "client"
+regression = [
+  "python:tools.harness.test_scene_shot:PlayerHeadTests.test_placed_head_roi_covers_fixture_and_requires_hat_pixels",
+  "python:tools.harness.test_scene_shot:PlayerHeadTests.test_authored_skin_has_opaque_contrasting_hat_and_base_window",
+]
+fix_commit = "patch:d5503b10c277e6e23027843c089e4a10175f74dcc9b60e5ecf83d4bdb7bb1ed7"
+repro_check = "Forward-ported both original commits onto ff72f53bd/current scene runtime. receipts/HarnessFix4Proof/hat.red.log and hat.green.log prove the combined patch; hat-f645 and hat-fad1 red/green logs prove each original commit independently. The authored wide/slim offline skin and placed-hat assertion are covered; original hunk dispositions remain in promotions/HARNESS-PLAYER-HEAD-HAT-UNOBSERVABLE.hunks.md. Historical actual placed-head evidence: 20261115T010513-native-player-head-93kmva1a has 9822 magenta pixels; 20261115T010623-native-player-head-vwnycn1k has zero and fails placed_head_hat_layer_pixels. That does not establish acceptance of the separate worn-head-on-back product failure."
+failing_first = "not recorded"

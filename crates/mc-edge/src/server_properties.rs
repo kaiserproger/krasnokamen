@@ -16,21 +16,38 @@ pub(crate) fn load(text: &str, origin: &Path) -> anyhow::Result<crate::config::E
         .and_then(|t| t.get("file"))
         .and_then(Value::as_str);
     let path = directory.join(explicit.unwrap_or("server.properties"));
+    let mut secret_properties = None;
+    let mut rcon_password_imported = false;
     match std::fs::read(&path) {
         Ok(bytes) => {
+            let toml_password = table
+                .get("rcon")
+                .and_then(Value::as_table)
+                .is_some_and(|rcon| rcon.contains_key("password"));
             // java.util.Properties.load(InputStream) uses ISO-8859-1, not UTF-8.
             let source: String = bytes.into_iter().map(char::from).collect();
-            overlay(&mut table, &source)
+            let carries_password = overlay(&mut table, &source)
                 .with_context(|| format!("importing {}", path.display()))?;
+            if carries_password {
+                secret_properties = Some(path.clone());
+                rcon_password_imported = !toml_password;
+            }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound && explicit.is_none() => {}
         Err(error) => return Err(error).with_context(|| format!("reading {}", path.display())),
     }
-    crate::config::EdgeConfig::from_toml(&toml::to_string(&table)?, Some(origin))
+    let mut cfg = crate::config::EdgeConfig::from_toml(&toml::to_string(&table)?, Some(origin))?;
+    cfg.secret_properties_path = secret_properties;
+    cfg.rcon_password_imported = rcon_password_imported;
+    Ok(cfg)
 }
 
-fn overlay(table: &mut toml::Table, text: &str) -> anyhow::Result<()> {
+/// Apply the properties under the TOML; `true` when the file itself holds a
+/// non-empty `rcon.password`, whichever side wins.
+fn overlay(table: &mut toml::Table, text: &str) -> anyhow::Result<bool> {
+    let mut carries_password = false;
     for (key, value) in parse(text)? {
+        carries_password |= key == "rcon.password" && !value.is_empty();
         let (section, leaf, value) = match key.as_str() {
             "motd" => ("server", "motd", Value::String(value)),
             "max-players" => ("server", "max_players", integer(&key, &value)?),
@@ -93,7 +110,7 @@ fn overlay(table: &mut toml::Table, text: &str) -> anyhow::Result<()> {
             tracing::warn!(property = %key, config_key = %format_args!("{section}.{leaf}"), "TOML overrides imported property");
         }
     }
-    Ok(())
+    Ok(carries_password)
 }
 
 fn integer(key: &str, value: &str) -> anyhow::Result<Value> {

@@ -1,0 +1,12 @@
+[[bug]]
+id = "LEDGER-LAUNCHER-NO-LIB"
+title = "Client regression runner assumes a library target for the bin-only launcher package"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "S3ClientRegress: nine client:krasnokamen-launcher refs under CLIENT-LAUNCHER-STALE-RESOURCE-PACK and HC-5 fail before selecting tests because cargo test --lib has no library target"
+repro = "source"
+regression = ["python:tools.harness.test_regressions:ClientRefTests.test_client_lib_package_uses_library_target", "python:tools.harness.test_regressions:ClientRefTests.test_client_bin_only_package_uses_named_binary_target", "python:tools.harness.test_regressions:ClientRefTests.test_client_unknown_or_ambiguous_target_fails_closed", "python:tools.harness.test_regressions:ClientRefTests.test_client_bin_ref_cannot_pass_by_selecting_no_test"]
+fix_commit = "a24ff7f93"
+failing_first = "reported"
+repro_check = "HarnessFix3/added-negative-controls.log: retaining the new test and restoring only _run_client fails at the expected --bin krasnokamen-launcher versus --lib assertion. launcher-results.json and launcher-ref-1..9.log: all nine real registered launcher refs select one test and pass at client 12e076e9c761, using cargo metadata's binary target through mem-run -m 6G."

@@ -1,0 +1,12 @@
+[[bug]]
+id = "SHRIEKER-HYDRATE-PANIC"
+title = "A corrupt sculk-shrieker block entity crashes the tick thread at hydration: `shrieker.rs:282` `decode(..).unwrap_or_else(panic!(\"sculk_shrieker at ...\"))` inside `changed()`/hydrate path over resident chunks. Same one-policy hydration root (load/hydrate path, not per-tick effect)."
+area = "gameplay"
+repro = "manual"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHRIEKER-HYDRATE-PANIC"
+regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
+failing_first = "reported"
+fix_commit = "patch:34e03a31bb87400103032020267781c98c9ebb79740915acbe303611c27552b9"
+promotion = "docs/bugs/promotions/SHRIEKER-HYDRATE-PANIC.json"

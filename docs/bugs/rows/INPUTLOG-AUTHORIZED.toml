@@ -1,0 +1,10 @@
+[[bug]]
+id = "INPUTLOG-AUTHORIZED"
+title = "Consumed AuthorizedBuild records contain only kind/connection, so a fresh placement/dig/use cannot be distinguished from stale queued authorization by sequence/payload/tick. Strict concurrency evidence must block rather than match this ambiguous marker."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#INPUTLOG-AUTHORIZED"
+regression = ["cargo:mc-core:build_precommit::tests::consumed_authorization_log_keeps_original_input_and_planning_tick"]
+failing_first = "reported"

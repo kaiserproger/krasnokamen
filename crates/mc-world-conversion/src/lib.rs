@@ -7,7 +7,9 @@
 mod census;
 #[cfg(test)]
 mod census_tests;
-pub use census::{CensusReceipt, DimensionCensus, SettlementCensus, census_native};
+pub use census::{
+    CensusReceipt, DimensionCensus, HouseholdCensus, SettlementCensus, census_native,
+};
 mod crash_census;
 pub use crash_census::crash_census;
 mod custody_census;

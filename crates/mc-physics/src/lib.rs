@@ -1606,15 +1606,27 @@ fn overlaps_across(body_min: f64, body_max: f64, obstacle_min: f64, obstacle_max
     body_min + COLLISION_EPSILON < obstacle_max && body_max - COLLISION_EPSILON >= obstacle_min
 }
 
+/// Vanilla `VoxelShape.collideX` (`javap -c` of server-26.1.2.jar) clips a face
+/// the body is within `1.0E-7` of on *both* sides: `d >= -1.0E-7 && d < movement`
+/// for positive movement, `d <= 1.0E-7 && d > movement` for negative. A side up
+/// to `COLLISION_EPSILON` past the face is snapped back out to it instead of
+/// being skipped, so the clip and the overlap predicate (`overlaps_across`)
+/// agree about the same contact.
 fn clip_x(body: WorldAabb, mut dx: f64, collision_boxes: &[WorldAabb]) -> f64 {
     for obstacle in collision_boxes {
         if overlaps_across(body.min_y, body.max_y, obstacle.min_y, obstacle.max_y)
             && overlaps_across(body.min_z, body.max_z, obstacle.min_z, obstacle.max_z)
         {
-            if dx > 0.0 && body.max_x <= obstacle.min_x {
-                dx = dx.min(obstacle.min_x - body.max_x);
-            } else if dx < 0.0 && body.min_x >= obstacle.max_x {
-                dx = dx.max(obstacle.max_x - body.min_x);
+            if dx > 0.0 {
+                let clip = obstacle.min_x - body.max_x;
+                if clip >= -COLLISION_EPSILON && clip < dx {
+                    dx = clip;
+                }
+            } else if dx < 0.0 {
+                let clip = obstacle.max_x - body.min_x;
+                if clip <= COLLISION_EPSILON && clip > dx {
+                    dx = clip;
+                }
             }
         }
     }
@@ -1626,10 +1638,16 @@ fn clip_z(body: WorldAabb, mut dz: f64, collision_boxes: &[WorldAabb]) -> f64 {
         if overlaps_across(body.min_x, body.max_x, obstacle.min_x, obstacle.max_x)
             && overlaps_across(body.min_y, body.max_y, obstacle.min_y, obstacle.max_y)
         {
-            if dz > 0.0 && body.max_z <= obstacle.min_z {
-                dz = dz.min(obstacle.min_z - body.max_z);
-            } else if dz < 0.0 && body.min_z >= obstacle.max_z {
-                dz = dz.max(obstacle.max_z - body.min_z);
+            if dz > 0.0 {
+                let clip = obstacle.min_z - body.max_z;
+                if clip >= -COLLISION_EPSILON && clip < dz {
+                    dz = clip;
+                }
+            } else if dz < 0.0 {
+                let clip = obstacle.max_z - body.min_z;
+                if clip <= COLLISION_EPSILON && clip > dz {
+                    dz = clip;
+                }
             }
         }
     }
@@ -1643,6 +1661,10 @@ fn resolve_horizontal_sweep(
 ) -> Vec3 {
     let mut resolved = Vec3::ZERO;
     let mut remaining = desired;
+
+    // The contact tolerance is applied inside `sweep_axis_interval` (one
+    // comparison per axis per box), so an axis whose near face the body sits
+    // up to `COLLISION_EPSILON` past comes back as `entry = 0.0` and blocks.
 
     // At most two horizontal normals can be removed. A third pass only applies
     // the remaining tangent movement after the second contact.
@@ -1742,6 +1764,23 @@ fn first_sweep_hit(
     nearest
 }
 
+/// Vanilla `Shapes.collide` tolerance (`javap -c` of server-26.1.2.jar): a face
+/// the leading side sits up to `COLLISION_EPSILON` past is a contact *now*, so
+/// its entry time is exactly `0`. The test takes the signed face gap in blocks
+/// (`gap = leading side - face` along the movement, so negative means past the
+/// face in both directions) before any division, which keeps the tolerance in
+/// one unit instead of an `entry * movement` product. A non-negative gap is an
+/// obstacle the body reaches now or later and keeps its own time; a body deeper
+/// than the tolerance keeps the negative entry, which the caller's
+/// `-TIME_EPSILON..=1.0` window rejects rather than teleporting it out.
+fn contact_entry(gap: f64, movement: f64) -> f64 {
+    if (-COLLISION_EPSILON..0.0).contains(&gap) {
+        0.0
+    } else {
+        gap / movement.abs()
+    }
+}
+
 fn sweep_axis_interval(
     body_min: f64,
     body_max: f64,
@@ -1751,12 +1790,12 @@ fn sweep_axis_interval(
 ) -> Option<(f64, f64)> {
     if movement > 0.0 {
         Some((
-            (obstacle_min - body_max) / movement,
+            contact_entry(obstacle_min - body_max, movement),
             (obstacle_max - body_min) / movement,
         ))
     } else if movement < 0.0 {
         Some((
-            (obstacle_max - body_min) / movement,
+            contact_entry(body_min - obstacle_max, movement),
             (obstacle_min - body_max) / movement,
         ))
     } else if overlaps_across(body_min, body_max, obstacle_min, obstacle_max) {

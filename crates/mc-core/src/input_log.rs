@@ -243,7 +243,9 @@ impl InputLog {
     ) -> Result<Self, CoreError> {
         let storage = |error: std::io::Error| CoreError::Storage(format!("input log: {error}"));
         let dir = world_dir.join(DIR);
-        std::fs::create_dir_all(&dir).map_err(storage)?;
+        // R4-P2: a diagnostic log whose directory entry is not durable would
+        // vanish with the power loss it exists to describe.
+        mc_world::atomic_file::create_dir_all_durable(&dir).map_err(storage)?;
         let unix_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |elapsed| elapsed.as_millis());

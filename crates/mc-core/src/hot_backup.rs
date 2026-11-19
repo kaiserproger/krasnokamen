@@ -81,6 +81,7 @@ pub(crate) fn copy_world(
     database: &mut impl Read,
     checkpoint_tick: u64,
     through: u64,
+    store_uuid: [u8; 16],
 ) -> Result<HotBackup, CoreError> {
     let through = through.max(checkpoint_tick);
     let mut files = BTreeMap::new();
@@ -89,6 +90,38 @@ pub(crate) fn copy_world(
     files.insert(
         NATIVE_DATABASE.to_owned(),
         copy_reader_hashed(database, &out.join(NATIVE_DATABASE))?,
+    );
+    // Books R4-P1: the marker travels with the store it witnesses, so a
+    // restored copy is checked against the same (store id, checkpoint tick)
+    // pair. It is read here, on the writer thread, after the commit that it
+    // describes; a store with a checkpoint always has one.
+    let marker_path = mc_world::store_marker::path(world_dir);
+    let marker_bytes = std::fs::read(&marker_path)
+        .map_err(|error| CoreError::Storage(format!("{}: {error}", marker_path.display())))?;
+    let marker = mc_world::store_marker::StoreMarker::decode(&marker_bytes)
+        .map_err(|error| CoreError::Storage(format!("{}: {error}", marker_path.display())))?;
+    if marker.store_uuid != store_uuid {
+        return Err(CoreError::Storage(format!(
+            "hot backup: checkpoint marker {} records store id {} but the store is {}; the copy \
+             would pair two different worlds",
+            marker_path.display(),
+            uuid::Uuid::from_bytes(marker.store_uuid),
+            uuid::Uuid::from_bytes(store_uuid),
+        )));
+    }
+    if marker.checkpoint_tick > checkpoint_tick {
+        return Err(CoreError::Storage(format!(
+            "hot backup: checkpoint marker records {}, ahead of the committed checkpoint {}; \
+             the store rolled back and the copy would be refused on restore",
+            marker.checkpoint_tick, checkpoint_tick
+        )));
+    }
+    files.insert(
+        mc_world::store_marker::MARKER_FILE.to_owned(),
+        copy_reader_hashed(
+            &mut marker_bytes.as_slice(),
+            &out.join(mc_world::store_marker::MARKER_FILE),
+        )?,
     );
 
     let mut batches = Vec::new();
@@ -115,6 +148,10 @@ pub(crate) fn copy_world(
             )));
         }
         let relative = format!("journal/{name}");
+        // Books R5 G3: a digest only proves the copy matches the source. Decode
+        // and CRC-check every batch so the backup cannot be silently
+        // unrestorable because the source tail was damaged.
+        crate::journal::verify_batch_file(&world_dir.join(&relative))?;
         let digest = copy_hashed(&world_dir.join(&relative), &out.join(&relative))?;
         files.insert(relative, digest);
         covered = *hi;

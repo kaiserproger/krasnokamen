@@ -1,0 +1,10 @@
+[[bug]]
+id = "PERF-RECEIPT-HAS-NO-ERROR-COUNTER-ROLLUP"
+title = "No per-resource error-counter rollup reaches the receipt: retried or soft errors, socket drops and short writes are not counted anywhere a receipt can cite, and the 'edge items:' line has no error field."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-12 (Gregg 2.5.9 USE: errors; hygiene). crates/mc-edge/src/fanout.rs (around :268) prints the edge items line without an error field; fsync and rename failures are fatal by design, but soft errors, drops and short writes are not counted. Verified open on main 5bdc02911. Fix: add a per-window error rollup (socket drops and short writes, retried I/O, input drops already on the dashboard) to the rung receipt; pair with the per-socket snapshot idea I-4 in receipts/Perf1M/BOOKS-IDEAS.md."
+regression = []
+failing_first = "not recorded"

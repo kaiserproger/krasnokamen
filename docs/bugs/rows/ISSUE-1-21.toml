@@ -1,0 +1,10 @@
+[[bug]]
+id = "ISSUE-1-21"
+title = "First-person tool clips through block"
+area = "client"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "https://github.com/kaiserproger/solaris/issues/1"
+regression = []
+repro_check = "Stage2X SLICES.md:125,151: scene control pin d4c5a326243c fails tool_wall_visible (receipts/Stage2Client/run-redr2-21_firstperson_clip.log), green pin 34a85940 passes (run-green2-21_firstperson_clip.log). The scene is not registered in this tree; promotion requires a registered symptom assertion and a clean exact reversal."

@@ -222,25 +222,34 @@ fn stored_structure(state: &mut TickState) -> String {
         worksites::planned_points(state, &instance).unwrap(),
     );
     let image = fingerprint(state, bounds(at, blueprint.size()).unwrap(), false).unwrap();
-    let mut ledger = LedgerView(Arc::new(Ledger {
-        revision: 1,
-        ..Default::default()
-    }));
-    ledger.structures.insert(
+    let mut ledger = LedgerView(Arc::new(Ledger::default()));
+    ledger.revision = 1;
+    ledger.insert_structure(
         snapshot.structure_id.clone(),
         Structure {
             owner: "demo".into(),
             settlement: None,
+            liquid: None,
             settlement_preparation: None,
             snapshot,
             blueprint_hash: blueprint.content_hash().into(),
             image,
+            admission: provenance::Admission::Plugin,
             cells,
-            receipts: Vec::new(),
+            portions: Vec::new(),
         },
     );
-    save(state, &ledger);
+    save(state, ledger);
     "saved-house".into()
+}
+
+/// Every `@native-structures` key and value, the persisted ledger as written.
+fn ledger_domain(state: &TickState) -> BTreeMap<String, serde_json::Value> {
+    state
+        .plugins
+        .domain_entries(OWNER)
+        .map(|(key, value)| (key.to_owned(), value.clone()))
+        .collect()
 }
 
 #[test]
@@ -375,7 +384,7 @@ fn survey_unknown_chunks_refuses_instead_of_minting_air_facts() {
         survey(&mut state, "demo", "minecraft:overworld", bounds).err(),
         Some(Failure::Unloaded)
     );
-    assert!(ledger(&state).unwrap().surveys.is_empty());
+    assert!(ledger(&state).unwrap().surveys().is_empty());
     let facts = worksites::facts(&state, [20_000, 100, 20_000]).unwrap();
     assert_eq!(facts.block, None);
     assert!(!facts.standable);
@@ -411,7 +420,7 @@ fn worksite_registration_checks_live_point_and_owned_survey() {
         execute_operation(&mut state, "demo", &operation).err(),
         Some(Failure::Blocked)
     );
-    assert!(ledger(&state).unwrap().worksites.is_empty());
+    assert!(ledger(&state).unwrap().worksites().is_empty());
 }
 #[test]
 fn saved_structure_has_real_status_and_lifecycle_fences() {
@@ -521,9 +530,37 @@ fn corrupt_staged_geometry_cannot_recover_as_success() {
     let mut state = state();
     let id = stored_structure(&mut state);
     let mut ledger = ledger(&state).unwrap();
-    ledger.structures.get_mut(&id).unwrap().cells[0][0].at[0] += 100;
-    save(&mut state, &ledger);
+    ledger.structure_mut(&id).unwrap().cells[0][0].at[0] += 100;
+    save(&mut state, ledger);
     assert!(validate(&state).is_err());
+}
+
+/// PrepLifecycle §2.3 fence C: `admission` is a required field of every
+/// structure record, and its kind must match the record's owner.
+#[test]
+fn a_structure_record_without_a_matching_admission_refuses_startup() {
+    let mut state = state();
+    let id = stored_structure(&mut state);
+    validate(&state).unwrap();
+    let key = ledger::structure_key(&id);
+    let mut stripped = state.plugins.get_domain(OWNER, &key).unwrap().clone();
+    stripped
+        .as_object_mut()
+        .unwrap()
+        .remove("admission")
+        .expect("every record carries its admission");
+    state.plugins.set_domain(OWNER, &key, stripped);
+    assert!(validate(&state).is_err(), "a record without admission");
+
+    let mut state = self::state();
+    let id = stored_structure(&mut state);
+    let mut ledger = ledger_mut(&mut state).unwrap();
+    ledger.structure_mut(&id).unwrap().admission = provenance::Admission::Captured { since: 0 };
+    save(&mut state, ledger);
+    assert!(
+        validate(&state).is_err(),
+        "a plugin record with a settlement admission"
+    );
 }
 
 #[test]
@@ -536,9 +573,10 @@ fn survey_expiry_counts_global_plugin_transactions_not_local_domain_updates() {
         panic!("survey")
     };
     let mut local = ledger(&state).unwrap();
-    assert_eq!(local.surveys[&survey.survey_token].expires, 64);
+    assert_eq!(local.surveys()[&survey.survey_token].expires, 64);
     local.revision += 100;
-    save(&mut state, &local);
+    save(&mut state, local);
+    let local = ledger(&state).unwrap();
     for index in 0..64 {
         state.plugins.apply_storage(
             "other-package",
@@ -614,7 +652,7 @@ fn held_structure(state: &mut TickState) -> (String, String, ScriptInventoryEndp
         position: ScriptBlockPosition::new(pos.x, pos.y, pos.z),
     };
     let mut local = ledger(state).unwrap();
-    let record = local.structures.get_mut(&id).unwrap();
+    let record = local.structure_mut(&id).unwrap();
     let plan = resource_plan(&record.snapshot.stages);
     let fence = inventories::load(state, "demo", &endpoint).unwrap().fence;
     let request = ScriptOperationRequest::try_new(
@@ -637,7 +675,7 @@ fn held_structure(state: &mut TickState) -> (String, String, ScriptInventoryEndp
     reservation.snapshot.bound_to = Some(id.clone());
     inventories::save_reservation(state, reservation).unwrap();
     record.snapshot.reservation_ref = Some(reference.clone());
-    save(state, &local);
+    save(state, local);
     (id, reference, endpoint)
 }
 
@@ -696,18 +734,19 @@ fn cancelled_structure_survives_pruned_history_but_live_or_wrong_owner_reference
     validate(&state).unwrap();
 
     let mut local = ledger(&state).unwrap();
-    local.structures.get_mut(&id).unwrap().snapshot.state = ScriptStructureState::Running;
-    save(&mut state, &local);
+    local.structure_mut(&id).unwrap().snapshot.state = ScriptStructureState::Running;
+    save(&mut state, local);
     assert!(validate(&state).is_err());
 
     let mut foreign = released;
     foreign.owner = "other".into();
     foreign.snapshot.reservation_ref = "foreign".into();
     inventories::save_reservation(&mut state, foreign).unwrap();
-    let record = local.structures.get_mut(&id).unwrap();
+    let mut local = ledger(&state).unwrap();
+    let record = local.structure_mut(&id).unwrap();
     record.snapshot.state = ScriptStructureState::Cancelled;
     record.snapshot.reservation_ref = Some("foreign".into());
-    save(&mut state, &local);
+    save(&mut state, local);
     assert!(validate(&state).is_err());
 }
 
@@ -717,12 +756,12 @@ fn cancellation_capacity_failure_keeps_source_reservation_and_domain_unchanged()
     let (id, reference, endpoint) = held_structure(&mut state);
     let mut local = ledger(&state).unwrap();
     local.revision = u64::MAX;
-    save(&mut state, &local);
+    save(&mut state, local);
     let source = inventories::load(&state, "demo", &endpoint).unwrap();
     let reservation =
         serde_json::to_value(inventories::reservation(&state, "demo", &reference).unwrap())
             .unwrap();
-    let domain = state.plugins.get_domain(OWNER, KEY).unwrap().clone();
+    let domain = ledger_domain(&state);
     assert_eq!(
         execute_operation(
             &mut state,
@@ -736,7 +775,7 @@ fn cancellation_capacity_failure_keeps_source_reservation_and_domain_unchanged()
         .err(),
         Some(Failure::Capacity)
     );
-    assert_eq!(state.plugins.get_domain(OWNER, KEY), Some(&domain));
+    assert_eq!(ledger_domain(&state), domain);
     assert_eq!(
         serde_json::to_value(inventories::reservation(&state, "demo", &reference).unwrap())
             .unwrap(),
@@ -1329,8 +1368,8 @@ fn npc_construct_waits_for_the_canonical_hook_then_counts_one_real_committed_por
     assert_eq!(assignment.changes[0].delta, -1);
     assert_eq!(fixture.state.plugin_block_writes.len(), 1);
     let local = ledger(&fixture.state).unwrap();
-    let structure = local.structures.get("saved-house").unwrap();
-    assert_eq!(structure.receipts.len(), 1);
+    let structure = local.structures().get("saved-house").unwrap();
+    assert_eq!(structure.snapshot.watermark, 1);
     assert_eq!(structure.snapshot.completed_work_units, 1);
     assert_eq!(
         inventories::load(&fixture.state, "demo", &fixture.endpoint)
@@ -1362,12 +1401,7 @@ fn npc_hook_denial_and_stale_guards_do_not_mint_work_receipts_or_debit_custody()
             &[ScriptStorageMutation::compare_and_swap("claim", None, "allowed").unwrap()],
         );
         let version = fixture.state.plugins.version("protector", "claim").unwrap();
-        let structure = fixture
-            .state
-            .plugins
-            .get_domain(OWNER, KEY)
-            .unwrap()
-            .clone();
+        let structure = ledger_domain(&fixture.state);
         let inventory = inventories::load(&fixture.state, "demo", &fixture.endpoint).unwrap();
         crate::plugin_npcs::advance(&mut fixture.state);
         let question = fixture.question();
@@ -1410,11 +1444,7 @@ fn npc_hook_denial_and_stale_guards_do_not_mint_work_receipts_or_debit_custody()
         assert!(work.changes.is_empty(), "{denied}");
         assert!(work.receipts.is_empty(), "{denied}");
         assert_eq!(work.state, ScriptWorkState::Paused, "{denied}");
-        assert_eq!(
-            fixture.state.plugins.get_domain(OWNER, KEY),
-            Some(&structure),
-            "{denied}"
-        );
+        assert_eq!(ledger_domain(&fixture.state), structure, "{denied}");
         assert_eq!(
             inventories::load(&fixture.state, "demo", &fixture.endpoint)
                 .unwrap()
@@ -1487,12 +1517,7 @@ fn npc_construct_revalidates_its_frozen_footprint_and_material_before_images() {
     for changed in ["footprint", "materials"] {
         let mut fixture = StructureBuildFixture::new(true);
         let (_, slot) = assign_construct_work(&mut fixture);
-        let structure_before = fixture
-            .state
-            .plugins
-            .get_domain(OWNER, KEY)
-            .unwrap()
-            .clone();
+        let structure_before = ledger_domain(&fixture.state);
         crate::plugin_npcs::advance(&mut fixture.state);
         let question = fixture.question();
         if changed == "footprint" {
@@ -1527,11 +1552,7 @@ fn npc_construct_revalidates_its_frozen_footprint_and_material_before_images() {
         assert_eq!(assignment.work_units_done, 0, "{changed}");
         assert!(assignment.changes.is_empty(), "{changed}");
         assert!(assignment.receipts.is_empty(), "{changed}");
-        assert_eq!(
-            fixture.state.plugins.get_domain(OWNER, KEY),
-            Some(&structure_before),
-            "{changed}"
-        );
+        assert_eq!(ledger_domain(&fixture.state), structure_before, "{changed}");
         assert_eq!(
             inventories::load(&fixture.state, "demo", &fixture.endpoint)
                 .unwrap()
@@ -1628,7 +1649,7 @@ fn district_requires_committed_matching_structure_and_loses_destroyed_readiness(
         ScriptOperationState::Committed
     );
     assert_eq!(
-        ledger(&fixture.state).unwrap().structures["saved-house"]
+        ledger(&fixture.state).unwrap().structures()["saved-house"]
             .snapshot
             .state,
         ScriptStructureState::Committed
@@ -1799,14 +1820,18 @@ fn stored_generic_cells_without_quantity_keep_one_item_semantics() {
 fn decoded_structure_ledger_observes_every_domain_write_without_stale_reads() {
     let mut state = state();
     stored_structure(&mut state);
-    let original = state.plugins.get_domain(OWNER, KEY).unwrap().clone();
+    let original = state
+        .plugins
+        .get_domain(OWNER, ledger::META)
+        .unwrap()
+        .clone();
     let first = ledger(&state).unwrap();
     assert_eq!(first.revision, 1);
     reset_ledger_stats();
     assert!(Arc::ptr_eq(&first.0, &ledger(&state).unwrap().0));
     state
         .plugins
-        .set_domain("other-owner", KEY, serde_json::json!({}));
+        .set_domain("other-owner", ledger::META, serde_json::json!({}));
     assert!(Arc::ptr_eq(&first.0, &ledger(&state).unwrap().0));
     assert_eq!(
         ledger_stats().decodes,
@@ -1816,13 +1841,13 @@ fn decoded_structure_ledger_observes_every_domain_write_without_stale_reads() {
 
     let mut replacement = original.clone();
     replacement["revision"] = serde_json::json!(2);
-    state.plugins.set_domain(OWNER, KEY, replacement);
+    state.plugins.set_domain(OWNER, ledger::META, replacement);
     assert_eq!(ledger(&state).unwrap().revision, 2);
     assert_eq!(
         first.revision, 1,
         "a published read snapshot stays immutable"
     );
-    state.plugins.get_domain_mut(OWNER, KEY).unwrap()["revision"] = serde_json::json!(3);
+    state.plugins.get_domain_mut(OWNER, ledger::META).unwrap()["revision"] = serde_json::json!(3);
     assert_eq!(ledger(&state).unwrap().revision, 3);
     let mut pending = ledger(&state).unwrap();
     pending.revision = 4;
@@ -1831,15 +1856,21 @@ fn decoded_structure_ledger_observes_every_domain_write_without_stale_reads() {
         3,
         "unsaved mutations are not published"
     );
-    save(&mut state, &pending);
+    save(&mut state, pending);
     assert_eq!(ledger(&state).unwrap().revision, 4);
-    state.plugins.delete_domain(OWNER, KEY);
-    assert_eq!(ledger(&state).unwrap().revision, 0);
-    state
-        .plugins
-        .set_domain(OWNER, KEY, serde_json::json!({"revision": "invalid"}));
+    state.plugins.delete_domain(OWNER, ledger::META);
+    assert_eq!(
+        ledger(&state).err(),
+        Some(Failure::RuntimeUnavailable),
+        "records without the meta key are not a fresh ledger"
+    );
+    state.plugins.set_domain(
+        OWNER,
+        ledger::META,
+        serde_json::json!({"revision": "invalid"}),
+    );
     assert_eq!(ledger(&state).err(), Some(Failure::RuntimeUnavailable));
-    state.plugins.set_domain(OWNER, KEY, original);
+    state.plugins.set_domain(OWNER, ledger::META, original);
     assert_eq!(
         ledger(&state).unwrap().revision,
         1,
@@ -1864,9 +1895,12 @@ fn decoded_structure_ledger_is_derived_from_checkpoint_and_wal_bytes() {
         BTreeSet::from(["storage", "receipts", "domains", "revision"]),
         "decoded state and its local revision never enter persisted plugin bytes"
     );
-    assert!(ledger(&original).unwrap().structures.contains_key(&id));
+    assert!(ledger(&original).unwrap().structures().contains_key(&id));
     assert_eq!(serde_json::to_vec(&original.plugins).unwrap(), checkpoint);
-    original.plugins.get_domain_mut(OWNER, KEY).unwrap()["revision"] = serde_json::json!(2);
+    original
+        .plugins
+        .get_domain_mut(OWNER, ledger::META)
+        .unwrap()["revision"] = serde_json::json!(2);
     let mut entries = Vec::new();
     crate::plugin::journal(&mut original, &mut entries);
     assert!(matches!(
@@ -1920,8 +1954,8 @@ fn cached_building_projection_keeps_duplicate_refusal_without_copying_the_ledger
     let mut state = state();
     let id = stored_structure(&mut state);
     let mut local = ledger(&state).unwrap();
-    local.structures.get_mut(&id).unwrap().snapshot.state = ScriptStructureState::Committed;
-    save(&mut state, &local);
+    local.structure_mut(&id).unwrap().snapshot.state = ScriptStructureState::Committed;
+    save(&mut state, local);
     reset_ledger_stats();
     assert_eq!(
         building_facts(
@@ -1935,7 +1969,7 @@ fn cached_building_projection_keeps_duplicate_refusal_without_copying_the_ledger
     assert_eq!(
         ledger_stats().copies,
         0,
-        "read projections do not clone every stored cell and receipt"
+        "read projections do not clone every stored cell"
     );
 }
 
@@ -1943,16 +1977,21 @@ fn cached_building_projection_keeps_duplicate_refusal_without_copying_the_ledger
 fn exclusive_ledger_writer_reuses_decoded_allocation_and_publishes_exact_bytes() {
     let mut state = state();
     stored_structure(&mut state);
+    let record = ledger_domain(&state)[&ledger::structure_key("saved-house")].clone();
     reset_ledger_stats();
     let mut local = ledger_mut(&mut state).unwrap();
     local.revision = 2;
-    save(&mut state, &local);
+    save(&mut state, local);
     assert_eq!(ledger(&state).unwrap().revision, 2);
     assert_eq!(ledger_stats().copies, 0);
     assert_eq!(ledger_stats().decodes, 0);
     assert_eq!(
-        state.plugins.get_domain(OWNER, KEY).unwrap(),
-        &serde_json::to_value(&*local.0).unwrap()
+        state.plugins.get_domain(OWNER, ledger::META).unwrap(),
+        &serde_json::json!({"schema": 2, "revision": 2})
+    );
+    assert_eq!(
+        ledger_domain(&state)[&ledger::structure_key("saved-house")],
+        record
     );
 }
 
@@ -1962,12 +2001,11 @@ fn active_structure_recovery_is_a_cached_read_not_a_ledger_mutation() {
     let handle = stored_structure(&mut state);
     let settlement = crate::settlements::SettlementId(7);
     let mut local = ledger_mut(&mut state).unwrap();
-    let record = local.structures.get_mut(&handle).unwrap();
+    let record = local.structure_mut(&handle).unwrap();
     record.owner = settlement_builds::owner(settlement);
     record.settlement = Some(settlement);
     record.snapshot.state = ScriptStructureState::Running;
-    save(&mut state, &local);
-    drop(local);
+    save(&mut state, local);
     let mut initial = Vec::new();
     crate::plugin::journal(&mut state, &mut initial);
     let before = serde_json::to_vec(&state.plugins).unwrap();
@@ -2061,8 +2099,41 @@ fn persisted_expedition_claim_refuses_plugin_prepare_without_reserving_or_chargi
         Some(Failure::Blocked)
     );
     assert_eq!(serde_json::to_value(&state.plugins).unwrap(), before);
-    assert!(ledger(&state).unwrap().structures.is_empty());
+    assert!(ledger(&state).unwrap().structures().is_empty());
     // Removing only the durable claim restores the exact same admitted path.
     state.settlements.get_mut(parent).unwrap().founding = None;
     assert!(execute_operation(&mut state, "demo", &operation).is_ok());
+}
+
+#[path = "plugin_structures/ledger_tests.rs"]
+mod ledger_split;
+
+/// The liquid proof is a required ledger key that may be null: a record saved
+/// before the key existed (or hand-edited to drop it) refuses to load rather
+/// than reading as a dry plan. There is no old-save compatibility: the ledger
+/// breaks once, in the single reset (LedgerSplit).
+#[test]
+fn a_structure_record_without_the_liquid_key_refuses_to_load() {
+    let mut state = state();
+    stored_structure(&mut state);
+    let ledger = ledger(&state).expect("ledger");
+    let record = ledger
+        .structures()
+        .get("saved-house")
+        .expect("saved structure");
+    let mut value = serde_json::to_value(record).expect("record json");
+    assert!(
+        value.get("liquid").is_some_and(serde_json::Value::is_null),
+        "a dry plan stores a null liquid proof"
+    );
+    assert!(
+        serde_json::from_value::<Structure>(value.clone()).is_ok(),
+        "a null liquid proof loads"
+    );
+    value.as_object_mut().expect("object").remove("liquid");
+    let missing = serde_json::from_value::<Structure>(value);
+    assert!(
+        missing.is_err(),
+        "a record without the liquid key refuses to load"
+    );
 }

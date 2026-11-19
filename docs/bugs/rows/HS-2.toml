@@ -1,0 +1,11 @@
+[[bug]]
+id = "HS-2"
+title = "Vehicle-to-hopper transfer leaves an already-open hopper menu stale."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-2"
+regression = ["cargo:mc-core:vehicles::tests::hopper_pulling_from_a_container_vehicle_refreshes_its_open_menu"]
+fix_commit = "6948e64e1"
+repro_check = "real-hunk control: reverse-applying 6948e64e1's redstone/containers.rs additions turns the ref red at vehicles_tests.rs:1647 (the hopper viewer never sees the pulled apple), receipts/XCoreItems/real-hunk-control.txt; the row is repro=manual, so candidate: real-client check required (repro=manual)"

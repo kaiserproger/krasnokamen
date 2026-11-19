@@ -1,0 +1,10 @@
+[[bug]]
+id = "CAT-SITTING-BREED"
+title = "A healthy tamed sitting cat rejects breeding fish even when a standing tamed partner is adjacent; current rule requires both cats standing, whereas vanilla permits a mobile cat to breed with a sitting one."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAT-SITTING-BREED"
+regression = ["cargo:mc-core:entity_life_tests::sitting_cat_breeds_with_a_standing_partner_but_not_two_sitting"]
+failing_first = "reported"

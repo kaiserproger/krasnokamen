@@ -1,0 +1,10 @@
+[[bug]]
+id = "BREEDING-EGG-LIFECYCLE"
+title = "Feed two adult sniffers torchflower seeds, turtles seagrass, or frogs slimeballs in survival. The common breeding commit creates a baby of the parent's entity type immediately, bypassing the respective sniffer-egg item, turtle nesting/eggs, and frogspawn/tadpole lifecycle. Grouped as one shared birth-path defect, not three inflated counts."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BREEDING-EGG-LIFECYCLE"
+regression = ["cargo:mc-core:entity_life_tests::sniffer_breeding_stages_an_egg_item_instead_of_a_live_child", "cargo:mc-core:entity_life_tests::sniffer_pair_drops_egg_through_gameplay", "cargo:mc-core:entity_life_tests::sniffer_breeding_accepts_a_carpet_in_the_midpoint_cell", "cargo:mc-core:entity_life_tests::turtle_carries_eggs_home_before_laying_on_sand", "cargo:mc-core:entity_life_tests::frog_pair_breeds_then_lays_frogspawn_at_water"]
+failing_first = "reported"

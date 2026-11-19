@@ -7,24 +7,28 @@ fn routing_snapshot_only_rebuilds_changed_rosters() {
     let (reliable_tx, _reliable_rx) = mpsc::channel(2);
     let (world_tx, _world_rx) = world_queue(2, WORLD_QUEUE_BYTES);
     registry
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0)
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || 0,
+        )
         .unwrap();
-    assert!(registry.routing_snapshot().1.is_none());
+    assert!(registry.routing_view().1.is_none());
     registry.set_name(id, "Zoe".into());
     registry.set_name(ConnectionId(99), "Alex".into());
-    let (handles, names) = registry.routing_snapshot();
+    let (handles, names) = registry.routing_view();
     assert!(handles.contains_key(&id));
     assert_eq!(names.unwrap(), ["Alex", "Zoe"]);
-    assert!(registry.routing_snapshot().1.is_none());
+    assert!(registry.routing_view().1.is_none());
     registry.set_name(id, "Zoe".into());
-    assert!(registry.routing_snapshot().1.is_none());
+    assert!(registry.routing_view().1.is_none());
     registry.set_name(id, "Sam".into());
-    assert_eq!(registry.routing_snapshot().1.unwrap(), ["Alex", "Sam"]);
+    assert_eq!(registry.routing_view().1.unwrap(), ["Alex", "Sam"]);
     registry.remove(id);
-    let (handles, names) = registry.routing_snapshot();
+    let (handles, names) = registry.routing_view();
     assert!(handles.is_empty());
     assert_eq!(names.unwrap(), ["Alex"]);
-    assert!(registry.routing_snapshot().1.is_none());
+    assert!(registry.routing_view().1.is_none());
 }
 
 #[tokio::test]
@@ -34,7 +38,11 @@ async fn registry_removal_clears_all_connection_state() {
     let (reliable_tx, mut reliable_rx) = mpsc::channel(2);
     let (world_tx, mut world_rx) = world_queue(2, WORLD_QUEUE_BYTES);
     registry
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || 0)
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || 0,
+        )
         .unwrap();
     registry.set_name(id, "Alex".into());
     registry.stash_disconnect_reason(id, "test".into());

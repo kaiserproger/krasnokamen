@@ -1,0 +1,11 @@
+[[bug]]
+id = "QA5-STARTUP-GREY"
+title = "Cold startup still shows a blank grey client window before the title: original winfix3 approximately60s report, latest Windows8796727 approximately25s report. Sane window dimensions do not resolve first-frame latency."
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-STARTUP-GREY"
+regression = []
+fix_commit = "client:9102bbd4"
+repro_check = "candidate: the fix keeps the window hidden (wayland ignores set_visible and maps on the first buffer) and presents one frame in `resumed` before set_visible, but window-mapping timing has no unit seam; the 25-60 s grey period must be measured on a real window (stage 3), including the Windows/macOS launchers"

@@ -1,0 +1,12 @@
+[[bug]]
+id = "EDGE-ONESHOT-EXPLOSION-QUEUE-PRESSURE"
+title = "Under world queue pressure an explosion's knockback impulse is silently dropped instead of delivered or explicitly closed"
+area = "gameplay"
+severity = "major"
+status = "fixed"
+source = "Split from EDGE-ONESHOT-WORLD-PRESSURE (independent review of the ledger batch): the queue-pressure part is the single commit 40b28f732; lag detection and coalescing (60f1d475b) remain on the original row."
+repro = "source"
+regression = ["cargo:mc-edge:server::admin_tests::explosion_queue_tests::explosions_deliver_or_explicitly_close_under_queue_pressure"]
+fix_commit = "40b28f732"
+failing_first = "not recorded"
+promotion = "docs/bugs/promotions/EDGE-ONESHOT-EXPLOSION-QUEUE-PRESSURE.json"

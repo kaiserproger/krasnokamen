@@ -1,0 +1,11 @@
+[[bug]]
+id = "SETBLOCK-SNBT"
+title = "setblock chest{Items:...} rejects block-entity SNBT."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SETBLOCK-SNBT"
+regression = ["cargo:mc-core:command_world::tests::setblock_snbt_installs_native_chest_contents_and_replaces_same_block", "harness:entities:native-v2-ledger-setblock-snbt"]
+fix_commit = "patch:43dcf616a9d89ec5444b0e93311f364ea0d3b0efa9f89339236702c1de6dd054"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> red at command_world.rs:994 (`Block entity SNBT is not supported`)"

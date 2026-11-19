@@ -1,0 +1,12 @@
+[[bug]]
+id = "COMMAND-BLOCK-SOURCE-NAME-AND-ADMIN-BROADCAST"
+title = "A command block's say shows [Server] instead of [@], and operators get no gray italic [@: ...] admin broadcast of its command output while commandBlockOutput and sendCommandFeedback are on."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "fixed"
+source = "BreakJoinRows 2026-11-12 (FINDINGS.md F6 aside); javap CommandSourceStack.sendSuccess/broadcastToAdmins and BaseCommandBlock (default name @, shouldInformAdmins = COMMAND_BLOCK_OUTPUT). Admin broadcast is implemented for command-block sources only; player and console sources do not inform other operators yet."
+fix_commit = "patch:4a450a9f261ef2fb286bced2b381fb5963ad1b53935274c12c3538a8f26a3149"
+regression = ["cargo:mc-core:command_blocks::tests::command_block_is_named_at_and_informs_operators_of_its_output", "harness:entities:native-v2-command-rows"]
+failing_first = "not recorded"
+promotion = "docs/bugs/promotions/COMMAND-BLOCK-SOURCE-NAME-AND-ADMIN-BROADCAST.json"

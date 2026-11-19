@@ -1,0 +1,12 @@
+[[bug]]
+id = "DEATH-COMPONENT"
+title = "Death event contained English text rather than vanilla death translation component."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-COMPONENT"
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_generic_kill_notifies_victim_and_filters_all_team_modes", "harness:entities:native-v2-team-deaths"]
+# Fix commit lost. Patch docs/bugs/fix-patches/DEATH-COMPONENT.patch: the control returns the pre-fix English death text instead of the translation component (death_message.rs component()).
+fix_commit = "patch:3a1a6a0e69602a5bc4c02fab1b404e437842661605fb9914840ab96bbdda9dbc"
+promotion = "docs/bugs/promotions/DEATH-COMPONENT.json"

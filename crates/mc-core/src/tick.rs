@@ -12,7 +12,7 @@
 //! per-connection queues (never skipped; overflow disconnects).
 
 use mc_physics::mth;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use mc_data::statistics::StatType;
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
@@ -79,6 +79,14 @@ pub(crate) mod mining_tests;
 #[cfg(test)]
 #[path = "auth_gate_tests.rs"]
 mod auth_gate_tests;
+
+#[cfg(test)]
+#[path = "tick/mirror_tests.rs"]
+mod mirror_tests;
+
+#[cfg(test)]
+#[path = "crowd_pen_tests.rs"]
+mod crowd_pen_tests;
 
 /// Fixed worker count: derived once from the machine.
 #[must_use]
@@ -202,6 +210,11 @@ fn prefer_dense_entity_admission(state: &TickState) -> bool {
     active >= needed
 }
 
+/// The tick's authoritative plugin-login lock set, with a change counter: see
+/// [`session_locks`].
+mod session_locks;
+pub(crate) use session_locks::SessionLocks;
+
 /// One accepted damage intent, retaining its pre-commit hit context.
 #[derive(Debug, Clone, Copy)]
 pub struct DamagePiece {
@@ -243,7 +256,7 @@ pub struct TickState {
     pub connections: Connections,
     /// Opt-in native login fence; authorization belongs to the live session.
     pub(crate) require_plugin_login: bool,
-    pub(crate) locked_sessions: BTreeSet<ConnectionId>,
+    pub(crate) locked_sessions: SessionLocks,
     /// Consecutive unsupported non-descending movement samples permitted before
     /// anti-flight corrects and disconnects the player; zero disables it.
     pub(crate) max_airtime_ticks: u32,

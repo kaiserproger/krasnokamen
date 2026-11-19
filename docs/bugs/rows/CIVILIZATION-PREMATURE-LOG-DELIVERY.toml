@@ -1,0 +1,12 @@
+[[bug]]
+id = "CIVILIZATION-PREMATURE-LOG-DELIVERY"
+title = "An already-funded construction candidate sends the lumberjack home after each harvested log while it still has no legal site."
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "open"
+source = "Seed-24 funded/no-site stall .analysis/validation/20261107T140655-civilization-seed-qa-t5znkkd9/result.json; delivery-trigger failing-first .analysis/validation/civsim3-premature-delivery-failing-first.log; reverting only the funding-gap guard fails .analysis/validation/civsim3-premature-delivery-negative-control.log."
+failing_first = "reported"
+regression = ["cargo:mc-core:settlements::construction::planner_tests::an_already_funded_candidate_does_not_send_each_harvested_log_home"]
+fix_commit = "a946fa286"
+repro_check = "Stage2X SLICES.md:129; fix guard reversal fails the registered symptom assertion (receipts/XCivEconomy/control-CIVILIZATION-PREMATURE-LOG-DELIVERY-an_already_funded_candidate_does_not_send_each_harvested_log_home.log)."

@@ -1,0 +1,10 @@
+[[bug]]
+id = "VILLAGER-CURE-SPEEDUP"
+title = "Zombie-villager curing ignores nearby iron bars and beds: vanilla shortens the 3-5 minute cure when iron bars/beds surround the curing villager (~4% average reduction at cap). The candidate sets a fixed `3600 + hash % 2401` duration at apple-use (`conversion.rs:160`) and counts down in `tick()` with no surroundings check, so cure time is identical in an empty room and a prepared chamber."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#VILLAGER-CURE-SPEEDUP"
+regression = ["cargo:mc-core:villager::conversion_tests::nearby_iron_bars_and_beds_accelerate_zombie_villager_curing"]
+failing_first = "reported"

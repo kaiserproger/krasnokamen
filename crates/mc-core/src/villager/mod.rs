@@ -117,15 +117,18 @@ pub(crate) fn sync_appearance(
             .filter(|(index, _)| matches!(index, 14 | 19 | 20 | 21))
             .count()
             == if zombie { 4 } else { 2 };
-    let (half_width, height) = if villager.sleeping {
-        (0.1, 0.2)
-    } else if baby && zombie {
-        (0.245, 0.99)
-    } else if baby {
-        (0.15, 0.975)
-    } else {
-        (0.3, 1.95)
+    // Vanilla `LivingEntity#getDefaultDimensions`: the sleeping pose's square
+    // body, otherwise the summoned type's own blueprint halved for a baby
+    // (exact). The blueprint carries the f32 contract width the summon and
+    // recovery paths wrote, so this refresh cannot overwrite it with a table.
+    let crate::entities::EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
+        return;
     };
+    let Some(blueprint) = state.registry.blueprint(type_id) else {
+        return;
+    };
+    let (half_width, height) =
+        crate::blueprint::blueprint_dimensions(blueprint, baby, villager.sleeping);
     let speed = if zombie {
         Some(if baby { 6.45 } else { 4.3 })
     } else {

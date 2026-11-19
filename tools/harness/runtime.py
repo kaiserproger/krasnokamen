@@ -638,8 +638,34 @@ def _judge_after_exit(path: Path, condition: Any, process: subprocess.Popen[Any]
 
 @in_phase("server_start")
 def start_server(*args: Any, **kwargs: Any) -> subprocess.Popen[Any]:
-    """Launch a server process; readiness is observed separately by wait_port."""
-    return subprocess.Popen(*args, **kwargs)
+    """Launch a server process; readiness is observed separately by wait_port.
+
+    The process carries the server stop budget, so a later `stop_process` waits
+    for its clean stop instead of applying the short cleanup deadline."""
+    process = subprocess.Popen(*args, **kwargs)
+    process.harness_stop_budget = SERVER_STOP_TIMEOUT_SECONDS
+    return process
+
+
+# A server's own stop path (`crates/mc-edge/src/server.rs`, `serve_with_console`):
+# kick every connection, join the connection tasks (10 s per join before
+# `abort_all`), then `hub.shutdown()` — the final checkpoint and journal flush,
+# which has no internal bound. A stop that gives the server less than that
+# SIGKILLs it mid-checkpoint: nothing is corrupted (WAL replay is the designed
+# path), but the next start recovers a crash, and the gate can no longer tell a
+# clean stop from a killed one.
+SERVER_DRAIN_SECONDS = 10.0
+SERVER_CHECKPOINT_SECONDS = 50.0
+SERVER_STOP_TIMEOUT_SECONDS = SERVER_DRAIN_SECONDS + SERVER_CHECKPOINT_SECONDS
+# Everything else (Xvfb, clients, probes) keeps the short budget: a wedged one
+# has no journal to flush.
+STOP_TIMEOUT_SECONDS = 8.0
+
+
+def stop_budget(process: subprocess.Popen[Any]) -> float:
+    """Seconds a stop waits for `process` to exit before SIGKILL."""
+    budget = getattr(process, "harness_stop_budget", None)
+    return float(budget) if isinstance(budget, (int, float)) else STOP_TIMEOUT_SECONDS
 
 
 @in_phase("teardown")
@@ -647,10 +673,11 @@ def stop_process(
     process: subprocess.Popen[Any] | None,
     *,
     interrupt: bool = False,
-    timeout_seconds: float = 8.0,
+    timeout_seconds: float | None = None,
 ) -> None:
     if process is None or process.poll() is not None:
         return
+    timeout_seconds = stop_budget(process) if timeout_seconds is None else timeout_seconds
     try:
         os.killpg(process.pid, signal.SIGINT if interrupt else signal.SIGTERM)
     except (ProcessLookupError, PermissionError):

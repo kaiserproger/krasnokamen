@@ -1,0 +1,13 @@
+[[bug]]
+id = "OUTBOX-TEXT-FLOOD-KICK"
+title = "More than the per-connection outbox cap (512) of chat or system lines in one tick (a datapack function of 600 tellraw @a lines) disconnected every recipient with a reliable queue overflow."
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "fixed"
+source = "CoreBlockers (wave/core-blockers): reproduced by datapacks::tests::function_chat_flood_in_one_tick_reaches_every_recipient before the TextBurst compaction; found while checking the HS-1 batch path."
+regression = ["cargo:mc-core:datapacks::tests::function_chat_flood_in_one_tick_reaches_every_recipient", "cargo:mc-edge:server::lifecycle_tests::text_burst_live_updates_fit_reliable_queue"]
+# Fix 82434561 also refuses undecodable block-entity records, and its reversal does not build; the control disables only the TextBurst compaction (tick.rs) and the edge frame merge.
+fix_commit = "patch:8f5c5749fbc27e368a7c4f0e833783794c6fb803f7bf10ca0241c3a30213f1fd"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/OUTBOX-TEXT-FLOOD-KICK.json"

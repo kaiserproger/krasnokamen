@@ -1,0 +1,10 @@
+[[bug]]
+id = "CAMPFIRE-CONTACT-DAMAGE"
+title = "Sneaking incorrectly prevents campfire damage, Frost Walker boots fail to prevent it, and soul campfires inflict the ordinary1 HP instead of2 HP. These are grouped contact-policy defects, not three separate product counts."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CAMPFIRE-CONTACT-DAMAGE"
+regression = ["cargo:mc-core:tick_tests::contact_hazards_tests::lit_campfires_hurt_even_while_sneaking_and_unlit_ones_stay_cold", "cargo:mc-core:tick_tests::contact_hazards_tests::frost_walker_boots_prevent_campfire_damage", "cargo:mc-core:tick_tests::contact_hazards_tests::soul_campfires_deal_two_damage_per_hit"]
+failing_first = "not recorded"

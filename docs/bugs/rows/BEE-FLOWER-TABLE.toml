@@ -1,0 +1,10 @@
+[[bug]]
+id = "BEE-FLOWER-TABLE"
+title = "Bees omitted 5 bee_attractive members + waterlogged/tall-half rules."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BEE-FLOWER-TABLE"
+regression = ["cargo:mc-core:bees::tests::flowerless_bee_finds_wither_rose_and_rejects_waterlogged", "cargo:mc-core:bees::tests::flower_rules_exclude_waterlogged_and_tall_upper"]
+failing_first = "not recorded"

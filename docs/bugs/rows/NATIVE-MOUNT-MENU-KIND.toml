@@ -1,0 +1,11 @@
+[[bug]]
+id = "NATIVE-MOUNT-MENU-KIND"
+title = "In the native client, quick-moving cargo in an ordinary horse/donkey/llama inventory fails with 'mount kind unknown': inventory/policies.rs:263-269 requires the menu's mount kind, but InventoryStore::configure_mount is never called."
+area = "client"
+repro = "client"
+severity = "blocker"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/receipts/Promote/validation/20261104T195352-native-v2-custody-mount-export-4di9p1dx/result.json"
+regression = ["harness:entities:native-v2-custody-mount-export"]
+proving_assertions = { "harness:entities:native-v2-custody-mount-export" = "reimport_exact_five_emeralds_no_resurrected_diamonds" }
+failing_first = "reported"

@@ -184,6 +184,7 @@ fn birth_inherits_existing_household_and_keeps_its_individual_bed() {
     );
     assert!(output.contains(&format!("household={family}")), "{output}");
     assert!(output.contains(&format!("tick={}", state.tick)), "{output}");
+    assert!(output.contains("origin=adoption"), "{output}");
     assert_eq!(
         villager(&state, child).household.as_deref(),
         Some(family.as_str())

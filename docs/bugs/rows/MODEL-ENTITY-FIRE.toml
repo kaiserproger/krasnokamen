@@ -1,0 +1,12 @@
+[[bug]]
+id = "MODEL-ENTITY-FIRE"
+title = "Burning entities have no fire overlay. The server sends the on-fire flag; the client never reads it"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:86"
+regression = ["harness:scene-shot:native-entity-visuals", "client:krasnokamen-client:entities::presentation::tests::fire_bands_follow_the_vanilla_flame_feature_numbers"]
+fix_commit = "client:a3f2a486"
+proving_assertions = { "harness:scene-shot:native-entity-visuals" = "fire_overlay_only_when_burning" }
+repro_check = "Stage2X SLICES.md:120: 26.3 FlameFeatureRenderer band geometry corrected; producer-only reversal fails the band-height assertion (receipts/XHarnessGates/client-r10-fire-red.log). Graphical control remains required."

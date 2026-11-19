@@ -1,0 +1,10 @@
+[[bug]]
+id = "TEST-DIMENSION-BIOME"
+title = "`dimensions_tests.rs:1679` hardcodes nether_wastes although fixture `:260-275` uses the real seed42 NetherGenerator; actual crimson_forest alone does not violate dimension-local spawn tables. Failure retained in `wt/server-fixes/.analysis/codex-logs/server-fixes/after/core-fixer.log:174-179`."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-DIMENSION-BIOME"
+regression = ["cargo:mc-core:dimensions::tests::native_dimension_spawn_tables_and_census_are_local"]
+fix_commit = "9cc59fb37b5ea1e543eaca53f5864a0c0613051c"

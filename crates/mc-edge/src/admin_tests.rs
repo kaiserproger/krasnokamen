@@ -84,6 +84,7 @@ fn server_at(dir: &std::path::Path) -> EdgeServer {
         cfg,
         connections: Arc::new(ConnectionRegistry::new()),
         pre_play_addresses: crate::conn_limit::AddressLimiter::new(0, 8),
+        pre_play: Arc::new(PrePlayLimit::new(64)),
         tick_stats: Arc::new(TickStats::new()),
         net_counters: Arc::new(NetCounters::new()),
         admin: crate::admin::Admin::open(dir).unwrap(),
@@ -116,9 +117,11 @@ pub(crate) fn register(
     let (world_tx, _) = world_queue(64, WORLD_QUEUE_BYTES);
     server
         .connections
-        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-            server.hub.published_knockback_count(id)
-        })
+        .register(
+            id,
+            ConnectionHandles::new(reliable_tx, world_tx, crate::plan::CHUNKS_PER_TICK),
+            || server.hub.published_knockback_count(id),
+        )
         .unwrap();
     server.connections.set_name(id, name.into());
     server

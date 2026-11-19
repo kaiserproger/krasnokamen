@@ -39,6 +39,22 @@ pub(in crate::tick) fn early_entity_rest(
     targets_empty: bool,
 ) -> bool {
     let flags = view.entities.motion_flags(slot);
+    // The rotation the skipped step would write must be the stored one. A
+    // projected battle row's step writes its published facing, so it rests
+    // exactly when that facing is bit-identical to the stored rotation (D36;
+    // BATTLE-REST-SKIPS-TARGET-FACING). Any other body rests only with its head
+    // on its body: a head still settling is motion the footprint shortcut
+    // cannot see, refused before it on every activation period.
+    let rotation = view.rotations[slot.0 as usize];
+    if !view
+        .hostile
+        .battle
+        .facing
+        .of(slot)
+        .map_or(rotation[2] == rotation[0], |facing| facing.rests(rotation))
+    {
+        return false;
+    }
     let battle = crate::battle::battle_row(view.bodies[slot.0 as usize].faction);
     let battle_thrust = view
         .hostile
@@ -252,7 +268,10 @@ pub(in crate::tick) fn idle_wander_motion_unchanged(view: &PrepView, slot: Entit
             impulse: view.impulses[slot.0 as usize],
             rotation,
             look_target: None,
+            facing: None,
             battle_facing: false,
+            legacy_facing: false,
+            head_follows_body: capabilities.head_follows_body,
             climbs_walls: capabilities.climbs_walls,
             aquatic_control: capabilities.aquatic,
             air_supply: body.air_supply,

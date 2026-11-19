@@ -1,0 +1,10 @@
+[[bug]]
+id = "CLIENT-ZOMBIE-BABY-HELMET-HEIGHT"
+title = "Native baby zombie proportions and armor regions differ from the Java control"
+area = "client"
+severity = "minor"
+status = "open"
+source = "ClientQ04 matched 26.3 controls on 2026-11-11: the original burning baby frame confounded the first helmet estimate. Clean fire-free native pin 90c4850a282a-844cc39b and canonical Java frames retain the same camera and subject UUID ending 0fa400000003. They confirm an elevated helmet, oversized torso/limbs and opaque native forearm armor where Java shows green forearms. The supplied child armor atlas and clean paired frames are retained under ClientQ04Variants/final-native-r1-clean and final-java-r1. Client tests: entities::solaris_models::tests::baby_zombie_head_and_helmet_follow_the_matched_control_height, entities::solaris_models::tests::baby_zombie_and_shared_husk_armor_keep_child_body_proportions, entities::solaris_models::baby_armor_alignment_tests::baby_armor_encloses_animated_body_parts."
+repro = "client"
+regression = []
+failing_first = "reported"

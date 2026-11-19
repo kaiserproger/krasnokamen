@@ -128,14 +128,53 @@ fn sweep(
 }
 
 /// Crop block path, its item, and the items one mature plant yields.
-const CROPS: [(&str, &str, i32); 4] = [
+pub(crate) const CROPS: [(&str, &str, i32); 4] = [
     ("wheat", "wheat", 1),
     ("carrots", "carrot", 3),
     ("potatoes", "potato", 3),
     ("beetroots", "beetroot", 1),
 ];
 
-fn item_id(state: &TickState, name: &str) -> Option<u32> {
+/// The seed one of those crops leaves when it is reaped or uprooted.
+#[must_use]
+pub(crate) fn crop_seed(path: &str) -> Option<&'static str> {
+    match path {
+        "wheat" => Some("wheat_seeds"),
+        "beetroots" => Some("beetroot_seeds"),
+        _ => None,
+    }
+}
+
+pub(crate) type CropYield = (Option<(&'static str, i32)>, Option<&'static str>);
+
+/// Produce and seed of one crop block: `(produce, seed)` for the item of a
+/// plant reaped `ripe` (a mature plant) or uprooted (an immature one). The one
+/// table both the settlement's farmers and a lot's field removal read, so a
+/// crop on a needed lot yields exactly what reaping it does.
+#[must_use]
+pub(crate) fn crop_yield(path: &str, ripe: bool) -> Option<CropYield> {
+    if let Some(&(_, item, count)) = CROPS.iter().find(|(crop, _, _)| *crop == path) {
+        // An unripe grain plant leaves only its seed; an unripe root vegetable
+        // still yields one, as vanilla's own harvest does.
+        let produce = if ripe {
+            Some((item, count))
+        } else if matches!(path, "wheat" | "beetroots") {
+            None
+        } else {
+            Some((item, 1))
+        };
+        return Some((produce, crop_seed(path)));
+    }
+    match path {
+        // A flower crop's block always leaves its seed; the flower is the
+        // separate `torchflower`/`pitcher_plant` block's own drop.
+        "torchflower_crop" => Some((None, Some("torchflower_seeds"))),
+        "pitcher_crop" => Some((None, Some("pitcher_pod"))),
+        _ => None,
+    }
+}
+
+pub(crate) fn item_id(state: &TickState, name: &str) -> Option<u32> {
     state
         .registry
         .items

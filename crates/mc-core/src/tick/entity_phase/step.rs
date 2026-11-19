@@ -526,7 +526,12 @@ pub(in crate::tick) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, V
             impulse: row.horizontal_impulse,
             rotation: row.rotation,
             look_target,
+            facing: (row.battle && !row.standing)
+                .then(|| ctx.battle.facing.of(row.slot))
+                .flatten(),
             battle_facing: row.battle && !row.standing,
+            legacy_facing: row.battle,
+            head_follows_body: row.head_follows_body,
             climbs_walls: row.climbs_walls,
             aquatic_control: row.aquatic_control,
             air_supply: row.air_supply,

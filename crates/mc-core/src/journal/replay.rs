@@ -58,6 +58,14 @@ pub struct Replay {
     pub(crate) battle: Option<Arc<String>>,
     pub(crate) battle_tail: crate::battle::persistence::Tail,
     pub(crate) battle_fault: Option<String>,
+    /// A compact entity post-image (`EntityAppearance`/`ProjectileFlight`) met
+    /// without the full image it is a delta of. Recovery reports it before
+    /// applying anything: a tail that lost its base must not be served.
+    pub(crate) entity_fault: Option<String>,
+    /// Ids with an `Entity` image in this fold, i.e. the records a compact
+    /// record may be a delta of. A checkpoint populates `entities` without
+    /// proving an image, so existence there is not enough (committee F1).
+    pub(crate) tail_images: std::collections::HashSet<i32>,
     /// Block-log checkpoint table rows.
     pub block_log: Vec<crate::block_log::Delta>,
     /// Recovered WAL tail, which must be persisted before the WAL is pruned.
@@ -960,6 +968,8 @@ pub(crate) fn apply_batch_images(
                             replay.entity_removals.push(previous.uuid);
                         }
                         replay.entity_changes.insert(*id);
+                        // The base a later compact record may be a delta of.
+                        replay.tail_images.insert(*id);
                     } else {
                         remove_replay_entity(&mut replay, *id);
                     }
@@ -1132,6 +1142,138 @@ pub(crate) fn apply_batch_images(
                         replay.battle_fault = Some(format!("pose for missing native body {id}"));
                     }
                 }
+                JournalEntry::EntityAppearance {
+                    id,
+                    tick,
+                    age,
+                    health,
+                    alive,
+                    active_effects,
+                    appearance,
+                } => {
+                    // A delta needs an image in this tail, not merely a record
+                    // (a checkpoint fills `entities` without one), and a dead
+                    // body is a removal that keeps the image path.
+                    if !*alive || !replay.tail_images.contains(id) {
+                        compact_fault(&mut replay, *id);
+                        continue;
+                    }
+                    let Some(record) = replay.entities.get_mut(id) else {
+                        compact_fault(&mut replay, *id);
+                        continue;
+                    };
+                    if *tick < record.tick {
+                        continue;
+                    }
+                    appearance.apply(&mut record.appearance);
+                    record.health = *health;
+                    record.alive = *alive;
+                    record.active_effects = active_effects.clone();
+                    // The full image bakes the live state/villager clocks and
+                    // the lifetime age into the record; a delta carries the age
+                    // and lands the same projection before the anchor moves.
+                    // Apply first: the projection reads the record's `baby`.
+                    let clock = replay
+                        .simulation_clocks
+                        .get(&replay_entity_chunk(record.pos));
+                    let elapsed = clock.map_or(0, |clock| clock.between(record.tick, *tick));
+                    record
+                        .state
+                        .advance_clocks(record.type_id, record.appearance.baby, elapsed);
+                    if let Some(villager) = &mut record.villager
+                        && let Some(clock) = clock
+                    {
+                        clock.advance_villager(villager, record.tick, *tick);
+                    }
+                    record.breed_cooldown = record.state.breed_cooldown;
+                    record.age = *age;
+                    record.state.age = *age;
+                    record.tick = *tick;
+                    replay.entity_changes.insert(*id);
+                }
+                JournalEntry::ProjectileFlight {
+                    id,
+                    tick,
+                    age,
+                    health,
+                    alive,
+                    active_effects,
+                    appearance,
+                    pos,
+                    vel,
+                    yaw,
+                    pitch,
+                    projectile_age,
+                    stuck,
+                    grounded_at_age,
+                    state,
+                } => {
+                    // A delta needs an image in this tail, a record, and the
+                    // retained projectile that image carried; a dead body is a
+                    // removal that keeps the image path.
+                    if !*alive
+                        || !replay.tail_images.contains(id)
+                        || !replay
+                            .entities
+                            .get(id)
+                            .is_some_and(|record| record.projectile.is_some())
+                    {
+                        compact_fault(&mut replay, *id);
+                        continue;
+                    }
+                    let record = replay.entities.get_mut(id).expect("checked");
+                    if *tick < record.tick {
+                        continue;
+                    }
+                    appearance.apply(&mut record.appearance);
+                    record.health = *health;
+                    record.active_effects = active_effects.clone();
+                    record.pos = *pos;
+                    record.vel = *vel;
+                    record.yaw = *yaw;
+                    record.pitch = *pitch;
+                    // Same projection the image would bake in, after the delta.
+                    let clock = replay
+                        .simulation_clocks
+                        .get(&replay_entity_chunk(record.pos));
+                    let elapsed = clock.map_or(0, |clock| clock.between(record.tick, *tick));
+                    record
+                        .state
+                        .advance_clocks(record.type_id, record.appearance.baby, elapsed);
+                    if let Some(villager) = &mut record.villager
+                        && let Some(clock) = clock
+                    {
+                        clock.advance_villager(villager, record.tick, *tick);
+                    }
+                    record.breed_cooldown = record.state.breed_cooldown;
+                    record.age = *age;
+                    record.state.age = *age;
+                    let projectile = record.projectile.as_mut().expect("checked");
+                    match state {
+                        Some(state) => **projectile = (**state).clone(),
+                        None => {
+                            projectile.age = *projectile_age;
+                            if let Some(stuck) = stuck {
+                                projectile.stuck = *stuck;
+                            }
+                            crate::journal::apply_delta(
+                                grounded_at_age,
+                                &mut projectile.grounded_at_age,
+                            );
+                        }
+                    }
+                    // The full image's own ground rule for a projectile body.
+                    record.ground = projectile.stuck
+                        || record.state.tnt.is_some_and(|tnt| tnt.on_ground)
+                        || record
+                            .state
+                            .entity_life
+                            .vehicle
+                            .as_ref()
+                            .is_some_and(|vehicle| vehicle.on_ground);
+                    record.tick = *tick;
+                    replay.entity_changes.insert(*id);
+                }
             }
         }
     }
@@ -1140,10 +1282,33 @@ pub(crate) fn apply_batch_images(
 
 /// Drop one record and log its UUID, so recovery can tombstone its stored row.
 fn remove_replay_entity(replay: &mut Replay, id: i32) {
+    replay.tail_images.remove(&id);
     if let Some(record) = replay.entities.remove(&id) {
         replay.entity_changes.remove(&id);
         replay.entity_removals.push(record.uuid);
     }
+}
+
+/// Remember the first compact post-image that had no base image to fold into.
+/// Recovery refuses the world instead of serving a partial appearance.
+fn compact_fault(replay: &mut Replay, id: i32) {
+    if replay.entity_fault.is_none() {
+        replay.entity_fault = Some(format!(
+            "compact entity post-image {id} without an earlier full image in the WAL tail"
+        ));
+    }
+}
+
+/// Refuse a replayed tail whose compact records lost their base image. Every
+/// dimension is checked: a child tail folds its own records.
+pub(crate) fn validate_replay(replay: &Replay) -> Result<(), CoreError> {
+    if let Some(fault) = &replay.entity_fault {
+        return Err(CoreError::Storage(format!("entity WAL tail: {fault}")));
+    }
+    for dimension in replay.dimensions.values() {
+        validate_replay(dimension)?;
+    }
+    Ok(())
 }
 
 /// Project each retained anchor once after the complete streamed tail is folded.

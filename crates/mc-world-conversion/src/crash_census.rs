@@ -227,7 +227,7 @@ pub fn crash_census(config: &CoreConfig) -> Result<CrashCensus, CoreError> {
     let path = config.world_dir.join("native/state.redb");
     let identity = native::native_identity(config);
     drop(
-        mc_world::native::NativeStore::open(&path, identity)
+        mc_world::native::NativeStore::open_checked(&config.world_dir, identity)
             .map_err(|error| native::open_refusal(config, &path, error))?,
     );
     let world = native::recover_offline(config)?;

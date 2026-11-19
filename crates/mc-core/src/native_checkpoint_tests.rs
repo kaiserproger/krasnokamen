@@ -119,6 +119,10 @@ pub(crate) fn fixture_store(config: &CoreConfig) -> Result<Arc<NativeStore>, Cor
             &registry.items,
         )
         .map_err(storage)?;
+    // A real world always carries the checkpoint marker of its committed
+    // checkpoint; `Core::open` refuses a store that has one without it.
+    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), 0)
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
     Ok(store)
 }
 
@@ -198,6 +202,8 @@ pub(crate) fn write_manifest(
             &registry.blocks,
             &registry.items,
         )
+        .map_err(|e| CoreError::Storage(e.to_string()))?;
+    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), manifest.tick)
         .map_err(|e| CoreError::Storage(e.to_string()))
 }
 
@@ -938,14 +944,18 @@ fn custom_name_visible_survives_native_store_restart_without_opaque_shadow() {
     let mut changes = ChangeSet::default();
     crate::command_execution::execute(&mut state, ConnectionId(1), actor, &command, &mut changes);
     let id = changes.entities_spawned[0];
+    // A compact record is a delta of an image in the same tail: seed the replay
+    // with the whole tail, beginning with the summon tick's full image.
+    let mut tail: Vec<crate::journal::JournalEntry> = Vec::new();
     for visible in [true, false] {
         let slot = state.entities.slot_of(id).unwrap();
         Arc::make_mut(&mut state.entities.row_mut(slot).appearance).custom_name_visible = visible;
         state.appearance_changed.push(id);
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
         let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
+        tail.extend(entries.iter().cloned());
         let replay =
-            crate::journal::replay_batches(Replay::default(), &[(1, output.tick, entries)]);
+            crate::journal::replay_batches(Replay::default(), &[(1, output.tick, tail.clone())]);
         assert_eq!(
             replay.entities[&id.0].appearance.custom_name_visible,
             visible
@@ -1422,6 +1432,9 @@ fn pre_plugin_native_checkpoint_opens_with_empty_authority_and_upgrades_on_check
             &registry.items,
         )
         .unwrap();
+    // A world this build wrote always has its checkpoint marker; the subject
+    // here is the pre-plugin domain set, not the store identity.
+    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), 0).unwrap();
     drop(store);
     let core = crate::Core::open(config.clone()).unwrap();
     core.shutdown();
@@ -1435,6 +1448,84 @@ fn pre_plugin_native_checkpoint_opens_with_empty_authority_and_upgrades_on_check
     for domain in ["plugins", "plugin_startup"] {
         assert_eq!(manifest.domain_versions.get(domain), Some(&1));
         assert!(upgraded.globals.contains_key(domain));
+    }
+}
+
+#[test]
+fn manifest_format_version_is_required_in_root_and_children() {
+    let mut manifest = CheckpointManifest {
+        domain_versions: domain_versions(),
+        world_spawn: Some([0, 80, 0]),
+        ..Default::default()
+    };
+    for dimension in [Dimension::Nether, Dimension::End] {
+        manifest.dimensions.insert(
+            dimension,
+            Box::new(CheckpointManifest {
+                domain_versions: domain_versions(),
+                world_spawn: Some([0, 80, 0]),
+                ..Default::default()
+            }),
+        );
+    }
+    validate_manifest(&manifest).unwrap();
+
+    let mut missing = manifest.clone();
+    missing.domain_versions.remove("manifest");
+    let error = validate_manifest(&missing).unwrap_err().to_string();
+    assert!(
+        error.contains("unsupported required domain versions"),
+        "{error}"
+    );
+
+    let mut child_missing = manifest.clone();
+    child_missing
+        .dimensions
+        .get_mut(&Dimension::Nether)
+        .unwrap()
+        .domain_versions
+        .remove("manifest");
+    assert!(validate_manifest(&child_missing).is_err());
+
+    let mut wrong = manifest.clone();
+    wrong.domain_versions.insert("manifest".into(), 2);
+    let error = validate_manifest(&wrong).unwrap_err().to_string();
+    assert!(
+        error.contains("unsupported required domain versions"),
+        "{error}"
+    );
+
+    let mut child_wrong = manifest.clone();
+    child_wrong
+        .dimensions
+        .get_mut(&Dimension::End)
+        .unwrap()
+        .domain_versions
+        .insert("manifest".into(), 2);
+    assert!(validate_manifest(&child_wrong).is_err());
+}
+
+#[test]
+fn manifest_format_version_round_trips_through_the_writer() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_owned(), 42);
+    write_manifest(
+        &config,
+        &CheckpointManifest {
+            world_spawn: Some([0, 80, 0]),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let persisted = read_manifest(&config).unwrap();
+    assert_eq!(persisted.domain_versions.get("manifest"), Some(&1));
+    assert_eq!(persisted.dimensions.len(), 2);
+    for (dimension, child) in &persisted.dimensions {
+        assert_eq!(
+            child.domain_versions.get("manifest"),
+            Some(&1),
+            "{dimension:?}"
+        );
     }
 }
 
@@ -1473,4 +1564,49 @@ fn pre_rename_world_is_refused_with_its_conversion_path() {
     let error = open_refusal_text(|_| [7; 32]);
     assert!(error.contains("identity mismatch"), "{error}");
     assert!(!error.contains("Krasnokamen rename"), "{error}");
+}
+
+/// The tail guard reads published batch names only: `.tmp` files, foreign names
+/// and batches the checkpoint covers are not a tail, while any published range
+/// above the manifest is refused; enumeration failures fail closed.
+#[test]
+fn checkpointed_tail_guard_reads_published_batch_names() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    let journal = directory.path().join("journal");
+    // No journal directory at all: nothing is above the manifest.
+    require_checkpointed_tail(&config, 7).expect("missing journal");
+
+    std::fs::create_dir_all(&journal).unwrap();
+    // Unpublished temp files and foreign names are not published batches.
+    std::fs::write(
+        journal.join("batch-00000000000000000008-00000000000000000009.bin.tmp"),
+        b"",
+    )
+    .unwrap();
+    std::fs::write(journal.join("notes.txt"), b"").unwrap();
+    std::fs::write(journal.join("batch-garbage.bin"), b"").unwrap();
+    require_checkpointed_tail(&config, 7).expect("no published batch above tick 7");
+
+    // A published batch the checkpoint already covers is not a tail.
+    std::fs::write(
+        journal.join("batch-00000000000000000003-00000000000000000007.bin"),
+        b"",
+    )
+    .unwrap();
+    require_checkpointed_tail(&config, 7).expect("covered batch");
+
+    // A gapped or foreign range above the manifest is refused conservatively,
+    // and the range reported spans every published batch above it.
+    for (lo, hi) in [(9_u64, 11_u64), (13, 13)] {
+        std::fs::write(journal.join(format!("batch-{lo:020}-{hi:020}.bin")), b"").unwrap();
+    }
+    let error = require_checkpointed_tail(&config, 7).expect_err("tail above the manifest");
+    assert!(error.to_string().contains(UNCHECKPOINTED_TAIL), "{error}");
+    assert!(error.to_string().contains("9..=13"), "{error}");
+
+    // Enumeration failures fail closed instead of reading as "no tail".
+    std::fs::remove_dir_all(&journal).unwrap();
+    std::fs::write(&journal, b"not a directory").unwrap();
+    require_checkpointed_tail(&config, 7).expect_err("enumeration error");
 }

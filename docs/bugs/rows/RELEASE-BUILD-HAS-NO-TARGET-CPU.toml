@@ -1,0 +1,10 @@
+[[bug]]
+id = "RELEASE-BUILD-HAS-NO-TARGET-CPU"
+title = ".cargo/config.toml sets only the mold link argument, so the shipped x86-64 build targets the SSE2 baseline and no AVX2/FMA vector code can be emitted, which leaves the SIMD experiment (Perf1M H1) not even runnable."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-4 (Bakhvalov 6.1.2, 5.6.1 llvm-mca; perf). .cargo/config.toml has rustflags = link-arg=-fuse-ld=mold only; an earlier profile put floor at 5.23 % self (.analysis/committee/q008/opus.md:60). The report records the global flag as a measured non-lever: ABBench variant C with -C target-cpu=x86-64-v3 gave tick_mean 0.990 / 0.969 and p99 0.961 (1-3 %, inside the two-rep noise band, .analysis/codex-logs/ABBench/report.md), and SimdEval got 1.175x on one quiet kernel with no live tick gain, so the row is about making the H1 experiment possible (a target_feature(enable = avx2) or multiversioned kernel, or a release-profile decision), not about a global speedup. Verified open on main 5bdc02911. Any H1 kernel must show YMM/ZMM in cargo asm, an llvm-mca ceiling and an A/B on one pin, seed and view distance."
+regression = []
+failing_first = "not recorded"

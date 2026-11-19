@@ -37,7 +37,7 @@ pub(super) enum Counter {
     Panic,
     /// `.push(..)` on a field or variable named `merge_block_writes`.
     MergeBlockWritePush,
-    /// `.project`/`.pending_order` outside the construction owner and its children.
+    /// `.projects`/`.orders` outside the construction owner and its children.
     ConstructionFieldAccess,
 }
 
@@ -734,7 +734,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_expr_field(&mut self, field: &'ast syn::ExprField) {
         if !self.in_construction
             && matches!(&field.member, syn::Member::Named(name)
-                if name == "project" || name == "pending_order")
+                if name == "projects" || name == "orders")
         {
             self.count(Counter::ConstructionFieldAccess);
         }

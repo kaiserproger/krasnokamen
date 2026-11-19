@@ -9,11 +9,12 @@
 
 use std::sync::Arc;
 
-pub use crate::entity_views::EntityViews;
+mod views;
 use mc_data::item_stack::ItemStack;
 use mc_script::ScriptClientViewKey;
 pub use mc_world::chunk::{BlockPos, Chunk, ChunkPos};
 use uuid::Uuid;
+pub use views::EntityViews;
 
 /// Simulation tick number. Tick `t` output describes the state after tick `t`.
 pub type Tick = u64;
@@ -654,7 +655,12 @@ pub struct BattleCounts {
 /// Immutable world state after a tick. Shared read-only; never mutated after
 /// publication. A reader may hold it for as long as it likes: the core never
 /// reuses its storage (copy-on-write pages, see ADR 0013 "Data layout").
-#[derive(Debug, Default)]
+///
+/// `Clone` exists for one fallback only: a tick snapshot that a second holder
+/// already shares is rebuilt instead of mutated
+/// (`crate::core::observe_explosion_knockback`). It is never taken when the
+/// snapshot is unique, which is every tick the loop publishes.
+#[derive(Debug, Default, Clone)]
 pub struct WorldSnapshot {
     pub tick: Tick,
     pub dimension: crate::dimensions::Dimension,

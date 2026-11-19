@@ -1,0 +1,10 @@
+[[bug]]
+id = "MAP-LOCKED-BANNERS"
+title = "A locked map cannot add/remove banner waypoints at all, although locking freezes terrain pixels rather than disabling vanilla's explicit banner interaction."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-LOCKED-BANNERS"
+regression = ["cargo:mc-core:tick_tests::maps_tests::locked_map_can_toggle_banner_waypoint", "harness:entities:native-v2-map-locked-banners"]
+failing_first = "reported"

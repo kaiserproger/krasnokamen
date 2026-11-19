@@ -1,0 +1,11 @@
+[[bug]]
+id = "MODEL-BANNER-PLACEMENT"
+title = "A banner placed from an item with `banner_patterns` is unpatterned in the world, and named banners lose their custom names: server writes only `{id,x,y,z}` block-entity defaults without transferring the banner item components."
+area = "client"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:29"
+regression = ["cargo:mc-core:block_entity_defaults::tests::patterned_banner_item_use_preserves_layers_in_world_wire_and_journal", "cargo:mc-core:block_entity_defaults::tests::named_unpatterned_banner_retains_custom_name", "harness:entities:native-v2-banner-placement"]
+repro_check = "No symptom-specific assertion in native-v2-banner-placement: promotion needs the gate to assert patterned and named components in the placed block entity as a failing assertion, not only a wait."
+failing_first = "reported"

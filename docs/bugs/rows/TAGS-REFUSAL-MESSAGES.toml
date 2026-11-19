@@ -1,0 +1,12 @@
+[[bug]]
+id = "TAGS-REFUSAL-MESSAGES"
+title = "Invalid tag types and oversized tag strings produce misleading or internal errors"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Stage-3 S3FixBreaker finding F4: Tags:[1b] reports a count limit, and a 70000-byte tag reports an internal storage wire-length error"
+repro = "client"
+regression = ["cargo:mc-core:command_summon::tests::scoreboard_tags_tests::tag_refusals_name_element_type_count_and_modified_utf8_limit_before_spawn"]
+fix_commit = "patch:a1dae3762dffce388825c288c8bf9ecf9250f89df7af7882a0feffacbf21c55a"
+failing_first = "reported"
+repro_check = "FixBatchB/F4-red.log fails with only validate_tags behavior reverted; amendments/core-green.log passes element/count/Modified-UTF-8 pre-spawn checks. Count wording is at most 1024 tags, before dedupe. docs/bugs/fix-patches/TAGS-REFUSAL-MESSAGES.patch covers validation behavior from c224df8de and 0c51b3a44, leaving F3's callable API and tag normalization intact. Vanilla StringTag.write delegates to DataOutput.writeUTF, whose 65535-byte limit throws UTFDataFormatException; preflight refuses before creating an unsavable entity."

@@ -1,0 +1,10 @@
+[[bug]]
+id = "DISPENSER-MINECART-VARIANTS"
+title = "Dispensers eject command-block minecarts as items: the vehicle matcher admits only `minecart/chest/hopper/furnace/tnt` (`dispenser_vehicle.rs:24-28`), omitting `command_block_minecart` which vanilla places onto rails ([wiki](https://minecraft.wiki/w/Dispenser)). `spawner_minecart` is correctly excluded (command-only summon, not dispensable). Entity registry confirms both types exist locally (`registries.json` lists all 7 minecart entities)."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DISPENSER-MINECART-VARIANTS"
+regression = ["cargo:mc-core:redstone::containers::tests::automation_regression_vehicle_placement"]
+failing_first = "reported"

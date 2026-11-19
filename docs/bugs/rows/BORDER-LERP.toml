@@ -1,0 +1,10 @@
+[[bug]]
+id = "BORDER-LERP"
+title = "Timed set/add rejected; no interpolation state to persist. Merge BORDER-PERSIST; instant center/size persistence is not a separate defect. Pinned TimeArgument uses ticks without suffix; ScenarioMatrix and DomCommands corrected the200tick oracle to explicit10s/200t, not bare10seconds."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BORDER-LERP"
+regression = ["cargo:mc-core:command_border::tests::timed_set_interpolates_linearly_and_settles_exact", "cargo:mc-core:command_border::tests::checkpoint_and_fsynced_tail_keep_exact_border_and_reject_invalid_state", "cargo:mc-core:command_execution::tests::worldborder_commands_update_live_tick_state", "cargo:mc-edge:plan::plan_tests::world_border_init_changes_and_credit_deferral_use_vanilla_packet", "cargo:mc-core:core::difficulty_persistence_tests::worldborder_command_mid_lerp_checkpoint_restores_and_finishes"]
+failing_first = "not recorded"

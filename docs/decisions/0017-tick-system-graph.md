@@ -49,6 +49,39 @@ cross-dimension transfer or global tick sealing. `/tick freeze` still executes
 inputs, player work and merge/commit while gating simulation stages. Scheduling
 must use the existing admission/gates, not infer inactivity from an empty lane.
 
+## Settlement commit-tail writes and fluid ticks (D10)
+
+Native settlement construction writes blocks in the commit/native tail
+(`settlements::tick`), after the block pipeline's `fluids::schedule` and after
+the early merge fold; their after-images are sealed into `changes.blocks` at the
+publish seal. The contract that follows, and that ownership must keep:
+
+1. **Same-tick scheduling.** The settlements owner schedules fluid ticks for the
+   writes it made in that tick (`fluids::schedule_around` per new
+   `plugin_block_writes` entry) before it returns. Without this a builder that
+   fills a liquid source leaves the flow it fed without a due tick, and a wait
+   for that flow would never end.
+2. **No relocation.** An executor write is never moved into the pre-settlement
+   `block_writes`: that phase has already run and its overlay is folded, so a
+   late append would publish the same position twice.
+3. **World-state waits.** A liquid fill waits on the world, never on a timer:
+   the executor gate refuses to write a flowing or falling lava cell, and the
+   next admission reads the drained state. A waiting gate schedules the orphan
+   flow's neighbourhood **once, when the wait starts** — the fluid queue
+   deduplicates only inside one tick, so a per-tick call would add a fresh tick
+   per neighbour on every deadline. The wait is bounded by the engine's drain
+   (lava 30-tick steps) and is named in the stall cause (`lava_draining`)
+   instead of being reported as a stalled builder.
+4. **Pause and resume.** A fluid drain that changes the structure's block
+   identity inside its bounds trips the ordinary `footprint_changed` pause; the
+   settlement owner re-snapshots and resumes through its existing `recover`
+   path. `recover` does **not** re-run admission: it only refreshes the image and
+   builds the repair stage. Re-proving the liquid supply, mix and bowl before a
+   resume (with the shell inside the interference fence, and without re-planning
+   or re-charging paid cells) belongs to the executor follow-up. There is no
+   fluid-tolerant image and no second recovery path.
+   fluid-tolerant image and no second recovery path.
+
 ## Declaration and resource model
 
 A system declaration has a stable identity, immutable read set, write set,
@@ -139,9 +172,33 @@ zero drive/no look, preserving the ordinary world's sparse fast path.
 
 Workers read slot-indexed drive/look arrays, not ID hash maps. A battle row
 with zero thrust may use the existing rest proof only while grounded, motionless
-and unaffected by impulse/hurt/effects or changed geometry. Moving rows still use
-ordinary block collision, ordered movement writeback and native intent merge.
-No position writer or second physics path is introduced.
+and unaffected by impulse/hurt/effects or changed geometry, and only while its
+stored rotation is exactly what the skipped step would write. Since D36 that
+rotation is published once per battle tick by `battle::facing::project`
+(right after `Columns::project`) for every battle row with a target and zero
+drive, and both the rest guard (`early_entity_rest`) and the step
+(`MotionInput::facing`) read that one value: the row rests when it is
+bit-identical to the stored rotation. Standing soldiers keep head and body
+apart: the head turns toward the target only after a 20 degree dead zone on a
+smoothed bearing (15 degrees per tick, landing on the current bearing), pitch
+has its own 8 degree dead zone, and the body replicates the client's
+`BodyRotationControl` (cone 75, aligned after 10 stable ticks over 10), which is
+what the client draws for a standing mob; a hold returns the stored bits, so a
+holding row rests and journals nothing. Riders, head-on-body mobs and a fighter
+whose charge bonus lasts keep the previous whole-body look: their step turns
+them from where the body ends up and their rest keeps the half-quantum guard,
+both as before (the projection publishes only that guard's decision). With
+nothing projected (no target, battle paused or stopped) a head left off its
+body returns with the vanilla head rule in the step. The facing state is
+runtime-only: a restart rebuilds it from the stored rotation. A standing row
+stores no yaw of its own (owner D48 kept the lazy variant of the D36
+comparison): its stored yaw changes only when it really moves or leaves the
+projection, so the wire keeps the yaw the row already had while its head and
+its drawn body turn. A row leaving the projection, also on pause or stop or
+while its chunk is not simulated, hands its drawn body to its step until a
+step took it. Moving rows still use ordinary block collision,
+ordered movement writeback and native intent merge. No position writer or
+second physics path is introduced.
 
 Crowd steering reserves half the free gap for each simultaneous neighbour.
 After directional projections and field-boundary clipping, a common bounded

@@ -1,0 +1,13 @@
+[[bug]]
+id = "SUMMON-EXPERIENCE-ORB-NOT-ORB"
+title = "Summoning an experience orb does not create an XP orb"
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "fixed"
+source = "The summon command rejected Value or created a mob row instead of an experience orb; vanilla loads Value as a signed short defaulting to zero."
+regression = ["cargo:mc-core:command_summon::tests::experience_orb_summon_preserves_native_value_count_kind_and_checkpoint"]
+fix_commit = "1bf193720f99740448be7fc290f33b1b97e312b5"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/SUMMON-EXPERIENCE-ORB-NOT-ORB.json"
+repro_check = "round 2: the admission regression came back from c9401c3e5 and is fixed again by patch:a0e50c6d63e64f16 (docs/bugs/fix-patches/SUMMON-EXPERIENCE-ORB-NOT-ORB.patch, digest verified); control-D.log - reversed -> red `Unsupported or duplicate orb summon NBT field Count` for {Value:5s,Count:4,Motion:[...]}. Status untouched: the recorded fix_commit stays the one the promotion receipt carries"

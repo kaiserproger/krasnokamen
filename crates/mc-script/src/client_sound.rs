@@ -33,6 +33,12 @@ pub struct ScriptClientSound {
 }
 
 impl ScriptClientSound {
+    /// Bytes this message's own string keeps alive, for callers accounting
+    /// queued payloads. The inline header is not included.
+    pub fn heap_bytes(&self) -> usize {
+        self.sound_id.capacity()
+    }
+
     pub fn play(
         sound_id: &str,
         volume: f32,

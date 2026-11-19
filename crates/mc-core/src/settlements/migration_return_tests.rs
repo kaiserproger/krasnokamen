@@ -43,6 +43,19 @@ pub(crate) fn resident(state: &mut TickState, town: SettlementId, x: f64) -> Ent
 }
 
 pub(crate) fn house(state: &mut TickState, town: SettlementId, x: i32) {
+    shelter(state, x);
+    buildings::certify(
+        state,
+        town,
+        buildings::BuildingKind::House,
+        mc_script::ScriptWorldBounds::new([x - 3, 63, 5], [x + 3, 67, 11]).unwrap(),
+    )
+    .unwrap();
+}
+
+/// The house's blocks and two beds without a House certificate, as a
+/// generated village house that fails certification stands.
+pub(crate) fn shelter(state: &mut TickState, x: i32) {
     let stone = state.registry.states.stone;
     for a in x - 3..=x + 3 {
         for z in 5..=11 {
@@ -81,13 +94,6 @@ pub(crate) fn house(state: &mut TickState, town: SettlementId, x: i32) {
         state.world.set_block(x, 64, z, head);
     }
     state.world.fold_overlay();
-    buildings::certify(
-        state,
-        town,
-        buildings::BuildingKind::House,
-        mc_script::ScriptWorldBounds::new([x - 3, 63, 5], [x + 3, 67, 11]).unwrap(),
-    )
-    .unwrap();
 }
 
 pub(crate) fn step(state: &mut TickState) {
@@ -272,7 +278,7 @@ fn real_daughter_handover_and_outside_builder_preserve_native_work_and_people() 
         fund(&mut state, name, 1);
         state.tick = state.tick.div_ceil(20) * 20;
         construction::tick(&mut state);
-        assert!(state.settlements.get(parent).unwrap().project.is_some());
+        assert!(!state.settlements.get(parent).unwrap().projects.is_empty());
         let v = state.entities.row_mut(builder).villager.as_mut().unwrap();
         v.data.profession = VillagerProfession::Builder;
         v.activity = Activity::Work;
@@ -298,12 +304,12 @@ fn real_daughter_handover_and_outside_builder_preserve_native_work_and_people() 
                         .get(&id)
                         .is_some_and(|r| r.no_candidates);
                 state.tick += 1;
-                if state.settlements.get(parent).unwrap().project.is_none() {
+                if state.settlements.get(parent).unwrap().projects.is_empty() {
                     break;
                 }
             }
             assert!(
-                state.settlements.get(parent).unwrap().project.is_none(),
+                state.settlements.get(parent).unwrap().projects.is_empty(),
                 "native outside builder must finish the outpost house: status={:?} pos={:?} villager={:?}",
                 construction::project_status(&state, parent),
                 state.entities.pos(builder),

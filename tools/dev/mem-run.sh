@@ -123,11 +123,20 @@ fi
 # holders never wait on their own nested builds. The token is taken before the -x
 # lock: a queued compile never delays a -x window, and a -x window never waits for a
 # token while it holds that lock. Holders and waiters: tools/dev/fleet-status.
-# KRASNOKAMEN_BUILD_LANE=background (owner 2026-11-12: the battle video gets resources first):
-# such compiles wait only for tokens 1-2, so token 3 stays free for priority work.
+# KRASNOKAMEN_BUILD_LANE=background: such compiles may take any token, but they give a
+# freed token to a waiting normal-lane compile first: a normal-lane waiter holds
+# tokens/priority.gate, a background waiter yields to it. Battle-video work (takes,
+# render, live-take pins) keeps the normal lane, so it gets the next freed token first:
+# that keeps the owner's 2026-11-12 goal ("the battle video gets resources first"). The
+# token-3 reserve for that goal stays removed (owner D27 p.7, 2026-11-18); restore a
+# reserve only for live-take windows if a take is starved. A four-token trial (owner D27
+# p.6) was ended at 12:1x on 2026-11-18: the 15-minute load stayed above 20 (21.3, 24.1, 23.9).
 build_tokens=3
 token_slots=$(seq -s, "$build_tokens")
-[ "${KRASNOKAMEN_BUILD_LANE:-}" = background ] && token_slots=$(seq -s, $((build_tokens - 1)))
+token_gate=(--hold-gate "$dir/tokens/priority.gate")
+if [ "${KRASNOKAMEN_BUILD_LANE:-}" = background ]; then
+  token_gate=(--yield-gate "$dir/tokens/priority.gate")
+fi
 tool=("${cmd[@]}")
 while :; do
   # screen_audio_graph.sh (tools/harness) runs its argv inside a private PipeWire graph: look through it too,
@@ -180,7 +189,7 @@ if [ "$compile" = 1 ]; then
     token="${KRASNOKAMEN_BUILD_TOKEN:-?}(reused)"
   else
     exec python3 "$here/slot-lock.py" --dir "$dir/tokens" --name 'token-%s.lock' --slots "$token_slots" \
-      --env KRASNOKAMEN_BUILD_TOKEN --fd 9 --wait-dir "$dir/tokens/wait" \
+      --env KRASNOKAMEN_BUILD_TOKEN --fd 9 --wait-dir "$dir/tokens/wait" "${token_gate[@]}" \
       --wait-message "mem-run: build tokens $token_slots are in use; waiting for one (holders: $here/fleet-status)" \
       -- bash "$here/${BASH_SOURCE[0]##*/}" "${args[@]}"
   fi
@@ -193,7 +202,10 @@ slice=solaris-heavy.slice
 # solaris-agents.scope) run in that parent too, so the heavy cap OOM-kills inside the
 # slice before the parent throttles the agents and every heavy command at once.
 ncpu=$(nproc --all)
-slice_gib=$(( $(awk '/MemTotal/{print int($2/1048576)}' /proc/meminfo) - 16 ))
+total_gib=$(awk '/MemTotal/{print int($2/1048576)}' /proc/meminfo)
+slice_gib=$(( total_gib - 16 ))
+# A small host (a 16 GiB CI runner) keeps half its memory, never a negative cap.
+[ "$slice_gib" -ge $(( total_gib / 2 )) ] || slice_gib=$(( total_gib / 2 ))
 parent_high=$(systemctl --user show solaris.slice -p MemoryHigh --value 2>/dev/null || true)
 if [[ "$parent_high" =~ ^[0-9]+$ ]] && [ $(( parent_high / 1073741824 - 8 )) -lt "$slice_gib" ]; then
   slice_gib=$(( parent_high / 1073741824 - 8 ))

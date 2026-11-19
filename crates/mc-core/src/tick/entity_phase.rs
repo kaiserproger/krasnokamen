@@ -61,6 +61,7 @@ pub(super) struct ReadRow {
     pub(super) is_slime_size_one: bool,
     /// Blueprint locomotion capabilities read by the motion step.
     pub(super) climbs_walls: bool,
+    pub(super) head_follows_body: bool,
     pub(super) avoids_armadillos: bool,
     pub(super) aquatic_control: crate::species::AquaticControl,
     /// Resolved from the blueprint's goal set (data, not type names).
@@ -540,7 +541,9 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         passive: passive_follow::Context {
             players: grid(&players, temptation_consumers),
             states: &state.players,
-            locked: state.require_plugin_login.then_some(&state.locked_sessions),
+            locked: state
+                .require_plugin_login
+                .then_some(&*state.locked_sessions),
         },
         dolphin_toys: &dolphin_toys,
         villagers: villager_grid,
@@ -672,6 +675,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
                 vel: write.vel,
                 yaw: write.rotation[0],
                 pitch: write.rotation[1],
+                head_yaw: write.rotation[2],
                 ground: write.ground,
                 horizontal_impulse: write.horizontal_impulse,
                 air_supply: write.air_supply,
@@ -780,9 +784,9 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             post.shots,
             post.grounded,
         );
-        let battle = state.hostile.battle.timings;
+        let (battle, probe) = crate::battle::phase_log_detail(state);
         eprintln!(
-            "  battle detail us: total={} counters={} formation={} columns={} targets={} retaliation={} steering={} combat={} morale={} projection={} emit={}",
+            "  battle detail us: total={} counters={} formation={} columns={} targets={} retaliation={} steering={} combat={} morale={} projection={} emit={} stepped_battle_rows={} battle_slots={} {}",
             battle.total_us,
             battle.counters_us,
             battle.formation_us,
@@ -794,6 +798,9 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             battle.morale_us,
             battle.projection_us,
             battle.emit_us,
+            rows.iter().filter(|row| row.battle).count(),
+            state.entities.battle_slots().count(),
+            probe,
         );
     }
     rows.clear();

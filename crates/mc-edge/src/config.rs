@@ -51,6 +51,17 @@ pub struct EdgeConfig {
     /// Access lists live beside the explicit config, otherwise in the cwd.
     #[serde(skip, default = "default_server_dir")]
     pub(crate) server_dir: PathBuf,
+    /// File this config was loaded from; `None` for defaults and library use.
+    /// Startup checks read its permissions.
+    #[serde(skip)]
+    pub(crate) config_path: Option<PathBuf>,
+    /// Imported properties file holding a non-empty `rcon.password`, whether
+    /// or not the TOML overrides it; startup checks read its permissions too.
+    #[serde(skip)]
+    pub(crate) secret_properties_path: Option<PathBuf>,
+    /// The effective `rcon.password` came from that file, not the TOML.
+    #[serde(skip)]
+    pub(crate) rcon_password_imported: bool,
     /// Upstream proxy trust: Velocity modern forwarding.
     #[serde(default)]
     pub proxy: ProxySection,
@@ -95,13 +106,29 @@ pub struct PropertiesSection {
     pub file: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(default)]
 pub struct RconSection {
     pub enabled: bool,
     pub bind_address: String,
     pub port: u16,
     pub password: String,
+}
+
+impl std::fmt::Debug for RconSection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RconSection")
+            .field("enabled", &self.enabled)
+            .field("bind_address", &self.bind_address)
+            .field("port", &self.port)
+            .field("password", &redacted(&self.password))
+            .finish()
+    }
+}
+
+/// Debug rendering of a secret: its presence, never its value.
+fn redacted(secret: &str) -> &'static str {
+    if secret.is_empty() { "" } else { "<redacted>" }
 }
 
 impl Default for RconSection {
@@ -246,6 +273,23 @@ pub struct NetworkSection {
     /// unlimited.
     #[serde(default)]
     pub max_connections_per_ip: u32,
+    /// Server-wide cap on concurrent pre-play connections (handshake, status
+    /// and login before Play). `0` (default) derives `max_players * 2 + 64`:
+    /// the per-address knobs above cannot bound a flood from many addresses,
+    /// and each pre-play socket may hold up to 1 MiB of decoded input. A
+    /// connection over the cap is closed before its handshake is read.
+    #[serde(default)]
+    pub max_pre_play_connections: u32,
+    /// Maximum concurrent pre-play connections from one address for direct
+    /// clients (Play sessions do not count). Default 8; `0` disables it.
+    /// Velocity mode ignores it: the proxy owns connection control.
+    #[serde(default = "default_max_pre_play_connections_per_ip")]
+    pub max_pre_play_connections_per_ip: u32,
+    /// Chunk packets sent to one player per published tick, 1..=64 (vanilla
+    /// clamps a client's requested rate to 64). Default 16; the client's
+    /// acknowledged rate lowers it further.
+    #[serde(default = "default_chunks_per_tick_per_player")]
+    pub chunks_per_tick_per_player: u32,
 }
 
 impl Default for NetworkSection {
@@ -255,6 +299,9 @@ impl Default for NetworkSection {
             port: default_port(),
             connection_throttle_ms: 0,
             max_connections_per_ip: 0,
+            max_pre_play_connections: 0,
+            max_pre_play_connections_per_ip: default_max_pre_play_connections_per_ip(),
+            chunks_per_tick_per_player: default_chunks_per_tick_per_player(),
         }
     }
 }
@@ -281,6 +328,25 @@ pub struct DataSection {
     /// empty-server pause still checkpoint. Zero counts as one.
     #[serde(default = "default_checkpoint_every_ticks")]
     pub checkpoint_every_ticks: u64,
+    /// Journal directory-fsync cadence in published batches (ticks); one is
+    /// the safest, ten is the default. A batch file is fsynced before its
+    /// rename, but the rename is durable only after the next directory fsync,
+    /// so a host power loss can drop up to this many published batches. It
+    /// does not bound the process-crash window: a tick reaches clients once
+    /// its batch is queued, so the queued batches (up to 128 / 256 MiB) and the
+    /// one being written can be lost by any crash. See
+    /// docs/architecture/persistence.md "Write errors and publication order".
+    #[serde(default = "default_journal_fsync_every_batches")]
+    pub journal_fsync_every_batches: u32,
+    /// Hard cap on reliable presentation bytes queued between the core tick and
+    /// the edge pump, in bytes (default 256 MiB). The tick never blocks on a
+    /// slow edge: exceeding this cap, or leaving the queue undrained for 10 s,
+    /// halts the server fail-closed with an explicit disconnect reason. The
+    /// process exits even when the pump is wedged; the reason reaches players
+    /// best effort. The warning mark is 8 MiB. See
+    /// `docs/architecture/persistence.md`.
+    #[serde(default = "default_outbox_queue_bytes")]
+    pub outbox_queue_bytes: usize,
 }
 
 impl Default for DataSection {
@@ -291,6 +357,8 @@ impl Default for DataSection {
             vanilla_data_dir: default_vanilla_data_dir(),
             backup_dir: None,
             checkpoint_every_ticks: default_checkpoint_every_ticks(),
+            journal_fsync_every_batches: default_journal_fsync_every_batches(),
+            outbox_queue_bytes: default_outbox_queue_bytes(),
         }
     }
 }
@@ -310,7 +378,7 @@ pub struct AuthSection {
 }
 
 /// `[proxy]`: upstream proxy trust for player-info forwarding.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 pub struct ProxySection {
     /// `none` (default) or `velocity` modern forwarding.
     #[serde(default)]
@@ -318,6 +386,15 @@ pub struct ProxySection {
     /// Velocity `forwarding.secret` contents, required in velocity mode.
     #[serde(default)]
     pub secret: String,
+}
+
+impl std::fmt::Debug for ProxySection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProxySection")
+            .field("mode", &self.mode)
+            .field("secret", &redacted(&self.secret))
+            .finish()
+    }
 }
 
 /// Which forwarding scheme the listener trusts.
@@ -517,7 +594,7 @@ fn default_block_log_max_records() -> usize {
 }
 
 /// `[dashboard]`: optional operator dashboard and Prometheus scrape endpoint.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct DashboardSection {
     /// Master switch (default off).
     #[serde(default)]
@@ -537,6 +614,21 @@ pub struct DashboardSection {
     pub metrics_bearer_token: Option<String>,
 }
 
+impl std::fmt::Debug for DashboardSection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DashboardSection")
+            .field("enabled", &self.enabled)
+            .field("bind_address", &self.bind_address)
+            .field("port", &self.port)
+            .field("allow_remote", &self.allow_remote)
+            .field(
+                "metrics_bearer_token",
+                &self.metrics_bearer_token.as_deref().map(redacted),
+            )
+            .finish()
+    }
+}
+
 impl Default for DashboardSection {
     fn default() -> Self {
         Self {
@@ -550,7 +642,7 @@ impl Default for DashboardSection {
 }
 
 /// `[msmp]`: authenticated JSON-RPC-over-WebSocket management endpoint.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct MsmpSection {
     #[serde(default)]
     pub enabled: bool,
@@ -564,6 +656,18 @@ pub struct MsmpSection {
     pub bearer_token: String,
     #[serde(default)]
     pub allow_remote: bool,
+}
+
+impl std::fmt::Debug for MsmpSection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MsmpSection")
+            .field("enabled", &self.enabled)
+            .field("bind_address", &self.bind_address)
+            .field("port", &self.port)
+            .field("bearer_token", &redacted(&self.bearer_token))
+            .field("allow_remote", &self.allow_remote)
+            .finish()
+    }
 }
 
 impl Default for MsmpSection {
@@ -617,14 +721,29 @@ fn default_checkpoint_every_ticks() -> u64 {
     // mc-core's `CoreConfig::new` cadence.
     1200
 }
+
+fn default_outbox_queue_bytes() -> usize {
+    // mc-core's own default: the 8 GiB target keeps presentation backlog well
+    // inside its memory cap (see docs/OPERATING.md).
+    mc_core::config::OUTBOX_QUEUE_BYTES
+}
 fn default_bind_address() -> String {
     "127.0.0.1".to_owned()
 }
 fn default_port() -> u16 {
     25565
 }
+fn default_max_pre_play_connections_per_ip() -> u32 {
+    8
+}
+fn default_chunks_per_tick_per_player() -> u32 {
+    crate::plan::CHUNKS_PER_TICK as u32
+}
 fn default_world_dir() -> PathBuf {
     PathBuf::from("world")
+}
+fn default_journal_fsync_every_batches() -> u32 {
+    10
 }
 fn default_vanilla_data_dir() -> PathBuf {
     PathBuf::new()
@@ -680,9 +799,9 @@ impl EdgeConfig {
             .and_then(Path::parent)
             .filter(|path| !path.as_os_str().is_empty())
             .map_or_else(default_server_dir, Path::to_path_buf);
+        cfg.config_path = origin.map(Path::to_path_buf);
         // Relative data paths resolve against the process working directory.
         // Absolute paths pass through untouched.
-        let _ = origin;
         if cfg.server.view_distance == 0 {
             cfg.server.view_distance = default_view_distance();
         }
@@ -722,6 +841,21 @@ impl EdgeConfig {
         anyhow::ensure!(
             cfg.recorder.world_queue_bytes > 0,
             "recorder.world_queue_bytes must be positive"
+        );
+        anyhow::ensure!(
+            (1..=1200).contains(&cfg.data.journal_fsync_every_batches),
+            "data.journal_fsync_every_batches must be in 1..=1200 batches: one is \
+             every tick, and above the default checkpoint interval (1200 ticks) a \
+             checkpoint gate flushes the directory first anyway"
+        );
+        anyhow::ensure!(
+            cfg.data.outbox_queue_bytes > 0,
+            "data.outbox_queue_bytes must be positive"
+        );
+        anyhow::ensure!(
+            (1..=64).contains(&cfg.network.chunks_per_tick_per_player),
+            "network.chunks_per_tick_per_player must be in 1..=64: 0 would never send a \
+             chunk, and clients never ask for more than 64"
         );
         Ok(cfg)
     }
@@ -786,6 +920,9 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
                 "port",
                 "connection_throttle_ms",
                 "max_connections_per_ip",
+                "max_pre_play_connections",
+                "max_pre_play_connections_per_ip",
+                "chunks_per_tick_per_player",
             ],
         ),
         (
@@ -796,6 +933,8 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
                 "vanilla_data_dir",
                 "backup_dir",
                 "checkpoint_every_ticks",
+                "journal_fsync_every_batches",
+                "outbox_queue_bytes",
             ],
         ),
         ("auth", &["online_mode", "require_plugin_login"]),
@@ -972,6 +1111,34 @@ mod tests {
     }
 
     #[test]
+    fn debug_redacts_every_secret_but_keeps_their_presence() {
+        let cfg = EdgeConfig::from_toml(
+            "[network]\nbind_address = \"0.0.0.0\"\n\
+             [auth]\nonline_mode = false\n\
+             [proxy]\nmode = \"velocity\"\nsecret = \"proxy-hunter2\"\n\
+             [msmp]\nenabled = true\nbearer_token = \"msmp-hunter2\"\n\
+             [dashboard]\nmetrics_bearer_token = \"metrics-hunter2\"\n\
+             [rcon]\nenabled = true\npassword = \"rcon-hunter2\"\n",
+            None,
+        )
+        .unwrap();
+        let debug = format!("{cfg:?}");
+        for secret in [
+            "proxy-hunter2",
+            "msmp-hunter2",
+            "metrics-hunter2",
+            "rcon-hunter2",
+        ] {
+            assert!(!debug.contains(secret), "{secret} leaked in {debug}");
+        }
+        assert_eq!(debug.matches("<redacted>").count(), 4, "{debug}");
+        // The surrounding settings stay readable so the dump is still usable.
+        assert!(debug.contains("RconSection"), "{debug}");
+        assert!(debug.contains("0.0.0.0"), "{debug}");
+        assert!(format!("{:?}", EdgeConfig::default()).contains("secret: \"\""));
+    }
+
+    #[test]
     fn pause_when_empty_defaults_to_vanilla_sixty_and_parses() {
         let default = EdgeConfig::from_toml("", None).unwrap();
         assert_eq!(default.server.pause_when_empty_seconds, 60);
@@ -987,12 +1154,60 @@ mod tests {
     }
 
     #[test]
+    fn outbox_queue_bytes_is_a_known_data_key_and_validates() {
+        let default = EdgeConfig::from_toml("", None).unwrap();
+        assert_eq!(
+            default.data.outbox_queue_bytes,
+            mc_core::config::OUTBOX_QUEUE_BYTES
+        );
+        let configured =
+            EdgeConfig::from_toml("[data]\noutbox_queue_bytes = 4194304\n", None).unwrap();
+        assert_eq!(configured.data.outbox_queue_bytes, 4 << 20);
+        // A configured value must not be reported as an unknown key.
+        let table: toml::Table = toml::from_str("[data]\noutbox_queue_bytes = 4194304\n").unwrap();
+        assert_eq!(
+            unknown_leaves(&table),
+            Vec::<String>::new(),
+            "outbox_queue_bytes must be a known data key"
+        );
+        assert!(EdgeConfig::from_toml("[data]\noutbox_queue_bytes = 0\n", None).is_err());
+    }
+
+    #[test]
     fn checkpoint_cadence_defaults_to_core_and_parses() {
         let default = EdgeConfig::from_toml("", None).unwrap();
         assert_eq!(default.data.checkpoint_every_ticks, 1200);
         let long =
             EdgeConfig::from_toml("[data]\ncheckpoint_every_ticks = 1000000\n", None).unwrap();
         assert_eq!(long.data.checkpoint_every_ticks, 1_000_000);
+    }
+
+    #[test]
+    fn journal_fsync_window_defaults_to_ten_and_is_validated() {
+        let default = EdgeConfig::from_toml("", None).unwrap();
+        assert_eq!(default.data.journal_fsync_every_batches, 10);
+        assert_eq!(
+            crate::server::core_config(&default).journal_fsync_every_batches,
+            10,
+            "the core keeps the same default"
+        );
+        let every_tick =
+            EdgeConfig::from_toml("[data]\njournal_fsync_every_batches = 1\n", None).unwrap();
+        assert_eq!(every_tick.data.journal_fsync_every_batches, 1);
+        assert_eq!(
+            crate::server::core_config(&every_tick).journal_fsync_every_batches,
+            1,
+            "the configured window reaches the core"
+        );
+        for refused in ["0", "1201"] {
+            let text = format!("[data]\njournal_fsync_every_batches = {refused}\n");
+            let error = EdgeConfig::from_toml(&text, None)
+                .expect_err("out-of-range window must be refused");
+            assert!(
+                error.to_string().contains("journal_fsync_every_batches"),
+                "the refusal names the key: {error}"
+            );
+        }
     }
 
     #[test]
@@ -1169,12 +1384,23 @@ mod tests {
     #[test]
     fn network_address_limits_parse_and_example_names_only_known_keys() {
         let cfg = EdgeConfig::from_toml(
-            "[network]\nconnection_throttle_ms = 750\nmax_connections_per_ip = 2\n",
+            "[network]\nconnection_throttle_ms = 750\nmax_connections_per_ip = 2\nmax_pre_play_connections_per_ip = 64\nchunks_per_tick_per_player = 24\n",
             None,
         )
         .unwrap();
         assert_eq!(cfg.network.connection_throttle_ms, 750);
         assert_eq!(cfg.network.max_connections_per_ip, 2);
+        assert_eq!(cfg.network.max_pre_play_connections_per_ip, 64);
+        assert_eq!(cfg.network.chunks_per_tick_per_player, 24);
+        for out_of_range in [0, 65] {
+            assert!(
+                EdgeConfig::from_toml(
+                    &format!("[network]\nchunks_per_tick_per_player = {out_of_range}\n"),
+                    None,
+                )
+                .is_err()
+            );
+        }
 
         let text =
             std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../example.toml"))

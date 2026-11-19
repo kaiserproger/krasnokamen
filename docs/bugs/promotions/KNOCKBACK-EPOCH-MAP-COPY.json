@@ -1,0 +1,41 @@
+{
+  "id": "KNOCKBACK-EPOCH-MAP-COPY",
+  "verdict": "promoted",
+  "fix_commit": "215e1d9212729dc2415a45e71c4c45b31c989e1e",
+  "fix_commit_full": "215e1d9212729dc2415a45e71c4c45b31c989e1e",
+  "promoted_at": "2026-11-17T18:34:34+00:00",
+  "tree_head": "42601f36ccfe9a8c157e374f9b74d45a247d2b31",
+  "tree_dirty": true,
+  "tree_sha256": "10ec419b90d241baf56aad5b395cb18529bf003fabdbe014ca14fbee2416828b",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/boundary.rs",
+    "crates/mc-core/src/core.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/dimensions_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:dimensions::tests::shared_tick_snapshot_never_panics_the_knockback_observer": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:dimensions::tests::unchanged_knockback_ticks_republish_the_same_map_without_a_copy": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-core:dimensions::tests::shared_tick_snapshot_never_panics_the_knockback_observer": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:dimensions::tests::unchanged_knockback_ticks_republish_the_same_map_without_a_copy": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/solaris/.analysis/validation/20261117T182927-ledger-promote-9x49a008"
+}

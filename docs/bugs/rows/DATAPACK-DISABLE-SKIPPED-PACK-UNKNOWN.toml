@@ -1,0 +1,11 @@
+[[bug]]
+id = "DATAPACK-DISABLE-SKIPPED-PACK-UNKNOWN"
+title = "/datapack disable on a pack skipped at /reload answered `Unknown data pack` while /datapack list showed it; vanilla DataPackCommand.getPack throws unknown only when the repository has no such pack and otherwise commands.datapack.disable.failed (`Pack '...' is not enabled!`)."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "fixed"
+source = "BreakB10Commands round 3 H4 (REBREAK3.md); vanilla 26.1.2 DataPackCommand.getPack javap (getPack null -> unknown; selected.contains(pack) == enabling -> failed)."
+regression = ["cargo:mc-core:datapacks::command_tests::disabling_a_skipped_pack_says_it_is_not_enabled", "cargo:mc-core:datapacks::command_tests::a_refused_reload_never_leaves_a_listed_pack_unknown_to_disable", "harness:datapack-reload:native-datapack-reload"]
+fix_commit = "patch:66e66c89e001d20f24ede3fb3e32e719cb587286bf4cee7cb95fb72fbf90bf5b"
+promotion = "docs/bugs/promotions/DATAPACK-DISABLE-SKIPPED-PACK-UNKNOWN.json"

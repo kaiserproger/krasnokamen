@@ -1,0 +1,12 @@
+[[bug]]
+id = "TEST-NATIVE-HEALTH"
+title = "Current native full wave does not execute every scenario always_oracle (server alive/noERRORpanic/MSPT<50); old captures lack complete metrics. Subject/domain passes therefore are not complete matrix acceptance."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-HEALTH"
+regression = ["python:tools.harness.test_native_matrix:NativeMatrixTests.test_health_interval_requires_live_complete_below_budget_samples_and_clean_log", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_health_checks_before_and_after_restart_and_discloses_gap", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_health_rejects_frozen_server_despite_client_ticks", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_wave_never_credits_missing_slow_or_restart_gap_health"]
+repro_check = "Not promotable for full-wave acceptance: HealthInterval and its final integration now have assertion-level control evidence (receipts/HarnessFix4/TEST-NATIVE-HEALTH.red.log and .green.log), but restart cells still deliberately block because final metrics read -> server stop is unobservable. The new wave test executes real HealthInterval validation and rejects a slow tick, missing samples, late ERROR, and restart gap; old mock-call ordering is not the proving assertion. A complete shutdown-boundary metrics receipt and a full real wave are still required; no status or promotion claim is made."
+fix_commit = "ef67d139e"
+failing_first = "reported"

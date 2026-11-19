@@ -1,0 +1,11 @@
+[[bug]]
+id = "LOADER-ZOMBIE-SHIELD-MIXIN"
+title = "Fabric 26.3 client never enters Play: ZombieShieldPoseMixin targets getArmPose, absent from the 26.3 zombie renderer"
+area = "client"
+severity = "blocker"
+status = "open"
+source = "Stage3 S3Loader on loader dfad752: critical mixin injection failure, wt/S3LoaderCore/.analysis/validation/20261114T232908-loader-fabric-screen-admission-j0xk_52i/client.log:207"
+repro = "client"
+regression = ["harness:loader-live:loader-fabric-screen-admission"]
+failing_first = "reported"
+repro_check = "Fixed in Loader commits 635e415 (ZombieShieldPoseMixin now injects at extractRenderState(Zombie, ZombieRenderState, float) RETURN and sets the arm BLOCK pose; WindowMixin.onFocus reads isFocused()) and 4e214443 (generic MixinTargetTest over every configured mixin selector against the 26.1.2, 26.2 and 26.3 client jars); no ledger fix_commit kind for the Loader repository. Loader Java tests (no ledger ref kind): receipts/LoaderMixinFix/generic-26.1.2-final.xml, generic-26.2-final.xml, generic-26.3-final.xml green; old zombie selector restored fails naming ZombieShieldPoseMixin/getArmPose (receipts/LoaderMixinFix/generic-negative-committed.xml). Real clients: Fabric screen admission enters Play (receipts/LoaderMixinFix/20261114T234416-loader-fabric-screen-admission-uvnk421h), NeoForge settlements smoke enters Play (20261114T234858-loader-v2-settlements-smoke-m8581t1b); S3Loader confirmed the blocking husk shield pose visually on loader 635e415 (receipts/Stage3/S3Loader/REPORT.md). Not promoted."

@@ -82,9 +82,11 @@ including critical persistence, protocol, custody and battle-core changes before
 Main commits them; docs-only and test-only slices get none. It neither edits nor
 delegates, and fixing its findings does not trigger another reviewer.
 
-Permanent owner policy, 2026-11-15: **Fable (`architect-fable`) is preferred; when
-unavailable, an independent Astra/Sol reviewer is allowed.** This replaces the
-single-model prerequisite, not independent review. Record actual agent/model,
+Owner D14 (2026-11-17), reaffirmed by D46 (2026-11-19): **reviews run on Sol
+or Opus, from a different vendor than the author.** This replaces the earlier
+Fable preference, not independent review. Fable is used only for an explicitly
+owner-requested architecture design; see [model routing](agent-fleet.md#generalist-roster).
+Record actual agent/model,
 independence, exact base/candidate/diff and critical source coverage. Reuse an old
 or partial review only for the hunks it actually covers, never as approval of a
 new combined candidate. Review points/counts, correctness, negative controls,

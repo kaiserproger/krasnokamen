@@ -1,0 +1,10 @@
+[[bug]]
+id = "WAL-FSYNC-LATENCY-AND-BYTES-UNMEASURED"
+title = "No receipt records WAL fsync service time, fsync count, WAL bytes per tick or journal device utilisation; only the tick-side journal_queue_us exists, so the 15 ms journal budget row and the 1M durability story have no measurement behind them."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R1.md gap G-5 and section F5 (Gregg 8.5.2 file system latency analysis, 9.5.2 disk USE; perf/durability). crates/mc-core/src/journal.rs appends one file per tick (File::create, write_all, sync_all, rename, directory fsync every fsync_every batches); the dashboard exposes journal_build_us and journal_queue_us (crates/mc-edge/src/dashboard.rs), which are queue and backpressure, not service time; the WAL creates 20 files/s (1.7 M files/day in one directory) and at 1M the batch size grows with the entity count; the 128-batch queue absorbs a slow fsync until it fills and then the tick blocks with a cause invisible in every current receipt. Verified open on main 5bdc02911 (no fsync latency or batch-byte counter in dashboard.rs). Measurement (no rebuild needed): bpftrace on vfs_fsync per thread name for p50/p99/p999, biolatency-bpfcc and iostat -x 5 for the device, WAL bytes/tick from new batch files or a counter beside journal_build_us, correlated with journal_queue_us p99. Related R1 idea I-9 (WAL micro-benchmark) is in receipts/Perf1M/BOOKS-IDEAS.md."
+regression = []
+failing_first = "not recorded"

@@ -1,0 +1,12 @@
+[[bug]]
+id = "HC-3"
+title = "Physical gameplay F/middle-click unbound. Client dispatch fixed; server pick handler tracked PICK-SERVER separately."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-3"
+regression = ["harness:entities:native-v2-input-pick", "client:krasnokamen-client:controls_tests::controls_pick_defaults_and_old_settings_keep_rebindings", "client:krasnokamen-client:controls_tests::controls_native_dispatch_uses_rebound_mouse_button", "client:krasnokamen-client:controls_tests::controls_item_mapping_uses_rebound_key", "client:krasnokamen-client:ui::inventory_input_tests::inventory_native_shortcuts_preserve_gameplay_and_ignore_releases"]
+proving_assertions = { "harness:entities:native-v2-input-pick" = "creative_picked_block_hotbar" }
+fix_commit = "client:5ef71d56"
+repro_check = "candidate: same drift as HC-2 (receipts/XClientControl/negctl/hc23-reverse-apply-failures.log); the gameplay early return and pick binding were introduced by d5303246/83994480, no real hunk reverse-applies; the server pick half is PICK-SERVER"

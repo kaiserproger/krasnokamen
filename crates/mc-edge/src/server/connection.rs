@@ -3,6 +3,22 @@
 
 use super::*;
 
+impl EdgeServer {
+    /// Queue handles for one Play connection, paced by
+    /// `[network] chunks_per_tick_per_player`.
+    pub(super) fn connection_handles(
+        &self,
+        reliable_tx: mpsc::Sender<bytes::Bytes>,
+        world_tx: WorldSender,
+    ) -> ConnectionHandles {
+        ConnectionHandles::new(
+            reliable_tx,
+            world_tx,
+            self.cfg.network.chunks_per_tick_per_player as usize,
+        )
+    }
+}
+
 /// Register the session and enqueue its native Join under the same fence as
 /// op/deop, so a permission update cannot overtake the Join it targets.
 pub(super) async fn admit_native_session(
@@ -41,6 +57,14 @@ pub(super) fn refresh_join_permission_tree(
         )?;
     }
     Ok(())
+}
+
+/// Vanilla Netty sets `TCP_NODELAY` on every accepted child channel. Without
+/// it a small clientbound frame (keepalive, block ack, position correction)
+/// waits behind an in-flight world batch for the delayed ACK, up to ~40 ms of
+/// jitter on a high-RTT link.
+pub(super) fn tune_game_socket(stream: &TcpStream) -> std::io::Result<()> {
+    stream.set_nodelay(true)
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -83,10 +107,12 @@ impl Drop for PrePlayPermit<'_> {
 }
 
 /// Per-connection pipeline. Status connections return after the ping;
-/// Play connections run until disconnect or overflow.
+/// Play connections run until disconnect or overflow. `pre_play` is the
+/// server-wide slot taken by the accept loop and released at the Play handoff.
 pub(super) async fn handle_connection(
     stream: TcpStream,
     server: Arc<EdgeServer>,
+    pre_play_slot: crate::server::pre_play_limit::PrePlaySlot,
 ) -> anyhow::Result<()> {
     let peer = stream
         .peer_addr()
@@ -103,7 +129,7 @@ pub(super) async fn handle_connection(
             warn!(%peer, connection = id.0, cause, "connection closed by delivery policy");
             Err(anyhow::anyhow!("connection delivery stopped"))
         }
-        result = run_connection(stream, Arc::clone(&server), id, peer.clone(), &mut lifecycle) => result,
+        result = run_connection(stream, Arc::clone(&server), id, peer.clone(), &mut lifecycle, pre_play_slot) => result,
     };
     lifecycle.stop_writer().await;
     result
@@ -115,6 +141,7 @@ async fn run_connection(
     id: ConnectionId,
     peer: String,
     lifecycle: &mut ConnectionLifecycle<'_>,
+    pre_play_slot: crate::server::pre_play_limit::PrePlaySlot,
 ) -> anyhow::Result<()> {
     let permit = if server.velocity.is_none() {
         let ip = stream.peer_addr()?.ip();
@@ -423,12 +450,11 @@ async fn run_connection(
         mpsc::channel::<bytes::Bytes>(crate::fanout::RELIABLE_QUEUE_BOUND);
     let (world_tx, world_rx) = world_queue_for(&server.cfg.recorder, recorder);
     let operator_guard = server.operator_updates.lock().await;
-    let stashed =
-        server
-            .connections
-            .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
-                server.hub.published_knockback_count(id)
-            })?;
+    let stashed = server.connections.register(
+        id,
+        server.connection_handles(reliable_tx, world_tx),
+        || server.hub.published_knockback_count(id),
+    )?;
     if !stashed.is_empty() {
         // Adopt the Joined entity id if stashed (matches the pump path).
         let joined_entity = stashed.iter().find_map(|change| match change {
@@ -450,6 +476,9 @@ async fn run_connection(
     server.connections.set_name(id, outcome.name.clone());
     refresh_join_permission_tree(&server, id, burst_op_level)?;
     drop(operator_guard);
+    // Play: this session now counts against `max_players`, not the
+    // server-wide pre-play cap.
+    drop(pre_play_slot);
     server.feedback(id, "Settlements / Поселения: /settlement guide")?;
     if *server.stop.borrow() {
         server.kick(

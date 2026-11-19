@@ -289,6 +289,7 @@ fn admit(state: &mut TickState, parent: SettlementId) {
         return;
     }
     let record = state.settlements.get(parent).unwrap();
+    let mut survey = site_refusals::Survey::default();
     if !expedition.sites().into_iter().all(|(name, origin)| {
         let blueprint = blueprints::get(&state.registry, name).expect("authored outpost");
         site_free_claim(
@@ -297,6 +298,7 @@ fn admit(state: &mut TickState, parent: SettlementId) {
             origin,
             blueprint.footprint(Rotation(0)),
             Some(&expedition),
+            &mut survey,
         ) && planned_cells(
             state,
             &Project {
@@ -308,38 +310,80 @@ fn admit(state: &mut TickState, parent: SettlementId) {
                 building: None,
                 structure: String::new(),
                 ordered: false,
-                borrowed_builder: None,
+                builder: None,
+                order_seq: None,
             },
             "oak",
+            &mut survey.clearance,
         )
-        .is_some()
+        .is_ok()
     }) {
         return;
     }
+    let members = super::super::households::members(state, parent, &expedition.household);
+    let adults = members
+        .iter()
+        .filter(|entity| {
+            let slot = state
+                .entities
+                .slot_of(**entity)
+                .expect("living household member");
+            state.entities.row(slot).villager.as_ref().unwrap().age >= 0
+        })
+        .count();
+    tracing::info!(target: "settlement_audit", parent = parent.0, household = %expedition.household,
+        origin = %record.households[&expedition.household].origin.as_str(), members = members.len(),
+        adults, destination = ?expedition.destination, tick = state.tick, "settlement_founding_admitted");
     let record = state.settlements.get_mut(parent).unwrap();
     record.founding = Some(expedition);
     record.revision = record.revision.saturating_add(1);
 }
 
+/// True when `project` is the construction of exactly this expedition site.
+fn is_site(project: &Project, name: &str, origin: [i32; 3]) -> bool {
+    project.blueprint == name
+        && project.origin == origin
+        && project.rotation == 0
+        && project.level == 1
+}
+
 pub(super) fn owns_project(record: &SettlementRecord, project: &Project) -> bool {
     record.founding.as_ref().is_some_and(|expedition| {
-        expedition.sites().into_iter().any(|(name, origin)| {
-            project.blueprint == name
-                && project.origin == origin
-                && project.rotation == 0
-                && project.level == 1
-        })
+        expedition
+            .sites()
+            .into_iter()
+            .any(|(name, origin)| is_site(project, name, origin))
     })
 }
 
+/// True while a villager of the expedition household builds any project.
+fn member_bound(state: &TickState, parent: SettlementId, household: &str) -> bool {
+    super::super::households::members(state, parent, household)
+        .into_iter()
+        .filter_map(|entity| state.entities.slot_of(entity))
+        .any(|slot| bound_builder(&state.settlements, state.entities.row(slot).uuid))
+}
+
+/// True while a villager of the expedition household still owes storage its
+/// carried materials; the debt belongs to the parent and its body must not leave.
+fn member_owes_carry(state: &TickState, parent: SettlementId, household: &str) -> bool {
+    super::super::households::members(state, parent, household)
+        .into_iter()
+        .filter_map(|entity| state.entities.slot_of(entity))
+        .any(|slot| carry_debtor(state, parent, state.entities.row(slot).uuid))
+}
+
+/// Cancels every project the expedition owns, each through `cancel_project`.
 pub(in crate::settlements) fn cancel(state: &mut TickState, parent: SettlementId) {
-    let record = state.settlements.get(parent).expect("founding parent");
-    if record
-        .project
-        .as_ref()
-        .is_some_and(|project| owns_project(record, project))
-    {
-        cancel_project(state, parent).expect("cancel admitted founding structure");
+    let owned: Vec<String> = {
+        let record = state.settlements.get(parent).expect("founding parent");
+        projects(record)
+            .filter(|project| owns_project(record, project))
+            .map(|project| project.structure.clone())
+            .collect()
+    };
+    for structure in owned {
+        cancel_project(state, parent, &structure).expect("cancel admitted founding structure");
     }
     let record = state.settlements.get_mut(parent).unwrap();
     record.founding = None;
@@ -350,7 +394,7 @@ pub(in crate::settlements) fn cancel(state: &mut TickState, parent: SettlementId
 /// shortages leave ordinary native extraction and crafting active.
 pub(super) fn plan(state: &mut TickState, parent: SettlementId) -> bool {
     let record = state.settlements.get(parent).unwrap();
-    let pending = record.pending_order.is_some();
+    let pending = orders(record).next().is_some();
     if record.founding.is_none() {
         if pending {
             return false;
@@ -364,12 +408,19 @@ pub(super) fn plan(state: &mut TickState, parent: SettlementId) -> bool {
         cancel(state, parent);
         return false;
     }
-    if state.settlements.get(parent).unwrap().project.is_some() {
-        return true;
-    }
     for (name, origin) in expedition.sites() {
-        if executor::built_at(state, parent, name, origin) {
+        let record = state.settlements.get(parent).unwrap();
+        // One project per site: a site under construction is never admitted
+        // twice, and a finished one is never rebuilt.
+        if projects(record).any(|project| is_site(project, name, origin))
+            || executor::built_at(state, parent, name, origin)
+        {
             continue;
+        }
+        // A full project set keeps this expedition's turn, as an active
+        // project did while the store held one.
+        if claim_slot(state, parent).is_err() {
+            return true;
         }
         if pending {
             return false;
@@ -398,9 +449,17 @@ pub(super) fn plan(state: &mut TickState, parent: SettlementId) -> bool {
             building: None,
             structure: String::new(),
             ordered: false,
-            borrowed_builder: None,
+            builder: None,
+            order_seq: None,
         };
         return begin(state, project, &species, color);
+    }
+    // Every site is admitted. While the expedition's own projects build, the
+    // parent's owner orders and autonomy keep their free slots; the turn is
+    // held only for the final handover.
+    let record = state.settlements.get(parent).unwrap();
+    if projects(record).any(|project| owns_project(record, project)) {
+        return false;
     }
     finish(state, parent, &expedition);
     true
@@ -415,7 +474,11 @@ fn finish(state: &mut TickState, parent: SettlementId, expedition: &FoundingExpe
         return false;
     }
     let source = state.settlements.get(parent).unwrap();
-    if source.project.is_some()
+    // Handover waits for the expedition's own projects only, and never carries
+    // away a villager who is bound as a builder on any project.
+    if projects(source).any(|project| owns_project(source, project))
+        || member_bound(state, parent, &expedition.household)
+        || member_owes_carry(state, parent, &expedition.household)
         || source.revision > u64::MAX - 2
         || source.households[&expedition.household].revision == u64::MAX
     {
@@ -489,10 +552,15 @@ fn finish(state: &mut TickState, parent: SettlementId, expedition: &FoundingExpe
     record.founding = None;
     record.revision += 1;
     tracing::info!(target: "settlement_audit", parent = parent.0, settlement = child.0,
-        tick = state.tick, game_time = state.tick_control.game_ticks(state.tick), "settlement_daughter_founded");
+        tick = state.tick, game_time = state.tick_control.game_ticks(state.tick),
+        household = %expedition.household, "settlement_daughter_founded");
     true
 }
 
 #[cfg(test)]
 #[path = "construction_founding_tests.rs"]
-mod tests;
+pub(super) mod tests;
+
+#[cfg(test)]
+#[path = "construction_founding_household_tests.rs"]
+mod household_tests;

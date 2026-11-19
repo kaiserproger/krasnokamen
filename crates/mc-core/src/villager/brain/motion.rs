@@ -383,14 +383,7 @@ pub(super) fn move_to(
         if (new_target || changed || (due && v.navigation_path.is_empty()) || stalled)
             && cache.spend_path(state, Consumer::Brain)
         {
-            let from = at(pos);
-            let horizontal = from
-                .x
-                .abs_diff(target.x)
-                .max(from.z.abs_diff(target.z))
-                .saturating_add(8)
-                .clamp(48, 512);
-            let vertical = from.y.abs_diff(target.y).saturating_add(4).clamp(16, 512);
+            let (horizontal, vertical) = allocator::route_bounds(at(pos), target);
             let mut seek_path = std::mem::take(&mut cache.candidate_path);
             let mut ctx = allocator::RouteCtx {
                 world: &state.world,
@@ -490,11 +483,7 @@ pub(crate) fn move_committed_with_route(
             break None;
         };
         let standing = geometry.standing(state, v, cell, unchanged);
-        let reached = standing.unwrap_or_else(|| centre(cell));
-        if (pos[0] - reached[0]).powi(2) + (pos[2] - reached[2]).powi(2)
-            < WAYPOINT_REACH * WAYPOINT_REACH
-            && (pos[1] - reached[1]).abs() < 0.6
-        {
+        if waypoint_reached(state, slot, pos, cell, standing) {
             v.navigation_path.pop();
         } else {
             break standing;
@@ -559,10 +548,7 @@ pub(super) fn move_skipped(
     if allowed {
         for &cell in v.navigation_path.iter().rev() {
             let standing = geometry.standing(state, v, cell, unchanged);
-            let point = standing.unwrap_or_else(|| centre(cell));
-            if (pos[0] - point[0]).powi(2) + (pos[2] - point[2]).powi(2) < 0.09
-                && (pos[1] - point[1]).abs() < 0.6
-            {
+            if waypoint_reached(state, slot, pos, cell, standing) {
                 reached += 1;
             } else {
                 has_next = true;
@@ -599,11 +585,47 @@ const SWIM_CHANCE: f64 = 0.8;
 const SWIM_JUMP_BLOCKS_PER_SECOND: f64 = 0.04 / mc_physics::TICK_SECONDS;
 const WATER_VERTICAL_DRAG: f64 = 0.8;
 
-/// (body overlaps fluid, fluid deeper than the swim jump threshold).
-fn immersion(state: &TickState, slot: EntitySlot) -> (bool, bool) {
+/// Vertical arrival band of a committed waypoint: a body that can stand on its
+/// waypoint descends to it, so a lower waypoint stays committed until the body
+/// actually arrives.
+pub(crate) const WAYPOINT_VERTICAL_REACH: f64 = 0.6;
+
+/// A body overlapping fluid floats and cannot descend to the bed under a water
+/// waypoint: the route gives a one-block channel its bed top as the standing
+/// point, while Swim holds the body 0.59-0.73 above it (Spain trace, Farmer 45,
+/// ticks 111148-111150). One cell of slack accepts a body inside the waypoint's
+/// own column. The comparison is strictly `< 1.0`: a wet full-block ledge one
+/// block up has a gap of exactly `1.0` and its waypoint stays committed.
+const FLOATING_WAYPOINT_VERTICAL_REACH: f64 = 1.0;
+
+/// Whether the committed waypoint `cell` is reached. `standing` is the support
+/// point the route gives the cell; `None` falls back to the cell centre and
+/// keeps the narrow band, because an unsupported node is a route that changed
+/// under the body and must stay committed until the body really lands on it.
+/// Horizontal first, then the narrow vertical band, and only then the fluid
+/// probe, so ordinary dry walking never samples the body's fluid overlap.
+fn waypoint_reached(
+    state: &TickState,
+    slot: EntitySlot,
+    pos: [f64; 3],
+    cell: BlockPos,
+    standing: Option<[f64; 3]>,
+) -> bool {
+    let point = standing.unwrap_or_else(|| centre(cell));
+    if (pos[0] - point[0]).powi(2) + (pos[2] - point[2]).powi(2) >= WAYPOINT_REACH * WAYPOINT_REACH
+    {
+        return false;
+    }
+    let gap = (pos[1] - point[1]).abs();
+    gap < WAYPOINT_VERTICAL_REACH
+        || (standing.is_some() && gap < FLOATING_WAYPOINT_VERTICAL_REACH && wet(state, slot))
+}
+
+/// The body's box as the fluid probes read it.
+fn body_box(state: &TickState, slot: EntitySlot) -> mc_physics::EntityBody {
     let pos = state.entities.pos(slot);
     let body = state.entities.body(slot);
-    let body = mc_physics::EntityBody {
+    mc_physics::EntityBody {
         position: mc_physics::Vec3::new(pos[0], pos[1], pos[2]),
         velocity: mc_physics::Vec3::ZERO,
         aabb: mc_physics::Aabb {
@@ -611,7 +633,25 @@ fn immersion(state: &TickState, slot: EntitySlot) -> (bool, bool) {
             height: body.height,
         },
         on_ground: false,
-    };
+    }
+}
+
+/// Body overlaps fluid. `body_overlaps_fluid` samples block rows, not the fluid
+/// surface, so a body standing on a farmland, dirt-path, mud or soul-sand edge
+/// (top 0.875-0.9375) with water in the same row counts as wet too.
+fn wet(state: &TickState, slot: EntitySlot) -> bool {
+    mc_physics::body_overlaps_fluid(
+        body_box(state, slot),
+        &TickSampler {
+            world: &state.world,
+            registry: &state.registry,
+        },
+    )
+}
+
+/// (body overlaps fluid, fluid deeper than the swim jump threshold).
+fn immersion(state: &TickState, slot: EntitySlot) -> (bool, bool) {
+    let body = body_box(state, slot);
     let live = TickSampler {
         world: &state.world,
         registry: &state.registry,

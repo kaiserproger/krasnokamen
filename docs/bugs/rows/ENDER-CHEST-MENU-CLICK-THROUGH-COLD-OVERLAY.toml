@@ -1,0 +1,10 @@
+[[bug]]
+id = "ENDER-CHEST-MENU-CLICK-THROUGH-COLD-OVERLAY"
+title = "With an ender chest menu open, a click reaches personal ender storage when the chest's chunk is no longer resident but its overlay still holds an ender_chest state."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/ArchDesign/VOTE-RESIDENCY-R13-astra.md item 4 and DESIGN-RESIDENCY-R14.md (read-only audit). On main 3068dfb1b handler selection calls ender_chest::is_open, which checks the block at the stored menu coordinate through block_at (crates/mc-core/src/tick/input/inventory.rs:234-248; ender_chest.rs:97-109,242-266; world.rs:951-965). Fix and scene: DESIGN-RESIDENCY-R14/R16 menu-source check before handler selection (cold -> close_player_menu with item return); T16i-23."
+regression = []
+failing_first = "not recorded"

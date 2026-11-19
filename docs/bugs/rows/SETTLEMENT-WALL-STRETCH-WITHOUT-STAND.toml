@@ -1,0 +1,10 @@
+[[bug]]
+id = "SETTLEMENT-WALL-STRETCH-WITHOUT-STAND"
+title = "A perimeter wall stretch planned on a lakeshore house roof has no Builder stand, so it never starts and is admitted again after each cancellation"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "SlotStall native probe on a copy of SpainCulture growth-03ef2e297a72-laptop-2 at ab2d945c9 (receipts/SlotStall/README.md, logs/after-growth03ef-l2.log PROBE_COLUMN lines): the next wall cell [91,69,-25] stands on acacia_stairs at y=68 of a house roof; layout::stand's inward columns (91,-24) and (91,-23) are open water up to y=62, below the surface band 63..79 of anchor y 71, so stand is None, villager::building::work gives the Builder no target (navigation=None) and the stretch stays Prepared work=0/24 while the Builders carry 24 cobblestone. With SETTLEMENT-ROAD-STALL-HOLDS-SLOT-TRIAL4's fix the stretch is cancelled after one failed rotation, and with no pending order the planner admits the same stretch 20 ticks later. A similar worksite_unreached stall hits fast-ab/pin's stretch at origin [102,72,35] on cell [107,77,35] (logs/before-fastab-pin.log)."
+regression = []
+failing_first = "not recorded"

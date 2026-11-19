@@ -1,0 +1,10 @@
+[[bug]]
+id = "PLUGIN-PRECOMMIT-DEADLINE-RACE"
+title = "precommit_host real-component tests (nonreturning hook, trap keeps deny registration) can see the chain answer Expired instead of Cancelled under CPU contention: the chain deadline races the hook's epoch cancellation. Failed 2 tests in L2 at load ~21 on 12 cores; 3/3 isolated reruns pass."
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "fixed"
+source = "L2 .analysis/validation/20261104T070730-correctness-vv86u65r (precommit_host.rs:198)"
+failing_first = "reported"
+regression = ["cargo:mc-plugin-host:a_real_component_nonreturning_hook_fails_closed", "cargo:mc-plugin-host:a_real_component_trap_keeps_the_deny_registration_protecting_damage"]

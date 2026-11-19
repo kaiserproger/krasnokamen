@@ -1,0 +1,11 @@
+[[bug]]
+id = "DATAPACK-LIST-HOVER"
+title = "Datapack listing emits joined plain names and discards pack descriptions, so users cannot inspect pack.mcmeta descriptions by hovering the listed packs in chat."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-HOVER Fix patch: reversing it makes the list print plain pack names instead of hover chat links."
+regression = ["cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover"]
+fix_commit = "patch:61916b68f2759fa892f3eedc6158c06aa19d47274e877ab607e220a850d0593a"
+repro_check = "round 2: patch docs/bugs/fix-patches/DATAPACK-LIST-HOVER.patch (digest verified here). Control negative-control.log: reversed -> red `left: [] right: [vanilla, file/alpha]` (plain names, no link or hover). Needs a graphical harness ref before it can be promoted"

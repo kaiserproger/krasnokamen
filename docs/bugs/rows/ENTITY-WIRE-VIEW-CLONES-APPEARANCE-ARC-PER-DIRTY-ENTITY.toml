@@ -1,0 +1,10 @@
+[[bug]]
+id = "ENTITY-WIRE-VIEW-CLONES-APPEARANCE-ARC-PER-DIRTY-ENTITY"
+title = "wire_view clones the appearance Arc for every published row although the edge only compares the pointer, so each dirty entity per tick costs two atomic RMWs and an extra cache line on a separate allocation (about 2 M atomics and 64 MB per tick at 1M)."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-7 (Drepper 6.4.2 atomicity, Bakhvalov 13.4 cache coherence; perf). crates/mc-core/src/entities.rs wire_view does Arc::clone(&row.appearance) per published row (line 1229 on main 5bdc02911), and crates/mc-edge/src/plan.rs appearance_stale only compares the pointer. Verified open on main 5bdc02911. Fix: keep the Arc in a parallel Vec consulted on spawn and metadata change only, or store a u32 appearance id into a side table, preserving the appearance_stale pointer-equality contract exactly (Arc::ptr_eq on the same allocation). Measure fills on an all-active versus an idle leg and the Arc drop path (perf c2c cannot resolve symbols with kptr_restrict=1, so argue from layout plus fills)."
+regression = []
+failing_first = "not recorded"

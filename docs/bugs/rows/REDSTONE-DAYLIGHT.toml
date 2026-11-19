@@ -1,0 +1,11 @@
+[[bug]]
+id = "REDSTONE-DAYLIGHT"
+title = "gap_daylight_detector failed bare (thunder step power 15 vs 10)."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#REDSTONE-DAYLIGHT"
+regression = ["cargo:mc-core:redstone::tests::gap_tests::gap_daylight_detector_requires_local_sky_and_overworld"]
+fix_commit = "da5421f7b"
+repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/nc-hs3-daylight.log: reversing the scheduling fix fails thunder-step power. Manual repro still needs a client gate."

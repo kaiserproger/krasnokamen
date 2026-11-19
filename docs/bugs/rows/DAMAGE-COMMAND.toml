@@ -1,0 +1,11 @@
+[[bug]]
+id = "DAMAGE-COMMAND"
+title = "Vanilla /damage command was absent; magic potion is not generic damage coverage."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DAMAGE-COMMAND"
+regression = ["cargo:mc-core:command_damage::tests::damage_command_commits_default_damage_and_reports_actual_rejection", "harness:entities:native-v2-command-score-store"]
+fix_commit = "patch:ff8339d548af2b08289112d15575ac1aeff71dd04da4dfd85585245b9a18c6f5"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> `/damage` is an unknown command again"

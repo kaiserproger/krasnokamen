@@ -8,13 +8,7 @@ fn test_acceleration_scales_canonical_builder_steps() {
         state.test_acceleration.construction_speed = factor;
         start(&mut state, town, "house", 1, None);
         fund(&mut state, "house", 1);
-        let handle = state
-            .settlements
-            .get(town)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap()
+        let handle = state.settlements.get(town).unwrap().projects[0]
             .structure
             .clone();
         let work = |state: &TickState| {
@@ -48,13 +42,7 @@ fn builder_finishes_the_last_roof_cells_beside_a_lower_perimeter() {
     // The shared paid fixture constructs the initial cells with declared
     // navigation assistance. Only the last four cells exercise real movement.
     for _ in 0..4096 {
-        let project = state
-            .settlements
-            .get(town)
-            .unwrap()
-            .project
-            .as_ref()
-            .unwrap();
+        let project = &state.settlements.get(town).unwrap().projects[0];
         let status = executor::status(&state, town, &project.structure).unwrap();
         if status.stages[status.current_stage_index as usize].work_units
             - status.completed_work_units
@@ -68,8 +56,9 @@ fn builder_finishes_the_last_roof_cells_beside_a_lower_perimeter() {
         .settlements
         .get(town)
         .unwrap()
-        .project
-        .clone()
+        .projects
+        .first()
+        .cloned()
         .unwrap();
     let next = executor::next_cell(&state, town, &project.structure)
         .unwrap()
@@ -148,8 +137,9 @@ fn final_approach_fixture() -> (TickState, SettlementId, EntitySlot, constructio
         .settlements
         .get(town)
         .unwrap()
-        .project
-        .clone()
+        .projects
+        .first()
+        .cloned()
         .unwrap();
     // Setup uses the shared paid executor fixture; the final approach below
     // runs only native allocator/brain motion, without navigation assistance.

@@ -1,0 +1,11 @@
+[[bug]]
+id = "EXECUTE-IF-PREDICATE"
+title = "Execute if or unless predicate does not implement datapack predicate conditions"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Stage2X SLICES.md:123; XCoreCommands round 3 vanilla javap"
+repro = "source"
+regression = []
+repro_check = "Use /execute if predicate <id> or /execute unless predicate <id>; these conditions are unimplemented. Vanilla resolves the id at parse time and unknown ids report argument.resource_or_id.no_such_element. This is distinct from selector predicate= semantics."
+failing_first = "not recorded"

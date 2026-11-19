@@ -1,0 +1,12 @@
+[[bug]]
+id = "PROJECTILE-MAY-INTERACT-IGNORES-WORLD-BORDER"
+title = "A player's projectile interacts with blocks outside the world border"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Source review against 26.3 ServerLevel.mayInteract javap (.analysis/codex-logs/impact-parity/blocks.javap 9270-9293): a player also needs WorldBorder.isWithinBounds(pos) (parity.javap 3144-3186: minX <= x < maxX, minZ <= z < maxZ). crates/mc-core/src/projectiles/block_impact.rs may_interact checked spawn protection only."
+regression = ["cargo:mc-core:projectiles::flight_tests::player_arrow_primes_tnt_only_inside_the_world_border"]
+failing_first = "reported"
+fix_commit = "cd727225"
+promotion = "docs/bugs/promotions/PROJECTILE-MAY-INTERACT-IGNORES-WORLD-BORDER.json"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "WAL-BATCH-HAS-NO-STORE-IDENTITY"
+title = "WAL batch frames carry magic, version, tick range, length and CRC but no identity of the store they belong to, so a journal directory copied from another world or copy of the same world replays into a store that validates its own 32-byte identity, with every check passing and nothing logged."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "receipts/Books/REPORT-R4.md section 1 R4-P3 (OSTEP 45.5 misdirected writes, 42.3 block reuse; corruption, operator-triggered). The batch frame is [magic][version][tick_lo][tick_hi][length][crc] (crates/mc-core/src/journal.rs BATCH_VERSION = 1, decode_batch cross-checks the file name and the CRC), so a file moved to another name refuses, but ownership is not recorded: redb validates a 32-byte identity (crates/mc-world/src/native.rs validate_header on every open), the journal does not. Two worlds both number batches from tick 1, so a foreign journal/ directory satisfies every check against another world's checkpoint (visit_complete_batches_after needs only contiguous, CRC-clean ticks above the manifest). Scenario: restoring only the database into a world whose journal/ is newer or foreign, or copying a world's journal/ between two copies of the same world; recovery folds post-images and tombstones of different chunks, entities and players without a message. Verified open on main 5bdc02911 (BATCH_VERSION still 1, no identity in the frame). Fix direction: NOT decided (architecture committee, receipts/Books/PERSIST6-SYNTHESIS.md). The report's 'first 16 bytes of the store identity' is unusable: that prefix is the KrasnoV2Native tag, identical in every world (crates/mc-core/src/native_checkpoint.rs:194-200); a per-instance identity is needed. A batch without a matching identity fails closed, never accepted with a warning. Regression sketch: a batch with identity A in a world whose store has identity B must refuse naming both."
+regression = []
+failing_first = "not recorded"

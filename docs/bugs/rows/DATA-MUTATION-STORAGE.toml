@@ -1,0 +1,12 @@
+[[bug]]
+id = "DATA-MUTATION-STORAGE"
+title = "Generic entity/block data mutation and storage persistence require native-owner and original real-client acceptance."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-MUTATION-STORAGE Fix patch: reversing it removes the storage, entity and block arms from the /data dispatch, so merge/modify/remove fall through to unsupported syntax."
+regression = ["cargo:mc-core:command_data::tests::data_storage_modify_reports_results_and_survives_reads", "cargo:mc-core:command_data::tests::data_merge_modify_and_remove_edit_a_mobs_data_and_keep_its_identity", "cargo:mc-core:command_data::tests::data_entity_edits_refuse_players_unsupported_fields_and_position_without_changing_anything", "cargo:mc-core:command_data::tests::data_entity_edit_of_a_villager_keeps_its_profession_level_and_age", "cargo:mc-core:command_data::tests::data_edits_an_item_entitys_stack_delay_age_and_gravity", "cargo:mc-core:command_data::tests::data_modify_and_merge_edit_any_block_entity_through_its_native_owner", "cargo:mc-core:command_data::tests::data_block_edits_are_refused_without_changing_anything", "cargo:mc-core:command_data::tests::data_edits_a_command_block_through_the_same_command_path", "cargo:mc-core:command_data::tests::data_edit_of_a_baby_keeps_its_hitbox_and_growing_up_restores_it", "cargo:mc-core:command_data::tests::data_edit_of_an_experience_orb_changes_its_value_and_count", "cargo:mc-core:command_data::tests::data_edit_keeps_a_zombie_villagers_cure_and_a_name_removal_clears_it", "cargo:mc-core:dimensions::tests::data_merge_entity_edits_an_entity_in_another_loaded_dimension", "cargo:mc-core:dimensions::tests::data_edits_a_block_entity_in_another_loaded_dimension", "cargo:mc-core:dimensions::tests::data_edits_an_entity_for_senders_in_the_nether_and_the_end", "cargo:mc-core:dimensions::tests::data_edit_of_a_villager_keeps_trades_gossip_inventory_and_replays_from_the_wal", "cargo:mc-core:command_data::tests::data_edit_of_one_field_keeps_love_and_persistence_the_entity_already_had", "harness:datapack-reload:native-datapack-reload"]
+fix_commit = "patch:f3ee0db6f2ab384acbb5302aa2202e5a64216714f8e89b77ac32c859b97f65cb"
+promotion = "docs/bugs/promotions/DATA-MUTATION-STORAGE.json"
+repro_check = "round 2: the ref went green with the child-sender routing fix and no test edit, which confirms XCoreItems' reattribution - the dropped sender was one cause. This row's own fix (patch:f3ee0db6) is untouched and its status stays fixed"

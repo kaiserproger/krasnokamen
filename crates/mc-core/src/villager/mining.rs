@@ -59,7 +59,7 @@ fn note(state: &TickState, slot: EntitySlot, v: &VillagerState, event: &str) {
     );
 }
 
-pub(super) fn item_id(state: &TickState, name: &str) -> Option<u32> {
+pub(crate) fn item_id(state: &TickState, name: &str) -> Option<u32> {
     state
         .registry
         .items
@@ -446,11 +446,13 @@ fn natural(path: &str) -> bool {
     ) || path.ends_with("_ore")
 }
 
-fn drop_name(path: &str) -> &str {
+/// The one mining drop mapping: harvested natural blocks name their own item.
+pub(crate) fn drop_name(path: &str) -> &str {
     match path {
-        "grass_block" => "dirt",
+        "grass_block" | "podzol" | "mycelium" => "dirt",
         "stone" => "cobblestone",
         "deepslate" => "cobbled_deepslate",
+        "clay" => "clay_ball",
         "coal_ore" | "deepslate_coal_ore" => "coal",
         "iron_ore" | "deepslate_iron_ore" => "raw_iron",
         "copper_ore" | "deepslate_copper_ore" => "raw_copper",
@@ -460,6 +462,14 @@ fn drop_name(path: &str) -> &str {
         "redstone_ore" | "deepslate_redstone_ore" => "redstone",
         "lapis_ore" | "deepslate_lapis_ore" => "lapis_lazuli",
         other => other,
+    }
+}
+
+/// Stacks of that drop one block yields (vanilla: clay gives four balls).
+pub(crate) fn drop_count(path: &str) -> i32 {
+    match path {
+        "clay" => 4,
+        _ => 1,
     }
 }
 
@@ -820,11 +830,11 @@ pub(super) fn work(
         } else {
             bounds
         },
-        state
-            .settlements
-            .get(building.settlement)
-            .and_then(|record| record.project.as_ref())
-            .is_some_and(|project| project.building == Some(building.id)),
+        crate::settlements::construction::upgrading(
+            &state.settlements,
+            building.settlement,
+            building.id,
+        ),
     );
     let entrance = v.job_site?;
     if v.mining_progress.building != id || v.mining_progress.bounds != Some(bounds) {

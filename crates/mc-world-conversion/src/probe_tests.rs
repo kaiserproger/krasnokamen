@@ -328,3 +328,55 @@ fn probe_receipt_inside_source_is_refused_without_writing() {
     assert!(probe_native(&fixture.config, &fixture.world, &[GRAVE], &path).is_err());
     assert!(!path.exists());
 }
+
+/// Books R4-P1 / advisor R2: a probe promises a byte-identical source, so a
+/// store ahead of its marker is accepted without rewriting the marker, and a
+/// marker from another store is refused before any read.
+#[test]
+fn probe_keeps_a_store_ahead_of_its_marker_byte_identical_and_refuses_a_foreign_pair() {
+    let fixture = world(Vec::new(), None);
+    let marker = mc_world::store_marker::read(&fixture.world)
+        .unwrap()
+        .expect("fixture marker");
+    mc_world::store_marker::write(
+        &fixture.world,
+        marker.store_uuid,
+        marker.checkpoint_tick.saturating_sub(1),
+    )
+    .unwrap();
+    let ahead = mc_world::store_marker::read(&fixture.world)
+        .unwrap()
+        .unwrap();
+    let before = hashes(&fixture.world).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let receipt = probe_native(
+        &fixture.config,
+        &fixture.world,
+        &[GRAVE],
+        &out.path().join("ahead.json"),
+    )
+    .unwrap();
+    assert_eq!(receipt.status, "PASS");
+    assert_eq!(receipt.source_unchanged, Some(true));
+    assert_eq!(
+        hashes(&fixture.world).unwrap(),
+        before,
+        "a read-only probe must not rewrite the source, marker included"
+    );
+    assert_eq!(
+        mc_world::store_marker::read(&fixture.world).unwrap(),
+        Some(ahead)
+    );
+
+    mc_world::store_marker::write(&fixture.world, [0x44; 16], ahead.checkpoint_tick).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let error = probe_native(
+        &fixture.config,
+        &fixture.world,
+        &[],
+        &out.path().join("foreign.json"),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("belong to different worlds"), "{error}");
+}

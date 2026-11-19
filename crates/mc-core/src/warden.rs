@@ -110,6 +110,20 @@ pub(crate) fn restore(state: &mut TickState, slot: EntitySlot) {
     };
     let pose = value.pose;
     let anger = value.anger.values().copied().max().unwrap_or(0);
+    // Vanilla `LivingEntity#getDefaultDimensions`: the standing pose uses the
+    // type's contract body; poses 13/14 (emerging, digging) use the vanilla
+    // `EntityDimensions.scalable(0.6F, 1.0F)` of those poses.
+    const EMERGING_HEIGHT: f64 = 1.0;
+    let crate::entities::EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
+        return;
+    };
+    let Some(standing_height) = state
+        .registry
+        .blueprint(type_id)
+        .map(|blueprint| blueprint.height)
+    else {
+        return;
+    };
     let (body, row) = state.entities.parts_mut(slot);
     let spawn_data = i32::from(pose == 13);
     if row.appearance.pose != pose || row.appearance.spawn_data != spawn_data {
@@ -117,7 +131,11 @@ pub(crate) fn restore(state: &mut TickState, slot: EntitySlot) {
         appearance.pose = pose;
         appearance.spawn_data = spawn_data;
     }
-    body.height = if matches!(pose, 13 | 14) { 1.0 } else { 2.9 };
+    body.height = if matches!(pose, 13 | 14) {
+        EMERGING_HEIGHT
+    } else {
+        standing_height
+    };
     metadata(state, slot, 16, EntityDataValue::VarInt(anger as i32));
 }
 pub(crate) fn darkness(state: &mut TickState, pos: [f64; 3], radius: f64) {

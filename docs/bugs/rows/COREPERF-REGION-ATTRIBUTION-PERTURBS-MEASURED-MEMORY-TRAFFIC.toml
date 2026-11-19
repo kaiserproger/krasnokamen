@@ -1,0 +1,10 @@
+[[bug]]
+id = "COREPERF-REGION-ATTRIBUTION-PERTURBS-MEASURED-MEMORY-TRAFFIC"
+title = "coreperf_slot_region runs per slot in the measured legs and reads a late ColdRow line plus dereferences the EntityAppearance Arc to compare a name string, so the profile it attributes contains memory traffic the un-instrumented server never generates and any H5 ranking built on those legs carries an unknown positive memory bias."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "receipts/Books/REPORT-R2.md finding R2-15 (measurement validity of the Perf1M attribution; Bakhvalov 5.4). crates/mc-core/src/tick/entity_phase.rs coreperf_slot_region (with KRASNOKAMEN_COREPERF_REGIONS set) does chunk_of(slot), a HashMap<(i32,i32), usize> probe, then state.entities.row(slot).appearance.custom_name == marker; it is 6.48 % of samples plus coreperf_region 2.26 % (ROADMAP item 3 records the 8.7 % total), and the inflation of measured fills per entity and backend_bound_memory lands on whatever symbol the sampler hits, not on coreperf_*. Verified open on main 5bdc02911 (the row read is still there). Fix: run one leg with KRASNOKAMEN_COREPERF_REGIONS unset on the same population and compare tick ms and fills per entity; if the difference is material key the attribution on chunk_of(slot) alone or build a per-chunk histogram at the chunk boundary."
+regression = []
+failing_first = "not recorded"

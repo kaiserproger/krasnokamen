@@ -2794,3 +2794,115 @@ fn data_edit_of_a_villager_keeps_trades_gossip_inventory_and_replays_from_the_wa
     assert_eq!(replayed.xp, 55);
     assert_eq!(replayed.inventory, before.inventory);
 }
+
+// B6 (CS341 REPORT-B.md): the knockback epoch publication turned the "tick
+// output snapshot is unique" assumption into an `.expect` panic. The fix
+// rebuilds a shared snapshot instead of panicking, and keeps the epoch
+// assignment outside the change condition so an unchanged tick republishes the
+// same (non-empty) map handle. The per-impulse `Arc::make_mut` copy is kept by
+// decision (an O(K) node walk over tracked connections, measured and recorded
+// in the row); these checks pin the two properties above, not that copy.
+
+#[test]
+fn shared_tick_snapshot_never_panics_the_knockback_observer() {
+    let (mut state, alice, _) = worlds();
+    command(&mut state, 1, "gamemode survival Alice");
+    let slot = state.entities.slot_of(alice).unwrap();
+    let position = state.entities.pos(slot);
+    command(
+        &mut state,
+        1,
+        &format!(
+            "summon minecraft:tnt {} {} {} {{fuse:1,explosion_power:1}}",
+            position[0] + 1.0,
+            position[1],
+            position[2]
+        ),
+    );
+    let (mut output, _) = command(&mut state, 1, "time set day");
+    assert!(
+        output.changes.explosions.iter().any(|blast| blast
+            .knockback
+            .iter()
+            .any(|&(entity, push)| entity == alice && push != [0.0; 3])),
+        "the fixture tick carries a real impulse"
+    );
+    // A reader that cloned this tick's snapshot before publication: the old
+    // `Arc::get_mut(..).expect(..)` made this a tick-owner panic.
+    let held = Arc::clone(&output.snapshot);
+    let mut epochs = Arc::default();
+    crate::core::observe_explosion_knockback(&state, &mut output, &mut epochs);
+    let tick = output.tick;
+    assert_eq!(
+        output.snapshot.player_knockback_ticks.get(&ConnectionId(1)),
+        Some(&(1, tick)),
+        "the tick's own snapshot carries the impulse"
+    );
+    assert_eq!(
+        held.player_knockback_ticks.get(&ConnectionId(1)),
+        None,
+        "the snapshot a reader already holds is never mutated"
+    );
+}
+
+#[test]
+fn unchanged_knockback_ticks_republish_the_same_map_without_a_copy() {
+    let (mut state, alice, _) = worlds();
+    command(&mut state, 1, "gamemode survival Alice");
+    let slot = state.entities.slot_of(alice).unwrap();
+    let position = state.entities.pos(slot);
+    command(
+        &mut state,
+        1,
+        &format!(
+            "summon minecraft:tnt {} {} {} {{fuse:1,explosion_power:1}}",
+            position[0] + 1.0,
+            position[1],
+            position[2]
+        ),
+    );
+    let (mut impulse, _) = command(&mut state, 1, "time set day");
+    let mut epochs = Arc::default();
+    crate::core::observe_explosion_knockback(&state, &mut impulse, &mut epochs);
+    let published = Arc::clone(&impulse.snapshot.player_knockback_ticks);
+    assert_eq!(published.len(), 1, "non-empty: the map is the point");
+    let first_tick = impulse.tick;
+
+    // An idle tick carries no impulse: same handle, no clone, same content.
+    let (mut idle, _) = command(&mut state, 1, "time set noon");
+    crate::core::observe_explosion_knockback(&state, &mut idle, &mut epochs);
+    assert!(
+        Arc::ptr_eq(&published, &idle.snapshot.player_knockback_ticks),
+        "an unchanged tick republishes the same epoch map handle"
+    );
+    assert_eq!(
+        idle.snapshot.player_knockback_ticks.get(&ConnectionId(1)),
+        Some(&(1, first_tick)),
+        "and it is still the earlier impulse"
+    );
+    // `Arc::ptr_eq` above is the no-copy proof: a copy would be a new Arc.
+}
+
+#[test]
+fn knockback_epoch_clone_cost_is_informative_not_a_gate() {
+    // Debug, shared host, informative: the epoch map is cloned on impulse
+    // ticks only (O(K) node walk, K = tracked connections). Printed, never
+    // asserted, so a loaded host cannot fail the gate.
+    use std::collections::BTreeMap;
+    use std::time::Instant;
+    for entries in [100usize, 1_000] {
+        let map: BTreeMap<ConnectionId, (u64, u64)> = (0..entries as u64)
+            .map(|id| (ConnectionId(id + 1), (id, id)))
+            .collect();
+        let started = Instant::now();
+        let mut checksum = 0u64;
+        for _ in 0..1_000 {
+            checksum += map.clone().len() as u64;
+        }
+        let per_clone = started.elapsed().as_nanos() / 1_000;
+        assert_eq!(checksum, 1_000 * entries as u64);
+        println!(
+            "knockback epoch map clone, K={entries}: {per_clone} ns/clone (debug, shared host, informative)"
+        );
+    }
+}

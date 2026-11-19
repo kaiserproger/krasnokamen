@@ -1,0 +1,9 @@
+[[bug]]
+id = "MODEL-OPUS-N5"
+title = "With boots on, baby leggings are hidden or nearly hidden."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:124"
+regression = []

@@ -91,7 +91,7 @@ fn build_everything(
     let mut order = Vec::new();
     for _ in 0..40 {
         plan(state, id);
-        let Some(project) = state.settlements.get(id).unwrap().project.clone() else {
+        let Some(project) = state.settlements.get(id).unwrap().projects.first().cloned() else {
             break;
         };
         order.push(project.blueprint);
@@ -124,7 +124,7 @@ fn ten_residents_wall_the_town_in_with_four_gates_and_one_well() {
     assert_eq!(order.iter().filter(|kind| *kind == GATE).count(), 4);
     assert_eq!(order.iter().filter(|kind| *kind == PERIMETER).count(), 24);
     assert!(
-        state.settlements.get(id).unwrap().project.is_none(),
+        state.settlements.get(id).unwrap().projects.is_empty(),
         "nothing owed once the wall and well stand"
     );
     // Wall columns are three cobblestone blocks on the ground, gatehouse
@@ -182,7 +182,7 @@ fn ten_residents_wall_the_town_in_with_four_gates_and_one_well() {
     );
     // Planned once: a second pass owes nothing.
     plan(&mut state, id);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
 }
 
 /// The well's water source costs nothing, and the structure ledger that is
@@ -193,7 +193,7 @@ fn the_free_water_source_and_door_halves_pass_ledger_validation() {
     let (mut state, id, builder) = town(10, true);
     for expected in [WELL, GATE] {
         plan(&mut state, id);
-        let project = state.settlements.get(id).unwrap().project.clone().unwrap();
+        let project = state.settlements.get(id).unwrap().projects[0].clone();
         assert_eq!(project.blueprint, expected);
         crate::plugin_structures::validate(&state).expect("ledger accepts the free cells");
         finish(&mut state, id, builder);
@@ -204,10 +204,10 @@ fn the_free_water_source_and_door_halves_pass_ledger_validation() {
 fn fewer_than_ten_residents_or_no_stock_start_no_fortification() {
     let (mut state, id, _) = town(9, true);
     plan(&mut state, id);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
     let (mut state, id, _) = town(10, false);
     plan(&mut state, id);
-    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
 }
 
 /// Street paving crosses the wall line on all four axes. Paved first, the road
@@ -230,7 +230,8 @@ fn a_gatehouse_stands_on_a_road_that_was_paved_first() {
             building: None,
             structure: String::new(),
             ordered: false,
-            borrowed_builder: None,
+            builder: None,
+            order_seq: None,
         };
         assert!(begin_cells(&mut state, project, work.bounds, work.cells));
         finish(&mut state, id, builder);

@@ -1,0 +1,11 @@
+[[bug]]
+id = "HARNESS-SAND-GATE-NO-HOLD-CHECK"
+title = "native-v2-input-sand stays green when the server keeps dropping a falling block in a frozen world: since 760ca0b5 it slows the server to 1 tick/s after the spawn and never compares the server position with the stepped tick count."
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Negative controls of P1 and QA5-SETBLOCK-SAND (docs/bugs/promotions/P1.json, QA5-SETBLOCK-SAND.json): with the crates/mc-core/src/falling.rs frozen hold reversed, the cargo ref went red and harness:entities:native-v2-input-sand stayed green. tools/harness/backends/native_player_input.py sand() checks client prediction only."
+regression = ["harness:entities:native-v2-input-sand", "python:tools.harness.test_native_player_input:SandGateTests.test_a_server_that_keeps_dropping_a_frozen_block_turns_the_gate_red"]
+failing_first = "reported"
+fix_commit = "e1d92ae4e8ebb7ae1a186b2774bd564fff9dc958"

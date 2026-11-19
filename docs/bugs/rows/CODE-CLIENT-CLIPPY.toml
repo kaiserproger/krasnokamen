@@ -1,0 +1,10 @@
+[[bug]]
+id = "CODE-CLIENT-CLIPPY"
+title = "Existing strict lint gate fails: `refactor/SplitClientLoader-client-final-1.log:6580,6701` reports436 library/459 lib-test errors. Combined native strict `artifact://64976:6915,7005` now reports435 library/458 lib-test errors; concrete:ui_hotfix_tests.rs:967 uses an always-true fov assertion. No runtime conclusion inferred."
+area = "harness"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CODE-CLIENT-CLIPPY"
+regression = []
+repro_check = "candidate: the gate was re-measured green on client 9a645aa9 (workspace and the root crate explicitly, `cargo clippy --workspace --all-targets -- -D warnings` rc=0 plus `-p krasnokamen-client`, receipts/XHarnessInfra/client-clippy-9a645aa9*.log); the cited always-true assertion is gone (src/ui_hotfix_tests.rs has real assert_eq!/assert_ne! FOV assertions). No fix hunks exist to revert, and the --workspace run never printed 'Checking krasnokamen-client', which is why the root crate was checked explicitly"

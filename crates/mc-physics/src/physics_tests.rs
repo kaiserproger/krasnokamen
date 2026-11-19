@@ -2204,3 +2204,214 @@ impl GridPos {
         Self { x, y, z }
     }
 }
+
+/// A body within the collision tolerance of a block face is touching that block.
+/// `VoxelShape.collideX` (26.1.2) treats `d >= -1.0E-7` / `d <= 1.0E-7` as a
+/// contact and `Shapes.collide` returns `0.0` for it; the entity step must never
+/// advance it *through* the block, and it stays at most `COLLISION_EPSILON`
+/// inside the face (the contact clamp blocks without pushing the body out).
+///
+/// The offset below is what an ordinary clip writes: at the pen's coordinates
+/// `512.3 + (512.0 - (512.3 - 0.3)) - 0.3` is `-5.68e-14` below the face, and the
+/// production evidence (prep11-125000 pen 64) has bodies 0.04..0.35 blocks inside
+/// the same wall column, lifted onto it by a jump.
+#[test]
+fn wall_face_snap_never_lets_a_body_cross_the_face() {
+    struct Pen;
+    impl BlockSampler for Pen {
+        fn material_at(&self, _x: i32, y: i32, z: i32) -> BlockMaterial {
+            // Ground for y <= 63 (grass block at 63) and the pen's `-z` wall
+            // column at z = 511 (blocks 511..512) for y 64..=70.
+            if y <= 63 || (z == 511 && (64..=70).contains(&y)) {
+                BlockMaterial::Solid
+            } else {
+                BlockMaterial::Air
+            }
+        }
+    }
+    let half_width = 0.3;
+    let face = 512.0;
+    let mut config = PhysicsConfig::living_entity();
+    config.air_drag = 1.0;
+    config.ground_friction = 1.0;
+    config.vertical_air_drag = 0.98;
+    for round_ulp in [0.0, -1.0e-13, -5.0e-8] {
+        let mut body = EntityBody {
+            position: Vec3::new(11.5, 64.0, face + half_width + round_ulp),
+            velocity: Vec3::ZERO,
+            aabb: Aabb {
+                half_width,
+                height: 1.95,
+            },
+            on_ground: true,
+        };
+        let mut deepest = f64::NEG_INFINITY;
+        for tick in 0..80 {
+            body.velocity.x = 0.0;
+            body.velocity.z = -0.23;
+            body = step_entity(body, &Pen, config).body;
+            let penetration = face - (body.position.z - half_width);
+            deepest = deepest.max(penetration);
+            assert!(
+                penetration <= COLLISION_EPSILON,
+                "offset {round_ulp:e} tick {tick}: body is {penetration:e} behind the wall face \
+                 (pos z {})",
+                body.position.z
+            );
+        }
+        assert!(
+            deepest <= COLLISION_EPSILON,
+            "offset {round_ulp:e}: deepest penetration {deepest:e}"
+        );
+        // The production state (prep11-125000 pen 64) is a body standing at
+        // y = 65.00 *on* the wall's lowest block after jumping from inside it.
+        // With no step and no support across the face, only the floor at y = 64
+        // can hold the body.
+        assert!(
+            body.position.y < 64.5,
+            "offset {round_ulp:e}: body rests on the wall block at y {}",
+            body.position.y
+        );
+    }
+}
+
+/// The tolerance must not become a push-out: a body already embedded deeper
+/// than `COLLISION_EPSILON` keeps today's semantics (vanilla has no unstick for
+/// mobs; only items and experience orbs call `moveTowardsClosestSpace`).
+#[test]
+fn deeply_embedded_body_keeps_moving_without_a_push_out() {
+    struct Pen;
+    impl BlockSampler for Pen {
+        fn material_at(&self, _x: i32, y: i32, z: i32) -> BlockMaterial {
+            if y <= 63 || (z == 511 && (64..=70).contains(&y)) {
+                BlockMaterial::Solid
+            } else {
+                BlockMaterial::Air
+            }
+        }
+    }
+    let mut config = PhysicsConfig::living_entity();
+    config.air_drag = 1.0;
+    config.ground_friction = 1.0;
+    config.vertical_air_drag = 0.98;
+    let mut body = EntityBody {
+        position: Vec3::new(11.5, 64.0, 511.7),
+        velocity: Vec3::ZERO,
+        aabb: Aabb {
+            half_width: 0.3,
+            height: 1.95,
+        },
+        on_ground: true,
+    };
+    let start = body.position.z;
+    for _ in 0..10 {
+        body.velocity.z = -0.23;
+        body = step_entity(body, &Pen, config).body;
+    }
+    assert!(
+        body.position.z < start - 0.05,
+        "an embedded body must keep its vanilla free movement, not be pushed out: {start} -> {}",
+        body.position.z
+    );
+}
+
+/// The clamp in the unit it is stated in: the signed face gap in blocks, tested
+/// before the division. Both movement directions clamp at the boundary
+/// (`-COLLISION_EPSILON`), a gap one step deeper than the tolerance keeps its
+/// own entry time, and a non-negative gap is an approach, not a contact.
+#[test]
+fn contact_entry_clamps_the_face_gap_within_the_tolerance_for_both_directions() {
+    let step = 0.0115;
+    for movement in [step, -step] {
+        assert_eq!(contact_entry(0.0, movement), 0.0, "{movement}");
+        assert_eq!(contact_entry(-5.684_341_886_080_802e-14, movement), 0.0);
+        assert_eq!(contact_entry(-COLLISION_EPSILON, movement), 0.0);
+        assert!(
+            contact_entry(-2.0 * COLLISION_EPSILON, movement) < 0.0,
+            "a body deeper than the tolerance keeps its contact in the past"
+        );
+        assert_eq!(contact_entry(step, movement).abs(), 1.0, "{movement}");
+    }
+}
+
+/// The invariant behind the contact clamp: over repeated ticks, on all four
+/// horizontal faces, a body that starts at or within the contact tolerance of a
+/// face never ends deeper than the tolerance behind it. Measured on the body the
+/// resolver returns, not on the delta it chose, so any implementation that keeps
+/// the face contact may satisfy it (`sweep_axis_interval` returns `entry = 0.0`
+/// for a near-face penetration up to `COLLISION_EPSILON`).
+#[test]
+fn a_contact_never_grows_deeper_than_the_tolerance_behind_a_face() {
+    let wall = WorldAabb {
+        min_x: 10.0,
+        min_y: 64.0,
+        min_z: 512.0,
+        max_x: 11.0,
+        max_y: 65.0,
+        max_z: 513.0,
+    };
+    let half = 0.3;
+    let depth = |body: &WorldAabb, axis: usize, face: f64, side: f64| {
+        let (min, max) = if axis == 0 {
+            (body.min_x, body.max_x)
+        } else {
+            (body.min_z, body.max_z)
+        };
+        if side > 0.0 { max - face } else { face - min }
+    };
+    for axis in [0_usize, 2] {
+        let (wall_lo, wall_hi) = if axis == 0 {
+            (wall.min_x, wall.max_x)
+        } else {
+            (wall.min_z, wall.max_z)
+        };
+        for side in [1.0_f64, -1.0] {
+            let face = if side > 0.0 { wall_lo } else { wall_hi };
+            // Flush against the face, one rounding step inside, and halfway
+            // into the tolerance.
+            for start in [0.0, 5.684_341_886_080_802e-14, 5.0e-8] {
+                let lo = if side > 0.0 {
+                    face - 2.0 * half + start
+                } else {
+                    face - start
+                };
+                let hi = lo + 2.0 * half;
+                let mut body = if axis == 0 {
+                    WorldAabb {
+                        min_x: lo,
+                        max_x: hi,
+                        min_y: 64.0,
+                        max_y: 65.95,
+                        min_z: 512.2,
+                        max_z: 512.8,
+                    }
+                } else {
+                    WorldAabb {
+                        min_z: lo,
+                        max_z: hi,
+                        min_y: 64.0,
+                        max_y: 65.95,
+                        min_x: 10.2,
+                        max_x: 10.8,
+                    }
+                };
+                let step = if side > 0.0 { 0.0115 } else { -0.0115 };
+                let desired = if axis == 0 {
+                    Vec3::new(step, 0.0, 0.0)
+                } else {
+                    Vec3::new(0.0, 0.0, step)
+                };
+                for tick in 0..40 {
+                    let moved = resolve_horizontal_sweep(body, desired, &[wall]);
+                    body = body.moved(moved);
+                    let behind = depth(&body, axis, face, side);
+                    assert!(
+                        behind <= COLLISION_EPSILON,
+                        "axis {axis} face {face} side {side} start {start:e}: \
+                         tick {tick} ended {behind:e} behind the face"
+                    );
+                }
+            }
+        }
+    }
+}

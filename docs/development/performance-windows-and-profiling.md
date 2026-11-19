@@ -178,7 +178,12 @@ capacity claim from the profiled run.
   phase). The step scope itself is one parallel lap (`step_scope`): split it
   with perf, not laps.
   `post detail us:` separates pickup, hostile work and projectile substeps;
-  `battle detail us:` includes the battle counters and phase clocks.
+  `battle detail us:` includes the battle counters and phase clocks, then
+  `stepped_battle_rows` (battle rows whose step ran) against `battle_slots`
+  (every battle slot, including rested, inactive and dying ones: the difference
+  bounds the rested rows from above, it does not count rests) and the facing
+  probe counters of `battle/probe.rs` (standing rows, target switches,
+  start-of-motion and windup facing errors).
 - **Worldgen:** prefer the test-only stage clocks in
   `crates/mc-worldgen/src/terrain/profile_tests.rs` over call graphs; to split a
   stage add an `end(new_index)` call and widen the totals. Use `--exact`
