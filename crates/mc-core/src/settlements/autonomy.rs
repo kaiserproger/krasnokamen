@@ -233,7 +233,7 @@ fn advance(
         return true;
     }
     grow_radius(state, id, anchor, &pending.site);
-    ensure_storage_chest(state, changes, id, anchor);
+    ensure_storage_chest(state, changes, id, anchor, None);
     let attempts = pending
         .residents
         .len()
@@ -398,30 +398,66 @@ fn grow_radius(
     state.settlements.grow_radius(id, radius);
 }
 
-fn ensure_storage_chest(
+/// A checked, empty location for a new founding chest. Planning happens before
+/// registry creation so an obstructed anchor cannot leave a half-founded town.
+pub(crate) struct StorageChestSite {
+    at: [i32; 3],
+    block: u32,
+}
+
+pub(crate) fn storage_chest_site(state: &TickState, anchor: [i32; 3]) -> Option<StorageChestSite> {
+    let chest = mc_data::Identifier::parse("minecraft:chest")
+        .ok()
+        .and_then(|name| state.registry.blocks.block(&name))?
+        .default.0;
+    let at = [
+        (1, 0), (-1, 0), (0, 1), (0, -1),
+        (1, 1), (-1, -1), (1, -1), (-1, 1),
+    ]
+    .into_iter()
+    .flat_map(|(dx, dz)| {
+        [0, 1, -1, 2, -2, 3, -3]
+            .into_iter()
+            .map(move |dy| [anchor[0] + dx, anchor[1] + dy, anchor[2] + dz])
+    })
+    .find(|at| {
+        state.world.block_at(at[0], at[1], at[2]) == Some(state.registry.states.air)
+            && state.world.block_at(at[0], at[1] + 1, at[2]) == Some(state.registry.states.air)
+            && state.world.block_at(at[0], at[1] - 1, at[2])
+                .is_some_and(|id| !state.registry.collision_boxes[id as usize].is_empty())
+            // Never merge with an existing (possibly foreign or stocked) chest.
+            && [(1, 0), (-1, 0), (0, 1), (0, -1)].into_iter()
+                .all(|(dx, dz)| !is_chest_block(state, [at[0] + dx, at[1], at[2] + dz]))
+            && !state.block_entities.contains_key(&(at[0], at[1], at[2]))
+    })?;
+    Some(StorageChestSite { at, block: chest })
+}
+
+/// Generated villages may adopt existing storage. Player founding supplies a
+/// prechecked new site instead, guaranteeing a distinct, empty starter chest.
+pub(crate) fn ensure_storage_chest(
     state: &mut TickState,
     changes: &mut ChangeSet,
     id: SettlementId,
     anchor: [i32; 3],
+    site: Option<StorageChestSite>,
 ) {
-    if state
-        .settlements
-        .get(id)
-        .is_some_and(|record| record.bootstrap_storage.is_some())
-    {
+    if state.settlements.get(id).is_some_and(|record| record.bootstrap_storage.is_some()) {
         return;
     }
     let mut existing = None;
-    for x in anchor[0] - 8..=anchor[0] + 8 {
-        for y in anchor[1] - 4..=anchor[1] + 4 {
-            for z in anchor[2] - 8..=anchor[2] + 8 {
-                let at = [x, y, z];
-                let distance =
-                    (x - anchor[0]).pow(2) + (y - anchor[1]).pow(2) + (z - anchor[2]).pow(2);
-                if distance <= 64 && is_chest_block(state, at) {
-                    let candidate = (distance, at);
-                    if existing.is_none_or(|known| candidate < known) {
-                        existing = Some(candidate);
+    if site.is_none() {
+        for x in anchor[0] - 8..=anchor[0] + 8 {
+            for y in anchor[1] - 4..=anchor[1] + 4 {
+                for z in anchor[2] - 8..=anchor[2] + 8 {
+                    let at = [x, y, z];
+                    let distance =
+                        (x - anchor[0]).pow(2) + (y - anchor[1]).pow(2) + (z - anchor[2]).pow(2);
+                    if distance <= 64 && is_chest_block(state, at) {
+                        let candidate = (distance, at);
+                        if existing.is_none_or(|known| candidate < known) {
+                            existing = Some(candidate);
+                        }
                     }
                 }
             }
@@ -430,49 +466,12 @@ fn ensure_storage_chest(
     let position = if let Some((_, at)) = existing {
         at
     } else {
-        let Some(chest) = mc_data::Identifier::parse("minecraft:chest")
-            .ok()
-            .and_then(|name| state.registry.blocks.block(&name))
-            .map(|block| block.default.0)
-        else {
-            return;
-        };
-        let at = [
-            (1, 0),
-            (-1, 0),
-            (0, 1),
-            (0, -1),
-            (1, 1),
-            (-1, -1),
-            (1, -1),
-            (-1, 1),
-        ]
-        .into_iter()
-        .flat_map(|(dx, dz)| {
-            [0, 1, -1, 2, -2, 3, -3]
-                .into_iter()
-                .map(move |dy| [anchor[0] + dx, anchor[1] + dy, anchor[2] + dz])
-        })
-        .find(|at| {
-            state
-                .world
-                .block_at(at[0], at[1], at[2])
-                .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
-                .is_some_and(|block| block.block.id.path() == "air")
-                && state
-                    .world
-                    .block_at(at[0], at[1] - 1, at[2])
-                    .is_some_and(|id| !state.registry.collision_boxes[id as usize].is_empty())
-        });
-        let Some(at) = at else { return };
-        state.world.set_block(at[0], at[1], at[2], chest);
+        let Some(StorageChestSite { at, block }) = site.or_else(|| storage_chest_site(state, anchor))
+        else { return };
+        state.world.set_block(at[0], at[1], at[2], block);
         changes.blocks.push(crate::boundary::BlockChange {
-            position: BlockPos {
-                x: at[0],
-                y: at[1],
-                z: at[2],
-            },
-            state: chest,
+            position: BlockPos { x: at[0], y: at[1], z: at[2] },
+            state: block,
         });
         state.block_entities.insert(
             (at[0], at[1], at[2]),
@@ -483,7 +482,7 @@ fn ensure_storage_chest(
         );
         at
     };
-    let record = state.settlements.get_mut(id).expect("adopted village");
+    let record = state.settlements.get_mut(id).expect("created settlement");
     record.bootstrap_storage = Some(position);
     record.revision = record.revision.saturating_add(1);
 }
