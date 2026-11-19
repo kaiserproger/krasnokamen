@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 mod core_ast;
+mod domain_boundary;
 mod module_graph;
 mod ownership_rules;
 mod ratchet;

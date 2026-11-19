@@ -34,6 +34,74 @@ impl Drop for Fixture {
 }
 
 #[test]
+fn domain_boundary_resolves_children_aliases_and_explicit_reexports() {
+    let fixture = Fixture::new(
+        "domain-paths",
+        &[(
+            "lib.rs",
+            r#"
+        mod villager {
+            pub mod brain { pub fn tick() {} }
+            mod persistence { fn f() { super::brain::tick(); } }
+            fn f() { brain::tick(); }
+        }
+        mod bridge { pub use crate::villager::brain as ai; }
+        mod host {
+            use crate::bridge::ai as resident_ai;
+            fn f() { resident_ai::tick(); }
+        }
+    "#,
+        )],
+    );
+    let facts = fixture.facts();
+    assert_eq!(facts.domain_refs.len(), 5);
+    assert!(
+        facts
+            .domain_refs
+            .iter()
+            .all(|reference| reference.target.starts_with("villager::brain"))
+    );
+}
+
+#[test]
+fn domain_boundary_ast_negative_control_is_independent_of_scc() {
+    let calls = "crate::villager::brain::tick();".repeat(116);
+    let host = format!(
+        "fn f() {{ {calls} }}\n\
+         #[cfg(test)] fn excluded() {{ crate::villager::brain::tick(); }}\n"
+    );
+    let fixture = Fixture::new(
+        "domain-boundary",
+        &[
+            (
+                "lib.rs",
+                "mod host; mod villager { pub mod brain { pub fn tick() {} } } mod settlements { pub struct Registry; }",
+            ),
+            ("host.rs", &host),
+        ],
+    );
+    let facts = fixture.facts();
+    assert_eq!(facts.domain_refs.len(), 116);
+    assert_eq!(largest_component(&facts.edges()).len(), 1);
+    let mut findings = Vec::new();
+    crate::code_health::domain_boundary::check(&fixture.0, &facts.domain_refs, &mut findings);
+    assert!(findings.is_empty());
+    // This additional import is a named dependency, even without a call. No
+    // runtime compilation or unrelated SCC growth is needed to catch it.
+    fs::write(
+        fixture.0.join("crates/mc-core/src/host.rs"),
+        format!("{host}\nuse crate::settlements::Registry as NewOwner;\n"),
+    )
+    .unwrap();
+    let changed = fixture.facts();
+    assert_eq!(changed.domain_refs.len(), 117);
+    assert_eq!(largest_component(&changed.edges()).len(), 1);
+    crate::code_health::domain_boundary::check(&fixture.0, &changed.domain_refs, &mut findings);
+    assert_eq!(findings.len(), 1);
+    assert!(findings[0].message.contains("D65 inbound domain paths"));
+}
+
+#[test]
 fn tarjan_finds_every_component() {
     // 0 -> 1 -> 2 -> 0 is a cycle, 2 -> 3, 3 <-> 4 is a second one, 5 is alone.
     let edges = vec![vec![1], vec![2], vec![0, 3], vec![4], vec![3], vec![]];
