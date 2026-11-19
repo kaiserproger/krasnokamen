@@ -285,6 +285,7 @@ class Walk:
             nodes = self.button_nodes(state, pattern)
         if scrolls:
             self.evidence.setdefault("scrolled_to_button", []).append({"label": label, "scrolls": scrolls, "found": bool(nodes)})
+            shown = view(state)  # what the press leaves is judged against the scrolled screen
         if not nodes:
             self.probe.report["assertions"][f"QW nav {label}"] = False
             self.stuck += 1
