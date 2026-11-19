@@ -1,11 +1,12 @@
 //! Optional Horizon VERSION 1 far-terrain presentation.
 mod codec;
 
+use std::collections::HashMap;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use mc_data::Identifier;
 use mc_protocol::packets::{CustomPayload, Packet, play::ServerboundCustomPayload};
@@ -30,6 +31,48 @@ pub(crate) fn payload(mut body: &[u8]) -> Option<Vec<u8>> {
             payload,
         } if body.is_empty() && id == channel() => Some(payload),
         _ => None,
+    }
+}
+
+type TileKey = (i32, i32, i32);
+const REFUSAL_TTL: Duration = Duration::from_secs(60);
+const MAX_REFUSALS: usize = 4096;
+
+#[derive(Default)]
+pub(crate) struct Refusals {
+    entries: HashMap<TileKey, Instant>,
+}
+
+impl Refusals {
+    fn contains(&mut self, key: TileKey, now: Instant) -> bool {
+        if self.entries.get(&key).is_some_and(|until| *until > now) {
+            true
+        } else {
+            self.entries.remove(&key);
+            false
+        }
+    }
+
+    fn dispatch(&mut self, key: TileKey, now: Instant, submit: impl FnOnce()) -> bool {
+        if self.contains(key, now) {
+            return false;
+        }
+        submit();
+        true
+    }
+
+    fn insert(&mut self, key: TileKey, now: Instant) {
+        if self.entries.len() >= MAX_REFUSALS
+            && !self.entries.contains_key(&key)
+            && let Some(oldest) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, until)| *until)
+                .map(|(key, _)| *key)
+        {
+            self.entries.remove(&oldest);
+        }
+        self.entries.insert(key, now + REFUSAL_TTL);
     }
 }
 
@@ -110,40 +153,60 @@ impl Connection {
             reject();
             return;
         }
-        if self.inflight.fetch_add(1, Ordering::AcqRel) >= 8 {
-            self.inflight.fetch_sub(1, Ordering::AcqRel);
+        let service = server.lod.as_ref().expect("shared lod lane");
+        let key = (request.x, request.z, stride);
+        let submitted = service
+            .horizon_refusals
+            .lock()
+            .expect("refusal cache")
+            .dispatch(key, now, || {
+                if self.inflight.fetch_add(1, Ordering::AcqRel) >= 8 {
+                    self.inflight.fetch_sub(1, Ordering::AcqRel);
+                    reject();
+                    return;
+                }
+                let inflight = Arc::clone(&self.inflight);
+                let workers = Arc::clone(&service.workers);
+                let refusals = Arc::clone(&service.horizon_refusals);
+                let server = Arc::clone(server);
+                tokio::spawn(async move {
+                    let _done = Done(inflight);
+                    let Ok(_permit) = workers.acquire_owned().await else {
+                        return;
+                    };
+                    let hub = Arc::clone(&server.hub);
+                    let result = tokio::task::spawn_blocking(move || {
+                        hub.lod_stored_tile(
+                            request.x.div_euclid(size),
+                            request.z.div_euclid(size),
+                            stride.trailing_zeros() as u8,
+                        )
+                    })
+                    .await;
+                    let payload = match result {
+                        Ok(Ok(Some(samples))) => codec::reply(request.id, &samples),
+                        _ => codec::refusal(request.id),
+                    };
+                    if payload.len()
+                        == mc_protocol::codec::varint_encoded_len(request.id as i32) + 1
+                        && payload.last() == Some(&1)
+                    {
+                        refusals
+                            .lock()
+                            .expect("refusal cache")
+                            .insert(key, Instant::now());
+                    }
+                    if !server.hub.session_locked(connection)
+                        && let Ok(frame) = crate::lod::frame(channel(), payload)
+                        && let Some(handles) = server.connections.get(connection)
+                    {
+                        let _ = handles.world_tx.try_send(frame);
+                    }
+                });
+            });
+        if !submitted {
             reject();
-            return;
         }
-        let inflight = Arc::clone(&self.inflight);
-        let workers = Arc::clone(&server.lod.as_ref().expect("shared lod lane").workers);
-        let server = Arc::clone(server);
-        tokio::spawn(async move {
-            let _done = Done(inflight);
-            let Ok(_permit) = workers.acquire_owned().await else {
-                return;
-            };
-            let hub = Arc::clone(&server.hub);
-            let result = tokio::task::spawn_blocking(move || {
-                hub.lod_tile(
-                    request.x.div_euclid(size),
-                    request.z.div_euclid(size),
-                    stride.trailing_zeros() as u8,
-                    true,
-                )
-            })
-            .await;
-            let payload = match result {
-                Ok(Ok(samples)) => codec::reply(request.id, &samples),
-                _ => codec::refusal(request.id),
-            };
-            if !server.hub.session_locked(connection)
-                && let Ok(frame) = crate::lod::frame(channel(), payload)
-                && let Some(handles) = server.connections.get(connection)
-            {
-                let _ = handles.world_tx.try_send(frame);
-            }
-        });
     }
 }
 struct Done(Arc<AtomicUsize>);
@@ -198,5 +261,23 @@ mod tests {
             request.stride = stride;
             assert!(!allowed(request, 8, [0.0, 0.0]));
         }
+    }
+
+    #[test]
+    fn horizon_lod_refusal_cache_skips_sampling_and_expires() {
+        let mut cache = Refusals::default();
+        let now = Instant::now();
+        let key = (0, 0, 1);
+        let mut calls = 0;
+        assert!(cache.dispatch(key, now, || calls += 1));
+        cache.insert(key, now);
+        assert!(!cache.dispatch(key, now + Duration::from_secs(2), || calls += 1));
+        assert_eq!(calls, 1, "repeat must not reach the sampler");
+        assert!(cache.dispatch(key, now + REFUSAL_TTL, || calls += 1));
+        assert_eq!(calls, 2);
+        for i in 0..=MAX_REFUSALS {
+            cache.insert((i as i32, 0, 1), now);
+        }
+        assert_eq!(cache.entries.len(), MAX_REFUSALS);
     }
 }

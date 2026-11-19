@@ -72,7 +72,7 @@ pub(super) fn reply(id: u32, samples: &[mc_core::lod::LodSample]) -> Vec<u8> {
             let Some(height) = sample.height.checked_add(1) else {
                 return refusal(id);
             };
-            if !(-2047..=4096).contains(&height) {
+            if !(-63..=4096).contains(&height) {
                 return refusal(id);
             }
             let biome = names.iter().position(|n| *n == name).unwrap() as i32;
@@ -82,7 +82,7 @@ pub(super) fn reply(id: u32, samples: &[mc_core::lod::LodSample]) -> Vec<u8> {
             out.put_u8(0);
             out.write_varint(biome);
             out.write_varint(1);
-            out.put_i16((height - 1) as i16);
+            out.put_i16(-64);
             out.put_i16(height as i16);
             out.write_varint(state.0 as i32);
             out.write_varint(biome);
@@ -138,7 +138,7 @@ mod tests {
             assert_eq!(data.read_varint().unwrap(), 1);
             assert_eq!(
                 (data.read_i16().unwrap(), data.read_i16().unwrap()),
-                (63, 64)
+                (-64, 64)
             );
             assert_eq!(data.read_varint().unwrap(), 1);
             assert_eq!(data.read_varint().unwrap(), 0);

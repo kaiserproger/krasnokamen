@@ -452,12 +452,14 @@ seed to every native player.**
 `[horizon_lod]` is off by default. When enabled, the server offers Horizon
 protocol 1 during configuration; vanilla ignores the unknown payload.
 `distance_chunks` is in 1–1024 chunks, and sampling shares `[lod].workers`.
-Only stored overworld columns are served; missing tiles are refused. Pregenerate
-the stopped world with [`world pregenerate`](#offline-chunk-pregeneration) for
-far coverage. Stored terrain can help recover the world seed, so enable this
-only when players may see it. Surface samples use the last stored image and
-preserve only the known top block, not subsurface material layers or water
-depth; lighting is a fixed presentation value, not sampled world lighting.
+Only stored overworld columns are served. A tile with any unstored column is
+refused whole and Horizon retries it every 2 seconds. An offered Horizon client
+draws only server tiles within `distance_chunks`, not its own server-terrain
+cache or BlueMap. Enable this only after pregenerating approximately that
+distance around the play area using [`world pregenerate`](#offline-chunk-pregeneration).
+Stored terrain can help recover the world seed. Surface samples use the last
+stored image and extend the top block down to overworld min Y; actual subsurface
+layers and water depth are unavailable. Lighting is a fixed presentation value.
 
 ### Distant Horizons
 

@@ -506,14 +506,7 @@ async fn run_connection(
             let _ = handles.reliable_tx.try_send(frame);
         }
     }
-    let mut horizon_lod = server.cfg.horizon_lod.enabled.then(|| {
-        crate::horizon_lod::Connection::new(
-            spawn,
-            entity,
-            server.hub.subscribe(),
-            dimension == mc_core::dimensions::Dimension::Overworld,
-        )
-    });
+    let mut horizon_lod = None;
     let (dh_tx, dh_rx) = mpsc::channel(128);
     let dh =
         server.dh.as_ref().filter(|_| !native_client).map(|_| {
@@ -707,10 +700,18 @@ async fn run_connection(
                         }
                     }
                 }
-                if let Some(horizon) = &mut horizon_lod
+                if server.cfg.horizon_lod.enabled
                     && frame.id == mc_protocol::packets::play::ServerboundCustomPayload::ID
                     && let Some(payload) = crate::horizon_lod::payload(&frame.body)
                 {
+                    let horizon = horizon_lod.get_or_insert_with(|| {
+                        crate::horizon_lod::Connection::new(
+                            spawn,
+                            entity,
+                            server.hub.subscribe(),
+                            dimension == mc_core::dimensions::Dimension::Overworld,
+                        )
+                    });
                     horizon.request(&server, id, &payload);
                     continue;
                 }

@@ -62,6 +62,8 @@ pub(crate) struct LodSource {
     /// `MOTION_BLOCKING`); air and dry passable plants are not ground.
     surface: Vec<bool>,
     program: std::sync::OnceLock<Option<Arc<Vec<u8>>>>,
+    #[cfg(test)]
+    reads: std::sync::atomic::AtomicUsize,
 }
 
 impl std::fmt::Debug for LodSource {
@@ -98,6 +100,8 @@ impl LodSource {
             source: Arc::downgrade(&source),
             surface,
             program: std::sync::OnceLock::new(),
+            #[cfg(test)]
+            reads: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 
@@ -131,6 +135,28 @@ impl LodSource {
         level: u8,
         stored_only: bool,
     ) -> Result<Vec<LodSample>, CoreError> {
+        Ok(self
+            .tile_inner(tile_x, tile_z, level, stored_only, false)?
+            .expect("partial tiles are allowed"))
+    }
+
+    pub(crate) fn stored_tile(
+        &self,
+        tile_x: i32,
+        tile_z: i32,
+        level: u8,
+    ) -> Result<Option<Vec<LodSample>>, CoreError> {
+        self.tile_inner(tile_x, tile_z, level, true, true)
+    }
+
+    fn tile_inner(
+        &self,
+        tile_x: i32,
+        tile_z: i32,
+        level: u8,
+        stored_only: bool,
+        require_complete: bool,
+    ) -> Result<Option<Vec<LodSample>>, CoreError> {
         let source = self
             .source
             .upgrade()
@@ -172,6 +198,9 @@ impl LodSource {
                     .iter()
                     .take_while(|entry| entry.0 == pos)
                     .count();
+            #[cfg(test)]
+            self.reads
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             match source.load_native(pos) {
                 Ok(Some(chunk)) => {
                     for &(_, index, x, z) in &order[group..end] {
@@ -190,12 +219,16 @@ impl LodSource {
                         }
                     }
                 }
+                Ok(None) if require_complete => return Ok(None),
                 Ok(None) => {}
+                Err(error) if require_complete => {
+                    return Err(CoreError::Storage(error.to_string()));
+                }
                 Err(error) => tracing::warn!(%error, "lod tile store read failed"),
             }
             group = end;
         }
-        Ok(samples)
+        Ok(Some(samples))
     }
 
     fn stored(&self, chunk: &Chunk, x: i32, z: i32) -> LodSample {
@@ -284,6 +317,8 @@ mod tests {
             structure_catalog: registry.structure_catalog.clone(),
         });
         let source = LodSource::new(Arc::clone(&chunks), &registry.materials);
+        assert!(source.stored_tile(10, 10, 4).unwrap().is_none());
+        assert_eq!(source.reads.load(std::sync::atomic::Ordering::Relaxed), 1);
         // Level 1 tile (0, 0): 2-block spacing over chunks (0..2, 0..2).
         let tile = source.tile(0, 0, 1, false).expect("tile");
         let pillar = &tile[2 * TILE_EDGE + 1];

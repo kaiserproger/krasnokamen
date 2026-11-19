@@ -142,9 +142,11 @@ enabled = false
 radius_chunks = 128
 
 [horizon_lod]
-# Optional Horizon protocol 1 far terrain. Stored terrain helps recover the
-# world seed: enable only if players may see it. Pregenerate the stopped world
-# with mc-world-tools for coverage; missing tiles are refused.
+# Optional Horizon protocol 1. Stored terrain helps recover the world seed.
+# An offered Horizon client draws only server tiles within distance_chunks,
+# not its own cache or BlueMap. A tile with an unstored column is refused
+# whole and retried every 2 seconds. Pregenerate approximately this distance
+# around the play area with mc-world-tools before enabling.
 enabled = false
 distance_chunks = 256 # 1..=1024 chunks
 
