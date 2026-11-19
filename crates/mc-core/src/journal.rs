@@ -3,7 +3,8 @@
 //!
 //! Layout under `<world_dir>/`:
 //! - `journal/batch-<first_tick>-<last_tick>.bin`: framed batches. One batch
-//!   holds whole ticks: `[magic u32][version u32][tick_lo u64][tick_hi u64][len u32][crc32 u32][payload]`.
+//!   holds whole ticks: `[magic u32][version u32][store id 16][palette 8]
+//!   [tick_lo u64][tick_hi u64][len u32][crc32 u32][payload]`.
 //!   Payload is JSON lines of [`JournalEntry`]. Unpublished `.tmp` files are ignored
 //!   when reading and removed by the next [`JournalWriter::open`].
 //! - `native/state.redb`: one atomic checkpoint of chunks, entities, players,
@@ -30,8 +31,56 @@ mod replay;
 pub use replay::*;
 
 const BATCH_MAGIC: u32 = 0x534F_4C4A;
-const BATCH_VERSION: u32 = 1;
-const HEADER_LEN: usize = 4 + 4 + 8 + 8 + 4 + 4;
+/// Frame version 2 binds every batch to the store that wrote it and to the
+/// block-state palette its numeric ids mean (Books R4-P3, R5-G5). Format 1 is
+/// refused, not converted: ADR 0013 keeps no compatibility surface of our own,
+/// and a clean stop with the build that wrote it folds the tail into the
+/// checkpoint and prunes it before this build starts.
+const BATCH_VERSION: u32 = 2;
+/// The pre-binding frame, recognized only to name the refusal.
+const BATCH_VERSION_V1: u32 = 1;
+/// `[magic][version][store id][palette digest][tick_lo][tick_hi][len][crc]`.
+const HEADER_LEN: usize = 4 + 4 + 16 + 8 + 8 + 8 + 4 + 4;
+
+/// What a WAL batch is bound to: the store that wrote it and the block-state
+/// palette its `JournalEntry::Block` ids mean.
+///
+/// Both values already persist with the world — the store id in the native
+/// header (`store_uuid`, required on every open), the palette as the content
+/// the build registers — so binding the frame adds no stored state and no
+/// migration. A batch whose identity differs from the opened world is refused
+/// by name, never replayed with a warning (Books R4-P3, R5-G5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WalIdentity {
+    /// The native store's immutable 16-byte id.
+    pub store: [u8; 16],
+    /// [`mc_world::BlockRegistry::palette_digest`] of the registry that wrote
+    /// (and must read) the numeric block states.
+    pub palette: [u8; 8],
+}
+
+impl WalIdentity {
+    /// Identity of `store` under `blocks`.
+    #[must_use]
+    pub fn new(store: [u8; 16], blocks: &mc_world::BlockRegistry) -> Self {
+        Self {
+            store,
+            palette: blocks.palette_digest(),
+        }
+    }
+
+    /// Identity for journals a test writes without opening a store: batches
+    /// carry this fixed value and a test reader accepts it. Production always
+    /// derives the identity from the opened store ([`WalIdentity::new`]).
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn fixture() -> Self {
+        Self {
+            store: [0; 16],
+            palette: [0; 8],
+        }
+    }
+}
 
 /// One absolute post-image inside a batch. Replay is idempotent.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -452,6 +501,8 @@ pub fn fsync_dir(path: &Path) -> std::io::Result<()> {
 /// [`JournalWriter::flush`] to force).
 pub struct JournalWriter {
     dir: PathBuf,
+    /// Store and palette every batch of this writer is bound to.
+    identity: WalIdentity,
     pending_fsync: u32,
     fsync_every: u32,
     /// Ticks `lo..=hi` appended contiguously since open: the WAL gate
@@ -517,7 +568,14 @@ impl From<GateError> for CoreError {
 }
 
 impl JournalWriter {
-    pub fn open(world_dir: &Path, fsync_every: u32) -> Result<Self, CoreError> {
+    /// Open the journal of the world at `world_dir` for a writer whose batches
+    /// are bound to `identity`: the opened store's id and the block palette
+    /// whose numeric state ids the entries carry.
+    pub fn open(
+        world_dir: &Path,
+        fsync_every: u32,
+        identity: WalIdentity,
+    ) -> Result<Self, CoreError> {
         let dir = world_dir.join("journal");
         // R4-P2: the shared helper persists every directory entry it creates,
         // including a journal directory left unflushed by an interrupted first
@@ -548,6 +606,7 @@ impl JournalWriter {
         }
         Ok(Self {
             dir,
+            identity,
             pending_fsync: 0,
             fsync_every: fsync_every.max(1),
             appended: None,
@@ -563,10 +622,17 @@ impl JournalWriter {
         fsync_every: u32,
         checkpoint_tick: u64,
         recovered_tick: u64,
+        identity: WalIdentity,
     ) -> Result<Self, CoreError> {
-        let mut writer = Self::open(world_dir, fsync_every)?;
+        let mut writer = Self::open(world_dir, fsync_every, identity)?;
         writer.pre_open_verified = Some((checkpoint_tick, recovered_tick));
         Ok(writer)
+    }
+
+    /// The identity this writer stamps on (and verifies against) every batch.
+    #[must_use]
+    pub fn identity(&self) -> WalIdentity {
+        self.identity
     }
 
     /// Write-ahead gate for checkpoint `through`: every tick in
@@ -600,7 +666,7 @@ impl JournalWriter {
                 .pre_open_verified
                 .is_some_and(|(from, through)| from <= prev_tick && through >= first_appended - 1)
         {
-            verify_batches_through(&self.dir, prev_tick, first_appended - 1)
+            verify_batches_through(&self.dir, prev_tick, first_appended - 1, self.identity)
                 .map_err(GateError::Io)?;
             self.pre_open_verified = Some((prev_tick, first_appended - 1));
         }
@@ -700,7 +766,7 @@ impl JournalWriter {
             );
             payload.push('\n');
         }
-        let frame = frame_batch(tick_lo, tick_hi, payload.as_bytes())?;
+        let frame = frame_batch(tick_lo, tick_hi, payload.as_bytes(), self.identity)?;
         let name = format!("batch-{tick_lo:020}-{tick_hi:020}.bin");
         let tmp = self.dir.join(format!("{name}.tmp"));
         let final_path = self.dir.join(&name);
@@ -789,14 +855,16 @@ pub(crate) fn parse_batch_name(name: &str) -> Option<(u64, u64)> {
     Some((lo.parse().ok()?, hi.parse().ok()?))
 }
 
-/// Read complete published batches after the manifest, failing closed on damage.
+/// Read complete published batches after the manifest, failing closed on damage
+/// and on a batch that does not belong to `identity`.
 /// Incomplete, unpublished `.tmp` files are ignored.
 pub fn read_complete_batches_after(
     journal_dir: &Path,
     manifest_tick: u64,
+    identity: WalIdentity,
 ) -> Result<Vec<(u64, u64, Vec<JournalEntry>)>, CoreError> {
     let mut out = Vec::new();
-    visit_complete_batches_after(journal_dir, manifest_tick, |batch| {
+    visit_complete_batches_after(journal_dir, manifest_tick, identity, |batch| {
         out.push(batch);
         Ok(())
     })?;
@@ -805,9 +873,12 @@ pub fn read_complete_batches_after(
 
 /// Decode and consume one published batch at a time. Recovery memory is bounded
 /// by one batch and the latest recovered images, never the complete WAL history.
+/// A batch whose store or palette does not match `identity` is refused by name
+/// (Books R4-P3, R5-G5), as is a format-1 frame.
 pub fn visit_complete_batches_after(
     journal_dir: &Path,
     manifest_tick: u64,
+    identity: WalIdentity,
     mut visit: impl FnMut((u64, u64, Vec<JournalEntry>)) -> Result<(), CoreError>,
 ) -> Result<u64, CoreError> {
     let entries = match std::fs::read_dir(journal_dir) {
@@ -848,7 +919,7 @@ pub fn visit_complete_batches_after(
         }
         let bytes = std::fs::read(&path)
             .map_err(|err| CoreError::Storage(format!("journal {}: {err}", path.display())))?;
-        let entries = decode_batch(&bytes, *lo, *hi).map_err(|err| err.at_path(&path))?;
+        let entries = decode_batch(&bytes, *lo, *hi, identity).map_err(|err| err.at_path(&path))?;
         drop(bytes);
         visit((*lo, *hi, entries))?;
         previous_tick = *hi;
@@ -863,6 +934,7 @@ pub fn verify_batches_through(
     journal_dir: &Path,
     prev_tick: u64,
     through: u64,
+    identity: WalIdentity,
 ) -> Result<(), CoreError> {
     let mut intervals: Vec<(u64, u64)> = Vec::new();
     let entries =
@@ -881,7 +953,8 @@ pub fn verify_batches_through(
         }
         let bytes = std::fs::read(journal_dir.join(&name))
             .map_err(|err| CoreError::Storage(err.to_string()))?;
-        decode_batch(&bytes, lo, hi).map_err(|err| err.at_path(&journal_dir.join(&name)))?;
+        decode_batch(&bytes, lo, hi, identity)
+            .map_err(|err| err.at_path(&journal_dir.join(&name)))?;
         intervals.push((lo, hi));
     }
     intervals.sort();
@@ -942,17 +1015,43 @@ fn decode_batch(
     bytes: &[u8],
     expect_lo: u64,
     expect_hi: u64,
+    identity: WalIdentity,
 ) -> Result<Vec<JournalEntry>, BatchDecodeError> {
-    if bytes.len() < HEADER_LEN {
+    if bytes.len() < 4 + 4 {
         return Err(BatchDecodeError::Framing("incomplete batch header".into()));
     }
     let magic = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
+    if magic != BATCH_MAGIC {
+        return Err(BatchDecodeError::Framing(format!(
+            "invalid header: magic {magic:#x}, expected {BATCH_MAGIC:#x}"
+        )));
+    }
     let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
-    let lo = u64::from_le_bytes(bytes[8..16].try_into().unwrap());
-    let hi = u64::from_le_bytes(bytes[16..24].try_into().unwrap());
-    let len = u32::from_le_bytes(bytes[24..28].try_into().unwrap()) as usize;
-    let crc = u32::from_le_bytes(bytes[28..32].try_into().unwrap());
-    if magic != BATCH_MAGIC || version != BATCH_VERSION || lo != expect_lo || hi != expect_hi {
+    if version == BATCH_VERSION_V1 {
+        return Err(BatchDecodeError::Framing(
+            "batch format 1 carries no store identity and this build reads format 2; stop the \
+             world with the build that wrote it (its final checkpoint folds and prunes this \
+             tail) and start again, or move the journal directory aside"
+                .into(),
+        ));
+    }
+    if version != BATCH_VERSION {
+        return Err(BatchDecodeError::Framing(format!(
+            "invalid header: version {version}, expected {BATCH_VERSION}"
+        )));
+    }
+    if bytes.len() < HEADER_LEN {
+        return Err(BatchDecodeError::Framing("incomplete batch header".into()));
+    }
+    // Every frame records the store id and palette that wrote it; refusing a
+    // mismatch on replay is the next commit (WAL-BATCH-HAS-NO-STORE-IDENTITY,
+    // WAL-BLOCK-STATE-IDS-HAVE-NO-PALETTE-IDENTITY).
+    let _ = identity;
+    let lo = u64::from_le_bytes(bytes[32..40].try_into().unwrap());
+    let hi = u64::from_le_bytes(bytes[40..48].try_into().unwrap());
+    let len = u32::from_le_bytes(bytes[48..52].try_into().unwrap()) as usize;
+    let crc = u32::from_le_bytes(bytes[52..56].try_into().unwrap());
+    if lo != expect_lo || hi != expect_hi {
         return Err(BatchDecodeError::Framing(format!(
             "invalid header: magic {magic:#x}, version {version}, ticks {lo}..={hi}, expected {expect_lo}..={expect_hi}"
         )));
@@ -1132,10 +1231,13 @@ pub(crate) fn frame_batch(
     tick_lo: u64,
     tick_hi: u64,
     payload: &[u8],
+    identity: WalIdentity,
 ) -> Result<Vec<u8>, CoreError> {
     let mut frame = Vec::with_capacity(HEADER_LEN + payload.len());
     frame.extend_from_slice(&BATCH_MAGIC.to_le_bytes());
     frame.extend_from_slice(&BATCH_VERSION.to_le_bytes());
+    frame.extend_from_slice(&identity.store);
+    frame.extend_from_slice(&identity.palette);
     frame.extend_from_slice(&tick_lo.to_le_bytes());
     frame.extend_from_slice(&tick_hi.to_le_bytes());
     frame.extend_from_slice(
@@ -1322,7 +1424,10 @@ pub fn prune_batches_through(journal_dir: &Path, manifest_tick: u64) -> PruneRep
 /// batch it copies so a backup is not merely byte-identical to a **damaged**
 /// source (Books R5 G3). Memory is one batch, and the WAL tail since the last
 /// checkpoint bounds how many calls a backup makes.
-pub fn verify_batch_file(path: &Path) -> Result<(u64, u64, usize), CoreError> {
+pub fn verify_batch_file(
+    path: &Path,
+    identity: WalIdentity,
+) -> Result<(u64, u64, usize), CoreError> {
     let name = path
         .file_name()
         .and_then(std::ffi::OsStr::to_str)
@@ -1332,7 +1437,7 @@ pub fn verify_batch_file(path: &Path) -> Result<(u64, u64, usize), CoreError> {
     })?;
     let bytes = std::fs::read(path)
         .map_err(|error| CoreError::Storage(format!("journal {}: {error}", path.display())))?;
-    let entries = decode_batch(&bytes, lo, hi).map_err(|error| error.at_path(path))?;
+    let entries = decode_batch(&bytes, lo, hi, identity).map_err(|error| error.at_path(path))?;
     Ok((lo, hi, entries.len()))
 }
 
@@ -1850,11 +1955,11 @@ pub fn open_journal_stream(path: &Path) -> Result<File, CoreError> {
 }
 
 /// Drain helper for tests: read all entries of one batch file.
-pub fn read_batch_file(path: &Path) -> Option<Vec<JournalEntry>> {
+pub fn read_batch_file(path: &Path, identity: WalIdentity) -> Option<Vec<JournalEntry>> {
     let name = path.file_name()?.to_string_lossy().into_owned();
     let (lo, hi) = parse_batch_name(&name)?;
     let bytes = std::fs::read(path).ok()?;
-    decode_batch(&bytes, lo, hi).ok()
+    decode_batch(&bytes, lo, hi, identity).ok()
 }
 
 /// Block position helpers for journal entries.

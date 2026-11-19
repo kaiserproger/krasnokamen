@@ -104,7 +104,7 @@ fn append_nether_edit(config: &CoreConfig, pos: ChunkPos, state: u32) {
     let store = fixture_store(config).unwrap();
     let tick = read_manifest(&store).unwrap().tick + 1;
     drop(store);
-    let mut writer = JournalWriter::open(&config.world_dir, 1).unwrap();
+    let mut writer = JournalWriter::open(&config.world_dir, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(
             tick,

@@ -195,13 +195,13 @@ fn sniffer_active_dig_survives_real_wal_and_region_checkpoint() {
     let expected = state.entities.row(sniffer_slot).entity_life.sniffer.clone();
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&dir.path().join("journal"), 0).unwrap(),
+        &read_complete_batches_after(&dir.path().join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
     );
     let mut restored = fixture().0;
     crate::core::restore_entity(&mut restored, sniffer.0, &replay.entities[&sniffer.0]).unwrap();

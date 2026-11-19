@@ -856,13 +856,13 @@ fn summon_common_state_survives_real_wal_replay_and_native_region_restart() {
         uuid::Uuid::new_v4()
     ));
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
-    let mut writer = crate::journal::JournalWriter::open(&root, 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open(&root, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
     let replay = crate::journal::replay_batches(
         crate::journal::Replay::default(),
-        &crate::journal::read_complete_batches_after(&root.join("journal"), 0).unwrap(),
+        &crate::journal::read_complete_batches_after(&root.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
     );
     assert_eq!(replay.entities.len(), 1);
     let record = &replay.entities[&id.0];

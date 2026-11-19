@@ -249,7 +249,7 @@ impl World {
         }
         let manifest = read_manifest(&config).unwrap();
         let writer =
-            JournalWriter::open_recovered(&config.world_dir, 1, manifest.tick, state.tick).unwrap();
+            JournalWriter::open_recovered(&config.world_dir, 1, manifest.tick, state.tick, crate::journal::WalIdentity::fixture()).unwrap();
         Self {
             manifest,
             writer,
@@ -348,6 +348,7 @@ impl World {
             &std::sync::atomic::AtomicBool::new(false),
             &mut self.manifest,
             &mut Default::default(),
+            self.writer.identity(),
         );
         assert!(outcome.is_continue());
         done.recv().unwrap()
@@ -3541,7 +3542,7 @@ fn assert_container_wal_pruned(world: &World) {
             );
         }
     }
-    crate::journal::read_complete_batches_after(&journal, world.manifest.tick).unwrap();
+    crate::journal::read_complete_batches_after(&journal, world.manifest.tick, crate::journal::WalIdentity::fixture()).unwrap();
 }
 
 #[test]

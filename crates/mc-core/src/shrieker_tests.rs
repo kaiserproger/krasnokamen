@@ -277,12 +277,12 @@ fn warning_and_inflight_shriek_survive_wal_checkpoint_restart_without_duplicate_
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let root = std::env::temp_dir().join(format!("krasnokamen-shrieker-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).unwrap();
-    let mut writer = JournalWriter::open(&root, 1).unwrap();
+    let mut writer = JournalWriter::open(&root, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&root.join("journal"), 0).unwrap(),
+        &read_complete_batches_after(&root.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
     );
     let record = &replay.players[&uuid];
     assert_eq!(record.warden_warning.warning_level(), 4);
@@ -452,18 +452,18 @@ fn lazy_warning_decay_survives_native_checkpoint_and_wal_restart() {
     };
     check_restart(6010, 6000, 3);
     {
-        let mut writer = JournalWriter::open(&native, 1).unwrap();
+        let mut writer = JournalWriter::open(&native, 1, crate::journal::WalIdentity::fixture()).unwrap();
         writer.append(6011, 12010, &[]).unwrap();
         writer.flush().unwrap();
     }
     check_restart(12010, 12000, 3);
     {
-        let mut writer = JournalWriter::open(&native, 1).unwrap();
+        let mut writer = JournalWriter::open(&native, 1, crate::journal::WalIdentity::fixture()).unwrap();
         writer.append(12011, 12011, &[]).unwrap();
         writer.flush().unwrap();
     }
     check_restart(12011, 0, 2);
-    let batches = read_complete_batches_after(&native.join("journal"), 6010).unwrap();
+    let batches = read_complete_batches_after(&native.join("journal"), 6010, crate::journal::WalIdentity::fixture()).unwrap();
     let mut replay = Replay::default();
     replay.players.insert(uuid.to_string(), saved);
     let replay = replay_batches(replay, &batches);
@@ -502,7 +502,7 @@ fn disconnected_warning_anchor_is_journaled_and_rejoin_does_not_count_offline_ti
     let (output, _, _) = crate::tick::run_tick(&mut state, std::slice::from_ref(&join));
     let actor = state.connections.entity_of(connection).unwrap();
     state.players.get_mut(&actor).unwrap().warden_warning = Warning::warned(3, output.tick);
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     for _ in 0..5 {

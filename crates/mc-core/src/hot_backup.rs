@@ -25,6 +25,32 @@ const SYNC_EVERY_BYTES: u64 = 8 * 1024 * 1024;
 
 pub(crate) const NATIVE_DATABASE: &str = "native/state.redb";
 
+/// Test-only damage applied to a finished copy, so a test can prove that
+/// `Core::backup` refuses an unrestorable copy instead of reporting it.
+/// Inside a `#[cfg(test)]` module on purpose: `ledger promote`'s negative
+/// control keeps test hunks and reverses the fix, and the control must still
+/// build.
+#[cfg(test)]
+pub(crate) mod test_hooks {
+    use std::sync::atomic::{AtomicU8, Ordering};
+
+    pub(crate) const NONE: u8 = 0;
+    /// Corrupt the copied database after it is written.
+    pub(crate) const DATABASE: u8 = 1;
+    /// Append a CRC-clean batch whose record recovery refuses.
+    pub(crate) const UNREPLAYABLE_BATCH: u8 = 2;
+
+    static DAMAGE: AtomicU8 = AtomicU8::new(NONE);
+
+    pub(crate) fn arm(mode: u8) {
+        DAMAGE.store(mode, Ordering::SeqCst);
+    }
+
+    pub(crate) fn take() -> u8 {
+        DAMAGE.swap(NONE, Ordering::SeqCst)
+    }
+}
+
 /// What a completed hot backup contains. `files` maps world-relative names to
 /// lowercase hex SHA-256 digests of the copied bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -161,6 +187,42 @@ pub(crate) fn copy_world(
             "hot backup: journal hole: ticks {}..={through} have no batch",
             covered + 1
         )));
+    }
+    // Test-only: damage the finished copy so `Core::backup` must refuse it.
+    #[cfg(test)]
+    match test_hooks::take() {
+        test_hooks::DATABASE => {
+            let path = out.join(NATIVE_DATABASE);
+            let mut bytes = std::fs::read(&path).map_err(io)?;
+            for byte in bytes.iter_mut().take(4096) {
+                *byte ^= 0xff;
+            }
+            std::fs::write(&path, &bytes).map_err(io)?;
+        }
+        test_hooks::UNREPLAYABLE_BATCH => {
+            let tick = covered + 1;
+            let entry = crate::journal::JournalEntry::InhabitedTime {
+                image: crate::journal::InhabitedTimeImage {
+                    chunk: [0, 0],
+                    value: -1,
+                    tick,
+                    active: false,
+                },
+            };
+            let payload = format!(
+                "{}\n",
+                serde_json::to_string(&entry)
+                    .map_err(|error| CoreError::Storage(error.to_string()))?
+            );
+            let frame = crate::journal::frame_batch(tick, tick, payload.as_bytes(), identity)?;
+            std::fs::write(
+                out.join("journal")
+                    .join(format!("batch-{tick:020}-{tick:020}.bin")),
+                frame,
+            )
+            .map_err(io)?;
+        }
+        _ => {}
     }
     for directory in [out.join("native"), out.join("journal"), out.to_path_buf()] {
         crate::journal::fsync_dir(&directory).map_err(io)?;

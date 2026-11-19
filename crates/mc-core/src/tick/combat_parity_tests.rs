@@ -692,11 +692,11 @@ fn death_protection_rescue_wal_replays_health_effects_and_inventory_custody_toge
     assert_eq!(expected.grid[0].count, 4);
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&dir.path().join("journal"), 0).unwrap();
+    let batches = read_complete_batches_after(&dir.path().join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     assert!(replay.players[&uuid].eq_except_statistics(&expected));
     let replay = replay_batches(replay, &batches);

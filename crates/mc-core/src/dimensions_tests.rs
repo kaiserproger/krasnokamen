@@ -115,12 +115,12 @@ fn integrity_same_tick_dimension_round_trip_survives_wal_recovery() {
     assert!(output.changes.entities_removed.contains(&item));
     assert!(output.changes.entities_spawned.contains(&item));
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
-    let mut writer = crate::journal::JournalWriter::open(&directory.0, 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open(&directory.0, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
     let batches =
-        crate::journal::read_complete_batches_after(&directory.0.join("journal"), 0).unwrap();
+        crate::journal::read_complete_batches_after(&directory.0.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
     let replay = crate::journal::replay_batches(
         Default::default(),
         &journal_for_dimension(&batches, Dimension::Overworld),
@@ -952,14 +952,14 @@ fn cross_dimension_wal_then_checkpoint_restart_preserves_player_and_world_custod
         ..Default::default()
     };
     crate::native_checkpoint::tests::write_manifest(&config, &initial).unwrap();
-    let mut writer = crate::journal::JournalWriter::open(&directory.0, 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open(&directory.0, 1, crate::journal::WalIdentity::fixture()).unwrap();
     // Manifest and player fixture publication captures tick 2. Split the
     // empty earlier interval from the tail that runtime recovery must replay.
     writer.append(1, 2, &[]).unwrap();
     writer.append(3, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     let batches =
-        crate::journal::read_complete_batches_after(&directory.0.join("journal"), 0).unwrap();
+        crate::journal::read_complete_batches_after(&directory.0.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
     let replay = crate::journal::replay_batches(
         Default::default(),
         &journal_for_dimension(&batches, Dimension::Nether),
@@ -1309,7 +1309,7 @@ fn native_checkpoint_keeps_ids_stable_for_wal_only_removal_and_health_replay() {
         .tick;
     let removed = assigned[&uuid::Uuid::from_u128(1)];
     let modified = assigned[&uuid::Uuid::from_u128(2)];
-    let mut writer = crate::journal::JournalWriter::open(&directory.0, 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open(&directory.0, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(
             base + 1,

@@ -1179,7 +1179,7 @@ fn full_suction_wal_batch_replays_inventory_cooldown_and_entity_tombstone() {
         yaw: 0.0,
         pitch: 0.0,
     };
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, 1, &[birth]).unwrap();
     step(&mut state);
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
@@ -1209,7 +1209,7 @@ fn full_suction_wal_batch_replays_inventory_cooldown_and_entity_tombstone() {
     writer.append(2, 2, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&dir.join("journal"), 0).unwrap();
+    let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     assert!(!replay.entities.contains_key(&id.0));
     assert_eq!(replay.block_entities[&key(HOPPER)].slots[0], stone);
@@ -1701,7 +1701,7 @@ fn built_base_cooling_hopper_wal_has_no_per_tick_timer_images() {
         .map(|c| (c.pos, c.revision))
         .collect();
     let dir = std::env::temp_dir().join(format!("hopper-timer-wal-{}", uuid::Uuid::new_v4()));
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
     let mut opaque_per_tick = Vec::new();
     let mut bytes_per_tick = Vec::new();
     for _ in 0..7 {

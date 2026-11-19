@@ -1140,6 +1140,7 @@ impl NativeStore {
     pub fn checkpoint_reader(&self) -> Result<NativeCheckpointReader, NativeError> {
         Ok(NativeCheckpointReader {
             tx: db(self.database.begin_read())?,
+            store_uuid: self.store_uuid,
         })
     }
     pub fn read_chunk(
@@ -1233,11 +1234,25 @@ fn validate_player_map(
 /// One pinned read image for offline conversion; all reads share this transaction.
 pub struct NativeCheckpointReader {
     pub(super) tx: redb::ReadTransaction,
+    /// The store's immutable id, so a reader can bind the WAL it replays to the
+    /// store it read (Books R4-P3).
+    store_uuid: [u8; 16],
 }
+
+impl NativeCheckpointReader {
+    /// The immutable id of the store this reader was opened on.
+    #[must_use]
+    pub fn store_uuid(&self) -> [u8; 16] {
+        self.store_uuid
+    }
+}
+
 impl NativeReadOnlyStore {
     pub fn checkpoint_reader(&self) -> Result<NativeCheckpointReader, NativeError> {
+        let (store_uuid, _) = self.marker_fields()?;
         Ok(NativeCheckpointReader {
             tx: db(self.database.begin_read())?,
+            store_uuid,
         })
     }
     pub fn read_checkpoint(&self) -> Result<NativeCheckpointImage, NativeError> {

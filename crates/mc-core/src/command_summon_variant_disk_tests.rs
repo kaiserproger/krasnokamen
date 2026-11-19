@@ -72,11 +72,11 @@ fn variant_disk_checkpoint_and_wal_round_trip() {
             .entities_spawned
             .push(id);
         let birth = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
-        let mut writer = JournalWriter::open(&root, 1).unwrap();
+        let mut writer = JournalWriter::open(&root, 1, crate::journal::WalIdentity::fixture()).unwrap();
         writer.append(1, output.tick, &birth).unwrap();
         writer.flush().unwrap();
         drop(writer);
-        let batches = read_complete_batches_after(&root.join("journal"), 0).unwrap();
+        let batches = read_complete_batches_after(&root.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
         let replay = replay_batches(Replay::default(), &batches);
         let (mut restored, _, _) = crate::hostile_tests::setup(8.0);
         crate::core::restore_entity(&mut restored, id.0, &replay.entities[&id.0]).unwrap();

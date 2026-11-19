@@ -372,10 +372,10 @@ fn trial_spawner_wal_postimage_is_idempotent_and_corruption_is_rejected() {
     newest.persist(&mut original, POS);
     let (output, _, _) = run_tick(&mut original, &[]);
     let entries = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.gate(0, output.tick).unwrap();
-    let batches = read_complete_batches_after(&dir.join("journal"), 0).unwrap();
+    let batches = read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     let expected = replay.opaque_block_entities.clone();
     let twice = replay_batches(replay, &batches);

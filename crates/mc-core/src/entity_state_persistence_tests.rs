@@ -310,14 +310,14 @@ fn compact_timer_postimages_replay_without_appearance_or_birth_motion_changes() 
         "krasnokamen-spawn-state-wal-{}",
         uuid::Uuid::new_v4()
     ));
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, 1, &birth).unwrap();
     writer.append(2, 2, &tail).unwrap();
     writer.flush().unwrap();
     drop(writer);
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&dir.join("journal"), 0).unwrap(),
+        &read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
     );
     let record = &replay.entities[&id.0];
     assert_eq!(record.state, expected);
@@ -351,7 +351,7 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
     let checkpoint_tick = birth_output.tick;
     let dir =
         std::env::temp_dir().join(format!("krasnokamen-controls-wal-{}", uuid::Uuid::new_v4()));
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(checkpoint_tick, checkpoint_tick, &birth)
         .unwrap();
@@ -406,7 +406,7 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
     .unwrap();
     let intermediate = replay_batches(
         intermediate,
-        &read_complete_batches_after(&dir.join("journal"), checkpoint_tick).unwrap(),
+        &read_complete_batches_after(&dir.join("journal"), checkpoint_tick, crate::journal::WalIdentity::fixture()).unwrap(),
     );
     assert!(intermediate.entities[&id.0].state.controls.invulnerable);
     assert!(!intermediate.entities[&id.0].state.controls.no_gravity);
@@ -426,7 +426,7 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
     drop(writer);
     let replay = replay_batches(
         replay,
-        &read_complete_batches_after(&dir.join("journal"), checkpoint_tick).unwrap(),
+        &read_complete_batches_after(&dir.join("journal"), checkpoint_tick, crate::journal::WalIdentity::fixture()).unwrap(),
     );
     let record = &replay.entities[&id.0];
     assert_eq!(record.state, expected);

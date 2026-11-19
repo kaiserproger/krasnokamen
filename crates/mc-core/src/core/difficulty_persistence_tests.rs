@@ -45,7 +45,7 @@ fn difficulty_checkpoint_is_frozen_and_wal_restart_preserves_join_and_query() {
     let JournalWork::Checkpoint(job) = work_rx.recv().unwrap() else {
         panic!("expected frozen checkpoint");
     };
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(tick, tick, &entries).unwrap();
     write_checkpoint(
         directory.path(),
@@ -58,7 +58,11 @@ fn difficulty_checkpoint_is_frozen_and_wal_restart_preserves_join_and_query() {
     assert_eq!(manifest.difficulty, Difficulty::Hard);
     prune_batches_through(&directory.path().join("journal"), tick);
     assert!(
-        read_complete_batches_after(&directory.path().join("journal"), 0)
+        read_complete_batches_after(
+            &directory.path().join("journal"),
+            0,
+            crate::journal::WalIdentity::fixture(),
+        )
             .unwrap()
             .is_empty()
     );
@@ -205,7 +209,7 @@ fn worldborder_command_mid_lerp_checkpoint_restores_and_finishes() {
     let JournalWork::Checkpoint(job) = work_rx.recv().unwrap() else {
         panic!("expected checkpoint")
     };
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(manifest.tick + 1, output.tick, &entries)
         .unwrap();

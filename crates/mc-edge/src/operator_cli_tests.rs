@@ -474,7 +474,7 @@ fn world_with_unrecovered_block_write(world_dir: &std::path::Path) -> crate::con
         .expect("recover clean world")
         .manifest
         .tick;
-    let mut journal = mc_core::journal::JournalWriter::open(world_dir, 1).unwrap();
+    let mut journal = mc_core::journal::JournalWriter::open(world_dir, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
     journal
         .append(
             durable + 1,

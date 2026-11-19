@@ -135,7 +135,7 @@ fn checkpoint_and_fsynced_tail_keep_exact_border_and_reject_invalid_state() {
         lerp_remaining: 0,
         ..base
     };
-    let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(2, 2, &[JournalEntry::Border { value: next }])
         .unwrap();
@@ -147,7 +147,7 @@ fn checkpoint_and_fsynced_tail_keep_exact_border_and_reject_invalid_state() {
             tick: manifest.tick,
             ..Default::default()
         },
-        &read_complete_batches_after(&dir.path().join("journal"), 1).unwrap(),
+        &read_complete_batches_after(&dir.path().join("journal"), 1, crate::journal::WalIdentity::fixture()).unwrap(),
     );
     assert_eq!(replay.border, next);
     assert!(

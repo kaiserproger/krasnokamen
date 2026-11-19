@@ -1678,7 +1678,7 @@ fn advancements_survive_native_checkpoint_wal_and_lossless_anvil_interchange() {
         tick: 80,
     };
     drop(world);
-    let mut writer = JournalWriter::open(&native, 1).unwrap();
+    let mut writer = JournalWriter::open(&native, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
     writer.append(80, 80, &[entry]).unwrap();
     writer.flush().unwrap();
     drop(writer);

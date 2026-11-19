@@ -1216,15 +1216,20 @@ krasnokamen --config restored-server.toml
 ```
 
 A backup holds the native database, WAL/journal and other world files with a
-versioned SHA-256 manifest (lease files excluded). Never mix a `journal/`
-directory with a store it was not written by: batches carry no store identity,
-so a foreign tail replays into the wrong world without a refusal. `backup` and
+versioned SHA-256 manifest (lease files excluded). A `journal/` directory
+belongs to the store it was written with: every batch carries that store's id
+and block-palette digest, and startup refuses a foreign tail by name instead of
+replaying it into the wrong world. `backup` and
 `restore` always move both together; restoring only `native/state.redb` over an
-existing `journal/` is operator error, not a supported path. Restore verifies the full
+existing `journal/` is refused at the next start, not a supported path. Restore verifies the full
 inventory and hashes before writing; the target must be empty or absent and
 separate from the backup. Missing, changed or extra files, incompatible
 manifests and symlinks are refused. Retain the TOML, plugin artifacts and access
-lists separately; backups are never pruned automatically.
+lists separately; backups are never pruned automatically. Before reporting
+success, `backup` restores the copy it just wrote into its own directory and
+runs ordinary recovery and WAL replay over it; a copy that does not replay is
+withdrawn, and a host without a content cache says the backup is unverified
+instead of implying a check.
 
 Database copies read through the file handle holding the lease, including on
 Windows; they do not release the lock or reopen `state.redb` to copy it.

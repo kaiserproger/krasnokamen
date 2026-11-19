@@ -1005,7 +1005,7 @@ fn sigkill_child_reopen_keeps_identical_records_and_high_water() {
                 });
             }
         }
-        let mut writer = JournalWriter::open(&dir, 1).expect("writer");
+        let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).expect("writer");
         writer
             .append(boundary, boundary, &entries)
             .expect("durable");

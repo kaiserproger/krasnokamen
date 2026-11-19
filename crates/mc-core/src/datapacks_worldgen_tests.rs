@@ -508,7 +508,7 @@ fn saved_disabled_selection_and_wal_selection_are_resolved_before_pack_loading()
         crate::core::recover_tick_state(&config, &base, &store, false, None, None).unwrap();
     assert_eq!(state.datapacks.selection(), &disabled);
     drop(state);
-    let mut writer = crate::journal::JournalWriter::open(dir.path(), 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(
             manifest.tick + 1,
@@ -641,7 +641,7 @@ fn fresh_restart_and_wal_generated_chunks_share_selected_worldgen() {
     let x = site.start_chunk.0 * 16;
     let z = site.start_chunk.1 * 16;
     let selected = manifest.datapack_selection.clone().unwrap();
-    let mut writer = crate::journal::JournalWriter::open(dir.path(), 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(
             manifest.tick + 1,

@@ -1383,7 +1383,7 @@ fn a_credited_cut_survives_a_journal_reopen() {
     let checkpointed = state.tick;
     let sand = stock(&state, pillar.item);
     assert_eq!(name_of(&state, cut_at), "sand");
-    let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     let mut cut_frame = None;
     for _ in 0..6000 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);

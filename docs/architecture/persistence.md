@@ -9,9 +9,20 @@ fallback or dual-write. See [ADR 0013](../decisions/0013-core-model-v2.md) and
 ## WAL
 
 `crates/mc-core/src/journal.rs` writes `batch-<lo>-<hi>.bin` containing whole
-ticks. Its little-endian frame is `[magic u32][version u32][tick_lo u64]
-[tick_hi u64][length u32][crc32 u32][payload]`; the payload is JSON lines of
-absolute post-images and tombstones. The writer writes
+ticks. Its little-endian frame is `[magic u32][version u32][store id 16][block
+palette 8][tick_lo u64][tick_hi u64][length u32][crc32 u32][payload]`; the
+payload is JSON lines of absolute post-images and tombstones. Frame version 2
+binds every batch to the store that wrote it and to the block-state palette its
+numeric block ids mean (Books R4-P3, R5-G5): the store id is the native header's
+required random `store_uuid`, and the palette is the first eight bytes of
+SHA-256 over the registry's `(state id, block, properties)` mapping. Recovery
+opens the batch only when both match the opened store and the registry this
+build replays with; a foreign journal directory, a copy of another world's tail
+or a tail written under a changed palette is refused by name, never replayed
+with a warning. A format-1 frame is refused too, with the clean-stop path in
+the message: stop the world with the build that wrote it so its final
+checkpoint folds and prunes the tail (ADR 0013 keeps no compatibility surface
+of our own). The writer writes
 `batch-<lo>-<hi>.bin.tmp`, fsyncs that file, renames it to publish the batch, and
 fsyncs the journal directory once per `CoreConfig.journal_fsync_every_batches`
 published batches (default 10, `[data] journal_fsync_every_batches`); a
@@ -341,8 +352,13 @@ committed checkpoint. The offline backup copies it as an ordinary world file and
 covers it by the manifest digest. `world restore` verifies every hash, then the
 restored pair — store id and checkpoint tick read back from the copied store
 against the copied marker — and on a mismatch removes what it copied and reports
-no world. WAL batches still carry no store identity of their own; the marker
-binds a store to its own checkpoints, not a foreign journal directory to it.
+no world. A hot backup is not reported successful until it has been tried: the
+finished copy is opened read-only and the ordinary recovery reader and WAL
+replay run over it, requiring the recovered tick the copy claims
+(`HOT-BACKUP-STATE-DATABASE-COPY-UNVERIFIED`). Every batch of the copied tail is
+bound to the same store id and palette as the world that wrote it, so a
+CRC-clean but unreplayable batch fails the trial restore instead of surfacing
+at disaster time.
 
 Every offline tool that opens a store without `Core::open` goes through the same
 entry (`NativeStore::open_checked`, or `check_marker_file` where the worldgen
@@ -781,11 +797,13 @@ restore verifies the backup inventory and checksums. The running console
 of the committed checkpoint plus its WAL, and it decodes and CRC-checks every
 batch it copies, so a byte-identical copy of a damaged source is refused
 instead of being published as a backup (Books R5 G3). A `journal/` directory
-belongs to the store it was written with: batches carry no store identity, so a
-foreign or mismatched tail replays into the wrong world without a refusal.
-Never mix the two — `backup` and `restore` always move both, and restoring only
-`native/state.redb` over an existing `journal/` is operator error, not a
-supported path (Books R4-P3). Use the documented operator commands
+belongs to the store it was written with: every batch carries that store's id
+and block-palette digest, so replay refuses a foreign or mismatched tail by
+name instead of folding it into the wrong world (Books R4-P3, R5-G5). Neither
+success path is reported until the copy has been opened read-only and the
+ordinary recovery reader and WAL replay run over it to the tick the copy
+claims; a copy that does not replay is withdrawn. Use the documented operator
+commands
 and check their results; a filesystem copy of a live writer is not equivalent.
 Anvil export is not a native backup: native-only plugin and settlement state
 and block-log history are not represented. See [operations](../OPERATING.md)

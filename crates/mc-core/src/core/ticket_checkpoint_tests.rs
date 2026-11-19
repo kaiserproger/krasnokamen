@@ -50,7 +50,11 @@ fn durable_api_ticket_survives_checkpoint_empty_tail_restart_without_portal_tick
     assert_eq!(manifest.tickets["example:forced"].1, (manifest.tick, 0));
     prune_batches_through(&directory.path().join("journal"), manifest.tick);
     assert!(
-        read_complete_batches_after(&directory.path().join("journal"), 0)
+        read_complete_batches_after(
+            &directory.path().join("journal"),
+            0,
+            crate::journal::WalIdentity::fixture(),
+        )
             .unwrap()
             .is_empty()
     );
@@ -130,7 +134,7 @@ fn ticket_capture_is_frozen_and_child_isolated_with_wal_override() {
     let JournalWork::Checkpoint(job) = work_rx.recv().unwrap() else {
         panic!("expected frozen checkpoint job");
     };
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(tick, tick, &[]).unwrap();
     write_checkpoint(
         directory.path(),
@@ -142,7 +146,11 @@ fn ticket_capture_is_frozen_and_child_isolated_with_wal_override() {
     .unwrap();
     prune_batches_through(&directory.path().join("journal"), tick);
     assert!(
-        read_complete_batches_after(&directory.path().join("journal"), 0)
+        read_complete_batches_after(
+            &directory.path().join("journal"),
+            0,
+            crate::journal::WalIdentity::fixture(),
+        )
             .unwrap()
             .is_empty()
     );

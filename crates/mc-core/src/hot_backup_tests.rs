@@ -11,13 +11,27 @@ fn copy_world(
 ) -> Result<crate::hot_backup::HotBackup, crate::config::CoreError> {
     let mut database = std::fs::File::open(world.join("native/state.redb")).unwrap();
     database.try_lock().unwrap();
-    crate::hot_backup::copy_world(world, out, &mut database, checkpoint, through, [9; 16])
+    crate::hot_backup::copy_world(
+        world,
+        out,
+        &mut database,
+        checkpoint,
+        through,
+        identity([9; 16]),
+    )
+}
+
+fn identity(store: [u8; 16]) -> crate::journal::WalIdentity {
+    crate::journal::WalIdentity {
+        store,
+        palette: [0; 8],
+    }
 }
 
 fn batch(dir: &std::path::Path, lo: u64, hi: u64) {
     std::fs::write(
         dir.join(format!("batch-{lo:020}-{hi:020}.bin")),
-        crate::journal::frame_batch(lo, hi, b"").unwrap(),
+        crate::journal::frame_batch(lo, hi, b"", identity([9; 16])).unwrap(),
     )
     .unwrap();
 }
@@ -87,7 +101,7 @@ fn copy_reads_the_owned_database_snapshot_not_a_second_path_handle() {
         &mut bytes.as_slice(),
         10,
         10,
-        [9; 16],
+        identity([9; 16]),
     )
     .unwrap();
     assert_eq!(
@@ -114,7 +128,7 @@ fn copy_refuses_a_marker_ahead_of_the_committed_checkpoint() {
         &mut b"database".as_slice(),
         9,
         9,
-        [9; 16],
+        identity([9; 16]),
     )
     .unwrap_err();
     assert!(
@@ -135,7 +149,7 @@ fn copy_refuses_a_marker_from_another_store() {
         &mut b"database".as_slice(),
         10,
         10,
-        [8; 16],
+        identity([8; 16]),
     )
     .unwrap_err();
     assert!(
@@ -291,8 +305,9 @@ fn copy_refuses_a_source_batch_that_fails_its_crc() {
     let journal = world.path().join("journal");
     batch(&journal, 11, 11);
     let damaged = journal.join("batch-00000000000000000012-00000000000000000012.bin");
-    let mut frame = crate::journal::frame_batch(12, 12, b"{}\n").unwrap();
-    frame[32] ^= 0xff; // flip one payload byte; the frame's CRC stays the old one
+    let mut frame = crate::journal::frame_batch(12, 12, b"{}\n", identity([9; 16])).unwrap();
+    let last = frame.len() - 2;
+    frame[last] ^= 0xff; // flip one payload byte; the frame's CRC stays the old one
     std::fs::write(&damaged, frame).unwrap();
     let out = tempfile::tempdir().unwrap();
 

@@ -132,12 +132,12 @@ fn anger_checkpoint_and_replay_restore_uuid_and_pose() {
         Some(Retained::Warden(expected.clone()))
     );
     std::fs::create_dir_all(&root).unwrap();
-    let mut writer = JournalWriter::open(&root, 1).unwrap();
+    let mut writer = JournalWriter::open(&root, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&root.join("journal"), 0).unwrap(),
+        &read_complete_batches_after(&root.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
     );
     let record = &replay.entities[&mob.0];
     state.remove_entity(slot);

@@ -272,11 +272,11 @@ fn conduit_be_wal_checkpoint_restart_preserves_last_target_once() {
         pos: [POS.x, POS.y, POS.z],
         nbt: Some(bytes.clone()),
     };
-    let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, 1, &[entry]).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&dir.path().join("journal"), 0).unwrap();
+    let batches = read_complete_batches_after(&dir.path().join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     assert_eq!(replay.opaque_block_entities.len(), 1);
     assert_eq!(
@@ -425,7 +425,7 @@ fn conduit_corrupt_target_wal_and_chunk_fail_closed() {
         .unwrap_err();
     assert_eq!(durable_error.to_string(), stored_error.to_string());
     assert!(!dir.path().join("region").exists());
-    let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(
             1,
@@ -438,7 +438,7 @@ fn conduit_corrupt_target_wal_and_chunk_fail_closed() {
         .unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let error = read_complete_batches_after(&dir.path().join("journal"), 0)
+    let error = read_complete_batches_after(&dir.path().join("journal"), 0, crate::journal::WalIdentity::fixture())
         .unwrap_err()
         .to_string();
     assert!(

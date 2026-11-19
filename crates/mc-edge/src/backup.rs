@@ -288,6 +288,77 @@ fn write_manifest(out: &Path, manifest: &BackupManifest) -> Result<()> {
     Ok(())
 }
 
+/// Tick a backup directory's own durable records recover to: the store's
+/// checkpoint tick, or the highest journal batch above it.
+fn backup_expected_tick(dir: &Path, checkpoint: u64) -> Result<u64> {
+    let mut through = checkpoint;
+    let journal = dir.join("journal");
+    let entries = match std::fs::read_dir(&journal) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(through),
+        Err(error) => return Err(error).with_context(|| format!("reading {}", journal.display())),
+    };
+    for entry in entries {
+        let name = entry?.file_name().to_string_lossy().into_owned();
+        let Some(rest) = name.strip_prefix("batch-").and_then(|name| name.strip_suffix(".bin"))
+        else {
+            continue;
+        };
+        let Some((lo, hi)) = rest.split_once('-') else {
+            continue;
+        };
+        if let (Ok(lo), Ok(hi)) = (lo.parse::<u64>(), hi.parse::<u64>())
+            && hi > checkpoint
+            && lo <= through + 1
+        {
+            through = through.max(hi);
+        }
+    }
+    Ok(through)
+}
+
+/// Prove a written backup restores with this build (Books R5 G3): open the copy
+/// read-only, derive the world's own seed from its store identity, and run the
+/// ordinary recovery reader and WAL replay over it, requiring the tick the copy
+/// claims. `content` supplies the content root and every non-world input; the
+/// seed comes from the copy itself, so a backup of any world can be verified.
+/// A copy that needs redb repair or cannot replay is reported, never called a
+/// verified backup.
+pub fn verify_backup(dir: &Path, content: &mc_core::config::CoreConfig) -> Result<()> {
+    let database = dir.join(NATIVE_DATABASE);
+    let identity = mc_world::native::NativeStore::read_identity(&database)
+        .map_err(|error| anyhow::anyhow!("{}: {error}", database.display()))?;
+    let mut config = content.clone();
+    config.seed = i64::from_be_bytes(identity[16..24].try_into().expect("seed bytes"));
+    config.world_dir = dir.to_path_buf();
+    let (_, checkpoint) = mc_world::native::NativeStore::read_marker_fields(&database)
+        .map_err(|error| anyhow::anyhow!("{}: {error}", database.display()))?;
+    let checkpoint = checkpoint
+        .ok_or_else(|| anyhow::anyhow!("{} has no committed checkpoint", dir.display()))?;
+    let expected = backup_expected_tick(dir, checkpoint)?;
+    let registry = std::sync::Arc::new(
+        mc_core::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref())
+            .map_err(|error| anyhow::anyhow!("content: {error}"))?,
+    );
+    mc_core::hot_backup::verify_restorable(dir, &config, registry, expected)
+        .map_err(|error| anyhow::anyhow!("backup {} does not restore: {error}", dir.display()))?;
+    println!(
+        "backup of {} verified: restores to tick {expected}",
+        dir.display()
+    );
+    Ok(())
+}
+
+/// Verify a backup this command just wrote and, on failure, withdraw it: the
+/// manifest is written last, so a directory without one is never a valid backup.
+pub fn verify_written_backup(out: &Path, content: &mc_core::config::CoreConfig) -> Result<()> {
+    if let Err(error) = verify_backup(out, content) {
+        let _ = std::fs::remove_file(out.join(BACKUP_MANIFEST));
+        bail!("{error}; the backup was withdrawn (no manifest kept)");
+    }
+    Ok(())
+}
+
 /// `YYYYMMDDTHHMMSSZ` for Unix seconds (proleptic Gregorian, civil-from-days).
 fn utc_stamp(unix_seconds: u64) -> String {
     let days = (unix_seconds / 86_400) as i64 + 719_468;

@@ -1419,7 +1419,7 @@ fn village_control_claim_and_profession_survive_native_checkpoint_and_wal() {
     );
     checkpoint_control_state(&mut state, &config);
     let checkpoint_pos = state.entities.pos(slot);
-    let mut writer = crate::journal::JournalWriter::open(&config.world_dir, 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open(&config.world_dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
     state.day_time = 2000;
     for _ in 0..100 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);

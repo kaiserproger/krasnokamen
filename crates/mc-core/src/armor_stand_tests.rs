@@ -431,7 +431,7 @@ fn armor_stand_equipment_and_stored_pose_survive_disk_wal_native_checkpoint_rest
         .push(stand);
     let birth = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let root = std::env::temp_dir().join(format!("krasnokamen-stand-{}", uuid::Uuid::new_v4()));
-    let mut writer = JournalWriter::open(&root, 1).unwrap();
+    let mut writer = JournalWriter::open(&root, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, output.tick, &birth).unwrap();
     let mut helmet = item(&state, "minecraft:iron_helmet", 1);
     helmet.damage = Some(13);
@@ -442,7 +442,7 @@ fn armor_stand_equipment_and_stored_pose_survive_disk_wal_native_checkpoint_rest
     writer.append(output.tick, output.tick, &equip).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&root.join("journal"), 0).unwrap();
+    let batches = read_complete_batches_after(&root.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     let replay = replay_batches(replay, &batches);
     assert_eq!(replay.entities.len(), 1);

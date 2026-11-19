@@ -318,7 +318,7 @@ fn natural_skeleton_arrow_hit_and_tombstone_survive_checkpoint_wal_replay() {
         .row(state.entities.slot_of(skeleton).unwrap())
         .uuid;
     let directory = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     let mut checkpoint = None;
     let mut checkpoint_tick = 0;
     let mut hit = None;
@@ -406,7 +406,7 @@ fn natural_skeleton_arrow_hit_and_tombstone_survive_checkpoint_wal_replay() {
     let hit = hit.expect("natural arrow applies damage and publishes causal hit/removal");
     writer.flush().unwrap();
     let batches =
-        read_complete_batches_after(&directory.path().join("journal"), checkpoint_tick).unwrap();
+        read_complete_batches_after(&directory.path().join("journal"), checkpoint_tick, crate::journal::WalIdentity::fixture()).unwrap();
     let recovered = replay_batches(checkpoint.unwrap(), &batches);
     assert!(
         !recovered.entities.contains_key(&hit.0),

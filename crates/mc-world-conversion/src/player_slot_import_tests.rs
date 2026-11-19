@@ -487,7 +487,7 @@ fn duplicate_wal_player_custody_refuses_offline_export_without_publication() {
             }
         }))
         .unwrap();
-        let mut writer = mc_core::journal::JournalWriter::open(&native, 79).unwrap();
+        let mut writer = mc_core::journal::JournalWriter::open(&native, 79, mc_core::journal::WalIdentity::fixture()).unwrap();
         writer.append(80, 80, &[entry]).unwrap();
         writer.flush().unwrap();
         drop(writer);

@@ -62,7 +62,7 @@ fn finite_water_stack_crosses_chunks_and_late_motion_cannot_resurrect_a_removed_
     let root = tempfile::tempdir().unwrap();
     let (mut state, item) = water_item(17, 15.4);
     let slot = state.entities.slot_of(item).unwrap();
-    let mut writer = JournalWriter::open(root.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     let birth = step(&mut state);
     writer.append(1, state.tick, &birth).unwrap();
     let initial = state.entities.pos(slot);
@@ -107,7 +107,7 @@ fn finite_water_stack_crosses_chunks_and_late_motion_cannot_resurrect_a_removed_
         Some(state.registry.states.water)
     );
     writer.flush().unwrap();
-    let batches = read_complete_batches_after(&root.path().join("journal"), 0).unwrap();
+    let batches = read_complete_batches_after(&root.path().join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     assert_item(&replay, &state, item, 17);
     let replay = replay_batches(replay, &batches);
@@ -131,7 +131,7 @@ fn finite_water_stack_crosses_chunks_and_late_motion_cannot_resurrect_a_removed_
     writer.append(late_tick, late_tick, &[late]).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&root.path().join("journal"), 0).unwrap();
+    let batches = read_complete_batches_after(&root.path().join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     assert!(!replay.entities.contains_key(&item.0));
     let replay = replay_batches(replay, &batches);
@@ -163,7 +163,7 @@ fn partial_pickup_and_motion_replay_preserve_inventory_plus_exact_ground_remaind
     let slot = state.entities.slot_of(item).unwrap();
     state.entities.body_mut(slot).pickup_delay = 100;
     state.entities.set_vel(slot, [2.0, 0.0, 0.0]);
-    let mut writer = JournalWriter::open(root.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     let birth = step(&mut state);
     writer.append(1, state.tick, &birth).unwrap();
     let before_position = state.entities.pos(slot);
@@ -196,7 +196,7 @@ fn partial_pickup_and_motion_replay_preserve_inventory_plus_exact_ground_remaind
     writer.append(state.tick, state.tick, &motion).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&root.path().join("journal"), 0).unwrap();
+    let batches = read_complete_batches_after(&root.path().join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
     let uuid = state
         .entities
         .row(state.entities.slot_of(player).unwrap())
@@ -223,7 +223,7 @@ fn partial_pickup_and_motion_replay_preserve_inventory_plus_exact_ground_remaind
 fn post_checkpoint_compact_water_motion_reuses_the_native_stack_baseline_exactly() {
     let root = tempfile::tempdir().unwrap();
     let (mut state, item) = water_item(23, 18.0);
-    let mut writer = JournalWriter::open(root.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     let birth = step(&mut state);
     writer.append(1, state.tick, &birth).unwrap();
     let checkpoint_tick = state.tick;
@@ -284,7 +284,7 @@ fn post_checkpoint_compact_water_motion_reuses_the_native_stack_baseline_exactly
     writer.flush().unwrap();
     drop(writer);
     let batches =
-        read_complete_batches_after(&root.path().join("journal"), checkpoint_tick).unwrap();
+        read_complete_batches_after(&root.path().join("journal"), checkpoint_tick, crate::journal::WalIdentity::fixture()).unwrap();
     assert_eq!(batches.len(), 4);
     let replay = replay_batches(baseline, &batches);
     assert_ne!(replay.entities[&item.0].pos, initial);

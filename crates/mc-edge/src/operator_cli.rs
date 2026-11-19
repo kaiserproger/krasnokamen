@@ -253,6 +253,15 @@ pub fn load_config(cli: &Cli) -> anyhow::Result<crate::config::EdgeConfig> {
     }
 }
 
+/// Content inputs for trial-restoring a backup, or the reason they are missing
+/// (a host without a content cache can still copy a world; it cannot replay it).
+fn verify_content(
+    cfg: &mut crate::config::EdgeConfig,
+) -> anyhow::Result<mc_core::config::CoreConfig> {
+    crate::server::resolve_content_config(cfg)?;
+    Ok(crate::server::core_config(cfg))
+}
+
 /// Returns true for a completed offline command, false for normal serving.
 pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyhow::Result<bool> {
     let Some(command) = &cli.command else {
@@ -304,8 +313,29 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                 }
             }
         }
-        Command::Backup { world_dir, out } => crate::backup::run_backup(world_dir, out)?,
-        Command::Restore { from, world_dir } => crate::backup::run_restore(from, world_dir)?,
+        Command::Backup { world_dir, out } => {
+            crate::backup::run_backup(world_dir, out)?;
+            // Books R5 G3: a backup is reported successful only after it
+            // restores. Without a content cache there is nothing to replay
+            // the copy against, so the report says it is unverified instead
+            // of implying a check that did not run.
+            match verify_content(cfg) {
+                Ok(content) => crate::backup::verify_written_backup(out, &content)?,
+                Err(error) => eprintln!(
+                    "backup written but NOT verified: no content cache for recovery: {error}"
+                ),
+            }
+        }
+        Command::Restore { from, world_dir } => {
+            // Refuse a backup that cannot replay before copying it into place.
+            match verify_content(cfg) {
+                Ok(content) => crate::backup::verify_backup(from, &content)?,
+                Err(error) => eprintln!(
+                    "restore proceeds unverified: no content cache for recovery: {error}"
+                ),
+            }
+            crate::backup::run_restore(from, world_dir)?;
+        }
         Command::World { command } => {
             crate::server::resolve_content_config(cfg)?;
             let config = crate::server::core_config(cfg);

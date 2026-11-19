@@ -582,7 +582,7 @@ fn absolute_manual_activation_costs_disable_and_equipment_are_disk_wal_replay_sa
     }
     let started = state.tick;
     let root = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(root.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     let (mut output, _, _) = crate::tick::run_tick(&mut state, &[]);
     Arc::get_mut(&mut output.changes)
         .unwrap()
@@ -647,7 +647,7 @@ fn absolute_manual_activation_costs_disable_and_equipment_are_disk_wal_replay_sa
     writer.append(output.tick, output.tick, &after).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&root.path().join("journal"), started + 1).unwrap();
+    let batches = read_complete_batches_after(&root.path().join("journal"), started + 1, crate::journal::WalIdentity::fixture()).unwrap();
     let replay = replay_batches(checkpoint, &batches);
     let replay = replay_batches(replay, &batches);
     let uuid = state.entities.row(player_slot).uuid.to_string();

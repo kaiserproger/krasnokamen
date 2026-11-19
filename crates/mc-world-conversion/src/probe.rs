@@ -167,10 +167,15 @@ fn probe(
     }
     receipt.checkpoint_tick = Some(manifest.tick);
     let mut tail = 0u64;
-    visit_complete_batches_after(&source.join("journal"), manifest.tick, |_| {
-        tail += 1;
-        Ok(())
-    })?;
+    visit_complete_batches_after(
+        &source.join("journal"),
+        manifest.tick,
+        mc_core::journal::WalIdentity::new(reader.store_uuid(), &registry.blocks),
+        |_| {
+            tail += 1;
+            Ok(())
+        },
+    )?;
     if tail != 0 {
         return Err(fail(format!(
             "journal holds {tail} complete batches after checkpoint tick {}; a probe would not \

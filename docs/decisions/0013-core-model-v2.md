@@ -298,7 +298,11 @@ marker is bootstrap proof of a world that never served, and the pair is
 published once from that store; without the first-start file the same state is
 refused. Hot backup copies
 the marker, and `world restore` refuses a restored pair whose store id or tick
-disagrees with it. Offline tools that open a store without `Core::open` (prune,
+disagrees with it. Every WAL batch frame (format 2) carries that store id and
+the block-state palette digest of the registry that wrote its numeric block
+ids, so replay refuses a journal directory or tail that belongs to another
+world or palette instead of folding foreign post-images; a format-1 tail is
+refused with the clean-stop path named, never converted. Offline tools that open a store without `Core::open` (prune,
 compact, pregeneration, worldgen upgrade, censuses, probe) run the same check
 before their first write or reported read, and a read-only tool never rewrites
 the marker. There is no converter for worlds written before the store id

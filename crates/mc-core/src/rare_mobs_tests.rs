@@ -141,7 +141,7 @@ fn illusioner_casts_invisibility_and_blindness_and_shoots_durable_bow_arrows() {
     let root = tempfile::tempdir().unwrap();
     // Replay every post-checkpoint tick through target acquisition and casting.
     let base = checkpoint_restart(&state, &root.path().join("base"));
-    let mut writer = JournalWriter::open(&root.path().join("wal"), 1).unwrap();
+    let mut writer = JournalWriter::open(&root.path().join("wal"), 1, crate::journal::WalIdentity::fixture()).unwrap();
     let output = (0..crate::special_mobs::raiders::SEARCH_INTERVAL)
         .find_map(|_| {
             let (output, _, _) = run_tick(&mut state, &[]);
@@ -195,7 +195,7 @@ fn illusioner_casts_invisibility_and_blindness_and_shoots_durable_bow_arrows() {
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&root.path().join("wal/journal"), base.tick).unwrap();
+    let batches = read_complete_batches_after(&root.path().join("wal/journal"), base.tick, crate::journal::WalIdentity::fixture()).unwrap();
     let replay = replay_batches(base, &batches);
     assert!(
         replay.entities[&id.0]

@@ -49,11 +49,11 @@ fn mob_rider_survives_native_checkpoint_restart_and_rejects_duplicate_or_nested_
         .extend([horse, rider]);
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let root = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(root.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&root.path().join("journal"), 0).unwrap();
+    let batches = read_complete_batches_after(&root.path().join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     crate::mounts::persistence::validate_replay(&replay).unwrap();
     let (mut restarted, _, _) = fixture();

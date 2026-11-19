@@ -579,12 +579,12 @@ fn successful_ignition_and_debit_share_wal_queue_survives_replay() {
             && original.registry.items.name_of(inventory[0].item_id)
                 .is_some_and(|name| name.as_str() == "minecraft:fire_charge"))));
     let image = original.block_ticks.image();
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&dir.join("journal"), 0).unwrap(),
+        &read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap(),
     );
     assert_eq!(replay.block_ticks, image);
     let mut restored = state(Some(dir.clone()));

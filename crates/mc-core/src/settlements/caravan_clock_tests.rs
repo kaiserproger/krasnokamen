@@ -38,7 +38,7 @@ fn game_time_caravan_deadline_survives_freeze_activity_and_disk_reopen() {
     admit(&mut f);
     let deadline = shipment(&f).game_deadline.unwrap();
     checkpoint(&mut f, &config);
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     step(&mut f, &mut writer);
     assert!(f.state.world.is_active(0, 0));
     f.state.tickets.clear();
@@ -89,7 +89,7 @@ fn game_time_caravan_old_store_converts_at_recovery_not_first_unfrozen_tick() {
     let config = CoreConfig::new(directory.path().to_path_buf(), 42);
     let mut f = disk_fixture(&config);
     command(&mut f, "tick freeze");
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     for _ in 0..20 {
         step(&mut f, &mut writer);
     }
@@ -172,7 +172,7 @@ fn game_time_caravan_pre_freeze_legacy_deadline_expires_on_first_tick() {
     let config = CoreConfig::new(directory.path().to_path_buf(), 42);
     let mut f = disk_fixture(&config);
     admit(&mut f);
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     command(&mut f, "tick freeze");
     for _ in 0..20 {
         step(&mut f, &mut writer);
@@ -232,7 +232,7 @@ fn game_time_legacy_caravan_wal_cuts_preserve_converted_deadline() {
         let mut f = disk_fixture(&config);
         admit(&mut f);
         command(&mut f, "tick freeze");
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
         for _ in 0..20 {
             step(&mut f, &mut writer);
         }
@@ -256,11 +256,11 @@ fn game_time_legacy_caravan_wal_cuts_preserve_converted_deadline() {
         let unpublished = crate::core::journal_entries_for_tick(&mut f.state, &output).unwrap();
         assert!(!unpublished.is_empty());
         drop(unpublished);
-        let writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
         let mut f = recover(f, &config, writer);
         assert_eq!(shipment(&f), &converted);
         command(&mut f, "tick freeze");
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
         step(&mut f, &mut writer);
         if save_checkpoint {
             checkpoint(&mut f, &config);
@@ -271,7 +271,7 @@ fn game_time_legacy_caravan_wal_cuts_preserve_converted_deadline() {
             &converted,
             "WAL conversion must not run again"
         );
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
         step(&mut f, &mut writer);
         assert_eq!(shipment(&f).status, Status::Blocked);
         assert_eq!(shipment(&f).game_deadline, Some(game));

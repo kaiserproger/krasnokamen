@@ -260,7 +260,7 @@ fn nonzero_debt_eviction_before_ack_restart_consumes_exactly_once() {
             "consumption fence holds until ACK"
         );
         // native checkpoint but crash BEFORE mark_flushed (no ACK).
-        let mut writer = JournalWriter::open(&dir, 1).unwrap();
+        let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
         writer.append(1, 10, &entries).unwrap();
         writer.flush().unwrap();
         let capture = world.capture_dirty(&Default::default());
@@ -276,7 +276,7 @@ fn nonzero_debt_eviction_before_ack_restart_consumes_exactly_once() {
     // fold latest-wins, restore, and prove no second consumption. Replay
     // tick is 10 (the zero batch); only that batch is durable.
     {
-        let batches = crate::journal::read_complete_batches_after(&dir.join("journal"), 0)
+        let batches = crate::journal::read_complete_batches_after(&dir.join("journal"), 0, crate::journal::WalIdentity::fixture())
             .expect("journal replays");
         assert_eq!(batches.len(), 1, "committed zero survives the crash");
         assert_eq!((batches[0].0, batches[0].1), (1, 10));
@@ -606,7 +606,7 @@ fn persisted_malformed_native_debt_refuses_core_open_without_rewriting_it() {
             .unwrap();
         drop(store);
         // A replayed block forces startup to admit this native chunk.
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
         writer
             .append(
                 checkpoint.tick + 1,

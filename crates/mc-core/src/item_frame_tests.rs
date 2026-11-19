@@ -172,11 +172,11 @@ fn item_frame_generation_support_and_wal_recovery() {
     });
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let root = std::env::temp_dir().join(format!("krasnokamen-frame-{}", uuid::Uuid::new_v4()));
-    let mut writer = JournalWriter::open(&root, 1).unwrap();
+    let mut writer = JournalWriter::open(&root, 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&root.join("journal"), 0).unwrap();
+    let batches = read_complete_batches_after(&root.join("journal"), 0, crate::journal::WalIdentity::fixture()).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     let mut corrupt = replay.entities[&frame.0].clone();
     corrupt.appearance.spawn_data = 6;

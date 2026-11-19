@@ -388,7 +388,7 @@ fn wal_only_missing_baseline_refuses_changed_inputs_without_writing() {
     let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
     let before = store.read_checkpoint().unwrap();
     let counts = store.record_counts().unwrap();
-    let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
     writer
         .append(
             before.tick + 1,

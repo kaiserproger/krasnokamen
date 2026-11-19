@@ -7,7 +7,7 @@ fn seed_world(root: &Path) {
     // Every world this build creates has a checkpoint marker; restore requires it.
     mc_world::store_marker::write(root, store.store_uuid(), 0).unwrap();
     drop(store);
-    let mut journal = mc_core::journal::JournalWriter::open(root, 1).unwrap();
+    let mut journal = mc_core::journal::JournalWriter::open(root, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
     journal.append(1, 1, &[]).unwrap();
     journal.flush().unwrap();
     std::fs::create_dir_all(root.join("operator")).unwrap();
@@ -55,7 +55,7 @@ fn backup_roundtrip_preserves_real_core_store_wal_and_metadata() {
         .read_checkpoint()
         .unwrap();
     drop(store);
-    let mut journal = mc_core::journal::JournalWriter::open(&world, 1).unwrap();
+    let mut journal = mc_core::journal::JournalWriter::open(&world, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
     journal.append(image.tick + 1, image.tick + 1, &[]).unwrap();
     journal.flush().unwrap();
     drop(journal);

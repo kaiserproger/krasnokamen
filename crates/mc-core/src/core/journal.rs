@@ -745,6 +745,7 @@ pub(super) fn journal_loop(
                     &committed_tick,
                     &native_failed,
                     initial_manifest,
+                    wal_identity,
                 );
             })
             .expect("spawn native checkpoint writer");
@@ -930,6 +931,7 @@ pub(super) fn native_writer_loop(
     committed_tick: &std::sync::atomic::AtomicU64,
     native_failed: &std::sync::atomic::AtomicBool,
     initial_manifest: CheckpointManifest,
+    wal_identity: crate::journal::WalIdentity,
 ) {
     // The current complete manifest is the recovery/pruning authority.
     let mut prev_manifest = initial_manifest;
