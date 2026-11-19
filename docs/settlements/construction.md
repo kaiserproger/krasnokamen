@@ -90,10 +90,13 @@ each census. It tops up observed existing stacks before using empty slots and
 delivers only its remaining units at later scheduled censuses as storage clears.
 `run.json` records that remainder explicitly; initial and daughter fixtures
 still require their complete delivery before observation continues.
-Long Spain phase profiles use disk output (omit `--scratch`). Raw output remains
-complete, while command readers exclude millisecond, microsecond and item-census
-diagnostics. The settlement tail measures Overworld laps only: a search logs the
-current tick, and its completed native phase header names the following tick.
+Long Spain phase profiles use disk output (omit `--scratch`). Console stdout is
+captured separately from diagnostic stderr before filtering: a native timing
+line can be written in pieces while a console reply arrives, so merging the
+pipes first could discard that real reply. Every raw byte remains retained.
+Command readers exclude timing and item diagnostics. The settlement tail
+measures Overworld laps only: a search logs the current tick, and its completed
+native phase header names the following tick.
 
 The native `civilization-seed-qa` census uses `minecraft_list_entities` cursor pages of 16 across the original 128-block radius, without reducing or dropping entity kinds. Native type filtering is used only for the targeted newborn refresh; birth proof still requires that same UUID's received baby metadata, targeted screenshot and final checkpoint audit. This chooses native cursor pagination rather than replacing the client census with server counts: the original client-visible coverage remains intact while each MCP reply stays below its transport byte limit. Use a pinned client exporting these optional arguments through `mcp-schema`; the Loader schema remains its own actual Java catalog.
 

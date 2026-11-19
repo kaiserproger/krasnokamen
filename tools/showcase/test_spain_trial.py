@@ -247,9 +247,11 @@ class SettlementTickTailTests(unittest.TestCase):
 
 
 class PhaseLogTests(unittest.TestCase):
-    def test_real_subprocess_output_keeps_raw_bytes_and_separates_command_reads(self):
-        ordinary = (b'Game is frozen\n'
-                    b'DEBUG settlement_storehouse_search game_tick=20\n')
+    def test_split_streams_keep_replies_written_during_partial_diagnostic_lines(self):
+        ordinary = (b'Game is frozen\nThe time is 4531\n'
+                    b'Villager has the following entity data: []\n'
+                    b'journal build ms: a genuine stdout reply\n')
+        trace = b'DEBUG settlement_storehouse_search game_tick=20\n'
         verbose = (b'settlement resident: uuid=actor lumber=lots-of-details\n'
                    b'  block detail ms: farming=10.0\n'
                    b'dimension envelope ms: elapsed=1.0\n'
@@ -257,21 +259,27 @@ class PhaseLogTests(unittest.TestCase):
                    b'  post detail us: pickup=0 hostile=0\n'
                    b'  battle detail us: total=1 counters=1\n'
                    b'items views: pending=1 items_pending=0\n'
-                   b'items census: tick=262081 dimension=Overworld items=48\n')
+                   b'items census: tick=262081 dimension=Overworld items=48\n'
+                   b'items merge: tick=262081 merged=0\n'
+                   b'chunk admission cpu: loaded=1 total_us=731\n')
         timing = (b'  commit detail ms: settlements=120.01\n'
                   b'phase ms: tick=21 dimension=Overworld commit=121.02\n')
-        payload = ordinary + verbose + timing
+        partial = b'journal build ms: tick=5624 after_entities=0.01'
+        script = (f'import os; os.write(2, {partial!r}); os.write(1, {ordinary!r}); '
+                  f'os.write(2, {bytes([10]) + trace + verbose + timing!r})')
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'server.log'
             capture = PhaseLog(path)
             try:
-                subprocess.run([sys.executable, '-c', f'import os; os.write(1, {payload!r})'],
-                               stdout=capture, stderr=subprocess.STDOUT, check=True)
+                subprocess.run([sys.executable, '-c', script], stdout=capture,
+                               stderr=capture.stderr, check=True)
             finally:
                 capture.close()
-            self.assertEqual(capture.raw_path.read_bytes(), payload)
-            self.assertEqual(path.read_bytes(), ordinary)
-            self.assertEqual(capture.phase_path.read_bytes(), ordinary + timing)
+            self.assertEqual(Counter(capture.raw_path.read_bytes().splitlines(keepends=True)),
+                             Counter((ordinary + partial + b'\n' + trace + verbose + timing).splitlines(keepends=True)))
+            self.assertEqual(Counter(path.read_bytes().splitlines(keepends=True)),
+                             Counter((ordinary + trace).splitlines(keepends=True)))
+            self.assertEqual(capture.phase_path.read_bytes(), trace + timing)
             with capture.phase_path.open() as lines:
                 tail = settlement_tick_tail(lines)
             self.assertEqual(tail['with_storehouse_search'],

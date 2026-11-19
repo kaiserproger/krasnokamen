@@ -221,7 +221,7 @@ def settlement_tick_tail(lines) -> dict:
 
 
 class PhaseLog:
-    """Stream verbose native phases separately from the command log readers."""
+    """Capture console stdout separately before filtering diagnostic stderr."""
 
     def __init__(self, path: Path):
         self.raw_path = path.with_name(f'{path.stem}-raw{path.suffix}')
@@ -230,26 +230,35 @@ class PhaseLog:
         self._raw = self.raw_path.open('xb')
         self._phases = self.phase_path.open('xb')
         reader, self._writer = os.pipe()
+        errors, self.stderr = os.pipe()
         self._error = None
-        self._thread = threading.Thread(target=self._read, args=(reader,), daemon=True,
-                                        name='spain-phase-log')
-        self._thread.start()
+        self._threads = [
+            threading.Thread(target=self._read, args=(reader, False), daemon=True,
+                             name='spain-console-log'),
+            threading.Thread(target=self._read, args=(errors, True), daemon=True,
+                             name='spain-phase-log'),
+        ]
+        for thread in self._threads:
+            thread.start()
 
     def fileno(self) -> int:
         if self._writer is None:
             raise ValueError('phase log is closed')
         return self._writer
 
-    def _read(self, reader: int) -> None:
+    def _read(self, reader: int, diagnostics: bool) -> None:
         try:
             with os.fdopen(reader, 'rb') as source:
                 for line in source:
                     self._raw.write(line)
+                    if not diagnostics:
+                        self._commands.write(line)
+                        continue
                     header = line.split(b':', 1)[0].strip()
                     timing = header in (b'phase ms', b'commit detail ms')
-                    diagnostic = header.endswith((b' ms', b' us')) or header in (
+                    diagnostic = header.endswith((b' ms', b' us')) or header.startswith(b'items ') or header in (
                         b'settlement planner', b'settlement resident', b'edge items',
-                        b'items views', b'items census')
+                        b'chunk admission cpu')
                     if timing or not diagnostic:
                         self._phases.write(line)
                     if not diagnostic:
@@ -261,8 +270,10 @@ class PhaseLog:
         if self._writer is None:
             return
         os.close(self._writer)
+        os.close(self.stderr)
         self._writer = None
-        self._thread.join()
+        for thread in self._threads:
+            thread.join()
         for output in (self._commands, self._raw, self._phases):
             output.close()
         if self._error is not None:
@@ -521,7 +532,9 @@ def main() -> None:
             command = ['taskset', '-c', args.server_cpus, *command]
         run['server']['command'] = command
         server = runtime.start_server(command, cwd=runtime.REPO_ROOT, env=env, stdin=subprocess.PIPE,
-                                      stdout=log_handle, stderr=subprocess.STDOUT, start_new_session=True)
+                                      stdout=log_handle,
+                                      stderr=log_handle.stderr if isinstance(log_handle, PhaseLog) else subprocess.STDOUT,
+                                      start_new_session=True)
         runtime.wait_port(port, 180, server, log_path=log_path)
         if args.client_render_threads:
             os.environ['LP_NUM_THREADS'] = str(args.client_render_threads)
