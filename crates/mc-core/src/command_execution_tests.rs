@@ -3429,15 +3429,17 @@ fn settlement_build_starts_funded_order_without_touching_blocks_or_stock() {
         build_last_chat(&state, ConnectionId(1)),
         "No pending construction order."
     );
-    // Full house L1 funding starts the single project with no debit here.
+    // Full house L1 funding queues the order while its bounded site sweep
+    // runs; the planner finishes it and starts the project with no debit here.
     fund_at(&mut state, (1, 201, 1), "house", 1);
     let before_writes = state.plugin_block_writes.len();
     let before_stock = build_chest_stock(&state);
     command(&mut state, alice, "settlement build house");
     assert_eq!(
         build_last_chat(&state, ConnectionId(1)),
-        "Started house construction."
+        "Queued house: waiting for a site"
     );
+    crate::settlements::construction::tests::finish_sweep(&mut state, id);
     let record = state.settlements.get(id).unwrap();
     assert_eq!(record.projects[0].blueprint, "house");
     assert_eq!(record.projects[0].level, 1);
@@ -3638,6 +3640,14 @@ fn settlement_build_upgrade_owner_command_starts_a_real_blueprint_upgrade() {
         alice,
         &format!("settlement build upgrade {}", building.0),
     );
+    // Owner D42: the command queues the funded upgrade at once and its order
+    // turn admits it, without a block write or a debit.
+    assert_eq!(
+        build_last_chat(&state, ConnectionId(1)),
+        "Queued house L2: ready"
+    );
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+    crate::settlements::construction::tests::finish_sweep(&mut state, id);
     let record = state.settlements.get(id).unwrap();
     let project = &record.projects[0];
     assert_eq!(project.building, Some(building));

@@ -340,6 +340,62 @@ fn a_stand_is_never_chosen_inside_a_neighbour_lot_while_clearing() {
     );
 }
 
+/// Spain seed 100 (pin 3068dfb1b857): a builder stood on its felling stand at
+/// [99.5, 68, 115.25] for a whole stall window. The brain ends a route anywhere
+/// within WAYPOINT_REACH of the stand, which left the body inside the
+/// neighbour's site (worksite_unreached on its own navigation target). Wherever
+/// on the stand it arrives, the builder's next work step leaves it in reach.
+#[test]
+fn a_builder_arriving_anywhere_on_its_stand_settles_in_reach() {
+    let (mut state, id, slot, handle, _neighbour) = clearing_site();
+    bind_project(&mut state, id, &handle, slot);
+    let project = site_project(&state, id, &handle);
+    let base = BlockPos { x: 5, y: 201, z: 5 };
+    let stand = preparation_stand(&state, slot, &project, [5, 201, 5], base)
+        .expect("a stand outside the neighbour lot is still available");
+    let reach = crate::villager::brain::WAYPOINT_REACH - 0.01;
+    let mut overlapping = 0;
+    for [dx, dz] in [[-reach, 0.0], [reach, 0.0], [0.0, -reach], [0.0, reach]] {
+        let arrived = [
+            f64::from(stand.x) + 0.5 + dx,
+            f64::from(stand.y),
+            f64::from(stand.z) + 0.5 + dz,
+        ];
+        state.entities.set_pos(slot, arrived);
+        overlapping += usize::from(!in_reach(&state, slot, &project, [5, 201, 5]));
+        let mut v = state.entities.row_mut(slot).villager.take().unwrap();
+        let target = work(&mut state, slot, &mut v, &mut ChangeSet::default());
+        state.entities.row_mut(slot).villager = Some(v);
+        assert!(
+            target.is_some(),
+            "arrived at {arrived:?}: the builder has work"
+        );
+        assert!(
+            in_reach(&state, slot, &project, [5, 201, 5]),
+            "arrived at {arrived:?} on stand {stand:?}, the builder is not in reach"
+        );
+    }
+    assert!(
+        overlapping > 0,
+        "fixture: an arrival on stand {stand:?} reaches into the neighbour's site"
+    );
+}
+
+/// Spain seed 100 (pin ae9f992e517b): road segments abut, so a road cell's one
+/// stand touches the next segment's site. Stands tested for the whole arrival
+/// tolerance left such a cell with no stand: builders bound to road, wall and
+/// well projects stood idle, navigation None, for whole stall windows.
+#[test]
+fn a_road_stand_beside_the_next_segment_stays_a_target() {
+    let (state, id, slot) = road_site(ScriptWorldBounds::new([8, 201, 4], [12, 203, 10]).unwrap());
+    let project = site_project(&state, id, "road-site");
+    assert_eq!(
+        site_target(&state, &project, [7, 201, 7], slot, None),
+        Some(BlockPos { x: 7, y: 201, z: 7 }),
+        "the road cell's own column is its stand beside the abutting site"
+    );
+}
+
 /// R3-4: the clear branch of `in_reach` refuses a builder whose body stands in
 /// a neighbour's future body, however close the trunk it would fell.
 #[test]

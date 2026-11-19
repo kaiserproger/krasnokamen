@@ -89,6 +89,9 @@ pub(crate) struct PoiCache {
     pub(crate) search_due: BTreeSet<(u64, EntityId)>,
     pub(crate) search_needs: FxHashMap<EntityId, (u64, usize, SearchProgress)>,
     pub(crate) home_search: FxHashMap<EntityId, HomeSearch>,
+    /// Far spare beds whose route failed, per resident: `free_bed` tries them
+    /// again only after every other far candidate has failed.
+    pub(crate) far_bed_tried: FxHashMap<EntityId, Vec<BlockPos>>,
     pub(crate) search_ready: BTreeSet<(u64, EntityId)>,
     pub(crate) search_ready_order: FxHashMap<EntityId, u64>,
     pub(crate) next_search_order: u64,
@@ -1236,6 +1239,50 @@ pub(crate) fn claimable_bed(
         && bed_allowed(state, scope, poi)
         && bed_pair(&state.world, &state.registry, poi.pos).is_some()
 }
+
+/// Home POIs inside a settlement's certified houses, read from the POI chunks
+/// those houses cover: the settlement's own bed record, never a scan of its
+/// territory.
+pub(crate) fn house_beds<'a>(
+    cache: &'a PoiCache,
+    record: &'a super::SettlementRecord,
+) -> impl Iterator<Item = (&'a super::buildings::Building, Poi)> + 'a {
+    record
+        .buildings
+        .values()
+        .filter(|b| b.kind == super::buildings::BuildingKind::House)
+        .flat_map(move |building| {
+            let [min_x, _, min_z] = building.bounds.min.map(|c| c.div_euclid(16));
+            let [max_x, _, max_z] = building.bounds.max.map(|c| c.div_euclid(16));
+            (min_x..=max_x)
+                .flat_map(move |x| {
+                    (min_z..=max_z).filter_map(move |z| cache.chunks.get(&ChunkPos { x, z }))
+                })
+                .flat_map(move |chunk| chunk.pois.iter().map(move |poi| (building, *poi)))
+                .filter(move |(_, poi)| {
+                    poi.kind == PoiKind::Home
+                        && [poi.pos.x, poi.pos.y, poi.pos.z]
+                            .into_iter()
+                            .enumerate()
+                            .all(|(i, p)| {
+                                p >= building.bounds.min[i] && p <= building.bounds.max[i]
+                            })
+                })
+        })
+}
+
+/// A* bounds of the brain's route to `target`: the vanilla 48 x 16 window,
+/// widened to the target's distance up to 512 blocks.
+pub(crate) fn route_bounds(from: BlockPos, target: BlockPos) -> (u32, u32) {
+    let horizontal = from
+        .x
+        .abs_diff(target.x)
+        .max(from.z.abs_diff(target.z))
+        .saturating_add(8)
+        .clamp(48, 512);
+    let vertical = from.y.abs_diff(target.y).saturating_add(4).clamp(16, 512);
+    (horizontal, vertical)
+}
 fn acquire(
     state: &mut TickState,
     cache: &mut PoiCache,
@@ -1669,6 +1716,10 @@ pub(crate) fn nodes_exhausted(state: &TickState) -> bool {
         == 0
 }
 
+/// Far spare-bed routes tried per search: each is a long A* on the shared
+/// budget, and the next search comes on the caller's 40-tick cadence.
+const FAR_BED_ROUTES: usize = 2;
+
 pub(crate) fn free_bed(
     state: &mut TickState,
     cache: &mut PoiCache,
@@ -1678,19 +1729,22 @@ pub(crate) fn free_bed(
     let pos = state.entities.pos(slot);
     let body = state.entities.body(slot);
     let row = state.entities.row(slot);
+    let settlement = row.villager.as_ref().and_then(|v| v.settlement);
     let (owner, half_width, height, claimed_home, scope) = (
         body.id,
         body.half_width,
         body.height,
         row.villager.as_ref().and_then(|v| v.home),
-        housing_scope(state, row.villager.as_ref().and_then(|v| v.settlement)),
+        housing_scope(state, settlement),
     );
     cache.nearby(pos, owner, |kind| kind == PoiKind::Home);
     cache
         .candidates
         .retain(|(_, poi)| scope_allows(scope, poi.pos) && bed_allowed(state, scope, *poi));
     for _ in 0..5 {
-        let (_, poi) = cache.candidates.pop()?;
+        let Some((_, poi)) = cache.candidates.pop() else {
+            break;
+        };
         // Vanilla VillagerMakeLove.takeVacantBed takes any reachable home POI:
         // no headroom check (the baby spawns at the parents, not on the bed).
         if bed_pair(&state.world, &state.registry, poi.pos).is_none()
@@ -1700,7 +1754,7 @@ pub(crate) fn free_bed(
         }
         if !cache.spend_path(state, Consumer::Brain) {
             cache.search_deferred = true;
-            break;
+            return None;
         }
         let mut ctx = RouteCtx {
             world: &state.world,
@@ -1720,7 +1774,75 @@ pub(crate) fn free_bed(
             == 0
         {
             cache.search_deferred = true;
-            break;
+            return None;
+        }
+    }
+    // A settlement resident's spare bed is any free bed of its settlement's
+    // certified houses (docs/settlements/breeding.md), not only one inside the
+    // vanilla 48-block POI range above. Spain seed 100 built its houses 95-130
+    // blocks from the plaza; their empty beds stayed out of every courting
+    // resident's range for 51k ticks. Candidates come from the house records,
+    // nearest first; the route takes the brain's long-route bounds.
+    let (HousingScope::Bound { .. }, Some(record)) =
+        (scope, settlement.and_then(|id| state.settlements.get(id)))
+    else {
+        return None;
+    };
+    let mut candidates = std::mem::take(&mut cache.candidates);
+    candidates.clear();
+    candidates.extend(house_beds(cache, record).filter_map(|(_, poi)| {
+        let d = distance(pos, centre(poi.pos));
+        (d > 48.0 * 48.0
+            && claimed_home != Some(poi.pos)
+            && claimable_bed(state, cache, owner, settlement, poi))
+        .then_some((d, poi))
+    }));
+    candidates.sort_unstable_by(|a, b| {
+        b.0.total_cmp(&a.0)
+            .then_with(|| (b.1.pos.x, b.1.pos.y, b.1.pos.z).cmp(&(a.1.pos.x, a.1.pos.y, a.1.pos.z)))
+    });
+    // A bed whose route failed waits until every other candidate has had its
+    // try: two unreachable nearest beds would otherwise hide every farther bed
+    // on each search. The memory forgets beds that left the candidate set and
+    // starts over once every candidate has failed. A success keeps it: the
+    // birth's own search, when the courtship that success began ends, would
+    // otherwise start again at the unreachable beds and part the couple.
+    if let Some(tried) = cache.far_bed_tried.get_mut(&owner) {
+        tried.retain(|bed| candidates.iter().any(|(_, poi)| poi.pos == *bed));
+        if candidates.iter().all(|(_, poi)| tried.contains(&poi.pos)) {
+            tried.clear();
+        }
+        candidates.retain(|(_, poi)| !tried.contains(&poi.pos));
+    }
+    cache.candidates = candidates;
+    for _ in 0..FAR_BED_ROUTES {
+        let (_, poi) = cache.candidates.pop()?;
+        if !cache.spend_path(state, Consumer::Brain) {
+            cache.search_deferred = true;
+            return None;
+        }
+        let (horizontal, vertical) = route_bounds(at(pos), poi.pos);
+        let mut ctx = RouteCtx {
+            world: &state.world,
+            registry: &state.registry,
+            dimension: state.dimension,
+            consumer: Consumer::Brain,
+            budget: &mut state.tick_budget,
+        };
+        if find_path_ctx(
+            &mut ctx, cache, pos, poi.pos, half_width, height, path, false, horizontal, vertical,
+            true,
+        ) {
+            return Some(poi.pos);
+        }
+        let exhausted = ctx
+            .budget
+            .allowance(ctx.dimension, ctx.consumer, Kind::PathNode)
+            == 0;
+        cache.far_bed_tried.entry(owner).or_default().push(poi.pos);
+        if exhausted {
+            cache.search_deferred = true;
+            return None;
         }
     }
     None

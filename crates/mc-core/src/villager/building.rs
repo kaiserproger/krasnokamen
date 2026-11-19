@@ -115,7 +115,8 @@ fn in_other_body(
     )
 }
 
-/// The same test for a stand on the centre of cell `at`.
+/// The same test for a stand on the centre of cell `at`. An arrived builder
+/// settles on that centre ([`settle_on_stand`]), so this is the body it works in.
 fn standing_in_other_body(
     state: &TickState,
     project: &construction::Project,
@@ -360,16 +361,46 @@ pub(crate) fn work(
             exact: false,
         });
     }
+    let stand = site_target(
+        state,
+        project,
+        next,
+        slot,
+        v.navigation_target.filter(|_| !v.navigation_search_failed),
+    )?;
+    settle_on_stand(state, slot, stand);
     Some(WorkTarget {
-        pos: site_target(
-            state,
-            project,
-            next,
-            slot,
-            v.navigation_target.filter(|_| !v.navigation_search_failed),
-        )?,
+        pos: stand,
         exact: true,
     })
+}
+
+/// The brain ends a route anywhere within WAYPOINT_REACH of the stand's
+/// standing point, but a stand is chosen, and kept clear of neighbour sites,
+/// for a body on that point. An arrived builder takes the last sub-cell step
+/// onto it, as a sleeper settles on its bed (Spain seed 100: a builder 0.25 off
+/// its felling stand's centre stood 0.05 into a neighbour's site for a whole
+/// stall window). Testing every stand for the whole arrival tolerance instead
+/// left a road segment's only stand, which abuts the next segment, unusable.
+fn settle_on_stand(state: &mut TickState, slot: EntitySlot, stand: BlockPos) {
+    let pos = state.entities.pos(slot);
+    let body = state.entities.body(slot);
+    let Some(point) = crate::settlements::allocator::standing(
+        &state.world,
+        &state.registry,
+        stand,
+        body.half_width,
+        body.height,
+    ) else {
+        return;
+    };
+    let arrived = (pos[0] - point[0]).powi(2) + (pos[2] - point[2]).powi(2)
+        < super::brain::WAYPOINT_REACH.powi(2)
+        && (pos[1] - point[1]).abs() < super::brain::WAYPOINT_VERTICAL_REACH;
+    if arrived && pos != point {
+        state.entities.set_pos(slot, point);
+        state.entities.set_vel(slot, [0.0; 3]);
+    }
 }
 
 /// Whole body outside every future cell and within placement reach of `next`.
@@ -528,16 +559,23 @@ pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
     let candidate = match project.builder {
         Some((uuid, _)) => Some(uuid),
         // A lazy bind never takes a resident who already holds a project: one
-        // binding per resident, or the record stops opening (P1-2).
-        None => construction::residents(state, id)
-            .find(|slot| {
-                builder_ready(state, id, *slot)
-                    && !construction::bound_builder(
-                        &state.settlements,
-                        state.entities.row(*slot).uuid,
-                    )
-            })
-            .map(|slot| state.entities.row(slot).uuid),
+        // binding per resident, or the record stops opening (P1-2). A free
+        // builder goes to the project the planner would give it, so an owner's
+        // order is never passed over by autonomous work whose turn came first.
+        None if construction::unbound_project(&state.settlements, id).as_deref()
+            == Some(project.structure.as_str()) =>
+        {
+            construction::residents(state, id)
+                .find(|slot| {
+                    builder_ready(state, id, *slot)
+                        && !construction::bound_builder(
+                            &state.settlements,
+                            state.entities.row(*slot).uuid,
+                        )
+                })
+                .map(|slot| state.entities.row(slot).uuid)
+        }
+        None => None,
     };
     let bound = match (project.builder.map(|(uuid, _)| uuid), candidate) {
         (Some(uuid), _) => Some(uuid),

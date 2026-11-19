@@ -1,4 +1,4 @@
-use super::tests::{fixture, fund, open_plan, start};
+use super::tests::{fixture, fund, open_plan, request_started, start};
 use super::*;
 
 // The acceptance window is part of the seed-24 regression, not its implementation.
@@ -62,9 +62,11 @@ pub(crate) fn storage_lots(state: &TickState, id: SettlementId) -> Vec<Site> {
         .collect()
 }
 
-/// Solid stone through the terrain-following band on every lot column except
-/// the fixture chest and the given sites: roads, verges and the plaza stay
-/// walkable, so a site exists only where a test leaves one.
+/// Solid stone above the territory's whole vertical span (the bell's elevation
+/// plus its radius, 48) on every lot column except the fixture chest and the
+/// given sites: roads, verges and the plaza stay walkable, so a site exists
+/// only where a test leaves one. Anything lower would be a hill the builder
+/// levels (owner 2026-11-17), no longer a wall.
 pub(crate) fn street_plateau(state: &mut TickState, id: SettlementId, open: &[Site]) {
     let anchor = state.settlements.get(id).unwrap().anchor;
     for x in -16i32..32 {
@@ -73,7 +75,7 @@ pub(crate) fn street_plateau(state: &mut TickState, id: SettlementId, open: &[Si
                 && (x, z) != (1, 1)
                 && !open.iter().any(|site| site.within(x, z))
             {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }
@@ -238,7 +240,7 @@ fn owner_order_takes_the_cheapest_free_lot() {
     let (near, far) = near_and_far(&state, id);
     street_plateau(&mut state, id, &[near, far]);
     let expected = ranking_lot(&state, id, "storage");
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(
         (project.origin, project.rotation),
@@ -300,14 +302,14 @@ fn owner_order_in_a_cluttered_village_finds_the_clearing_at_once() {
                 && !clearing(x, z)
                 && (x.rem_euclid(3) == 0 || z.rem_euclid(3) == 0)
             {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }
         }
     }
     state.world.fold_overlay();
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     let project = &state.settlements.get(id).unwrap().projects[0];
     let size = blueprints::get(&state.registry, "storage")
         .unwrap()
@@ -699,7 +701,7 @@ fn hillside_village_prepares_and_builds_first_storage() {
         .id;
     assert!(upgrade_available(&state, id, building));
     fund(&mut state, "storage", 2);
-    request_upgrade(&mut state, id, building).unwrap();
+    tests::upgrade_started(&mut state, id, building);
     complete(&mut state, id, builder);
     assert_eq!(
         state.settlements.get(id).unwrap().buildings[&building].level,
@@ -746,7 +748,7 @@ fn flat_site_keeps_bill_origin_and_same_site_upgrade() {
         [project.origin[0], project.origin[1] + 1, project.origin[2]]
     ));
     fund(&mut state, "storage", 2);
-    request_upgrade(&mut state, id, building).unwrap();
+    tests::upgrade_started(&mut state, id, building);
     complete(&mut state, id, builder);
     assert_eq!(
         state.settlements.get(id).unwrap().buildings[&building].level,
@@ -846,8 +848,8 @@ fn autonomous_admission_takes_the_level_lot_over_a_foundation_lot() {
 #[test]
 fn owner_order_takes_the_cheaper_level_lot_over_a_foundation_lot() {
     let (mut state, id, _, far) = unfunded_near_foundation();
-    // The owner order scans the whole plan once and takes the level lot.
-    request_build(&mut state, id, "storage").expect("a whole sweep admits the level lot");
+    // The owner order's sweep covers the whole plan and takes the level lot.
+    request_started(&mut state, id, "storage");
     let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(
         (project.origin, project.rotation),
@@ -916,7 +918,7 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
     let site = first_legal_lot(&state, id, "storage");
     assert_eq!((site.lot.origin, site.lot.rotation), ([11, 200, 13], 1));
     pin_lot(&mut state, id, "storage", &site);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     let storage = state.settlements.get(id).unwrap().projects[0].clone();
     complete(&mut state, id, slot);
     assert_eq!((storage.origin, storage.rotation), ([11, 200, 13], 1));
@@ -964,6 +966,12 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
     let chest = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
     chest[25] = mc_data::ItemStack::new(fence, 2);
     chest[26] = mc_data::ItemStack::new(torch, 1);
+    // The direct-work helper ended in an unticketed neighbour chunk, where
+    // construction cannot hire the only resident: no autonomous site opens
+    // until it is back on the active fixture.
+    plan(&mut state, id);
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+    state.entities.set_pos(slot, [1.5, 201.0, 2.5]);
     plan(&mut state, id);
     let lamp = state
         .settlements
@@ -979,9 +987,6 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
         [10, 201, 19],
         "the stretch's verge lamp column"
     );
-    // The direct-work helper ended in an unticketed neighbour chunk. Return
-    // to the active fixture before admitting the next temporary job.
-    state.entities.set_pos(slot, [1.5, 201.0, 2.5]);
     assign_builder(&mut state, id);
     complete(&mut state, id, slot);
     assert_eq!(block_name(&state, 10, 201, 19), "oak_fence");
@@ -1046,7 +1051,7 @@ fn funded_workshops_reach_lots_past_a_road_obstruction_via_the_verge() {
         }
         state.world.fold_overlay();
         fund(&mut state, name, 1);
-        request_build(&mut state, id, name).unwrap();
+        request_started(&mut state, id, name);
         let project = &state.settlements.get(id).unwrap().projects[0];
         assert_eq!(project.blueprint, name);
         assert_eq!(project.origin, site.lot.origin);
@@ -1075,7 +1080,7 @@ fn active_street_fixture() -> (TickState, SettlementId, crate::entities::EntityS
     }
     state.world.fold_overlay();
     fund(&mut state, "storage", 1);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     super::tests::complete(&mut state, id, slot);
     plan(&mut state, id);
     assert_eq!(
@@ -1132,7 +1137,7 @@ fn street_work_clearing_short_grass_stores_its_vanilla_wheat_seeds() {
     state.world.fold_overlay();
     fund(&mut state, "storage", 1);
     stock_seeds(&mut state, 12);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     super::tests::complete(&mut state, id, slot);
     plan(&mut state, id);
     assert_eq!(
@@ -1188,7 +1193,7 @@ fn meadow_fixture() -> (TickState, SettlementId, crate::entities::EntitySlot) {
     }
     state.world.fold_overlay();
     fund(&mut state, "storage", 1);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     super::tests::complete(&mut state, id, slot);
     (state, id, slot)
 }
@@ -1384,9 +1389,23 @@ fn replant_ignores_a_distant_cold_town_but_preserves_an_adjacent_towns_corridor(
         [root[0] + radius, root[1] + 64, root[2] + radius],
     )
     .unwrap();
+    // The proofs' shared budget, refilled per tick as the server does: a
+    // proof whose crown takes a free lot finishes its scan over several.
+    let mut budget = site_turn::SiteBudget::default();
+    let mut settled =
+        |state: &TickState, verdict: &dyn Fn(&TickState, &mut site_turn::SiteBudget) -> Replant| {
+            (0..32)
+                .map(|_| {
+                    budget.refill();
+                    verdict(state, &mut budget)
+                })
+                .find(|verdict| *verdict != Replant::NotYet)
+                .expect("the proof settles")
+        };
     let misses = state.settlements.forest.lock().unwrap().misses();
-    assert!(
-        !replant_conflicts(&state, root),
+    assert_eq!(
+        settled(&state, &|state, budget| replant_check(state, root, budget)),
+        Replant::Plant,
         "far B cannot veto A's safe renewal"
     );
     assert_eq!(
@@ -1396,11 +1415,15 @@ fn replant_ignores_a_distant_cold_town_but_preserves_an_adjacent_towns_corridor(
     );
     // Prove the cold foreign town would refuse this unrelated planting if
     // queried: it has no proved house lot and needs fresh forest evidence.
-    assert!(layout::planting_blocks_access(
-        &state,
-        state.settlements.get(b).unwrap(),
-        crown
-    ));
+    assert_ne!(
+        layout::planting_verdict(
+            &state,
+            state.settlements.get(b).unwrap(),
+            crown,
+            &mut site_turn::SiteBudget::default()
+        ),
+        Replant::Plant
+    );
     assert!(state.settlements.forest.lock().unwrap().misses() > misses);
 
     let town = state.settlements.get_mut(b).unwrap();
@@ -1425,17 +1448,188 @@ fn replant_ignores_a_distant_cold_town_but_preserves_an_adjacent_towns_corridor(
             .is_empty(),
         "B has a reachable standing-building corridor before the proposed crown"
     );
-    assert!(!layout::planting_blocks_access(
-        &state,
-        state.settlements.get(a).unwrap(),
-        crown
-    ));
-    assert!(
-        layout::planting_blocks_access(&state, state.settlements.get(b).unwrap(), crown),
+    assert_eq!(
+        settled(&state, &|state, budget| layout::planting_verdict(
+            state,
+            state.settlements.get(a).unwrap(),
+            crown,
+            budget
+        )),
+        Replant::Plant
+    );
+    assert_eq!(
+        layout::planting_verdict(
+            &state,
+            state.settlements.get(b).unwrap(),
+            crown,
+            &mut site_turn::SiteBudget::default()
+        ),
+        Replant::Refused,
         "the adjacent crown covers B's plaza and cuts its building off"
     );
-    assert!(
-        replant_conflicts(&state, root),
+    assert_eq!(
+        settled(&state, &|state, budget| replant_check(state, root, budget)),
+        Replant::Refused,
         "nearby B's access still vetoes A's planting"
+    );
+}
+
+/// Spain seed 100 (pin 3068dfb1b857): lots sit up to SITE_BAND below the
+/// bell, while the access corridor's columns are sampled around the bell. A
+/// corridor tree on ground 74 above a lot floor of 63 had no footing in the
+/// lot's band, so its builder got no stand and idled at the store
+/// (worksite_unreached, navigation=None) for 22,000 ticks.
+#[test]
+fn a_corridor_tree_on_ground_above_a_low_lot_gets_a_felling_stand() {
+    let (mut state, id, builder) = fixture();
+    open_plan(&mut state);
+    // The bell six below the street keeps a pit lot ten below the street and
+    // the street itself inside the bell's band, as on the seed-100 hillside.
+    state.settlements.get_mut(id).unwrap().anchor[1] = 194;
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let (lot, size) = {
+        let record = state.settlements.get(id).unwrap();
+        let mut network = layout::Network::walk(&state, record);
+        network
+            .frontage()
+            .into_iter()
+            .filter_map(|(at, normal)| {
+                let lot = network.lot(blueprint, at, normal)?;
+                let size = blueprint.footprint(Rotation::from_quarter_turns(lot.rotation));
+                let [ox, _, oz] = lot.origin;
+                (ox >= -14
+                    && oz >= -14
+                    && ox + i32::from(size[0]) <= 30
+                    && oz + i32::from(size[2]) <= 30)
+                    .then_some((lot, size))
+            })
+            .max_by_key(|(lot, _)| (lot.origin[0] - 8).abs() + (lot.origin[2] - 8).abs())
+            .expect("a loaded storage lot on the street plan")
+    };
+    let floor = 190;
+    let mut project = Project {
+        settlement: id,
+        blueprint: "storage".into(),
+        level: 1,
+        origin: [lot.origin[0], floor, lot.origin[2]],
+        rotation: lot.rotation,
+        building: None,
+        structure: String::new(),
+        ordered: true,
+        builder: None,
+        order_seq: None,
+    };
+    // The corridor column farthest from the lot, beyond felling reach of a
+    // builder waiting beside it, as the plaza-side trees were from the far lots.
+    let route = {
+        let record = state.settlements.get(id).unwrap();
+        layout::Network::walk(&state, record)
+            .construction_access(&project)
+            .expect("a walk from the plaza to the lot")
+    };
+    let distance = |at: [i32; 3]| {
+        let gap = |axis: usize| {
+            let min = lot.origin[axis];
+            let max = min + i32::from(size[axis]) - 1;
+            (min - at[axis]).max(at[axis] - max).max(0)
+        };
+        gap(0).max(gap(2))
+    };
+    let [x, ground, z] = route
+        .iter()
+        .copied()
+        .filter(|&[x, _, z]| (x, z) != (1, 1))
+        .max_by_key(|&at| distance(at))
+        .unwrap();
+    assert_eq!(ground, 200, "setup: the street stands on the flat plan");
+    assert!(
+        distance([x, ground, z]) >= 6,
+        "setup: the tree is beyond felling reach from beside the lot"
+    );
+    let root = [x, ground + 1, z];
+    super::super::forestry::tests::grown_world(&mut state, vec![root], "birch");
+    for x in lot.origin[0]..lot.origin[0] + i32::from(size[0]) {
+        for z in lot.origin[2]..lot.origin[2] + i32::from(size[2]) {
+            state
+                .world
+                .set_block(x, floor, z, state.registry.states.stone);
+            for y in floor + 1..=200 {
+                state.world.set_block(x, y, z, state.registry.states.air);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    assert!(
+        surface_y_for_lot(
+            &state,
+            floor,
+            x,
+            z,
+            None,
+            &mut super::super::forestry::Clearance::prepared()
+        )
+        .is_none(),
+        "setup: the corridor ground is beyond the lot floor's band"
+    );
+    assert!(begin(&mut state, project.clone(), "oak", 0));
+    project = state.settlements.get(id).unwrap().projects[0].clone();
+    super::tests::bind_project(&mut state, id, &project.structure, builder);
+    let next = executor::next_cell(&state, id, &project.structure)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        [next[0], next[2]],
+        [x, z],
+        "setup: the corridor tree is the first cell"
+    );
+    // The builder waits on the street plan out of placement reach of the tree,
+    // as the seed-100 builder stood at the store 19 blocks from it.
+    let [ox, _, oz] = lot.origin;
+    let (far, gap) = (-15..31)
+        .flat_map(|x| (-15..31).map(move |z| [x, z]))
+        .filter(|&[x, z]| {
+            !(ox - 1..=ox + i32::from(size[0])).contains(&x)
+                || !(oz - 1..=oz + i32::from(size[2])).contains(&z)
+        })
+        .map(|at| (at, (at[0] - x).abs().max((at[1] - z).abs())))
+        .max_by_key(|&(_, gap)| gap)
+        .unwrap();
+    assert!(
+        gap > 13,
+        "setup: the builder is out of placement reach: {gap}"
+    );
+    state.entities.set_pos(
+        builder,
+        [f64::from(far[0]) + 0.5, 201.0, f64::from(far[1]) + 0.5],
+    );
+    let mut v = state.entities.row_mut(builder).villager.take().unwrap();
+    let target = crate::villager::building::work(
+        &mut state,
+        builder,
+        &mut v,
+        &mut crate::boundary::ChangeSet::default(),
+    );
+    state.entities.row_mut(builder).villager = Some(v);
+    let target = target.expect("the corridor tree has a felling stand");
+    assert!(target.exact);
+    assert_eq!(
+        target.pos.y,
+        ground + 1,
+        "the stand is on the corridor's ground"
+    );
+    assert!(
+        (target.pos.x - x).abs() <= 3 && (target.pos.z - z).abs() <= 3,
+        "the stand is beside the tree: {:?}, tree at {root:?}",
+        target.pos
+    );
+    for _ in 0..64 {
+        if state.world.block_at(root[0], root[1], root[2]) == Some(state.registry.states.air) {
+            return;
+        }
+        super::tests::attempt(&mut state, id, builder);
+    }
+    panic!(
+        "the corridor tree was never felled: next={:?}",
+        executor::next_cell(&state, id, &project.structure)
     );
 }

@@ -209,7 +209,7 @@ fn natural_forest_lot_and_access_are_felled_into_storage_before_construction() {
     fund(&mut state, "storage", 1);
     let before = state.block_entities[&(1, 201, 1)].slots.clone();
     let log = state.world.block_at(root[0], root[1], root[2]).unwrap();
-    construction::request_build(&mut state, id, "storage").unwrap();
+    construction::tests::request_started(&mut state, id, "storage");
     let project = &state.settlements.get(id).unwrap().projects[0];
     assert_eq!(project.origin, expected.origin);
     assert_eq!(
@@ -305,6 +305,106 @@ fn natural_forest_lot_and_access_are_felled_into_storage_before_construction() {
         ),
         "finished clearing does not permanently reserve the corridor"
     );
+}
+
+/// Owner D7 (2026-11-17): a lumberjack's planted tree on the walking corridor
+/// of a needed lot is felled whole like a tree on the lot, its logs entering
+/// real storage, instead of cutting the street (seed 100: two planted roots on
+/// the avenue left the Spanish church no site).
+#[test]
+fn planted_tree_on_the_access_corridor_is_felled_whole_into_storage() {
+    let (mut state, id, builder, expected, root, access) = forest();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(access);
+    fund(&mut state, "storage", 1);
+    construction::tests::request_started(&mut state, id, "storage");
+    let project = &state.settlements.get(id).unwrap().projects[0];
+    assert_eq!(
+        project.origin, expected.origin,
+        "the street through the planted tree still reaches the lot"
+    );
+    let old = count(&state, "minecraft:birch_log");
+    let structure = project.structure.clone();
+    for _ in 0..4096 {
+        if crate::plugin_structures::settlement_builds::next_material(&state, id, &structure)
+            .unwrap()
+            .is_some()
+        {
+            break;
+        }
+        attempt(&mut state, id, builder);
+    }
+    assert_eq!(
+        count(&state, "minecraft:birch_log") - old,
+        8,
+        "both four-log trunks, the planted one included, enter real storage"
+    );
+    for [x, y, z] in [root, access] {
+        for above in y..y + 4 {
+            assert_eq!(
+                state.world.block_at(x, above, z),
+                Some(state.registry.states.air)
+            );
+        }
+    }
+    complete(&mut state, id, builder);
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+}
+
+/// Review of a77b63253: a planted corridor tree whose whole component cannot
+/// be proven (a log's neighbour chunk is unloaded) is never certified for
+/// felling in part. `cells()` refuses the plan on a refused certificate, so the
+/// lot waits; once the chunk is back the whole tree is planned.
+#[test]
+fn a_planted_corridor_tree_is_certified_only_with_its_whole_component_proven() {
+    let (mut state, id, _) = fixture();
+    // A trunk on the chunk's east edge: its logs' neighbours lie in chunk (1, 0).
+    let root = [15, 201, 5];
+    grown_world(&mut state, vec![root], "birch");
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    let cell = |at: [i32; 3]| mc_script::ScriptWorldBounds::new(at, at).unwrap();
+    let certify = |state: &TickState, at: [i32; 3]| {
+        let record = state.settlements.get(id).unwrap();
+        let mut clearance = Clearance::default();
+        clearance.within(record);
+        assert!(clearance.clearable(state, at, Some(cell(at))), "{at:?}");
+        clearance.mark_owner(state, at)
+    };
+    for y in 201..205 {
+        assert!(certify(&state, [15, y, 5]), "proven trunk cell y={y}");
+    }
+    let east = ChunkPos { x: 1, z: 0 };
+    let revision = state.world.chunk_revision(east.x, east.z);
+    state.world.mark_flushed(&[(east, revision)]);
+    let wanted = rustc_hash::FxHashMap::from_iter(
+        (-1..=1)
+            .flat_map(|x| (-1..=1).map(move |z| ChunkPos { x, z }))
+            .filter(|pos| *pos != east)
+            .map(|pos| (pos, 0)),
+    );
+    assert!(state.world.evict_outside(&wanted).contains(&east));
+    for y in 201..205 {
+        assert!(
+            !certify(&state, [15, y, 5]),
+            "an unproven component certifies no cell, y={y}"
+        );
+    }
+    state
+        .world
+        .ensure_blocking(&rustc_hash::FxHashMap::from_iter(
+            (-1..=1).flat_map(|x| (-1..=1).map(move |z| (ChunkPos { x, z }, 0))),
+        ));
+    warm(&state, [16, 201, 5]);
+    assert!(certify(&state, [15, 202, 5]), "loaded again, proven again");
 }
 
 #[test]
@@ -451,7 +551,7 @@ fn owner_order_waits_for_delayed_forest_evidence_then_starts() {
             let selected = (project.origin[0]..project.origin[0] + i32::from(size[0])).contains(&x)
                 && (project.origin[2]..project.origin[2] + i32::from(size[2])).contains(&z);
             if !selected && layout::cell(anchor, x, z) == layout::Cell::Lot && (x, z) != (1, 1) {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }
@@ -798,7 +898,7 @@ fn identical_replacement_after_history_expiry_is_felled_and_conserved() {
         "owner-approved indistinguishable historical replacement"
     );
     fund(&mut state, "storage", 1);
-    construction::request_build(&mut state, id, "storage").unwrap();
+    construction::tests::request_started(&mut state, id, "storage");
     let before = count(&state, "minecraft:birch_log");
     for _ in 0..100 {
         if count(&state, "minecraft:birch_log") - before == 8 {
@@ -893,7 +993,7 @@ fn imported_world_without_matching_generator_identity_clears_nothing() {
 fn full_storage_refuses_felling_without_losing_or_duplicating_the_log() {
     let (mut state, id, builder, _, _, _) = forest();
     fund(&mut state, "storage", 1);
-    construction::request_build(&mut state, id, "storage").unwrap();
+    construction::tests::request_started(&mut state, id, "storage");
     let handle = state.settlements.get(id).unwrap().projects[0]
         .structure
         .clone();

@@ -197,13 +197,13 @@ pub(crate) fn world_with(
 
 fn populated() -> Fixture {
     let registry = crate::test_support::registry().unwrap();
+    // The rider is the household's baby: the census counts it a member, not an adult.
+    let mut rider = fields(&registry, "minecraft:villager", 0x30, 30);
+    rider.retain(|(name, _)| name != "Age");
+    rider.push(("Age".into(), Tag::Int(-24_000)));
     let cow_rider = Tag::List(ListTag {
         element_type: tag_type::COMPOUND,
-        elements: vec![Tag::Compound(member(
-            fields(&registry, "minecraft:villager", 0x30, 30),
-            7,
-            Some("7-1"),
-        ))],
+        elements: vec![Tag::Compound(member(rider, 7, Some("7-1")))],
     });
     let mut cow = fields(&registry, "minecraft:cow", 0x20, 20);
     cow.push(("Passengers".into(), cow_rider));
@@ -370,6 +370,14 @@ fn census_counts_entities_passengers_villagers_chunks_and_persisted_settlements(
             households: 1,
             members: 3,
             household_members: 2,
+            household_details: BTreeMap::from([(
+                "7-1".into(),
+                HouseholdCensus {
+                    origin: HouseholdOrigin::Adoption,
+                    members: 2,
+                    adults: 1,
+                },
+            )]),
         }]
     );
     assert_eq!(

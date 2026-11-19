@@ -28,12 +28,14 @@ impl Liquids {
     }
 }
 
-/// One lot's bounded fluid work. **Invariant:** a lot footprint is at most
-/// 11×11 columns and the fill below the floor is at most `MAX_FILL_DEPTH` rows,
-/// so a real lot never exceeds 11·11·(4+1) = 605 fluid cells; the 1024 cap is a
-/// cheap independent guard, never reachable through `check`. It is kept so a
-/// future wider window cannot make liquid work unbounded, and the named refusal
-/// stays testable on the struct itself.
+/// One lot's bounded fluid work. The fill below the floor is at most
+/// `SITE_BAND` (8) rows (the support is found within that band of the floor,
+/// `surface_y_for_lot`). The shipped catalogue's largest footprint is 121 columns
+/// (11×11), so a shipped lot reaches at most 121·8 = 968 fluid cells and never
+/// this 1024 cap; a blueprint the validator accepts (`blueprints::MAX_SIZE`,
+/// 13×11) could reach 1144 and would then be refused as `LiquidBeyondBound`, a
+/// safe named refusal. A non-authored floor cell can be liquid as well (see
+/// `scan_column`), so no row is assumed dry.
 pub(crate) const MAX_LIQUID_CELLS: usize = 1024;
 
 /// A block that *contains* fluid, including a waterlogged block: the shell and
@@ -99,6 +101,43 @@ pub(crate) fn ground_y_for_lot(
     clearance: &mut crate::settlements::forestry::Clearance,
 ) -> Option<i32> {
     surface_y_for_lot(state, anchor_y, x, z, lot, clearance)
+}
+
+/// Highest standing surface of one column inside `window`.
+pub(crate) fn surface_y_between(
+    state: &TickState,
+    window: std::ops::RangeInclusive<i32>,
+    x: i32,
+    z: i32,
+    lot: Option<ScriptWorldBounds>,
+    clearance: &mut crate::settlements::forestry::Clearance,
+) -> Option<i32> {
+    window.rev().find(|&y| {
+        state.world.physics_block_at(x, y, z).is_some_and(|ground| {
+            !crate::settlements::forestry::tree(state, ground)
+                && state
+                    .registry
+                    .collision_boxes
+                    .get(ground as usize)
+                    .is_some_and(|boxes| !boxes.is_empty())
+        }) && state
+            .world
+            .physics_block_at(x, y + 1, z)
+            .is_some_and(|above| {
+                // A lot column may be covered by water or lava: the support
+                // under it is the pond's own bottom and the fluid cells are
+                // fill targets. Roads, frontage reach and layout pass
+                // `lot: None` and keep refusing a fluid ground.
+                crate::settlements::construction::clearable(state, above)
+                    || clearance.clearable(state, [x, y + 1, z], lot)
+                    || (lot.is_some()
+                        && (has_fluid(state, above)
+                            || contained(state, above).is_some()))
+                    // A field crop does not hide its farmland: a needed lot
+                    // surveys the soil under the plants it reaps (D10).
+                    || crate::settlements::construction::relayout::crop(state, above)
+            })
+    })
 }
 
 /// Collect the fluid cells of one fill column and apply every per-cell veto.

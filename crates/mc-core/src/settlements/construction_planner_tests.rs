@@ -1,4 +1,6 @@
-use super::tests::{attempt, complete, fixture, fund, open_plan, start};
+use super::tests::{
+    attempt, complete, fixture, fund, open_plan, request_started, start, upgrade_started,
+};
 use super::*;
 use mc_script::ScriptWorldBounds;
 
@@ -166,7 +168,7 @@ fn optional_lamps_do_not_borrow_the_worker_funding_the_next_house() {
     let (mut state, id, worker) = fixture();
     open_plan(&mut state);
     fund(&mut state, "storage", 1);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     complete(&mut state, id, worker);
     state.entities.set_pos(worker, [1.5, 201.0, 2.5]);
     state
@@ -842,7 +844,7 @@ fn funded_owner_order_starts_the_single_project_without_world_or_stock_debit() {
     fund(&mut state, "watch_tower", 1);
     let before_stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let before_block = state.world.block_at(8, 201, 8);
-    request_build(&mut state, id, "watch_tower").unwrap();
+    request_started(&mut state, id, "watch_tower");
     let record = &state.settlements.get(id).unwrap();
     let project = &record.projects[0];
     assert_eq!(project.blueprint, "watch_tower");
@@ -903,7 +905,7 @@ fn funded_pending_owner_order_searches_sites_in_bounded_planning_passes() {
     for x in -16..32 {
         for z in -16..32 {
             if lots(x, z) {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }
@@ -935,7 +937,7 @@ fn funded_pending_owner_order_searches_sites_in_bounded_planning_passes() {
     for x in -16..32 {
         for z in 16..32 {
             if lots(x, z) {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.air);
                 }
             }
@@ -1065,10 +1067,7 @@ fn queued_upgrade_targets_next_level_after_active_upgrade_finishes() {
         .next()
         .unwrap();
     fund(&mut state, "house", 2);
-    assert_eq!(
-        request_upgrade(&mut state, id, building).unwrap(),
-        OrderOutcome::Started
-    );
+    upgrade_started(&mut state, id, building);
     let active = state.settlements.get(id).unwrap().projects.first().cloned();
     assert_eq!(active.as_ref().unwrap().level, 2);
     assert!(
@@ -1288,8 +1287,11 @@ fn invalid_or_stale_owner_targets_leave_no_request_to_obstruct_planning() {
     );
 }
 
+/// D42: the order is queued at once and its command examines no lot; the
+/// search later finds no free site, says so once, leaves the order turn and
+/// touches neither the stock nor the plan.
 #[test]
-fn funded_owner_order_without_a_free_site_leaves_no_saved_request_or_cursor() {
+fn funded_owner_order_without_a_free_site_is_refused_by_its_search_without_debit() {
     let (mut state, id, _) = fixture();
     fund(&mut state, "watch_tower", 1);
     // No lot fits the fixture's one loaded chunk, and the plaza and roads are
@@ -1297,29 +1299,38 @@ fn funded_owner_order_without_a_free_site_leaves_no_saved_request_or_cursor() {
     for x in 0..16 {
         for z in 0..16 {
             if (x, z) != (1, 1) {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }
         }
     }
     state.world.fold_overlay();
-    let record = state.settlements.get(id).unwrap();
-    let revision = record.revision;
-    let cursor = record.construction_cursor;
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
-    state.settlements.take_images();
-    let error = request_build(&mut state, id, "watch_tower").unwrap_err();
-    assert!(
-        error.contains("No free loaded construction site"),
-        "{error}"
+    assert_eq!(
+        request_build(&mut state, id, "watch_tower").unwrap(),
+        OrderOutcome::Queued {
+            reason: site_refusals::WAITING_FOR_SITE.into()
+        }
     );
+    assert!(state.settlements.site_orders.contains_key(&id));
+    plan(&mut state, id);
     let record = state.settlements.get(id).unwrap();
     assert!(record.projects.is_empty());
-    assert_eq!(record.revision, revision);
-    assert_eq!(record.construction_cursor, cursor);
+    let seq = orders(record)
+        .next()
+        .expect("the request keeps its place")
+        .seq;
+    let refusal = state.settlements.order_refusal.get(&(id, seq));
+    assert!(
+        refusal.is_some_and(|reason| reason.contains("No free loaded construction site")),
+        "{refusal:?}"
+    );
+    assert!(
+        !state.settlements.site_orders.contains_key(&id),
+        "a refused sweep leaves the order turn"
+    );
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
-    assert!(state.settlements.take_images().is_empty());
 }
 
 #[test]
@@ -1497,7 +1508,7 @@ fn colored_wool_funds_and_builds_matching_bed_without_mixing() {
         !wool_demand(&state, id),
         "three matching wool satisfy the bed"
     );
-    request_build(&mut state, id, "house").unwrap();
+    request_started(&mut state, id, "house");
     let project = state.settlements.get(id).unwrap().projects[0].clone();
     let level = blueprints::get(&state.registry, "house")
         .unwrap()
@@ -1763,10 +1774,7 @@ fn ordered_project_finishes_before_the_first_pending_order_starts_and_later_requ
     // Only the storage bill is in storage: under D8 a later request queues
     // exactly when the joint proof cannot fund it beside the active project.
     fund_all(&mut state, &["storage"]);
-    assert_eq!(
-        request_build(&mut state, id, "storage").unwrap(),
-        OrderOutcome::Started
-    );
+    request_started(&mut state, id, "storage");
     let before = state.settlements.get(id).unwrap().projects.first().cloned();
     assert!(before.as_ref().unwrap().ordered);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
@@ -1920,6 +1928,24 @@ fn upgrade_is_offered_for_an_ordered_house_after_the_earlier_autonomous_project(
     );
     // D8 admits the ordered house beside the autonomous project.
     let admitted = later_order(&mut state, id, "house");
+    // The order's command only queued it (owner D42); planning passes search
+    // its site and start the house or refuse its lot.
+    for _ in 0..64 {
+        let record = state.settlements.get(id).unwrap();
+        if record
+            .projects
+            .iter()
+            .any(|project| project.blueprint == "house")
+            || state
+                .settlements
+                .order_refusal
+                .keys()
+                .any(|(town, _)| *town == id)
+        {
+            break;
+        }
+        plan(&mut state, id);
+    }
     // A second lot may be refused by the plan's geometry; the upgrade row only
     // exists for a house this settlement actually built, so skip then.
     let Some(project) = state
@@ -1931,7 +1957,10 @@ fn upgrade_is_offered_for_an_ordered_house_after_the_earlier_autonomous_project(
         .find(|project| project.blueprint == "house")
         .cloned()
     else {
-        assert!(admitted.is_none(), "the house starts only with its own lot");
+        assert!(
+            !matches!(admitted, Some(OrderOutcome::Started)),
+            "the house starts only with its own lot"
+        );
         return;
     };
     complete(&mut state, id, slot);
@@ -1963,7 +1992,7 @@ fn upgrade_is_offered_for_an_ordered_house_after_the_earlier_autonomous_project(
     // The row is orderable and the upgraded house offers L3 the same way.
     for level in [2, 3] {
         fund(&mut state, "house", level);
-        request_upgrade(&mut state, id, bid).unwrap();
+        upgrade_started(&mut state, id, bid);
         complete(&mut state, id, slot);
         let upgraded = &state.settlements.get(id).unwrap().buildings[&bid];
         assert_eq!(upgraded.level, level);
@@ -2268,7 +2297,7 @@ fn funded_house_keeps_an_ordinary_recruit_in_the_builder_career() {
             .unwrap()
             .data
             .profession = profession;
-        request_build(&mut state, id, "house").unwrap();
+        request_started(&mut state, id, "house");
         state.tick = PLAN_CADENCE;
         tick(&mut state);
         assert_eq!(
@@ -2308,7 +2337,7 @@ fn funded_house_can_borrow_the_only_untraded_gatherer_as_builder() {
         .unwrap()
         .data
         .profession = Profession::Lumberjack;
-    request_build(&mut state, id, "house").unwrap();
+    request_started(&mut state, id, "house");
     state.tick = PLAN_CADENCE;
     tick(&mut state);
     assert_eq!(
@@ -2405,7 +2434,7 @@ fn borrowed_lumberjack_replenishes_an_unfunded_active_project_through_ticks() {
     // takes it.
     let site = super::site_tests::first_legal_lot(&state, id, "lumber_camp");
     super::site_tests::pin_lot(&mut state, id, "lumber_camp", &site);
-    request_build(&mut state, id, "lumber_camp").unwrap();
+    request_started(&mut state, id, "lumber_camp");
     state.tick = PLAN_CADENCE;
     tick(&mut state);
     let project = &state.settlements.get(id).unwrap().projects[0];
@@ -2523,7 +2552,7 @@ fn active_wood_shortfall_can_retask_a_borrowed_miner_through_ticks() {
     // takes it.
     let site = super::site_tests::first_legal_lot(&state, id, "lumber_camp");
     super::site_tests::pin_lot(&mut state, id, "lumber_camp", &site);
-    request_build(&mut state, id, "lumber_camp").unwrap();
+    request_started(&mut state, id, "lumber_camp");
     state.tick = PLAN_CADENCE;
     tick(&mut state);
     assert_eq!(

@@ -718,6 +718,7 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
         .default
         .0;
     let mut published_construction = false;
+    let mut builder_seen = false;
     let mut residents = Vec::new();
     crate::settlements::construction_crafting::reset_scan_stats();
     // Include the real root's renewable resource growth rather than ticking
@@ -749,6 +750,14 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
             .any(|change| change.state == planks);
         residents.clear();
         residents.extend(crate::settlements::construction::residents(&state, id));
+        builder_seen |= residents.iter().any(|&slot| {
+            state
+                .entities
+                .row(slot)
+                .villager
+                .as_ref()
+                .is_some_and(|v| v.data.profession == VillagerProfession::Builder)
+        });
         for &slot in &residents {
             let next = state
                 .entities
@@ -802,11 +811,9 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
                 published_construction,
                 "canonical structure executor publishes construction block changes"
             );
-            assert!(state.entities.slots().any(|slot| {
-                state.entities.row(slot).villager.as_ref().is_some_and(|v| {
-                    v.settlement == Some(id) && v.data.profession == VillagerProfession::Builder
-                })
-            }));
+            // A borrowed extraction worker returns to its trade when its
+            // project completes (D8), so the closure tick may hold no Builder.
+            assert!(builder_seen, "a resident took the builder role");
             return;
         }
     }

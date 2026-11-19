@@ -20,7 +20,7 @@ mod access;
 pub(crate) use access::projects_of;
 pub(crate) use access::{
     bind_builder, bound_builder, head_order, idle, orders, project_for_structure,
-    project_of_builder, projects, record_heap_bytes, upgrading,
+    project_of_builder, projects, record_heap_bytes, unbound_project, upgrading,
 };
 
 #[path = "construction_furnace.rs"]
@@ -32,8 +32,25 @@ pub(super) mod founding;
 #[path = "construction_site_refusals.rs"]
 pub(super) mod site_refusals;
 
+#[path = "construction_site_turn.rs"]
+pub(super) mod site_turn;
+use site_turn::plan_order;
+pub(crate) use site_turn::{replant_verdict, tick};
+
+#[path = "construction_replant.rs"]
+mod replant;
+use replant::replant_check;
+pub(crate) use replant::{CrownScan, Replant};
+pub(super) use replant::{
+    Front, HouseLot, LotChecks, crowned_house_lot, keeps_free_lot, takes_free_lot,
+};
+
 #[path = "construction_upgrade.rs"]
 mod upgrade;
+
+#[path = "construction_builders.rs"]
+mod builders;
+use builders::{assign_builder, builder_free, probe_storage};
 
 pub(crate) const PLAN_CADENCE: u64 = 20;
 /// Active projects a settlement may hold at once: one per builder candidate the
@@ -179,18 +196,20 @@ pub(crate) fn owner_upgrade_level(
     blueprint.level(current + 1).map(|_| current + 1)
 }
 
+/// `attempts`: lots a new building's site slice may examine (an upgrade
+/// searches no site).
 fn start_order(
     state: &mut TickState,
     id: SettlementId,
     order: &OwnerOrder,
-    planning_cursor: Option<u32>,
+    attempts: u32,
 ) -> Result<String, String> {
-    if upgrade::next_level(state, id, order).is_some_and(|next| next != order.level) {
+    if upgrade::waits(state, id, order) {
         return Err("Busy.".into());
     }
     match order.building {
         Some(building) => start_upgrade(state, id, building),
-        None => start_build(state, id, &order.blueprint, planning_cursor),
+        None => start_build(state, id, &order.blueprint, attempts),
     }
 }
 
@@ -208,11 +227,10 @@ fn submit_order(
             "Construction queue is full: MAX_ORDERS={MAX_ORDERS}."
         ));
     }
-    // The request takes its submission sequence whether it starts at once or
-    // waits: a project that starts immediately and later retries must still
-    // restore the place it was submitted at (D8 review R2-4). The sequence is
-    // committed only when the request is kept, so a refused submission leaves
-    // the record untouched.
+    // The request takes its submission sequence when it is queued: a project
+    // started from it that later retries must still restore the place it was
+    // submitted at (D8 review R2-4). The sequence is committed only when the
+    // request is kept, so a refused submission leaves the record untouched.
     let seq = state
         .settlements
         .get(id)
@@ -240,49 +258,42 @@ fn submit_order(
         let index = orders(state.settlements.get(id).expect("pushed settlement"))
             .position(|queued| queued.seq == seq)
             .unwrap_or(0);
-        return Ok(OrderOutcome::Queued {
-            reason: pending_reason_at(state, id, index).unwrap_or_else(|| "queued".into()),
-        });
+        let reason = pending_reason_at(state, id, index).unwrap_or_else(|| "queued".into());
+        if reason == site_refusals::WAITING_FOR_SITE || reason == READY {
+            site_turn::enter(state, id);
+        }
+        return Ok(OrderOutcome::Queued { reason });
     }
-    match start_order(state, id, &order, None) {
-        Ok(handle) => {
-            // The started project carries its sequence, so its own retry keeps
-            // the submission place instead of taking the newest one.
-            if let Some(record) = state.settlements.get_mut(id) {
-                record.order_seq = seq;
-                if let Some(project) = record
-                    .projects
-                    .iter_mut()
-                    .find(|project| project.structure == handle)
-                {
-                    project.order_seq = Some(seq);
-                }
-                record.revision = record.revision.saturating_add(1);
+    // Every order starts on a later order turn under the server's one site
+    // budget (`site_turn`, owner D42), never in this command's tick: only its
+    // admission checks run here, and nothing is withdrawn or reserved.
+    let admitted = if upgrade::waits(state, id, &order) {
+        Err("Busy.".to_owned())
+    } else {
+        match order.building {
+            Some(building) => upgrade::upgradable(state, id, building).map(|()| READY),
+            None => {
+                buildable(state, id, &order.blueprint).map(|()| site_refusals::WAITING_FOR_SITE)
             }
-            Ok(OrderOutcome::Started)
         }
-        Err(reason)
-            if reason == "Busy."
-                || reason.starts_with("not enough:")
-                || reason == "waiting for forest evidence" =>
-        {
-            let record = state
-                .settlements
-                .get_mut(id)
-                .ok_or("Settlement not found.")?;
-            record.order_seq = seq;
-            access::insert_order_by_seq(record, order);
-            record.revision = record.revision.saturating_add(1);
-            Ok(OrderOutcome::Queued {
-                reason: if reason == "Busy." {
-                    "busy".into()
-                } else {
-                    reason
-                },
-            })
-        }
-        Err(error) => Err(error),
+    };
+    let (reason, turn) = match admitted {
+        Ok(reason) => (reason.to_owned(), true),
+        Err(reason) if reason == "Busy." => ("busy".to_owned(), false),
+        Err(reason) if reason.starts_with("not enough:") => (reason, false),
+        Err(error) => return Err(error),
+    };
+    let record = state
+        .settlements
+        .get_mut(id)
+        .ok_or("Settlement not found.")?;
+    record.order_seq = seq;
+    access::insert_order_by_seq(record, order);
+    record.revision = record.revision.saturating_add(1);
+    if turn {
+        site_turn::enter(state, id);
     }
+    Ok(OrderOutcome::Queued { reason })
 }
 
 pub(crate) fn cancel_pending(state: &mut TickState, id: SettlementId) -> Result<(), String> {
@@ -344,129 +355,17 @@ pub(crate) fn pending_reason_at(
     }
     Some(
         if order.building.is_none() {
-            "waiting for a site"
+            site_refusals::WAITING_FOR_SITE
         } else {
-            "ready"
+            READY
         }
         .into(),
     )
 }
 
-/// Returns true whenever a pending order owns this planning turn.
-///
-/// Owner D8: a request whose materials are already in storage moves ahead of
-/// unfunded ones; otherwise the entry order holds. The head's turn is never
-/// given to autonomous planning while it waits for materials, so a later
-/// autonomous house cannot overtake it.
-fn plan_order(state: &mut TickState, id: SettlementId) -> bool {
-    if state
-        .settlements
-        .get(id)
-        .is_none_or(|record| access::orders(record).next().is_none())
-    {
-        return false;
-    }
-    // An upgrade whose building is gone or has no next level is dropped from
-    // wherever it sits in the queue.
-    let mut dropped = Vec::new();
-    for (index, order) in access::orders(state.settlements.get(id).expect("settlement")).enumerate()
-    {
-        if order.building.is_some() && order_level(state, id, order).is_none() {
-            dropped.push((index, order.blueprint.clone()));
-        }
-    }
-    for (index, blueprint) in dropped.into_iter().rev() {
-        let record = state.settlements.get_mut(id).expect("pending settlement");
-        access::take_order(record, index);
-        record.revision = record.revision.saturating_add(1);
-        notify_owner(
-            state,
-            id,
-            format!("Dropped {blueprint} order: building gone or no upgrade available."),
-        );
-    }
-    if access::orders(state.settlements.get(id).expect("settlement"))
-        .next()
-        .is_none()
-    {
-        return false;
-    }
-    if claim_slot(state, id).is_err() {
-        return true;
-    }
-    // Funded candidates in queue order; the head is first when it is funded.
-    let images = executor::source_images(state, id);
-    let mut candidates = Vec::new();
-    {
-        let record = state.settlements.get(id).expect("settlement");
-        for (index, order) in access::orders(record).enumerate() {
-            let Some(level_number) = order_level(state, id, order) else {
-                continue;
-            };
-            let Some(level) = blueprints::get(&state.registry, &order.blueprint)
-                .and_then(|blueprint| blueprint.level(level_number))
-            else {
-                continue;
-            };
-            if funded_variant(state, id, &level.materials, &images).is_some() {
-                candidates.push(index);
-            }
-        }
-    }
-    // Nothing funded: the head keeps the turn and the settlement waits.
-    if candidates.is_empty() {
-        return true;
-    }
-    // A funded request that cannot start for lack of a site does not block the
-    // next funded one; it stays where it is in the queue.
-    for index in candidates {
-        let Some(record) = state.settlements.get_mut(id) else {
-            return true;
-        };
-        let Some(order) = access::take_order(record, index) else {
-            continue;
-        };
-        let cursor = state
-            .settlements
-            .get(id)
-            .expect("settlement")
-            .construction_cursor;
-        let seq = order.seq;
-        match start_order(state, id, &order, Some(cursor)) {
-            Ok(handle) => {
-                // The admitted project's own handle decides where the sequence
-                // is recorded; two parallel houses share a blueprint.
-                if let Some(record) = state.settlements.get_mut(id) {
-                    let mut recorded = false;
-                    if let Some(project) =
-                        access::projects_mut(record).find(|project| project.structure == handle)
-                    {
-                        project.order_seq = Some(seq);
-                        recorded = true;
-                    }
-                    if recorded {
-                        record.revision = record.revision.saturating_add(1);
-                    }
-                }
-                // A start clears the refusal it was waiting on, so a later one
-                // is news again.
-                state.settlements.order_refusal.remove(&(id, seq));
-                notify_owner(state, id, OrderOutcome::Started.message(&order.blueprint));
-                return true;
-            }
-            Err(reason) => {
-                // The queue keeps its FIFO slot and this slot is retried, so the
-                // owner hears a refusal once per distinct reason instead of every
-                // planning pass. Runtime only: the reason disappears from the
-                // status by itself once the world is fixed.
-                let record = state.settlements.get_mut(id).expect("pending settlement");
-                access::insert_order(record, index, order);
-                preparation::note_order_refusal(state, id, seq, reason);
-            }
-        }
-    }
-    true
-}
+/// The waiting reason of a funded upgrade with a free slot: its order turn
+/// admits it (`site_turn`).
+pub(crate) const READY: &str = "ready";
 
 /// A confirmed level remains unchanged even while its predecessor is missing.
 fn order_level(state: &TickState, id: SettlementId, order: &OwnerOrder) -> Option<u8> {
@@ -962,31 +861,31 @@ fn funding_error(state: &TickState, id: SettlementId, materials: &[(u32, u32)]) 
     Some("not enough: shared recipe ingredients".into())
 }
 
+/// A new building's admission checks before any site search: a free slot, a
+/// first level and its funding. Nothing is withdrawn or reserved: funding is
+/// proved again when the project starts.
+fn buildable(state: &TickState, id: SettlementId, blueprint: &str) -> Result<(), String> {
+    claim_slot(state, id)?;
+    let blueprint = blueprints::get(&state.registry, blueprint).ok_or("Unknown blueprint.")?;
+    let level = blueprint.level(1).ok_or("Blueprint has no first level.")?;
+    funding_error(state, id, &level.materials).map_or(Ok(()), Err)
+}
+
 /// Owner/operator entrypoints check `can_manage`; admission starts the sole
-/// funded project immediately, without withdrawing or placing any material.
+/// funded project, without withdrawing or placing any material. One bounded,
+/// resumable sweep slice of at most `attempts` lots, granted by the tick's
+/// site budget (`site_turn`): a sweep the slice does not finish waits for a
+/// site, and later turns continue it.
 fn start_build(
     state: &mut TickState,
     id: SettlementId,
     blueprint: &str,
-    planning_cursor: Option<u32>,
+    attempts: u32,
 ) -> Result<String, String> {
-    claim_slot(state, id)?;
+    buildable(state, id, blueprint)?;
     let registry = std::sync::Arc::clone(&state.registry);
     let blueprint = blueprints::get(&registry, blueprint).ok_or("Unknown blueprint.")?;
-    let level = blueprint.level(1).ok_or("Blueprint has no first level.")?;
-    if let Some(error) = funding_error(state, id, &level.materials) {
-        return Err(error);
-    }
     let images = executor::source_images(state, id);
-    // A direct owner request searches once for immediate admission. Retried
-    // pending work shares the autonomous planner's bounded, resumable scan.
-    let (start, attempts) = planning_cursor.map_or((0, u32::MAX), |cursor| (cursor, SITE_ATTEMPTS));
-    let forest_misses = state
-        .settlements
-        .forest
-        .lock()
-        .expect("forest cache poisoned")
-        .misses();
     let mut sweeps = state.settlements.site_sweep.remove(&id).unwrap_or_default();
     let pass = {
         let record = state.settlements.get(id).expect("claimed settlement");
@@ -995,7 +894,7 @@ fn start_build(
             record,
             std::iter::once(blueprint),
             &mut sweeps,
-            start,
+            record.construction_cursor,
             attempts,
             &images,
         )
@@ -1005,29 +904,16 @@ fn start_build(
         site,
         cursor,
         report,
+        running,
         ..
     } = pass;
     let Some(mut site) = site else {
-        if planning_cursor.is_none()
-            && state
-                .settlements
-                .forest
-                .lock()
-                .expect("forest cache poisoned")
-                .misses()
-                != forest_misses
-        {
-            return Err("waiting for forest evidence".into());
-        }
-        if planning_cursor.is_some() {
-            let record = state.settlements.get_mut(id).expect("planned settlement");
-            record.construction_cursor = cursor;
-            record.revision = record.revision.saturating_add(1);
-            site_refusals::observe(state, id, &blueprint.id, report);
-        }
-        return Err(
-            "No free loaded construction site is available within the material budget.".into(),
-        );
+        let record = state.settlements.get_mut(id).expect("planned settlement");
+        record.construction_cursor = cursor;
+        record.revision = record.revision.saturating_add(1);
+        // Every examined slice belongs to the refusal watch's sweep total.
+        site_refusals::observe(state, id, &blueprint.id, report);
+        return Err(site_refusals::miss(running));
     };
     site.project.ordered = true;
     // The admitted project's own handle is the authority, not a search by
@@ -1055,22 +941,12 @@ fn start_upgrade(
     id: SettlementId,
     building: BuildingId,
 ) -> Result<String, String> {
-    claim_slot(state, id)?;
+    upgrade::upgradable(state, id, building)?;
     let record = state.settlements.get(id).expect("claimed settlement");
-    let building = record
-        .buildings
-        .get(&building)
-        .ok_or("Building not found.")?;
-    let (blueprint, origin, rotation) = upgrade_blueprint(state, id, building)
-        .ok_or("No blueprint upgrade available for this building.")?;
+    let building = &record.buildings[&building];
+    let (blueprint, origin, rotation) =
+        upgrade_blueprint(state, id, building).expect("upgradable building");
     let level = building.level + 1;
-    if let Some(error) = funding_error(
-        state,
-        id,
-        &blueprint.level(level).expect("upgrade level").materials,
-    ) {
-        return Err(error);
-    }
     let images = executor::source_images(state, id);
     let (species, color) = funded_variant(
         state,
@@ -1228,74 +1104,6 @@ fn priority_house(
         .then_some(blueprint)
 }
 
-/// Reuse the executor's reservation, including the admitted clearing corridor.
-/// Finished structures stay protected; spent road and meadow work does not.
-pub(crate) fn replant_conflicts(state: &TickState, root: [i32; 3]) -> bool {
-    let crown = super::forestry::PLANTED_CROWN_RADIUS as i32;
-    let bounds = ScriptWorldBounds::new(
-        [
-            root[0].saturating_sub(crown),
-            root[1],
-            root[2].saturating_sub(crown),
-        ],
-        [
-            root[0].saturating_add(crown),
-            root[1]
-                .saturating_add(64)
-                .min(state.world.geometry().max_y() - 1),
-            root[2].saturating_add(crown),
-        ],
-    );
-    bounds.map_or(true, |bounds| {
-        executor::area_held(state, bounds)
-            || state
-                .settlements
-                .records()
-                .filter(|record| {
-                    // Street headroom and lots stay inside the territory's
-                    // horizontal extent. Outpost claims may lie outside it.
-                    let horizontal = ScriptWorldBounds::new(
-                        [bounds.min[0], record.anchor[1], bounds.min[2]],
-                        [bounds.max[0], record.anchor[1], bounds.max[2]],
-                    )
-                    .expect("valid crown projection");
-                    founding::sphere_overlaps(record.anchor, record.radius, horizontal)
-                        || record.founding.as_ref().is_some_and(|expedition| {
-                            let claim = expedition.bounds();
-                            [0, 2].into_iter().all(|axis| {
-                                bounds.min[axis] <= claim.max[axis]
-                                    && claim.min[axis] <= bounds.max[axis]
-                            })
-                        })
-                })
-                .any(|record| layout::planting_blocks_access(state, record, bounds))
-    })
-}
-
-/// Geometrically feasible housing, independent of today's material balance.
-/// The network may forecast a proposed planting without mutating the world.
-pub(super) fn has_house_lot(
-    state: &TickState,
-    record: &SettlementRecord,
-    network: &mut layout::Network<'_>,
-    blueprint: &blueprints::Blueprint,
-) -> bool {
-    let mut clearance = super::forestry::Clearance::default();
-    network.frontage().into_iter().any(|(front, normal)| {
-        let Some(lot) = network.lot(blueprint, front, normal) else {
-            return false;
-        };
-        site_free_claim(
-            state,
-            record,
-            lot.origin,
-            blueprint.footprint(Rotation::from_quarter_turns(lot.rotation)),
-            record.founding.as_ref(),
-            &mut clearance,
-        )
-    })
-}
-
 fn candidate_kinds<'a>(
     state: &'a TickState,
     record: &'a SettlementRecord,
@@ -1432,9 +1240,9 @@ fn site_free_claim(
     origin: [i32; 3],
     size: [u8; 3],
     expedition: Option<&FoundingExpedition>,
-    clearance: &mut super::forestry::Clearance,
+    survey: &mut site_refusals::Survey,
 ) -> bool {
-    site_refusals::check(state, record, origin, size, expedition, clearance, None).is_ok()
+    site_refusals::check(state, record, origin, size, expedition, survey, None).is_ok()
 }
 
 /// Rewrite the already-funded authored cells, not the stored project later.
@@ -1645,10 +1453,13 @@ pub(crate) fn upgrade_available(state: &TickState, id: SettlementId, building: B
         .is_some_and(|building| upgrade_blueprint(state, id, building).is_some())
 }
 
-/// Lot candidates examined per autonomous planning pass; an owner order
-/// examines every candidate of the street plan once.
+/// Lot candidates examined per planning pass, and by an owner order in the
+/// tick that admits it.
 const SITE_ATTEMPTS: u32 = 64;
-/// Ground may differ this much from the bell's elevation and still be a site.
+/// Ground may differ this much from the bell's elevation (or from a lot's floor)
+/// and still be found. A fill column below a floor, and a hillside cut above
+/// it, stay within this band: it is also what a builder standing at the lot's
+/// perimeter can reach (placement reach 12, margin 2, see `villager::building`).
 pub(super) const SITE_BAND: i32 = 8;
 
 /// Highest standing surface in the band around the bell for one column: a solid
@@ -1673,35 +1484,17 @@ pub(super) fn surface_y_for_lot(
     lot: Option<ScriptWorldBounds>,
     clearance: &mut super::forestry::Clearance,
 ) -> Option<i32> {
-    (anchor_y - SITE_BAND..=anchor_y + SITE_BAND)
-        .rev()
-        .find(|&y| {
-            state.world.physics_block_at(x, y, z).is_some_and(|ground| {
-                !super::forestry::tree(state, ground)
-                    && state
-                        .registry
-                        .collision_boxes
-                        .get(ground as usize)
-                        .is_some_and(|boxes| !boxes.is_empty())
-            }) && state
-                .world
-                .physics_block_at(x, y + 1, z)
-                .is_some_and(|above| {
-                    // A lot column may be covered by water or lava: the support
-                    // under it is the pond's own bottom and the fluid cells are
-                    // fill targets. Roads, frontage reach and layout pass
-                    // `lot: None` and keep refusing a fluid ground.
-                    clearable(state, above)
-                        || clearance.clearable(state, [x, y + 1, z], lot)
-                        || (lot.is_some()
-                            && (preparation::liquid::has_fluid(state, above)
-                                || preparation::liquid::contained(state, above).is_some()))
-                        // A field crop does not hide its farmland: a needed lot
-                        // surveys the soil under the plants it reaps (D10).
-                        || crate::settlements::construction::relayout::crop(state, above)
-                })
-        })
+    surface_y_between(
+        state,
+        anchor_y - SITE_BAND..=anchor_y + SITE_BAND,
+        x,
+        z,
+        lot,
+        clearance,
+    )
 }
+
+pub(super) use preparation::liquid::surface_y_between;
 
 struct FundedSite {
     project: Project,
@@ -1755,9 +1548,9 @@ fn site_project<'a>(
         };
     }
     let mut cursor = start % count;
-    let share = (attempts / kinds.len().max(1) as u32).max(1);
+    let share = attempts / kinds.len().max(1) as u32;
     let mut running = false;
-    let mut clearance = super::forestry::Clearance::default();
+    let mut survey = site_refusals::Survey::default();
     for blueprint in kinds {
         let Some(level) = blueprint.level(1) else {
             continue;
@@ -1777,7 +1570,7 @@ fn site_project<'a>(
             &mut network,
             blueprint,
             &floors,
-            &mut clearance,
+            &mut survey,
             sweeps,
             cursor,
             &mut budget,
@@ -1802,7 +1595,7 @@ fn site_project<'a>(
                         color,
                     },
                     &floors[usize::from(rotation) % 4],
-                    &mut clearance,
+                    &mut survey,
                     images,
                     &mut report,
                 );
@@ -1877,7 +1670,14 @@ fn street_site(
     None
 }
 
+/// One planner pass with a fresh tick's whole site budget (test driver).
+#[cfg(test)]
 fn plan(state: &mut TickState, id: SettlementId) {
+    plan_pass(state, id, &mut site_turn::SiteBudget::default());
+}
+
+/// The settlement's planner pass; its site slices come from `budget`.
+fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::SiteBudget) {
     // Pending orders permit an existing expedition's handover or cancellation,
     // never admission or construction of another outpost.
     if state
@@ -1892,7 +1692,7 @@ fn plan(state: &mut TickState, id: SettlementId) {
     if furnace::plan(state, id) {
         return;
     }
-    if plan_order(state, id) {
+    if plan_order(state, id, budget) {
         return;
     }
     if founding::plan(state, id) {
@@ -1901,7 +1701,14 @@ fn plan(state: &mut TickState, id: SettlementId) {
     let Some(record) = state.settlements.get(id) else {
         return;
     };
-    if claim_slot(state, id).is_err() {
+    // Autonomous work opens a site only when every active project has its
+    // builder and a resident could take one more: a site nobody can build only
+    // parks a slot and a lot and holds the planner (Spain seed 100: eight
+    // projects for three builders; later a fourth house unbound for 30k ticks).
+    if claim_slot(state, id).is_err()
+        || unbound_project(&state.settlements, id).is_some()
+        || !builder_free(state, id)
+    {
         return;
     }
     let residents = state.settlements.member_count(id);
@@ -1937,7 +1744,7 @@ fn plan(state: &mut TickState, id: SettlementId) {
                     std::iter::once(house),
                     sweeps,
                     record.construction_cursor,
-                    SITE_ATTEMPTS,
+                    budget.take(),
                     &images,
                 )
             },
@@ -1971,7 +1778,7 @@ fn plan(state: &mut TickState, id: SettlementId) {
                         .map(|blueprint| blueprint.expect("funded prefix")),
                     sweeps,
                     house.cursor,
-                    SITE_ATTEMPTS,
+                    budget.take(),
                     &images,
                 );
                 running |= pass.running;
@@ -2217,9 +2024,6 @@ fn reaches_storage(
         )
 }
 
-/// Residents tried per pass; the rest wait for the next planning pass.
-const BUILDER_CANDIDATES: usize = 8;
-
 /// The slot of the resident bound to `project`, while it is still a living
 /// Builder of this settlement. A project's own binding is the only incumbent
 /// (D8): another project never stands in for it.
@@ -2277,7 +2081,7 @@ fn release_trapped_builder(state: &mut TickState, id: SettlementId) -> bool {
         let mut cache = super::allocator::PoiCache::default();
         let mut path = Vec::new();
         if resident_simulated(state, slot)
-            && (!on_shift || reaches_storage(state, id, slot, &mut cache, &mut path))
+            && (!on_shift || probe_storage(state, id, slot, &mut cache, &mut path))
         {
             continue;
         }
@@ -2289,8 +2093,10 @@ fn release_trapped_builder(state: &mut TickState, id: SettlementId) -> bool {
 }
 
 /// Detach the builder bound to `handle` from that project, returning a borrowed
-/// gatherer to its profession. False when the builder carries project stock it
-/// must first deliver. Only that project's own binding is released (D8).
+/// gatherer to its profession. Its load of the project's materials becomes a
+/// recorded return duty first, paid by the next pass (D8 review R4-1): another
+/// builder may finish the project from storage meanwhile. Only that project's
+/// own binding is released (D8).
 fn release_incumbent(
     state: &mut TickState,
     id: SettlementId,
@@ -2312,6 +2118,7 @@ fn release_incumbent(
             .expect("builder incumbent"),
     );
     if released && let Some((uuid, profession)) = borrowed {
+        owe_carry(state, id, uuid, handle);
         if let Some(profession) = profession {
             state
                 .entities
@@ -2354,28 +2161,11 @@ pub(crate) struct BuilderWatch {
     recovery: Option<&'static str>,
     /// Replaced builders and the tick until which they are chosen last.
     shunned: Vec<(uuid::Uuid, u64)>,
+    /// Some builder was bound to the project during this episode: only a site
+    /// a builder failed is given back for another.
+    bound: bool,
     /// The progress of the episode whose owner notice was settled (Sol S-2).
     told: Option<(String, u32, u64)>,
-}
-
-/// The first active project with no bound builder.
-fn unbound_project(state: &TickState, id: SettlementId) -> Option<String> {
-    access::projects_of(&state.settlements, id)
-        .find(|project| project.builder.is_none())
-        .map(|project| project.structure.clone())
-}
-
-/// Bind an already-working native Builder to the first unbound project.
-fn bind_first_unbound(state: &mut TickState, id: SettlementId, slot: crate::entities::EntitySlot) {
-    let Some(target) = unbound_project(state, id) else {
-        return;
-    };
-    let binding = Some((state.entities.row(slot).uuid, None));
-    if let Some(record) = state.settlements.get_mut(id)
-        && access::bind_builder(record, &target, binding)
-    {
-        record.revision = record.revision.saturating_add(1);
-    }
 }
 
 /// Drop a binding whose villager died, left, converted or stopped being a
@@ -2492,6 +2282,7 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
             refusal: None,
             recovery: None,
             shunned: Vec::new(),
+            bound: false,
             told: None,
         });
     let elapsed = tick.saturating_sub(watch.seen).min(BUILDER_WATCH_STEP);
@@ -2502,8 +2293,10 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
         watch.reported = false;
         watch.refusal = None;
         watch.recovery = None;
+        watch.bound = project.builder.is_some();
         return false;
     }
+    watch.bound |= project.builder.is_some();
     if !on_shift {
         return false;
     }
@@ -2514,7 +2307,7 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     watch.idle = 0;
     let report = !watch.reported;
     watch.reported = true;
-    let refusal = watch.refusal;
+    let (refusal, bound) = (watch.refusal, watch.bound);
     let first_recovery = if report { None } else { watch.recovery.take() };
     // The incumbent is the resident bound to this project, never another
     // project's builder standing first in the resident list (D8).
@@ -2574,7 +2367,12 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     // A failed first recovery (another window without a cell) gives back the
     // slot of unpaid work, as a protected tree does: rotating builders that
     // cannot reach the worksite would otherwise hold the only slot forever.
-    let preparation = ((protected || !report) && snapshot.consumed.is_empty())
+    // Only a site a builder failed is given back: a project nobody was bound
+    // to in this episode keeps its site, because another lot has no builder
+    // either and a re-sited order only lets autonomous work take its lot
+    // (Spain seed 100: the church re-sited twice with no builder, then
+    // site_refused 587/587 and the order was lost).
+    let preparation = ((protected || (!report && bound)) && snapshot.consumed.is_empty())
         .then(|| retry_preparation(state, id, project));
     // A retry the queue refused is the owner's to act on: the paid request is
     // still in flight, so the reason reaches them instead of only the log
@@ -2781,13 +2579,12 @@ fn restore_borrowed_gatherer(state: &mut TickState, id: SettlementId, profession
 }
 
 /// Record what a released builder still owes storage: the carried amount of
-/// each item the project's bill asked for. Only those exact amounts are owed,
-/// so a resident's own food or a later working load is never taken (R4-1).
+/// each item the project's plan uses. Only those items are owed, so a
+/// resident's own food or a later working load is never taken (R4-1).
 pub(crate) fn owe_carry(state: &mut TickState, id: SettlementId, uuid: uuid::Uuid, handle: &str) {
-    // The full remaining bill, before any bound builder's carry is subtracted:
-    // `project_bill` drops a type once the builder already carries all of it,
-    // which is exactly the load that must be recorded (R4-1).
-    let bill = remaining_bill(state, id, handle);
+    // Placed items count too: a load the remaining bill no longer asks for
+    // (a finished stage, a finished project) is still project stock.
+    let items = plan_items(state, id, handle);
     let Some(slot) = state.entities.slot_of_uuid(uuid) else {
         return;
     };
@@ -2797,10 +2594,10 @@ pub(crate) fn owe_carry(state: &mut TickState, id: SettlementId, uuid: uuid::Uui
     let mut owed: Vec<(u32, u32)> = Vec::new();
     for stack in v.inventory.iter().flatten().filter(|stack| stack.count > 0) {
         let item = stack.item_id;
-        // Unreadable bill: fail closed on the whole load this builder was
+        // Unreadable plan: fail closed on the whole load this builder was
         // carrying, since it was bound to this project a moment ago.
-        if let Some(bill) = bill.as_ref()
-            && !bill.iter().any(|(known, _)| *known == item)
+        if let Some(items) = items.as_ref()
+            && !items.contains(&item)
         {
             continue;
         }
@@ -2866,181 +2663,10 @@ fn carry_debtor(state: &TickState, id: SettlementId, uuid: uuid::Uuid) -> bool {
         .is_some_and(|record| record.carry_pending.contains_key(&uuid))
 }
 
-fn assign_builder(state: &mut TickState, id: SettlementId) {
-    drain_carry_duties(state, id);
-    release_stalled_builder(state, id);
-    if release_trapped_builder(state, id) {
-        return;
-    }
-    rebind_lost_builders(state, id);
-    let Some(target) = unbound_project(state, id) else {
-        return;
-    };
-    // Extraction workers are lent to construction one at a time and only while
-    // the settlement holds a single project; from two projects on, gathering
-    // keeps its workers and parallel sites recruit ordinary residents (D8).
-    let may_borrow = access::projects_of(&state.settlements, id).count() == 1;
-    // The wake reason belongs to the project being bound, not to whichever
-    // project happens to be first (D8 review R3-8).
-    let ordered = state
-        .settlements
-        .get(id)
-        .and_then(|record| access::project_for_structure(record, &target))
-        .is_some_and(|project| project.ordered);
-    let protected = state.settlements.get(id).and_then(|record| {
-        let images = executor::source_images(state, id);
-        let bill = joint_active_bill(state, id)?;
-        super::construction_crafting::needed_gatherer(state, &bill, &images).or_else(|| {
-            if ordered {
-                return None;
-            }
-            gatherer_demand(state, record, &images)
-                .filter(|profession| has_staffed_gatherer(state, id, *profession))
-        })
-    });
-    // A native Builder already on the settlement takes the first unbound
-    // project directly; no recruitment and no profession change. It must still
-    // be able to reach storage, or a walled builder would hold the project.
-    let mut ready_cache = super::allocator::PoiCache::default();
-    let mut ready_path = Vec::new();
-    let ready = residents(state, id)
-        .filter(|slot| {
-            let row = state.entities.row(*slot);
-            state.entities.body(*slot).alive
-                && !access::bound_builder(&state.settlements, row.uuid)
-                && !carry_debtor(state, id, row.uuid)
-                && row.villager.as_ref().is_some_and(|v| {
-                    v.settlement == Some(id)
-                        && v.data.profession == Profession::Builder
-                        && v.conversion_time.is_none()
-                })
-        })
-        .find(|&slot| reaches_storage(state, id, slot, &mut ready_cache, &mut ready_path));
-    if let Some(slot) = ready {
-        bind_first_unbound(state, id, slot);
-        return;
-    }
-    let mut candidates = Vec::new();
-    for slot in residents(state, id) {
-        let uuid = state.entities.row(slot).uuid;
-        if !resident_simulated(state, slot)
-            || super::economy::worker_reserved(state, Some(id), uuid)
-            || carry_debtor(state, id, uuid)
-        {
-            continue;
-        }
-        let body = state.entities.body(slot);
-        let Some(v) = state.entities.row(slot).villager.as_ref() else {
-            continue;
-        };
-        if protected.is_some_and(|needed| {
-            v.job_site.is_some_and(|job| {
-                buildings::job_profession(&state.settlements, Some(id), job) == Some(needed)
-            })
-        }) {
-            continue;
-        }
-        if body.alive && v.settlement == Some(id) && v.age >= 0 && v.conversion_time.is_none() {
-            let uuid = state.entities.row(slot).uuid;
-            if v.data.profession == Profession::Builder
-                || access::bound_builder(&state.settlements, uuid)
-                || (!may_borrow
-                    && matches!(
-                        v.data.profession,
-                        Profession::Miner | Profession::Lumberjack
-                    ))
-            {
-                continue;
-            }
-            let priority = match v.data.profession {
-                Profession::None => Some(0),
-                Profession::Mason if !super::allocator::traded(v) => Some(1),
-                profession
-                    if !super::allocator::traded(v)
-                        && !matches!(
-                            profession,
-                            Profession::Farmer
-                                | Profession::Miner
-                                | Profession::Lumberjack
-                                | Profession::Shepherd
-                                | Profession::Soldier
-                                | Profession::Nitwit
-                        ) =>
-                {
-                    Some(2)
-                }
-                Profession::Miner | Profession::Lumberjack
-                    if !super::allocator::traded(v) && Some(v.data.profession) != protected =>
-                {
-                    Some(3)
-                }
-                _ => None,
-            };
-            if let Some(priority) = priority {
-                let shunned = state
-                    .settlements
-                    .builder_watch
-                    .get(&(id, target.clone()))
-                    .is_some_and(|watch| {
-                        watch.shunned.iter().any(|&(uuid, until)| {
-                            uuid == state.entities.row(slot).uuid && state.tick < until
-                        })
-                    });
-                candidates.push((priority + if shunned { 10 } else { 0 }, slot));
-            }
-        }
-    }
-    // Stable: residents of equal priority keep their index order.
-    candidates.sort_by_key(|&(priority, _)| priority);
-    let mut cache = super::allocator::PoiCache::default();
-    let mut path = Vec::new();
-    let Some(slot) = candidates
-        .into_iter()
-        .take(BUILDER_CANDIDATES)
-        .map(|(_, slot)| slot)
-        .find(|&slot| reaches_storage(state, id, slot, &mut cache, &mut path))
-    else {
-        return;
-    };
-    // Ordinary recruits keep the authored builder career. Only extraction
-    // workers are loaned to construction and restored on completion.
-    let profession = state
-        .entities
-        .row(slot)
-        .villager
-        .as_ref()
-        .unwrap()
-        .data
-        .profession;
-    let borrowed = match profession {
-        Profession::Miner | Profession::Lumberjack => Some(profession),
-        _ => None,
-    };
-    let binding = Some((state.entities.row(slot).uuid, borrowed));
-    if let Some(record) = state.settlements.get_mut(id)
-        && access::bind_builder(record, &target, binding)
-    {
-        record.revision = record.revision.saturating_add(1);
-    }
-    let v = state
-        .entities
-        .row_mut(slot)
-        .villager
-        .as_mut()
-        .expect("builder candidate");
-    v.data.profession = Profession::Builder;
-    v.offers.clear();
-    v.job_site = None;
-    v.navigation_target = None;
-    v.navigation_path.clear();
-    v.navigation_chunks.clear();
-    v.navigation_repath_at = 0;
-    crate::villager::sync_appearance(state, slot);
-}
-
-/// Planning keeps its one-settlement/second budget. Construction has a separate
-/// four-tick admission clock, retaining the bounded round-robin settlement budget.
-pub(crate) fn tick(state: &mut TickState) {
+/// Planning keeps its one-settlement/second budget; its site slices come from
+/// the tick's `budget` (`site_turn`). Construction has a separate four-tick
+/// admission clock, retaining the bounded round-robin settlement budget.
+fn planner_tick(state: &mut TickState, budget: &mut site_turn::SiteBudget) {
     if !state.tick.is_multiple_of(4) {
         return;
     }
@@ -3104,7 +2730,7 @@ pub(crate) fn tick(state: &mut TickState) {
                 }
             }
         }
-        plan(state, id);
+        plan_pass(state, id, budget);
         if state
             .settlements
             .get(id)
@@ -3166,6 +2792,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
         .is_ok_and(|snapshot| snapshot.state == ScriptStructureState::Committed)
     {
         return false;
+    }
+    // Every cell is placed: project stock the bound builder still carries is a
+    // leftover it owes storage, whichever way the project closes (R4-1).
+    if let Some((uuid, _)) = project.builder {
+        owe_carry(state, id, uuid, &project.structure);
     }
     if project.blueprint == furnace::NAME || layout::infra(&project.blueprint) {
         // Infrastructure work is temporary employment.
@@ -3267,29 +2898,24 @@ pub(crate) struct WaitingNeed {
     pub(crate) no_source: Option<SourceReason>,
 }
 
-/// One project's remaining bill, net of the carry of the builder bound to it.
-/// Another project's load never pays for these cells (D8).
-/// The project's remaining materials, not net of any builder carry: the set a
-/// released builder's load must be measured against (D8 review R4-1).
-pub(crate) fn remaining_bill(
-    state: &TickState,
-    id: SettlementId,
-    handle: &str,
-) -> Option<Vec<(u32, u32)>> {
+/// Every item the project's plan uses, placed or still to place: a released
+/// builder's load of any of them is project stock it owes storage (D8 review
+/// R4-1), even once the remaining bill no longer asks for it.
+fn plan_items(state: &TickState, id: SettlementId, handle: &str) -> Option<Vec<u32>> {
     let snapshot = executor::status(state, id, handle).ok()?;
     snapshot
-        .remaining
-        .into_iter()
+        .consumed
+        .iter()
+        .chain(&snapshot.remaining)
         .map(|material| {
             let name = mc_data::Identifier::parse(&material.resource).ok()?;
-            Some((
-                state.registry.items.id_of(&name)?,
-                u32::try_from(material.quantity).ok()?,
-            ))
+            state.registry.items.id_of(&name)
         })
         .collect()
 }
 
+/// One project's remaining bill, net of the carry of the builder bound to it.
+/// Another project's load never pays for these cells (D8).
 pub(crate) fn project_bill(
     state: &TickState,
     id: SettlementId,

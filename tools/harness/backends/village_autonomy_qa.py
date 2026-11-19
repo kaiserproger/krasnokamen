@@ -900,21 +900,59 @@ def _dialog_body(state: dict[str, Any]) -> str:
                      if str(n.get("id", "")).startswith("dialog/body/"))
 
 
-def _pending_dialog(state: dict[str, Any]) -> dict[str, Any]:
+def _body_cut(state: dict[str, Any]) -> bool:
+    """Whether the client may hide body nodes below the dialog viewport.
+
+    The client observes only body text overlapping its viewport, which ends less than one
+    body spacing above the action row (solaris-client ui/dialog.rs: footer padding 6 < SPACING
+    10 GUI px). A next node starting at least one spacing below the last observed one, within
+    one spacing of the action row, can therefore be off screen; anywhere higher it would show.
+    """
+    nodes = state.get("ui_nodes", [])
+    body = sorted((n["bounds"] for n in nodes
+                   if re.fullmatch(r"dialog/body/\d+", str(n.get("id", ""))) and n.get("bounds")),
+                  key=lambda b: b[1])
+    actions = [n["bounds"][1] for n in nodes
+               if re.fullmatch(r"dialog/action/\d+", str(n.get("id", ""))) and n.get("bounds")]
+    if len(body) < 2 or not actions:
+        return False
+    gap = body[1][1] - (body[0][1] + body[0][3])
+    return body[-1][1] + body[-1][3] + gap >= min(actions) - gap
+
+
+def _pending_dialog(state: dict[str, Any], *, clipped_ok: bool = False) -> dict[str, Any]:
+    """Pending orders and projects from the Status dialog.
+
+    The server writes the summary, every project, then every pending order
+    (settlements/ui.rs project_status_screen). The client observation lists only
+    the body nodes it renders, so with many parallel projects the tail is cut.
+    `clipped_ok` accepts that view only when the body reaches the action row
+    (`_body_cut`) and what shows is a prefix: projects up to "Active projects",
+    pending lines #1..#k up to "Pending orders" and none before every project.
+    The result then carries the summary count and head besides the visible lines.
+    """
     body = _dialog_body(state)
     orders = []
     for match in re.finditer(r"(?m)^Pending #(\d+): (.+?) L(\d+) · (.+)$", body):
-        blueprint = PROJECT_LABELS.get(match[2])
+        blueprint = _label_blueprint(match[2])
         if blueprint is None:
             raise RuntimeError(f"unrecognised pending blueprint {match[2]!r}")
         orders.append({"index": int(match[1]), "blueprint": blueprint,
                        "level": int(match[3]), "reason": match[4]})
+    projects = _project_progress(state, clipped_ok=clipped_ok)
+    active = re.search(r"(?m)^Active projects: (\d+)/(\d+)$", body)
     count = re.search(r"(?m)^Pending orders: (\d+)/(\d+)$", body)
-    if count is None or int(count[1]) != len(orders) or [
-        order["index"] for order in orders
-    ] != list(range(1, len(orders) + 1)):
+    indexed = [order["index"] for order in orders] == list(range(1, len(orders) + 1))
+    if clipped_ok and active is not None and count is not None and indexed and _body_cut(state):
+        every_project = len(projects) == int(active[1])
+        if (every_project or not orders) and len(orders) <= int(count[1]) and (
+                not every_project or len(orders) < int(count[1])):
+            head = re.search(r"(?m)^Head: (.+)$", body)
+            return {"body": body, "orders": orders, "projects": projects, "clipped": True,
+                    "pending_count": int(count[1]), "head": head[1] if head else None}
+    if count is None or int(count[1]) != len(orders) or not indexed:
         raise RuntimeError("pending order list does not match its count/indices")
-    return {"body": body, "orders": orders, "projects": _project_progress(state)}
+    return {"body": body, "orders": orders, "projects": projects}
 
 
 def _owner_projects(probe: ProbeSteps, detail: dict[str, Any], key: str, artifact: Path) -> dict[str, Any]:
@@ -1156,7 +1194,7 @@ def _map_has_sites(state: dict[str, Any], projects: list[dict[str, Any]]) -> boo
     body = _dialog_body(state)
     return len(projects) >= 2 and all(
         any(f"Active site: {label} L{p['level']} · {' '.join(map(str, p['origin']))}" in body
-            for label, blueprint in PROJECT_LABELS.items() if blueprint == p["blueprint"])
+            for label in _blueprint_labels(p["blueprint"]))
         for p in projects)
 
 
@@ -1935,7 +1973,9 @@ def _listed_buildings(lines: list[str]) -> list[dict[str, Any]]:
     return records
 
 
-# Project status labels (settlements/ui.rs blueprint_label), English and Russian.
+# Project status labels (settlements/ui.rs blueprint_label), English and Russian. A
+# blueprint without a display name there (the culture blueprints spanish_plaza,
+# spanish_house, spanish_church, spanish_fortress, spanish_wall) shows its raw id.
 PROJECT_LABELS = {
     "House": "house", "Дом": "house",
     "Storage": "storage", "Склад": "storage",
@@ -1947,18 +1987,41 @@ PROJECT_LABELS = {
     "Barracks": "barracks", "Казарма": "barracks",
     "Wall": "wall", "Стена": "wall",
     "Watchtower": "watch_tower", "Сторожевая башня": "watch_tower",
+    "Gate": "gate", "Ворота": "gate",
+    "Armorer's workshop": "armorer", "Мастерская бронника": "armorer",
+    "Butcher's workshop": "butcher", "Мастерская мясника": "butcher",
+    "Cartographer's workshop": "cartographer", "Мастерская картографа": "cartographer",
+    "Cleric's workshop": "cleric", "Мастерская священника": "cleric",
+    "Fisherman's workshop": "fisherman", "Мастерская рыбака": "fisherman",
+    "Fletcher's workshop": "fletcher", "Мастерская лучника": "fletcher",
+    "Leatherworker's workshop": "leatherworker", "Мастерская кожевника": "leatherworker",
+    "Librarian's workshop": "librarian", "Мастерская библиотекаря": "librarian",
+    "Toolsmith's workshop": "toolsmith", "Мастерская инструментальщика": "toolsmith",
+    "Weaponsmith's workshop": "weaponsmith", "Мастерская оружейника": "weaponsmith",
     "Road": "road", "Дорога": "road",
     "Street lamp": "lamp", "Фонарь": "lamp",
     "Meadow clearing": "meadow", "Расчистка луга": "meadow",
     "Building": "unlabelled", "Здание": "unlabelled",
 }
+RAW_BLUEPRINT_ID = re.compile(r"[a-z][a-z0-9_]*")
+
+
+def _label_blueprint(label: str) -> str | None:
+    """The blueprint a dialog label names: a display name, else a raw id; None when neither."""
+    return PROJECT_LABELS.get(label) or (label if RAW_BLUEPRINT_ID.fullmatch(label) else None)
+
+
+def _blueprint_labels(blueprint: str) -> list[str]:
+    return [label for label, named in PROJECT_LABELS.items() if named == blueprint] or [blueprint]
+
+
 # Street work: structure-ledger projects with no authored blueprint or
 # certificate. A road paves one stretch; a lamp is two fences and a torch;
 # a meadow clears seed-bearing grass for the first Farm.
 STREET_PROJECTS = frozenset({"road", "lamp", "meadow"})
 
 
-def _project_progress(observed: dict[str, Any]) -> list[dict[str, Any]]:
+def _project_progress(observed: dict[str, Any], *, clipped_ok: bool = False) -> list[dict[str, Any]]:
     """Every project on the live Construction dialog, in display order."""
     body = _dialog_body(observed)
     projects = []
@@ -1966,7 +2029,7 @@ def _project_progress(observed: dict[str, Any]) -> list[dict[str, Any]]:
         r"(?m)^(.+?) L(\d+) · ([^\n]+)\n(\d+)/(\d+)\n"
         r"(-?\d+) (-?\d+) (-?\d+)\nBuilder: ([^\n]+)(?:\n|$)", body,
     ):
-        blueprint = PROJECT_LABELS.get(match[1])
+        blueprint = _label_blueprint(match[1])
         if blueprint is None:
             raise RuntimeError(f"unrecognised active project label {match[1]!r}")
         project = {
@@ -1978,9 +2041,10 @@ def _project_progress(observed: dict[str, Any]) -> list[dict[str, Any]]:
             project["label"] = match[1]
         projects.append(project)
     count = re.search(r"(?m)^Active projects: (\d+)/(\d+)$", body)
-    if count is None or int(count[1]) != len(projects) or len({
-        _project_key(p) for p in projects
-    }) != len(projects):
+    shown_all = count is not None and int(count[1]) == len(projects)
+    cut_tail = (clipped_ok and count is not None and len(projects) < int(count[1])
+                and _body_cut(observed))
+    if not (shown_all or cut_tail) or len({_project_key(p) for p in projects}) != len(projects):
         raise RuntimeError("active project list does not match its count/identities")
     return projects
 

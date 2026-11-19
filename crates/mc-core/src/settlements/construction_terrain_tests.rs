@@ -1,6 +1,6 @@
 //! B-min: bounded solid terrain, whole-sweep lot ranking, credited cuts.
 use super::site_tests::{Site, storage_lots, street_plateau};
-use super::tests::{attempt, complete, fixture, fund, open_plan};
+use super::tests::{attempt, complete, fixture, fund, open_plan, request_started};
 use super::*;
 use crate::settlements::allocator::tests::block;
 
@@ -406,11 +406,11 @@ fn cheapest_lot_beyond_the_first_cursor_batch_wins_the_completed_sweep() {
     );
 }
 
-/// The window is bounded on both sides: a fill column four blocks deep and the
-/// authored top are the limits; a deeper support or a roof block above them is
-/// refused.
+/// Inside the territory the fill below the floor is levelled down to the edge
+/// of the builder's reach; the cut stays bounded by the authored top, and a roof
+/// block above it is refused.
 #[test]
-fn the_terrain_window_is_bounded_below_the_floor_and_above_the_roof() {
+fn the_fill_below_the_floor_is_levelled_within_reach_and_the_roof_block_is_refused() {
     let (mut state, id, _) = fixture();
     let record = state.settlements.get(id).unwrap().clone();
     let origin = [5, FLOOR, 5];
@@ -440,21 +440,37 @@ fn the_terrain_window_is_bounded_below_the_floor_and_above_the_roof() {
         Ok(4),
         "four fill cells below the floor"
     );
-    // A fifth block is a retaining wall the committee refuses, not a payment.
+    // Inside the territory a fifth block and anything down to the edge of the
+    // eight-block band is filled with real material (owner 2026-11-17).
+    for (depth, filled) in [(5, 5), (8, 8)] {
+        for y in FLOOR - 14..=FLOOR {
+            state.world.set_block(6, y, 6, state.registry.states.air);
+        }
+        state
+            .world
+            .set_block(6, FLOOR - depth, 6, state.registry.states.stone);
+        state.world.fold_overlay();
+        assert_eq!(
+            column(&state).map(|cost| cost.fill),
+            Ok(filled),
+            "a fill column {depth} blocks deep is levelled inside the territory"
+        );
+    }
+    // A support below the eight-block band is out of what a builder at the lot's
+    // perimeter reaches: a named refusal, not a shaft the executor stalls on.
+    for y in FLOOR - 14..=FLOOR {
+        state.world.set_block(6, y, 6, state.registry.states.air);
+    }
     state
         .world
-        .set_block(6, FLOOR - 4, 6, state.registry.states.air);
-    state
-        .world
-        .set_block(6, FLOOR - 5, 6, state.registry.states.stone);
+        .set_block(6, FLOOR - 12, 6, state.registry.states.stone);
     state.world.fold_overlay();
     assert_eq!(
         column(&state).err(),
-        Some(site_refusals::Reason::HeightVariance),
-        "a fill column deeper than four blocks is refused"
+        Some(site_refusals::Reason::SurfaceUnavailable)
     );
     // Restore the flat lot, then bound the cut at the authored top.
-    for y in FLOOR - 9..=FLOOR {
+    for y in FLOOR - 14..=FLOOR {
         state.world.set_block(6, y, 6, state.registry.states.air);
     }
     state
@@ -563,7 +579,7 @@ fn excavated_solids_are_credited_once_and_the_fill_is_debited() {
         slots[free] = mc_data::ItemStack::new(dirt_item, 8);
     }
     let dirt = dirt + 8;
-    request_build(&mut state, id, "storage").expect("authored bill admits the lot");
+    request_started(&mut state, id, "storage");
     let project = state
         .settlements
         .get(id)
@@ -608,7 +624,7 @@ fn a_full_store_waits_without_editing_or_losing_the_excavated_block() {
             *slot = mc_data::ItemStack::new(sticks, 64);
         }
     }
-    request_build(&mut state, id, "storage").expect("authored bill admits the lot");
+    request_started(&mut state, id, "storage");
     for _ in 0..3 {
         attempt(&mut state, id, builder);
     }
@@ -638,6 +654,46 @@ fn a_full_store_waits_without_editing_or_losing_the_excavated_block() {
     }
 }
 
+/// The deepest fill a builder at the lot's perimeter reaches (the band's eight
+/// blocks) is paid from real stock and executed to completion.
+#[test]
+fn a_fill_at_the_edge_of_reach_is_paid_from_storage_and_completed() {
+    let (mut state, id, builder) = fixture();
+    let site = only_lot(&mut state, id);
+    dig(&mut state, &site, 8);
+    let [x, z] = free_column(&state, &site, 3, 1);
+    let floor = site.lot.origin[1];
+    let dirt_item = item(&state, "dirt");
+    {
+        let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+        let free = slots
+            .iter()
+            .position(|stack| stack.is_empty())
+            .expect("the bill leaves a free slot");
+        slots[free] = mc_data::ItemStack::new(dirt_item, 16);
+    }
+    let dirt = stock(&state, dirt_item);
+    request_started(&mut state, id, "storage");
+    assert_eq!(
+        state.settlements.get(id).unwrap().projects[0].origin,
+        site.lot.origin
+    );
+    complete(&mut state, id, builder);
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+    for y in floor - 7..=floor {
+        assert_ne!(
+            name_of(&state, [x, y, z]),
+            "air",
+            "the eight-deep shaft is filled at y={y}"
+        );
+    }
+    assert_eq!(
+        stock(&state, dirt_item) + carried(&state, builder, dirt_item),
+        dirt - 8,
+        "eight real dirt blocks, no more"
+    );
+}
+
 /// A foundation shortfall belongs to the active bill: the project waits as
 /// `collecting_material` and finishes after a later delivery.
 #[test]
@@ -645,8 +701,8 @@ fn a_foundation_shortfall_waits_as_collecting_material_then_finishes() {
     let (mut state, id, builder) = fixture();
     let site = only_lot(&mut state, id);
     dig(&mut state, &site, 2);
-    request_build(&mut state, id, "storage")
-        .expect("admission is decided on the authored bill, not the foundation");
+    // Admission is decided on the authored bill, not the foundation.
+    request_started(&mut state, id, "storage");
     let project = state
         .settlements
         .get(id)
@@ -758,7 +814,7 @@ fn player_terrain_edited_after_admission_outside_the_territory_stops_the_debit()
     let (mut state, id, builder) = fixture();
     let site = only_lot(&mut state, id);
     let pillar = pillar(&mut state, &site, "stone", "cobblestone", 1);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     let project = state.settlements.get(id).unwrap().projects[0].clone();
     let next = executor::next_cell(&state, id, &project.structure)
         .unwrap()
@@ -786,7 +842,7 @@ fn player_terrain_edits_inside_the_territory_are_cut_and_credited_at_debit() {
     let (mut state, id, builder) = fixture();
     let site = only_lot(&mut state, id);
     let pillar = pillar(&mut state, &site, "stone", "cobblestone", 1);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     state.block_log = super::super::forestry::tests::player_history(&state, pillar.cells[0], 0);
     let before = stock(&state, pillar.item);
     let uuid = state.entities.row(builder).uuid;
@@ -832,7 +888,7 @@ fn terrain_is_cut_top_down_and_no_step_drops_more_than_one_block() {
     let (mut state, id, builder) = fixture();
     let site = only_lot(&mut state, id);
     let pillar = pillar(&mut state, &site, "stone", "cobblestone", 3);
-    request_build(&mut state, id, "storage").unwrap();
+    request_started(&mut state, id, "storage");
     let project = state
         .settlements
         .get(id)
@@ -932,7 +988,6 @@ fn a_stale_ranking_restarts_instead_of_admitting_the_old_winner() {
     let floors: [std::collections::BTreeSet<[i32; 2]>; 4] = std::array::from_fn(|turns| {
         site_refusals::floor_columns(blueprint, u8::try_from(turns).unwrap())
     });
-    let mut clearance = super::super::forestry::Clearance::default();
     let mut sweeps = site_refusals::Sweeps::default();
     let mut report = site_refusals::Report::default();
     // A: the flat plan's winner. The first pass examines A alone.
@@ -949,7 +1004,7 @@ fn a_stale_ranking_restarts_instead_of_admitting_the_old_winner() {
         &mut network,
         blueprint,
         &floors,
-        &mut clearance,
+        &mut site_refusals::Survey::default(),
         &mut sweeps,
         a.front,
         &mut budget,
@@ -995,7 +1050,7 @@ fn a_stale_ranking_restarts_instead_of_admitting_the_old_winner() {
             &mut network,
             blueprint,
             &floors,
-            &mut clearance,
+            &mut site_refusals::Survey::default(),
             &mut sweeps,
             0,
             &mut budget,
@@ -1081,7 +1136,6 @@ fn a_reordered_walk_of_the_same_length_restarts_the_sweep() {
     let column = reorder.expect("a plaza hole moves the winner's frontage earlier");
     assert_eq!(fronts(&state), before, "the plaza is whole again");
     // The first pass examines every frontage before the winner's.
-    let mut clearance = super::super::forestry::Clearance::default();
     let mut sweeps = site_refusals::Sweeps::default();
     let mut report = site_refusals::Report::default();
     let mut network = layout::Network::for_construction(&state, &record);
@@ -1092,7 +1146,7 @@ fn a_reordered_walk_of_the_same_length_restarts_the_sweep() {
         &mut network,
         blueprint,
         &floors,
-        &mut clearance,
+        &mut site_refusals::Survey::default(),
         &mut sweeps,
         0,
         &mut budget,
@@ -1111,7 +1165,7 @@ fn a_reordered_walk_of_the_same_length_restarts_the_sweep() {
             &mut network,
             blueprint,
             &floors,
-            &mut clearance,
+            &mut site_refusals::Survey::default(),
             &mut sweeps,
             0,
             &mut budget,
@@ -1146,7 +1200,6 @@ fn a_restart_keeps_the_tie_winner() {
     let floors: [std::collections::BTreeSet<[i32; 2]>; 4] = std::array::from_fn(|turns| {
         site_refusals::floor_columns(blueprint, u8::try_from(turns).unwrap())
     });
-    let mut clearance = super::super::forestry::Clearance::default();
     let mut report = site_refusals::Report::default();
     let mut winner = |start: u32, sweeps: &mut site_refusals::Sweeps| {
         let mut network = layout::Network::for_construction(&state, &record);
@@ -1157,7 +1210,7 @@ fn a_restart_keeps_the_tie_winner() {
             &mut network,
             blueprint,
             &floors,
-            &mut clearance,
+            &mut site_refusals::Survey::default(),
             sweeps,
             start,
             &mut budget,
@@ -1232,7 +1285,7 @@ fn a_flat_tie_goes_to_the_lot_nearest_the_anchor() {
         distance < near(westmost.0),
         "premise: the westmost tie {westmost:?} is not the nearest {origin:?}"
     );
-    request_build(&mut state, id, "storage").expect("a legal storage lot");
+    request_started(&mut state, id, "storage");
     let project = state.settlements.get(id).unwrap().projects.first().unwrap();
     assert_eq!(
         (project.origin, project.rotation),
@@ -1252,7 +1305,7 @@ fn a_cut_credit_block_and_cursor_survive_the_record_round_trip() {
     let pillar = pillar(&mut state, &site, "sand", "sand", 1);
     let cuts = pillar.cells.len();
     let sand = stock(&state, pillar.item);
-    request_build(&mut state, id, "storage").expect("authored bill admits the lot");
+    request_started(&mut state, id, "storage");
     complete(&mut state, id, builder);
     assert_eq!(stock(&state, pillar.item), sand + cuts as i64);
     let credited = stock(&state, pillar.item);
@@ -1308,7 +1361,7 @@ fn a_credited_cut_survives_a_journal_reopen() {
     state.refresh_active_chunks(0);
     let pillar = pillar(&mut state, &site, "sand", "sand", 1);
     let cut_at = pillar.cells[0];
-    request_build(&mut state, id, "storage").expect("authored bill admits the lot");
+    request_started(&mut state, id, "storage");
     let structure = state
         .settlements
         .get(id)

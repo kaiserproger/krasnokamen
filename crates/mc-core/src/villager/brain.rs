@@ -996,6 +996,10 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         #[cfg(test)]
         let full_start = std::time::Instant::now();
         let pos = state.entities.pos(slot);
+        // A bound Builder's shift belongs to its project: a breeding ration
+        // waits for the shift's end. Taken mid-haul it turned builders back to
+        // storage 20-60 blocks short of a site 110 blocks away, and the stall
+        // watch released them (Spain seed 100, ticks 85800-86850).
         let needs_ration = state.entities.row(slot).villager.as_ref().is_some_and(|v| {
             v.settlement.is_some()
                 && v.home.is_some()
@@ -1008,6 +1012,11 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                     v.settlement,
                     state.entities.row(slot).uuid,
                 )
+                && !(super::building::working(state, v)
+                    && crate::settlements::construction::bound_builder(
+                        &state.settlements,
+                        state.entities.row(slot).uuid,
+                    ))
                 && available_food(state, slot, &cache.food, v) < 12
         });
         // A ration trip owns its destination separately from worker hauling.

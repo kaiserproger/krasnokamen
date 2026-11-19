@@ -1382,7 +1382,8 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
     assert_eq!(state.world.block_at(8, 201, 8), before_block);
     assert_eq!(poor.title, page.title);
 
-    // Funded stock starts the single project immediately, with no debit or edit.
+    // Funded stock queues the order while its bounded site sweep runs; planning
+    // passes start the single project, with no debit or edit.
     crate::settlements::construction::tests::fund(&mut state, "watch_tower", 1);
     let before = state.block_entities[&(1, 201, 1)].slots.clone();
     let ordered = last_dialog(&click(
@@ -1392,10 +1393,13 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
         &[("blueprint", string("watch_tower"))],
     ));
     assert!(
-        ordered.body.contains("Started Watchtower construction."),
+        ordered
+            .body
+            .contains("Queued Watchtower: waiting for a site"),
         "{}",
         ordered.body
     );
+    crate::settlements::construction::tests::finish_sweep(&mut state, id);
     let project = state
         .settlements
         .get(id)
@@ -1403,7 +1407,7 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
         .projects
         .first()
         .cloned()
-        .expect("funded order starts immediately");
+        .expect("funded order starts");
     assert_eq!(project.blueprint, "watch_tower");
     assert_eq!(project.level, 1);
     assert!(!project.structure.is_empty());
@@ -1463,6 +1467,7 @@ fn cultural_project_status_names_active_and_pending_blueprints_in_both_locales()
                 "project_order",
                 &[("blueprint", string("spanish_plaza"))],
             );
+            crate::settlements::construction::tests::finish_sweep(&mut state, id);
             let project = &state.settlements.get(id).unwrap().projects[0];
             assert_eq!(project.blueprint, "spanish_plaza");
             let snapshot =
@@ -1585,24 +1590,26 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
     click(&mut state, id, "project_cancel_pending", &[]);
 
-    // Funded L2 stock starts the upgrade immediately, with no debit.
+    // Funded L2 stock queues the upgrade at once, with no debit; its order
+    // turn admits it (owner D42).
     // The fixture captures block history (the production default), so the
     // building's own authored beams pass the upgrade fence as authored state
     // instead of tripping the disabled-history live-player veto.
     state.block_log = crate::block_log::BlockLog::new(crate::config::BlockLogSettings::default());
     crate::settlements::construction::tests::fund(&mut state, "house", 2);
     let before = state.block_entities[&(1, 201, 1)].slots.clone();
-    let started = last_dialog(&click(
+    let ordered = last_dialog(&click(
         &mut state,
         id,
         "project_upgrade",
         &[("b", string(&building.0.to_string()))],
     ));
     assert!(
-        started.body.contains("Started House construction."),
+        ordered.body.contains("Queued House L2: ready"),
         "{}",
-        started.body
+        ordered.body
     );
+    crate::settlements::construction::tests::plan_until_project(&mut state, id);
     let project = state
         .settlements
         .get(id)
@@ -1610,7 +1617,7 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
         .projects
         .first()
         .cloned()
-        .expect("funded upgrade starts immediately");
+        .expect("the order turn admits the funded upgrade");
     assert_eq!(project.building, Some(building));
     assert_eq!(project.level, 2);
     assert!(!project.structure.is_empty());
@@ -1949,6 +1956,7 @@ fn project_status_active_shows_readable_progress() {
         "project_order",
         &[("blueprint", string("watch_tower"))],
     );
+    crate::settlements::construction::tests::finish_sweep(&mut state, id);
     let project = state
         .settlements
         .get(id)

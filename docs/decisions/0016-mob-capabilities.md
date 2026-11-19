@@ -229,7 +229,9 @@ release credit. Splitting mobs reserve their maximum descendants: admission
 reserves 16 for an initial size-4 splitter, and existing splitters cost size².
 At most four half-sized children replace a parent, so splitting cannot exceed the
 live bound. This is conservative admission, not guest fuel or a claim that every
-allowed population meets the tick budget.
+allowed population meets the tick budget. The owner allows revising this
+namespace budget after measurements, keeping the shared-tick protection (D45,
+2026-11-19); the constant stays until then.
 
 ### Layer 3 sketch (not implemented)
 

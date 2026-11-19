@@ -306,6 +306,52 @@ fn ration_trip_completes_when_storage_is_beyond_the_spare_bed_scan() {
     );
 }
 
+/// Spain seed 100 (trace pin 3068dfb1b857-b30a9c2b, ticks 85800-86850): two
+/// builders walking to sites 110 blocks from storage turned back for a
+/// breeding ration 20-60 blocks short, and the stall watch released both. A
+/// bound Builder takes its ration after its shift instead.
+#[test]
+fn a_bound_builder_takes_its_breeding_ration_after_its_shift() {
+    use crate::settlements::construction::{projects_of, tests};
+    let (mut state, id, slot) = tests::fixture();
+    tests::start(&mut state, id, "house", 1, None);
+    let handle = projects_of(&state.settlements, id)
+        .next()
+        .unwrap()
+        .structure
+        .clone();
+    tests::bind_project(&mut state, id, &handle, slot);
+    let home = roofed_bed(&mut state, 12, 12);
+    roofed_bed(&mut state, 14, 14);
+    state.world.fold_overlay();
+    let bread = item(&state, "minecraft:bread");
+    state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[0] = ItemStack::new(bread, 6);
+    state.entities.row_mut(slot).villager.as_mut().unwrap().home = Some(home);
+    assert_eq!(state.day_time, 3000, "fixture: the builder is on shift");
+    for _ in 0..600 {
+        step(&mut state);
+    }
+    assert_eq!(
+        (
+            food_count(&state, slot, bread),
+            state.block_entities[&(1, 201, 1)].slots[0].count
+        ),
+        (0, 6),
+        "no ration during the shift"
+    );
+    state.day_time = 9_500;
+    for _ in 0..1_200 {
+        step(&mut state);
+        if food_count(&state, slot, bread) == 3 {
+            return;
+        }
+    }
+    panic!(
+        "the builder never took its ration after the shift: resident={:?}",
+        state.entities.row(slot).villager
+    );
+}
+
 #[test]
 fn bound_village_uses_reachable_food_when_nearest_chest_is_blocked() {
     let (mut state, parents, bread) = stored_food_village(3);
@@ -759,4 +805,379 @@ fn bound_farmer_waits_for_a_certified_job_before_harvesting() {
         food_count(&state, slot, item(&state, "minecraft:carrot")),
         0
     );
+}
+
+/// Spain seed 100 (pin 3068dfb1b857): the certified houses stood 95-130
+/// blocks from the plaza where the residents live and eat, so their empty
+/// beds stayed outside every resident's 48-block spare-bed scan and the
+/// village stopped at 8-10. Two residents homed in an uncertified dwelling by
+/// the founding chest and a certified two-bed house 110 blocks away; with
+/// `near_spare`, a second uncertified dwelling by the plaza as well.
+fn far_house_village(near_spare: bool) -> (TickState, [EntitySlot; 2], [BlockPos; 2]) {
+    use crate::settlements::migration::return_tests::{fixture, house, shelter, town};
+    let mut state = fixture();
+    let settlement = town(&mut state, "plaza", 8, 160);
+    shelter(&mut state, 20);
+    if near_spare {
+        shelter(&mut state, 36);
+    }
+    house(&mut state, settlement, 118);
+    let chest = block(&state, "minecraft:chest", &[]);
+    state.world.set_block(9, 64, 11, chest);
+    let mut slots = vec![ItemStack::EMPTY; 27];
+    slots[0] = ItemStack::new(item(&state, "minecraft:bread"), 6);
+    state.block_entities.insert(
+        (9, 64, 11),
+        crate::tick::BlockEntityState {
+            slots,
+            furnace: None,
+        },
+    );
+    state
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .bootstrap_storage = Some([9, 64, 11]);
+    state.world.fold_overlay();
+    let parents = [8.5, 10.5].map(|x| bound_resident(&mut state, settlement, x));
+    let far = [7, 9].map(|z| BlockPos { x: 118, y: 64, z });
+    (state, parents, far)
+}
+
+/// Runs the village to its first birth and returns the newborn's home.
+fn first_birth_home(state: &mut TickState, parents: [EntitySlot; 2]) -> BlockPos {
+    for _ in 0..8_000 {
+        crate::settlements::migration::return_tests::step(state);
+        if let Some(child) = state.entities.slots().find(|&slot| {
+            state
+                .entities
+                .row(slot)
+                .villager
+                .as_ref()
+                .is_some_and(|v| v.birth_origin.is_some())
+        }) {
+            let home = state.entities.row(child).villager.as_ref().unwrap().home;
+            return home.expect("a newborn is born with its spare bed claimed");
+        }
+    }
+    panic!(
+        "no birth: parents={:?}, chest={:?}",
+        parents.map(|slot| (
+            state.entities.pos(slot),
+            state.entities.row(slot).villager.as_ref().unwrap()
+        )),
+        state.block_entities[&(9, 64, 11)].slots[0]
+    );
+}
+
+fn parent_homes(state: &TickState, parents: [EntitySlot; 2]) -> [BlockPos; 2] {
+    parents.map(|slot| {
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .home
+            .expect("parents keep their homes")
+    })
+}
+
+#[test]
+fn residents_breed_into_a_certified_house_beyond_the_local_bed_scan() {
+    let (mut state, parents, far) = far_house_village(false);
+    let home = first_birth_home(&mut state, parents);
+    assert!(
+        far.contains(&home),
+        "the child's bed is the far house's: {home:?}"
+    );
+    for slot in parents {
+        assert!(
+            distance(state.entities.pos(slot), centre(home)) > 48.0 * 48.0,
+            "the house bed is beyond the local scan"
+        );
+    }
+    assert!(
+        parent_homes(&state, parents)
+            .iter()
+            .all(|parent| parent.x == 20 && *parent != home),
+        "parents sleep in the uncertified dwelling; the child's bed is its own"
+    );
+}
+
+/// Control: the far certified house is a fallback. A nearby roofed bed in an
+/// uncertified dwelling stays the spare bed, as in vanilla.
+#[test]
+fn a_nearby_uncertified_bed_stays_the_spare_bed_over_a_far_certified_house() {
+    let (mut state, parents, far) = far_house_village(true);
+    let home = first_birth_home(&mut state, parents);
+    assert!(
+        !far.contains(&home),
+        "the near dwelling's bed comes first: {home:?}"
+    );
+    assert!(
+        home.x == 20 || home.x == 36,
+        "an uncertified dwelling's bed: {home:?}"
+    );
+    assert!(!parent_homes(&state, parents).contains(&home));
+}
+
+/// Clears the second bed (z = 9) of the `shelter` at `x`.
+fn drop_second_bed(state: &mut TickState, x: i32) {
+    let air = state.registry.states.air;
+    state.world.set_block(x - 1, 64, 9, air);
+    state.world.set_block(x, 64, 9, air);
+    state.world.fold_overlay();
+}
+
+/// A certified one-bed house at `x`. With `walled`, stone fills the two cells
+/// in front of its door, outside the certified bounds, so no route reaches it.
+fn one_bed_house(
+    state: &mut TickState,
+    settlement: crate::settlements::SettlementId,
+    x: i32,
+    walled: bool,
+) -> BlockPos {
+    crate::settlements::migration::return_tests::shelter(state, x);
+    drop_second_bed(state, x);
+    if walled {
+        let stone = state.registry.states.stone;
+        state.world.set_block(x + 4, 64, 8, stone);
+        state.world.set_block(x + 4, 65, 8, stone);
+        state.world.fold_overlay();
+    }
+    crate::settlements::buildings::certify(
+        state,
+        settlement,
+        crate::settlements::buildings::BuildingKind::House,
+        mc_script::ScriptWorldBounds::new([x - 3, 63, 5], [x + 3, 67, 11]).unwrap(),
+    )
+    .expect("a one-bed house certifies");
+    BlockPos { x, y: 64, z: 7 }
+}
+
+fn bound_resident(
+    state: &mut TickState,
+    settlement: crate::settlements::SettlementId,
+    x: f64,
+) -> EntitySlot {
+    let slot = villager(state, [x, 64.0, 8.5]);
+    let id = state.entities.body(slot).id;
+    crate::settlements::bind(state, settlement, id).unwrap();
+    slot
+}
+
+fn home_of(state: &TickState, slot: EntitySlot) -> Option<BlockPos> {
+    state.entities.row(slot).villager.as_ref().unwrap().home
+}
+
+/// Steps the village until every resident in `slots` holds a home bed.
+fn settle_homes(state: &mut TickState, slots: &[EntitySlot]) {
+    for _ in 0..400 {
+        if slots.iter().all(|&slot| home_of(state, slot).is_some()) {
+            return;
+        }
+        crate::settlements::migration::return_tests::step(state);
+    }
+    panic!(
+        "residents never claimed their homes: {:?}",
+        slots
+            .iter()
+            .map(|&slot| home_of(state, slot))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// The far search routes at most two beds per search. Two unreachable nearer
+/// beds must not hide a reachable farther one from every later search.
+#[test]
+fn a_far_spare_bed_search_reaches_past_unreachable_nearer_beds() {
+    use crate::settlements::migration::return_tests::{fixture, shelter, town};
+    let mut state = fixture();
+    let settlement = town(&mut state, "plaza", 8, 160);
+    shelter(&mut state, 20);
+    drop_second_bed(&mut state, 20);
+    let walled = [80, 100].map(|x| one_bed_house(&mut state, settlement, x, true));
+    let open = one_bed_house(&mut state, settlement, 130, false);
+    let slot = bound_resident(&mut state, settlement, 8.5);
+    settle_homes(&mut state, &[slot]);
+    assert_eq!(home_of(&state, slot).map(|bed| bed.x), Some(20));
+    let mut found = Vec::new();
+    for _ in 0..4 {
+        state.tick += 40;
+        begin_brain_tick(&mut state);
+        let mut cache = std::mem::take(&mut state.villager_pois);
+        let mut path = Vec::new();
+        found.push(crate::settlements::allocator::free_bed(
+            &mut state, &mut cache, slot, &mut path,
+        ));
+        state.villager_pois = cache;
+    }
+    for bed in &walled {
+        assert!(
+            distance(state.entities.pos(slot), centre(*bed)) > 48.0 * 48.0,
+            "the walled beds are far candidates"
+        );
+    }
+    assert!(
+        found
+            .iter()
+            .all(|bed| bed.is_none_or(|bed| !walled.contains(&bed))),
+        "a walled bed is never a spare bed: {found:?}"
+    );
+    assert!(
+        found[..3].contains(&Some(open)),
+        "the reachable far bed within three searches: {found:?}"
+    );
+}
+
+/// Review P1 (wt/SpainLand): the search that found the reachable far bed past
+/// two walled nearer ones starts a courtship. The birth's own search at its
+/// end must reach that bed again instead of starting over at the walled beds,
+/// which parted the couple courtship after courtship with no birth. The
+/// village stands in a walled strip, so a failed far route is short and
+/// leaves the tick's path-node budget: the birth search's answer decides.
+#[test]
+fn a_couple_breeds_into_the_far_bed_past_two_walled_ones() {
+    use crate::settlements::migration::return_tests::{fixture, shelter, town};
+    let mut state = fixture();
+    let settlement = town(&mut state, "plaza", 8, 160);
+    shelter(&mut state, 20);
+    let walled = [80, 100].map(|x| one_bed_house(&mut state, settlement, x, true));
+    let open = one_bed_house(&mut state, settlement, 130, false);
+    let stone = state.registry.states.stone;
+    for y in 64..=65 {
+        for x in 2..=140 {
+            state.world.set_block(x, y, 4, stone);
+            state.world.set_block(x, y, 14, stone);
+        }
+        for z in 4..=14 {
+            state.world.set_block(2, y, z, stone);
+            state.world.set_block(140, y, z, stone);
+        }
+    }
+    let chest = block(&state, "minecraft:chest", &[]);
+    state.world.set_block(9, 64, 11, chest);
+    let mut slots = vec![ItemStack::EMPTY; 27];
+    slots[0] = ItemStack::new(item(&state, "minecraft:bread"), 6);
+    state.block_entities.insert(
+        (9, 64, 11),
+        crate::tick::BlockEntityState {
+            slots,
+            furnace: None,
+        },
+    );
+    state
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .bootstrap_storage = Some([9, 64, 11]);
+    state.world.fold_overlay();
+    let parents = [8.5, 10.5].map(|x| bound_resident(&mut state, settlement, x));
+    settle_homes(&mut state, &parents);
+    // A courtship lasts about 300 ticks: the first ones must end in a birth,
+    // not in a loop the couple leaves only by drifting near another house.
+    let mut child = None;
+    for _ in 0..1_500 {
+        crate::settlements::migration::return_tests::step(&mut state);
+        child = state.entities.slots().find(|&slot| {
+            state
+                .entities
+                .row(slot)
+                .villager
+                .as_ref()
+                .is_some_and(|v| v.birth_origin.is_some())
+        });
+        if child.is_some() {
+            break;
+        }
+    }
+    let child = child.expect("the first courtships end in a birth");
+    let home = home_of(&state, child);
+    assert_eq!(home, Some(open), "the child's bed is the reachable far one");
+    assert!(home.is_none_or(|home| !walled.contains(&home)));
+}
+
+/// Two couples court for the one spare bed. The couple that finds it taken
+/// when its courtship ends keeps its food (docs/settlements/breeding.md).
+#[test]
+fn a_couple_that_loses_the_spare_bed_keeps_its_food() {
+    use crate::settlements::migration::return_tests::{fixture, shelter, step, town};
+    let mut state = fixture();
+    let settlement = town(&mut state, "plaza", 8, 160);
+    shelter(&mut state, 20);
+    shelter(&mut state, 36);
+    let spare = one_bed_house(&mut state, settlement, 118, false);
+    let residents = [8.5, 10.5, 12.5, 14.5].map(|x| bound_resident(&mut state, settlement, x));
+    settle_homes(&mut state, &residents);
+    let bread = item(&state, "minecraft:bread");
+    for slot in residents {
+        state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .inventory[0] = Some(ItemStack::new(bread, 3));
+    }
+    let courting = |state: &TickState, slot: EntitySlot| {
+        state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .partner
+            .is_some()
+    };
+    let mut overlap = false;
+    let mut child = None;
+    for _ in 0..4_000 {
+        step(&mut state);
+        overlap |= residents.iter().all(|&slot| courting(&state, slot));
+        child = state.entities.slots().find(|&slot| {
+            state
+                .entities
+                .row(slot)
+                .villager
+                .as_ref()
+                .is_some_and(|v| v.birth_origin.is_some())
+        });
+        if child.is_some() && !residents.iter().any(|&slot| courting(&state, slot)) {
+            break;
+        }
+    }
+    let child = child.expect("one couple's child");
+    assert!(overlap, "both couples courted for the one bed at once");
+    assert_eq!(home_of(&state, child), Some(spare));
+    assert_eq!(population(&state), 5, "the bed takes one child");
+    let parents = state
+        .entities
+        .row(child)
+        .villager
+        .as_ref()
+        .unwrap()
+        .birth_origin
+        .clone()
+        .unwrap()
+        .parents;
+    for slot in residents {
+        let uuid = state.entities.row(slot).uuid.to_string();
+        let kept = food_count(&state, slot, bread);
+        if parents.contains(&uuid) {
+            assert_eq!(kept, 0, "the parents ate their courtship bread");
+        } else {
+            assert_eq!(kept, 3, "the couple that lost the bed keeps its bread");
+            assert_eq!(
+                state
+                    .entities
+                    .row(slot)
+                    .villager
+                    .as_ref()
+                    .unwrap()
+                    .food_level,
+                0
+            );
+        }
+    }
 }

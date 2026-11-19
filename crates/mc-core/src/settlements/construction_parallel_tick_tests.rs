@@ -10,7 +10,7 @@
 //! `retry_preparation`, and the native checkpoint/WAL readers. Fixtures only
 //! prepare state a running world would already hold (a stocked chest, residents,
 //! a bound builder) and stand builders where the brain would have walked them.
-use super::tests::{bind_project, complete, fixture, fund, open_plan};
+use super::tests::{bind_project, complete, fixture, fund, open_plan, request_started};
 use super::*;
 use crate::boundary::{BlockPos, ChangeSet};
 use crate::entities::EntitySlot;
@@ -592,7 +592,7 @@ fn a_lantern_is_refused_by_the_joint_proof_not_by_its_own_bill() {
     let (mut state, id, worker) = fixture();
     open_plan(&mut state);
     fund(&mut state, "storage", 1);
-    request_build(&mut state, id, "storage").expect("funded storage request");
+    request_started(&mut state, id, "storage");
     complete(&mut state, id, worker);
     state.entities.set_pos(worker, [1.5, 201.0, 2.5]);
     state
@@ -655,13 +655,8 @@ fn a_lantern_is_refused_by_the_joint_proof_not_by_its_own_bill() {
     // planner admits on a legal lot next to the storage.
     clear_chest(&mut state);
     stock(&mut state, "house", 1, 1);
-    assert!(
-        matches!(
-            request_build(&mut state, id, "house").expect("funded house"),
-            OrderOutcome::Started
-        ),
-        "the rival house starts"
-    );
+    // The rival house starts.
+    request_started(&mut state, id, "house");
     let house = handle_of(&state, id, 0);
     // Only the lamp's own bill is left, in the same wood species the vanishing
     // stock allowed, so the joint proof is the only reason left to refuse it.
@@ -841,13 +836,8 @@ fn a_missing_oak_obligation_is_not_replaced_by_birch() {
     state.settlements.get_mut(id).expect("settlement").owner = Some("owner".into());
     // The storage project is admitted in oak and keeps that obligation.
     stock_species(&mut state, "storage", 1, 1, "oak");
-    assert!(
-        matches!(
-            request_build(&mut state, id, "storage").expect("funded storage"),
-            OrderOutcome::Started
-        ),
-        "the first project starts in oak"
-    );
+    // The first project starts in oak.
+    request_started(&mut state, id, "storage");
     let head = handle_of(&state, id, 0);
     let oak_obligation: Vec<String> = project_bill(&state, id, &head)
         .expect("a running bill")
@@ -906,22 +896,14 @@ fn a_kept_oak_obligation_does_not_hide_the_candidates_birch() {
     state.settlements.get_mut(id).expect("settlement").owner = Some("owner".into());
     // One full storage bill in oak (the joint) plus one house bill in birch.
     stock_species(&mut state, "storage", 1, 1, "oak");
-    assert!(
-        matches!(
-            request_build(&mut state, id, "storage").expect("funded storage"),
-            OrderOutcome::Started
-        ),
-        "the oak project starts"
-    );
+    // The oak project starts.
+    request_started(&mut state, id, "storage");
     // The candidate's own bill has headroom; the oak side is exactly the joint,
     // so an oak-variant admission cannot fit.
     add_species_stock(&mut state, "house", 1, 2, "birch");
     let head = handle_of(&state, id, 0);
-    let queued = request_build(&mut state, id, "house").expect("the second request is answered");
-    assert!(
-        matches!(queued, OrderOutcome::Started),
-        "the house is admitted on birch beside the oak project: {queued:?}"
-    );
+    // The house is admitted on birch beside the oak project.
+    request_started(&mut state, id, "house");
     assert_eq!(
         access::projects_of(&state.settlements, id).count(),
         2,
@@ -979,7 +961,7 @@ fn a_full_queue_retry_refusal_reaches_the_owner_repeatedly() {
     );
     // One funded order starts; the rest of the queue fills behind it.
     stock(&mut state, "house", 1, 1);
-    request_build(&mut state, id, "house").expect("funded house");
+    request_started(&mut state, id, "house");
     let handle = handle_of(&state, id, 0);
     bind_project(&mut state, id, &handle, builder);
     clear_chest(&mut state);
@@ -1051,13 +1033,8 @@ fn a_started_order_keeps_its_place_across_a_native_reopen() {
     open_plan(&mut state);
     state.settlements.get_mut(id).expect("settlement").owner = Some("owner".into());
     stock(&mut state, "house", 1, 1);
-    assert!(
-        matches!(
-            request_build(&mut state, id, "house").expect("head request"),
-            OrderOutcome::Started
-        ),
-        "the funded head starts at once"
-    );
+    // The funded head starts.
+    request_started(&mut state, id, "house");
     let handle = handle_of(&state, id, 0);
     let project = access::projects_of(&state.settlements, id)
         .next()
@@ -1119,7 +1096,7 @@ fn a_full_queue_refuses_the_retry_before_anything_changes() {
     open_plan(&mut state);
     state.settlements.get_mut(id).expect("settlement").owner = Some("owner".into());
     stock(&mut state, "house", 1, 1);
-    request_build(&mut state, id, "house").expect("funded house");
+    request_started(&mut state, id, "house");
     let handle = handle_of(&state, id, 0);
     clear_chest(&mut state);
     for _ in 0..MAX_ORDERS {
@@ -1152,7 +1129,7 @@ fn each_new_required_key_is_fenced_in_a_checkpoint_row() {
     open_plan(&mut state);
     state.settlements.get_mut(id).expect("settlement").owner = Some("owner".into());
     stock(&mut state, "house", 1, 1);
-    request_build(&mut state, id, "house").expect("funded house");
+    request_started(&mut state, id, "house");
     let handle = handle_of(&state, id, 0);
     let builder = fixture_builder(&state, id);
     bind_project(&mut state, id, &handle, builder);
@@ -1196,7 +1173,7 @@ fn each_new_required_key_is_fenced_in_a_wal_tail() {
     open_plan(&mut state);
     state.settlements.get_mut(id).expect("settlement").owner = Some("owner".into());
     stock(&mut state, "house", 1, 1);
-    request_build(&mut state, id, "house").expect("funded house");
+    request_started(&mut state, id, "house");
     let handle = handle_of(&state, id, 0);
     let builder = fixture_builder(&state, id);
     bind_project(&mut state, id, &handle, builder);

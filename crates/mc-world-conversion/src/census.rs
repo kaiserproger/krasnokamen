@@ -14,6 +14,7 @@ use mc_core::journal::{CheckpointManifest, Replay};
 use mc_core::native_checkpoint::{
     dimension_id, generation_records, hydrate_visited_entity, native_identity, validate_manifest,
 };
+use mc_core::settlements::households::HouseholdOrigin;
 use mc_core::settlements::persistence::{
     Row, checkpoint_sequence, parse_row_key, transit_census_rows,
 };
@@ -53,6 +54,17 @@ pub struct SettlementCensus {
     pub members: u64,
     /// Members that also carry a household identity.
     pub household_members: u64,
+    /// Each persisted household of the row, keyed by id.
+    pub household_details: BTreeMap<String, HouseholdCensus>,
+}
+
+/// One persisted household with its stored members; adults have `Age >= 0`,
+/// read as villager persistence reads it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HouseholdCensus {
+    pub origin: HouseholdOrigin,
+    pub members: u64,
+    pub adults: u64,
 }
 
 /// Durable operator evidence; only a fully completed census reports PASS.
@@ -197,6 +209,19 @@ fn census(
                 households: row.value.households.len() as u64,
                 members: 0,
                 household_members: 0,
+                household_details: row
+                    .value
+                    .households
+                    .iter()
+                    .map(|(id, household)| {
+                        let detail = HouseholdCensus {
+                            origin: household.origin,
+                            members: 0,
+                            adults: 0,
+                        };
+                        (id.clone(), detail)
+                    })
+                    .collect(),
             },
         );
     }
@@ -305,12 +330,20 @@ fn census(
                     && let Some(Tag::Long(id)) = mc_data::item_nbt::field(runtime, "settlement")
                 {
                     members_total += 1;
-                    let has_household = mc_data::item_nbt::field(runtime, "household").is_some();
+                    let household = mc_data::item_nbt::field(runtime, "household");
+                    let has_household = household.is_some();
                     household_members_total += u64::from(has_household);
                     match settlements.get_mut(&(*id as u64)) {
                         Some(settlement) => {
                             settlement.members += 1;
                             settlement.household_members += u64::from(has_household);
+                            if let Some(Tag::String(household)) = household
+                                && let Some(detail) =
+                                    settlement.household_details.get_mut(household)
+                            {
+                                detail.members += 1;
+                                detail.adults += u64::from(adult(fields));
+                            }
                         }
                         None => orphan_members += 1,
                     }
@@ -391,6 +424,17 @@ fn census(
     receipt.settlement_details = settlements.into_values().collect();
     receipt.status = "PASS".into();
     Ok(())
+}
+
+/// Adult as villager persistence reads it: `Age >= 0`; without `Age`, a
+/// baby only when `IsBaby` is set.
+fn adult(fields: &[(String, Tag)]) -> bool {
+    match mc_data::item_nbt::field(fields, "Age") {
+        Some(Tag::Int(age)) => *age >= 0,
+        _ => {
+            !matches!(mc_data::item_nbt::field(fields, "IsBaby"), Some(Tag::Byte(baby)) if *baby != 0)
+        }
+    }
 }
 
 /// Vanilla `UUID` int-array of one entity compound.

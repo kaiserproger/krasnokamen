@@ -154,6 +154,20 @@ pub(super) fn observe(state: &mut TickState, id: SettlementId, blueprint: &str, 
     }
 }
 
+/// Queue reason of a funded new-building order whose bounded site sweep is
+/// still running: later planning passes continue it.
+pub(super) const WAITING_FOR_SITE: &str = "waiting for a site";
+
+/// Admission refusal of a pass that found no site: a sweep that is still
+/// running waits for a site, a finished one has no free lot.
+pub(super) fn miss(running: bool) -> String {
+    if running {
+        WAITING_FOR_SITE.into()
+    } else {
+        "No free loaded construction site is available within the material budget.".into()
+    }
+}
+
 /// Solid work the bounded terrain window would rewrite on this lot: cells the
 /// plan fills below the authored floor plus cells it excavates inside the
 /// authored volume. A fluid fill cell is a fill cell and belongs to exactly one
@@ -211,6 +225,12 @@ impl Sweeps {
     pub(super) fn waiting(&self) -> bool {
         self.live.values().any(|sweep| sweep.best.is_some())
     }
+
+    /// Candidates this blueprint's live sweep has examined (test observer).
+    #[cfg(test)]
+    pub(super) fn examined(&self, blueprint: &str) -> Option<u32> {
+        self.live.get(blueprint).map(|sweep| sweep.next)
+    }
 }
 
 fn sweep_stale(id: &str, sweep: &Sweep, blueprint: &str, frontages: u32, topology: u64) -> bool {
@@ -220,7 +240,7 @@ fn sweep_stale(id: &str, sweep: &Sweep, blueprint: &str, frontages: u32, topolog
 }
 
 /// Identity of the ordered frontage list a sweep walked.
-fn topology(fronts: &[([i32; 3], [i32; 2])]) -> u64 {
+pub(super) fn topology(fronts: &[([i32; 3], [i32; 2])]) -> u64 {
     let mut hash = 0xcbf2_9ce4_8422_2325_u64;
     for (at, normal) in fronts {
         for byte in at
@@ -270,7 +290,7 @@ pub(super) fn materialize(
     record: &SettlementRecord,
     winner: Winner<'_>,
     floors: &BTreeSet<[i32; 2]>,
-    clearance: &mut super::super::forestry::Clearance,
+    survey: &mut Survey,
     images: &[super::super::inventory::Image],
     report: &mut Report,
 ) -> Option<super::FundedSite> {
@@ -283,7 +303,7 @@ pub(super) fn materialize(
         winner.origin,
         size,
         record.founding.as_ref(),
-        clearance,
+        survey,
         Some(floors),
     ) {
         report.reject(reason, winner.origin);
@@ -301,7 +321,9 @@ pub(super) fn materialize(
         builder: None,
         order_seq: None,
     };
-    let Ok((bounds, mut cells)) = planned_cells(state, &project, winner.species, clearance) else {
+    let Ok((bounds, mut cells)) =
+        planned_cells(state, &project, winner.species, &mut survey.clearance)
+    else {
         report.reject(Reason::Preparation, winner.origin);
         return None;
     };
@@ -334,6 +356,18 @@ pub(super) fn floor_columns(blueprint: &blueprints::Blueprint, rotation: u8) -> 
         .collect()
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Candidate lots examined on this thread (cost observer).
+    pub(super) static EXAMINED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// Count one examined candidate lot on this thread (tests' cost observer).
+pub(super) fn examined() {
+    #[cfg(test)]
+    EXAMINED.with(|count| count.set(count.get() + 1));
+}
+
 /// Examine up to `budget` further candidates of this blueprint's sweep. An
 /// incomplete sweep admits nothing; a completed one returns its cheapest lot
 /// and forgets its scratch. Equal costs go to the lot nearest the anchor.
@@ -344,7 +378,7 @@ pub(super) fn advance(
     network: &mut layout::Network<'_>,
     blueprint: &blueprints::Blueprint,
     floors: &[BTreeSet<[i32; 2]>; 4],
-    clearance: &mut super::super::forestry::Clearance,
+    survey: &mut Survey,
     sweeps: &mut Sweeps,
     start: u32,
     budget: &mut u32,
@@ -371,6 +405,7 @@ pub(super) fn advance(
         sweep.next += 1;
         *budget -= 1;
         report.examined += 1;
+        examined();
         let (front, normal) = fronts[index as usize];
         let Some(lot) = network.lot(blueprint, front, normal) else {
             // The lot's own door or verge column holds fluid: the builder
@@ -391,7 +426,7 @@ pub(super) fn advance(
             lot.origin,
             size,
             record.founding.as_ref(),
-            clearance,
+            survey,
             Some(&floors[usize::from(rotation) % 4]),
         ) {
             Err(reason) => report.reject(reason, lot.origin),
@@ -431,7 +466,7 @@ pub(super) fn advance(
         return Advance::Empty;
     };
     // The world may have moved since that candidate was ranked: re-check it
-    // now and restart this sweep when its cost changed. The pass's clearance
+    // now and restart this sweep when its cost changed. The pass's survey
     // already describes this world, so a registered root is proved once.
     let size = blueprint.footprint(Rotation::from_quarter_turns(rotation));
     match check(
@@ -440,7 +475,7 @@ pub(super) fn advance(
         origin,
         size,
         record.founding.as_ref(),
-        clearance,
+        survey,
         Some(&floors[usize::from(rotation) % 4]),
     ) {
         Ok(cost) if cost == stored => Advance::Cheapest(origin, rotation),
@@ -478,8 +513,9 @@ fn tree_refusal(state: &TickState, at: [i32; 3], property: bool) -> Reason {
     }
 }
 
-/// Deepest foundation this slice pays for under one column. A deeper column
-/// would be a retaining wall the settlement may not level (committee ruling).
+/// Deepest foundation a column pays for unless every cell of its fill lies
+/// inside the territory; a deeper column would be a retaining wall (committee
+/// ruling).
 const MAX_FILL_DEPTH: i32 = 4;
 
 /// One-cell shell around the work volume: a fluid there would flow into a cut.
@@ -509,6 +545,18 @@ fn shell_fluid(state: &TickState, volume: ScriptWorldBounds) -> bool {
     false
 }
 
+/// One site pass's scratch, shared by every candidate it checks: what the
+/// pass derived from the world and needs again for its next lot. A pass runs
+/// inside one tick for one settlement; the next pass starts a new survey,
+/// since the world and the territory move between passes.
+#[derive(Default)]
+pub(super) struct Survey {
+    /// Planted-tree proofs: a registered root is proved once per pass.
+    pub(super) clearance: super::super::forestry::Clearance,
+    /// The village walk every lot that cuts a path must keep connected.
+    walk: super::relayout::Walk,
+}
+
 /// `floors` are the footprint columns of this candidate's own authored floor.
 pub(super) fn check(
     state: &TickState,
@@ -516,7 +564,7 @@ pub(super) fn check(
     origin: [i32; 3],
     size: [u8; 3],
     expedition: Option<&FoundingExpedition>,
-    clearance: &mut super::super::forestry::Clearance,
+    survey: &mut Survey,
     floors: Option<&BTreeSet<[i32; 2]>>,
 ) -> Result<Cost, Reason> {
     if founding::site_reserved(state, record.id, origin, size) {
@@ -526,6 +574,7 @@ pub(super) fn check(
     // cell with `record.contains`, its planner reads no player history or
     // attribution. A founding site lies outside the parent's territory and
     // keeps every protection.
+    let Survey { clearance, walk } = survey;
     clearance.within(record);
     let max: [i32; 3] = std::array::from_fn(|axis| origin[axis] + i32::from(size[axis]) - 1);
     let lot = ScriptWorldBounds::new(origin, max).expect("blueprint bounds");
@@ -553,7 +602,7 @@ pub(super) fn check(
     }
     // Village paths and farmland the lot covers: a path that carries the road
     // network is re-laid around the lot, so those cells are not refusals.
-    let relayout = super::relayout::plan(state, record, lot)?;
+    let relayout = super::relayout::plan(state, record, lot, walk)?;
     for x in origin[0]..=max[0] {
         for z in origin[2]..=max[2] {
             if distance_sq([x, max[1], z], record.anchor) > i64::from(record.radius).pow(2)
@@ -631,8 +680,14 @@ pub(super) fn check(
                 return Err(Reason::ProtectedObstruction);
             }
             // A single fill column deeper than this is a retaining wall, not a
-            // foundation: the lot is refused instead of levelled.
-            if floor - height > MAX_FILL_DEPTH {
+            // foundation, unless every one of its cells is inside the territory
+            // (the sphere is convex, so its lowest fill cell and the floor decide):
+            // there the builder fills it (owner 2026-11-17). The support was found
+            // within `SITE_BAND` of the floor, which bounds the depth to what a
+            // builder at the lot's perimeter reaches.
+            if floor - height > MAX_FILL_DEPTH
+                && !(record.contains([x, height + 1, z]) && record.contains([x, floor, z]))
+            {
                 return Err(Reason::HeightVariance);
             }
             // Fill: real blocks between the support and the floor. A fluid cell

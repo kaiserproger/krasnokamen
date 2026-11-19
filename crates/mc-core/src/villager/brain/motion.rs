@@ -383,14 +383,7 @@ pub(super) fn move_to(
         if (new_target || changed || (due && v.navigation_path.is_empty()) || stalled)
             && cache.spend_path(state, Consumer::Brain)
         {
-            let from = at(pos);
-            let horizontal = from
-                .x
-                .abs_diff(target.x)
-                .max(from.z.abs_diff(target.z))
-                .saturating_add(8)
-                .clamp(48, 512);
-            let vertical = from.y.abs_diff(target.y).saturating_add(4).clamp(16, 512);
+            let (horizontal, vertical) = allocator::route_bounds(at(pos), target);
             let mut seek_path = std::mem::take(&mut cache.candidate_path);
             let mut ctx = allocator::RouteCtx {
                 world: &state.world,
@@ -595,7 +588,7 @@ const WATER_VERTICAL_DRAG: f64 = 0.8;
 /// Vertical arrival band of a committed waypoint: a body that can stand on its
 /// waypoint descends to it, so a lower waypoint stays committed until the body
 /// actually arrives.
-const WAYPOINT_VERTICAL_REACH: f64 = 0.6;
+pub(crate) const WAYPOINT_VERTICAL_REACH: f64 = 0.6;
 
 /// A body overlapping fluid floats and cannot descend to the bed under a water
 /// waypoint: the route gives a one-block channel its bed top as the standing

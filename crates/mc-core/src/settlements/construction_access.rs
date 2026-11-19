@@ -190,6 +190,17 @@ pub(crate) fn bound_builder(settlements: &Registry, builder: uuid::Uuid) -> bool
     })
 }
 
+/// The active project the next free resident builds: an owner's order before
+/// autonomous work, otherwise the first project with no bound builder. A paid
+/// order otherwise waited behind every autonomous site opened before it
+/// (Spain seed 100: the church never got one of the three builders).
+pub(crate) fn unbound_project(settlements: &Registry, id: SettlementId) -> Option<String> {
+    projects_of(settlements, id)
+        .filter(|project| project.builder.is_none())
+        .min_by_key(|project| !project.ordered)
+        .map(|project| project.structure.clone())
+}
+
 /// Heap held by the construction fields, for `SettlementRecord::heap_estimate`.
 pub(crate) fn record_heap_bytes(record: &SettlementRecord) -> usize {
     record.projects.capacity() * std::mem::size_of::<Project>()

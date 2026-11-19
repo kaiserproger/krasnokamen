@@ -1,5 +1,6 @@
 use super::tests::{
-    attempt, bind_project, complete, fixture, fund, open_plan, plan_until_project, start,
+    attempt, bind_project, complete, fixture, fund, open_plan, plan_until_project, request_started,
+    start,
 };
 use super::*;
 use crate::settlements::allocator::tests::block;
@@ -149,10 +150,7 @@ fn a_pending_cultural_order_starts_before_a_later_autonomous_house() {
 fn a_real_spare_roofed_bed_keeps_the_cultural_order_reachable() {
     let (mut state, id) = housing_fixture(true);
     stock_buildings(&mut state, &[("spanish_church", 1)]);
-    assert_eq!(
-        request_build(&mut state, id, "spanish_church").unwrap(),
-        OrderOutcome::Started
-    );
+    request_started(&mut state, id, "spanish_church");
     assert_eq!(
         state.settlements.get(id).unwrap().projects[0].blueprint,
         "spanish_church"
@@ -218,10 +216,7 @@ fn a_house_without_a_site_does_not_hide_a_funded_autonomous_farm() {
 #[test]
 fn a_house_without_a_site_does_not_hold_a_direct_farm_order() {
     let (mut state, id) = house_without_site();
-    assert_eq!(
-        request_build(&mut state, id, "farm").unwrap(),
-        OrderOutcome::Started
-    );
+    request_started(&mut state, id, "farm");
 }
 
 #[test]
@@ -234,7 +229,11 @@ fn a_house_without_a_site_does_not_hold_a_pending_farm_order() {
         building: None,
     }];
     for _ in 0..256 {
-        assert!(plan_order(&mut state, id));
+        assert!(plan_order(
+            &mut state,
+            id,
+            &mut site_turn::SiteBudget::default()
+        ));
         if !state.settlements.get(id).unwrap().projects.is_empty() {
             break;
         }
@@ -619,10 +618,36 @@ fn planted_sapling_before_admission(corridor: bool) {
         .planted_trees
         .insert(root);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
-    assert!(
-        planned_cells(&state, &project, "oak", &mut Default::default()).is_err(),
-        "future planted crown must exclude this site/corridor before it grows"
-    );
+    let planned = planned_cells(&state, &project, "oak", &mut Default::default());
+    if corridor {
+        // Owner D7: a planted sapling on the walking corridor is felled like a
+        // tree on the lot, as the first sapling cell of the preparation.
+        let (_, cells) = planned.expect("the corridor sapling is clearance work");
+        assert!(cells.iter().any(|cell| {
+            cell.at == root
+                && cell.portion
+                    == crate::plugin_structures::settlement_builds::PortionKind::Saplings
+        }));
+    } else {
+        // The sapling beside the lot is no corridor work; its future crown over
+        // the lot is the site check's refusal.
+        let size = blueprints::get(&state.registry, &project.blueprint)
+            .unwrap()
+            .footprint(Rotation::from_quarter_turns(project.rotation));
+        assert_eq!(
+            site_refusals::check(
+                &state,
+                state.settlements.get(id).unwrap(),
+                project.origin,
+                size,
+                None,
+                &mut Default::default(),
+                None,
+            ),
+            Err(site_refusals::Reason::PlantingProvenance),
+            "future planted crown must exclude this site before it grows"
+        );
+    }
     assert_eq!(
         state.world.block_at(root[0], root[1], root[2]),
         Some(sapling),
@@ -656,7 +681,7 @@ fn a_sapling_planted_first_keeps_its_future_crown_out_of_the_house_site() {
 }
 
 #[test]
-fn a_sapling_planted_first_keeps_its_future_crown_out_of_the_access_corridor() {
+fn a_sapling_planted_first_on_the_access_corridor_is_felled_with_the_preparation() {
     planted_sapling_before_admission(true);
 }
 
@@ -890,7 +915,7 @@ fn proven_lot_is_felled_and_built(sapling: bool, native: bool) {
     fund(&mut state, "spanish_fortress", 1);
     let stock = state.block_entities[&(1, 201, 1)].slots.clone();
     let original = state.world.block_at(root[0], root[1], root[2]);
-    request_build(&mut state, id, "spanish_fortress").unwrap();
+    request_started(&mut state, id, "spanish_fortress");
     let project = state.settlements.get(id).unwrap().projects[0].clone();
     assert_eq!(
         (project.origin, project.rotation),
@@ -1351,7 +1376,7 @@ fn an_empty_unfinished_sweep_does_not_hold_the_slot() {
             if layout::cell(anchor, x, z) == layout::Cell::Lot
                 && !((0..17).contains(&x) && (0..14).contains(&z))
             {
-                for y in 201..=216 {
+                for y in 201..=250 {
                     state.world.set_block(x, y, z, state.registry.states.stone);
                 }
             }

@@ -43,6 +43,19 @@ pub(crate) fn resident(state: &mut TickState, town: SettlementId, x: f64) -> Ent
 }
 
 pub(crate) fn house(state: &mut TickState, town: SettlementId, x: i32) {
+    shelter(state, x);
+    buildings::certify(
+        state,
+        town,
+        buildings::BuildingKind::House,
+        mc_script::ScriptWorldBounds::new([x - 3, 63, 5], [x + 3, 67, 11]).unwrap(),
+    )
+    .unwrap();
+}
+
+/// The house's blocks and two beds without a House certificate, as a
+/// generated village house that fails certification stands.
+pub(crate) fn shelter(state: &mut TickState, x: i32) {
     let stone = state.registry.states.stone;
     for a in x - 3..=x + 3 {
         for z in 5..=11 {
@@ -81,13 +94,6 @@ pub(crate) fn house(state: &mut TickState, town: SettlementId, x: i32) {
         state.world.set_block(x, 64, z, head);
     }
     state.world.fold_overlay();
-    buildings::certify(
-        state,
-        town,
-        buildings::BuildingKind::House,
-        mc_script::ScriptWorldBounds::new([x - 3, 63, 5], [x + 3, 67, 11]).unwrap(),
-    )
-    .unwrap();
 }
 
 pub(crate) fn step(state: &mut TickState) {

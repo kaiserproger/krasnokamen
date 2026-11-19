@@ -122,7 +122,7 @@ fn an_upgrade_clear_cell_credits_a_foreign_blocks_drop_exactly_once() {
 fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
     let (mut state, id, builder, _, root, _) = crate::settlements::forestry::tests::forest();
     crate::settlements::construction::tests::fund(&mut state, "storage", 1);
-    crate::settlements::construction::request_build(&mut state, id, "storage").unwrap();
+    crate::settlements::construction::tests::request_started(&mut state, id, "storage");
     let handle = state.settlements.get(id).unwrap().projects[0]
         .structure
         .clone();

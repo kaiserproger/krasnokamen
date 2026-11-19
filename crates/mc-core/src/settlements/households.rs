@@ -579,9 +579,10 @@ pub(crate) fn relocate(
     join(state, destination, departed)
 }
 
-/// Identity compatibility only. The native courtship branch must secure an
-/// actual free bed with baby clearance before it consumes food or spawns.
-/// Household membership has no authored population limit.
+/// Identity compatibility, plus the reservations a household split would
+/// break. The native courtship branch must secure an actual free bed with baby
+/// clearance before it consumes food or spawns. Household membership has no
+/// authored population limit.
 pub(crate) fn can_breed(state: &TickState, parents: [EntityId; 2]) -> bool {
     let Some(a) = state
         .entities
@@ -608,9 +609,48 @@ pub(crate) fn can_breed(state: &TickState, parents: [EntityId; 2]) -> bool {
     };
     match (a.household.as_deref(), b.household.as_deref()) {
         (Some(a), Some(b)) if a != b => false,
-        (Some(id), _) | (_, Some(id)) => record.households.contains_key(id),
+        (Some(id), _) | (_, Some(id)) => {
+            record.households.contains_key(id)
+                && split_member(state, parents).is_none_or(|(_, household)| {
+                    // Moving a member out of a household that an expedition or
+                    // a migration walk holds refuses before any mutation.
+                    record
+                        .founding
+                        .as_ref()
+                        .is_none_or(|founding| founding.household != household)
+                        && parents.iter().all(|&parent| {
+                            state.entities.slot_of(parent).is_some_and(|slot| {
+                                super::migration::target(state, state.entities.row(slot).uuid)
+                                    .is_none()
+                            })
+                        })
+                })
+        }
         (None, None) => true,
     }
+}
+
+/// Household formation by birth (D44). A household-less adult who has a child
+/// with a member of a household of three or more does not grow that household:
+/// the member moves out and the two parents form a new `Split` household with
+/// the child. Otherwise every co-parent joined the first family (Spain seed
+/// 100: 34 of 36 births into household `1-1`) and daughter founding never had
+/// the whole two-or-three-member household it admits. Returns that member and
+/// its household.
+fn split_member(state: &TickState, parents: [EntityId; 2]) -> Option<(EntityId, &str)> {
+    let household = |entity| {
+        state
+            .entities
+            .slot_of(entity)
+            .and_then(|slot| state.entities.row(slot).villager.as_ref())
+            .map(|v| v.household.as_deref())
+    };
+    let (member, household) = match (household(parents[0])?, household(parents[1])?) {
+        (Some(household), None) => (parents[0], household),
+        (None, Some(household)) => (parents[1], household),
+        _ => return None,
+    };
+    (state.settlements.household_size(household) >= 3).then_some((member, household))
 }
 
 /// The sole caller is the synchronous brain birth branch, immediately after
@@ -619,10 +659,23 @@ pub(crate) fn can_breed(state: &TickState, parents: [EntityId; 2]) -> bool {
 pub(crate) fn inherit_birth(state: &mut TickState, child: EntityId, parents: [EntityId; 2]) {
     let first = state.entities.slot_of(parents[0]).expect("birth parent");
     let second = state.entities.slot_of(parents[1]).expect("birth parent");
-    let a = state.entities.row(first).villager.as_ref().unwrap();
-    let Some(settlement) = a.settlement else {
+    let Some(settlement) = state
+        .entities
+        .row(first)
+        .villager
+        .as_ref()
+        .unwrap()
+        .settlement
+    else {
         return;
     };
+    // A split leaves both parents household-less, so they form their own
+    // household below exactly like a first birth.
+    let split = split_member(state, parents).map(|(member, _)| member);
+    if let Some(member) = split {
+        detach(state, member);
+    }
+    let a = state.entities.row(first).villager.as_ref().unwrap();
     let household = a.household.clone().or_else(|| {
         state
             .entities
@@ -649,8 +702,12 @@ pub(crate) fn inherit_birth(state: &mut TickState, child: EntityId, parents: [En
         1
     };
     let household = household.unwrap_or_else(|| {
-        form(state, settlement, &parents, HouseholdOrigin::Adoption)
-            .expect("admitted birth household")
+        let origin = if split.is_some() {
+            HouseholdOrigin::Split
+        } else {
+            HouseholdOrigin::Adoption
+        };
+        form(state, settlement, &parents, origin).expect("admitted birth household")
     });
     let size = state.settlements.household_size(&household) + added;
     for entity in parents.into_iter().chain([child]) {
@@ -661,7 +718,9 @@ pub(crate) fn inherit_birth(state: &mut TickState, child: EntityId, parents: [En
     }
     let record = state.settlements.get_mut(settlement).unwrap();
     record.revision = record.revision.saturating_add(1);
-    record.households.get_mut(&household).unwrap().revision += 1;
+    let joined = record.households.get_mut(&household).unwrap();
+    joined.revision += 1;
+    let origin = joined.origin;
     super::refresh_counts(state, parents.into_iter().chain([child]));
     state.settlements.set_household_size(&household, size);
     let child_uuid = state
@@ -669,7 +728,7 @@ pub(crate) fn inherit_birth(state: &mut TickState, child: EntityId, parents: [En
         .row(state.entities.slot_of(child).expect("birth child"))
         .uuid;
     tracing::info!(target: "settlement_audit", child = %child_uuid, settlement = settlement.0,
-        household = %household, tick = state.tick, "settlement_birth");
+        household = %household, tick = state.tick, origin = %origin.as_str(), "settlement_birth");
 }
 
 #[cfg(test)]
