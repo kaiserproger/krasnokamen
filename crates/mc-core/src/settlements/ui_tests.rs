@@ -822,7 +822,6 @@ fn finished_workshop_house_certifies_with_its_inclusive_bounds() {
 /// inclusive bounds, so a player who stands in a corner block of a finished
 /// house — exactly what the tooltip asks — marks the air layer above the floor.
 #[test]
-#[ignore = "known red: CERTIFY-CORNER-MARKS-USE-FEET-INSIDE-WALLS; un-ignore with the fix"]
 fn corner_marks_taken_inside_a_finished_house_certify_it() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
@@ -834,7 +833,7 @@ fn corner_marks_taken_inside_a_finished_house_certify_it() {
     click(&mut state, id, "mark1", &certify_form("farmer"));
     state.entities.set_pos(slot, [4.5, 201.0, 4.5]);
     click(&mut state, id, "mark2", &certify_form("farmer"));
-    let marks = state.settlement_marks[&CONN];
+    let marks = state.settlement_marks[&CONN].corners;
     let corner = |at: [i32; 3]| format!("{} {} {}", at[0], at[1], at[2]);
     let from = corner(marks[0].expect("mark1 stored a corner"));
     let to = corner(marks[1].expect("mark2 stored a corner"));

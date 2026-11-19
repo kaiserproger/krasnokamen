@@ -1108,6 +1108,31 @@ fn corner(text: &str) -> Option<[i32; 3]> {
     parts.next().is_none().then_some(at)
 }
 
+/// A player standing inside cannot mark a wall column. Include a one-block
+/// surrounding wall ring when it is physically present; typed outer corners
+/// remain exact, and certification still validates the entire resulting box.
+fn include_marked_walls(state: &TickState, mut bounds: ScriptWorldBounds) -> ScriptWorldBounds {
+    if [0, 2].into_iter().any(|axis| i64::from(bounds.max[axis]) - i64::from(bounds.min[axis]) > 61) {
+        return bounds;
+    }
+    let [Some(x0), Some(z0), Some(x1), Some(z1), Some(y)] = [
+        bounds.min[0].checked_sub(1), bounds.min[2].checked_sub(1),
+        bounds.max[0].checked_add(1), bounds.max[2].checked_add(1),
+        bounds.min[1].checked_add(1),
+    ] else { return bounds };
+    let solid = |x, z| state.world.block_at(x, y, z)
+        .is_some_and(|id| !state.registry.collision_boxes[id as usize].is_empty());
+    if (x0..=x1).all(|x| solid(x, z0) && solid(x, z1))
+        && (z0..=z1).all(|z| solid(x0, z) && solid(x1, z))
+    {
+        bounds.min[0] = x0;
+        bounds.min[2] = z0;
+        bounds.max[0] = x1;
+        bounds.max[2] = z1;
+    }
+    bounds
+}
+
 fn certify(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, payload: ClickPayload<'_>) {
     let form = form_of(state, connection, payload);
     let Some(kind) = BuildingKind::parse(&form.kind) else {
@@ -1123,6 +1148,10 @@ fn certify(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, payload: 
     let Ok(bounds) = ScriptWorldBounds::new(min, max) else {
         return certify_screen(state, connection, ctx, &form, ctx.t(Key::InvalidCorners));
     };
+    let bounds = if state.settlement_marks.get(&connection)
+        .is_some_and(|marks| marks.corners == [Some(a), Some(b)]) {
+        include_marked_walls(state, bounds)
+    } else { bounds };
     match buildings::certify(state, ctx.id, kind, bounds) {
         Ok(id) => {
             state.settlement_marks.remove(&connection);
