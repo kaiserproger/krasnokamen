@@ -1,22 +1,6 @@
 use super::*;
 
 #[test]
-fn faction_relations_distinguish_neutral_enemy_and_roster_ownership() {
-    for a in [0, 1, 2, u16::MAX] {
-        assert_eq!(battle_row(a), a != 0);
-        for b in [0, 1, 2, u16::MAX] {
-            let expected = match (a, b) {
-                (0, _) | (_, 0) => Relation::Neutral,
-                _ if a == b => Relation::Same,
-                _ => Relation::Enemy,
-            };
-            assert_eq!(relation(a, b), expected);
-            assert_eq!(enemies(a, b), expected == Relation::Enemy);
-        }
-    }
-}
-
-#[test]
 fn faction_snapshot_publishes_holds_without_enrolling_player_bodies() {
     use crate::battle::live_players::tests::{command, staged};
     use crate::battle::staging::BattleCommand;

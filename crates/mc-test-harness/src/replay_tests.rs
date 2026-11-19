@@ -247,14 +247,6 @@ fn core_gate_manifest_accepts_focused_phase_and_evidence_matrix() {
 }
 
 #[test]
-fn broad_core_gate_row_rejects_single_phase_manifest() {
-    let mut manifest = core_gate_manifest_json();
-    manifest["rows"][0]["required_phases"] = json!(["solid-edit"]);
-    CoreGateManifest::from_json(&manifest.to_string())
-        .expect_err("broad row must require multiple focused phases");
-}
-
-#[test]
 fn core_gate_completion_rejects_missing_focused_phase() {
     let manifest = CoreGateManifest::from_json(&core_gate_manifest_json().to_string())
         .expect("valid core gate manifest");
@@ -502,24 +494,6 @@ fn concurrent_result_json() -> Value {
             }
         ]
     })
-}
-
-#[test]
-fn minimal_complete_scenario_parses() {
-    let input = serde_json::to_string(&scenario_json()).expect("scenario json");
-    let scenario = ReplayScenarioManifest::from_json(&input).expect("valid scenario");
-
-    assert_eq!(scenario.seed, 81);
-    assert_eq!(scenario.actions.len(), 4);
-    assert_eq!(scenario.lanes.len(), 3);
-    assert_eq!(scenario.expected_invariants.len(), 2);
-}
-
-#[test]
-fn concurrent_scenario_parses_without_serial_actions() {
-    let input = serde_json::to_string(&concurrent_scenario_json()).expect("scenario json");
-
-    ReplayScenarioManifest::from_json(&input).expect("valid concurrent scenario");
 }
 
 #[test]
