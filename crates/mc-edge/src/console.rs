@@ -60,6 +60,14 @@ impl ConsoleState {
     }
     async fn wait_drained(&self, tick: u64) {
         loop {
+            // `notified` snapshots the `notify_waiters` generation when the
+            // future is created and its first poll honours a broadcast since
+            // then, so a `drained()` store and notify landing between this check
+            // and the poll cannot be lost: `Notified::enable` is not needed
+            // (tokio 1.52.3 per Cargo.lock, src/sync/notify.rs:565-572,
+            // 749-762, 1119-1159). A filed row claimed otherwise; it was
+            // disproven and deleted from the ledger, and the proof is in
+            // receipts/CrashRows/REVIEW-sol.md.
             let ready = self.ready.notified();
             if self.drained.load(std::sync::atomic::Ordering::Acquire) >= tick {
                 break;
