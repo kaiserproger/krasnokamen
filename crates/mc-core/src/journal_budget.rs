@@ -503,6 +503,7 @@ fn entry_heap(entry: &JournalEntry) -> usize {
         | E::EntityVitals { .. }
         | E::ItemMotion { .. }
         | E::EntityMotion { .. }
+        | E::StarterChestGranted { .. }
         | E::RemoveEntity { .. } => 0,
         // Rare per tick: a fixed allowance for small nested state, plus direct
         // lengths where the payload can grow without bound.
