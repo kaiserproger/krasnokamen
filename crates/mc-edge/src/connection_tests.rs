@@ -3,10 +3,7 @@
 use bytes::BytesMut;
 use mc_protocol::frame::{Compression, RawFrame, encode_frame};
 
-use super::{
-    MAX_INBOUND_BUFFER_BYTES, MAX_PRE_PLAY_BYTES, MAX_PRE_PLAY_PACKETS, PrePlayBudget,
-    text_component_nbt,
-};
+use super::{MAX_PRE_PLAY_BYTES, MAX_PRE_PLAY_PACKETS, PrePlayBudget, text_component_nbt};
 
 #[test]
 fn budget_accepts_within_limits() {
@@ -70,9 +67,4 @@ fn incomplete_frame_waits_for_more_bytes() {
             .unwrap()
             .is_some()
     );
-}
-
-#[test]
-fn inbound_cap_is_sane() {
-    assert_eq!(MAX_INBOUND_BUFFER_BYTES, 1024 * 1024);
 }

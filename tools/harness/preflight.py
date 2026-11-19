@@ -30,6 +30,8 @@ _ARGUMENT_VALIDATORS = {
     'dialogs': 'dialogs',
     'dh-gate': 'dh_gate',
     'claim-only-qa': 'claim_only_qa',
+    'horizon-lod': 'horizon_lod',
+    'horizon-lod-live': 'horizon_lod_live',
     'graves': 'graves',
     'item-merge': 'item_merge',
     'logical-native': 'native_logical',

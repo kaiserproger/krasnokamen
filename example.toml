@@ -141,6 +141,15 @@ enabled = false
 # Chunk units, not blocks; hard maximum 128.
 radius_chunks = 128
 
+[horizon_lod]
+# Optional Horizon protocol 1. Stored terrain helps recover the world seed.
+# An offered Horizon client draws only server tiles within distance_chunks,
+# not its own cache or BlueMap. A tile with an unstored column is refused
+# whole and retried every 2 seconds. Pregenerate approximately this distance
+# around the play area with mc-world-tools before enabling.
+enabled = false
+distance_chunks = 256 # 1..=1024 chunks
+
 [mob_griefing]
 # Finer switches under the vanilla `mobGriefing` gamerule, which stays the
 # master gate (`/gamerule mob_griefing false` disables all of them). Vanilla

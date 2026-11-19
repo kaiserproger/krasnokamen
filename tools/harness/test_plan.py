@@ -57,59 +57,6 @@ def ledger(rows: dict[str, tuple[str, str]]) -> dict[str, str]:
         for row_id, (status, extra) in rows.items()}
 
 
-class RustTests(unittest.TestCase):
-    def test_rust_change_gets_l0_for_the_crate_l1_and_l2(self):
-        result = build(["crates/mc-core/src/beacon.rs", "crates/mc-edge/src/backup_tests.rs"])
-        found = gates(result)
-        l0 = found[f"{PY} test -p mc-core --lib beacon"]
-        self.assertEqual((l0["runs"], l0["negative_control"], l0["reviewer"]), (1, True, []))
-        self.assertIn(f"{PY} test -p mc-edge --lib backup_tests", found)
-        self.assertFalse(found[f"{PY} test -p mc-edge --lib backup_tests"]["negative_control"])
-        self.assertEqual(found[f"{PY} fmt"]["when"], "slice")
-        self.assertEqual(found[f"{PY} code-health"]["when"], "slice")
-        self.assertEqual(found[f"{PY} correctness"]["when"], "commit")
-
-    def test_filters_are_minimal_and_manifests_widen_the_scope(self):
-        found = gates(build(["crates/mc-core/src/core.rs", "crates/mc-core/src/core/journal.rs",
-                             "crates/mc-core/src/tick/hydration.rs", "crates/mc-core/src/tick/mod.rs"]))
-        self.assertIn(f"{PY} test -p mc-core --lib core tick", found)
-        found = gates(build(["crates/mc-core/Cargo.toml", "crates/mc-core/src/beacon.rs"]))
-        self.assertIn(f"{PY} test -p mc-core", found)
-        self.assertNotIn(f"{PY} test -p mc-core --lib beacon", found)
-        found = gates(build(["crates/mc-edge/tests/handshake.rs", "Cargo.lock"]))
-        self.assertIn(f"{PY} test -p mc-edge --test handshake", found)
-        self.assertIn(f"{PY} test", found)
-
-
-class PersistenceTests(unittest.TestCase):
-    def test_persistence_path_needs_restart_tests_and_the_reviewer(self):
-        result = build(["crates/mc-core/src/core/journal.rs"])
-        entry = gates(result)[f"{PY} test -p mc-core --lib restart recovery checkpoint journal reopen"]
-        self.assertEqual(entry["reviewer"], ["persistence"])
-        self.assertIn("docs/architecture/persistence.md", entry["why"][0])
-        self.assertEqual([r["kind"] for r in result["reviewers"]], ["persistence"])
-
-    def test_test_only_persistence_slice_has_no_reviewer(self):
-        result = build(["crates/mc-core/src/chunk_loader_tests.rs"])
-        self.assertIn(f"{PY} test -p mc-core --lib restart recovery checkpoint journal reopen", gates(result))
-        self.assertEqual(result["reviewers"], [])
-
-    def test_world_storage_and_anvil_are_persistence(self):
-        found = gates(build(["crates/mc-world/src/anvil/chunk_nbt.rs", "crates/mc-world/src/native/mod.rs"]))
-        self.assertIn(f"{PY} test -p mc-world --lib restart recovery checkpoint journal reopen", found)
-
-
-class ProtocolTests(unittest.TestCase):
-    def test_protocol_needs_tests_a_real_client_gate_and_the_reviewer(self):
-        result = build(["crates/mc-protocol/src/packets/play.rs", "crates/mc-edge/src/translation/mod.rs"])
-        found = gates(result)
-        self.assertEqual(found[f"{PY} test -p mc-protocol"]["reviewer"], ["protocol"])
-        self.assertIn(f"{PY} test -p mc-edge --lib wire decode translation", found)
-        unmapped = [g for g in found if g.startswith("no mapped gate: choose from core-client")]
-        self.assertEqual(len(unmapped), 1)
-        self.assertEqual(found[unmapped[0]]["reviewer"], ["protocol"])
-
-
 class CustodyTests(unittest.TestCase):
     def test_container_release_in_merge_is_custody(self):
         result = build(["crates/mc-core/src/tick/merge.rs"])

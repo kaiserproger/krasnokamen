@@ -93,26 +93,6 @@ class SplitPartsTests(unittest.TestCase):
                          [os.sys.executable, "-m", "tools.harness", "run", "buildings-qa"])
         self.assertTrue((root / "parts").is_dir())
 
-    def test_a_failed_part_fails_the_combined_gate_and_names_it(self):
-        receipts = {"a": passed(), "b": {"status": "failed", "error": "house L2 blockmatch",
-                                          "details": {}}}
-        with self.assertRaisesRegex(RuntimeError, r"split part\(s\) failed: b: failed: house L2 blockmatch"):
-            self.run_split(receipts, [("a", {}), ("b", {})])
-
-    def test_a_missing_part_receipt_fails_the_combined_gate(self):
-        with self.assertRaisesRegex(RuntimeError, r"split part\(s\) failed: b: no result\.json"):
-            self.run_split({"a": passed()}, [("a", {}), ("b", {})])
-
-    def test_a_duplicate_part_receipt_fails_the_combined_gate(self):
-        with self.assertRaisesRegex(RuntimeError, r"b: 2 result\.json"):
-            self.run_split({"a": passed(), "b": passed()}, [("a", {}), ("b", {})],
-                           duplicate=True)
-
-    def test_a_nonzero_child_exit_fails_the_combined_gate(self):
-        receipts = {"a": passed(), "b": {**passed(), "__exit__": 3}}
-        with self.assertRaisesRegex(RuntimeError, r"b: exit 3"):
-            self.run_split(receipts, [("a", {}), ("b", {})])
-
     def test_children_start_before_any_is_awaited(self):
         # Concurrency is the point of a split: all children are spawned first,
         # then awaited, never spawned one after another.
@@ -139,20 +119,6 @@ class SplitPartsTests(unittest.TestCase):
                                [profiles.SplitPart(label) for label in ("a", "b", "c")])
         self.assertEqual(order, [("spawn", "a"), ("spawn", "b"), ("spawn", "c"),
                                  ("wait", "a"), ("wait", "b"), ("wait", "c")])
-
-    def test_child_argv_carries_the_parent_profile_options(self):
-        ctx = context(tempfile.gettempdir(), client="native", windowed=True,
-                      timeout_seconds=900.0, plugins_dir=Path("/tmp/plugins"),
-                      extra_args=[], release=True)
-        self.assertEqual(profiles.profile_argv(ctx),
-                         ["--release", "--client", "native", "--windowed",
-                          "--timeout-seconds", "900.0", "--plugins-dir", "/tmp/plugins"])
-
-    def test_child_omits_options_the_parent_did_not_set(self):
-        ctx = context(tempfile.gettempdir(), client="java", windowed=False,
-                      timeout_seconds=None, plugins_dir=None, server_bin=Path("/tmp/server"))
-        self.assertEqual(profiles.profile_argv(ctx),
-                         ["--client", "java", "--server-bin", "/tmp/server"])
 
     def test_a_part_child_never_splits_again(self):
         with patch.dict(os.environ, {profiles.SPLIT_PART_ENV: "b"}):

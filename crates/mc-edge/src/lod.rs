@@ -36,6 +36,7 @@ use crate::server::EdgeServer;
 
 pub(crate) const PROTOCOL: u8 = 1;
 const MAX_TILES_PER_REQUEST: usize = 16;
+const NATIVE_MAX_LEVEL: u8 = 6;
 
 pub(crate) fn hello_channel() -> Identifier {
     Identifier::parse("krasnokamen:lod/hello").expect("static lod channel")
@@ -88,6 +89,7 @@ pub(crate) fn hello_frames(server: &EdgeServer) -> anyhow::Result<Vec<bytes::Byt
 pub(crate) struct LodService {
     pub(crate) workers: Arc<tokio::sync::Semaphore>,
     biomes: HashMap<Identifier, u32>,
+    pub(crate) horizon_refusals: Arc<std::sync::Mutex<crate::horizon_lod::Refusals>>,
 }
 
 impl LodService {
@@ -100,6 +102,7 @@ impl LodService {
                 .enumerate()
                 .map(|(id, name)| (name.clone(), id as u32))
                 .collect(),
+            horizon_refusals: Arc::default(),
         }
     }
 }
@@ -273,7 +276,7 @@ impl LodConnection {
         };
         let cfg = &server.cfg.lod;
         for request in decode_request(payload)? {
-            if request.level > mc_core::lod::MAX_LEVEL || !self.near(request, cfg.max_distance) {
+            if request.level > NATIVE_MAX_LEVEL || !self.near(request, cfg.max_distance) {
                 continue;
             }
             if self.inflight.fetch_add(1, Ordering::AcqRel) >= usize::from(cfg.max_inflight_tiles) {
