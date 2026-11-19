@@ -406,10 +406,11 @@ fn cheapest_lot_beyond_the_first_cursor_batch_wins_the_completed_sweep() {
     );
 }
 
-/// Inside the territory the fill below the floor has no depth limit; the cut
-/// stays bounded by the authored top, and a roof block above it is refused.
+/// Inside the territory the fill below the floor is levelled down to the edge
+/// of the builder's reach; the cut stays bounded by the authored top, and a roof
+/// block above it is refused.
 #[test]
-fn the_fill_below_the_floor_is_unbounded_and_the_cut_is_bounded_above_the_roof() {
+fn the_fill_below_the_floor_is_levelled_within_reach_and_the_roof_block_is_refused() {
     let (mut state, id, _) = fixture();
     let record = state.settlements.get(id).unwrap().clone();
     let origin = [5, FLOOR, 5];
@@ -439,10 +440,9 @@ fn the_fill_below_the_floor_is_unbounded_and_the_cut_is_bounded_above_the_roof()
         Ok(4),
         "four fill cells below the floor"
     );
-    // Inside the territory no depth is a reason to refuse (owner 2026-11-17):
-    // the builder fills a fifth block and a support far below the eight-block
-    // band around the floor with real material.
-    for (depth, filled) in [(5, 5), (12, 12)] {
+    // Inside the territory a fifth block and anything down to the edge of the
+    // eight-block band is filled with real material (owner 2026-11-17).
+    for (depth, filled) in [(5, 5), (8, 8)] {
         for y in FLOOR - 14..=FLOOR {
             state.world.set_block(6, y, 6, state.registry.states.air);
         }
@@ -456,6 +456,19 @@ fn the_fill_below_the_floor_is_unbounded_and_the_cut_is_bounded_above_the_roof()
             "a fill column {depth} blocks deep is levelled inside the territory"
         );
     }
+    // A support below the eight-block band is out of what a builder at the lot's
+    // perimeter reaches: a named refusal, not a shaft the executor stalls on.
+    for y in FLOOR - 14..=FLOOR {
+        state.world.set_block(6, y, 6, state.registry.states.air);
+    }
+    state
+        .world
+        .set_block(6, FLOOR - 12, 6, state.registry.states.stone);
+    state.world.fold_overlay();
+    assert_eq!(
+        column(&state).err(),
+        Some(site_refusals::Reason::SurfaceUnavailable)
+    );
     // Restore the flat lot, then bound the cut at the authored top.
     for y in FLOOR - 14..=FLOOR {
         state.world.set_block(6, y, 6, state.registry.states.air);
@@ -639,6 +652,46 @@ fn a_full_store_waits_without_editing_or_losing_the_excavated_block() {
             "the cut applies once space exists"
         );
     }
+}
+
+/// The deepest fill a builder at the lot's perimeter reaches (the band's eight
+/// blocks) is paid from real stock and executed to completion.
+#[test]
+fn a_fill_at_the_edge_of_reach_is_paid_from_storage_and_completed() {
+    let (mut state, id, builder) = fixture();
+    let site = only_lot(&mut state, id);
+    dig(&mut state, &site, 8);
+    let [x, z] = free_column(&state, &site, 3, 1);
+    let floor = site.lot.origin[1];
+    let dirt_item = item(&state, "dirt");
+    {
+        let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+        let free = slots
+            .iter()
+            .position(|stack| stack.is_empty())
+            .expect("the bill leaves a free slot");
+        slots[free] = mc_data::ItemStack::new(dirt_item, 16);
+    }
+    let dirt = stock(&state, dirt_item);
+    request_started(&mut state, id, "storage");
+    assert_eq!(
+        state.settlements.get(id).unwrap().projects[0].origin,
+        site.lot.origin
+    );
+    complete(&mut state, id, builder);
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+    for y in floor - 7..=floor {
+        assert_ne!(
+            name_of(&state, [x, y, z]),
+            "air",
+            "the eight-deep shaft is filled at y={y}"
+        );
+    }
+    assert_eq!(
+        stock(&state, dirt_item) + carried(&state, builder, dirt_item),
+        dirt - 8,
+        "eight real dirt blocks, no more"
+    );
 }
 
 /// A foundation shortfall belongs to the active bill: the project waits as

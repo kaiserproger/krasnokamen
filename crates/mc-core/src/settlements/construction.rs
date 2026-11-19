@@ -1456,9 +1456,10 @@ pub(crate) fn upgrade_available(state: &TickState, id: SettlementId, building: B
 /// Lot candidates examined per planning pass, and by an owner order in the
 /// tick that admits it.
 const SITE_ATTEMPTS: u32 = 64;
-/// Ground within this band of the bell's elevation is found first; inside the
-/// territory the search then widens to its whole vertical span (owner,
-/// 2026-11-17, lots and terrain).
+/// Ground may differ this much from the bell's elevation (or from a lot's floor)
+/// and still be found. A fill column below a floor, and a hillside cut above
+/// it, stay within this band: it is also what a builder standing at the lot's
+/// perimeter can reach (placement reach 12, margin 2, see `villager::building`).
 pub(super) const SITE_BAND: i32 = 8;
 
 /// Highest standing surface in the band around the bell for one column: a solid
@@ -1483,8 +1484,26 @@ pub(super) fn surface_y_for_lot(
     lot: Option<ScriptWorldBounds>,
     clearance: &mut super::forestry::Clearance,
 ) -> Option<i32> {
-    let territory = clearance.territory(state);
-    let mut standing = |y: i32| {
+    surface_y_between(
+        state,
+        anchor_y - SITE_BAND..=anchor_y + SITE_BAND,
+        x,
+        z,
+        lot,
+        clearance,
+    )
+}
+
+/// Highest standing surface of one column inside `window`.
+pub(super) fn surface_y_between(
+    state: &TickState,
+    window: std::ops::RangeInclusive<i32>,
+    x: i32,
+    z: i32,
+    lot: Option<ScriptWorldBounds>,
+    clearance: &mut super::forestry::Clearance,
+) -> Option<i32> {
+    window.rev().find(|&y| {
         state.world.physics_block_at(x, y, z).is_some_and(|ground| {
             !super::forestry::tree(state, ground)
                 && state
@@ -1509,19 +1528,7 @@ pub(super) fn surface_y_for_lot(
                     // surveys the soil under the plants it reaps (D10).
                     || crate::settlements::construction::relayout::crop(state, above)
             })
-    };
-    let band = anchor_y - SITE_BAND..=anchor_y + SITE_BAND;
-    if let Some(y) = band.clone().rev().find(|&y| standing(y)) {
-        return Some(y);
-    }
-    // Owner 2026-11-17: inside the settlement the terrain's height is no reason
-    // to refuse a column: the builder levels, digs or fills it. The territory's
-    // own vertical span replaces the bell-elevation band there.
-    let record = territory?;
-    let reach = i32::try_from(record.radius).unwrap_or(i32::MAX / 2);
-    (record.anchor[1] - reach..=record.anchor[1] + reach)
-        .rev()
-        .find(|&y| !band.contains(&y) && record.contains([x, y, z]) && standing(y))
+    })
 }
 
 struct FundedSite {

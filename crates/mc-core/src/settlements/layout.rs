@@ -42,6 +42,10 @@ pub(crate) const WELL: &str = "well";
 pub(crate) const PAVED: &str = "paved";
 
 /// First lot row, counted from a road centre line (road ±1, verge 2).
+/// What a villager walks between two neighbouring columns: up one block, down
+/// three (`allocator` path search). Street steps, verge and door steps keep it.
+const STEP_UP: i32 = 1;
+const STEP_DOWN: i32 = 3;
 const LOT_FRONT: i32 = 3;
 /// Deepest lot: the largest blueprint extent across its front (the wall's
 /// 13-block length runs along the road).
@@ -344,6 +348,21 @@ pub(super) fn sample(
     z: i32,
     prepare_forest: bool,
 ) -> Column {
+    sample_near(state, record, x, z, prepare_forest, None)
+}
+
+/// A column's ground. Within eight blocks of the bell's elevation it is the
+/// highest standing surface there; beyond that band (a hillside village) only a
+/// column next to a reached one is found, within what a villager walks from
+/// `hint`: one block up, three down (owner 2026-11-17, bell-elevation limit).
+pub(super) fn sample_near(
+    state: &TickState,
+    record: &SettlementRecord,
+    x: i32,
+    z: i32,
+    prepare_forest: bool,
+    hint: Option<i32>,
+) -> Column {
     let anchor_y = record.anchor[1];
     if state.world.physics_block_at(x, anchor_y, z).is_none() {
         return Column::Unloaded;
@@ -362,7 +381,20 @@ pub(super) fn sample(
     // construction forecast walks through it (the proposed crown of a planting
     // preview still blocks, see `Network::column`).
     let mut street = super::forestry::Clearance::street(record, prepare_forest);
-    let Some(y) = construction::surface_y_for_lot(state, anchor_y, x, z, None, &mut street) else {
+    let Some(y) = construction::surface_y_for_lot(state, anchor_y, x, z, None, &mut street)
+        .or_else(|| {
+            hint.and_then(|near| {
+                construction::surface_y_between(
+                    state,
+                    near - STEP_DOWN..=near + STEP_UP,
+                    x,
+                    z,
+                    None,
+                    &mut street,
+                )
+            })
+        })
+    else {
         return Column::Blocked;
     };
     if state.block_entities.contains_key(&(x, y, z))
@@ -783,7 +815,7 @@ impl<'a> Network<'a> {
                 for dz in -ring..=ring {
                     if dx.abs().max(dz.abs()) == ring
                         && level_inside(record, ax + dx, az + dz)
-                        && let Column::Ground { y, .. } = network.column(ax + dx, az + dz)
+                        && let Column::Ground { y, .. } = network.column(ax + dx, az + dz, None)
                     {
                         network.reach([ax + dx, y, az + dz], SEED);
                     }
@@ -804,7 +836,7 @@ impl<'a> Network<'a> {
                 {
                     continue;
                 }
-                if let Column::Ground { y: ny, .. } = network.column(nx, nz)
+                if let Column::Ground { y: ny, .. } = network.column(nx, nz, Some(y))
                     && (ny - y).abs() <= 1
                 {
                     network.reach([nx, ny, nz], next);
@@ -821,11 +853,11 @@ impl<'a> Network<'a> {
         self.parents.push(parent);
     }
 
-    fn column(&mut self, x: i32, z: i32) -> Column {
+    fn column(&mut self, x: i32, z: i32, hint: Option<i32>) -> Column {
         let (state, record, prepare_forest, planting) =
             (self.state, self.record, self.prepare_forest, self.planting);
         *self.columns.entry((x, z)).or_insert_with(|| {
-            let column = sample(state, record, x, z, prepare_forest);
+            let column = sample_near(state, record, x, z, prepare_forest, hint);
             if let Column::Ground { y, .. } = column
                 && planting.is_some_and(|crown| {
                     (crown.min[0]..=crown.max[0]).contains(&x)
@@ -886,10 +918,11 @@ impl<'a> Network<'a> {
         if !(ox..ox + sx).all(|x| (oz..oz + sz).all(|z| cell(anchor, x, z) == Cell::Lot)) {
             return None;
         }
-        let Column::Ground { .. } = self.column(verge[0], verge[1]) else {
+        let Column::Ground { y: verge_y, .. } = self.column(verge[0], verge[1], Some(front[1]))
+        else {
             return None;
         };
-        let Column::Ground { y: floor, .. } = self.column(door[0], door[1]) else {
+        let Column::Ground { y: floor, .. } = self.column(door[0], door[1], Some(verge_y)) else {
             return None;
         };
         if self.planting.is_some_and(|crown| {
@@ -899,10 +932,11 @@ impl<'a> Network<'a> {
         }) {
             return None;
         }
-        // Owner 2026-11-17: inside the settlement the step between road, verge and
-        // floor is no limit; the builder levels the lot (every ground column here
-        // is inside the territory, see `sample`).
-        Some(Lot {
+        // Owner 2026-11-17: inside the settlement the one-block step limit is
+        // lifted; what stays is what a villager walks from the road across the
+        // verge to the door (up one, down three), so the door stays reachable.
+        let walkable = |from: i32, to: i32| to - from <= STEP_UP && from - to <= STEP_DOWN;
+        (walkable(front[1], verge_y) && walkable(verge_y, floor)).then_some(Lot {
             origin: [ox, floor, oz],
             rotation,
         })
@@ -1146,7 +1180,7 @@ impl<'a> Network<'a> {
                     continue;
                 };
                 let y = self.cells[index][1];
-                let Column::Ground { soil, .. } = self.column(x, z) else {
+                let Column::Ground { soil, .. } = self.column(x, z, None) else {
                     continue;
                 };
                 low = low.min(y);
@@ -1190,7 +1224,7 @@ impl<'a> Network<'a> {
         {
             return None;
         }
-        let Column::Ground { y, .. } = self.column(x, z) else {
+        let Column::Ground { y, .. } = self.column(x, z, None) else {
             return None;
         };
         let top = state.world.physics_block_at(x, y + 3, z)?;
@@ -1670,7 +1704,7 @@ pub(crate) fn report(state: &TickState, record: &SettlementRecord) -> String {
             if network.index.contains_key(&(x, z)) {
                 continue;
             }
-            match network.column(x, z) {
+            match network.column(x, z, None) {
                 Column::Unloaded => unloaded += 1,
                 Column::Occupied => occupied += 1,
                 Column::Blocked | Column::Ground { .. } => blocked += 1,

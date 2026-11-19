@@ -203,25 +203,71 @@ fn lots_line_the_entrance_up_with_the_road_across_the_verge() {
     );
 }
 
-/// Owner 2026-11-17: inside the settlement a step between the road, its verge
-/// and the lot floor is no reason to refuse a lot; the builder levels it.
+/// Owner 2026-11-17: the one-block step limit between road, verge and floor is
+/// lifted inside the settlement down to what a villager walks (up one, down
+/// three): a staircase down to the door is a lot, a rise of two is not.
 #[test]
-fn a_step_between_road_verge_and_floor_does_not_refuse_a_lot_inside_the_territory() {
+fn road_verge_and_floor_steps_are_what_a_villager_walks() {
     let (mut state, id, _) = fixture();
     open_plan(&mut state);
-    let stone = state.registry.states.stone;
-    for y in 201..=203 {
-        state.world.set_block(10, y, 16, stone);
+    let (air, stone) = (state.registry.states.air, state.registry.states.stone);
+    // Down two blocks to the verge and two more to the door column.
+    for y in 199..=200 {
+        state.world.set_block(10, y, 16, air);
     }
+    state.world.set_block(10, 198, 16, stone);
+    for y in 197..=200 {
+        state.world.set_block(11, y, 16, air);
+    }
+    state.world.set_block(11, 196, 16, stone);
     state.world.fold_overlay();
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
     let record = state.settlements.get(id).unwrap();
     let mut network = Network::walk(&state, record);
     assert!(network.frontage().contains(&([9, 200, 16], [1, 0])));
-    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
     let lot = network
         .lot(blueprint, [9, 200, 16], [1, 0])
-        .expect("a three-block verge step is levelled by the builder");
-    assert_eq!((lot.origin, lot.rotation), ([11, 200, 13], 1));
+        .expect("a two-block staircase down is walkable");
+    assert_eq!((lot.origin, lot.rotation), ([11, 196, 13], 1));
+    // A two-block rise across the verge is not.
+    let (mut state, id, _) = fixture();
+    open_plan(&mut state);
+    for y in 201..=202 {
+        state.world.set_block(10, y, 16, stone);
+    }
+    state.world.fold_overlay();
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let record = state.settlements.get(id).unwrap();
+    let mut network = Network::walk(&state, record);
+    assert_eq!(network.lot(blueprint, [9, 200, 16], [1, 0]), None);
+}
+
+/// A column beyond eight blocks of the bell's elevation is found from the
+/// reached column next to it: a hillside village's streets climb.
+#[test]
+fn a_street_climbs_past_the_bell_elevation_band_one_block_at_a_time() {
+    let (mut state, id, _) = fixture();
+    open_plan(&mut state);
+    let stone = state.registry.states.stone;
+    // The avenue east of the plaza rises one block per column from x = 9.
+    for x in 9..=24 {
+        for z in 7..=9 {
+            for y in 201..=200 + (x - 8) {
+                state.world.set_block(x, y, z, stone);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let record = state.settlements.get(id).unwrap();
+    let network = Network::walk(&state, record);
+    assert!(
+        network.cells.iter().any(|at| at[0] == 24 && at[1] == 216),
+        "the avenue reaches the column 16 blocks above the bell's floor"
+    );
+    assert!(matches!(
+        sample(&state, record, 24, 8, false),
+        Column::Blocked
+    ));
 }
 
 /// A player-certified house (no blueprint placement on record) on the lots
