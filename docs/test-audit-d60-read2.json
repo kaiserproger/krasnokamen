@@ -83,18 +83,19 @@
     "test-audit-d60-read2-bots-tests-batch.json",
     "test-audit-d60-read2-run-battle-batch.json",
     "test-audit-d60-read2-video-overlay-batch.json",
-    "test-audit-d60-read2-bench-batch.json"
+    "test-audit-d60-read2-bench-batch.json",
+    "test-audit-d60-read2-coreperf-compare-batch.json"
   ],
   "current_read_pass": {
-    "finalized_historical_test_ids": 1629,
-    "removed_in_new_batches": 703,
+    "finalized_historical_test_ids": 1663,
+    "removed_in_new_batches": 711,
     "prior_main_deletions_excluded": 3,
     "retained_K1": 254,
     "retained_K2": 10,
     "removed_shadowed_duplicate_declarations": 2,
-    "retained_U": 657,
-    "historical_medium_candidates_reviewed": 701,
-    "remaining_medium_candidates_unfinalized": 98,
+    "retained_U": 683,
+    "historical_medium_candidates_reviewed": 710,
+    "remaining_medium_candidates_unfinalized": 89,
     "candidate_count_basis": "Only the original 799 R4/medium removal-candidate IDs; two medium-confidence K1 building regressions are excluded. Their retained verdicts and all other disposition totals are unchanged.",
     "verification_owner": "Main"
   },

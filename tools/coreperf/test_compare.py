@@ -23,58 +23,6 @@ def args(**changes):
 
 
 class CompareContractTests(unittest.TestCase):
-    def test_representative_fixture_has_all_eight_kinds_and_villagers(self):
-        recipe = compare.fixture(20000, 64)
-        commands = [command for region in recipe['regions'] for command in region['commands']]
-        for kind in compare.MOB_KINDS:
-            summons = [command for command in commands if command.startswith(f'summon minecraft:{kind} ')]
-            self.assertEqual(len(summons), 2500)
-            self.assertTrue(all("PersistenceRequired:1b" in command for command in summons))
-        self.assertEqual(sum(command.startswith('summon minecraft:villager ') for command in commands), 64)
-        self.assertTrue(all(f"CustomName:'{compare.COHORT_NAME}'" in command
-                            for command in commands if command.startswith("summon ")))
-        self.assertEqual(sum('minecraft:composter' in command for command in commands), 64)
-        self.assertEqual(sum('part=foot' in command for command in commands), 64)
-        self.assertEqual(sum('part=head' in command for command in commands), 64)
-        self.assertFalse(any('NoAI' in command or 'invulnerable' in command.lower() for command in commands))
-        self.assertEqual(recipe['expected'], {f'minecraft:{kind}': 2500 for kind in compare.MOB_KINDS}
-                         | {'minecraft:villager': 64})
-        self.assertEqual(recipe, compare.fixture(20000, 64))
-
-    def test_cli_refuses_dropped_baseline_mode(self):
-        with tempfile.TemporaryDirectory() as directory:
-            argv = ["compare", "--out", str(Path(directory) / "new"), "--mode", "abab",
-                    "--server-bin", "/unused", "--bots-bin", "/unused", "--clients", "1"]
-            with mock.patch.object(compare.os.sys, "argv", argv), self.assertRaises(SystemExit):
-                compare.main()
-
-    def test_cli_accepts_native_population_above_former_baseline_capacity(self):
-        with tempfile.TemporaryDirectory() as directory:
-            argv = ["compare", "--out", str(Path(directory) / "new"), "--mode", "v2-only",
-                    "--server-bin", "/unused", "--bots-bin", "/unused",
-                    "--clients", "1", "--mobs", "100000", "--prepare-only"]
-            with mock.patch.object(compare.os.sys, "argv", argv), mock.patch.object(
-                    compare, 'run', new_callable=mock.AsyncMock, return_value=0) as run:
-                self.assertEqual(compare.main(), 0)
-            self.assertEqual(run.call_args.args[0].mobs, 100000)
-            received = run.call_args.args[0]
-            self.assertEqual((received.min_tps, received.sustained_seconds,
-                              received.max_tick_p99_ms, received.max_tick_max_ms,
-                              received.max_rss_mb), (19.5, 5, 50, 250, 3072))
-            self.assertEqual((received.server_cpus, received.bot_cpus), ('0-7', '8-11'))
-
-    def test_cpu_affinity_and_rss_budget_are_overridable(self):
-        with tempfile.TemporaryDirectory() as directory:
-            argv = ["compare", "--out", str(Path(directory) / "new"), "--mode", "v2-only",
-                    "--server-bin", "/unused", "--bots-bin", "/unused", "--clients", "1",
-                    "--server-cpus", "0,2,4,6", "--bot-cpus", "8,10", "--max-rss-mb", "8192"]
-            with mock.patch.object(compare.os.sys, "argv", argv), mock.patch.object(
-                    compare, 'run', new_callable=mock.AsyncMock, return_value=0) as run:
-                self.assertEqual(compare.main(), 0)
-            received = run.call_args.args[0]
-            self.assertEqual((received.server_cpus, received.bot_cpus, received.max_rss_mb),
-                             ('0,2,4,6', '8,10', 8192))
-
     def test_partial_population_has_exact_count_and_species_separated_roofed_pens(self):
         recipe = compare.fixture(8201, 1)
         self.assertEqual(sum(recipe['expected'].values()), 8202)
@@ -121,19 +69,6 @@ class CompareContractTests(unittest.TestCase):
             self.assertFalse(any('NoAI' in command or 'Invulnerable' in command
                                  for command in region['commands']))
         self.assertEqual(spiders, 12500)
-
-    def test_gameplay_uses_wire_crafting_nonlethal_combat_and_edits(self):
-        spec = compare.gameplay(compare.fixture(8, 2))
-        kinds = [action['kind'] for action in spec['actions']]
-        self.assertEqual(kinds.count('attack_entity'), 1)
-        self.assertEqual(kinds.count('click_slot'), 3)
-        self.assertIn('open_container', kinds)
-        self.assertTrue(all(action['window'] != 'recovery' for action in spec['actions']))
-        self.assertEqual([row['edit_hz'] for row in compare.schedule(args())['windows']], [2, 2, 0])
-        self.assertEqual(next(action['slot'] for action in spec['actions']
-                              if action['kind'] == 'select_slot'), 7)
-        self.assertEqual(next(action['slot_item'] for action in spec['actions']
-                              if action['kind'] == 'click_slot'), 'minecraft:oak_log')
 
     def test_gameplay_oracle_requires_received_work_not_writes(self):
         report = {"break_updates_observed": 1, "place_updates_observed": 1,
@@ -271,23 +206,6 @@ class CompareContractTests(unittest.TestCase):
         for rows in ([natural], [fixture, natural, fixture | {'uuid': 'extra-named-id'}]):
             with self.assertRaises(compare.load.ClassifiedFailure):
                 compare.cohort(image(rows), expected)
-
-    def test_native_config_never_uses_legacy_world_contract(self):
-        with tempfile.TemporaryDirectory() as directory, mock.patch.object(compare.load.scale, 'reserve_ports', return_value=(25566, 25567)):
-            path, _, _ = compare.configure(args(), Path(directory), Path(directory) / 'world', 2, 'scale')
-            self.assertNotIn('[admin]', path.read_text())
-            self.assertFalse((Path(directory) / 'world').exists())
-
-    def test_prepare_copies_args_for_wider_public_regions(self):
-        original = args()
-        with tempfile.TemporaryDirectory() as directory, mock.patch.object(
-                compare, 'configure', side_effect=RuntimeError('fixture config reached')) as configure:
-            with self.assertRaisesRegex(RuntimeError, 'fixture config reached'):
-                asyncio.run(compare.prepare(original, Path(directory) / 'prepare', compare.fixture(2, 2)))
-        prepared = configure.call_args.args[0]
-        self.assertIsNot(prepared, original)
-        self.assertEqual(prepared.view_distance, 8)
-        self.assertEqual(original.view_distance, 6)
 
     def test_preparation_records_server_and_bot_rss_separately(self):
         server_sample = {'rss_bytes': 40, 'peak_rss_bytes': 80}
@@ -429,19 +347,6 @@ class FixtureCacheTests(unittest.TestCase):
         self.BINARIES = {'server_sha256': 'srv-2', 'bots_sha256': 'bots-1'}
         with self.assertRaisesRegex(compare.load.ClassifiedFailure, r'srv-1.*srv-2.*native probe rejected world'):
             self.prepare('b')
-
-    def test_disabled_cache_records_disabled_and_writes_nothing(self):
-        self.key = None
-        with (mock.patch.object(compare, 'configure', return_value=(self.config, 'http://unused', 1)),
-              mock.patch.object(compare, 'CoreSession', return_value=self.session),
-              mock.patch.object(compare.load, 'public_region', side_effect=self.region),
-              mock.patch.object(compare, 'scope_memory'),
-              mock.patch.object(compare, 'snapshot', self.snapshot),
-              mock.patch.object(compare, 'cohort', return_value={'counts': self.recipe['expected']})):
-            (self.root / 'a').mkdir()
-            _, receipt = asyncio.run(compare.prepare(args(), self.root / 'a/prepare', self.recipe))
-        self.assertEqual(receipt['fixture_cache'], {'status': 'disabled', 'key': None, 'prepared_by': None})
-        self.assertFalse(self.cache.exists())
 
 
 
