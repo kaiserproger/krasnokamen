@@ -427,13 +427,16 @@ fn recursive_failure_restores_each_slot_and_stack_metadata() {
     let images = chest(vec![original]);
     let mut post: Vec<_> = images.iter().map(|image| image.slots.clone()).collect();
     let before = post.clone();
-    assert!(!super::ensure_units(
-        &state,
-        &mut post,
-        door,
-        3,
-        &std::collections::BTreeMap::new(),
-    ));
+    assert!(
+        super::ensure_units(
+            &state,
+            &mut post,
+            door,
+            3,
+            &std::collections::BTreeMap::new(),
+        )
+        .is_none()
+    );
     assert_eq!(
         post, before,
         "failed recursive crafting is an exact rollback"
@@ -447,6 +450,28 @@ fn recursive_failure_restores_each_slot_and_stack_metadata() {
     for item in [log, door, item(&state, "minecraft:oak_planks")] {
         assert_eq!(work.totals.get(item), super::total(&post, item));
     }
+}
+
+#[test]
+fn successful_recipe_trace_retains_fully_consumed_intermediate_inputs() {
+    let state = state();
+    let log = item(&state, "minecraft:oak_log");
+    let plank = item(&state, "minecraft:oak_planks");
+    let target = item(&state, "minecraft:chest");
+    let images = chest(vec![stock(log, 2)]);
+    let mut post: Vec<_> = images.iter().map(|image| image.slots.clone()).collect();
+    let inputs: std::collections::BTreeSet<_> =
+        super::ensure_units(&state, &mut post, target, 1, &std::collections::BTreeMap::new())
+            .unwrap()
+            .collect();
+    assert!(inputs.contains(&log));
+    assert!(
+        inputs.contains(&plank),
+        "net-zero intermediate planks are still a recipe input"
+    );
+    assert_eq!(super::total(&post, log), 0);
+    assert_eq!(super::total(&post, plank), 0);
+    assert_eq!(super::total(&post, target), 1);
 }
 
 #[test]

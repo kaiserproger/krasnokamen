@@ -2602,7 +2602,7 @@ fn restore_borrowed_gatherer(state: &mut TickState, id: SettlementId, profession
 pub(crate) fn owe_carry(state: &mut TickState, id: SettlementId, uuid: uuid::Uuid, handle: &str) {
     // Placed items count too: a load the remaining bill no longer asks for
     // (a finished stage, a finished project) is still project stock.
-    let items = plan_items(state, id, handle);
+    let items = executor::return_items(state, id, handle).ok();
     let Some(slot) = state.entities.slot_of_uuid(uuid) else {
         return;
     };
@@ -2939,22 +2939,6 @@ pub(crate) struct WaitingNeed {
     pub(crate) total: u64,
     pub(crate) source_item: Option<String>,
     pub(crate) no_source: Option<SourceReason>,
-}
-
-/// Every item the project's plan uses, placed or still to place: a released
-/// builder's load of any of them is project stock it owes storage (D8 review
-/// R4-1), even once the remaining bill no longer asks for it.
-fn plan_items(state: &TickState, id: SettlementId, handle: &str) -> Option<Vec<u32>> {
-    let snapshot = executor::status(state, id, handle).ok()?;
-    snapshot
-        .consumed
-        .iter()
-        .chain(&snapshot.remaining)
-        .map(|material| {
-            let name = mc_data::Identifier::parse(&material.resource).ok()?;
-            state.registry.items.id_of(&name)
-        })
-        .collect()
 }
 
 /// One project's remaining bill, net of the carry of the builder bound to it.

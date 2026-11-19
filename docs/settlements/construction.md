@@ -58,18 +58,28 @@ Hauling is not moved ahead of terrain clearing, and no future loan is counted as
 receiving capacity.
 
 A pressured storehouse is refused **inside the normal candidate sweep** if its
-early drops cannot be conservatively received. The bound reserves an empty slot
-per possible terrain/plant cut and two per retired crop; it deliberately does not
-count partial-stack merge room or future Builder fetches. Terrain heights also
-bound cuts above the authored roof. Any tree on the lot or a possible walking
-corridor refuses that candidate: preparation may fell its whole registered tree
-outside the footprint, with random leaf loot, before Fill. Tree-column answers
-and the construction walk are reused for the pass; this fence never materializes
-preparation or reruns re-layout per candidate. The sweep can therefore choose a
-clean alternative instead of repeatedly restarting at an unsafe cheapest lot.
-At fully occupied storage, admission needs a genuinely cut-free preparation;
-later Fill is never subtracted to make the first Cut appear payable. Existing
-transactional no-loss/no-duplication behavior remains unchanged.
+early drops cannot be conservatively received. The bound counts current empty
+bank slots plus the minimum current empty carry slots of eligible builders:
+one per possible terrain/plant cut and two per retired crop. It never counts
+future fetching, filling, deposits or partial-stack merge room. Terrain heights
+also bound cuts above the authored roof. Any tree on the lot or a possible
+walking corridor still refuses that candidate, because its whole registered
+crown can extend outside the footprint and have random loot. The sweep reuses
+its tree-column answers and walk without materializing preparation per candidate.
+
+Excavation credits storage first, as before. Soil the bank cannot receive stays
+in the bound Builder's real native carry, atomically journaled with the cut.
+Fill consumes that same soil. Unspent excavation stock is included in the
+site's durable return duty and deposited into the first storage with room after
+the work, including the new warehouse. Cumulative cut-credit receipts own the
+accounting, not a second item inventory. Exhausted bank and carry refuse without
+changing the block; a later Fill never pretends to have opened room already.
+
+Native hauls also journal their canonical recipe plan's net inputs and outputs,
+before custody transfers; zero-net intermediate ingredient kinds stay recorded.
+Together with cumulative cut credits and the existing consumed bill, this
+reconciles physical construction stock without treating receipts as custody or
+excusing unrelated world changes.
 
 An unfunded priority bill does not stop the search for funded buildings or upgrades. Its staffed extraction worker is protected from Builder recruitment for autonomous work, leaving another resident free to build; explicit owner projects retain their active-bill gathering rules. Optional street projects still wait for that priority bill.
 

@@ -128,11 +128,11 @@ pub(super) fn plan(
     )
 }
 
-/// A pressured storehouse's pass-local proof. Capacity comes from the exact
-/// deposit snapshot; the walking network and tree-column answers are reused,
-/// never a preparation manifest or a second per-candidate layout plan.
+/// A pressured storehouse's pass-local proof. Receiving room is today's bank
+/// room plus the minimum empty carry of its eligible builders. Excavated soil
+/// remains physical custody until Fill consumes it or storage receives it.
 pub(super) struct Capacity<'a> {
-    free: usize,
+    receiving_slots: usize,
     blueprint: &'a blueprints::Blueprint,
     network: layout::Network<'a>,
     project: Project,
@@ -159,7 +159,8 @@ impl<'a> Capacity<'a> {
             return None;
         }
         Some(Self {
-            free,
+            receiving_slots: free
+                .saturating_add(builders::receiving_slots(state, record.id).unwrap_or(0)),
             blueprint,
             network: layout::Network::for_construction(state, record),
             project: Project {
@@ -211,11 +212,9 @@ pub(super) fn candidate_fits(
     capacity: &mut Capacity<'_>,
 ) -> Result<(), site_refusals::Reason> {
     use site_refusals::Reason::StorageFull;
-    // One empty slot per possible cut conservatively covers mixed terrain and
-    // clearable plants too: their canonical loot is credited before Fill.
-    // The surveyed heights cover the hillside above the authored roof; adding
-    // both counts can over-refuse, but never assumes a future fill or fetch
-    // has already made room for the very first drop.
+    // One existing empty bank/carry slot per possible cut conservatively covers
+    // mixed terrain and plants. This never credits a future Fill or fetch:
+    // the executor keeps unreceived soil on the real bound builder's body.
     let cuts = columns
         .iter()
         .map(|(_, height)| usize::try_from((height - origin[1]).max(0)).expect("cut height"))
@@ -223,9 +222,15 @@ pub(super) fn candidate_fits(
         .saturating_add(volume_cuts as usize);
     // A retired crop can credit both produce and seed before construction.
     let crops = village.map_or(0, |plan| plan.cleared.len().saturating_mul(2));
-    if cuts.saturating_add(crops) > capacity.free {
-        tracing::debug!(settlement = capacity.project.settlement.0, ?origin,
-            free = capacity.free, cuts, crops, "settlement_storehouse_capacity_refused");
+    if cuts.saturating_add(crops) > capacity.receiving_slots {
+        tracing::debug!(
+            settlement = capacity.project.settlement.0,
+            ?origin,
+            receiving_slots = capacity.receiving_slots,
+            cuts,
+            crops,
+            "settlement_storehouse_capacity_refused"
+        );
         return Err(StorageFull);
     }
     // The full manifest also clears trees, including an entire registered

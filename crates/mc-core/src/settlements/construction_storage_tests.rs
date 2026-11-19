@@ -2,7 +2,7 @@ use super::*;
 use crate::settlements::allocator::tests::block;
 use crate::settlements::construction::site_tests;
 use crate::settlements::construction::tests::{
-    complete, fixture, fund, open_plan, plan_until_project, start,
+    attempt, complete, fixture, fund, open_plan, plan_until_project, start,
 };
 use mc_data::ItemStack;
 use std::collections::BTreeMap;
@@ -99,6 +99,16 @@ fn a_later_fill_never_pays_for_the_first_cut_at_a_full_store() {
     certificate(&mut state, id);
     open_plan(&mut state);
     saturate(&mut state);
+    let builder = residents(&state, id).next().unwrap();
+    let dirt = crate::villager::mining::item_id(&state, "dirt").unwrap();
+    state
+        .entities
+        .row_mut(builder)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory
+        .fill(Some(ItemStack::new(dirt, 64)));
     let record = state.settlements.get(id).unwrap();
     let blueprint = blueprints::get(&state.registry, "storage").unwrap();
     let images = executor::source_images(&state, id);
@@ -380,4 +390,135 @@ fn a_full_raw_material_bank_funds_and_builds_the_warehouse_without_inventing_cra
     );
     complete(&mut state, id, builder);
     assert_eq!(inventory_and_drops(&state, id, builder), expected);
+}
+
+#[test]
+fn saturated_bank_bootstraps_with_current_carry_then_returns_cut_fill_surplus() {
+    let (mut state, id, builder) = fixture();
+    open_plan(&mut state);
+    certificate(&mut state, id);
+    let bill = fund(&mut state, "storage", 1);
+    saturate(&mut state);
+    let dirt = crate::villager::mining::item_id(&state, "dirt").unwrap();
+    let grass = block(&state, "minecraft:grass_block", &[]);
+    let soil = block(&state, "minecraft:dirt", &[]);
+    // Two real cuts precede one support fill on the ordinary maximum footprint.
+    // The fill is in the reserved margin, not an authored floor replacement.
+    state.world.set_block(5, 201, 5, grass);
+    state.world.set_block(6, 201, 5, grass);
+    state.world.set_block(11, 199, 5, soil);
+    state.world.set_block(11, 200, 5, state.registry.states.air);
+    state.world.fold_overlay();
+    let mut expected = inventory_and_drops(&state, id, builder);
+    for (item, count) in bill {
+        *expected.get_mut(&item).unwrap() -= i64::from(count);
+    }
+    *expected.entry(dirt).or_default() += 1; // +2 excavated, -1 actually placed.
+    expected.retain(|_, count| *count != 0);
+    start(&mut state, id, "storage", 1, None);
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
+    let images = executor::source_images(&state, id);
+    assert!(
+        images
+            .iter()
+            .flat_map(|image| &image.slots)
+            .all(|stack| !stack.is_empty())
+    );
+    let record = state.settlements.get(id).unwrap();
+    let blueprint = blueprints::get(&state.registry, "storage").unwrap();
+    let mut capacity = Capacity::for_blueprint(&state, record, blueprint, &images).unwrap();
+    assert!(
+        candidate_fits(
+            &state,
+            project.origin,
+            blueprint.footprint(Rotation(0)),
+            &[([5, 5], 201), ([6, 5], 201), ([11, 5], 199)],
+            2,
+            None,
+            &mut capacity,
+        )
+        .is_ok(),
+        "only current native carry, not the later fill, makes these cuts admissible"
+    );
+    for _ in 0..8 {
+        attempt(&mut state, id, builder);
+    }
+    assert!(
+        state
+            .entities
+            .row(builder)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .any(|stack| stack.item_id == dirt && stack.count > 0),
+        "real cut overflow must already be in carry before the warehouse exists"
+    );
+    complete(&mut state, id, builder);
+    assert!(
+        executor::return_items(&state, id, &project.structure)
+            .unwrap()
+            .contains(&dirt)
+    );
+    // Re-decoding durable structure records must retain the excavation return
+    // kind even though it was not part of an authored material debit.
+    let durable = serde_json::to_value(&state.plugins).unwrap();
+    assert_eq!(
+        durable["domains"]["@native-structures"][format!("structure/{}", project.structure)]["cut_credits"]
+            [dirt.to_string()],
+        2,
+        "every real cut has one durable credit"
+    );
+    let encoded = serde_json::to_vec(&state.plugins).unwrap();
+    state.plugins = serde_json::from_slice(&encoded).unwrap();
+    assert!(
+        executor::return_items(&state, id, &project.structure)
+            .unwrap()
+            .contains(&dirt)
+    );
+    assign_builder(&mut state, id);
+    assert_eq!(inventory_and_drops(&state, id, builder), expected);
+    assert!(
+        state
+            .entities
+            .row(builder)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory
+            .iter()
+            .flatten()
+            .all(|stack| stack.item_id != dirt || stack.is_empty()),
+        "cut minus fill must return to storage, not strand on the builder"
+    );
+    assert!(
+        executor::source_images(&state, id)
+            .iter()
+            .map(|image| image.slots.len())
+            .sum::<usize>()
+            > 27
+    );
+}
+
+#[test]
+fn partial_bank_credit_passes_only_the_unplaced_remainder_to_carry() {
+    let (state, _, _) = fixture();
+    let dirt = crate::villager::mining::item_id(&state, "dirt").unwrap();
+    let mut bank = vec![vec![ItemStack::new(dirt, 63)]];
+    let remaining = crate::settlements::construction_crafting::add_stack_partial(
+        &state,
+        &mut bank,
+        &ItemStack::new(dirt, 3),
+    );
+    assert_eq!(remaining, 2);
+    assert_eq!(bank[0][0].count, 64);
+    let mut carry = vec![vec![ItemStack::EMPTY; 8]];
+    assert!(crate::settlements::construction_crafting::add_stack(
+        &state,
+        &mut carry,
+        &ItemStack::new(dirt, remaining),
+    ));
+    assert_eq!(bank[0][0].count + carry[0][0].count, 66);
 }

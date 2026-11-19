@@ -185,6 +185,8 @@ pub(crate) fn prepare(
             blueprint_hash: inventories::hash(&batches),
             image,
             portions,
+            cut_credits: BTreeMap::new(),
+            crafting_delta: BTreeMap::new(),
             admission: provenance::Admission::survey(state),
             cells: batches,
         },
@@ -284,6 +286,34 @@ pub(crate) fn status(
     Ok(structure(&ledger, &owner(settlement), handle)?
         .snapshot
         .clone())
+}
+
+/// Material and excavation stock this exact site's released builder owes back.
+pub(crate) fn return_items(
+    state: &TickState,
+    settlement: SettlementId,
+    handle: &str,
+) -> Result<Vec<u32>, Failure> {
+    let ledger = ledger(state)?;
+    let record = structure(&ledger, &owner(settlement), handle)?;
+    let mut items: Vec<_> = record.cut_credits.keys().copied().collect();
+    for material in record
+        .snapshot
+        .consumed
+        .iter()
+        .chain(&record.snapshot.remaining)
+    {
+        let name =
+            mc_data::Identifier::parse(&material.resource).map_err(|_| Failure::InvalidRequest)?;
+        items.push(
+            state
+                .registry
+                .items
+                .id_of(&name)
+                .ok_or(Failure::InvalidRequest)?,
+        );
+    }
+    Ok(items)
 }
 
 /// N3 alone pauses a grown certified sapling as `footprint_changed`. Before
@@ -759,6 +789,7 @@ pub(super) fn debit(
     // The stage being debited is the persisted `terrain` portion: ground-set
     // blocks are cleared and pay nothing (owner D27-4).
     uncredited: bool,
+    cut_credits: &mut BTreeMap<u32, u64>,
 ) -> Result<(), Failure> {
     if cells.len() != expected.len() {
         return Err(Failure::InvalidRequest);
@@ -867,18 +898,19 @@ pub(super) fn debit(
             continue;
         }
         if let Some(credit) = portions::village_drops(state, id, cell, *expected)? {
-            drops.extend(credit);
+            drops.extend(credit.into_iter().map(|stack| (stack, false)));
             continue;
         }
         if cell.state != state.registry.states.air {
             continue;
         }
         if crate::settlements::forestry::tree_or_sapling(state, block) {
-            drops.extend(if portions::inside(state, id, cell.at) {
+            let tree_drops = if portions::inside(state, id, cell.at) {
                 crate::settlements::forestry::roll(state, cell.at, block)?
             } else {
                 crate::settlements::forestry::drops(state, cell.at, block, lot, &mut clearance)?
-            });
+            };
+            drops.extend(tree_drops.into_iter().map(|stack| (stack, false)));
         } else if crate::settlements::construction::excavatable(state, block) {
             // Bounded terrain cut: recheck the cell the survey certified
             // immediately before the debit and credit its own mining drop in
@@ -896,12 +928,16 @@ pub(super) fn debit(
                 crate::villager::mining::item_id(state, crate::villager::mining::drop_name(path))
                     .ok_or(Failure::Blocked)?;
             let count = crate::villager::mining::drop_count(path);
-            drops.push(mc_data::ItemStack::new(item, count));
+            drops.push((mc_data::ItemStack::new(item, count), true));
         } else if portions::inside(state, id, cell.at)
             && !crate::settlements::construction::clearable(state, block)
             && !crate::settlements::construction::relayout::crop(state, block)
         {
-            drops.extend(portions::conserved_drops(state, cell.at, block)?);
+            drops.extend(
+                portions::conserved_drops(state, cell.at, block)?
+                    .into_iter()
+                    .map(|stack| (stack, false)),
+            );
         } else {
             // A log-tag variant excluded from tree ownership must never
             // pass through the flora path with an empty drop list.
@@ -948,9 +984,6 @@ pub(super) fn debit(
         }
     }
     let mut changes = Vec::new();
-    if before.slots != after {
-        changes.push(inventory::Change { before, after });
-    }
     let mut spilled = Vec::new();
     if !drops.is_empty() || !loot.is_empty() {
         let mut images = source_images(state, id);
@@ -982,18 +1015,49 @@ pub(super) fn debit(
                 .is_some_and(|(_, at)| modified([at.x, at.y, at.z]))
         });
         let mut post: Vec<_> = images.iter().map(|image| image.slots.clone()).collect();
-        for stack in drops {
-            if !crate::settlements::construction_crafting::add_stack(state, &mut post, &stack) {
+        for (mut stack, soil) in drops {
+            let credit = cut_credits.entry(stack.item_id).or_default();
+            *credit = credit
+                .checked_add(u64::try_from(stack.count).map_err(|_| Failure::InvalidRequest)?)
+                .ok_or(Failure::Capacity)?;
+            // Keep normal bank credit unchanged. Overflow stays on the bound
+            // builder, journaled in this transaction; later Fill can spend it.
+            stack.count = crate::settlements::construction_crafting::add_stack_partial(
+                state, &mut post, &stack,
+            );
+            if stack.count > 0
+                && (!soil
+                    || !crate::settlements::construction_crafting::add_stack(
+                        state,
+                        std::slice::from_mut(&mut after),
+                        &stack,
+                    ))
+            {
                 return Err(Failure::InsufficientItems);
             }
         }
-        // Plant loot is new, not conserved stock: what storage cannot hold
-        // drops at the cleared cell as in vanilla, rather than stalling the
-        // clear (and the only project slot) on a full chest.
+        // Non-storage plant loot retains vanilla ground drops. A storehouse
+        // bootstrap must receive all its cut credits in bank or carry instead.
         for (at, stack) in loot {
+            let credit = cut_credits.entry(stack.item_id).or_default();
+            *credit = credit
+                .checked_add(u64::try_from(stack.count).map_err(|_| Failure::InvalidRequest)?)
+                .ok_or(Failure::Capacity)?;
             let mut fitted = post.clone();
             if crate::settlements::construction_crafting::add_stack(state, &mut fitted, &stack) {
                 post = fitted;
+            } else if crate::settlements::blueprints::get(&state.registry, &project.blueprint)
+                .is_some_and(|blueprint| {
+                    blueprint.kind == crate::settlements::buildings::BuildingKind::Storage
+                })
+            {
+                if !crate::settlements::construction_crafting::add_stack(
+                    state,
+                    std::slice::from_mut(&mut after),
+                    &stack,
+                ) {
+                    return Err(Failure::InsufficientItems);
+                }
             } else {
                 spilled.push((at, stack));
             }
@@ -1001,6 +1065,9 @@ pub(super) fn debit(
         changes.extend(images.into_iter().zip(post).filter_map(|(before, after)| {
             (before.slots != after).then_some(inventory::Change { before, after })
         }));
+    }
+    if before.slots != after {
+        changes.push(inventory::Change { before, after });
     }
     // Loot credit and material debit precede the infallible native block edit
     // in the same tick transaction. Full storage leaves the tree untouched.
@@ -1564,6 +1631,7 @@ pub(crate) fn fetch(
         // reserved: refuse the haul instead of spending them (SOL-3b).
         return Err(Failure::Blocked);
     };
+    let mut crafting_delta = BTreeMap::<u32, i64>::new();
     for (planned, wanted) in plan {
         // Craft the whole haul; on a shortfall settle for what stock can give.
         let mut amount = wanted;
@@ -1593,7 +1661,7 @@ pub(crate) fn fetch(
                 continue;
             };
             let mut trial = stock_after.clone();
-            if crate::settlements::construction_crafting::ensure_units(
+            if let Some(inputs) = crate::settlements::construction_crafting::ensure_units(
                 state,
                 &mut trial,
                 planned,
@@ -1635,17 +1703,33 @@ pub(crate) fn fetch(
                 } else {
                     reserved
                 };
-                crafted = Some((trial, reserved));
+                crafted = Some((trial, reserved, inputs));
                 break;
             }
             amount /= 2;
         }
-        let Some((trial, reserved)) = crafted else {
+        let Some((trial, reserved, inputs)) = crafted else {
             if planned == item {
                 return Err(Failure::InsufficientItems);
             }
             continue;
         };
+        // Account only the accepted canonical recipe plan, before any haul
+        // transfer. A transfer error must not be excused as recipe consumption.
+        for item in inputs {
+            crafting_delta.entry(item).or_default();
+        }
+        for (before, after) in stock_after.iter().flatten().zip(trial.iter().flatten()) {
+            if before == after {
+                continue;
+            }
+            for (sign, stack) in [(-1, before), (1, after)] {
+                if !stack.is_empty() {
+                    *crafting_delta.entry(stack.item_id).or_default() +=
+                        sign * i64::from(stack.count);
+                }
+            }
+        }
         stock_after = trial;
         let mut available = stock_after
             .iter()
@@ -1702,7 +1786,7 @@ pub(crate) fn fetch(
             *count = count.saturating_sub(moved as u32);
         }
     }
-    let changes = images
+    let changes: Vec<_> = images
         .into_iter()
         .zip(stock_after)
         .filter_map(|(before, after)| {
@@ -1713,8 +1797,34 @@ pub(crate) fn fetch(
             after: carry_after,
         }))
         .collect();
+    let crafting = crafting_receipt(state, handle, crafting_delta)?;
     inventory::commit(state, changes)?;
+    if let Some(ledger) = crafting {
+        save(state, ledger);
+    }
     Ok(())
+}
+
+/// Preflight canonical recipe facts before publishing custody or its receipt.
+/// Zero net counts retain the kinds of actual intermediate recipe inputs.
+fn crafting_receipt(
+    state: &mut TickState,
+    handle: &str,
+    delta: BTreeMap<u32, i64>,
+) -> Result<Option<LedgerView>, Failure> {
+    if delta.is_empty() {
+        return Ok(None);
+    }
+    let mut ledger = ledger_mut(state)?;
+    let revision = next(ledger.revision)?;
+    let record = ledger.structure_mut(handle).ok_or(Failure::NotFound)?;
+    for (item, count) in delta {
+        let total = record.crafting_delta.entry(item).or_default();
+        *total = total.checked_add(count).ok_or(Failure::Capacity)?;
+    }
+    record.snapshot.revision = revision;
+    ledger.revision = revision;
+    Ok(Some(ledger))
 }
 
 /// What one addressable carry return achieved (D8 review SOL-6/R3-1).
