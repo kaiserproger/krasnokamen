@@ -2,8 +2,9 @@
 //! rotation, binding uniqueness, borrowed-builder restore, stall watch by
 //! binding, the joint proof for walls and lamps, order position on a retried
 //! preparation, and the first-project lookups.
-use super::tests::{bind_project, fixture, fund, open_plan, start};
+use super::tests::{bind_project, fixture, fund, open_plan, request_started, start};
 use super::*;
+use crate::entities::EntitySlot;
 
 fn chest(state: &mut TickState) -> &mut Vec<mc_data::ItemStack> {
     &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots
@@ -1204,23 +1205,17 @@ fn a_free_builder_takes_the_owners_order_before_autonomous_work() {
     }
 }
 
-/// Spain seed 100 (pin 3068dfb1b857): the planner opened autonomous sites up
-/// to the eight-project cap for three builders; five stood unbuilt
-/// (no_builder 26 times) and held the slots the owner's church needed.
-#[test]
-fn the_planner_opens_no_site_while_a_project_waits_for_its_builder() {
-    let (mut state, id, slot) = fixture();
-    open_plan(&mut state);
-    fund(&mut state, "storage", 1);
-    // A free paving cell far from the plaza lots: no bill, no shared ground.
+/// An active paving project on one free cell far from the plaza lots: no
+/// bill, no shared ground.
+fn paving_project(state: &mut TickState, id: SettlementId) -> String {
     let at = [28, 201, 28];
-    let soil = crate::settlements::allocator::tests::block(&state, "minecraft:grass_block", &[]);
+    let soil = crate::settlements::allocator::tests::block(state, "minecraft:grass_block", &[]);
     state.world.set_block(at[0], at[1], at[2], soil);
     state.world.fold_overlay();
-    let path = crate::settlements::allocator::tests::block(&state, "minecraft:dirt_path", &[]);
+    let path = crate::settlements::allocator::tests::block(state, "minecraft:dirt_path", &[]);
     let bounds = ScriptWorldBounds::new(at, at).unwrap();
     let structure = executor::prepare(
-        &mut state,
+        state,
         id,
         layout::ROAD.into(),
         bounds,
@@ -1250,6 +1245,41 @@ fn the_planner_opens_no_site_while_a_project_waits_for_its_builder() {
             order_seq: None,
         },
     );
+    structure
+}
+
+/// A bound resident of `id` with `profession`, standing at `at`.
+fn resident(
+    state: &mut TickState,
+    id: SettlementId,
+    at: [f64; 3],
+    profession: Profession,
+) -> EntitySlot {
+    let slot = crate::settlements::allocator::tests::villager(state, at);
+    let entity = state.entities.body(slot).id;
+    crate::settlements::bind(state, id, entity).unwrap();
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = profession;
+    slot
+}
+
+/// Spain seed 100 (pin 3068dfb1b857): the planner opened autonomous sites up
+/// to the eight-project cap for three builders; five stood unbuilt
+/// (no_builder 26 times) and held the slots the owner's church needed.
+#[test]
+fn the_planner_opens_no_site_while_a_project_waits_for_its_builder() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "storage", 1);
+    let structure = paving_project(&mut state, id);
+    // A resident the next site can recruit, so only the unbound project holds.
+    resident(&mut state, id, [5.5, 201.0, 5.5], Profession::None);
     for _ in 0..64 {
         plan(&mut state, id);
     }
@@ -1266,4 +1296,47 @@ fn the_planner_opens_no_site_while_a_project_waits_for_its_builder() {
         }
     }
     panic!("setup: with every project bound the planner opens the funded storage");
+}
+
+/// Spain seed 100 (trace pin 1f30290d787e-de95775f): with three builders the
+/// planner opened a fourth house that none of the other residents (farmers, a
+/// nitwit, extraction workers kept for gathering) could take; it stood
+/// unbound for 30k ticks and held the planner. Autonomous work opens a site
+/// only when a resident could build it; an owner's order keeps its own path.
+#[test]
+fn the_planner_opens_no_site_nobody_can_build() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "storage", 1);
+    let structure = paving_project(&mut state, id);
+    bind_project(&mut state, id, &structure, slot);
+    resident(&mut state, id, [5.5, 201.0, 5.5], Profession::Farmer);
+    resident(&mut state, id, [6.5, 201.0, 5.5], Profession::Nitwit);
+    for _ in 0..64 {
+        plan(&mut state, id);
+    }
+    assert_eq!(
+        handles(&state, id),
+        vec![structure.clone()],
+        "every project is bound, but no resident could take another site"
+    );
+    // Control: the owner's order is admitted at once all the same.
+    request_started(&mut state, id, "storage");
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(handles(&state, id).len(), 2);
+    assert!(
+        access::projects(record).any(|project| project.ordered && project.blueprint == "storage"),
+        "the owner's storage order is an active project"
+    );
+    // A resident who can build turns up: the order takes it first.
+    let recruit = resident(&mut state, id, [7.5, 201.0, 5.5], Profession::None);
+    assign_builder(&mut state, id);
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(
+        access::projects(record)
+            .find(|project| project.ordered)
+            .unwrap()
+            .builder,
+        Some((state.entities.row(recruit).uuid, None))
+    );
 }

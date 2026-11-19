@@ -48,6 +48,10 @@ pub(super) use replant::{
 #[path = "construction_upgrade.rs"]
 mod upgrade;
 
+#[path = "construction_builders.rs"]
+mod builders;
+use builders::{assign_builder, builder_free};
+
 pub(crate) const PLAN_CADENCE: u64 = 20;
 /// Active projects a settlement may hold at once: one per builder candidate the
 /// planner scans, so the joint funding proof and the tick stay bounded.
@@ -1713,9 +1717,13 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
         return;
     };
     // Autonomous work opens a site only when every active project has its
-    // builder: a site nobody can build only parks a slot and a lot (Spain
-    // seed 100: eight projects for three builders, no_builder 26 times).
-    if claim_slot(state, id).is_err() || unbound_project(&state.settlements, id).is_some() {
+    // builder and a resident could take one more: a site nobody can build only
+    // parks a slot and a lot and holds the planner (Spain seed 100: eight
+    // projects for three builders; later a fourth house unbound for 30k ticks).
+    if claim_slot(state, id).is_err()
+        || unbound_project(&state.settlements, id).is_some()
+        || !builder_free(state, id)
+    {
         return;
     }
     let residents = state.settlements.member_count(id);
@@ -2031,9 +2039,6 @@ fn reaches_storage(
         )
 }
 
-/// Residents tried per pass; the rest wait for the next planning pass.
-const BUILDER_CANDIDATES: usize = 8;
-
 /// The slot of the resident bound to `project`, while it is still a living
 /// Builder of this settlement. A project's own binding is the only incumbent
 /// (D8): another project never stands in for it.
@@ -2173,19 +2178,6 @@ pub(crate) struct BuilderWatch {
     bound: bool,
     /// The progress of the episode whose owner notice was settled (Sol S-2).
     told: Option<(String, u32, u64)>,
-}
-
-/// Bind an already-working native Builder to the first unbound project.
-fn bind_first_unbound(state: &mut TickState, id: SettlementId, slot: crate::entities::EntitySlot) {
-    let Some(target) = unbound_project(&state.settlements, id) else {
-        return;
-    };
-    let binding = Some((state.entities.row(slot).uuid, None));
-    if let Some(record) = state.settlements.get_mut(id)
-        && access::bind_builder(record, &target, binding)
-    {
-        record.revision = record.revision.saturating_add(1);
-    }
 }
 
 /// Drop a binding whose villager died, left, converted or stopped being a
@@ -2682,178 +2674,6 @@ fn carry_debtor(state: &TickState, id: SettlementId, uuid: uuid::Uuid) -> bool {
         .settlements
         .get(id)
         .is_some_and(|record| record.carry_pending.contains_key(&uuid))
-}
-
-fn assign_builder(state: &mut TickState, id: SettlementId) {
-    drain_carry_duties(state, id);
-    release_stalled_builder(state, id);
-    if release_trapped_builder(state, id) {
-        return;
-    }
-    rebind_lost_builders(state, id);
-    let Some(target) = unbound_project(&state.settlements, id) else {
-        return;
-    };
-    // Extraction workers are lent to construction one at a time and only while
-    // the settlement holds a single project; from two projects on, gathering
-    // keeps its workers and parallel sites recruit ordinary residents (D8).
-    let may_borrow = access::projects_of(&state.settlements, id).count() == 1;
-    // The wake reason belongs to the project being bound, not to whichever
-    // project happens to be first (D8 review R3-8).
-    let ordered = state
-        .settlements
-        .get(id)
-        .and_then(|record| access::project_for_structure(record, &target))
-        .is_some_and(|project| project.ordered);
-    let protected = state.settlements.get(id).and_then(|record| {
-        let images = executor::source_images(state, id);
-        let bill = joint_active_bill(state, id)?;
-        super::construction_crafting::needed_gatherer(state, &bill, &images).or_else(|| {
-            if ordered {
-                return None;
-            }
-            gatherer_demand(state, record, &images)
-                .filter(|profession| has_staffed_gatherer(state, id, *profession))
-        })
-    });
-    // A native Builder already on the settlement takes the first unbound
-    // project directly; no recruitment and no profession change. It must still
-    // be able to reach storage, or a walled builder would hold the project.
-    let mut ready_cache = super::allocator::PoiCache::default();
-    let mut ready_path = Vec::new();
-    let ready = residents(state, id)
-        .filter(|slot| {
-            let row = state.entities.row(*slot);
-            state.entities.body(*slot).alive
-                && !access::bound_builder(&state.settlements, row.uuid)
-                && !carry_debtor(state, id, row.uuid)
-                && row.villager.as_ref().is_some_and(|v| {
-                    v.settlement == Some(id)
-                        && v.data.profession == Profession::Builder
-                        && v.conversion_time.is_none()
-                })
-        })
-        .find(|&slot| reaches_storage(state, id, slot, &mut ready_cache, &mut ready_path));
-    if let Some(slot) = ready {
-        bind_first_unbound(state, id, slot);
-        return;
-    }
-    let mut candidates = Vec::new();
-    for slot in residents(state, id) {
-        let uuid = state.entities.row(slot).uuid;
-        if !resident_simulated(state, slot)
-            || super::economy::worker_reserved(state, Some(id), uuid)
-            || carry_debtor(state, id, uuid)
-        {
-            continue;
-        }
-        let body = state.entities.body(slot);
-        let Some(v) = state.entities.row(slot).villager.as_ref() else {
-            continue;
-        };
-        if protected.is_some_and(|needed| {
-            v.job_site.is_some_and(|job| {
-                buildings::job_profession(&state.settlements, Some(id), job) == Some(needed)
-            })
-        }) {
-            continue;
-        }
-        if body.alive && v.settlement == Some(id) && v.age >= 0 && v.conversion_time.is_none() {
-            let uuid = state.entities.row(slot).uuid;
-            if v.data.profession == Profession::Builder
-                || access::bound_builder(&state.settlements, uuid)
-                || (!may_borrow
-                    && matches!(
-                        v.data.profession,
-                        Profession::Miner | Profession::Lumberjack
-                    ))
-            {
-                continue;
-            }
-            let priority = match v.data.profession {
-                Profession::None => Some(0),
-                Profession::Mason if !super::allocator::traded(v) => Some(1),
-                profession
-                    if !super::allocator::traded(v)
-                        && !matches!(
-                            profession,
-                            Profession::Farmer
-                                | Profession::Miner
-                                | Profession::Lumberjack
-                                | Profession::Shepherd
-                                | Profession::Soldier
-                                | Profession::Nitwit
-                        ) =>
-                {
-                    Some(2)
-                }
-                Profession::Miner | Profession::Lumberjack
-                    if !super::allocator::traded(v) && Some(v.data.profession) != protected =>
-                {
-                    Some(3)
-                }
-                _ => None,
-            };
-            if let Some(priority) = priority {
-                let shunned = state
-                    .settlements
-                    .builder_watch
-                    .get(&(id, target.clone()))
-                    .is_some_and(|watch| {
-                        watch.shunned.iter().any(|&(uuid, until)| {
-                            uuid == state.entities.row(slot).uuid && state.tick < until
-                        })
-                    });
-                candidates.push((priority + if shunned { 10 } else { 0 }, slot));
-            }
-        }
-    }
-    // Stable: residents of equal priority keep their index order.
-    candidates.sort_by_key(|&(priority, _)| priority);
-    let mut cache = super::allocator::PoiCache::default();
-    let mut path = Vec::new();
-    let Some(slot) = candidates
-        .into_iter()
-        .take(BUILDER_CANDIDATES)
-        .map(|(_, slot)| slot)
-        .find(|&slot| reaches_storage(state, id, slot, &mut cache, &mut path))
-    else {
-        return;
-    };
-    // Ordinary recruits keep the authored builder career. Only extraction
-    // workers are loaned to construction and restored on completion.
-    let profession = state
-        .entities
-        .row(slot)
-        .villager
-        .as_ref()
-        .unwrap()
-        .data
-        .profession;
-    let borrowed = match profession {
-        Profession::Miner | Profession::Lumberjack => Some(profession),
-        _ => None,
-    };
-    let binding = Some((state.entities.row(slot).uuid, borrowed));
-    if let Some(record) = state.settlements.get_mut(id)
-        && access::bind_builder(record, &target, binding)
-    {
-        record.revision = record.revision.saturating_add(1);
-    }
-    let v = state
-        .entities
-        .row_mut(slot)
-        .villager
-        .as_mut()
-        .expect("builder candidate");
-    v.data.profession = Profession::Builder;
-    v.offers.clear();
-    v.job_site = None;
-    v.navigation_target = None;
-    v.navigation_path.clear();
-    v.navigation_chunks.clear();
-    v.navigation_repath_at = 0;
-    crate::villager::sync_appearance(state, slot);
 }
 
 /// Planning keeps its one-settlement/second budget; its site slices come from

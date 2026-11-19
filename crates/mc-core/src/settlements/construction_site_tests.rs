@@ -964,6 +964,12 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
     let chest = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
     chest[25] = mc_data::ItemStack::new(fence, 2);
     chest[26] = mc_data::ItemStack::new(torch, 1);
+    // The direct-work helper ended in an unticketed neighbour chunk, where
+    // construction cannot hire the only resident: no autonomous site opens
+    // until it is back on the active fixture.
+    plan(&mut state, id);
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+    state.entities.set_pos(slot, [1.5, 201.0, 2.5]);
     plan(&mut state, id);
     let lamp = state
         .settlements
@@ -979,9 +985,6 @@ fn standing_storage_gets_the_street_its_door_faces_paved_then_lit() {
         [10, 201, 19],
         "the stretch's verge lamp column"
     );
-    // The direct-work helper ended in an unticketed neighbour chunk. Return
-    // to the active fixture before admitting the next temporary job.
-    state.entities.set_pos(slot, [1.5, 201.0, 2.5]);
     assign_builder(&mut state, id);
     complete(&mut state, id, slot);
     assert_eq!(block_name(&state, 10, 201, 19), "oak_fence");
