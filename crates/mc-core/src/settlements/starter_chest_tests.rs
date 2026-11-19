@@ -1,6 +1,6 @@
 use super::tests::{native_checkpoint, native_state};
 use super::*;
-use crate::boundary::{BlockPos, ChangeSet, ChunkPos, ConnectionId, EntityId, PlayerInput};
+use crate::boundary::{ChangeSet, ChunkPos, ConnectionId, EntityId, PlayerInput};
 use crate::commands::Command;
 use crate::settlements::{commands::SettlementCommand, starter_chest};
 use std::sync::Arc;
@@ -221,17 +221,11 @@ fn starter_grant_and_empty_chest_recover_from_wal_without_a_post_grant_checkpoin
         .world
         .ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
     assert!(is_chest_block(&reopened, chest));
-    let chunk = reopened.world.chunk(ChunkPos { x: 0, z: 0 }).unwrap();
-    assert!(
-        chunk.chests[&BlockPos {
-            x: chest[0],
-            y: chest[1],
-            z: chest[2]
-        }]
-            .slots
-            .iter()
-            .all(|slot| slot.is_empty())
-    );
+    // WAL inventories hydrate the tick owner; the chunk image still belongs to
+    // the pre-grant checkpoint until the next checkpoint captures that owner.
+    let slots = &reopened.block_entities[&(chest[0], chest[1], chest[2])].slots;
+    assert_eq!(slots.len(), 27);
+    assert!(slots.iter().all(mc_data::ItemStack::is_empty));
     let (connection, actor) = founder(&mut reopened);
     assert!(reopened.settlements.remove(id));
     let repeated = create(&mut reopened, connection, actor, "walrepeat");
