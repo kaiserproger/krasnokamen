@@ -904,3 +904,31 @@ fn movement_due_with_a_zero_update_interval_is_due_every_tick() {
         "interval 1 is due every tick"
     );
 }
+
+#[test]
+fn a_window_rescan_is_counted_and_an_incremental_publish_is_not() {
+    // The plan debug line reports rescans *per publish*: a full scan is O(the viewer's chunk
+    // square) and the R3k-5 fanout step has to be separable into rescans and move volume.
+    let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
+    viewer.loaded_chunks.insert((0, 0), 0);
+    let out = output(
+        vec![],
+        (10..110).map(|id| entity(id, [9.0, 64.0, 8.0])).collect(),
+        ChangeSet::default(),
+    );
+    plan_entities_for(&out, &mut viewer, usize::MAX);
+    assert_eq!(viewer.rescans, 1, "the first publish has no baseline to walk");
+    assert!(
+        viewer.entities_scanned >= 1,
+        "the scan must report the rows it walked, got {}",
+        viewer.entities_scanned
+    );
+    let scanned = viewer.entities_scanned;
+
+    let index = TickPlanIndex::with_previous(&out, viewer.previous_entities());
+    let mut interest = std::mem::take(&mut viewer.entity_interest);
+    let mut scratch = PlanScratch::default();
+    interest.prepare(&out.snapshot, &mut viewer, 4, &index, &mut scratch, usize::MAX);
+    assert_eq!(viewer.rescans, 1, "an unchanged window must not rescan");
+    assert_eq!(viewer.entities_scanned, scanned);
+}

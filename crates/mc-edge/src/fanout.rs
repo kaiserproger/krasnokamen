@@ -172,6 +172,19 @@ pub fn publish_with_registries<'a>(
         .any(|viewer| viewer.recorder)
         .then(|| crate::recorder::tick_marker_frame(output.tick, output.times.wall_start_unix_ns));
     let marker_bytes = marker.as_ref().map_or(0, bytes::Bytes::len);
+    // Counters for the plan debug line: a rescan is per-viewer O(chunk square), so its
+    // per-publish delta says whether a fanout step comes from rescans or from move volume.
+    let plan_debug = tracing::enabled!(tracing::Level::DEBUG);
+    let rescans_before = if plan_debug {
+        viewers.iter().map(|viewer| viewer.rescans).sum::<u64>()
+    } else {
+        0
+    };
+    let scanned_before = if plan_debug {
+        viewers.iter().map(|viewer| viewer.entities_scanned).sum::<u64>()
+    } else {
+        0
+    };
     let plan_start = probe.map(|_| std::time::Instant::now());
     let mut planned: Vec<(ConnectionId, Vec<PlannedPacket>)> = Vec::with_capacity(viewers.len());
     let mut marked: Vec<ConnectionId> = Vec::new();
@@ -205,6 +218,36 @@ pub fn publish_with_registries<'a>(
             marked.push(connection);
         }
         planned.push((connection, packets));
+    }
+    if plan_debug {
+        let packets: usize = planned.iter().map(|(_, packets)| packets.len()).sum();
+        let chunk_packets: usize = planned
+            .iter()
+            .flat_map(|(_, packets)| packets.iter())
+            .filter(|packet| packet.chunk.is_some())
+            .count();
+        let viewers_unplanned = planned.iter().filter(|(_, packets)| packets.is_empty()).count();
+        let (hit, miss) = indices
+            .values()
+            .fold((0u64, 0u64), |(hit, miss), index| {
+                let (h, m) = index.move_tallies();
+                (hit + h, miss + m)
+            });
+        tracing::debug!(
+            target: "mc_edge::server::plan",
+            tick = output.tick,
+            viewers = viewers.len(),
+            viewers_unplanned,
+            packets,
+            chunk_packets,
+            plan_us = plan_start.map_or(0, |start| start.elapsed().as_micros() as u64),
+            rescans = viewers.iter().map(|viewer| viewer.rescans).sum::<u64>() - rescans_before,
+            entities_scanned = viewers.iter().map(|viewer| viewer.entities_scanned).sum::<u64>()
+                - scanned_before,
+            move_hits = hit,
+            move_misses = miss,
+            "pump plan"
+        );
     }
     let fill_start = probe.map(|_| std::time::Instant::now());
     let failed = crate::plan::fill_chunk_packets(output, &mut planned, registries, chunk_cache);

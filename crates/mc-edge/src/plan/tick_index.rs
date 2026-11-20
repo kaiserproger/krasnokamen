@@ -50,6 +50,11 @@ pub(crate) struct TickPlanIndex {
 }
 
 impl TickPlanIndex {
+    /// (hit, miss) move frames this publish's cache served, for the plan debug line.
+    pub(crate) fn move_tallies(&self) -> (u64, u64) {
+        self.moves.move_tallies()
+    }
+
     /// Attach the publish's chunk revision delta (`None`: every viewer walks
     /// its whole window).
     pub(crate) fn with_chunk_delta(mut self, delta: Option<Arc<ChunkDelta>>) -> Self {

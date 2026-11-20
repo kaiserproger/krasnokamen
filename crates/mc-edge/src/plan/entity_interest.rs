@@ -77,6 +77,8 @@ impl EntityInterest {
         });
         if !contiguous || !window_same || !held_same {
             entity_candidates::collect(snapshot, viewer, distance, scratch, credit, spectators);
+            viewer.rescans += 1;
+            viewer.entities_scanned += scratch.visible.len() as u64;
             self.ranges.clear();
             self.ranges.extend(scratch.tracking_ranges.iter().copied());
             self.visible.clear();

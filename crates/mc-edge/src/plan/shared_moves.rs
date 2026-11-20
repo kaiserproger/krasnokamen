@@ -17,6 +17,7 @@
 use super::*;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Shard count (power of two; the mask keeps shard selection cheap).
 const SHARDS: usize = 64;
@@ -66,6 +67,11 @@ pub(super) struct SharedMove {
 pub(super) struct SharedMoves {
     moves: [Mutex<FxHashMap<MoveKey, Option<SharedMove>>>; SHARDS],
     heads: [Mutex<FxHashMap<i32, (i32, bytes::Bytes)>>; SHARDS],
+    /// Move frames served from the map / encoded by it. Per publish these two numbers say
+    /// whether the viewers share baselines at all: a miss is one encode per viewer, and the
+    /// R3k-5 fanout step is only explicable by misses when the volume per viewer grows.
+    hit_frames: AtomicU64,
+    miss_frames: AtomicU64,
 }
 
 impl Default for SharedMoves {
@@ -73,6 +79,8 @@ impl Default for SharedMoves {
         Self {
             moves: std::array::from_fn(|_| Mutex::new(FxHashMap::default())),
             heads: std::array::from_fn(|_| Mutex::new(FxHashMap::default())),
+            hit_frames: AtomicU64::new(0),
+            miss_frames: AtomicU64::new(0),
         }
     }
 }
@@ -90,20 +98,30 @@ impl SharedMoves {
         let key = MoveKey::new(entity.id, baseline);
         let shard = &self.moves[(key.id as usize) & (SHARDS - 1)];
         let mut guard = shard.lock();
-        guard
-            .entry(key)
-            .or_insert_with(|| {
-                entity_movement(entity, baseline).map(|(packet, next)| {
-                    let (id, data) = match packet {
-                        MovePacket::Pos(packet) => frame(&packet),
-                        MovePacket::Rot(packet) => frame(&packet),
-                        MovePacket::PosRot(packet) => frame(&packet),
-                        MovePacket::Sync(packet) => frame(&packet),
-                    };
-                    SharedMove { id, data, next }
-                })
-            })
-            .clone()
+        if let Some(cached) = guard.get(&key) {
+            self.hit_frames.fetch_add(1, Ordering::Relaxed);
+            return cached.clone();
+        }
+        self.miss_frames.fetch_add(1, Ordering::Relaxed);
+        let value = entity_movement(entity, baseline).map(|(packet, next)| {
+            let (id, data) = match packet {
+                MovePacket::Pos(packet) => frame(&packet),
+                MovePacket::Rot(packet) => frame(&packet),
+                MovePacket::PosRot(packet) => frame(&packet),
+                MovePacket::Sync(packet) => frame(&packet),
+            };
+            SharedMove { id, data, next }
+        });
+        guard.insert(key, value.clone());
+        value
+    }
+
+    /// (hit, miss) move-frame tallies since this snapshot's cache was created.
+    pub(crate) fn move_tallies(&self) -> (u64, u64) {
+        (
+            self.hit_frames.load(Ordering::Relaxed),
+            self.miss_frames.load(Ordering::Relaxed),
+        )
     }
 
     /// Shared `RotateHead` frame for `entity`'s current head yaw, keyed by

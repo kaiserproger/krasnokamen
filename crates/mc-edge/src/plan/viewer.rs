@@ -133,6 +133,12 @@ pub struct ViewerState {
     pub(super) skip_base: Option<Arc<Vec<SnapshotChunk>>>,
     /// Free outbound world-queue frame slots, refreshed by the pump before
     /// each publish: the plan emits at most this many best-effort frames.
+    /// Full-candidate rescans this viewer has paid (`entity_interest::prepare`), and the
+    /// visible entities those scans walked. A rescan is O(the viewer's whole chunk square);
+    /// the plan debug line reports the per-publish deltas so a fanout step can be read.
+    pub rescans: u64,
+    /// Summed `visible` length over those rescans.
+    pub entities_scanned: u64,
     pub world_credit: usize,
     /// Free outbound world-queue bytes, refreshed with `world_credit`
     /// ([`WorldCredit`] explains the soft byte bound).
@@ -208,6 +214,8 @@ impl ViewerState {
             radius_sent: None,
             skipped: false,
             skip_base: None,
+            rescans: 0,
+            entities_scanned: 0,
             world_credit: usize::MAX,
             world_bytes: usize::MAX,
             recorder: false,
