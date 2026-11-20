@@ -67,10 +67,21 @@ This is not an approved war/faction model and must not be described as one.
   settlement, containing only `destination: [i32; 3]` and an existing `household`
   key. Stage, payment, materials, construction and culture are derived from
   existing native state; there is no persisted lineage or culture flag.
-- At 24 residents, a whole eligible household of two or three members can
-  commission an outside-radius outpost: three paid Spanish houses and a plaza.
-  There must be at least two adults; the three-bed plan cannot receive a larger
-  household. Missing or relocated members cancel the expedition.
+- At 24 residents, a founding group of two or three members can commission an
+  outside-radius outpost: three paid Spanish houses and a plaza. There must be
+  at least two adults; the three-bed plan cannot receive a larger group. Missing
+  or relocated members cancel the expedition.
+- Owner D68 (2026-11-20): a group of two or three residents (at least two
+  adults) splits off a large household and founds the outpost as a new
+  household; the three-bed plan stays. Main's
+  readings within those limits, open to owner correction: a whole eligible
+  household still goes first; otherwise the largest household (ties: lowest
+  household key) that keeps at least one adult gives its two lowest-id adults
+  that are not reserved or in transit; children stay with the parent household.
+  The split happens in the same native WAL tick as founding admission, under a
+  new household key that `founding.household` names. The parent household keeps
+  its key, home and bed claims, remaining members and all stock; the leavers
+  keep only what they carry.
 - Site rights, overlap admission and recovery validation are explicit. Civil
   certificates are withheld until physical completion. Generic plugin structure
   preparation cannot reserve an expedition's site.
@@ -280,8 +291,9 @@ the parallel behaviour lands,
 
 - A birth between a household-less resident and a member of a household of
   three or more founds a new household of both parents and the child; the
-  owner kept this rule. Founding still takes a whole household of two or three
-  with at least two adults ([daughter founding](#daughter-founding--owner-approved-2026-11-15)).
+  owner kept this rule. Founding takes a whole household of two or three with
+  at least two adults, or a group of two split off a larger household (D68,
+  [daughter founding](#daughter-founding--owner-approved-2026-11-15)).
   Implementation: [migration policy and physical return](../architecture/settlements.md#migration-policy-and-physical-return).
 - A birth's bed search keeps vanilla's near search (48 blocks) first; only when
   that finds no bed does a settlement resident take a free bed in a certified
