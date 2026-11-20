@@ -58,7 +58,10 @@ WITNESS = "JoinLagWitness"
 JOINER = "JoinLagJoiner"
 TIMEOUT = 1800.0
 JOIN_BOUND_SECONDS = 10.0      # the server's join deadline the row names
-PUBLISH_BUDGET_SECONDS = 1.6   # the pump's publish queue budget (pump.rs PUBLISH_QUEUE_BUDGET)
+PUBLISH_BUDGET_SECONDS = 1.6
+#: Row 1's own red control needs the fresh join launched behind the over-budget pump but before the
+#: drain halt; the knob's lag at the trigger (ticks) comes from KRASNOKAMEN_JOIN_LAG_GATE_JOIN_AT_LAG.
+DEFAULT_JOIN_AT_LAG = 0  # 0 keeps the historical timing: join right after the settle
 ENGAGED_LINE = "pump lag enabled"  # the server's warn line for the test/dev knob
 CRITERIA = ("join_behind_slow_pump", "live_pump_does_not_halt")
 
@@ -248,6 +251,16 @@ def private_xdg_root(artifact: Path) -> str:
         if (source / name).exists():
             link.symlink_to((source / name).resolve(), target_is_directory=(source / name).is_dir())
     return str(root)
+
+
+def join_due(lag: int | None, threshold: int) -> bool:
+    """Wait for the witnessed lag to pass `threshold` ticks before launching the fresh join.
+
+    Zero keeps the historical timing (join right after the settle); a positive threshold holds the
+    join until the pump is that far behind the core, which is how row 1's control reproduces a held
+    join (022858: admitted at lag 26 and held 9.28 s) before the 10 s drain halt.
+    """
+    return bool(threshold) and lag is not None and lag >= threshold
 
 
 def _stat(dashboard_port: int) -> dict[str, Any]:
@@ -473,6 +486,19 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: int, ad
     tick_before = _safe_tick(dashboard_port)
 
     skips_before = _skip_counters(dashboard_port)
+    join_at_lag = int(os.environ.get("KRASNOKAMEN_JOIN_LAG_GATE_JOIN_AT_LAG", DEFAULT_JOIN_AT_LAG) or 0)
+    if join_at_lag:
+        # Row 1's own red control: hold the join until the pump is far enough behind to hold it, yet
+        # before the 10 s drain halt (022858: admitted at lag 26, held 9.28 s). A bounded poll of the
+        # dashboard, not a fixed sleep.
+        detail["join_at_lag"] = join_at_lag
+        for _ in range(1200):
+            try:
+                if join_due(_stat(dashboard_port).get("pump_lag_ticks"), join_at_lag):
+                    break
+            except OSError:
+                break
+            time.sleep(0.05)
     joiner_process, joiner_mcp = launch_joiner()
     try:
         joiner = ProbeSteps(joiner_mcp, artifact / "join-lag-joiner",
