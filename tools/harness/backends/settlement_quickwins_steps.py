@@ -15,8 +15,8 @@ from typing import Any
 from .. import runtime
 from . import scene_shot
 from .settlement_quickwins_qa import (
-    CRITERIA, NAME, RADIUS, StepFailed, Walk, blob, expected_shortage, greeting_verdict, guide_verdict, matching,
-    refusal_verdict, shortage_verdict, signature, view, UUID,
+    CRITERIA, NAME, RADIUS, C1Race, StepFailed, Walk, blob, c1_race_clocks, expected_shortage, greeting_verdict,
+    guide_verdict, matching, refusal_verdict, shortage_verdict, signature, view, UUID,
 )
 
 BUILDING_LIST = re.compile(
@@ -55,8 +55,10 @@ def run_block(w: Walk, name: str, criteria: tuple[str, ...], block: Any) -> None
 # ----------------------------------------------------------------------------- setup
 
 
-def setup(w: Walk) -> None:
-    """Privileged prerequisites: a flat pad and a survival player; nothing here is judged."""
+def setup(w: Walk, race: C1Race | None = None) -> None:
+    """Privileged prerequisites: a flat pad and a survival player; nothing here is judged. `race`
+    (`--scenario quickwins-c1-race`): observer clocks in the anchor's chunk, then the founding waits
+    `race.found_after_ticks` so the pad's block and light traffic has left the connection queue."""
     from .buildings_qa import _chunked_fills
     probe = w.probe
     probe.report["setup_not_asserted"] = [
@@ -81,6 +83,14 @@ def setup(w: Walk) -> None:
         w.fixture(command)
     w.tp(x + .5, y, z + .5)
     w.fixture("gamemode survival @s")
+    if race is not None:
+        pairs = c1_race_clocks([x, y, z], race.clocks)
+        for east, west in pairs:
+            w.fixture(f"setblock {east[0]} {east[1]} {east[2]} minecraft:observer[facing=east]")
+            w.fixture(f"setblock {west[0]} {west[1]} {west[2]} minecraft:observer[facing=west]")
+            w.probe.call("minecraft_wait_ticks", {"ticks": 1})  # the 2-tick clocks do not all start in one phase
+        wait_ticks(w, race.found_after_ticks)
+        w.evidence["c1_race"] = {"clocks": [list(pair) for pair in pairs], "found_after_ticks": race.found_after_ticks}
     # The player's own command: found the settlement at the anchor.
     probe.report.setdefault("player_commands", []).append(f"settlement create {NAME} {RADIUS}")
     probe.call("minecraft_send_chat", {"message": f"settlement create {NAME} {RADIUS}", "command": True})

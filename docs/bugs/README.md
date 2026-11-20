@@ -50,7 +50,8 @@ failing_first = "not recorded"
   `harness:<profile>:<scenario>`, or `harness:<profile>:<verdict>` checks;
   initially it may be empty. Profile verdicts run the windowed native client,
   except `settlement-map-qa:localized_text`, which needs the Russian locale and
-  runs vanilla Java with `--language ru_ru`.
+  runs vanilla Java with `--language ru_ru`, and `settlement-map-qa:starter_chest_race`,
+  which runs vanilla Java with `--scenario quickwins-c1-race`.
   A profile may publish boolean `details.verdicts` keyed by behaviour; the
   referenced key must be exactly `true`. The `all` key denotes the whole
   profile; when no boolean verdict map exists, `all` requires a passing

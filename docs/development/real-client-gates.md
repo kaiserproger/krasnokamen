@@ -821,7 +821,8 @@ the Settings dialog or the map territory.
   `false` as red and `null` as no evidence. A ledger ref
   `harness:settlement-map-qa:localized_text` runs `--client java ... --language ru_ru`
   (the receipt needs the Java prerequisites env, `receipts/BuildHost/java-prereqs.env`);
-  every other verdict runs native with `--timeout-seconds 3600`.
+  `harness:settlement-map-qa:starter_chest_race` runs `--client java ... --scenario quickwins-c1-race`
+  (below); every other verdict runs native with `--timeout-seconds 3600`.
   A Java run whose client could not load the requested language fails before connect
   (`scene_shot_client.check_java_language`, marker `Failed to load translations for
   <locale> from pack vanilla`): such a client still reports the locale to the server but
@@ -845,6 +846,17 @@ the Settings dialog or the map territory.
   criteria instead (negative-control plumbing check on a tree without the changes; it fails when any
   criterion is unmet and is never acceptance). Its negative control is the same run on the tree without
   the quick wins, with that tree's own server pin.
+
+  `settlement-map-qa -- --scenario quickwins-c1-race [--founding-clocks 1..6] [--found-after-ticks 1..1200]`
+  (native or Java, any language) is the standing check of
+  JAVA-CLIENT-MISSES-FOUNDING-STARTER-CHEST-BLOCK: the same pad and `/settlement create`, but first observer
+  clocks (default 4) on the anchor chunk's far side keep changing blocks of that chunk, and the founding waits
+  (default 100 ticks) until the pad's traffic has left the connection queue; then only C1 is judged with the
+  quickwins diagnostics (15 scans, a ±16 scan, a rescan after 60 s and after a teleport 220 blocks away and
+  back). It publishes `details.verdicts.starter_chest_race`: `true` when the client sees the chest, `false`
+  when it sees it only after coming back (the server had it; only a chunk resend delivered it), `null`
+  otherwise. On the unfixed core (pin `7393780e37a4`) the client missed the chest in every run (Java 7/7,
+  Horizon 2/2, `receipts/ChestDeliveryFix/REVIEW-BRIEF.md`). The options exist only on this scenario.
 
 ## Distant Horizons gate (`dh-gate`)
 
