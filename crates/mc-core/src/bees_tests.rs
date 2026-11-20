@@ -6,6 +6,10 @@ use std::sync::{Arc, LazyLock};
 
 pub(crate) const POS: BlockPos = BlockPos { x: 4, y: 201, z: 4 };
 pub(crate) fn state(dir: Option<std::path::PathBuf>) -> TickState {
+    state_at_tick(dir, 0)
+}
+
+pub(crate) fn state_at_tick(dir: Option<std::path::PathBuf>, tick: u64) -> TickState {
     static REGISTRY: LazyLock<Arc<CoreRegistry>> =
         LazyLock::new(|| Arc::new(CoreRegistry::load(None).unwrap()));
     let registry = Arc::clone(&REGISTRY);
@@ -36,8 +40,11 @@ pub(crate) fn state(dir: Option<std::path::PathBuf>) -> TickState {
             mc_world::OVERWORLD_GEOMETRY,
         ),
     };
+    // Native chunk admission compares its saved simulation frontier to this clock.
+    world.refresh_active_clock(tick);
     world.ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
     let mut state = TickState::new(registry, world, 0, 512);
+    state.tick = tick;
     state.day_time = 1000;
     // Strict radius split: fixture intent carries a ticket; activation flows
     // through the same refresh run_tick uses (tickets simulate, Main binding).
