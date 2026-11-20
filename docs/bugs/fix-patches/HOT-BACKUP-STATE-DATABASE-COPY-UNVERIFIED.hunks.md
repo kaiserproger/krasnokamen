@@ -14,8 +14,13 @@ hunks of the second one, which is the part a HEAD control must reverse:
   rewritten afterwards, so the commit's own hunks no longer reverse on HEAD.
   The ref it left red is still registered (`hot_backup_tests::
   backup_refuses_a_copy_that_does_not_restore`); it is not the control used here.
-- `92a28e7186` — offline/CLI verification from the copy's own one open: the
-  release covered everything this patch covers.
+- `92a28e7186` — offline/CLI verification from the copy's own one open.
+- `7988d0db4b` — the same path under the plugins a serve resolves: `verify_copy`
+  uses `native_checkpoint::recovery_registry` (content + plugin startup
+  contribution) and `verify_opened` applies `plugin::check_startup_identity`.
+  The patch carries these hunks too: reversing only `92a28e7186` no longer
+  applies on HEAD, and a reversed copy must not be "verified" under a bare
+  registry either.
 
 ## Hunk mapping
 
@@ -30,9 +35,10 @@ hunks of the second one, which is the part a HEAD control must reverse:
 
 Reversed, these files return to `4785cbc83e`, which builds: `verify_restorable`
 keeps its `Core::backup` caller and the refused copy still yields an error, so
-`hot_backup_tests::backup_refuses_a_copy_that_does_not_restore` stays green and
-`hot_backup_tests::backup_of_a_running_core_restores_the_state_at_its_tick`
-stays green.
+`hot_backup_tests::backup_refuses_a_copy_that_does_not_restore` stays green.
+`recovery_registry` and `check_startup_identity` stay defined (they live in
+`native_checkpoint.rs` and `plugin.rs`, outside this patch) and become unused —
+warnings, not errors. `backup_expected_tick` comes back with `backup.rs`.
 
 ## Exclusions
 
