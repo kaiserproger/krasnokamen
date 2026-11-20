@@ -972,6 +972,66 @@ server), then grep `server.log` per entity id. `path=0` with a fixed target for
 thousands of ticks means no route; the same position with `path>0` means a
 navigation stall. Compare good and bad runs of the same binary.
 
+## Edge pump lag on real clients (`join-lag-gate`)
+
+`python3 -m tools.harness run join-lag-gate --client native --windowed` covers
+EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS and
+EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP.
+
+The condition is a pump behind the tick. There is no operator knob for that, so
+the gate sets the test/dev-only `KRASNOKAMEN_PUMP_LAG_TICKS=K`: with it, the
+pump waits for K core tick events (the light tick-time stream, subscribed only
+when the knob is set) before each call to the unchanged `next_publication`,
+which then meets a backlog and applies its own skip/drain — the production path
+stays the only path, so a control tree that reverts the fix is exercised exactly
+as the fix is. No clock is read by the knob. Unset or 0 keeps the shipped pump;
+an invalid value fails startup and one `warn` line names the knob (see
+`crates/mc-edge/src/server/pump.rs` beside the queue budget).
+
+The gate runs `/tick rate 3` with K=8: about 2.7 s per publication, past the
+1.6 s publish budget (so the skip applies) and under the 10 s outbox watch (so
+the fixed pump keeps draining), while the pre-fix queue still grows to the whole
+broadcast window. The gate opens its verdicts only on the server's
+`pump lag enabled` warn line, which it waits for with
+`runtime.wait_for_path_condition` (inotify), and it reads the join interval from
+the server's own `login admitted` -> `join landed` pair (`RUST_LOG` sets the pump
+to debug for that line), never from the client's process startup. The gate
+harness itself takes no wall-clock sleep: the join is awaited as a client MCP
+event and the warn line as a filesystem event.
+
+Criteria (rows reference them as `harness:join-lag-gate:<name>`):
+
+- `join_behind_slow_pump`: behind the delayed pump, a fresh client's join has to
+  land inside the 10 s deadline.
+- `live_pump_does_not_halt`: behind the delayed pump, `/stats` keeps advancing
+  `simulation_tick` and the server log carries no `edge pump not draining`.
+
+A verdict whose condition never occurred is `null` (inconclusive: the run ends
+failed with that reason), never `false` — the ledger reads a false verdict as
+the row's symptom, so an unreached condition must not look like a red control.
+
+Options (deterministic, no environment): `--tick-rate N` (1-20, default 3) and
+`--pump-lag-ticks N` (1-64, default 8).
+
+Negative control: run the same command on a control tree that differs only in
+the fix hunks (`stale()` never skips on the queue budget; the anti-xray side
+repair removed) with `KRASNOKAMEN_SERVER_BINARY` naming its build: the join then
+misses its deadline and the core halts with `edge pump not draining`, so both
+verdicts go red.
+
+Not covered here: ANTI-XRAY-BORDER-REVEAL-LOST-ACROSS-SKIPPED-PUBLISH. A held
+chunk's reveal reaches a real client through the plain block-update path in
+both trees, so a client-world read cannot discriminate the chunk-frame repair;
+that row keeps its frame-level unit tests, and a packet/frame-level witness is
+backlog.
+
+Traps: the client data root is a private `XDG_DATA_HOME` linked to the caller's
+content (a shared root leaks settings); the witness and the joiner are ops (the
+gate writes `ops.json` for both); a run without the `pump lag enabled` line is
+red as inconclusive by design, never green; the flood clients the first design
+had are gone — real client work never made a publish longer than a tick here,
+and the load collapsed the core's own rate instead.
+
 ## Settlement and army QA false alarms
 
 Check these before blaming the product (all happened):

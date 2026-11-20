@@ -14,5 +14,7 @@ regression = [
   "cargo:mc-edge:server::pump_join_lag_tests::the_queue_budget_is_exclusive",
   "cargo:mc-edge:server::pump_join_lag_tests::the_newest_output_is_never_stale",
   "cargo:mc-edge:server::admin_tests::explosion_queue_tests::stale_skip_closes_only_recipients_of_skipped_knockback",
+  "harness:join-lag-gate:join_behind_slow_pump",
 ]
 failing_first = "reported"
+note = "Negative control: row 1 cannot be red independently at client level on pre-fix code — the 10 s stall watch and the 10 s join deadline race there and row 2's fail-closed halt fires first; the harness judges row 1 null then, with that reason in the receipt (025204). Its NC is therefore the shared-fix control (row 2 red on the same control tree whose only delta is stale() returning false) plus the cargo NCs above. Positive: harness:join-lag-gate:join_behind_slow_pump on the gate tree."

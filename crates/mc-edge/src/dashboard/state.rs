@@ -20,6 +20,7 @@ impl DashboardState {
                 tick_us: VecDeque::new(),
                 publish_us: VecDeque::new(),
                 pump_skipped_ticks: 0,
+                pump_stale_skipped_ticks: 0,
                 chunks: DashboardChunks::default(),
                 entities: DashboardEntities::default(),
                 coreperf_visibility: None,
@@ -388,6 +389,13 @@ impl DashboardState {
         inner.pump_skipped_ticks = inner.pump_skipped_ticks.saturating_add(ticks);
     }
 
+    /// Outputs the pump skipped because they waited past the publish queue budget
+    /// (`server/pump.rs` `stale`), as opposed to a broadcast `Lagged` run.
+    pub fn record_pump_stale_skipped(&self, ticks: u64) {
+        let mut inner = self.inner.lock();
+        inner.pump_stale_skipped_ticks = inner.pump_stale_skipped_ticks.saturating_add(ticks);
+    }
+
     /// Replace the operator warning list.
     pub fn set_warnings(&self, warnings: Vec<String>) {
         let mut inner = self.inner.lock();
@@ -412,6 +420,7 @@ impl DashboardState {
             players: inner.players.clone(),
             tps,
             pump_skipped_ticks: inner.pump_skipped_ticks,
+            pump_stale_skipped_ticks: inner.pump_stale_skipped_ticks,
             tick,
             publish,
             chunks: inner.chunks.clone(),

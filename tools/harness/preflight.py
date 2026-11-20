@@ -34,6 +34,7 @@ _ARGUMENT_VALIDATORS = {
     'horizon-lod-live': 'horizon_lod_live',
     'graves': 'graves',
     'item-merge': 'item_merge',
+    'join-lag-gate': 'join_lag',
     'logical-native': 'native_logical',
     'native-scale': 'native_scale',
     'pause-empty': 'pause_empty',

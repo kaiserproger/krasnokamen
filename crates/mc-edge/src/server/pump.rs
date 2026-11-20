@@ -95,6 +95,7 @@ pub(super) async fn next_publication(
     loop {
         match rx.recv().await {
             Ok(out) if stale(&out, std::time::Instant::now(), || !rx.is_empty()) => {
+                server.dashboard.record_pump_stale_skipped(1);
                 skip_publications(server, viewers, chunk_cache, 1);
             }
             Ok(out) => return Some(out),
@@ -103,6 +104,38 @@ pub(super) async fn next_publication(
             }
             Err(broadcast::error::RecvError::Closed) => return None,
         }
+    }
+}
+
+/// Test/dev pump lag: `KRASNOKAMEN_PUMP_LAG_TICKS=K` makes the pump wait for K core tick events
+/// before each publication, so it always meets a backlog and its own skip/drain decides what to
+/// publish — the production `next_publication` stays untouched (a control tree that reverts the fix
+/// is exercised exactly as the fix is). The wait counts the core's light tick-time stream, created
+/// only when the knob is set; no timer is read. At `/tick rate 3` K=32 is about 10 s of age, past
+/// the 1.6 s queue budget and the 10 s join deadline. Unset or `0` keeps the shipped pump; an
+/// invalid value fails startup. See docs/development/real-client-gates.md.
+pub(super) const LAG_ENV: &str = "KRASNOKAMEN_PUMP_LAG_TICKS";
+
+/// The count named by `KRASNOKAMEN_PUMP_LAG_TICKS`; `None` means no extra wait.
+pub(super) fn lag_ticks_from_env() -> anyhow::Result<Option<u64>> {
+    lag_ticks(std::env::var(LAG_ENV).ok().as_deref()).map_err(anyhow::Error::msg)
+}
+
+/// The env value as a tick count: pure, so the parsing rules are testable and never touch the process.
+pub(super) fn lag_ticks(value: Option<&str>) -> Result<Option<u64>, String> {
+    let Some(raw) = value else { return Ok(None) };
+    let ticks: u64 = raw.trim().parse().map_err(|_| {
+        format!("{LAG_ENV} must be a whole number of ticks the pump waits before publishing (unset or 0 = none), got {raw:?}")
+    })?;
+    Ok(Some(ticks).filter(|ticks| *ticks > 0))
+}
+
+/// Count one core tick event toward the wait: `Ok(())` is one tick, `Err(dropped)` a lagged run of
+/// that many. Pure, so a test feeds events instead of running a core.
+pub(super) fn pace_count(remaining: u64, event: Result<(), u64>) -> u64 {
+    match event {
+        Ok(()) => remaining.saturating_sub(1),
+        Err(dropped) => remaining.saturating_sub(dropped),
     }
 }
 
@@ -115,6 +148,16 @@ pub(super) async fn next_publication(
 /// rayon pool: on the global pool the core tick's parallel phases queued
 /// behind whole publishes.
 pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task::JoinHandle<()>> {
+    let lag_ticks = lag_ticks_from_env()?;
+    if let Some(ticks) = lag_ticks {
+        tracing::warn!(
+            env = LAG_ENV,
+            lag_ticks = ticks,
+            "pump lag enabled: a test/dev knob for real-client gates, never for production"
+        );
+    }
+    // Only with the knob set: the light tick-time stream counts the core's ticks for the wait.
+    let mut pace_rx = lag_ticks.map(|_| server.hub.subscribe_tick_times());
     let mut rx = server.hub.subscribe();
     let pool = rayon::ThreadPoolBuilder::new()
         .thread_name(|i| format!("edge-fanout-{i}"))
@@ -148,6 +191,20 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
         let mut connections: HashMap<ConnectionId, ConnectionHandles> = HashMap::new();
         let mut connections_generation = 0u64;
         loop {
+            if let (Some(ticks), Some(tick_rx)) = (lag_ticks, pace_rx.as_mut()) {
+                let mut remaining = ticks;
+                while remaining > 0 {
+                    let event = match tick_rx.recv().await {
+                        Ok(_) => Ok(()),
+                        Err(broadcast::error::RecvError::Lagged(dropped)) => Err(dropped),
+                        Err(broadcast::error::RecvError::Closed) => break,
+                    };
+                    remaining = pace_count(remaining, event);
+                }
+                // Knob-only debug event: the tick stream's backlog at the wait's completion, which
+                // is the pump's distance behind the core when the harness holds a join.
+                tracing::debug!(lag_ticks = tick_rx.len(), knob_ticks = ticks, "pump knob wait completed");
+            }
             let Some(out) = next_publication(&server, &mut rx, &mut viewers, &chunk_cache).await
             else {
                 // Drain terminal reliable disconnects before closing, both
@@ -1114,3 +1171,68 @@ mod roster_seed_tests {
 #[cfg(test)]
 #[path = "pump_delivery_tests.rs"]
 mod delivery_tests;
+
+#[cfg(test)]
+mod lag_tests {
+    use super::*;
+
+    #[test]
+    fn unset_or_zero_is_todays_pump() {
+        assert_eq!(lag_ticks(None), Ok(None));
+        assert_eq!(lag_ticks(Some("0")), Ok(None));
+        assert_eq!(lag_ticks(Some(" 0 ")), Ok(None));
+    }
+
+    #[test]
+    fn a_count_is_taken_as_lag() {
+        assert_eq!(lag_ticks(Some("32")), Ok(Some(32)));
+        assert_eq!(lag_ticks(Some("1")), Ok(Some(1)));
+    }
+
+    #[test]
+    fn an_invalid_value_is_an_error_not_an_ignore() {
+        for raw in ["abc", "", "-1", "1.5", "inf", "NaN", "32t"] {
+            assert!(lag_ticks(Some(raw)).is_err(), "{raw:?} must be refused");
+        }
+    }
+
+    #[test]
+    fn an_unset_env_leaves_the_pump_unwaited() {
+        // Reading is safe; the crate forbids env mutation, so a gate that exports the variable is
+        // respected by leaving this assertion to the unset case (lag_ticks covers the other values).
+        if std::env::var(LAG_ENV).is_ok() {
+            return;
+        }
+        assert_eq!(lag_ticks_from_env().expect("unset is fine"), None);
+    }
+
+    #[test]
+    fn the_wait_counts_tick_events_and_lagged_runs() {
+        // Fed events, no core and no timer: three single ticks reach a count of three.
+        let mut remaining = 3u64;
+        for _ in 0..3 {
+            remaining = pace_count(remaining, Ok(()));
+        }
+        assert_eq!(remaining, 0);
+        // A lagged run of five satisfies a wait of five in one event.
+        assert_eq!(pace_count(5, Err(5)), 0);
+        // A lagged run larger than the wait saturates instead of underflowing.
+        assert_eq!(pace_count(2, Err(9)), 0);
+        // A short run leaves the rest to wait.
+        assert_eq!(pace_count(9, Err(4)), 5);
+    }
+
+    #[test]
+    fn a_publication_follows_the_wait() {
+        // The wait releases the pump only after the count is spent; the next call publishes.
+        let mut remaining = lag_ticks(Some("2")).expect("valid").expect("set");
+        let mut published = 0;
+        for event in [Ok(()), Ok(())] {
+            remaining = pace_count(remaining, event);
+            if remaining == 0 {
+                published += 1;
+            }
+        }
+        assert_eq!(published, 1);
+    }
+}

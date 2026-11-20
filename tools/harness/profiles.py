@@ -564,6 +564,13 @@ def run_anti_xray(ctx: ProfileContext) -> dict[str, Any]:
     return anti_xray.run(ctx)
 
 
+def run_join_lag_gate(ctx: ProfileContext) -> dict[str, Any]:
+    """Edge pump lagging behind the tick: joins, the stall watch and an anti-xray border reveal on native clients."""
+    from .backends import join_lag
+
+    return join_lag.run(ctx)
+
+
 def run_composter_chance(ctx: ProfileContext) -> dict[str, Any]:
     """Graphical hopper-fed wheat-seed composter probability gate."""
     from .backends import composter_chance
@@ -1319,6 +1326,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Anti-xray gate: an enclosed diamond ore is absent from the client's world data until survival mining beside it reveals it (native --client, windowed for screenshots)",
         "run": run_anti_xray,
     },
+    "join-lag-gate": {
+        "scope": "real-client",
+        "description": "Edge pump lagging behind the tick on two native clients: a second join inside the 10 s deadline, no core halt under a live lagging pump, and an anti-xray border reveal that survives a skipped publish (native --client, windowed for screenshots)",
+        "run": run_join_lag_gate,
+    },
     "composter-chance": {
         "scope": "real-client",
         "description": "Native player loads wheat seeds into a hopper; observe individual debits and composter levels",
@@ -1575,6 +1587,7 @@ PROFILE_PREREQUISITES = {
     "dialogs": _NATIVE,
     "admin-commands": _NATIVE,
     "anti-xray": _NATIVE,
+    "join-lag-gate": _NATIVE,
     "composter-chance": _NATIVE,
     "chat-visibility": _NATIVE,
     "screen-share": _NATIVE,

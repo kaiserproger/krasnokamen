@@ -128,7 +128,7 @@ def _client_command(profile, scenario):
 _WINDOWED_PROFILES = frozenset({
     'survival', 'inventory', 'entities', 'core-client', 'native-lifecycle',
     'logical-native', 'native-scale', 'native-matrix', 'title-connect', 'singleplayer-regressions',
-    'dialogs', 'admin-commands', 'chisel', 'anti-xray', 'block-log',
+    'dialogs', 'admin-commands', 'chisel', 'anti-xray', 'join-lag-gate', 'block-log',
     'composter-chance', 'chat-visibility', 'datapack-reload', 'village-qa', 'village-autonomy-qa',
     'civilization-seed-qa', 'village-owner-order-qa', 'scene-shot',
     'settlement-map-qa', 'claim-only-qa', 'buildings-qa', 'army-qa', 'autocraft-qa', 'screen-share',
@@ -143,6 +143,10 @@ _AUTONOMY_VERDICTS = frozenset({
     'restart_resume',
 })
 _BOOLEAN_PROFILE_VERDICTS = {
+    # backends/join_lag.py VERDICTS: one criterion per ledger row the gate covers.
+    'join-lag-gate': frozenset({
+        'join_behind_slow_pump', 'live_pump_does_not_halt',
+    }),
     'civilization-seed-qa': frozenset({
         'new_house', 'births', 'second_building', 'iron_smelted', 'all',
     }),
