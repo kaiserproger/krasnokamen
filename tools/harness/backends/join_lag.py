@@ -7,20 +7,23 @@ Rows (docs/bugs/rows):
 - EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP: the 10 s reliable outbox
   stall watch halts the core under a live pump that only lags.
 
-The condition is the pump publishing fewer outputs than the tick:
-`KRASNOKAMEN_PUMP_PUBLISH_PER_SECOND` (a test/dev knob, unset or 0 = unlimited)
-paces the pump, and the gate sets it to 3 at the default 20 TPS. The dashboard
-is the sensor: the pump lag is `simulation_tick - publish.source_tick`, measured
-in both trees, so a verdict never needs the fixed behaviour's own skip counter.
+The condition is a pump behind the tick: `KRASNOKAMEN_PUMP_LAG_TICKS=K` (a
+test/dev knob, unset or 0 = today's pump) is a delay line in front of the pump —
+output n is processed only after n+K arrived, no clock read. The gate sets K=8 at
+`/tick rate 3`: about 2.7 s per publication — past the 1.6 s publish budget so
+the skip applies, under the 10 s outbox watch so the fixed pump keeps draining,
+and the pre-fix queue still grows to the whole broadcast window. The gate reads its own engagement from the server's
+one warn line, so an unengaged run is inconclusive instead of a guess.
 
 Criteria:
 
-- `join_behind_slow_pump`: with the pump behind by at least `LAG_TICKS`, a fresh
+- `join_behind_slow_pump`: with the delay line engaged, a fresh
   client's join has to land inside the 10 s deadline. The interval is the
   server's own `login admitted` -> `join landed` (`RUST_LOG` sets the pump to
   debug for that line), never the client's process startup.
-- `live_pump_does_not_halt`: while the pump lags, `/stats` keeps advancing its
-  simulation tick and the server log carries no `edge pump not draining`.
+- `live_pump_does_not_halt`: with the delay line engaged, `/stats` keeps
+  advancing its simulation tick and the server log carries no
+  `edge pump not draining`.
 
 A verdict whose condition never occurred is `null` (inconclusive: the run ends
 failed with that reason), never `false` — `ledger._failing_verdict` reads
@@ -57,9 +60,8 @@ FLOOD = "JoinLagFlood"
 JOINER = "JoinLagJoiner"
 TIMEOUT = 1800.0
 JOIN_BOUND_SECONDS = 10.0  # the server's join deadline the row names
-LAG_TICKS = 8              # the pump must be at least this many ticks behind
-LAG_WAIT_SECONDS = 20.0    # how long the gate waits for the pump to fall behind
-LAG_SAMPLE_SECONDS = 0.1
+ENGAGED_LINE = "pump lag enabled"  # the server's warn line for the test/dev knob
+SKIP_WAIT_SECONDS = 20.0   # how long the gate waits for the knob's warn line
 FLOOD_DX = 512             # a flood client's area sits far outside the witness
 FLOOD_RADIUS = 72          # a 145x145 slab covers the whole 9x9 chunk view
 FILL_PAUSE = 0.35          # pacing between a flood client's fills
@@ -72,31 +74,30 @@ REQUIRED_TOOLS = frozenset({
 })
 
 
-def join_verdict(elapsed: float | None, lag_max: int, halt: str | None) -> tuple[bool | None, str]:
-    """Row 1 verdict: None when the pump never fell behind, False only for a real symptom."""
+def join_verdict(elapsed: float | None, engaged: bool, halt: str | None) -> tuple[bool | None, str]:
+    """Row 1 verdict: None when the delay line never ran, False only for a real symptom."""
     if halt:
         return False, f"the core halted during the lag: {halt}"
-    if lag_max < LAG_TICKS:
-        return None, f"the pump was never {LAG_TICKS} ticks behind (max lag {lag_max}): the condition did not occur"
+    if not engaged:
+        return None, "the pump delay line never ran: the lagging condition did not occur"
     if elapsed is None:
-        return False, f"the join never landed with the pump {lag_max} ticks behind"
+        return False, "the join never landed behind the delayed pump"
     if elapsed > JOIN_BOUND_SECONDS:
-        return False, (f"the join landed after {elapsed:.1f} s with the pump {lag_max} ticks behind, "
+        return False, (f"the join landed after {elapsed:.1f} s behind the delayed pump, "
                        f"past the {JOIN_BOUND_SECONDS:.0f} s deadline")
-    return True, f"the join landed in {elapsed:.1f} s with the pump {lag_max} ticks behind"
+    return True, f"the join landed in {elapsed:.1f} s behind the delayed pump"
 
 
-def halt_verdict(lag_max: int, tick_before: int, tick_after: int,
+def halt_verdict(engaged: bool, tick_before: int, tick_after: int,
                  halt: str | None) -> tuple[bool | None, str]:
-    """Row 2 verdict: None when the pump never fell behind, False only for a real symptom."""
+    """Row 2 verdict: None when the delay line never ran, False only for a real symptom."""
     if halt:
         return False, f"the core halted under a live lagging pump: {halt}"
-    if lag_max < LAG_TICKS:
-        return None, f"the pump was never {LAG_TICKS} ticks behind (max lag {lag_max}): the condition did not occur"
+    if not engaged:
+        return None, "the pump delay line never ran: the lagging condition did not occur"
     if tick_after <= tick_before:
         return False, f"the simulation tick did not advance ({tick_before} -> {tick_after})"
-    return True, (f"the core kept ticking {tick_before} -> {tick_after} through a lag of "
-                  f"{lag_max} ticks")
+    return True, f"the core kept ticking {tick_before} -> {tick_after} behind the delayed pump"
 
 
 def disposition(verdicts: dict[str, bool | None]) -> tuple[str, list[str]]:
@@ -113,6 +114,14 @@ def disposition(verdicts: dict[str, bool | None]) -> tuple[str, list[str]]:
     if unproven:
         return "inconclusive", unproven
     return "passed", []
+
+
+def engaged(log_path: Path) -> bool:
+    """Whether the server's warn line says the pump delay line ran (pure helper)."""
+    try:
+        return ENGAGED_LINE in log_path.read_text(errors="replace")
+    except OSError:
+        return False
 
 
 def halt_line(log_path: Path) -> str | None:
@@ -185,24 +194,16 @@ def _stat(dashboard_port: int) -> dict[str, Any]:
         return json.loads(reply.read().decode())
 
 
-def pump_lag(stats: dict[str, Any]) -> int:
-    """How many ticks the pump's last publication is behind the core (pure helper).
-
-    No publication sample yet (or a publish ahead of the core's rollup) means the lag is unknown,
-    reported as zero so it can never stand in for the condition.
-    """
-    publish = stats.get("publish") or {}
-    if publish.get("source_tick") is None:
-        return 0
-    return max(0, int(stats.get("simulation_tick") or 0) - int(publish["source_tick"]))
-
-
-def _lag(dashboard_port: int) -> int:
-    return pump_lag(_stat(dashboard_port))
-
-
 def _tick(stats: dict[str, Any]) -> int:
     return int(stats.get("simulation_tick") or 0)
+
+
+def _safe_tick(dashboard_port: int) -> int:
+    """The core tick, or 0 when the dashboard is not answering (a halt ends the process)."""
+    try:
+        return _tick(_stat(dashboard_port))
+    except OSError:
+        return 0
 
 
 def validate_args(ctx: ProfileContext) -> tuple[float, int, int, int, int]:
@@ -212,13 +213,13 @@ def validate_args(ctx: ProfileContext) -> tuple[float, int, int, int, int]:
         raise ValueError("join-lag-gate accepts only --client, --windowed, --timeout-seconds and its own args")
     parser = argparse.ArgumentParser(prog="join-lag-gate")
     # 20 TPS is the row's own rate: the pump must outpace the tick for the queue to build in seconds.
-    parser.add_argument("--tick-rate", type=int, default=20)
+    parser.add_argument("--tick-rate", type=int, default=3)
     parser.add_argument("--flood-clients", type=int, default=1)
     parser.add_argument("--flood-steps", type=int, default=40,
                         help="cap on view-wide fills per flood client while the pump falls behind")
-    # The condition lever: the server publishes at most this many outputs per second for the run
-    # (KRASNOKAMEN_PUMP_PUBLISH_PER_SECOND, a test/dev knob, never an operator setting).
-    parser.add_argument("--pump-publish-per-second", type=int, default=3)
+    # The condition lever: the pump is delayed by K core ticks (KRASNOKAMEN_PUMP_LAG_TICKS, a
+    # test/dev knob, never an operator setting).
+    parser.add_argument("--pump-lag-ticks", type=int, default=8)
     args = parser.parse_args(ctx.extra_args)
     if not 1 <= args.tick_rate <= 20:
         raise ValueError("join-lag-gate --tick-rate must be in [1, 20]")
@@ -226,17 +227,16 @@ def validate_args(ctx: ProfileContext) -> tuple[float, int, int, int, int]:
         raise ValueError("join-lag-gate --flood-clients must be in [0, 4]")
     if not 4 <= args.flood_steps <= 128:
         raise ValueError("join-lag-gate --flood-steps must be in [4, 128]")
-    if not 1 <= args.pump_publish_per_second <= 100:
-        raise ValueError("join-lag-gate --pump-publish-per-second must be in [1, 100]")
+    if not 1 <= args.pump_lag_ticks <= 64:
+        raise ValueError("join-lag-gate --pump-lag-ticks must be in [1, 64]")
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else TIMEOUT
     if not 0 < timeout <= 2400:
         raise ValueError("join-lag-gate --timeout-seconds must be in (0, 2400]")
-    return (timeout, args.tick_rate, args.flood_clients, args.flood_steps,
-            args.pump_publish_per_second)
+    return (timeout, args.tick_rate, args.flood_clients, args.flood_steps, args.pump_lag_ticks)
 
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
-    timeout, tick_rate, flood_clients, flood_steps, pump_rate = validate_args(ctx)
+    timeout, tick_rate, flood_clients, flood_steps, lag_ticks = validate_args(ctx)
     artifact = ctx.artifact_dir
     override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not override:
@@ -271,7 +271,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     evidence.update(server_address=address, server_binary_path=str(binary),
                     server_binary_sha256=server_hash, world_dir=str(artifact / "world"),
                     seed=81, dashboard_address=f"127.0.0.1:{dashboard_port}",
-                    flood_clients=names[2:], pump_publish_per_second=pump_rate)
+                    flood_clients=names[2:], pump_lag_ticks=lag_ticks)
     previous_xdg = os.environ.get("XDG_DATA_HOME")
     os.environ["XDG_DATA_HOME"] = private_xdg_root(artifact)
     server = None
@@ -286,7 +286,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         env["KRASNOKAMEN_HARNESS_LOG_STDOUT"] = "1"
         # The pump's debug `join landed` line is the server-side join timing this gate reads.
         env.setdefault("RUST_LOG", "info,mc_edge::server::pump=debug")
-        env["KRASNOKAMEN_PUMP_PUBLISH_PER_SECOND"] = str(pump_rate)
+        env["KRASNOKAMEN_PUMP_LAG_TICKS"] = str(lag_ticks)
         server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                                       cwd=runtime.REPO_ROOT, stdout=server_log,
                                       stderr=subprocess.STDOUT, start_new_session=True, env=env)
@@ -326,7 +326,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             detail, verdicts = _gate(a, flooders, ctx, artifact, tick_rate, flood_steps,
                                      address, server_log_path, dashboard_port,
                                      lambda: launch(peer_context(JOINER), JOINER, display=None))
-            detail["pump_publish_per_second"] = pump_rate
+            detail["pump_lag_ticks"] = lag_ticks
             a.report["details"] = detail
             evidence["flood_client"] = flood_evidence
             outcome, names_out = disposition(verdicts)
@@ -386,29 +386,17 @@ def _gate(a: ProbeSteps, flooders: list[tuple[subprocess.Popen[Any], ProbeSteps]
     a_pos = (int(player.get("x") or 0), int(player.get("y") or 0), int(player.get("z") or 0))
     a.report["origin_block"] = list(a_pos)
 
-    samples: list[int] = []
-    stop = threading.Event()
-
-    def sample() -> None:
-        while not stop.is_set():
-            try:
-                samples.append(_lag(dashboard_port))
-            except OSError:
-                pass
-            time.sleep(LAG_SAMPLE_SECONDS)
-
     threads = [threading.Thread(target=flood, args=(probe, index, flood_steps), daemon=True)
                for index, (_process, probe) in enumerate(flooders)]
     for thread in threads:
         thread.start()
-    sampler = threading.Thread(target=sample, daemon=True)
-    sampler.start()
-    # The condition: the pump has to be clearly behind before the join is queued.
-    lag_deadline = time.monotonic() + LAG_WAIT_SECONDS
-    while time.monotonic() < lag_deadline and not any(lag >= LAG_TICKS for lag in samples):
+    # The condition is the server's own delay line: wait for its warn line and for the core to tick.
+    deadline = time.monotonic() + SKIP_WAIT_SECONDS
+    while time.monotonic() < deadline and not engaged(server_log_path):
         time.sleep(0.1)
-    detail["lag_at_join"] = max(samples) if samples else 0
-    tick_before = _tick(_stat(dashboard_port))
+    delayed = engaged(server_log_path)
+    detail["delay_line_engaged"] = delayed
+    tick_before = _safe_tick(dashboard_port)
 
     joiner_process, joiner_mcp = launch_joiner()
     elapsed: float | None = None
@@ -426,23 +414,18 @@ def _gate(a: ProbeSteps, flooders: list[tuple[subprocess.Popen[Any], ProbeSteps]
     for thread in threads:
         thread.join(timeout=5)
     time.sleep(0.5)
-    stop.set()
-    sampler.join(timeout=2)
-    lag_max = max(samples) if samples else 0
-    tick_after = _tick(_stat(dashboard_port))
+    tick_after = _safe_tick(dashboard_port)
     halt = halt_line(server_log_path)
     stats_end = _stat(dashboard_port)
-    detail["lag_max"] = lag_max
-    detail["lag_samples"] = len(samples)
     detail["join_ticks"] = [tick_before, tick_after]
     detail["publish"] = stats_end.get("publish")
     detail["tps_at_end"] = stats_end.get("tps")
     detail["halt_line"] = halt
-    ok, why = join_verdict(elapsed, lag_max, halt)
+    ok, why = join_verdict(elapsed, delayed, halt)
     detail["join_verdict"] = why
     detail.setdefault("verdicts", {})["join_behind_slow_pump"] = why
     verdicts["join_behind_slow_pump"] = ok
-    ok2, why2 = halt_verdict(lag_max, tick_before, tick_after, halt)
+    ok2, why2 = halt_verdict(delayed, tick_before, tick_after, halt)
     detail["halt_verdict"] = why2
     detail.setdefault("verdicts", {})["live_pump_does_not_halt"] = why2
     verdicts["live_pump_does_not_halt"] = ok2

@@ -106,58 +106,35 @@ pub(super) async fn next_publication(
     }
 }
 
-/// Test/dev pacing of pump publications: `KRASNOKAMEN_PUMP_PUBLISH_PER_SECOND=N` lets the pump
-/// publish at most N outputs per second, so a real-client gate can hold a pump slower than the tick
-/// without the unit tests' park. Unset or `0` leaves the pump unlimited (the shipped behaviour); an
-/// invalid value fails startup instead of being ignored. See
-/// docs/development/real-client-gates.md ("Edge pump lag on real clients").
-pub(super) const PACE_ENV: &str = "KRASNOKAMEN_PUMP_PUBLISH_PER_SECOND";
+/// Test/dev pump lag: `KRASNOKAMEN_PUMP_LAG_TICKS=K` makes the pump wait for K core tick events
+/// before each publication, so it always meets a backlog and its own skip/drain decides what to
+/// publish — the production `next_publication` stays untouched (a control tree that reverts the fix
+/// is exercised exactly as the fix is). The wait counts the core's light tick-time stream, created
+/// only when the knob is set; no timer is read. At `/tick rate 3` K=32 is about 10 s of age, past
+/// the 1.6 s queue budget and the 10 s join deadline. Unset or `0` keeps the shipped pump; an
+/// invalid value fails startup. See docs/development/real-client-gates.md.
+pub(super) const LAG_ENV: &str = "KRASNOKAMEN_PUMP_LAG_TICKS";
 
-/// One-token bucket (no burst): a publication consumes the token, the next one waits its share of
-/// the rate. Time is the caller's milliseconds since the pump started, so tests drive it without
-/// sleeping.
-pub(super) struct PublicationPace {
-    per_second: f64,
-    tokens: f64,
-    last_ms: u128,
+/// The count named by `KRASNOKAMEN_PUMP_LAG_TICKS`; `None` means no extra wait.
+pub(super) fn lag_ticks_from_env() -> anyhow::Result<Option<u64>> {
+    lag_ticks(std::env::var(LAG_ENV).ok().as_deref()).map_err(anyhow::Error::msg)
 }
 
-impl PublicationPace {
-    /// The rate named by `KRASNOKAMEN_PUMP_PUBLISH_PER_SECOND`; `None` means unlimited.
-    pub(super) fn from_env() -> anyhow::Result<Option<f64>> {
-        Self::parse(std::env::var(PACE_ENV).ok().as_deref()).map_err(anyhow::Error::msg)
-    }
+/// The env value as a tick count: pure, so the parsing rules are testable and never touch the process.
+pub(super) fn lag_ticks(value: Option<&str>) -> Result<Option<u64>, String> {
+    let Some(raw) = value else { return Ok(None) };
+    let ticks: u64 = raw.trim().parse().map_err(|_| {
+        format!("{LAG_ENV} must be a whole number of ticks the pump waits before publishing (unset or 0 = none), got {raw:?}")
+    })?;
+    Ok(Some(ticks).filter(|ticks| *ticks > 0))
+}
 
-    /// The env value as a rate: pure, so the parsing rules are testable and never touch the process.
-    pub(super) fn parse(value: Option<&str>) -> Result<Option<f64>, String> {
-        let Some(raw) = value else { return Ok(None) };
-        let trimmed = raw.trim();
-        let rate: f64 = trimmed.parse().map_err(|_| {
-            format!("{PACE_ENV} must be a number of publications per second (unset or 0 = unlimited), got {raw:?}")
-        })?;
-        if !rate.is_finite() || rate < 0.0 {
-            return Err(format!(
-                "{PACE_ENV} must be a finite rate >= 0 (unset or 0 = unlimited), got {raw:?}"
-            ));
-        }
-        Ok(if rate == 0.0 { None } else { Some(rate) })
-    }
-
-    pub(super) fn new(per_second: f64) -> Self {
-        Self { per_second, tokens: 1.0, last_ms: 0 }
-    }
-
-    /// Milliseconds to wait before the next publication at `elapsed_ms`, or `None` when it may go.
-    pub(super) fn wait_ms(&mut self, elapsed_ms: u128) -> Option<u64> {
-        let elapsed = elapsed_ms.saturating_sub(self.last_ms) as f64 / 1000.0;
-        self.last_ms = elapsed_ms;
-        self.tokens = (self.tokens + elapsed * self.per_second).min(1.0);
-        if self.tokens >= 1.0 {
-            self.tokens -= 1.0;
-            None
-        } else {
-            Some((((1.0 - self.tokens) / self.per_second) * 1000.0).ceil() as u64)
-        }
+/// Count one core tick event toward the wait: `Ok(())` is one tick, `Err(dropped)` a lagged run of
+/// that many. Pure, so a test feeds events instead of running a core.
+pub(super) fn pace_count(remaining: u64, event: Result<(), u64>) -> u64 {
+    match event {
+        Ok(()) => remaining.saturating_sub(1),
+        Err(dropped) => remaining.saturating_sub(dropped),
     }
 }
 
@@ -170,14 +147,16 @@ impl PublicationPace {
 /// rayon pool: on the global pool the core tick's parallel phases queued
 /// behind whole publishes.
 pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task::JoinHandle<()>> {
-    let pace_rate = PublicationPace::from_env()?;
-    if let Some(rate) = pace_rate {
+    let lag_ticks = lag_ticks_from_env()?;
+    if let Some(ticks) = lag_ticks {
         tracing::warn!(
-            env = PACE_ENV,
-            per_second = rate,
-            "pump publish pacing enabled: a test/dev knob for real-client gates, never for production"
+            env = LAG_ENV,
+            lag_ticks = ticks,
+            "pump lag enabled: a test/dev knob for real-client gates, never for production"
         );
     }
+    // Only with the knob set: the light tick-time stream counts the core's ticks for the wait.
+    let mut pace_rx = lag_ticks.map(|_| server.hub.subscribe_tick_times());
     let mut rx = server.hub.subscribe();
     let pool = rayon::ThreadPoolBuilder::new()
         .thread_name(|i| format!("edge-fanout-{i}"))
@@ -191,8 +170,6 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
     )?
     .map(Arc::new);
     Ok(tokio::spawn(async move {
-        let mut pace = pace_rate.map(PublicationPace::new);
-        let pace_start = std::time::Instant::now();
         // Viewer world-view state keyed by connection: what each client
         // holds, reconciled against every newest snapshot.
         let mut viewers: HashMap<ConnectionId, crate::plan::ViewerState> = HashMap::new();
@@ -213,6 +190,17 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
         let mut connections: HashMap<ConnectionId, ConnectionHandles> = HashMap::new();
         let mut connections_generation = 0u64;
         loop {
+            if let (Some(ticks), Some(tick_rx)) = (lag_ticks, pace_rx.as_mut()) {
+                let mut remaining = ticks;
+                while remaining > 0 {
+                    let event = match tick_rx.recv().await {
+                        Ok(_) => Ok(()),
+                        Err(broadcast::error::RecvError::Lagged(dropped)) => Err(dropped),
+                        Err(broadcast::error::RecvError::Closed) => break,
+                    };
+                    remaining = pace_count(remaining, event);
+                }
+            }
             let Some(out) = next_publication(&server, &mut rx, &mut viewers, &chunk_cache).await
             else {
                 // Drain terminal reliable disconnects before closing, both
@@ -238,11 +226,6 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                 }
                 break;
             };
-            if let Some(pace) = pace.as_mut() {
-                while let Some(wait) = pace.wait_ms(pace_start.elapsed().as_millis()) {
-                    tokio::time::sleep(std::time::Duration::from_millis(wait)).await;
-                }
-            }
             server.tick_stats.record(out.tick);
             // Test-only: a test parks the real pump here, in a synchronous
             // section before the registry lock, the shape a fanout `install`
@@ -1186,64 +1169,66 @@ mod roster_seed_tests {
 mod delivery_tests;
 
 #[cfg(test)]
-mod pace_tests {
+mod lag_tests {
     use super::*;
 
     #[test]
-    fn unset_or_zero_is_unlimited() {
-        assert_eq!(PublicationPace::parse(None), Ok(None));
-        assert_eq!(PublicationPace::parse(Some("0")), Ok(None));
-        assert_eq!(PublicationPace::parse(Some(" 0 ")), Ok(None));
+    fn unset_or_zero_is_todays_pump() {
+        assert_eq!(lag_ticks(None), Ok(None));
+        assert_eq!(lag_ticks(Some("0")), Ok(None));
+        assert_eq!(lag_ticks(Some(" 0 ")), Ok(None));
     }
 
     #[test]
-    fn a_rate_is_taken_as_pacing() {
-        assert_eq!(PublicationPace::parse(Some("3")), Ok(Some(3.0)));
-        assert_eq!(PublicationPace::parse(Some("2.5")), Ok(Some(2.5)));
+    fn a_count_is_taken_as_lag() {
+        assert_eq!(lag_ticks(Some("32")), Ok(Some(32)));
+        assert_eq!(lag_ticks(Some("1")), Ok(Some(1)));
     }
 
     #[test]
     fn an_invalid_value_is_an_error_not_an_ignore() {
-        for raw in ["abc", "", "-1", "inf", "NaN", "3/s"] {
-            assert!(PublicationPace::parse(Some(raw)).is_err(), "{raw:?} must be refused");
+        for raw in ["abc", "", "-1", "1.5", "inf", "NaN", "32t"] {
+            assert!(lag_ticks(Some(raw)).is_err(), "{raw:?} must be refused");
         }
     }
 
     #[test]
-    fn the_bucket_allows_one_publication_then_waits_the_period() {
-        let mut pace = PublicationPace::new(2.0); // one publication every 500 ms
-        assert_eq!(pace.wait_ms(0), None, "the first publication goes at once");
-        assert_eq!(pace.wait_ms(0), Some(500));
-        assert_eq!(pace.wait_ms(250), Some(250));
-        assert_eq!(pace.wait_ms(500), None);
-    }
-
-    #[test]
-    fn a_faster_rate_waits_less_and_never_more_than_one_period() {
-        let mut pace = PublicationPace::new(20.0);
-        assert_eq!(pace.wait_ms(0), None);
-        let wait = pace.wait_ms(0).expect("no second publication without time");
-        assert_eq!(wait, 50);
-        let mut slow = PublicationPace::new(1.0);
-        assert_eq!(slow.wait_ms(0), None);
-        assert!(slow.wait_ms(0).expect("paced") <= 1000);
-    }
-
-    #[test]
-    fn a_long_gap_refills_at_most_one_token() {
-        let mut pace = PublicationPace::new(1.0);
-        assert_eq!(pace.wait_ms(0), None);
-        assert_eq!(pace.wait_ms(60_000), None, "a minute of quiet refills one token, not sixty");
-        assert_eq!(pace.wait_ms(60_000), Some(1000));
-    }
-
-    #[test]
-    fn an_unset_env_leaves_the_pump_unlimited() {
+    fn an_unset_env_leaves_the_pump_unwaited() {
         // Reading is safe; the crate forbids env mutation, so a gate that exports the variable is
-        // respected by leaving this assertion to the unset case (parse() covers the other values).
-        if std::env::var(PACE_ENV).is_ok() {
+        // respected by leaving this assertion to the unset case (lag_ticks covers the other values).
+        if std::env::var(LAG_ENV).is_ok() {
             return;
         }
-        assert_eq!(PublicationPace::from_env().expect("unset is fine"), None);
+        assert_eq!(lag_ticks_from_env().expect("unset is fine"), None);
+    }
+
+    #[test]
+    fn the_wait_counts_tick_events_and_lagged_runs() {
+        // Fed events, no core and no timer: three single ticks reach a count of three.
+        let mut remaining = 3u64;
+        for _ in 0..3 {
+            remaining = pace_count(remaining, Ok(()));
+        }
+        assert_eq!(remaining, 0);
+        // A lagged run of five satisfies a wait of five in one event.
+        assert_eq!(pace_count(5, Err(5)), 0);
+        // A lagged run larger than the wait saturates instead of underflowing.
+        assert_eq!(pace_count(2, Err(9)), 0);
+        // A short run leaves the rest to wait.
+        assert_eq!(pace_count(9, Err(4)), 5);
+    }
+
+    #[test]
+    fn a_publication_follows_the_wait() {
+        // The wait releases the pump only after the count is spent; the next call publishes.
+        let mut remaining = lag_ticks(Some("2")).expect("valid").expect("set");
+        let mut published = 0;
+        for event in [Ok(()), Ok(())] {
+            remaining = pace_count(remaining, event);
+            if remaining == 0 {
+                published += 1;
+            }
+        }
+        assert_eq!(published, 1);
     }
 }

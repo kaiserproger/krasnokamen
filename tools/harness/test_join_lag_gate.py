@@ -17,16 +17,16 @@ def context(*extra: str, client: str = "native", timeout: float | None = None) -
 
 class ArgsTest(unittest.TestCase):
     def test_defaults_are_the_gate_options(self) -> None:
-        timeout, tick_rate, flood_clients, flood_steps, pump_rate = join_lag.validate_args(context())
-        self.assertEqual((timeout, tick_rate, flood_clients, flood_steps, pump_rate),
-                         (join_lag.TIMEOUT, 20, 1, 40, 3))
+        timeout, tick_rate, flood_clients, flood_steps, lag_ticks = join_lag.validate_args(context())
+        self.assertEqual((timeout, tick_rate, flood_clients, flood_steps, lag_ticks),
+                         (join_lag.TIMEOUT, 3, 1, 40, 8))
 
     def test_options_select_the_load_and_the_rate(self) -> None:
-        timeout, tick_rate, flood_clients, flood_steps, pump_rate = join_lag.validate_args(
+        timeout, tick_rate, flood_clients, flood_steps, lag_ticks = join_lag.validate_args(
             context("--tick-rate", "10", "--flood-clients", "2", "--flood-steps", "8",
-                    "--pump-publish-per-second", "10", timeout=600.0))
-        self.assertEqual((timeout, tick_rate, flood_clients, flood_steps, pump_rate),
-                         (600.0, 10, 2, 8, 10))
+                    "--pump-lag-ticks", "6", timeout=600.0))
+        self.assertEqual((timeout, tick_rate, flood_clients, flood_steps, lag_ticks),
+                         (600.0, 10, 2, 8, 6))
 
     def test_a_java_client_is_refused(self) -> None:
         with self.assertRaisesRegex(ValueError, "requires --client native"):
@@ -36,7 +36,7 @@ class ArgsTest(unittest.TestCase):
         for argv in (("--tick-rate", "0"), ("--tick-rate", "21"),
                      ("--flood-clients", "-1"), ("--flood-clients", "5"),
                      ("--flood-steps", "3"), ("--flood-steps", "129"),
-                     ("--pump-publish-per-second", "0"), ("--pump-publish-per-second", "101"),
+                     ("--pump-lag-ticks", "0"), ("--pump-lag-ticks", "65"),
                      ("--scenario", "border-reveal")):
             with self.subTest(argv=argv):
                 with self.assertRaises((ValueError, SystemExit)):
@@ -50,48 +50,48 @@ class ArgsTest(unittest.TestCase):
 
 
 class JoinVerdictTest(unittest.TestCase):
-    def test_a_join_inside_the_deadline_behind_a_lagging_pump_passes(self) -> None:
-        ok, why = join_lag.join_verdict(2.5, 20, None)
+    def test_a_join_inside_the_deadline_behind_the_delayed_pump_passes(self) -> None:
+        ok, why = join_lag.join_verdict(2.5, True, None)
         self.assertTrue(ok)
         self.assertIn("2.5 s", why)
 
     def test_a_join_past_the_deadline_fails(self) -> None:
-        ok, why = join_lag.join_verdict(10.5, 20, None)
+        ok, why = join_lag.join_verdict(10.5, True, None)
         self.assertFalse(ok)
         self.assertIn("deadline", why)
 
-    def test_an_unreached_lag_is_inconclusive_not_false(self) -> None:
-        ok, why = join_lag.join_verdict(2.5, join_lag.LAG_TICKS - 1, None)
+    def test_an_unengaged_delay_line_is_inconclusive_not_false(self) -> None:
+        ok, why = join_lag.join_verdict(2.5, False, None)
         self.assertIsNone(ok)
         self.assertIn("did not occur", why)
 
-    def test_a_missing_join_behind_the_lag_fails(self) -> None:
-        ok, why = join_lag.join_verdict(None, 20, None)
+    def test_a_missing_join_behind_the_delay_fails(self) -> None:
+        ok, why = join_lag.join_verdict(None, True, None)
         self.assertFalse(ok)
         self.assertIn("never landed", why)
 
     def test_a_core_halt_fails_even_when_the_join_landed(self) -> None:
-        ok, why = join_lag.join_verdict(2.5, 20, "ERROR edge pump not draining")
+        ok, why = join_lag.join_verdict(2.5, True, "ERROR edge pump not draining")
         self.assertFalse(ok)
         self.assertIn("halted", why)
 
 
 class HaltVerdictTest(unittest.TestCase):
-    def test_a_ticking_core_behind_a_lagging_pump_passes(self) -> None:
-        ok, _ = join_lag.halt_verdict(20, 100, 160, None)
+    def test_a_ticking_core_behind_the_delayed_pump_passes(self) -> None:
+        ok, _ = join_lag.halt_verdict(True, 100, 160, None)
         self.assertTrue(ok)
 
     def test_a_halted_core_fails(self) -> None:
-        ok, _ = join_lag.halt_verdict(20, 100, 160, "ERROR edge pump not draining")
+        ok, _ = join_lag.halt_verdict(True, 100, 160, "ERROR edge pump not draining")
         self.assertFalse(ok)
 
     def test_a_stuck_simulation_tick_fails(self) -> None:
-        ok, why = join_lag.halt_verdict(20, 100, 100, None)
+        ok, why = join_lag.halt_verdict(True, 100, 100, None)
         self.assertFalse(ok)
         self.assertIn("did not advance", why)
 
-    def test_an_unreached_lag_is_inconclusive_not_false(self) -> None:
-        ok, why = join_lag.halt_verdict(join_lag.LAG_TICKS - 1, 100, 160, None)
+    def test_an_unengaged_delay_line_is_inconclusive_not_false(self) -> None:
+        ok, why = join_lag.halt_verdict(False, 100, 160, None)
         self.assertIsNone(ok)
         self.assertIn("did not occur", why)
 
@@ -113,20 +113,26 @@ class DispositionTest(unittest.TestCase):
     def test_a_symptom_outranks_an_unreached_condition(self) -> None:
         self.assertEqual(join_lag.disposition({"a": None, "b": False}), ("failed", ["b"]))
 
-    def test_neither_verdict_returns_false_without_the_lag(self) -> None:
-        tight = join_lag.LAG_TICKS - 1
-        self.assertIsNone(join_lag.join_verdict(30.0, tight, None)[0])
-        self.assertIsNone(join_lag.halt_verdict(tight, 100, 160, None)[0])
+    def test_neither_verdict_returns_false_without_the_delay(self) -> None:
+        self.assertIsNone(join_lag.join_verdict(30.0, False, None)[0])
+        self.assertIsNone(join_lag.halt_verdict(False, 100, 160, None)[0])
 
 
-class PumpLagTest(unittest.TestCase):
-    def test_the_lag_is_the_core_tick_minus_the_published_tick(self) -> None:
-        stats = {"simulation_tick": 120, "publish": {"source_tick": 100}}
-        self.assertEqual(join_lag.pump_lag(stats), 20)
+class EngagementTest(unittest.TestCase):
+    def test_the_delay_lines_warn_says_it_ran(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            log = Path(root) / "server.log"
+            log.write_text("INFO tick\nWARN " + join_lag.ENGAGED_LINE + ' lag_ticks=32\n')
+            self.assertTrue(join_lag.engaged(log))
 
-    def test_an_unpublished_or_ahead_pump_is_zero(self) -> None:
-        self.assertEqual(join_lag.pump_lag({"simulation_tick": 120, "publish": None}), 0)
-        self.assertEqual(join_lag.pump_lag({"simulation_tick": 100, "publish": {"source_tick": 104}}), 0)
+    def test_a_quiet_log_has_no_engagement(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            log = Path(root) / "server.log"
+            log.write_text("INFO tick\n")
+            self.assertFalse(join_lag.engaged(log))
+
+    def test_a_missing_log_has_no_engagement(self) -> None:
+        self.assertFalse(join_lag.engaged(Path("/tmp/definitely-missing-join-lag.log")))
 
 
 class HaltLineTest(unittest.TestCase):
