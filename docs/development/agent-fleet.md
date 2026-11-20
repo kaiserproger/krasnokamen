@@ -18,11 +18,11 @@ owners). Every other piece of work is a queued TODO item, not a live agent:
 Main starts the next item when a slot frees (pull, not push), pre-freeze items
 first. More throughput comes from the second server, not from agents waiting
 for this host's tokens. Backlog streams (the `Tail*` items) wait for the second
-server. One standing review committee (one Opus and one Sol reviewer) serves
-every slice in batches by area; no per-task reviewer spawns. While owner D69
-applies, [its routing](#model-routing-while-claude-is-out-owner-d69) replaces
-the Opus member. Persistence and D7
-changes still need both members' verdicts; other slices may take one member's.
+server. One standing review committee serves every slice in batches by area;
+no per-task reviewer spawns. While owner D69 applies,
+[its routing](#model-routing-while-claude-is-out-owner-d69) replaces the
+committee's former Opus and Sol composition. Persistence and D7 changes still
+need two independent reviewer verdicts; other slices may take one.
 An agent that needs a build token runs one blocking command that waits for the
 token and then runs (the `mem-run` runner already does); never `timeout N true`,
 sleep or status-polling loops. Executors run only L0/L1 for their own crates
@@ -141,8 +141,8 @@ the previous one's handoff.
   (D14). Muse or DeepSeek take mechanical bulk. Edit-heavy slices go to Terra,
   Sol or Astra: about 10% of their edits failed against 24–27% for Sonnet and
   Mistral (owner, 2026-11-17). While owner D69 applies, [its
-  routing](#model-routing-while-claude-is-out-owner-d69) replaces the Opus and
-  Anthropic parts of this rule.
+  routing](#model-routing-while-claude-is-out-owner-d69) replaces these model
+  assignments.
 - **New context after each finished task.** After sending a task's result, a
   generalist writes its remaining queue and state to its lane's handoff file
   (`receipts/<lane>/HANDOFF.md`) and starts a new context before the next
