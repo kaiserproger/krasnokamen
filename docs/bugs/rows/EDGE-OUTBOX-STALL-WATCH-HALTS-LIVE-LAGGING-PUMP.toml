@@ -9,5 +9,6 @@ repro = "cargo"
 regression = [
   "cargo:mc-edge:server::pump_join_lag_tests::a_live_pump_behind_a_lone_batch_does_not_trip_the_stall_watch",
   "cargo:mc-edge:server::pump_join_lag_tests::a_hung_pump_still_halts_the_core",
+  "harness:join-lag-gate:live_pump_does_not_halt",
 ]
 failing_first = "reported"

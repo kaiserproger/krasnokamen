@@ -14,5 +14,6 @@ regression = [
   "cargo:mc-edge:server::pump_join_lag_tests::the_queue_budget_is_exclusive",
   "cargo:mc-edge:server::pump_join_lag_tests::the_newest_output_is_never_stale",
   "cargo:mc-edge:server::admin_tests::explosion_queue_tests::stale_skip_closes_only_recipients_of_skipped_knockback",
+  "harness:join-lag-gate:join_behind_slow_pump",
 ]
 failing_first = "reported"

@@ -10,5 +10,6 @@ regression = [
   "cargo:mc-edge:anti_xray::anti_xray_tests::a_border_reveal_inside_a_skipped_publish_reaches_the_client",
   "cargo:mc-edge:anti_xray::anti_xray_tests::a_neighbour_unloaded_inside_a_skipped_publish_reveals_the_border_ore",
   "cargo:mc-edge:anti_xray::anti_xray_tests::a_neighbour_loaded_inside_a_skipped_publish_hides_the_border_ore",
+  "harness:join-lag-gate:border_reveal_after_skipped_publish",
 ]
 failing_first = "reported"
