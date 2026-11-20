@@ -44,51 +44,83 @@ class ArgsTest(unittest.TestCase):
                     join_lag.validate_args(context(timeout=timeout))
 
 
+def record(**fields) -> dict:
+    base = {"admitted": True, "landed_seconds": None, "timed_out": False, "lag": 3, "knockout": None}
+    base.update(fields)
+    return base
+
+
 class JoinVerdictTest(unittest.TestCase):
-    def test_a_join_inside_the_deadline_behind_the_delayed_pump_passes(self) -> None:
-        ok, why = join_lag.join_verdict(2.5, True, None)
+    def test_a_join_inside_the_deadline_behind_a_witnessed_delay_passes(self) -> None:
+        ok, why = join_lag.join_verdict(record(landed_seconds=2.5, knockout="landed"), True, None)
         self.assertTrue(ok)
         self.assertIn("2.5 s", why)
 
     def test_a_join_past_the_deadline_fails(self) -> None:
-        ok, why = join_lag.join_verdict(10.5, True, None)
+        ok, why = join_lag.join_verdict(record(landed_seconds=10.5, knockout="landed"), True, None)
         self.assertFalse(ok)
         self.assertIn("deadline", why)
 
-    def test_an_unengaged_delay_line_is_inconclusive_not_false(self) -> None:
-        ok, why = join_lag.join_verdict(2.5, False, None)
+    def test_a_confirmed_timeout_behind_a_delay_fails(self) -> None:
+        ok, why = join_lag.join_verdict(record(timed_out=True, knockout="timeout"), True, None)
+        self.assertFalse(ok)
+        self.assertIn("missed", why)
+
+    def test_no_admission_is_infrastructure_not_a_verdict(self) -> None:
+        ok, why = join_lag.join_verdict(record(admitted=False), True, None)
+        self.assertIsNone(ok)
+        self.assertIn("admission", why)
+
+    def test_an_mcp_failure_without_an_outcome_is_not_a_verdict(self) -> None:
+        ok, why = join_lag.join_verdict(record(knockout=None), True, None)
+        self.assertIsNone(ok)
+        self.assertIn("neither", why)
+
+    def test_a_knob_without_a_witnessed_delay_proves_nothing(self) -> None:
+        ok, why = join_lag.join_verdict(record(lag=0, landed_seconds=30.0, knockout="landed"), True, None)
+        self.assertIsNone(ok)
+        self.assertIn("witness", why)
+
+    def test_an_unset_knob_proves_nothing(self) -> None:
+        ok, why = join_lag.join_verdict(record(landed_seconds=30.0, knockout="landed"), False, None)
         self.assertIsNone(ok)
         self.assertIn("did not occur", why)
 
-    def test_a_missing_join_behind_the_delay_fails(self) -> None:
-        ok, why = join_lag.join_verdict(None, True, None)
-        self.assertFalse(ok)
-        self.assertIn("never landed", why)
-
-    def test_a_core_halt_fails_even_when_the_join_landed(self) -> None:
-        ok, why = join_lag.join_verdict(2.5, True, "ERROR edge pump not draining")
+    def test_a_core_halt_under_a_witnessed_delay_fails(self) -> None:
+        ok, why = join_lag.join_verdict(record(landed_seconds=2.5, knockout="landed"), True,
+                                        "ERROR edge pump not draining")
         self.assertFalse(ok)
         self.assertIn("halted", why)
 
+    def test_a_halt_without_a_witnessed_delay_is_inconclusive(self) -> None:
+        ok, why = join_lag.join_verdict(record(lag=0), True, "ERROR edge pump not draining")
+        self.assertIsNone(ok)
+        self.assertIn("witness", why)
+
 
 class HaltVerdictTest(unittest.TestCase):
-    def test_a_ticking_core_behind_the_delayed_pump_passes(self) -> None:
-        ok, _ = join_lag.halt_verdict(True, 100, 160, None)
+    def test_a_ticking_core_behind_a_witnessed_delay_passes(self) -> None:
+        ok, _ = join_lag.halt_verdict(True, record(), 100, 160, None)
         self.assertTrue(ok)
 
-    def test_a_halted_core_fails(self) -> None:
-        ok, _ = join_lag.halt_verdict(True, 100, 160, "ERROR edge pump not draining")
+    def test_a_halted_core_under_a_witnessed_delay_fails(self) -> None:
+        ok, _ = join_lag.halt_verdict(True, record(), 100, 160, "ERROR edge pump not draining")
         self.assertFalse(ok)
 
+    def test_a_halt_without_a_witnessed_delay_is_inconclusive(self) -> None:
+        ok, why = join_lag.halt_verdict(True, record(lag=0), 100, 160, "ERROR edge pump not draining")
+        self.assertIsNone(ok)
+        self.assertIn("witness", why)
+
     def test_a_stuck_simulation_tick_fails(self) -> None:
-        ok, why = join_lag.halt_verdict(True, 100, 100, None)
+        ok, why = join_lag.halt_verdict(True, record(), 100, 100, None)
         self.assertFalse(ok)
         self.assertIn("did not advance", why)
 
-    def test_an_unengaged_delay_line_is_inconclusive_not_false(self) -> None:
-        ok, why = join_lag.halt_verdict(False, 100, 160, None)
+    def test_an_unwitnessed_delay_proves_nothing(self) -> None:
+        ok, why = join_lag.halt_verdict(True, record(lag=0), 100, 160, None)
         self.assertIsNone(ok)
-        self.assertIn("did not occur", why)
+        self.assertIn("witness", why)
 
 
 class DispositionTest(unittest.TestCase):
@@ -109,8 +141,9 @@ class DispositionTest(unittest.TestCase):
         self.assertEqual(join_lag.disposition({"a": None, "b": False}), ("failed", ["b"]))
 
     def test_neither_verdict_returns_false_without_the_delay(self) -> None:
-        self.assertIsNone(join_lag.join_verdict(30.0, False, None)[0])
-        self.assertIsNone(join_lag.halt_verdict(False, 100, 160, None)[0])
+        self.assertIsNone(join_lag.join_verdict(record(landed_seconds=30.0, knockout="landed"),
+                                                False, None)[0])
+        self.assertIsNone(join_lag.halt_verdict(False, record(), 100, 160, None)[0])
 
 
 class EngagementTest(unittest.TestCase):
@@ -147,34 +180,56 @@ class HaltLineTest(unittest.TestCase):
         self.assertIsNone(join_lag.halt_line(Path("/tmp/definitely-missing-join-lag.log")))
 
 
-class JoinTimingTest(unittest.TestCase):
+class JoinRecordTest(unittest.TestCase):
     LOG = (
         "2026-11-20T01:18:15.209868Z  INFO mc_edge::server::connection: "
         "login admitted peer=127.0.0.1:53492 connection=2 name=JoinLagWitness protocol=777 release=\"26.3\"\n"
         "2026-11-20T01:18:17.827594Z  INFO mc_edge::server::connection: "
         "login admitted peer=127.0.0.1:53510 connection=4 name=JoinLagJoiner protocol=777 release=\"26.3\"\n"
-        "2026-11-20T01:18:18.000000Z DEBUG mc_edge::server::pump: connection = 2 joined=1 \"join landed\"\n"
-        "2026-11-20T01:18:30.827594Z DEBUG mc_edge::server::pump: connection = 4 joined=1 \"join landed\"\n"
+        "2026-11-20T01:18:18.000000Z DEBUG mc_edge::server::pump: connection = 2 joined=1 \"join landed\" "
+        "core_tick_seen=Some(120) pump_tick=118\n"
+        "2026-11-20T01:18:30.827594Z DEBUG mc_edge::server::pump: connection = 4 joined=1 \"join landed\" "
+        "core_tick_seen=Some(340) pump_tick=310\n"
+    )
+    TIMEOUT = (
+        "2026-11-20T01:18:17.827594Z  INFO mc_edge::server::connection: "
+        "login admitted peer=127.0.0.1:53510 connection=4 name=JoinLagJoiner protocol=777 release=\"26.3\"\n"
+        "2026-11-20T01:18:27.697423Z  WARN mc_edge::server::connection: connection closed "
+        "peer=127.0.0.1:44294 connection=4 stage=\"join-wait\" name=JoinLagJoiner "
+        "error=timed out waiting for join (core tick 351 seen when the wait began, 358 now; "
+        "pump published tick 349)\n"
     )
 
-    def test_the_join_is_measured_from_admission_to_landing(self) -> None:
+    def test_a_landing_carries_the_interval_and_the_pump_lag(self) -> None:
         with tempfile.TemporaryDirectory() as root:
             log = Path(root) / "server.log"
             log.write_text(self.LOG)
-            self.assertAlmostEqual(join_lag.join_timing(log, "JoinLagJoiner"), 13.0, places=3)
-            self.assertAlmostEqual(join_lag.join_timing(log, "JoinLagWitness"), 2.79, places=2)
+            joiner = join_lag.join_record(log, "JoinLagJoiner")
+            self.assertTrue(joiner["admitted"])
+            self.assertAlmostEqual(joiner["landed_seconds"], 13.0, places=3)
+            self.assertEqual(joiner["lag"], 30)
+            witness = join_lag.join_record(log, "JoinLagWitness")
+            self.assertAlmostEqual(witness["landed_seconds"], 2.79, places=2)
+            self.assertEqual(witness["lag"], 2)
 
-    def test_a_kicked_join_has_no_timing(self) -> None:
+    def test_a_timeout_is_the_servers_own_deadline_with_its_ticks(self) -> None:
         with tempfile.TemporaryDirectory() as root:
             log = Path(root) / "server.log"
-            log.write_text(self.LOG.replace(' connection = 4 joined=1 "join landed"', ""))
-            self.assertIsNone(join_lag.join_timing(log, "JoinLagJoiner"))
+            log.write_text(self.TIMEOUT)
+            joiner = join_lag.join_record(log, "JoinLagJoiner")
+            self.assertTrue(joiner["timed_out"])
+            self.assertIsNone(joiner["landed_seconds"])
+            self.assertEqual(joiner["lag"], 9)
 
-    def test_an_unknown_client_has_no_timing(self) -> None:
+    def test_an_unadmitted_client_has_an_empty_record(self) -> None:
         with tempfile.TemporaryDirectory() as root:
             log = Path(root) / "server.log"
             log.write_text(self.LOG)
-            self.assertIsNone(join_lag.join_timing(log, "Nobody"))
+            self.assertFalse(join_lag.join_record(log, "Nobody")["admitted"])
+
+    def test_a_missing_log_has_an_empty_record(self) -> None:
+        self.assertFalse(join_lag.join_record(Path("/tmp/definitely-missing-join-lag.log"),
+                                              "JoinLagJoiner")["admitted"])
 
 
 class RegistrationTest(unittest.TestCase):
