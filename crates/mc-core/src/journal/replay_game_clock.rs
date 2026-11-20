@@ -269,3 +269,7 @@ impl ReplayGameClock {
 fn invalid(reason: &str) -> CoreError {
     CoreError::Storage(format!("entity replay game clock: {reason}"))
 }
+
+#[cfg(test)]
+#[path = "replay_game_clock_tests.rs"]
+mod tests;
