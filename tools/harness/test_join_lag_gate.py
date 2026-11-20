@@ -45,82 +45,106 @@ class ArgsTest(unittest.TestCase):
 
 
 def record(**fields) -> dict:
-    base = {"admitted": True, "landed_seconds": None, "timed_out": False, "lag": 3, "knockout": None}
+    # lag 8 at 3 TPS = 2.7 s: past the 1.6 s publish budget, which the verdicts require.
+    base = {"admitted": True, "landed_seconds": None, "timed_out": False, "lag": 8, "knockout": None}
     base.update(fields)
     return base
 
 
 class JoinVerdictTest(unittest.TestCase):
-    def test_a_join_inside_the_deadline_behind_a_witnessed_delay_passes(self) -> None:
-        ok, why = join_lag.join_verdict(record(landed_seconds=2.5, knockout="landed"), True, None)
+    def test_a_join_inside_the_deadline_behind_a_skipping_pump_passes(self) -> None:
+        ok, why = join_lag.join_verdict(record(landed_seconds=2.5, knockout="landed"), True, 3.0, 4, None)
         self.assertTrue(ok)
         self.assertIn("2.5 s", why)
+        self.assertIn("skipped", why)
+
+    def test_a_join_inside_the_deadline_behind_a_measured_over_budget_lag_passes(self) -> None:
+        ok, why = join_lag.join_verdict(record(lag=26, landed_seconds=2.5, knockout="landed"), True, 3.0, 0, None)
+        self.assertTrue(ok)
+        self.assertIn("behind", why)
 
     def test_a_join_past_the_deadline_fails(self) -> None:
-        ok, why = join_lag.join_verdict(record(landed_seconds=10.5, knockout="landed"), True, None)
+        ok, why = join_lag.join_verdict(record(landed_seconds=10.5, knockout="landed"), True, 3.0, 0, None)
         self.assertFalse(ok)
         self.assertIn("deadline", why)
 
-    def test_a_confirmed_timeout_behind_a_delay_fails(self) -> None:
-        ok, why = join_lag.join_verdict(record(timed_out=True, knockout="timeout"), True, None)
+    def test_a_confirmed_timeout_behind_an_over_budget_delay_fails(self) -> None:
+        ok, why = join_lag.join_verdict(record(timed_out=True, knockout="timeout"), True, 3.0, 0, None)
         self.assertFalse(ok)
         self.assertIn("missed", why)
 
     def test_no_admission_is_infrastructure_not_a_verdict(self) -> None:
-        ok, why = join_lag.join_verdict(record(admitted=False), True, None)
+        ok, why = join_lag.join_verdict(record(admitted=False), True, 3.0, 0, None)
         self.assertIsNone(ok)
         self.assertIn("admission", why)
 
     def test_an_mcp_failure_without_an_outcome_is_not_a_verdict(self) -> None:
-        ok, why = join_lag.join_verdict(record(knockout=None), True, None)
+        ok, why = join_lag.join_verdict(record(knockout=None), True, 3.0, 0, None)
         self.assertIsNone(ok)
         self.assertIn("neither", why)
 
-    def test_a_knob_without_a_witnessed_delay_proves_nothing(self) -> None:
-        ok, why = join_lag.join_verdict(record(lag=0, landed_seconds=30.0, knockout="landed"), True, None)
+    def test_a_lag_inside_the_publish_budget_without_skips_is_inconclusive(self) -> None:
+        # lag 4 at 3 TPS = 1.33 s with no skip: the receipt 20261120T022817 case.
+        ok, why = join_lag.join_verdict(record(lag=4, landed_seconds=2.0, knockout="landed"), True, 3.0, 0, None)
         self.assertIsNone(ok)
-        self.assertIn("witness", why)
+        self.assertIn("budget", why)
+
+    def test_a_lag_inside_the_budget_at_a_faster_rate_is_inconclusive(self) -> None:
+        # lag 4 at 14.65 TPS = 0.27 s, no skip: a rate that never settled to 3 must not pass.
+        ok, why = join_lag.join_verdict(record(lag=4, landed_seconds=0.5, knockout="landed"), True, 14.65, 0, None)
+        self.assertIsNone(ok)
+        self.assertIn("budget", why)
+
+    def test_an_unconfirmed_tick_rate_is_inconclusive(self) -> None:
+        ok, why = join_lag.join_verdict(record(landed_seconds=2.0, knockout="landed"), True, None, 5, None)
+        self.assertIsNone(ok)
+        self.assertIn("tick rate", why)
+
+    def test_neither_a_skip_nor_an_over_budget_lag_is_inconclusive(self) -> None:
+        ok, why = join_lag.join_verdict(record(lag=2, landed_seconds=2.0, knockout="landed"), True, 3.0, 0, None)
+        self.assertIsNone(ok)
+        self.assertIn("neither", why)
 
     def test_an_unset_knob_proves_nothing(self) -> None:
-        ok, why = join_lag.join_verdict(record(landed_seconds=30.0, knockout="landed"), False, None)
+        ok, why = join_lag.join_verdict(record(landed_seconds=30.0, knockout="landed"), False, 3.0, 5, None)
         self.assertIsNone(ok)
         self.assertIn("did not occur", why)
 
     def test_a_core_halt_under_a_witnessed_delay_fails(self) -> None:
-        ok, why = join_lag.join_verdict(record(landed_seconds=2.5, knockout="landed"), True,
+        ok, why = join_lag.join_verdict(record(landed_seconds=2.5, knockout="landed"), True, 3.0, 4,
                                         "ERROR edge pump not draining")
         self.assertFalse(ok)
         self.assertIn("halted", why)
 
     def test_a_halt_without_a_witnessed_delay_is_inconclusive(self) -> None:
-        ok, why = join_lag.join_verdict(record(lag=0), True, "ERROR edge pump not draining")
+        ok, why = join_lag.join_verdict(record(lag=0), True, 3.0, 0, "ERROR edge pump not draining")
         self.assertIsNone(ok)
-        self.assertIn("witness", why)
+        self.assertIn("neither", why)
 
 
 class HaltVerdictTest(unittest.TestCase):
     def test_a_ticking_core_behind_a_witnessed_delay_passes(self) -> None:
-        ok, _ = join_lag.halt_verdict(True, record(), 100, 160, None)
+        ok, _ = join_lag.halt_verdict(True, record(), 3.0, 4, 100, 160, None)
         self.assertTrue(ok)
 
     def test_a_halted_core_under_a_witnessed_delay_fails(self) -> None:
-        ok, _ = join_lag.halt_verdict(True, record(), 100, 160, "ERROR edge pump not draining")
+        ok, _ = join_lag.halt_verdict(True, record(), 3.0, 0, 100, 160, "ERROR edge pump not draining")
         self.assertFalse(ok)
 
-    def test_a_halt_without_a_witnessed_delay_is_inconclusive(self) -> None:
-        ok, why = join_lag.halt_verdict(True, record(lag=0), 100, 160, "ERROR edge pump not draining")
-        self.assertIsNone(ok)
-        self.assertIn("witness", why)
-
     def test_a_stuck_simulation_tick_fails(self) -> None:
-        ok, why = join_lag.halt_verdict(True, record(), 100, 100, None)
+        ok, why = join_lag.halt_verdict(True, record(), 3.0, 4, 100, 100, None)
         self.assertFalse(ok)
         self.assertIn("did not advance", why)
 
     def test_an_unwitnessed_delay_proves_nothing(self) -> None:
-        ok, why = join_lag.halt_verdict(True, record(lag=0), 100, 160, None)
+        ok, why = join_lag.halt_verdict(True, record(lag=0), 3.0, 0, 100, 160, None)
         self.assertIsNone(ok)
-        self.assertIn("witness", why)
+        self.assertIn("neither", why)
+
+    def test_a_ticking_core_without_a_witness_is_inconclusive(self) -> None:
+        ok, why = join_lag.halt_verdict(True, record(lag=1), 20.0, 0, 100, 160, None)
+        self.assertIsNone(ok)
+        self.assertIn("neither", why)
 
 
 class DispositionTest(unittest.TestCase):
@@ -142,8 +166,8 @@ class DispositionTest(unittest.TestCase):
 
     def test_neither_verdict_returns_false_without_the_delay(self) -> None:
         self.assertIsNone(join_lag.join_verdict(record(landed_seconds=30.0, knockout="landed"),
-                                                False, None)[0])
-        self.assertIsNone(join_lag.halt_verdict(False, record(), 100, 160, None)[0])
+                                                False, 3.0, 5, None)[0])
+        self.assertIsNone(join_lag.halt_verdict(False, record(), 3.0, 5, 100, 160, None)[0])
 
 
 class EngagementTest(unittest.TestCase):
@@ -230,6 +254,16 @@ class JoinRecordTest(unittest.TestCase):
     def test_a_missing_log_has_an_empty_record(self) -> None:
         self.assertFalse(join_lag.join_record(Path("/tmp/definitely-missing-join-lag.log"),
                                               "JoinLagJoiner")["admitted"])
+
+
+class AppliedRateTest(unittest.TestCase):
+    def test_the_tick_query_reply_names_the_rate(self) -> None:
+        self.assertEqual(join_lag.applied_tick_rate(["Target tick rate: 3.0", "hello"]), 3.0)
+        self.assertEqual(join_lag.applied_tick_rate(["Some chat", "Target tick rate: 14.65"]), 14.65)
+
+    def test_a_quiet_chat_has_no_rate(self) -> None:
+        self.assertIsNone(join_lag.applied_tick_rate([]))
+        self.assertIsNone(join_lag.applied_tick_rate(["Set the target tick rate to 3.0 per second"]))
 
 
 class RegistrationTest(unittest.TestCase):

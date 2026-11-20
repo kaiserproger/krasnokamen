@@ -57,7 +57,8 @@ from .probe_steps import ProbeSteps
 WITNESS = "JoinLagWitness"
 JOINER = "JoinLagJoiner"
 TIMEOUT = 1800.0
-JOIN_BOUND_SECONDS = 10.0  # the server's join deadline the row names
+JOIN_BOUND_SECONDS = 10.0      # the server's join deadline the row names
+PUBLISH_BUDGET_SECONDS = 1.6   # the pump's publish queue budget (pump.rs PUBLISH_QUEUE_BUDGET)
 ENGAGED_LINE = "pump lag enabled"  # the server's warn line for the test/dev knob
 CRITERIA = ("join_behind_slow_pump", "live_pump_does_not_halt")
 
@@ -127,24 +128,38 @@ def join_record(log_path: Path, username: str) -> dict[str, Any]:
     return record
 
 
-def precondition(record: dict[str, Any], knob_on: bool) -> tuple[bool, str]:
-    """The gate's causal precondition: the knob ran, the server admitted the client, and the log
-    witnessed the pump actually delayed (`lag` = core tick minus pump tick). A missing piece is
-    inconclusive, never a symptom."""
+def witness(record: dict[str, Any], knob_on: bool, applied_rate: float | None,
+            skips_delta: int) -> tuple[bool, str]:
+    """Why an output is known to have aged past the publish budget, on either tree.
+
+    The fixed pump proves it directly: every `pump_skipped_ticks` increment is one output older than
+    the 1.6 s budget (`stale`). A pump without the skip proves it by its measured lag behind the
+    core (`core_tick_seen - pump_tick` over the confirmed tick rate). The knob's warn line alone,
+    a missing admission or an unconfirmed rate are inconclusive, never a symptom.
+    """
     if not knob_on:
         return False, "the pump lag knob never ran: the lagging condition did not occur"
+    if applied_rate is None or applied_rate <= 0:
+        return False, "the server never confirmed an applied tick rate: the delay age in seconds is unknown"
     if not record.get("admitted"):
         return False, "the joining client never reached the server (no admission line): infrastructure, not a verdict"
+    if skips_delta > 0:
+        return True, (f"after {skips_delta} stale outputs skipped (each older than the "
+                      f"{PUBLISH_BUDGET_SECONDS:.1f} s budget) at {applied_rate:g} TPS")
     lag = record.get("lag")
-    if lag is None or lag < 1:
-        return False, "no pump delay was witnessed at the join (pump tick equals the core tick)"
-    return True, f"the pump {lag} ticks behind"
+    age = None if not lag else lag / applied_rate
+    if age is not None and age > PUBLISH_BUDGET_SECONDS:
+        return True, (f"the pump was {lag} ticks = {age:.2f} s behind at {applied_rate:g} TPS, "
+                      f"past the {PUBLISH_BUDGET_SECONDS:.1f} s budget")
+    return False, (f"neither a stale-output skip nor a delay past the {PUBLISH_BUDGET_SECONDS:.1f} s "
+                   f"budget was witnessed (lag {lag}, rate {applied_rate:g} TPS): the condition did not occur")
 
 
-def join_verdict(record: dict[str, Any], knob_on: bool, halt: str | None) -> tuple[bool | None, str]:
-    """Row 1 verdict: False only for a held join behind a witnessed delay; otherwise True when the
-    join landed in time; everything unreached is None."""
-    witnessed, info = precondition(record, knob_on)
+def join_verdict(record: dict[str, Any], knob_on: bool, applied_rate: float | None, skips_delta: int,
+                 halt: str | None) -> tuple[bool | None, str]:
+    """Row 1 verdict: False only for a held join behind a witnessed over-budget publication; True for
+    a join inside the deadline behind it; anything unwitnessed is None."""
+    witnessed, info = witness(record, knob_on, applied_rate, skips_delta)
     if not witnessed:
         return None, info
     if halt:
@@ -160,10 +175,10 @@ def join_verdict(record: dict[str, Any], knob_on: bool, halt: str | None) -> tup
     return None, "the join neither landed nor timed out inside the run: no verdict"
 
 
-def halt_verdict(knob_on: bool, record: dict[str, Any], tick_before: int, tick_after: int,
-                 halt: str | None) -> tuple[bool | None, str]:
-    """Row 2 verdict: False only for a halt or a stuck core behind the same witnessed delay."""
-    witnessed, info = precondition(record, knob_on)
+def halt_verdict(knob_on: bool, record: dict[str, Any], applied_rate: float | None, skips_delta: int,
+                 tick_before: int, tick_after: int, halt: str | None) -> tuple[bool | None, str]:
+    """Row 2 verdict: False only for a halt or a stuck core behind the same witnessed publication."""
+    witnessed, info = witness(record, knob_on, applied_rate, skips_delta)
     if not witnessed:
         return None, info
     if halt:
@@ -240,6 +255,23 @@ def _stat(dashboard_port: int) -> dict[str, Any]:
 
 def _tick(stats: dict[str, Any]) -> int:
     return int(stats.get("simulation_tick") or 0)
+
+
+def applied_tick_rate(chat: list[Any]) -> float | None:
+    """The rate from the server's own `/tick query` reply ("Target tick rate: 3.0"), or None."""
+    for line in reversed([str(item) for item in chat]):
+        match = re.search(r"Target tick rate:?\s*([0-9.]+)", line)
+        if match:
+            return float(match.group(1))
+    return None
+
+
+def _skips_now(dashboard_port: int) -> int:
+    """The pump's skipped-output counter, or 0 when the dashboard is silent."""
+    try:
+        return int(_stat(dashboard_port).get("pump_skipped_ticks") or 0)
+    except (OSError, ValueError):
+        return 0
 
 
 def _safe_tick(dashboard_port: int) -> int:
@@ -393,6 +425,13 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: int, ad
     a.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
     a.fixture(f"tick rate {tick_rate}")
     a.fixture("gamemode creative @s")
+    # The server confirms the applied rate in its own `/tick query` reply; the delay age in seconds
+    # can only be computed against a confirmed rate, so the join waits for it.
+    a.fixture("tick query")
+    applied = a.wait(lambda s: applied_tick_rate(s.get("recent_chat") or []) is not None,
+                     "tick_rate_applied")
+    applied_rate = applied_tick_rate(applied.get("recent_chat") or [])
+    detail["applied_tick_rate"] = applied_rate
     # The knob's own warn line is written before the server listens; wait for it with inotify so a
     # late flush is an event, not a sleep.
     delayed = runtime.wait_for_path_condition(
@@ -400,6 +439,7 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: int, ad
     detail["pump_lag_enabled"] = delayed
     tick_before = _safe_tick(dashboard_port)
 
+    skips_before = _skips_now(dashboard_port)
     joiner_process, joiner_mcp = launch_joiner()
     try:
         joiner = ProbeSteps(joiner_mcp, artifact / "join-lag-joiner",
@@ -431,15 +471,18 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: int, ad
         stats_end = _stat(dashboard_port)
     except OSError:
         pass
+    skips_after = _skips_now(dashboard_port)
+    skips_delta = max(0, skips_after - skips_before)
+    detail["join_skips"] = [skips_before, skips_after]
     detail["join_ticks"] = [tick_before, tick_after]
     detail["publish"] = (stats_end or {}).get("publish")
     detail["tps_at_end"] = (stats_end or {}).get("tps")
     detail["halt_line"] = halt
-    ok, why = join_verdict(record, delayed, halt)
+    ok, why = join_verdict(record, delayed, applied_rate, skips_delta, halt)
     detail["join_verdict"] = why
     detail.setdefault("verdicts", {})["join_behind_slow_pump"] = why
     verdicts["join_behind_slow_pump"] = ok
-    ok2, why2 = halt_verdict(delayed, record, tick_before, tick_after, halt)
+    ok2, why2 = halt_verdict(delayed, record, applied_rate, skips_delta, tick_before, tick_after, halt)
     detail["halt_verdict"] = why2
     detail.setdefault("verdicts", {})["live_pump_does_not_halt"] = why2
     verdicts["live_pump_does_not_halt"] = ok2
