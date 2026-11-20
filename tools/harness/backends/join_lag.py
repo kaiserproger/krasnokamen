@@ -59,9 +59,6 @@ JOINER = "JoinLagJoiner"
 TIMEOUT = 1800.0
 JOIN_BOUND_SECONDS = 10.0      # the server's join deadline the row names
 PUBLISH_BUDGET_SECONDS = 1.6
-#: Row 1's own red control needs the fresh join launched behind the over-budget pump but before the
-#: drain halt; the knob's lag at the trigger (ticks) comes from KRASNOKAMEN_JOIN_LAG_GATE_JOIN_AT_LAG.
-DEFAULT_JOIN_AT_LAG = 0  # 0 keeps the historical timing: join right after the settle
 ENGAGED_LINE = "pump lag enabled"  # the server's warn line for the test/dev knob
 CRITERIA = ("join_behind_slow_pump", "live_pump_does_not_halt")
 
@@ -251,30 +248,6 @@ def private_xdg_root(artifact: Path) -> str:
         if (source / name).exists():
             link.symlink_to((source / name).resolve(), target_is_directory=(source / name).is_dir())
     return str(root)
-
-
-def knob_lag(log_path: Path) -> int | None:
-    """The knob's own lag event: the tick-stream backlog when its wait completed (or None).
-
-    `KRASNOKAMEN_PUMP_LAG_TICKS` makes the pump log `pump knob wait completed lag_ticks=<N>` at
-    `RUST_LOG=mc_edge::server::pump=debug`; the harness waits on that line instead of polling.
-    """
-    try:
-        text = log_path.read_text(errors="replace")
-    except OSError:
-        return None
-    matches = list(re.finditer(r"pump knob wait completed.*?lag_ticks=(\d+)", text))
-    return int(matches[-1].group(1)) if matches else None
-
-
-def join_due(lag: int | None, threshold: int) -> bool:
-    """Wait for the witnessed lag to pass `threshold` ticks before launching the fresh join.
-
-    Zero keeps the historical timing (join right after the settle); a positive threshold holds the
-    join until the pump is that far behind the core, which is how row 1's control reproduces a held
-    join (022858: admitted at lag 26 and held 9.28 s) before the 10 s drain halt.
-    """
-    return bool(threshold) and lag is not None and lag >= threshold
 
 
 def _stat(dashboard_port: int) -> dict[str, Any]:
@@ -500,20 +473,6 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: float, 
     tick_before = _safe_tick(dashboard_port)
 
     skips_before = _skip_counters(dashboard_port)
-    join_at_lag = int(os.environ.get("KRASNOKAMEN_JOIN_LAG_GATE_JOIN_AT_LAG", DEFAULT_JOIN_AT_LAG) or 0)
-    if join_at_lag:
-        # Row 1's own red control: hold the join until the knob's own log event reports the pump at
-        # least that far behind (inotify on the server log, never a poll): 022858 was admitted at
-        # lag 26 and held 9.28 s.
-        detail["join_at_lag"] = join_at_lag
-        try:
-            triggered = runtime.wait_for_path_condition(
-                server_log_path, JOIN_BOUND_SECONDS,
-                lambda: (join_due(knob_lag(server_log_path), join_at_lag),
-                         knob_lag(server_log_path)), server)
-            detail["join_at_lag_seen"] = triggered
-        except (TimeoutError, runtime.ChildExited):
-            detail["join_at_lag_seen"] = knob_lag(server_log_path)
     joiner_process, joiner_mcp = launch_joiner()
     try:
         joiner = ProbeSteps(joiner_mcp, artifact / "join-lag-joiner",

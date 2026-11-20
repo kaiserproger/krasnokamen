@@ -275,33 +275,6 @@ class AttributionTest(unittest.TestCase):
                                                "ERROR edge pump not draining")[0])
 
 
-class KnobLagTest(unittest.TestCase):
-    """The knob's own debug event is the join trigger; no polling."""
-
-    def test_the_last_knob_line_carries_the_backlog(self) -> None:
-        import tempfile
-        with tempfile.NamedTemporaryFile("w", suffix=".log", delete=False) as handle:
-            handle.write("x pump knob wait completed lag_ticks=3\n")
-            handle.write("x pump knob wait completed lag_ticks=9\n")
-            path = handle.name
-        self.assertEqual(join_lag.knob_lag(join_lag.Path(path)), 9)
-        self.assertIsNone(join_lag.knob_lag(join_lag.Path(path + ".missing")))
-
-
-class JoinDueTest(unittest.TestCase):
-    """Row 1's control timing: hold the join until the witnessed lag passes the threshold."""
-
-    def test_the_default_timing_asks_no_question(self) -> None:
-        self.assertFalse(join_lag.join_due(None, 0))
-        self.assertFalse(join_lag.join_due(4, 0))
-
-    def test_the_threshold_holds_the_join_until_the_pump_is_that_far_behind(self) -> None:
-        self.assertFalse(join_lag.join_due(None, 6))
-        self.assertFalse(join_lag.join_due(5, 6))
-        self.assertTrue(join_lag.join_due(6, 6))
-        self.assertTrue(join_lag.join_due(26, 6))
-
-
 class AppliedRateTest(unittest.TestCase):
     def test_the_tick_query_reply_names_the_rate(self) -> None:
         self.assertEqual(join_lag.applied_tick_rate(["Target tick rate: 3.0", "hello"]), 3.0)
