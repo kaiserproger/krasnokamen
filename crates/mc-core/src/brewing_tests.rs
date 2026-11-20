@@ -17,6 +17,10 @@ fn registry() -> Arc<CoreRegistry> {
 }
 
 fn state(dir: Option<std::path::PathBuf>) -> TickState {
+    state_at_tick(dir, 0)
+}
+
+fn state_at_tick(dir: Option<std::path::PathBuf>, tick: u64) -> TickState {
     let registry = registry();
     let generator = Arc::new(mc_worldgen::TerrainGenerator::new(
         42,
@@ -45,8 +49,10 @@ fn state(dir: Option<std::path::PathBuf>) -> TickState {
             mc_world::OVERWORLD_GEOMETRY,
         ),
     };
+    world.refresh_active_clock(tick);
     world.ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
     let mut state = TickState::new(registry, world, 0, 512);
+    state.tick = tick;
     // A headless stand must retain residency, including after a clean reload.
     state
         .tickets
@@ -301,8 +307,9 @@ fn checkpoint_native_loading_restores_slots_timers_and_finishes_once() {
             .unwrap()
             .is_empty()
     );
+    let checkpoint_tick = original.tick;
     drop(original);
-    let mut restored = state(Some(dir.clone()));
+    let mut restored = state_at_tick(Some(dir.clone()), checkpoint_tick);
     hydrate(&mut restored);
     assert_eq!(restored.brewing[&KEY], before);
     assert_eq!(restored.block_entities[&KEY].slots, slots_before);
@@ -360,7 +367,7 @@ fn durable_wal_after_checkpoint_restores_newer_timer_and_slots_idempotently() {
     let expected_opaque = once.opaque_block_entities.clone();
     let twice = replay_batches(once, &batches);
     assert_eq!(expected_opaque, twice.opaque_block_entities);
-    let mut restored = state(Some(dir.clone()));
+    let mut restored = state_at_tick(Some(dir.clone()), twice.tick);
     for (key, bytes) in twice.opaque_block_entities {
         restored.world.set_opaque_block_entity(
             BlockPos {

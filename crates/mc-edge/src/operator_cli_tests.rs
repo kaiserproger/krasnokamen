@@ -460,7 +460,8 @@ fn path_only_offline_commands_do_not_require_a_serving_config() {
         "backup",
     ])
     .unwrap();
-    assert!(load_config(&cli).is_ok());
+    // Backup uses an existing config to verify the content and plugin identity.
+    assert!(load_config(&cli).is_err());
     let cli = Cli::try_parse_from([
         "krasnokamen",
         "--config",

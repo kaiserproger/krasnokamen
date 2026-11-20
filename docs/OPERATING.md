@@ -1269,6 +1269,10 @@ krasnokamen restore --from /backups/world-2026-10-15 --world-dir /srv/krasnokame
 krasnokamen --config restored-server.toml
 ```
 
+Pass the world's serving config with `--config` when its content cache or plugin
+deployment differs from the defaults. Backup and restore read an existing config
+for verification and reject a malformed one. Only an absent config uses defaults.
+
 A backup holds the native database, WAL/journal and other world files with a
 versioned SHA-256 manifest (lease files excluded). A `journal/` directory
 belongs to the store it was written with: every batch carries that store's id

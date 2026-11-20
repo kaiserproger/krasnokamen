@@ -1,10 +1,10 @@
 [[bug]]
 id = "TIME-FROZEN-LIVE-MIRROR-IMAGE-CHURN"
 title = "The live journal baseline mirror still projects native elapsed over held frames, causing redundant entity images"
-area = "persistence"
+area = "gameplay"
 repro = "source"
 severity = "minor"
 status = "open"
 source = "Separate residual from TIME-REPLAY-FROZEN-ENTITY-AGE, outside the approved recovery/debt fix. journal_touched.rs:565-569 advances the comparison state by simulation_interval's native to-from, and :774-776 does the same for villager countdowns. During a held active interval the owner stays unchanged but its comparison image advances; the absolute image emitted on mismatch preserves custody but causes avoidable WAL/image churn. The test-only full-scan fence uses the same native projection at :807-808 and :826-829."
 regression = []
-failing_first = "source audit; no runtime negative control recorded"
+failing_first = "not recorded"

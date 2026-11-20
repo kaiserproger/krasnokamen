@@ -24,7 +24,7 @@ impl mc_world::ChunkGenerator for Empty {
     }
 }
 
-fn state_in(directory: Option<std::path::PathBuf>) -> TickState {
+fn state_in(directory: Option<std::path::PathBuf>, tick: u64) -> TickState {
     static REGISTRY: LazyLock<Arc<CoreRegistry>> =
         LazyLock::new(|| Arc::new(CoreRegistry::load(None).unwrap()));
     let registry = Arc::clone(&REGISTRY);
@@ -52,6 +52,7 @@ fn state_in(directory: Option<std::path::PathBuf>) -> TickState {
             mc_world::OVERWORLD_GEOMETRY,
         )
     };
+    world.refresh_active_clock(tick);
     world.set_opaque_block_entity(BlockPos { x: 0, y: 200, z: 0 }, None);
     for x in 0..16 {
         for z in 0..16 {
@@ -60,6 +61,7 @@ fn state_in(directory: Option<std::path::PathBuf>) -> TickState {
     }
     world.fold_overlay();
     let mut state = TickState::new(registry, world, 0, 512);
+    state.tick = tick;
     state
         .tickets
         .insert("dirty-signals-test".into(), (ChunkPos { x: 0, z: 0 }, 0));
@@ -68,7 +70,7 @@ fn state_in(directory: Option<std::path::PathBuf>) -> TickState {
 }
 
 fn state() -> TickState {
-    state_in(None)
+    state_in(None, 0)
 }
 
 fn key(pos: BlockPos) -> (i32, i32, i32) {
@@ -536,7 +538,7 @@ fn explosion_removal_forgets_cached_signal_and_unpowers_surviving_comparator() {
 #[test]
 fn native_restart_recovers_pending_comparator_update_but_not_trapped_chest_viewers() {
     let directory = tempfile::tempdir().unwrap();
-    let mut state = state_in(Some(directory.path().to_owned()));
+    let mut state = state_in(Some(directory.path().to_owned()), 0);
     chest_and_comparator(&mut state, "trapped_chest");
     let wire = BlockPos {
         x: CHEST.x + 1,
@@ -578,8 +580,9 @@ fn native_restart_recovers_pending_comparator_update_but_not_trapped_chest_viewe
         .world
         .capture_scheduled_block_ticks(&mut capture, absent);
     capture.write().unwrap();
+    let checkpoint_tick = state.tick;
     drop(state);
-    let mut restarted = state_in(Some(directory.path().to_owned()));
+    let mut restarted = state_in(Some(directory.path().to_owned()), checkpoint_tick);
     assert!(restarted.open_containers.is_empty());
     run_tick(&mut restarted, &[]);
     assert!(restarted.block_entities[&key(CHEST)].slots[0].is_empty());

@@ -1,11 +1,10 @@
 [[bug]]
 id = "PROTO-WIKI-UNCOMPRESSED-FRAME-REJECTED"
 title = "Our frame decoder rejects an uncompressed frame at or above the compression threshold, which the vanilla 26.3 (777) and 26.1.2 (775) servers accept, so a peer that a vanilla server admits is disconnected by us"
-area = "protocol"
+area = "gameplay"
 severity = "minor"
 status = "open"
-source = "D60 wiki-vs-code audit, item 1, 2026-11-20. Local javap of the vanilla 26.3 and 26.1.2 server jars (receipts kept outside Git: <work>/receipts/ProtocolWikiCheck/REPORT.md): the vanilla compression decoder hands a frame whose declared uncompressed length is zero on unchanged at any size and applies the threshold check only to compressed frames. Ours: crates/mc-protocol/src/frame.rs try_decode_frame_plan returns FramingError::UncompressedAboveThreshold for an uncompressed frame whose body is at or above the threshold. Vanilla's own encoder compresses everything at or above the threshold, so a stock vanilla client never sends such a frame; only third-party peers or proxies that rely on the decoder's leniency are affected."
-repro = "harness"
+source = "D60 wiki-vs-code audit, item 1, 2026-11-20. Local javap of the vanilla 26.3 and 26.1.2 server jars (receipts kept outside Git: <work>/receipts/ProtocolWikiCheck/REPORT.md): the vanilla compression decoder hands a frame whose declared uncompressed length is zero on unchanged at any size and applies the threshold check only to compressed frames. Ours: crates/mc-protocol/src/frame.rs try_decode_frame_plan returns FramingError::UncompressedAboveThreshold for an uncompressed frame whose body is at or above the threshold. Vanilla's own encoder compresses everything at or above the threshold, so a stock vanilla client never sends such a frame; only third-party peers or proxies that rely on the decoder's leniency are affected.\n\nFix direction (not applied): accept the uncompressed frame above the threshold like vanilla, or keep the rejection as documented intentional strictness. A negative control needs a wire-probe scenario that sends one uncompressed Login/Play frame at or above the threshold (none exists yet). Affected protocol versions: 775, 776 and 777 alike."
+repro = "source"
 regression = []
 failing_first = "reported"
-note = "Fix direction (not applied): accept the uncompressed frame above the threshold like vanilla, or keep the rejection as documented intentional strictness. A negative control needs a wire-probe scenario that sends one uncompressed Login/Play frame at or above the threshold (none exists yet). Affected protocol versions: 775, 776 and 777 alike."

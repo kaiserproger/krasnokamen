@@ -7,10 +7,14 @@ use std::sync::{Arc, LazyLock};
 const SENSOR: BlockPos = BlockPos { x: 3, y: 201, z: 3 };
 const CATALYST: BlockPos = BlockPos { x: 8, y: 201, z: 3 };
 fn state(dir: Option<std::path::PathBuf>) -> TickState {
-    state_in(dir, crate::dimensions::Dimension::Overworld)
+    state_in(dir, crate::dimensions::Dimension::Overworld, 0)
 }
 
-fn state_in(dir: Option<std::path::PathBuf>, dimension: crate::dimensions::Dimension) -> TickState {
+fn state_in(
+    dir: Option<std::path::PathBuf>,
+    dimension: crate::dimensions::Dimension,
+    tick: u64,
+) -> TickState {
     static REGISTRY: LazyLock<Arc<CoreRegistry>> =
         LazyLock::new(|| Arc::new(CoreRegistry::load(None).unwrap()));
     let registry = Arc::clone(&REGISTRY);
@@ -38,8 +42,10 @@ fn state_in(dir: Option<std::path::PathBuf>, dimension: crate::dimensions::Dimen
             dimension.geometry(),
         )
     };
+    world.refresh_active_clock(tick);
     world.ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
     let mut state = TickState::new(registry, world, 0, 512);
+    state.tick = tick;
     state.dimension = dimension;
     state
         .tickets
@@ -191,8 +197,13 @@ fn setblock_valid_sculk_records_hydrate_after_restart() {
         crate::tick::run_tick(&mut state, &[]);
     }
     state.world.flush_dirty(&BTreeMap::new()).unwrap();
+    let checkpoint_tick = state.tick;
     drop(state);
-    let mut restored = self::state(Some(dir.path().to_owned()));
+    let mut restored = state_in(
+        Some(dir.path().to_owned()),
+        crate::dimensions::Dimension::Overworld,
+        checkpoint_tick,
+    );
     crate::shrieker::validate_loaded(&restored).unwrap();
     validate(&restored).unwrap();
     hydrate(&mut restored);
@@ -886,9 +897,13 @@ fn pending_vibration_writes_start_and_resolution_only_and_checkpoint_refreshes_d
         "native checkpoint refresh is not a WAL mutation"
     );
     s.world.flush_dirty(&BTreeMap::new()).unwrap();
+    let checkpoint_tick = s.tick;
     drop(s);
-    let mut restored = state(Some(dir.path().to_owned()));
-    restored.tick = 104;
+    let mut restored = state_in(
+        Some(dir.path().to_owned()),
+        crate::dimensions::Dimension::Overworld,
+        checkpoint_tick,
+    );
     hydrate(&mut restored);
     assert_eq!(vibration::pending(&restored, SENSOR).unwrap().arrival, 105);
     advance(&mut restored, 1);
@@ -914,6 +929,7 @@ fn non_overworld_checkpoint_capture_refreshes_inflight_delay() {
     let mut other = state_in(
         Some(dir.path().to_owned()),
         crate::dimensions::Dimension::End,
+        0,
     );
     place(&mut other, SENSOR, "sculk_sensor", &[]);
     other.tick = 100;
@@ -934,8 +950,8 @@ fn non_overworld_checkpoint_capture_refreshes_inflight_delay() {
     let mut restored = state_in(
         Some(dir.path().to_owned()),
         crate::dimensions::Dimension::End,
+        102,
     );
-    restored.tick = 102;
     hydrate(&mut restored);
     assert_eq!(remaining_delay(&restored), 2);
     assert_eq!(vibration::pending(&restored, SENSOR).unwrap().arrival, 104);

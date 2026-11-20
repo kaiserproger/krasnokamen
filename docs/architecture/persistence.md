@@ -350,6 +350,12 @@ authorities. A dormant activation subtracts held time with checked arithmetic:
 an inconsistent prefix fails before commit rather than wrapping into catch-up
 debt. The already-published WAL remains the recovery boundary.
 
+Recovery installs the recovered native tick and held prefix before admitting
+chunks. An extras-only debt anchor ahead of that boundary is invalid. A
+checkpoint and its WAL tail also share the climate image's debt epoch; a test
+that captures a checkpoint and then keeps writing with the same live state
+must persist that image rather than synthesizing a legacy base.
+
 A process SIGKILL exercises process recovery, not arbitrary power-loss or storage
 hardware durability. The [drills below](#hazards-and-defense-layers) state their
 fault model; [crash-census evidence](../QA_AGENT_PROTOCOL.md#crash-census-evidence)

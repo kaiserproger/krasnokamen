@@ -32,6 +32,7 @@ fn checkpoint_restart(state: &TickState, directory: &std::path::Path) -> crate::
         &config,
         &crate::journal::CheckpointManifest {
             tick: state.tick,
+            climate: Some(crate::weather::ClimateImage::capture(state)),
             ..Default::default()
         },
     )
@@ -201,6 +202,7 @@ fn illusioner_casts_invisibility_and_blindness_and_shoots_durable_bow_arrows() {
     )
     .unwrap();
     let replay = replay_batches(base, &batches);
+    crate::journal::validate_replay(&replay).expect("replay the checkpoint's WAL tail");
     assert!(
         replay.entities[&id.0]
             .active_effects

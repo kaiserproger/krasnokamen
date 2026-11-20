@@ -469,8 +469,9 @@ fn idle_occupied_hive_skips_wal_and_checkpoint_restores_elapsed_ticks() {
         .capture_dirty(&BTreeMap::new())
         .write()
         .unwrap();
+    let checkpoint_tick = original.tick;
     drop(original);
-    let mut restored = state(Some(dir.clone()));
+    let mut restored = state_at_tick(Some(dir.clone()), checkpoint_tick);
     crate::tick::sync_chunk_block_entities(&mut restored);
     assert_eq!(restored.hives[&key(POS)].bees[0].ticks, 237);
     run(&mut restored, &mut Vec::new(), &mut ChangeSet::default());
@@ -1105,8 +1106,9 @@ fn pending_item_placement_checkpoint_before_run_restarts_with_one_owner() {
         .capture_dirty(&BTreeMap::new())
         .write()
         .unwrap();
+    let checkpoint_tick = original.tick;
     drop(original);
-    let mut restarted = state(Some(dir.clone()));
+    let mut restarted = state_at_tick(Some(dir.clone()), checkpoint_tick);
     crate::tick::sync_chunk_block_entities(&mut restarted);
     assert_eq!(restarted.hives[&key(POS)].bees, vec![occupant]);
     assert!(!restarted.hives[&key(POS)].pending_placement);

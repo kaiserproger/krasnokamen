@@ -7,6 +7,10 @@ use std::sync::{Arc, LazyLock};
 const POS: BlockPos = BlockPos { x: 8, y: 201, z: 8 };
 const KEY: (i32, i32, i32) = (8, 201, 8);
 pub(crate) fn fixture(dir: Option<std::path::PathBuf>) -> (TickState, EntityId) {
+    fixture_at_tick(dir, 0)
+}
+
+fn fixture_at_tick(dir: Option<std::path::PathBuf>, tick: u64) -> (TickState, EntityId) {
     static REGISTRY: LazyLock<Arc<CoreRegistry>> =
         LazyLock::new(|| Arc::new(CoreRegistry::load(None).unwrap()));
     let registry = Arc::clone(&REGISTRY);
@@ -36,8 +40,10 @@ pub(crate) fn fixture(dir: Option<std::path::PathBuf>) -> (TickState, EntityId) 
             mc_world::OVERWORLD_GEOMETRY,
         )
     };
+    world.refresh_active_clock(tick);
     world.ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
     let mut state = TickState::new(registry, world, 0, 512);
+    state.tick = tick;
     state
         .tickets
         .insert("storage-test".into(), (ChunkPos { x: 0, z: 0 }, 0));
@@ -410,6 +416,7 @@ fn crafter_wal_checkpoint_restart_retains_slots_disabled_and_pulse_latch_once() 
         [8, 201, 10],
         mc_world::OVERWORLD_GEOMETRY,
     );
+    native.refresh_active_clock(base);
     native.ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
     let mut native_crafters = BTreeMap::new();
     let mut native_custody = crate::redstone::custody::BlockEntities::default();
@@ -440,7 +447,7 @@ fn crafter_wal_checkpoint_restart_retains_slots_disabled_and_pulse_latch_once() 
     let once = replay_batches(Replay::default(), &batches);
     let twice = replay_batches(replay_batches(Replay::default(), &batches), &batches);
     assert_eq!(once.opaque_block_entities, twice.opaque_block_entities);
-    let (mut restored, _) = fixture(Some(dir.clone()));
+    let (mut restored, _) = fixture_at_tick(Some(dir.clone()), twice.tick);
     for (key, bytes) in twice.opaque_block_entities {
         restored.world.set_opaque_block_entity(position(key), bytes);
     }
