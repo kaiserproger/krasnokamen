@@ -1,5 +1,5 @@
 use super::*;
-use crate::bees::tests::{POS, item, joined, place, state};
+use crate::bees::tests::{POS, item, joined, place, state, state_at_tick};
 use crate::boundary::ChunkPos;
 
 #[test]
@@ -75,9 +75,11 @@ fn song_end_retains_record_and_checkpoint_preserves_remaining_clock() {
         assert_eq!(durable.elapsed, Some(1439));
         assert_eq!(durable.record.count, 1);
     }
+    let checkpoint_tick = original.tick;
     drop(original);
-    let mut restored = state(Some(dir.clone()));
+    let mut restored = state_at_tick(Some(dir.clone()), checkpoint_tick);
     crate::tick::sync_chunk_block_entities(&mut restored);
+    assert!(restored.block_entities.contains_key(&key(POS)));
     run(&mut restored, &mut Vec::new(), &mut Vec::new());
     assert!(playing(&restored, POS));
     run(&mut restored, &mut Vec::new(), &mut Vec::new());
@@ -162,9 +164,11 @@ fn playing_clock_skips_idle_wal_and_checkpoint_resumes_elapsed_time() {
         assert_eq!(durable.elapsed, Some(started + 100));
         assert_eq!(durable.record, disc);
     }
+    let checkpoint_tick = original.tick;
     drop(original);
-    let mut restored = state(Some(dir.clone()));
+    let mut restored = state_at_tick(Some(dir.clone()), checkpoint_tick);
     crate::tick::sync_chunk_block_entities(&mut restored);
+    assert!(restored.block_entities.contains_key(&key(POS)));
     assert_eq!(restored.jukeboxes[&key(POS)].elapsed, Some(started + 100));
     assert_eq!(restored.block_entities[&key(POS)].slots[0], disc);
     run(&mut restored, &mut Vec::new(), &mut Vec::new());

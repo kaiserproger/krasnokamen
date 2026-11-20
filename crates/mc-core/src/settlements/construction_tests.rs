@@ -417,7 +417,10 @@ pub(crate) fn attempt(state: &mut TickState, id: SettlementId, slot: EntitySlot)
             .entities
             .set_pos(slot, [f64::from(x) + 0.5, f64::from(y), f64::from(z) + 0.5]);
     }
-    state.tick += 20;
+    for _ in 0..20 {
+        state.tick += 1;
+        state.tick_control.begin_tick(state.tick);
+    }
     building::tick(state, id);
 }
 

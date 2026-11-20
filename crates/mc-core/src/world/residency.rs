@@ -310,14 +310,14 @@ impl ChunkWorld {
             let tick = self.sim_tick;
             let boundary = match self.sim_debt.get_mut(&pos) {
                 Some(debt) if debt.active => {
-                    let boundary = (debt.last_sim, debt.remaining);
+                    let boundary = (debt.last_sim, debt.held_anchor, debt.remaining);
                     debt.active = false;
                     debt.dirty = true;
                     Some(boundary)
                 }
                 _ => None,
             };
-            if let Some((last_sim, remaining)) = boundary {
+            if let Some((last_sim, held_anchor, remaining)) = boundary {
                 self.next_revision += 1;
                 self.revisions.insert(pos, self.next_revision);
                 self.eviction_check.insert(pos);
@@ -325,6 +325,7 @@ impl ChunkWorld {
                 let image = crate::journal::SimDebtImage {
                     chunk: [pos.x, pos.z],
                     last_sim,
+                    held_anchor,
                     remaining,
                     active: false,
                     tick,
@@ -387,7 +388,13 @@ impl ChunkWorld {
     /// A load may have read native storage before an absent counter capture
     /// committed. Its live interval remains authoritative across admission.
     pub(super) fn apply_inhabited_image(&mut self, pos: ChunkPos, chunk: &mut Arc<Chunk>) -> bool {
-        if let Err(error) = crate::debt::adopt_native_extras(pos, chunk, &mut self.sim_debt) {
+        if let Err(error) = crate::debt::adopt_native_extras(
+            pos,
+            chunk,
+            &mut self.sim_debt,
+            self.sim_tick,
+            self.sim_held_ticks,
+        ) {
             self.record_load_error(ChunkLoadError {
                 dimension: self.source.dimension,
                 pos,

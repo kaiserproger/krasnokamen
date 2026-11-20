@@ -1117,6 +1117,7 @@ fn villager_checkpoint_and_wal_recover_absolute_conversion_custody_and_memories(
         SimDebtImage {
             chunk: [0, -1],
             last_sim: 100,
+            held_anchor: Some(0),
             remaining: 0,
             tick: 100,
             active: true,

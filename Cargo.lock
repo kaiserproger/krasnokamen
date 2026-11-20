@@ -2071,6 +2071,7 @@ dependencies = [
  "mc-world",
  "mc-worldgen",
  "redb",
+ "serde_json",
  "uuid",
 ]
 

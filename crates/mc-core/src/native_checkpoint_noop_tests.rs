@@ -113,6 +113,7 @@ fn native_noop_save_twice_keeps_chunks_and_size() {
                         crate::journal::SimDebtImage {
                             chunk: [pos.x, pos.z],
                             last_sim: 2,
+                            held_anchor: Some(0),
                             remaining: 7,
                             active: false,
                             tick: 2,

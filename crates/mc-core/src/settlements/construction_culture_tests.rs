@@ -35,7 +35,13 @@ fn spanish_blueprints_finish_through_paid_resident_construction() {
                 .find(|b| b.kind == BuildingKind::Storage)
                 .unwrap()
                 .id,
-            "spanish_plaza"
+            // The completed civic plaza still proves Spanish provenance;
+            // D54's additional receiving capacity uses renewable wood/stone.
+            if name == "spanish_plaza" {
+                "storage"
+            } else {
+                "spanish_plaza"
+            }
         );
     }
 }

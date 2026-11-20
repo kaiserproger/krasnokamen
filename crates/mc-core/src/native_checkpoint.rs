@@ -818,6 +818,17 @@ pub fn recover_with_reader(
     registry: Arc<crate::registry::CoreRegistry>,
     reader: NativeCheckpointReader,
 ) -> Result<RecoveredWorld, CoreError> {
+    recover_with_clock(config, registry, reader, false)
+}
+
+/// Only the explicit offline converter admits legacy missing clock anchors.
+/// Admission, export and ordinary recovery require the persisted current law.
+fn recover_with_clock(
+    config: &CoreConfig,
+    registry: Arc<crate::registry::CoreRegistry>,
+    reader: NativeCheckpointReader,
+    legacy: bool,
+) -> Result<RecoveredWorld, CoreError> {
     let checkpoint = reader
         .read_checkpoint_metadata()
         .map_err(|e| read_refusal(config, e))?;
@@ -963,12 +974,27 @@ pub fn recover_with_reader(
             Ok(())
         })
         .map_err(|e| CoreError::Storage(e.to_string()))?;
+    let initial_clock = manifest.climate.map(|image| match image.game_clock {
+        crate::weather::GameClockImage::Held {
+            game_ticks,
+            held_since: None,
+        } if legacy => crate::weather::GameClockImage::Held {
+            game_ticks,
+            held_since: Some(manifest.tick),
+        },
+        clock => clock,
+    });
+    let mut game_clock = crate::journal::ReplayGameClock::new(manifest.tick, initial_clock)?;
+    if !legacy {
+        game_clock.observe_debt_stamp(manifest.climate, manifest.tick)?;
+    }
     let recovered_tick = crate::journal::visit_complete_batches_after(
         &config.world_dir.join("journal"),
         manifest.tick,
         crate::journal::WalIdentity::new(reader.store_uuid(), &registry.blocks),
         |batch| {
             let batches = [batch];
+            game_clock.observe_batches(&batches, legacy)?;
             for (&dimension, replay) in &mut dimensions {
                 let mut routed = crate::dimensions::journal_for_dimension(&batches, dimension);
                 if dimension != Dimension::Overworld {
@@ -1022,13 +1048,24 @@ pub fn recover_with_reader(
                         }
                     }
                 }
-                *replay = crate::journal::apply_batch_images(std::mem::take(replay), &routed);
+                *replay = crate::journal::apply_batch_images_with_clock(
+                    std::mem::take(replay),
+                    &routed,
+                    &game_clock,
+                );
             }
             Ok(())
         },
     )?;
+    let clock_tick = dimensions[&Dimension::Overworld].tick;
+    let held_ticks = clock_tick - game_clock.game_ticks(clock_tick);
+    let anchored_since = if legacy {
+        0
+    } else {
+        game_clock.finish_debt_upgrade(clock_tick)?
+    };
     for (&dimension, replay) in &mut dimensions {
-        crate::journal::advance_replay_clocks(replay);
+        crate::journal::advance_replay_clocks_with_clock(replay, &game_clock, held_ticks, legacy);
         replay.plugins.validate()?;
         replay.block_ticks.validate().map_err(|error| {
             CoreError::Storage(format!(
@@ -1058,7 +1095,12 @@ pub fn recover_with_reader(
     }
     let scoreboard = root.scoreboard.clone();
     let bossbars = root.bossbars.clone();
-    let climate = root.climate;
+    let climate = root.climate.map(|mut image| {
+        if !legacy {
+            image.sim_debt_anchored_since = Some(anchored_since);
+        }
+        image
+    });
     let difficulty = root.difficulty;
     let default_game_mode = root.default_game_mode;
     let gamerules = root.gamerules.clone();
@@ -1086,6 +1128,13 @@ pub fn recover_with_reader(
                 )));
             }
         }
+    }
+    #[cfg(test)]
+    {
+        dimensions
+            .get_mut(&Dimension::Overworld)
+            .expect("overworld replay")
+            .game_clock = Some(game_clock);
     }
     Ok(RecoveredWorld {
         config: config.clone(),
@@ -1192,6 +1241,7 @@ pub fn generator(
 pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage, CoreError> {
     let mut manifest = world.manifest.clone();
     let tick = world.dimensions[&Dimension::Overworld].tick;
+    let held_ticks = world.dimensions[&Dimension::Overworld].recovered_held_ticks;
     let mut entities = Vec::new();
     let mut players = Vec::new();
     for (&dimension, replay) in &world.dimensions {
@@ -1221,12 +1271,7 @@ pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage
         image.debt = replay
             .sim_debt
             .values()
-            .map(|image| crate::journal::SimDebtImage {
-                last_sim: image.last_sim_at(tick),
-                remaining: image.remaining,
-                tick,
-                ..*image
-            })
+            .map(|image| image.at(tick, held_ticks))
             .collect();
         image.generated_entity_claims = replay.generated_entity_claims.clone();
         image.tickets = replay.tickets.clone();
@@ -1377,6 +1422,8 @@ pub fn refresh_metadata(
     );
     Ok(())
 }
+
+pub mod game_clock_upgrade;
 
 #[cfg(test)]
 #[path = "native_checkpoint_tests.rs"]

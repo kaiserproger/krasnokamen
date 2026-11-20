@@ -20,13 +20,42 @@ const LEVEL_STEP_PER_TICK: f32 = 0.01;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GameClockImage {
-    Running { held_ticks: u64 },
-    Held { game_ticks: u64 },
+    Running {
+        held_ticks: u64,
+    },
+    Held {
+        game_ticks: u64,
+        /// First native output tick of the current uninterrupted hold.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        held_since: Option<u64>,
+    },
 }
 
 impl Default for GameClockImage {
     fn default() -> Self {
         Self::Running { held_ticks: 0 }
+    }
+}
+
+pub(crate) const LEGACY_CLOCK_ERROR: &str = "world was frozen by an older binary; its catch-up debt cannot be reconstructed; run world upgrade-game-clock --copy <disposable-world-copy>";
+
+impl GameClockImage {
+    pub(crate) fn held_ticks(self, tick: u64) -> Result<u64, CoreError> {
+        let held = match self {
+            Self::Running { held_ticks } => (held_ticks <= tick).then_some(held_ticks),
+            Self::Held {
+                held_since: None, ..
+            } => return Err(CoreError::Storage(LEGACY_CLOCK_ERROR.into())),
+            Self::Held {
+                game_ticks,
+                held_since: Some(since),
+            } => (since > 0 && since <= tick && game_ticks < since).then(|| tick - game_ticks),
+        };
+        held.ok_or_else(|| {
+            CoreError::Storage(format!(
+                "restore game clock: persisted {self:?} is invalid at native tick {tick}"
+            ))
+        })
     }
 }
 
@@ -36,6 +65,9 @@ pub struct ClimateImage {
     pub day_time: i64,
     #[serde(default)]
     pub game_clock: GameClockImage,
+    /// First native tick written by a binary that anchors simulation debt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sim_debt_anchored_since: Option<u64>,
     pub weather_kind: u8,
     pub remaining_ticks: i64,
     /// A zero clock draws a fresh natural duration on the next tick.
@@ -53,6 +85,7 @@ impl ClimateImage {
         Self {
             day_time: state.day_time,
             game_clock: state.tick_control.clock_image(state.tick),
+            sim_debt_anchored_since: Some(state.tick_control.sim_debt_anchored_since()),
             weather_kind: match state.weather.0 {
                 Weather::Clear => 0,
                 Weather::Rain => 1,
@@ -95,6 +128,9 @@ impl ClimateImage {
         state
             .tick_control
             .restore_clock(self.game_clock, state.tick)?;
+        if let Some(since) = self.sim_debt_anchored_since {
+            state.tick_control.restore_debt_anchor(since);
+        }
         state.day_time = self.day_time;
         state.weather = (kind, self.remaining_ticks);
         state.thunder_remaining_ticks = self.thunder_remaining_ticks;

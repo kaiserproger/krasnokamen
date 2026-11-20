@@ -1404,6 +1404,7 @@ fn durable_bookkeeping_is_clean_but_newer_wal_and_active_clock_projection_are_di
                 crate::journal::SimDebtImage {
                     chunk: [0, 0],
                     last_sim,
+                    held_anchor: Some(0),
                     remaining: 7,
                     active,
                     tick: image_tick,
@@ -1423,6 +1424,7 @@ fn durable_bookkeeping_is_clean_but_newer_wal_and_active_clock_projection_are_di
             debt: vec![crate::journal::SimDebtImage {
                 chunk: [0, 0],
                 last_sim: 20,
+                held_anchor: Some(0),
                 remaining: 7,
                 active,
                 tick: 20,

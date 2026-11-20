@@ -3,7 +3,7 @@
 
 Run through Main's mem-run with KRASNOKAMEN_SERVER_BINARY set to Main's pin.
 Stock is an explicit, bounded operator-supplied fixture, inserted ONLY into
-client-observed empty slots. Cultural buildings are never pasted. Every frame
+client-observed storage with real room. Cultural buildings are never pasted. Every frame
 is an actual-window GPU capture; the one-minute film is 60 such frames at 1 fps.
 
 Fast runs (owner, 2026-11-16): `--scratch /dev/shm` keeps the world and every
@@ -12,6 +12,9 @@ output on tmpfs and copies the complete directory to `--out` at the end;
 disjoint CPUs; `--frames 12` captures fewer frames, while the census, supply,
 building orders and observer move still follow every one of the 60 sprints.
 Acceptance needs 60 frames.
+With MC_CORE_PHASE_LOG, raw diagnostics and timing remain in separate streamed
+files so command readers do not load the verbose phases. Use disk output (omit
+`--scratch`) for long phase profiles; all raw diagnostics are retained.
 Every building order must receive a native Started/Queued reply before the
 driver advances its queue; a refusal or missing acknowledgement fails the run
 immediately, with that command and the received chat retained in run.json.
@@ -30,6 +33,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import threading
 import time
 from urllib.request import urlopen
 
@@ -133,12 +137,31 @@ def record_census(probe: ProbeSteps, console, run: dict, server_log: Path) -> di
 
 
 def supply(probe: ProbeSteps, console, positions: list[tuple[int, int, int]], stock: Counter, run: dict) -> None:
+    """Place only the manifest units that fit; leave undelivered units in stock."""
     commands = []
+    containers = []
     for position in positions:
         console(f'tp {USERNAME} {position[0] + 0.5} {position[1] + 1} {position[2] + 1.5}')
         probe.wait(lambda observed: abs(observed['player']['x'] - position[0] - 0.5) < 1
                    and abs(observed['player']['z'] - position[2] - 1.5) < 1, 'storage_observer_arrived')
         slots = village._open_chest(probe, position)
+        containers.append((position, slots))
+        probe.call('minecraft_close_screen', {})
+    # Top up all existing stacks before assigning any empty slot: otherwise
+    # an early chest can spend a slot on stock that fits in a later chest.
+    for position, slots in containers:
+        for slot, entry in sorted(slots.items()):
+            item = entry.get('item_id', '').removeprefix('minecraft:')
+            if item not in stock:
+                continue
+            added = min((1 if item.endswith('_bed') else 64) - entry['count'], stock[item])
+            if added <= 0:
+                continue
+            commands.append(f'item replace block {position[0]} {position[1]} {position[2]} container.{slot} with minecraft:{item} {entry["count"] + added}')
+            stock[item] -= added
+            if stock[item] == 0:
+                del stock[item]
+    for position, slots in containers:
         free = [slot for slot in range(27) if slot not in slots or slots[slot].get('item_id') in (None, 'minecraft:air')]
         for slot in free:
             if not stock:
@@ -150,13 +173,11 @@ def supply(probe: ProbeSteps, console, positions: list[tuple[int, int, int]], st
             stock[item] -= count
             if stock[item] == 0:
                 del stock[item]
-        probe.call('minecraft_close_screen', {})
-    if stock:
-        raise RuntimeError(f'bounded fixture lacks client-observed empty slots: {dict(stock)}')
     # All slots were observed while the world is frozen: workers cannot race us.
     for command in commands:
         console(command)
     run.setdefault('material_fixture_commands', []).extend(commands)
+    run['material_fixture_remaining'] = dict(stock)
     probe.call('minecraft_wait_ticks', {'ticks': 40})
 
 
@@ -171,11 +192,108 @@ def effective_acceleration(log: str) -> dict[str, float] | None:
     return dict(zip(ACCEL_KEYS, map(float, found[-1]))) if found else None
 
 
+def settlement_tick_tail(lines) -> dict:
+    """Join Overworld settlement laps to searches before the tick counter advances."""
+    searches, pending, enabled = set(), None, False
+    groups = {name: {'samples': 0, 'max_ms': None, 'over_100ms': 0}
+              for name in ('with_storehouse_search', 'without_storehouse_search')}
+    for line in lines:
+        if 'settlement_storehouse_search' in line:
+            match = re.search(r'game_tick=(\d+)', line)
+            if match:
+                searches.add(int(match[1]) + 1)
+        elif line.startswith('  commit detail ms:'):
+            match = re.search(r'\bsettlements=([0-9.]+)', line)
+            pending = float(match[1]) if match else None
+        elif line.startswith('phase ms:'):
+            enabled = True
+            tick = re.search(r'\btick=(\d+)', line)
+            dimension = re.search(r'\bdimension=(\w+)', line)
+            if pending is not None and tick and dimension and dimension[1].lower() == 'overworld':
+                name = 'with_storehouse_search' if int(tick[1]) in searches else 'without_storehouse_search'
+                group = groups[name]
+                group['samples'] += 1
+                group['max_ms'] = pending if group['max_ms'] is None else max(group['max_ms'], pending)
+                group['over_100ms'] += pending > 100
+            pending = None
+    return {'enabled': enabled, 'measurement': 'native Overworld commit_laps.settlements ms',
+            'search_ticks': len(searches), **groups}
+
+
+class PhaseLog:
+    """Capture console stdout separately before filtering diagnostic stderr."""
+
+    def __init__(self, path: Path):
+        self.raw_path = path.with_name(f'{path.stem}-raw{path.suffix}')
+        self.phase_path = path.with_name(f'{path.stem}-phases{path.suffix}')
+        self._commands = path.open('xb', buffering=0)
+        self._raw = self.raw_path.open('xb')
+        self._phases = self.phase_path.open('xb')
+        reader, self._writer = os.pipe()
+        errors, self.stderr = os.pipe()
+        self._error = None
+        self._threads = [
+            threading.Thread(target=self._read, args=(reader, False), daemon=True,
+                             name='spain-console-log'),
+            threading.Thread(target=self._read, args=(errors, True), daemon=True,
+                             name='spain-phase-log'),
+        ]
+        for thread in self._threads:
+            thread.start()
+
+    def fileno(self) -> int:
+        if self._writer is None:
+            raise ValueError('phase log is closed')
+        return self._writer
+
+    def _read(self, reader: int, diagnostics: bool) -> None:
+        try:
+            with os.fdopen(reader, 'rb') as source:
+                for line in source:
+                    self._raw.write(line)
+                    if not diagnostics:
+                        self._commands.write(line)
+                        continue
+                    header = line.split(b':', 1)[0].strip()
+                    timing = header in (b'phase ms', b'commit detail ms')
+                    diagnostic = header.endswith((b' ms', b' us')) or header.startswith(b'items ') or header in (
+                        b'settlement planner', b'settlement resident', b'edge items',
+                        b'chunk admission cpu')
+                    if timing or not diagnostic:
+                        self._phases.write(line)
+                    if not diagnostic:
+                        self._commands.write(line)
+        except BaseException as error:
+            self._error = error
+
+    def close(self) -> None:
+        if self._writer is None:
+            return
+        os.close(self._writer)
+        os.close(self.stderr)
+        self._writer = None
+        for thread in self._threads:
+            thread.join()
+        for output in (self._commands, self._raw, self._phases):
+            output.close()
+        if self._error is not None:
+            raise RuntimeError('native phase log capture failed') from self._error
+
+
 # Refusals `/settlement build` can answer with (command_execution/settlement.rs build_command,
 # settlements/construction.rs request_build, building_commands.rs); any other line is not its reply.
 BUILD_REFUSALS = ('Construction ', 'No free loaded construction site', 'No settlement contains your position',
                   'Settlement command admission is unavailable', 'Only the owner or an operator orders construction',
                   'Unknown blueprint', 'Settlement not found', 'Building not found', 'No blueprint upgrade')
+
+
+def next_order(queue: list[str], parent: dict) -> str | None:
+    """Do not duplicate cultural buildings the autonomous planner already took."""
+    present = {building.get('blueprint') for building in parent['buildings']}
+    present.update(project['blueprint'] for project in parent['project']['projects'])
+    while queue and queue[0] in present:
+        queue.pop(0)
+    return queue[0] if queue else None
 
 
 def order_build(probe: ProbeSteps, blueprint: str, run: dict) -> None:
@@ -378,7 +496,7 @@ def main() -> None:
     run['driver'] = {'path': str(driver), 'sha256': hashlib.sha256(driver.read_bytes()).hexdigest()}
     run['material_fixture_plan'] = {
         'initial': 'Four parent houses through L3, three outpost houses L1, church, fortress, outpost plaza; bread256, dirt128, seeds64, logs128, cobble128.',
-        'at_population_16_once': 'Four further parent houses through L3 and bread512, from observed empty slots only.',
+        'at_population_16_once': 'One bounded manifest: four further parent houses through L3 and bread512; top up existing stacks, then empty slots, delivering the remainder at later censuses as storage clears.',
         'at_daughter_once': 'One house L2+L3 upgrade bill; bread64, dirt64, seeds32, logs64, cobble64.',
     }
     port, dashboard = runtime.reserve_port(), runtime.reserve_port()
@@ -396,7 +514,10 @@ def main() -> None:
     server = client = xvfb = mcp = None
     client_log = None
     log_path = out / 'server.log'
-    log_handle = log_path.open('wb')
+    log_handle = PhaseLog(log_path) if 'MC_CORE_PHASE_LOG' in os.environ else log_path.open('wb')
+    run['server_logs'] = {'commands': str(log_path)}
+    if isinstance(log_handle, PhaseLog):
+        run['server_logs'].update(raw=str(log_handle.raw_path), phases=str(log_handle.phase_path))
     telemetry_path = out / 'telemetry.jsonl'
     cpu_args = {'server': args.server_cpus, 'client': args.client_cpus}
     roles = {role: cpu_list(text) for role, text in cpu_args.items() if text}
@@ -405,13 +526,15 @@ def main() -> None:
     cpu_start = {role: busy_ticks(cpus) for role, cpus in roles.items()}
     started = time.monotonic()
     try:
-        env = {**os.environ, 'KRASNOKAMEN_HARNESS_LOG_STDOUT': '1', 'RUST_LOG': 'info,settlement_audit=info'}
+        env = {**os.environ, 'KRASNOKAMEN_HARNESS_LOG_STDOUT': '1', 'RUST_LOG': 'info,settlement_audit=info,mc_core::settlements::construction=debug'}
         command = [str(binary), '--config', str(config)]
         if args.server_cpus:
             command = ['taskset', '-c', args.server_cpus, *command]
         run['server']['command'] = command
         server = runtime.start_server(command, cwd=runtime.REPO_ROOT, env=env, stdin=subprocess.PIPE,
-                                      stdout=log_handle, stderr=subprocess.STDOUT, start_new_session=True)
+                                      stdout=log_handle,
+                                      stderr=log_handle.stderr if isinstance(log_handle, PhaseLog) else subprocess.STDOUT,
+                                      start_new_session=True)
         runtime.wait_port(port, 180, server, log_path=log_path)
         if args.client_render_threads:
             os.environ['LP_NUM_THREADS'] = str(args.client_render_threads)
@@ -444,11 +567,12 @@ def main() -> None:
             chest = village._founding_storage(probe, (120, 70, 7))
             run['bootstrap_storage'] = list(chest)
             supply(probe, console, [chest], bill('spanish_plaza'), run)
+            probe.check('plaza_fixture_delivered', not run.get('material_fixture_remaining'))
             order_build(probe, 'spanish_plaza', run)
             run['snapshots'].append(record_census(probe, console, run, log_path))
             telemetry_tick = -1
             funded = False
-            expansion_funded = False
+            expansion_stock = None
             supplied_children = set()
             queue = ['spanish_house', 'spanish_church', 'spanish_fortress']
             ordered = 'spanish_plaza'
@@ -481,18 +605,20 @@ def main() -> None:
                     stock.update({'bread': 256, 'dirt': 128, 'wheat_seeds': 64, 'oak_log': 128, 'cobblestone': 128})
                     console(f'gamemode creative {USERNAME}')
                     supply(probe, console, positions + [chest], stock, run)
+                    probe.check('initial_fixture_delivered', not stock)
                     funded = True
-                if funded and not expansion_funded and parent['population'] >= 16:
+                if funded and expansion_stock is None and parent['population'] >= 16:
+                    expansion_stock = Counter()
+                    for level in (1, 2, 3):
+                        expansion_stock.update({item: 4 * count for item, count in bill('spanish_house', level).items()})
+                    expansion_stock['bread'] += 512
+                if expansion_stock:
                     plaza = next(building for building in parent['buildings'] if building.get('blueprint') == 'spanish_plaza')
                     positions = [(plaza['min'][0] + x, plaza['min'][1] + 1, plaza['min'][2] + z)
                                  for x, z in [(1, 1), (5, 1), (1, 5), (5, 5)]]
-                    stock = Counter()
-                    for level in (1, 2, 3):
-                        stock.update({item: 4 * count for item, count in bill('spanish_house', level).items()})
-                    stock['bread'] += 512
                     console(f'gamemode creative {USERNAME}')
-                    supply(probe, console, positions + [chest], stock, run)
-                    expansion_funded = True
+                    supply(probe, console, positions + [chest], expansion_stock, run)
+                    run['expansion_fixture_remaining'] = dict(expansion_stock)
                 children = [town for town in snapshot['settlements'] if town['name'].startswith('colony_')]
                 for child in children:
                     if child['id'] in supplied_children:
@@ -504,12 +630,14 @@ def main() -> None:
                     stock.update({'bread': 64, 'dirt': 64, 'wheat_seeds': 32, 'oak_log': 64, 'cobblestone': 64})
                     console(f'gamemode creative {USERNAME}')
                     supply(probe, console, positions, stock, run)
+                    probe.check(f'daughter_{child["id"]}_fixture_delivered', not stock)
                     supplied_children.add(child['id'])
-                if ordered in completed and queue:
+                following = next_order(queue, parent) if ordered in completed else None
+                if following is not None:
                     console(f"tp {USERNAME} {parent['anchor'][0] + 0.5} {parent['anchor'][1] + 2} {parent['anchor'][2] + 0.5}")
                     probe.wait(lambda observed: abs(observed['player']['x'] - parent['anchor'][0] - 0.5) < 1
                                and abs(observed['player']['z'] - parent['anchor'][2] - 0.5) < 1, 'order_at_parent')
-                    order_build(probe, queue[0], run)
+                    order_build(probe, following, run)
                     ordered = queue.pop(0)
                 console(f'gamemode spectator {USERNAME}')
                 focus = children[0] if children and step % 2 else parent
@@ -552,6 +680,9 @@ def main() -> None:
             log_handle.close()
             run['elapsed_seconds'] = time.monotonic() - started
             run['test_acceleration']['effective'] = effective_acceleration(log_path.read_text(errors='replace'))
+            timing_log = log_handle.phase_path if isinstance(log_handle, PhaseLog) else log_path
+            with timing_log.open(errors='replace') as lines:
+                run['settlement_tick_tail'] = settlement_tick_tail(lines)
             run['shutdown'] = {'server': server.returncode if server is not None else None, 'client': client.returncode if client is not None else None}
             run['client'] = ctx.client_evidence
             dump(out / 'run.json', run)

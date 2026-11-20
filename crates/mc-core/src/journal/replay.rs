@@ -43,6 +43,12 @@ pub struct Replay {
     /// Transient cumulative active time while folding the existing debt images.
     pub(crate) simulation_clocks: BTreeMap<[i32; 2], ReplayChunkClock>,
     pub climate: Option<crate::weather::ClimateImage>,
+    /// Test-only wrapper history; production recovery shares one root clock.
+    #[cfg(test)]
+    pub(crate) game_clock: Option<ReplayGameClock>,
+    pub(crate) clock_fault: Option<String>,
+    pub(crate) recovered_held_ticks: u64,
+    pub(crate) sim_debt_anchored_since: Option<u64>,
     pub border: crate::command_border::Border,
     pub difficulty: crate::survival::Difficulty,
     pub default_game_mode: crate::commands::GameMode,
@@ -93,19 +99,25 @@ impl ReplayChunkClock {
         }
     }
 
-    pub(super) fn through(&self, tick: u64) -> u64 {
+    pub(super) fn through(&self, tick: u64, game: &ReplayGameClock) -> u64 {
         let index = self.points.partition_point(|point| point.tick <= tick);
         let Some(point) = index.checked_sub(1).map(|index| &self.points[index]) else {
             return 0;
         };
-        point.elapsed + if point.active { tick - point.tick } else { 0 }
+        point.elapsed
+            + if point.active {
+                game.between(point.tick, tick)
+            } else {
+                0
+            }
     }
 
-    pub(super) fn between(&self, from: u64, to: u64) -> u64 {
-        self.through(to).saturating_sub(self.through(from))
+    pub(super) fn between(&self, from: u64, to: u64, game: &ReplayGameClock) -> u64 {
+        self.through(to, game)
+            .saturating_sub(self.through(from, game))
     }
 
-    pub(super) fn observe(&mut self, image: SimDebtImage) {
+    pub(super) fn observe(&mut self, image: SimDebtImage, game: &ReplayGameClock) {
         if self
             .points
             .last()
@@ -121,9 +133,9 @@ impl ReplayChunkClock {
             image.tick.min(image.last_sim.saturating_add(1))
         };
         let elapsed = if image.active {
-            self.through(tick.saturating_sub(1)) + 1
+            self.through(tick.saturating_sub(1), game) + game.between(tick.saturating_sub(1), tick)
         } else {
-            self.through(image.last_sim)
+            self.through(image.last_sim, game)
         };
         self.points.push(ReplayClockPoint {
             tick,
@@ -139,6 +151,7 @@ impl ReplayChunkClock {
         villager: &mut crate::villager::VillagerState,
         from: u64,
         to: u64,
+        game: &ReplayGameClock,
     ) -> bool {
         let mut advanced = false;
         for (index, point) in self.points.iter().enumerate() {
@@ -151,8 +164,15 @@ impl ReplayChunkClock {
                 .get(index + 1)
                 .map_or(to, |next| to.min(next.tick.saturating_sub(1)));
             if start < end {
-                crate::villager::persistence::advance_clocks(villager, start, end);
-                advanced = true;
+                game.running_intervals(start, end, |first, last| {
+                    crate::villager::persistence::advance_running_clocks(
+                        villager,
+                        game.last_running_at(first),
+                        first + 1,
+                        last,
+                    );
+                    advanced = true;
+                });
             }
         }
         advanced
@@ -607,6 +627,7 @@ fn unaffiliated(faction: &u16) -> bool {
 /// over it, so tail removals delete base records, tail vitals update base
 /// health, and intra-chunk entity images keep base motion. A default [`Replay`] is
 /// an empty base (fresh world).
+#[cfg(test)]
 pub fn replay_batches(replay: Replay, batches: &[(u64, u64, Vec<JournalEntry>)]) -> Replay {
     let mut replay = apply_batch_images(replay, batches);
     advance_replay_clocks(&mut replay);
@@ -614,9 +635,54 @@ pub fn replay_batches(replay: Replay, batches: &[(u64, u64, Vec<JournalEntry>)])
 }
 
 /// Fold absolute images without scanning unrelated retained entities per batch.
+#[cfg(test)]
 pub(crate) fn apply_batch_images(
     mut replay: Replay,
     batches: &[(u64, u64, Vec<JournalEntry>)],
+) -> Replay {
+    let clock = replay.game_clock.take().map_or_else(
+        || {
+            let mut clock =
+                ReplayGameClock::new(replay.tick, replay.climate.map(|image| image.game_clock))?;
+            clock.observe_debt_stamp(replay.climate, replay.tick)?;
+            Ok::<_, CoreError>(clock)
+        },
+        Ok,
+    );
+    let mut clock = match clock {
+        Ok(clock) => clock,
+        Err(error) => {
+            replay.clock_fault = Some(error.to_string());
+            return replay;
+        }
+    };
+    if let Err(error) = clock.observe_batches(batches, false) {
+        replay.clock_fault = Some(error.to_string());
+        replay.game_clock = Some(clock);
+        return replay;
+    }
+    replay = apply_batch_images_with_clock(replay, batches, &clock);
+    replay.game_clock = Some(clock);
+    replay
+}
+
+pub(crate) fn apply_batch_images_with_clock(
+    mut replay: Replay,
+    batches: &[(u64, u64, Vec<JournalEntry>)],
+    game: &ReplayGameClock,
+) -> Replay {
+    for (lo, hi, entries) in batches {
+        replay = apply_batch_entries(replay, *lo, *hi, entries, game);
+    }
+    replay
+}
+
+fn apply_batch_entries(
+    mut replay: Replay,
+    lo: u64,
+    hi: u64,
+    entries: &[JournalEntry],
+    game: &ReplayGameClock,
 ) -> Replay {
     if replay.simulation_clocks.is_empty() {
         for (&chunk, image) in &replay.sim_debt {
@@ -625,643 +691,649 @@ pub(crate) fn apply_batch_images(
                 .insert(chunk, ReplayChunkClock::new(replay.tick, image.active));
         }
     }
-    for (lo, hi, entries) in batches {
-        replay.tick = replay.tick.max(*hi);
-        let _ = lo;
-        // Debt is emitted after entity images. Fold its boundaries first so
-        // even a compact vitals anchor sees this batch's complete activity.
-        for entry in entries {
-            if let JournalEntry::SimDebt { image } = entry {
+    replay.tick = replay.tick.max(hi);
+    // Debt is emitted after entity images. Fold its boundaries first so
+    // even a compact vitals anchor sees this batch's complete activity.
+    for entry in entries {
+        if let JournalEntry::SimDebt { image } = entry {
+            if image.held_anchor.is_none()
+                && game
+                    .anchored_since()
+                    .is_some_and(|since| image.tick >= since)
+            {
+                replay.clock_fault = Some(format!(
+                    "anchorless simulation-debt WAL image at tick {} after the anchored epoch",
+                    image.tick
+                ));
+                return replay;
+            }
+            if replay
+                .sim_debt
+                .get(&image.chunk)
+                .is_some_and(|old| image.tick <= old.tick)
+            {
+                continue;
+            }
+            replay
+                .simulation_clocks
+                .entry(image.chunk)
+                .or_insert_with(|| ReplayChunkClock::new(0, false))
+                .observe(*image, game);
+            replay.sim_debt.insert(image.chunk, *image);
+        }
+    }
+    for entry in entries {
+        match entry {
+            JournalEntry::Plugins { value } => {
+                replay.plugins.apply_delta(value);
+            }
+            JournalEntry::EndFight { value } => {
+                replay.end_fight = Some(value.clone());
+            }
+            JournalEntry::Dimension { dimension, entries } => {
+                if *dimension == crate::dimensions::Dimension::Overworld {
+                    replay = apply_batch_entries(replay, lo, hi, entries, game);
+                } else {
+                    let base = replay
+                        .dimensions
+                        .remove(dimension)
+                        .map(|base| *base)
+                        .unwrap_or_default();
+                    replay.dimensions.insert(
+                        *dimension,
+                        Box::new(apply_batch_entries(base, lo, hi, entries, game)),
+                    );
+                }
+            }
+            JournalEntry::GameRules { values } => {
+                replay.gamerules.clone_from(values);
+            }
+            JournalEntry::BlockTicks {
+                image,
+                next_sequence,
+            } => {
+                replay.block_ticks.apply(image.clone(), *next_sequence);
+            }
+            JournalEntry::FluidTicks { image } => {
+                replay.fluid_ticks = image.clone();
+            }
+            JournalEntry::InhabitedTime { image } => {
+                replay.inhabited_time.insert(image.chunk, *image);
+            }
+            JournalEntry::SimDebt { .. } => {}
+            JournalEntry::GeneratedEntityClaim { claim } => {
+                replay.generated_entity_claims.insert(claim.clone());
+            }
+            JournalEntry::Climate { value } => {
+                replay.climate = Some(*value);
+            }
+            JournalEntry::Border { value } => {
+                replay.border = *value;
+            }
+            JournalEntry::Difficulty { value } => {
+                replay.difficulty = *value;
+            }
+            JournalEntry::DefaultGameMode { value } => {
+                replay.default_game_mode = *value;
+            }
+            JournalEntry::Scoreboard { value } => {
+                replay.scoreboard = Some(value.clone());
+            }
+            JournalEntry::CommandStorage { value } => {
+                replay.command_storage = Some(value.clone());
+            }
+            JournalEntry::SavedMap { id, value } => {
+                replay.saved_maps.insert(*id, Arc::clone(value));
+            }
+            JournalEntry::Bossbars { value } => {
+                replay.bossbars = Some(value.clone());
+            }
+            JournalEntry::Raids { value } => {
+                replay.raids = Some(value.clone());
+            }
+            JournalEntry::WanderingTrader { value } => {
+                replay.wandering_trader = Some(*value);
+            }
+            JournalEntry::ScheduledFunctions { value } => {
+                replay.scheduled_functions.clone_from(value);
+            }
+            JournalEntry::DatapackSelection { value } => {
+                replay.datapack_selection = Some(value.clone());
+            }
+            JournalEntry::Block { pos, state } => {
+                replay.blocks.insert((pos[0], pos[1], pos[2]), *state);
+            }
+            JournalEntry::BlockLog { value } => {
+                replay.block_log_tail.push((**value).clone());
+            }
+            JournalEntry::Statistics {
+                uuid,
+                changes,
+                timers,
+                tick,
+            } => {
+                if let Some(player) = replay.players.get_mut(uuid) {
+                    player.statistics.apply_changes(changes);
+                    if let Some(timers) = timers {
+                        player.statistics.apply_timers(*timers);
+                    }
+                    player.statistics.advance_tick(*tick);
+                    player.tick = *tick;
+                }
+            }
+            JournalEntry::Player {
+                uuid,
+                opaque_player_fields,
+                statistics,
+                advancement_progress,
+                unlocked_recipes,
+                dimension,
+                pos,
+                yaw,
+                pitch,
+                health,
+                food,
+                saturation,
+                exhaustion,
+                air,
+                experience_level,
+                experience_progress,
+                experience_total,
+                game_mode,
+                selected,
+                inventory,
+                carried,
+                grid,
+                respawn,
+                respawn_dimension,
+                respawn_forced,
+                respawn_yaw,
+                respawn_pitch,
+                active_effects,
+                enchantment_seed,
+                enchantment_offer_seed,
+                warden_warning,
+                current_impulse_impact_pos,
+                fall_flying,
+                burn_ticks,
+                portal,
+                tick,
+            } => {
+                let mut statistics = statistics.as_ref().clone();
+                statistics.advance_tick(*tick);
+                let previous = replay.players.get(uuid);
+                let advancement_progress = advancement_progress
+                    .clone()
+                    .or_else(|| previous.map(|player| Arc::clone(&player.advancement_progress)))
+                    .unwrap_or_else(empty_advancement_progress);
+                let unlocked_recipes = unlocked_recipes
+                    .clone()
+                    .or_else(|| previous.map(|player| Arc::clone(&player.unlocked_recipes)))
+                    .unwrap_or_default();
+                replay.players.insert(
+                    uuid.clone(),
+                    ReplayPlayer {
+                        opaque_player_fields: opaque_player_fields.clone(),
+                        statistics,
+                        advancement_progress,
+                        unlocked_recipes,
+                        dimension: *dimension,
+                        pos: *pos,
+                        yaw: *yaw,
+                        pitch: *pitch,
+                        health: *health,
+                        food: *food,
+                        saturation: *saturation,
+                        exhaustion: *exhaustion,
+                        air: *air,
+                        experience_level: *experience_level,
+                        experience_progress: *experience_progress,
+                        experience_total: *experience_total,
+                        game_mode: *game_mode,
+                        selected: *selected,
+                        inventory: inventory.clone(),
+                        carried: carried.clone(),
+                        grid: grid.clone(),
+                        respawn: *respawn,
+                        respawn_dimension: *respawn_dimension,
+                        respawn_forced: *respawn_forced,
+                        respawn_yaw: *respawn_yaw,
+                        respawn_pitch: *respawn_pitch,
+                        active_effects: active_effects.clone(),
+                        enchantment_seed: *enchantment_seed,
+                        enchantment_offer_seed: *enchantment_offer_seed,
+                        warden_warning: *warden_warning,
+                        current_impulse_impact_pos: *current_impulse_impact_pos,
+                        fall_flying: *fall_flying,
+                        burn_ticks: *burn_ticks,
+                        portal: *portal,
+                        tick: *tick,
+                    },
+                );
+            }
+            JournalEntry::BlockEntity {
+                pos,
+                slots,
+                furnace,
+                tick,
+            } => {
+                replay.block_entities.insert(
+                    (pos[0], pos[1], pos[2]),
+                    ReplayBlockEntity {
+                        slots: slots.clone(),
+                        furnace: furnace.clone(),
+                        tick: *tick,
+                    },
+                );
+            }
+            JournalEntry::RemoveBlockEntity { pos, .. } => {
+                replay.block_entities.remove(&(pos[0], pos[1], pos[2]));
+                replay
+                    .opaque_block_entities
+                    .insert((pos[0], pos[1], pos[2]), None);
+            }
+            JournalEntry::OpaqueBlockEntity { pos, nbt } => {
+                replay
+                    .opaque_block_entities
+                    .insert((pos[0], pos[1], pos[2]), nbt.clone());
+            }
+            JournalEntry::Entity {
+                id,
+                uuid,
+                type_id,
+                health,
+                alive,
+                age,
+                breed_cooldown,
+                pickup_delay,
+                item,
+                appearance,
+                active_effects,
+                villager,
+                state,
+                projectile,
+                tick,
+                pos: spawn_pos,
+                vel: flight_vel,
+                yaw: spawn_yaw,
+                pitch: spawn_pitch,
+            } => {
                 if replay
-                    .sim_debt
-                    .get(&image.chunk)
-                    .is_some_and(|old| image.tick <= old.tick)
+                    .entities
+                    .get(id)
+                    .is_some_and(|record| *tick < record.tick)
                 {
                     continue;
                 }
-                replay
-                    .simulation_clocks
-                    .entry(image.chunk)
-                    .or_insert_with(|| ReplayChunkClock::new(0, false))
-                    .observe(*image);
-                replay.sim_debt.insert(image.chunk, *image);
-            }
-        }
-        for entry in entries {
-            match entry {
-                JournalEntry::Plugins { value } => {
-                    replay.plugins.apply_delta(value);
-                }
-                JournalEntry::EndFight { value } => {
-                    replay.end_fight = Some(value.clone());
-                }
-                JournalEntry::Dimension { dimension, entries } => {
-                    if *dimension == crate::dimensions::Dimension::Overworld {
-                        replay = apply_batch_images(replay, &[(*lo, *hi, entries.clone())]);
+                if *alive {
+                    // Ordinary intra-chunk motion stays checkpoint-only;
+                    // chunk crossings and retained body motion advance together.
+                    let base = replay.entities.get(id);
+                    let (pos, vel, yaw, pitch, ground) = if projectile.is_some()
+                        || state.tnt.is_some()
+                        || state.falling.is_some()
+                        || state.entity_life.vehicle.is_some()
+                        || crate::end_fight::dragon_type(*type_id)
+                        || crate::piglin::name(*type_id) == "minecraft:enderman"
+                        || base.is_some_and(|record| {
+                            replay_entity_chunk(record.pos) != replay_entity_chunk(*spawn_pos)
+                        }) {
+                        (
+                            *spawn_pos,
+                            *flight_vel,
+                            *spawn_yaw,
+                            *spawn_pitch,
+                            projectile.as_ref().is_some_and(|record| record.stuck)
+                                || state.tnt.is_some_and(|record| record.on_ground)
+                                || state
+                                    .entity_life
+                                    .vehicle
+                                    .as_ref()
+                                    .is_some_and(|v| v.on_ground),
+                        )
                     } else {
-                        let base = replay
-                            .dimensions
-                            .remove(dimension)
-                            .map(|base| *base)
-                            .unwrap_or_default();
-                        replay.dimensions.insert(
-                            *dimension,
-                            Box::new(apply_batch_images(base, &[(*lo, *hi, entries.clone())])),
-                        );
-                    }
-                }
-                JournalEntry::GameRules { values } => {
-                    replay.gamerules.clone_from(values);
-                }
-                JournalEntry::BlockTicks {
-                    image,
-                    next_sequence,
-                } => {
-                    replay.block_ticks.apply(image.clone(), *next_sequence);
-                }
-                JournalEntry::FluidTicks { image } => {
-                    replay.fluid_ticks = image.clone();
-                }
-                JournalEntry::InhabitedTime { image } => {
-                    replay.inhabited_time.insert(image.chunk, *image);
-                }
-                JournalEntry::SimDebt { .. } => {}
-                JournalEntry::GeneratedEntityClaim { claim } => {
-                    replay.generated_entity_claims.insert(claim.clone());
-                }
-                JournalEntry::Climate { value } => {
-                    replay.climate = Some(*value);
-                }
-                JournalEntry::Border { value } => {
-                    replay.border = *value;
-                }
-                JournalEntry::Difficulty { value } => {
-                    replay.difficulty = *value;
-                }
-                JournalEntry::DefaultGameMode { value } => {
-                    replay.default_game_mode = *value;
-                }
-                JournalEntry::Scoreboard { value } => {
-                    replay.scoreboard = Some(value.clone());
-                }
-                JournalEntry::CommandStorage { value } => {
-                    replay.command_storage = Some(value.clone());
-                }
-                JournalEntry::SavedMap { id, value } => {
-                    replay.saved_maps.insert(*id, Arc::clone(value));
-                }
-                JournalEntry::Bossbars { value } => {
-                    replay.bossbars = Some(value.clone());
-                }
-                JournalEntry::Raids { value } => {
-                    replay.raids = Some(value.clone());
-                }
-                JournalEntry::WanderingTrader { value } => {
-                    replay.wandering_trader = Some(*value);
-                }
-                JournalEntry::ScheduledFunctions { value } => {
-                    replay.scheduled_functions.clone_from(value);
-                }
-                JournalEntry::DatapackSelection { value } => {
-                    replay.datapack_selection = Some(value.clone());
-                }
-                JournalEntry::Block { pos, state } => {
-                    replay.blocks.insert((pos[0], pos[1], pos[2]), *state);
-                }
-                JournalEntry::BlockLog { value } => {
-                    replay.block_log_tail.push((**value).clone());
-                }
-                JournalEntry::Statistics {
-                    uuid,
-                    changes,
-                    timers,
-                    tick,
-                } => {
-                    if let Some(player) = replay.players.get_mut(uuid) {
-                        player.statistics.apply_changes(changes);
-                        if let Some(timers) = timers {
-                            player.statistics.apply_timers(*timers);
+                        match base {
+                            Some(record) => (
+                                record.pos,
+                                record.vel,
+                                record.yaw,
+                                record.pitch,
+                                record.ground,
+                            ),
+                            None => (*spawn_pos, [0.0; 3], *spawn_yaw, *spawn_pitch, false),
                         }
-                        player.statistics.advance_tick(*tick);
-                        player.tick = *tick;
-                    }
-                }
-                JournalEntry::Player {
-                    uuid,
-                    opaque_player_fields,
-                    statistics,
-                    advancement_progress,
-                    unlocked_recipes,
-                    dimension,
-                    pos,
-                    yaw,
-                    pitch,
-                    health,
-                    food,
-                    saturation,
-                    exhaustion,
-                    air,
-                    experience_level,
-                    experience_progress,
-                    experience_total,
-                    game_mode,
-                    selected,
-                    inventory,
-                    carried,
-                    grid,
-                    respawn,
-                    respawn_dimension,
-                    respawn_forced,
-                    respawn_yaw,
-                    respawn_pitch,
-                    active_effects,
-                    enchantment_seed,
-                    enchantment_offer_seed,
-                    warden_warning,
-                    current_impulse_impact_pos,
-                    fall_flying,
-                    burn_ticks,
-                    portal,
-                    tick,
-                } => {
-                    let mut statistics = statistics.as_ref().clone();
-                    statistics.advance_tick(*tick);
-                    let previous = replay.players.get(uuid);
-                    let advancement_progress = advancement_progress
-                        .clone()
-                        .or_else(|| previous.map(|player| Arc::clone(&player.advancement_progress)))
-                        .unwrap_or_else(empty_advancement_progress);
-                    let unlocked_recipes = unlocked_recipes
-                        .clone()
-                        .or_else(|| previous.map(|player| Arc::clone(&player.unlocked_recipes)))
-                        .unwrap_or_default();
-                    replay.players.insert(
-                        uuid.clone(),
-                        ReplayPlayer {
-                            opaque_player_fields: opaque_player_fields.clone(),
-                            statistics,
-                            advancement_progress,
-                            unlocked_recipes,
-                            dimension: *dimension,
-                            pos: *pos,
-                            yaw: *yaw,
-                            pitch: *pitch,
+                    };
+                    let previous = replay.entities.insert(
+                        *id,
+                        ReplayEntity {
+                            uuid: uuid.clone(),
+                            type_id: *type_id,
+                            pos,
+                            vel,
+                            yaw,
+                            pitch,
+                            ground,
                             health: *health,
-                            food: *food,
-                            saturation: *saturation,
-                            exhaustion: *exhaustion,
-                            air: *air,
-                            experience_level: *experience_level,
-                            experience_progress: *experience_progress,
-                            experience_total: *experience_total,
-                            game_mode: *game_mode,
-                            selected: *selected,
-                            inventory: inventory.clone(),
-                            carried: carried.clone(),
-                            grid: grid.clone(),
-                            respawn: *respawn,
-                            respawn_dimension: *respawn_dimension,
-                            respawn_forced: *respawn_forced,
-                            respawn_yaw: *respawn_yaw,
-                            respawn_pitch: *respawn_pitch,
+                            alive: *alive,
+                            age: *age,
+                            breed_cooldown: *breed_cooldown,
+                            pickup_delay: *pickup_delay,
+                            item: item.clone(),
+                            appearance: appearance.clone(),
                             active_effects: active_effects.clone(),
-                            enchantment_seed: *enchantment_seed,
-                            enchantment_offer_seed: *enchantment_offer_seed,
-                            warden_warning: *warden_warning,
-                            current_impulse_impact_pos: *current_impulse_impact_pos,
-                            fall_flying: *fall_flying,
-                            burn_ticks: *burn_ticks,
-                            portal: *portal,
+                            villager: villager.clone(),
+                            state: EntityStateImage {
+                                age: *age,
+                                ..state.as_ref().clone()
+                            },
+                            projectile: projectile.clone(),
                             tick: *tick,
                         },
                     );
-                }
-                JournalEntry::BlockEntity {
-                    pos,
-                    slots,
-                    furnace,
-                    tick,
-                } => {
-                    replay.block_entities.insert(
-                        (pos[0], pos[1], pos[2]),
-                        ReplayBlockEntity {
-                            slots: slots.clone(),
-                            furnace: furnace.clone(),
-                            tick: *tick,
-                        },
-                    );
-                }
-                JournalEntry::RemoveBlockEntity { pos, .. } => {
-                    replay.block_entities.remove(&(pos[0], pos[1], pos[2]));
-                    replay
-                        .opaque_block_entities
-                        .insert((pos[0], pos[1], pos[2]), None);
-                }
-                JournalEntry::OpaqueBlockEntity { pos, nbt } => {
-                    replay
-                        .opaque_block_entities
-                        .insert((pos[0], pos[1], pos[2]), nbt.clone());
-                }
-                JournalEntry::Entity {
-                    id,
-                    uuid,
-                    type_id,
-                    health,
-                    alive,
-                    age,
-                    breed_cooldown,
-                    pickup_delay,
-                    item,
-                    appearance,
-                    active_effects,
-                    villager,
-                    state,
-                    projectile,
-                    tick,
-                    pos: spawn_pos,
-                    vel: flight_vel,
-                    yaw: spawn_yaw,
-                    pitch: spawn_pitch,
-                } => {
-                    if replay
-                        .entities
-                        .get(id)
-                        .is_some_and(|record| *tick < record.tick)
+                    // A post-image under another UUID (`set_uuid`) retires
+                    // the old identity like a removal; recovery's live-UUID
+                    // filter still keeps it if it is live elsewhere.
+                    if let Some(previous) = previous
+                        && previous.uuid != *uuid
                     {
+                        replay.entity_removals.push(previous.uuid);
+                    }
+                    replay.entity_changes.insert(*id);
+                    // The base a later compact record may be a delta of.
+                    replay.tail_images.insert(*id);
+                } else {
+                    remove_replay_entity(&mut replay, *id);
+                }
+            }
+            JournalEntry::ItemMotion {
+                id,
+                pos,
+                vel,
+                yaw,
+                pitch,
+                ground,
+                age,
+                pickup_delay,
+                tick,
+            } => {
+                if let Some(record) = replay.entities.get_mut(id) {
+                    if record.item.is_none() || *tick < record.tick {
+                        continue;
+                    }
+                    let elapsed = replay
+                        .simulation_clocks
+                        .get(&replay_entity_chunk(record.pos))
+                        .map_or(0, |clock| clock.between(record.tick, *tick, game));
+                    record
+                        .state
+                        .advance_clocks(record.type_id, record.appearance.baby, elapsed);
+                    record.age = *age;
+                    record.state.age = *age;
+                    record.breed_cooldown = record.state.breed_cooldown;
+                    record.pickup_delay = *pickup_delay;
+                    record.pos = *pos;
+                    record.vel = *vel;
+                    record.yaw = *yaw;
+                    record.pitch = *pitch;
+                    record.ground = *ground;
+                    record.tick = *tick;
+                    replay.entity_changes.insert(*id);
+                }
+            }
+            JournalEntry::EntityState { id, state, tick } => {
+                if let Some(record) = replay.entities.get_mut(id) {
+                    if *tick < record.tick {
+                        continue;
+                    }
+                    if let Some(villager) = &mut record.villager
+                        && let Some(clock) = replay
+                            .simulation_clocks
+                            .get(&replay_entity_chunk(record.pos))
+                    {
+                        clock.advance_villager(villager, record.tick, *tick, game);
+                    }
+                    record.age = state.age;
+                    record.state = state.as_ref().clone();
+                    record.breed_cooldown = state.breed_cooldown;
+                    record.tick = *tick;
+                    replay.entity_changes.insert(*id);
+                }
+            }
+            JournalEntry::EntityVitals {
+                id,
+                health,
+                alive,
+                tick,
+            } => {
+                if let Some(record) = replay.entities.get_mut(id) {
+                    if *tick < record.tick {
                         continue;
                     }
                     if *alive {
-                        // Ordinary intra-chunk motion stays checkpoint-only;
-                        // chunk crossings and retained body motion advance together.
-                        let base = replay.entities.get(id);
-                        let (pos, vel, yaw, pitch, ground) = if projectile.is_some()
-                            || state.tnt.is_some()
-                            || state.falling.is_some()
-                            || state.entity_life.vehicle.is_some()
-                            || crate::end_fight::dragon_type(*type_id)
-                            || crate::piglin::name(*type_id) == "minecraft:enderman"
-                            || base.is_some_and(|record| {
-                                replay_entity_chunk(record.pos) != replay_entity_chunk(*spawn_pos)
-                            }) {
-                            (
-                                *spawn_pos,
-                                *flight_vel,
-                                *spawn_yaw,
-                                *spawn_pitch,
-                                projectile.as_ref().is_some_and(|record| record.stuck)
-                                    || state.tnt.is_some_and(|record| record.on_ground)
-                                    || state
-                                        .entity_life
-                                        .vehicle
-                                        .as_ref()
-                                        .is_some_and(|v| v.on_ground),
-                            )
-                        } else {
-                            match base {
-                                Some(record) => (
-                                    record.pos,
-                                    record.vel,
-                                    record.yaw,
-                                    record.pitch,
-                                    record.ground,
-                                ),
-                                None => (*spawn_pos, [0.0; 3], *spawn_yaw, *spawn_pitch, false),
-                            }
-                        };
-                        let previous = replay.entities.insert(
-                            *id,
-                            ReplayEntity {
-                                uuid: uuid.clone(),
-                                type_id: *type_id,
-                                pos,
-                                vel,
-                                yaw,
-                                pitch,
-                                ground,
-                                health: *health,
-                                alive: *alive,
-                                age: *age,
-                                breed_cooldown: *breed_cooldown,
-                                pickup_delay: *pickup_delay,
-                                item: item.clone(),
-                                appearance: appearance.clone(),
-                                active_effects: active_effects.clone(),
-                                villager: villager.clone(),
-                                state: EntityStateImage {
-                                    age: *age,
-                                    ..state.as_ref().clone()
-                                },
-                                projectile: projectile.clone(),
-                                tick: *tick,
-                            },
-                        );
-                        // A post-image under another UUID (`set_uuid`) retires
-                        // the old identity like a removal; recovery's live-UUID
-                        // filter still keeps it if it is live elsewhere.
-                        if let Some(previous) = previous
-                            && previous.uuid != *uuid
-                        {
-                            replay.entity_removals.push(previous.uuid);
-                        }
-                        replay.entity_changes.insert(*id);
-                        // The base a later compact record may be a delta of.
-                        replay.tail_images.insert(*id);
-                    } else {
-                        remove_replay_entity(&mut replay, *id);
-                    }
-                }
-                JournalEntry::ItemMotion {
-                    id,
-                    pos,
-                    vel,
-                    yaw,
-                    pitch,
-                    ground,
-                    age,
-                    pickup_delay,
-                    tick,
-                } => {
-                    if let Some(record) = replay.entities.get_mut(id) {
-                        if record.item.is_none() || *tick < record.tick {
-                            continue;
-                        }
-                        let elapsed = replay
+                        let clock = replay
                             .simulation_clocks
-                            .get(&replay_entity_chunk(record.pos))
-                            .map_or(0, |clock| clock.between(record.tick, *tick));
+                            .get(&replay_entity_chunk(record.pos));
+                        let elapsed =
+                            clock.map_or(0, |clock| clock.between(record.tick, *tick, game));
                         record.state.advance_clocks(
                             record.type_id,
                             record.appearance.baby,
                             elapsed,
                         );
-                        record.age = *age;
-                        record.state.age = *age;
-                        record.breed_cooldown = record.state.breed_cooldown;
-                        record.pickup_delay = *pickup_delay;
-                        record.pos = *pos;
-                        record.vel = *vel;
-                        record.yaw = *yaw;
-                        record.pitch = *pitch;
-                        record.ground = *ground;
-                        record.tick = *tick;
-                        replay.entity_changes.insert(*id);
-                    }
-                }
-                JournalEntry::EntityState { id, state, tick } => {
-                    if let Some(record) = replay.entities.get_mut(id) {
-                        if *tick < record.tick {
-                            continue;
-                        }
                         if let Some(villager) = &mut record.villager
-                            && let Some(clock) = replay
-                                .simulation_clocks
-                                .get(&replay_entity_chunk(record.pos))
+                            && let Some(clock) = clock
                         {
-                            clock.advance_villager(villager, record.tick, *tick);
+                            clock.advance_villager(villager, record.tick, *tick, game);
                         }
-                        record.age = state.age;
-                        record.state = state.as_ref().clone();
-                        record.breed_cooldown = state.breed_cooldown;
+                        record.breed_cooldown = record.state.breed_cooldown;
+                        record.age =
+                            crate::entities::advance_lifetime_age(record.age, elapsed as u32);
+                        record.state.age = record.age;
+                        record.health = *health;
+                        record.appearance.health = *health;
                         record.tick = *tick;
                         replay.entity_changes.insert(*id);
-                    }
-                }
-                JournalEntry::EntityVitals {
-                    id,
-                    health,
-                    alive,
-                    tick,
-                } => {
-                    if let Some(record) = replay.entities.get_mut(id) {
-                        if *tick < record.tick {
-                            continue;
-                        }
-                        if *alive {
-                            let clock = replay
-                                .simulation_clocks
-                                .get(&replay_entity_chunk(record.pos));
-                            let elapsed =
-                                clock.map_or(0, |clock| clock.between(record.tick, *tick));
-                            record.state.advance_clocks(
-                                record.type_id,
-                                record.appearance.baby,
-                                elapsed,
-                            );
-                            if let Some(villager) = &mut record.villager
-                                && let Some(clock) = clock
-                            {
-                                clock.advance_villager(villager, record.tick, *tick);
-                            }
-                            record.breed_cooldown = record.state.breed_cooldown;
-                            record.age =
-                                crate::entities::advance_lifetime_age(record.age, elapsed as u32);
-                            record.state.age = record.age;
-                            record.health = *health;
-                            record.appearance.health = *health;
-                            record.tick = *tick;
-                            replay.entity_changes.insert(*id);
-                        } else {
-                            remove_replay_entity(&mut replay, *id);
-                        }
-                    }
-                }
-                JournalEntry::RemoveEntity { id, tick } => {
-                    if replay
-                        .entities
-                        .get(id)
-                        .is_none_or(|record| *tick >= record.tick)
-                    {
+                    } else {
                         remove_replay_entity(&mut replay, *id);
                     }
                 }
-                JournalEntry::Ticket {
-                    owner,
-                    chunk,
-                    tick,
-                    radius,
-                } => {
-                    replay
-                        .tickets
-                        .insert(owner.clone(), (*chunk, (*tick, *radius)));
+            }
+            JournalEntry::RemoveEntity { id, tick } => {
+                if replay
+                    .entities
+                    .get(id)
+                    .is_none_or(|record| *tick >= record.tick)
+                {
+                    remove_replay_entity(&mut replay, *id);
                 }
-                JournalEntry::TicketRemoved { owner, .. } => {
-                    replay.tickets.remove(owner);
-                }
-                JournalEntry::Settlement {
-                    image, high_water, ..
-                } => {
-                    replay.settlement_tail.fold_settlement(image, *high_water);
-                }
-                JournalEntry::StarterChestGranted { player, count } => {
-                    replay
-                        .settlement_tail
-                        .fold_starter_chest_grant(*player, *count);
-                }
-                JournalEntry::Transit { id, record, .. } => {
-                    replay.settlement_tail.fold_transit(*id, record);
-                }
-                JournalEntry::Battle { value } => {
-                    crate::battle::persistence::fold_full(&mut replay, value);
-                }
-                JournalEntry::BattlePatch { value } => {
-                    crate::battle::persistence::fold_patch(&mut replay, value);
-                }
-                JournalEntry::EntityMotion {
-                    id,
-                    pos,
-                    vel,
-                    yaw,
-                    pitch,
-                    ground,
-                } => {
-                    if !pos.iter().chain(vel).all(|value| value.is_finite())
-                        || !yaw.is_finite()
-                        || !pitch.is_finite()
-                    {
-                        replay.battle_fault = Some(format!("non-finite native pose for {id}"));
-                    } else if let Some(record) = replay.entities.get_mut(id) {
-                        record.pos = *pos;
-                        record.vel = *vel;
-                        record.yaw = *yaw;
-                        record.pitch = *pitch;
-                        record.ground = *ground;
-                        replay.entity_changes.insert(*id);
-                    } else {
-                        replay.battle_fault = Some(format!("pose for missing native body {id}"));
-                    }
-                }
-                JournalEntry::EntityAppearance {
-                    id,
-                    tick,
-                    age,
-                    health,
-                    alive,
-                    active_effects,
-                    appearance,
-                } => {
-                    // A delta needs an image in this tail, not merely a record
-                    // (a checkpoint fills `entities` without one), and a dead
-                    // body is a removal that keeps the image path.
-                    if !*alive || !replay.tail_images.contains(id) {
-                        compact_fault(&mut replay, *id);
-                        continue;
-                    }
-                    let Some(record) = replay.entities.get_mut(id) else {
-                        compact_fault(&mut replay, *id);
-                        continue;
-                    };
-                    if *tick < record.tick {
-                        continue;
-                    }
-                    appearance.apply(&mut record.appearance);
-                    record.health = *health;
-                    record.alive = *alive;
-                    record.active_effects = active_effects.clone();
-                    // The full image bakes the live state/villager clocks and
-                    // the lifetime age into the record; a delta carries the age
-                    // and lands the same projection before the anchor moves.
-                    // Apply first: the projection reads the record's `baby`.
-                    let clock = replay
-                        .simulation_clocks
-                        .get(&replay_entity_chunk(record.pos));
-                    let elapsed = clock.map_or(0, |clock| clock.between(record.tick, *tick));
-                    record
-                        .state
-                        .advance_clocks(record.type_id, record.appearance.baby, elapsed);
-                    if let Some(villager) = &mut record.villager
-                        && let Some(clock) = clock
-                    {
-                        clock.advance_villager(villager, record.tick, *tick);
-                    }
-                    record.breed_cooldown = record.state.breed_cooldown;
-                    record.age = *age;
-                    record.state.age = *age;
-                    record.tick = *tick;
-                    replay.entity_changes.insert(*id);
-                }
-                JournalEntry::ProjectileFlight {
-                    id,
-                    tick,
-                    age,
-                    health,
-                    alive,
-                    active_effects,
-                    appearance,
-                    pos,
-                    vel,
-                    yaw,
-                    pitch,
-                    projectile_age,
-                    stuck,
-                    grounded_at_age,
-                    state,
-                } => {
-                    // A delta needs an image in this tail, a record, and the
-                    // retained projectile that image carried; a dead body is a
-                    // removal that keeps the image path.
-                    if !*alive
-                        || !replay.tail_images.contains(id)
-                        || !replay
-                            .entities
-                            .get(id)
-                            .is_some_and(|record| record.projectile.is_some())
-                    {
-                        compact_fault(&mut replay, *id);
-                        continue;
-                    }
-                    let record = replay.entities.get_mut(id).expect("checked");
-                    if *tick < record.tick {
-                        continue;
-                    }
-                    appearance.apply(&mut record.appearance);
-                    record.health = *health;
-                    record.active_effects = active_effects.clone();
+            }
+            JournalEntry::Ticket {
+                owner,
+                chunk,
+                tick,
+                radius,
+            } => {
+                replay
+                    .tickets
+                    .insert(owner.clone(), (*chunk, (*tick, *radius)));
+            }
+            JournalEntry::TicketRemoved { owner, .. } => {
+                replay.tickets.remove(owner);
+            }
+            JournalEntry::Settlement {
+                image, high_water, ..
+            } => {
+                replay.settlement_tail.fold_settlement(image, *high_water);
+            }
+            JournalEntry::StarterChestGranted { player, count } => {
+                replay
+                    .settlement_tail
+                    .fold_starter_chest_grant(*player, *count);
+            }
+            JournalEntry::Transit { id, record, .. } => {
+                replay.settlement_tail.fold_transit(*id, record);
+            }
+            JournalEntry::Battle { value } => {
+                crate::battle::persistence::fold_full(&mut replay, value);
+            }
+            JournalEntry::BattlePatch { value } => {
+                crate::battle::persistence::fold_patch(&mut replay, value);
+            }
+            JournalEntry::EntityMotion {
+                id,
+                pos,
+                vel,
+                yaw,
+                pitch,
+                ground,
+            } => {
+                if !pos.iter().chain(vel).all(|value| value.is_finite())
+                    || !yaw.is_finite()
+                    || !pitch.is_finite()
+                {
+                    replay.battle_fault = Some(format!("non-finite native pose for {id}"));
+                } else if let Some(record) = replay.entities.get_mut(id) {
                     record.pos = *pos;
                     record.vel = *vel;
                     record.yaw = *yaw;
                     record.pitch = *pitch;
-                    // Same projection the image would bake in, after the delta.
-                    let clock = replay
-                        .simulation_clocks
-                        .get(&replay_entity_chunk(record.pos));
-                    let elapsed = clock.map_or(0, |clock| clock.between(record.tick, *tick));
-                    record
-                        .state
-                        .advance_clocks(record.type_id, record.appearance.baby, elapsed);
-                    if let Some(villager) = &mut record.villager
-                        && let Some(clock) = clock
-                    {
-                        clock.advance_villager(villager, record.tick, *tick);
-                    }
-                    record.breed_cooldown = record.state.breed_cooldown;
-                    record.age = *age;
-                    record.state.age = *age;
-                    let projectile = record.projectile.as_mut().expect("checked");
-                    match state {
-                        Some(state) => **projectile = (**state).clone(),
-                        None => {
-                            projectile.age = *projectile_age;
-                            if let Some(stuck) = stuck {
-                                projectile.stuck = *stuck;
-                            }
-                            crate::journal::apply_delta(
-                                grounded_at_age,
-                                &mut projectile.grounded_at_age,
-                            );
-                        }
-                    }
-                    // The full image's own ground rule for a projectile body.
-                    record.ground = projectile.stuck
-                        || record.state.tnt.is_some_and(|tnt| tnt.on_ground)
-                        || record
-                            .state
-                            .entity_life
-                            .vehicle
-                            .as_ref()
-                            .is_some_and(|vehicle| vehicle.on_ground);
-                    record.tick = *tick;
+                    record.ground = *ground;
                     replay.entity_changes.insert(*id);
+                } else {
+                    replay.battle_fault = Some(format!("pose for missing native body {id}"));
                 }
+            }
+            JournalEntry::EntityAppearance {
+                id,
+                tick,
+                age,
+                health,
+                alive,
+                active_effects,
+                appearance,
+            } => {
+                // A delta needs an image in this tail, not merely a record
+                // (a checkpoint fills `entities` without one), and a dead
+                // body is a removal that keeps the image path.
+                if !*alive || !replay.tail_images.contains(id) {
+                    compact_fault(&mut replay, *id);
+                    continue;
+                }
+                let Some(record) = replay.entities.get_mut(id) else {
+                    compact_fault(&mut replay, *id);
+                    continue;
+                };
+                if *tick < record.tick {
+                    continue;
+                }
+                appearance.apply(&mut record.appearance);
+                record.health = *health;
+                record.alive = *alive;
+                record.active_effects = active_effects.clone();
+                // The full image bakes the live state/villager clocks and
+                // the lifetime age into the record; a delta carries the age
+                // and lands the same projection before the anchor moves.
+                // Apply first: the projection reads the record's `baby`.
+                let clock = replay
+                    .simulation_clocks
+                    .get(&replay_entity_chunk(record.pos));
+                let elapsed = clock.map_or(0, |clock| clock.between(record.tick, *tick, game));
+                record
+                    .state
+                    .advance_clocks(record.type_id, record.appearance.baby, elapsed);
+                if let Some(villager) = &mut record.villager
+                    && let Some(clock) = clock
+                {
+                    clock.advance_villager(villager, record.tick, *tick, game);
+                }
+                record.breed_cooldown = record.state.breed_cooldown;
+                record.age = *age;
+                record.state.age = *age;
+                record.tick = *tick;
+                replay.entity_changes.insert(*id);
+            }
+            JournalEntry::ProjectileFlight {
+                id,
+                tick,
+                age,
+                health,
+                alive,
+                active_effects,
+                appearance,
+                pos,
+                vel,
+                yaw,
+                pitch,
+                projectile_age,
+                stuck,
+                grounded_at_age,
+                state,
+            } => {
+                // A delta needs an image in this tail, a record, and the
+                // retained projectile that image carried; a dead body is a
+                // removal that keeps the image path.
+                if !*alive
+                    || !replay.tail_images.contains(id)
+                    || !replay
+                        .entities
+                        .get(id)
+                        .is_some_and(|record| record.projectile.is_some())
+                {
+                    compact_fault(&mut replay, *id);
+                    continue;
+                }
+                let record = replay.entities.get_mut(id).expect("checked");
+                if *tick < record.tick {
+                    continue;
+                }
+                appearance.apply(&mut record.appearance);
+                record.health = *health;
+                record.active_effects = active_effects.clone();
+                record.pos = *pos;
+                record.vel = *vel;
+                record.yaw = *yaw;
+                record.pitch = *pitch;
+                // Same projection the image would bake in, after the delta.
+                let clock = replay
+                    .simulation_clocks
+                    .get(&replay_entity_chunk(record.pos));
+                let elapsed = clock.map_or(0, |clock| clock.between(record.tick, *tick, game));
+                record
+                    .state
+                    .advance_clocks(record.type_id, record.appearance.baby, elapsed);
+                if let Some(villager) = &mut record.villager
+                    && let Some(clock) = clock
+                {
+                    clock.advance_villager(villager, record.tick, *tick, game);
+                }
+                record.breed_cooldown = record.state.breed_cooldown;
+                record.age = *age;
+                record.state.age = *age;
+                let projectile = record.projectile.as_mut().expect("checked");
+                match state {
+                    Some(state) => **projectile = (**state).clone(),
+                    None => {
+                        projectile.age = *projectile_age;
+                        if let Some(stuck) = stuck {
+                            projectile.stuck = *stuck;
+                        }
+                        crate::journal::apply_delta(
+                            grounded_at_age,
+                            &mut projectile.grounded_at_age,
+                        );
+                    }
+                }
+                // The full image's own ground rule for a projectile body.
+                record.ground = projectile.stuck
+                    || record.state.tnt.is_some_and(|tnt| tnt.on_ground)
+                    || record
+                        .state
+                        .entity_life
+                        .vehicle
+                        .as_ref()
+                        .is_some_and(|vehicle| vehicle.on_ground);
+                record.tick = *tick;
+                replay.entity_changes.insert(*id);
             }
         }
     }
@@ -1290,6 +1362,9 @@ fn compact_fault(replay: &mut Replay, id: i32) {
 /// Refuse a replayed tail whose compact records lost their base image. Every
 /// dimension is checked: a child tail folds its own records.
 pub(crate) fn validate_replay(replay: &Replay) -> Result<(), CoreError> {
+    if let Some(fault) = &replay.clock_fault {
+        return Err(CoreError::Storage(fault.clone()));
+    }
     if let Some(fault) = &replay.entity_fault {
         return Err(CoreError::Storage(format!("entity WAL tail: {fault}")));
     }
@@ -1300,13 +1375,57 @@ pub(crate) fn validate_replay(replay: &Replay) -> Result<(), CoreError> {
 }
 
 /// Project each retained anchor once after the complete streamed tail is folded.
+#[cfg(test)]
 pub(crate) fn advance_replay_clocks(replay: &mut Replay) {
+    let clock = replay.game_clock.take().map_or_else(
+        || {
+            let mut clock =
+                ReplayGameClock::new(replay.tick, replay.climate.map(|image| image.game_clock))?;
+            clock.observe_debt_stamp(replay.climate, replay.tick)?;
+            Ok::<_, CoreError>(clock)
+        },
+        Ok,
+    );
+    match clock {
+        Ok(clock) => {
+            let held_ticks = replay.tick - clock.game_ticks(replay.tick);
+            advance_replay_clocks_with_clock(replay, &clock, held_ticks, false);
+            replay.game_clock = Some(clock);
+        }
+        Err(error) => replay.clock_fault = Some(error.to_string()),
+    }
+}
+
+pub(crate) fn advance_replay_clocks_with_clock(
+    replay: &mut Replay,
+    game: &ReplayGameClock,
+    held_ticks: u64,
+    legacy: bool,
+) {
+    replay.recovered_held_ticks = held_ticks;
+    replay.sim_debt_anchored_since = game.anchored_since();
+    // The copy-only converter validates debt after assigning its new anchors.
+    // Ordinary recovery must still refuse invalid persisted authority here.
+    if !legacy {
+        for (&[x, z], image) in &replay.sim_debt {
+            if let Err(error) = crate::debt::validate_anchor(
+                mc_world::ChunkPos { x, z },
+                image.last_sim,
+                image.held_anchor,
+                replay.tick,
+                held_ticks,
+            ) {
+                replay.clock_fault = Some(error.to_string());
+                return;
+            }
+        }
+    }
     for (&id, record) in &mut replay.entities {
         if record.tick < replay.tick {
             let clock = replay
                 .simulation_clocks
                 .get(&replay_entity_chunk(record.pos));
-            let elapsed = clock.map_or(0, |clock| clock.between(record.tick, replay.tick));
+            let elapsed = clock.map_or(0, |clock| clock.between(record.tick, replay.tick, game));
             record
                 .state
                 .advance_clocks(record.type_id, record.appearance.baby, elapsed);
@@ -1314,7 +1433,8 @@ pub(crate) fn advance_replay_clocks(replay: &mut Replay) {
             if let Some(villager) = &mut record.villager
                 && let Some(clock) = clock
             {
-                villager_advanced = clock.advance_villager(villager, record.tick, replay.tick);
+                villager_advanced =
+                    clock.advance_villager(villager, record.tick, replay.tick, game);
             }
             record.breed_cooldown = record.state.breed_cooldown;
             record.age = crate::entities::advance_lifetime_age(record.age, elapsed as u32);
@@ -1332,8 +1452,7 @@ pub(crate) fn advance_replay_clocks(replay: &mut Replay) {
     // 001 slice0: active debt intervals advance through the recovered WAL
     // tick (never `remaining`, never wall time); inactive images freeze.
     for image in replay.sim_debt.values_mut() {
-        image.last_sim = image.last_sim_at(replay.tick);
-        image.tick = replay.tick;
+        *image = image.at(replay.tick, held_ticks);
     }
     for clock in replay.simulation_clocks.values_mut() {
         let active = clock.points.last().is_some_and(|point| point.active);
@@ -1345,6 +1464,7 @@ pub(crate) fn advance_replay_clocks(replay: &mut Replay) {
         });
     }
     for dimension in replay.dimensions.values_mut() {
-        advance_replay_clocks(dimension);
+        dimension.tick = dimension.tick.max(replay.tick);
+        advance_replay_clocks_with_clock(dimension, game, held_ticks, legacy);
     }
 }

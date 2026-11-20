@@ -203,6 +203,7 @@ fn nonzero_debt_eviction_before_ack_restart_consumes_exactly_once() {
     let seed = SimDebtImage {
         chunk: [pos.x, pos.z],
         last_sim: 5,
+        held_anchor: Some(0),
         remaining: 3,
         tick: 5,
         active: false,
@@ -320,6 +321,7 @@ fn nonzero_debt_eviction_before_ack_restart_consumes_exactly_once() {
         world.flush_dirty(&Default::default()).unwrap();
         drop(world);
         let mut reopened = test_world(Some(dir.clone()));
+        reopened.refresh_active_clock(12);
         reopened.ensure_blocking(&wants(&[pos]));
         let stored = reopened
             .chunk(pos)
@@ -390,6 +392,7 @@ fn active_image_projects_clock_and_inactive_boundary_freezes() {
             image: SimDebtImage {
                 chunk: pos,
                 last_sim: 10,
+                held_anchor: Some(0),
                 remaining: 0,
                 tick: 10,
                 active: true,
@@ -421,6 +424,7 @@ fn active_image_projects_clock_and_inactive_boundary_freezes() {
     let frozen = SimDebtImage {
         chunk: pos,
         last_sim: 14,
+        held_anchor: Some(0),
         remaining: 0,
         tick: 15,
         active: false,
@@ -461,6 +465,8 @@ fn native_debt_absent_pair_is_new_and_valid_pair_is_exact() {
         pos,
         &std::sync::Arc::new(debt_chunk(Vec::new())),
         &mut records,
+        17,
+        0,
     )
     .unwrap();
     assert!(records.is_empty());
@@ -468,7 +474,7 @@ fn native_debt_absent_pair_is_new_and_valid_pair_is_exact() {
         (LAST_SIM_KEY.into(), mc_nbt::Tag::Long(17)),
         (REMAINING_KEY.into(), mc_nbt::Tag::Long(3)),
     ]));
-    adopt_native_extras(pos, &chunk, &mut records).unwrap();
+    adopt_native_extras(pos, &chunk, &mut records, 17, 0).unwrap();
     assert_eq!((records[&pos].last_sim, records[&pos].remaining), (17, 3));
 }
 
@@ -516,15 +522,21 @@ fn native_debt_rejects_partial_wrong_type_negative_and_duplicate_authority() {
                     pos,
                     SimDebtRecord {
                         last_sim: 19,
+                        held_anchor: Some(0),
                         remaining: 2,
                         dirty: true,
                         active: false,
                     },
                 );
             }
-            let error = adopt_native_extras(pos, &chunk, &mut records).unwrap_err();
-            assert!(matches!(error, crate::CoreError::Storage(_)), "{error}");
-            assert!(error.to_string().contains("simulation debt"), "{error}");
+            let result = adopt_native_extras(pos, &chunk, &mut records, 19, 0);
+            if existing {
+                result.expect("newer manifest authority supersedes malformed old extras");
+            } else {
+                let error = result.unwrap_err();
+                assert!(matches!(error, crate::CoreError::Storage(_)), "{error}");
+                assert!(error.to_string().contains("simulation debt"), "{error}");
+            }
             assert_eq!(records.len(), usize::from(existing));
             if existing {
                 assert_eq!((records[&pos].last_sim, records[&pos].remaining), (19, 2));
@@ -543,7 +555,7 @@ fn native_debt_projection_overflow_refuses_without_mutating_authority() {
             (REMAINING_KEY.into(), mc_nbt::Tag::Long(3)),
         ]);
         let before = chunk.extras.clone();
-        let error = crate::debt::project(&mut chunk, last_sim, remaining).unwrap_err();
+        let error = crate::debt::project(&mut chunk, last_sim, remaining, Some(0)).unwrap_err();
         assert!(matches!(error, crate::CoreError::Storage(_)), "{error}");
         assert!(error.to_string().contains("simulation debt"), "{error}");
         assert_eq!(chunk.extras, before);
@@ -654,6 +666,7 @@ fn checkpoint_debt_outside_native_range_refuses_core_open() {
         let image = SimDebtImage {
             chunk: [0, 0],
             last_sim,
+            held_anchor: Some(0),
             remaining,
             tick: manifest.tick.max(1),
             active: false,

@@ -112,7 +112,7 @@ impl CrownScan {
 pub(in crate::settlements) struct LotChecks {
     /// Site checks the proof may still run.
     pub(in crate::settlements) lots: u32,
-    survey: site_refusals::Survey,
+    survey: site_refusals::Survey<'static>,
     seen: std::collections::HashMap<([i32; 3], [u8; 3]), bool>,
 }
 

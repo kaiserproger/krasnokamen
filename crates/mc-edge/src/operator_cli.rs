@@ -106,6 +106,12 @@ pub enum WorldCommand {
     /// stay as generated; only not-yet-generated chunks use the new generator.
     /// Refuses when anything but the revision differs (seed comes from --config).
     UpgradeWorldgen,
+    /// Convert legacy frozen clocks offline, only on a disposable stopped copy.
+    /// Folds the old WAL, writes one checkpoint and archives the WAL untouched.
+    UpgradeGameClock {
+        #[arg(long)]
+        copy: PathBuf,
+    },
     /// Generate missing overworld chunks offline and store them, so joining
     /// players load them instead of waiting for worldgen. Holds the world
     /// lease; rerunning skips chunks already stored.
@@ -398,6 +404,31 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                         &paths.blocks,
                         &paths.receipt,
                     )?;
+                }
+                WorldCommand::UpgradeGameClock { copy } => {
+                    let report =
+                        mc_world_tools::game_clock_upgrade::upgrade_game_clock(&config, copy)?;
+                    let archive = copy.join(format!(
+                        "journal-before-game-clock-{}",
+                        report.checkpoint_tick
+                    ));
+                    println!(
+                        "game-clock conversion: copy={} checkpoint={} tick={} tail_held_ticks={} H={} held_since={:?} active={} inactive={} dropped_debt={} work_normalized={} work_raw={} sleep_normalized={} sleep_raw={} archive={}",
+                        copy.display(),
+                        report.checkpoint_tick,
+                        report.tick,
+                        report.tail_held_ticks,
+                        report.held_ticks,
+                        report.held_since,
+                        report.active_debts,
+                        report.inactive_debts,
+                        report.dropped_debt,
+                        report.work_normalized,
+                        report.work_raw,
+                        report.sleep_normalized,
+                        report.sleep_raw,
+                        archive.display()
+                    );
                 }
                 WorldCommand::UpgradeWorldgen => {
                     let report =
