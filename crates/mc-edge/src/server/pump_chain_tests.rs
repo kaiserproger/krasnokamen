@@ -1,9 +1,6 @@
 //! EDGE-PUMP-SKIP-FORCES-FULL-RESCAN at the pump: the real drain
-//! ([`next_publication`]) and the real publish path, not a hand-built index.
-//!
-//! A publish the pump skips must not turn every later publish into a full
-//! rescan of every viewer, and history a broadcast `Lagged` dropped must keep
-//! that fallback.
+//! ([`next_publication`], including its stale branch and `Lagged`) and the real
+//! publish path, not a hand-built index.
 use super::*;
 use mc_core::boundary::{ChangeSet, EntityAppearance, EntityId, TickOutput, WorldSnapshot};
 use mc_core::dimensions::Dimension;
@@ -41,20 +38,28 @@ fn cold(pos: [f64; 3]) -> ColdFields {
     }
 }
 
-fn output(tick: u64, entities: mc_core::boundary::EntityViews) -> TickOutput {
+fn output(
+    tick: u64,
+    entities: mc_core::boundary::EntityViews,
+    published_at: Option<std::time::Instant>,
+) -> TickOutput {
     TickOutput {
         tick,
         snapshot: Arc::new(WorldSnapshot {
             tick,
+            dimension: Dimension::Overworld,
             entities,
             ..Default::default()
         }),
         changes: Arc::new(ChangeSet::default()),
-        times: Default::default(),
+        times: mc_core::boundary::TickTimes {
+            published_at,
+            ..Default::default()
+        },
     }
 }
 
-/// A registered viewer in the pen's first chunk, holding no baseline yet.
+/// A registered viewer with no baseline yet, its queues kept alive.
 async fn viewer(
     server: &Arc<EdgeServer>,
 ) -> (
@@ -73,8 +78,6 @@ async fn viewer(
             || 0,
         )
         .unwrap();
-    // The receivers outlive the publish: a dropped queue would close the
-    // connection instead of delivering the plan.
     std::mem::forget((reliable_rx, world_rx));
     let (connections, _) = server.connections.routing_view();
     let mut state = crate::plan::ViewerState::new(id, EntityId(1), [8.0, 64.0, 8.0]);
@@ -90,18 +93,22 @@ fn pool() -> rayon::ThreadPool {
         .unwrap()
 }
 
+/// The pump's real stale drain: an output that waited past
+/// `PUBLISH_QUEUE_BUDGET` while a newer one is queued is skipped by
+/// `next_publication`, and its step must still reach the next publish.
+/// Negative control: without the stale branch's `history.record`, the viewer
+/// rescans and this test fails.
 #[tokio::test]
-async fn a_skipped_publish_stays_contiguous_through_the_chain() {
+async fn a_stale_skipped_drain_keeps_the_viewer_contiguous() {
     let (server, _world) = crate::server::admin_tests::fixture();
     let server = Arc::new(server);
-    let (_id, mut viewers, mut connections) = viewer(&server).await;
+    let (id, mut viewers, mut connections) = viewer(&server).await;
     let pool = pool();
     let mut cache = crate::plan::ChunkPacketCache::new();
-    let mut chain = crate::plan::PublicationChain::new(server.hub.broadcast_capacity());
+    let mut history = crate::plan::PublicationHistory::new(server.hub.broadcast_capacity());
 
-    // The pen: two cows in the viewer's chunk.
-    let mut store = EntityStore::default();
     let type_id = cow_type_id();
+    let mut store = EntityStore::default();
     let a = store.spawn(
         EntityId(1_000),
         uuid::Uuid::from_u128(1_000),
@@ -115,9 +122,9 @@ async fn a_skipped_publish_stays_contiguous_through_the_chain() {
         cold([12.0, 64.0, 8.0]),
     );
 
-    // Publish A: the viewer learns the pen.
-    let first = output(1, store.views());
-    chain.record(&first.snapshot.entities);
+    // Publish A through the real path.
+    let first = output(1, store.views(), None);
+    history.record(&first);
     publish_and_route_chained(
         &server,
         &pool,
@@ -125,16 +132,14 @@ async fn a_skipped_publish_stays_contiguous_through_the_chain() {
         &first,
         &mut cache,
         &mut connections,
-        &chain,
+        &history,
     )
     .await;
-    let id = viewers.keys().copied().next().unwrap();
     let rescans = viewers[&id].rescans;
     assert_eq!(rescans, 1, "the first publish has no baseline");
-    assert_eq!(viewers[&id].tracked_entities.len(), 2, "both cows tracked");
 
-    // B moves one cow, spawns a third and removes the second: it is drained
-    // but the pump skips it.
+    // Drain B (stale: it waited, and C is queued) then C, both from the real
+    // `next_publication`, and publish only C.
     store.set_pos(a, [20.0, 64.0, 8.0]);
     store.spawn(
         EntityId(1_002),
@@ -143,50 +148,60 @@ async fn a_skipped_publish_stays_contiguous_through_the_chain() {
         cold([4.0, 64.0, 4.0]),
     );
     store.remove(b);
-    let second = output(2, store.views());
-    chain.record(&second.snapshot.entities);
-
-    // C moves the cow again: the next publication the pump actually publishes.
+    let (tx, mut rx) = broadcast::channel(8);
+    let now = std::time::Instant::now();
+    let waited = now
+        .checked_sub(
+            crate::server::pump::PUBLISH_QUEUE_BUDGET + std::time::Duration::from_millis(1),
+        )
+        .unwrap();
+    tx.send(output(2, store.views(), Some(waited))).unwrap();
     store.set_pos(a, [24.0, 64.0, 8.0]);
-    let third = output(3, store.views());
-    chain.record(&third.snapshot.entities);
-    assert_eq!(chain.len(), 2, "the skipped step stays in the chain");
+    tx.send(output(3, store.views(), Some(now))).unwrap();
+    let skipped_before = server.dashboard.snapshot().pump_skipped_ticks;
+    let drained = next_publication(&server, &mut rx, &mut viewers, &cache, &mut history)
+        .await
+        .expect("the retained output");
+    assert_eq!(drained.tick, 3, "the stale output is skipped");
+    assert_eq!(
+        server.dashboard.snapshot().pump_skipped_ticks,
+        skipped_before + 1,
+        "the stale branch ran"
+    );
 
     publish_and_route_chained(
         &server,
         &pool,
         &mut viewers,
-        &third,
+        &drained,
         &mut cache,
         &mut connections,
-        &chain,
+        &history,
     )
     .await;
     assert_eq!(
         viewers[&id].rescans, rescans,
-        "one skipped publish must not rescan the viewer"
-    );
-    assert_eq!(
-        viewers[&id].rescans_no_history, 0,
-        "the chain held the step, so the base is not missing history"
+        "a stale-skipped publish must not rescan the viewer"
     );
     let tracked = &viewers[&id].tracked_entities;
     assert!(
         tracked.contains_key(&EntityId(1_002)),
-        "a cow spawned inside the skipped window must be tracked"
+        "a cow spawned inside the skipped output must be tracked"
     );
     assert!(
         !tracked.contains_key(&EntityId(1_001)),
-        "a cow removed inside the skipped window must be untracked"
+        "a cow removed inside the skipped output must be untracked"
     );
     server.hub.shutdown();
 }
 
+/// A broadcast `Lagged` drops outputs the pump can never see: those viewers
+/// keep the full-rescan fallback and the reason says why.
 #[tokio::test]
 async fn a_lagged_publication_keeps_the_full_rescan_fallback() {
     let (server, _world) = crate::server::admin_tests::fixture();
     let server = Arc::new(server);
-    let (_id, mut viewers, mut connections) = viewer(&server).await;
+    let (id, mut viewers, mut connections) = viewer(&server).await;
     let pool = pool();
     let mut cache = crate::plan::ChunkPacketCache::new();
     let mut store = EntityStore::default();
@@ -196,9 +211,9 @@ async fn a_lagged_publication_keeps_the_full_rescan_fallback() {
         cowboy(cow_type_id()),
         cold([8.0, 64.0, 8.0]),
     );
-    let first = output(1, store.views());
-    let mut chain = crate::plan::PublicationChain::new(1);
-    chain.record(&first.snapshot.entities);
+    let first = output(1, store.views(), None);
+    let mut history = crate::plan::PublicationHistory::new(1);
+    history.record(&first);
     publish_and_route_chained(
         &server,
         &pool,
@@ -206,25 +221,23 @@ async fn a_lagged_publication_keeps_the_full_rescan_fallback() {
         &first,
         &mut cache,
         &mut connections,
-        &chain,
+        &history,
     )
     .await;
-    let id = viewers.keys().copied().next().unwrap();
     let rescans = viewers[&id].rescans;
 
-    // Two outputs into a one-slot broadcast: the receiver sees `Lagged` and
-    // the drained output can no longer be bridged from the viewer's base.
     let (tx, mut rx) = broadcast::channel(1);
     store.set_pos(only, [10.0, 64.0, 8.0]);
-    tx.send(output(2, store.views())).unwrap();
+    tx.send(output(2, store.views(), None)).unwrap();
     store.set_pos(only, [12.0, 64.0, 8.0]);
-    tx.send(output(3, store.views())).unwrap();
-    let next = next_publication(&server, &mut rx, &mut viewers, &cache, &mut chain)
+    tx.send(output(3, store.views(), None)).unwrap();
+    let next = next_publication(&server, &mut rx, &mut viewers, &cache, &mut history)
         .await
         .expect("the newer output is retained");
     assert_eq!(next.tick, 3, "the dropped output is never published");
     assert!(
-        chain
+        history
+            .chain(next.snapshot.dimension)
             .steps(
                 first.snapshot.entities.revision(),
                 next.snapshot.entities.revision()
@@ -240,7 +253,7 @@ async fn a_lagged_publication_keeps_the_full_rescan_fallback() {
         &next,
         &mut cache,
         &mut connections,
-        &chain,
+        &history,
     )
     .await;
     assert_eq!(

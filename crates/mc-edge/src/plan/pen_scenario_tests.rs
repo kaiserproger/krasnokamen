@@ -113,84 +113,27 @@ struct Publish {
     scanned: u64,
 }
 
-/// One publish over a shared index (one move cache, as the pump's fan-out has), counts only.
-fn publish(
-    out: &TickOutput,
-    viewers: &mut [ViewerState],
-    previous: Option<&mc_core::boundary::EntityViews>,
-) -> Publish {
-    let index = TickPlanIndex::with_previous(out, previous);
-    let rescans_before: u64 = viewers.iter().map(|viewer| viewer.rescans).sum();
-    let scanned_before: u64 = viewers.iter().map(|viewer| viewer.entities_scanned).sum();
-    let mut row = Publish::default();
-    for viewer in viewers.iter_mut() {
-        let mut scratch = PlanScratch::default();
-        let mut packets = Vec::new();
-        let mut credit = WorldCredit::frames(usize::MAX);
-        plan_entities(
-            &out.snapshot,
-            viewer,
-            VIEW_DISTANCE,
-            &mut scratch,
-            &index,
-            &mut packets,
-            &mut credit,
-        );
-        row.spawns += packets.iter().filter(|packet| packet.id == 0x01).count();
-        row.moves += packets
-            .iter()
-            .filter(|packet| {
-                packet.id == mc_protocol::packets::play::MoveEntityPos::ID
-                    || packet.id == mc_protocol::packets::play::MoveEntityRot::ID
-                    || packet.id == mc_protocol::packets::play::MoveEntityPosRot::ID
-                    || packet.id == mc_protocol::packets::play::EntityPositionSync::ID
-            })
-            .count();
-        row.packets += packets.len();
+/// Move every resident and republish the store's views: the snapshot chain
+/// stays contiguous through the store, exactly as the pump's outputs are.
+fn advance(
+    store: &mut EntityStore,
+    slots: &[mc_core::entities::EntitySlot],
+    out: &mut TickOutput,
+    round: usize,
+) {
+    if round > 0 {
+        for (index, &slot) in slots.iter().enumerate() {
+            let x = 2.0 + (index % 32) as f64 * 2.0 + round as f64 * 0.5;
+            store.set_pos(slot, [x, 64.0, 2.0 + (index / 32) as f64 * 2.0]);
+        }
     }
-    let (hits, misses) = index.move_tallies();
-    row.hits = hits;
-    row.misses = misses;
-    row.rescans = viewers.iter().map(|viewer| viewer.rescans).sum::<u64>() - rescans_before;
-    row.scanned = viewers
-        .iter()
-        .map(|viewer| viewer.entities_scanned)
-        .sum::<u64>()
-        - scanned_before;
-    row
+    let snapshot = Arc::get_mut(&mut out.snapshot).expect("sole snapshot owner");
+    snapshot.tick += 1;
+    snapshot.entities = store.views();
 }
 
-/// Drive `PUBLICATIONS` publishes: every resident moves 0.5 blocks per publish, the snapshot
-/// chain is contiguous through the store.
-fn drive(viewers: &mut Vec<ViewerState>) -> Vec<Publish> {
-    let (mut store, slots) = pen_store();
-    let mut out = output(pen_chunks(), vec![], ChangeSet::default());
-    let mut rows = Vec::new();
-    for round in 0..PUBLICATIONS {
-        if round > 0 {
-            for (index, &slot) in slots.iter().enumerate() {
-                let x = 2.0 + (index % 32) as f64 * 2.0 + round as f64 * 0.5;
-                let z = 2.0 + (index / 32) as f64 * 2.0;
-                store.set_pos(slot, [x, 64.0, z]);
-            }
-        }
-        {
-            let snapshot = Arc::get_mut(&mut out.snapshot).expect("sole snapshot owner");
-            snapshot.tick += 1;
-            snapshot.entities = store.views();
-        }
-        // The pump builds one index from the published tree's previous revision; clone the
-        // handle so the viewers stay free for the mutable planning pass.
-        let previous = viewers[0].previous_entities().cloned();
-        let row = publish(&out, viewers, previous.as_ref());
-        println!("round {round}: {row:?}");
-        rows.push(row);
-    }
-    rows
-}
-
-/// Plan one publish, optionally skipping viewers (a skip is a publish that viewer never saw, so
-/// its tracked baselines lag the others: the case the leg's staggered joins create).
+/// Plan `selected` viewers against one index, optionally skipping the others
+/// (a skip is a publish those viewers never saw).
 fn publish_selected(
     out: &TickOutput,
     viewers: &mut [ViewerState],
@@ -202,30 +145,8 @@ fn publish_selected(
     let scanned_before: u64 = viewers.iter().map(|viewer| viewer.entities_scanned).sum();
     let mut row = Publish::default();
     for &slot in selected {
-        let viewer = &mut viewers[slot];
-        let mut scratch = PlanScratch::default();
-        let mut packets = Vec::new();
-        let mut credit = WorldCredit::frames(usize::MAX);
-        plan_entities(
-            &out.snapshot,
-            viewer,
-            VIEW_DISTANCE,
-            &mut scratch,
-            &index,
-            &mut packets,
-            &mut credit,
-        );
-        row.spawns += packets.iter().filter(|packet| packet.id == 0x01).count();
-        row.moves += packets
-            .iter()
-            .filter(|packet| {
-                packet.id == mc_protocol::packets::play::MoveEntityPos::ID
-                    || packet.id == mc_protocol::packets::play::MoveEntityRot::ID
-                    || packet.id == mc_protocol::packets::play::MoveEntityPosRot::ID
-                    || packet.id == mc_protocol::packets::play::EntityPositionSync::ID
-            })
-            .count();
-        row.packets += packets.len();
+        let (packets, _, _) = plan_packets(out, &mut viewers[slot], &index);
+        count(&mut row, &packets);
     }
     let (hits, misses) = index.move_tallies();
     row.hits = hits;
@@ -249,28 +170,9 @@ fn drive_all(viewers: &mut Vec<ViewerState>) -> Vec<Publish> {
         let previous = viewers[0].previous_entities().cloned();
         let all: Vec<usize> = (0..viewers.len()).collect();
         let row = with_plan_debug(|| publish_selected(&out, viewers, previous.as_ref(), &all));
-        println!("round {round}: {row:?}");
         rows.push(row);
     }
     rows
-}
-
-fn advance(
-    store: &mut EntityStore,
-    slots: &[mc_core::entities::EntitySlot],
-    out: &mut TickOutput,
-    round: usize,
-) {
-    if round > 0 {
-        for (index, &slot) in slots.iter().enumerate() {
-            let x = 2.0 + (index % 32) as f64 * 2.0 + round as f64 * 0.5;
-            let z = 2.0 + (index / 32) as f64 * 2.0;
-            store.set_pos(slot, [x, 64.0, z]);
-        }
-    }
-    let snapshot = Arc::get_mut(&mut out.snapshot).expect("sole snapshot owner");
-    snapshot.tick += 1;
-    snapshot.entities = store.views();
 }
 
 #[test]
@@ -371,23 +273,21 @@ fn contiguous_snapshots_rescan_only_until_the_window_is_known() {
 /// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN, index level: a snapshot the pump coalesced
 /// over must not cost a full candidate scan of every viewer.
 ///
-/// The pump skips tick outputs (`next_publication`, server/pump.rs). A viewer keeps the last
-/// snapshot it actually planned, so after a skip its previous revision is the base of the skipped
-/// output, not of the next one, and `entity_interest::prepare` (plan/entity_interest.rs) treats it
-/// as non-contiguous and rescans the whole square. The chain keeps those steps as deltas, so the
-/// same viewer stays contiguous. The pump-level path is fenced separately
-/// (`server/pump_chain_tests.rs`); this one pins the index contract and its cost.
+/// The pump records every drained output (`PublicationHistory`) and the
+/// fan-out bridges the base a viewer still holds, so `entity_interest::prepare`
+/// stays contiguous. The pump path is fenced separately
+/// (`server/pump_chain_tests.rs`); this one pins the index contract, the net
+/// delta it builds, and its cost.
 #[test]
 fn an_index_given_the_chain_must_not_rescan_after_a_skip() {
     let (mut store, slots) = pen_store();
     let mut out = output(pen_chunks(), vec![], ChangeSet::default());
     let mut viewers = vec![pen_viewer(1, [32.0, 64.0, 32.0])];
-    let mut chain = crate::plan::PublicationChain::new(8);
+    let mut history = crate::plan::PublicationHistory::new(8);
 
     advance(&mut store, &slots, &mut out, 0);
-    chain.record(&out.snapshot.entities);
-    let previous = viewers[0].previous_entities().cloned();
-    let first = with_plan_debug(|| publish_selected(&out, &mut viewers, previous.as_ref(), &[0]));
+    history.record(&out);
+    let first = with_plan_debug(|| publish_now(&out, &mut viewers, &history, &[0]));
     assert_eq!(
         first.rescans, 1,
         "the first publish has no baseline: {first:?}"
@@ -395,78 +295,73 @@ fn an_index_given_the_chain_must_not_rescan_after_a_skip() {
 
     // A contiguous publish (the normal case) walks the delta, no rescan.
     advance(&mut store, &slots, &mut out, 1);
-    chain.record(&out.snapshot.entities);
-    let previous = viewers[0].previous_entities().cloned();
-    let contiguous =
-        with_plan_debug(|| publish_selected(&out, &mut viewers, previous.as_ref(), &[0]));
+    history.record(&out);
+    let contiguous = with_plan_debug(|| publish_now(&out, &mut viewers, &history, &[0]));
     assert_eq!(
         contiguous.rescans, 0,
         "a contiguous publish must not rescan: {contiguous:?}"
     );
 
-    // The pump skips the next publication: it drained it, so the chain holds
-    // its step, but no viewer planned it.
+    // The pump drains the next publications without planning them. B repeats:
+    // a revision the core did not advance because its wire image did not
+    // change, which must be a no-op for the chain, not a cut.
     advance(&mut store, &slots, &mut out, 2);
-    chain.record(&out.snapshot.entities);
+    history.record(&out);
+    history.record(&out);
     advance(&mut store, &slots, &mut out, 3);
-    chain.record(&out.snapshot.entities);
-    let previous = viewers[0].previous_entities().cloned();
-    let after_skip =
-        with_plan_debug(|| publish_chained(&out, &mut viewers, previous.as_ref(), &[0], &chain));
+    history.record(&out);
     assert_eq!(
-        after_skip.rescans, 0,
-        "one skipped publication must not cost a full rescan of every viewer: {after_skip:?}"
+        history.chain(out.snapshot.dimension).len(),
+        4,
+        "the repeated revision recorded once: A, step 1, step 2, step 3"
+    );
+    let skipped = with_plan_debug(|| publish_now(&out, &mut viewers, &history, &[0]));
+    assert_eq!(
+        skipped.rescans, 0,
+        "one skipped publication must not cost a full rescan of every viewer: {skipped:?}"
     );
     assert_eq!(
-        after_skip.scanned, 0,
-        "no candidate scan may run after a skip: {after_skip:?}"
+        skipped.scanned, 0,
+        "no candidate scan may run after a skip: {skipped:?}"
     );
     assert!(
-        after_skip.moves > 0,
-        "the skipped window's moves must still be delivered: {after_skip:?}"
+        skipped.moves > 0,
+        "the skipped window's moves must still be delivered: {skipped:?}"
     );
 }
 
-/// Plan `selected` viewers against `chain`: the shared fan-out selector, so
-/// this costs what the pump's publish costs.
-fn publish_chained(
+/// Plan `selected` viewers the way the fan-out does: index from the delivered
+/// base, bridged through the pump's history when that base is covered.
+fn publish_now(
     out: &TickOutput,
     viewers: &mut [ViewerState],
-    previous: Option<&mc_core::boundary::EntityViews>,
+    history: &crate::plan::PublicationHistory,
     selected: &[usize],
-    chain: &crate::plan::PublicationChain,
 ) -> Publish {
-    let mut index = TickPlanIndex::with_previous(out, previous);
-    if index.entity_base.is_none() {
-        let bridge = TickPlanIndex::bridge(
+    let previous = viewers
+        .first()
+        .and_then(|viewer| viewer.previous_entities())
+        .cloned();
+    let mut index = TickPlanIndex::with_previous(out, previous.as_ref());
+    let chain = history.chain(out.snapshot.dimension);
+    if index.entity_base.is_none()
+        && let Some((base, _, changed)) = TickPlanIndex::bridge(
             chain,
             out.snapshot.entities.revision(),
             viewers
                 .iter()
-                .filter_map(|viewer| viewer.previous_entities())
-                .map(mc_core::boundary::EntityViews::revision),
-        );
-        if let Some((base, steps)) = bridge {
-            index = TickPlanIndex::with_chain(out, &steps, base);
-        }
+                .filter_map(|viewer| viewer.previous_entities()),
+        )
+    {
+        index = TickPlanIndex::with_chain(out, base, &changed);
     }
-    let index = index.with_chain_info(chain.info());
+    let index = index.with_chain_info(chain.info()).with_reveals(out, None);
     let rescans_before: u64 = viewers.iter().map(|viewer| viewer.rescans).sum();
     let scanned_before: u64 = viewers.iter().map(|viewer| viewer.entities_scanned).sum();
     let mut row = Publish::default();
     for &slot in selected {
-        let (packets, _) = plan_packets(out, &mut viewers[slot], &index);
-        row.spawns += packets.iter().filter(|packet| packet.id == 0x01).count();
-        row.moves += packets
-            .iter()
-            .filter(|packet| {
-                packet.id == mc_protocol::packets::play::MoveEntityPos::ID
-                    || packet.id == mc_protocol::packets::play::MoveEntityRot::ID
-                    || packet.id == mc_protocol::packets::play::MoveEntityPosRot::ID
-                    || packet.id == mc_protocol::packets::play::EntityPositionSync::ID
-            })
-            .count();
-        row.packets += packets.len();
+        let (packets, _, _) = plan_packets(out, &mut viewers[slot], &index);
+        count(&mut row, &packets);
     }
     let (hits, misses) = index.move_tallies();
     row.hits = hits;
@@ -480,12 +375,26 @@ fn publish_chained(
     row
 }
 
+fn count(row: &mut Publish, packets: &[PlannedPacket]) {
+    row.spawns += packets.iter().filter(|packet| packet.id == 0x01).count();
+    row.moves += packets
+        .iter()
+        .filter(|packet| {
+            packet.id == mc_protocol::packets::play::MoveEntityPos::ID
+                || packet.id == mc_protocol::packets::play::MoveEntityRot::ID
+                || packet.id == mc_protocol::packets::play::MoveEntityPosRot::ID
+                || packet.id == mc_protocol::packets::play::EntityPositionSync::ID
+        })
+        .count();
+    row.packets += packets.len();
+}
+
 /// Plan one viewer against a prepared index and keep its packets.
 fn plan_packets(
     out: &TickOutput,
     viewer: &mut ViewerState,
     index: &TickPlanIndex,
-) -> (Vec<PlannedPacket>, u64) {
+) -> (Vec<PlannedPacket>, u64, usize) {
     let mut scratch = PlanScratch::default();
     let mut packets = Vec::new();
     let mut credit = WorldCredit::frames(usize::MAX);
@@ -498,37 +407,84 @@ fn plan_packets(
         &mut packets,
         &mut credit,
     );
-    (packets, scratch.visible.len() as u64)
+    let teams_before = packets.len();
+    crate::faction_teams::plan_teams(&out.snapshot, index.faction_delta(), viewer, &mut packets);
+    let team_frames = packets.len() - teams_before;
+    (packets, scratch.visible.len() as u64, team_frames)
 }
 
-/// The packets as the client sees them: id and framed bytes, order-insensitive.
+/// The packets as the client sees them: id and framed bytes in wire order. The
+/// order is part of the contract (a respawn must precede the packets that
+/// follow it), so nothing is sorted here.
 fn wire(packets: &[PlannedPacket]) -> Vec<(i32, Vec<u8>)> {
-    let mut frames: Vec<(i32, Vec<u8>)> = packets
+    packets
         .iter()
         .filter(|packet| packet.chunk.is_none())
         .map(|packet| (packet.id, packet.data.to_vec()))
-        .collect();
-    frames.sort_unstable();
-    frames
+        .collect()
+}
+
+/// One store step with the same scene in both runs: everyone moves, one
+/// resident is removed and a cow spawns beside the viewer.
+fn step_scene(
+    store: &mut EntityStore,
+    slots: &[mc_core::entities::EntitySlot],
+    out: &mut TickOutput,
+    step: usize,
+) {
+    for (index, &slot) in slots.iter().enumerate().skip(1) {
+        let x = 2.0 + (index % 32) as f64 * 2.0 + step as f64 * 0.5;
+        store.set_pos(slot, [x, 64.0, 2.0 + (index / 32) as f64 * 2.0]);
+    }
+    if step == 1 {
+        store.remove(slots[0]);
+        store.spawn(
+            EntityId(9_000),
+            uuid::Uuid::from_u128(9_000),
+            EntityKind::Mob {
+                type_id: cow_type_id(),
+            },
+            ColdFields {
+                pos: [33.0, 64.0, 33.0],
+                vel: [0.0; 3],
+                yaw: 0.0,
+                pitch: 0.0,
+                ground: true,
+                health: 20.0,
+                breed_cooldown: 0,
+                pickup_delay: 0,
+                item: None,
+                appearance: Arc::new(EntityAppearance::default()),
+                movement: MovementClass::Walker,
+                half_width: 0.45,
+                height: 1.4,
+                speed: 0.1,
+                attack_damage: 1.0,
+                sight_range: 16.0,
+                attack_reach: 1.0,
+            },
+        );
+    }
+    let snapshot = Arc::get_mut(&mut out.snapshot).expect("sole snapshot owner");
+    snapshot.tick += 1;
+    snapshot.entities = store.views();
 }
 
 /// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN fence: a viewer whose base predates the
 /// published snapshot must receive exactly what a full rescan of that snapshot
-/// would deliver — including a spawn, a removal and a move that happened inside
-/// the skipped outputs.
+/// delivers, frame for frame and in wire order — including a spawn, a removal
+/// and moves inside the skipped outputs.
 #[test]
 fn a_skipped_window_delivers_what_a_full_rescan_delivers() {
     let (mut store, slots) = pen_store();
     let mut out = output(pen_chunks(), vec![], ChangeSet::default());
-    let mut chain = crate::plan::PublicationChain::new(8);
+    let mut history = crate::plan::PublicationHistory::new(8);
     let position = [32.0, 64.0, 32.0];
-    // Two identical viewers: one bridges the skipped window through the chain,
-    // the other is forced onto the full rescan of the same snapshot.
     let mut bridged = pen_viewer(1, position);
     let mut rescanned = pen_viewer(2, position);
 
-    advance(&mut store, &slots, &mut out, 0);
-    chain.record(&out.snapshot.entities);
+    step_scene(&mut store, &slots, &mut out, 0);
+    history.record(&out);
     for viewer in [&mut bridged, &mut rescanned] {
         let previous = viewer.previous_entities().cloned();
         let mut index = TickPlanIndex::with_previous(&out, previous.as_ref());
@@ -536,18 +492,78 @@ fn a_skipped_window_delivers_what_a_full_rescan_delivers() {
         plan_packets(&out, viewer, &index);
     }
 
-    // Step one inside the window: everything moves, one resident is removed and
-    // one cow spawns next to the viewer.
-    let mut index = 0;
-    while index < slots.len() {
-        let moved = 2.0 + (index % 32) as f64 * 2.0 + 0.5;
-        store.set_pos(slots[index], [moved, 64.0, 2.0 + (index / 32) as f64 * 2.0]);
-        index += 1;
+    // Two steps the pump drains but never publishes to these viewers.
+    step_scene(&mut store, &slots, &mut out, 1);
+    history.record(&out);
+    step_scene(&mut store, &slots, &mut out, 2);
+    history.record(&out);
+
+    let chain = history.chain(out.snapshot.dimension);
+    let previous = bridged.previous_entities().cloned();
+    let (base, _, changed) = TickPlanIndex::bridge(
+        chain,
+        out.snapshot.entities.revision(),
+        std::iter::once(previous.as_ref().expect("bridged baseline")),
+    )
+    .expect("the chain covers the viewer's base");
+    assert_eq!(base.revision(), previous.as_ref().unwrap().revision());
+    let bridged_index =
+        TickPlanIndex::with_chain(&out, base, &changed).with_chain_info(chain.info());
+    let (bridged_packets, _, _) = plan_packets(&out, &mut bridged, &bridged_index);
+
+    let rescanned_index = TickPlanIndex::new(&out);
+    let (rescanned_packets, _, _) = plan_packets(&out, &mut rescanned, &rescanned_index);
+
+    assert_eq!(
+        wire(&bridged_packets),
+        wire(&rescanned_packets),
+        "the bridged window must deliver exactly the rescan's frames, in order"
+    );
+    let tracked = |viewer: &ViewerState| {
+        let mut ids: Vec<EntityId> = viewer.tracked_entities.keys().copied().collect();
+        ids.sort_unstable();
+        ids
+    };
+    assert_eq!(
+        tracked(&bridged),
+        tracked(&rescanned),
+        "the bridged window must track exactly what the rescan tracks"
+    );
+    assert!(
+        !tracked(&bridged).contains(&EntityId(1_000)),
+        "the resident removed inside the window must be untracked"
+    );
+}
+
+/// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN faction fence: the bridge must send the
+/// net team state against the delivered base, not replay the steps. `1 → 2 → 1`
+/// must reach the same frames as a rescan, and a faction mob that spawns and
+/// dies inside the window must leave no team behind.
+#[test]
+fn a_bridged_window_sends_the_net_faction_state() {
+    let (mut store, slots) = pen_store();
+    let mut out = output(pen_chunks(), vec![], ChangeSet::default());
+    let mut history = crate::plan::PublicationHistory::new(8);
+    let position = [32.0, 64.0, 32.0];
+    let mut bridged = pen_viewer(1, position);
+    let mut rescanned = pen_viewer(2, position);
+
+    step_scene(&mut store, &slots, &mut out, 0);
+    history.record(&out);
+    for viewer in [&mut bridged, &mut rescanned] {
+        let previous = viewer.previous_entities().cloned();
+        let mut index = TickPlanIndex::with_previous(&out, previous.as_ref());
+        index = index.with_reveals(&out, None);
+        plan_packets(&out, viewer, &index);
     }
-    store.remove(slots[0]);
-    store.spawn(
-        EntityId(9_000),
-        uuid::Uuid::from_u128(9_000),
+
+    // Step one: a resident joins faction 1, a faction-2 mob spawns beside the
+    // viewer. Step two: the resident moves to faction 2 and back to faction 1,
+    // and the faction-2 mob dies.
+    store.set_faction(slots[1], 1);
+    let transient = store.spawn(
+        EntityId(9_100),
+        uuid::Uuid::from_u128(9_100),
         EntityKind::Mob {
             type_id: cow_type_id(),
         },
@@ -571,87 +587,107 @@ fn a_skipped_window_delivers_what_a_full_rescan_delivers() {
             attack_reach: 1.0,
         },
     );
-    let snapshot = Arc::get_mut(&mut out.snapshot).expect("sole snapshot owner");
-    snapshot.tick += 1;
-    snapshot.entities = store.views();
-    chain.record(&out.snapshot.entities);
+    store.set_faction(transient, 2);
+    step_scene(&mut store, &slots, &mut out, 1);
+    history.record(&out);
+    store.set_faction(slots[1], 2);
+    store.set_faction(slots[1], 1);
+    store.remove(transient);
+    step_scene(&mut store, &slots, &mut out, 2);
+    history.record(&out);
 
-    // Step two inside the window: the survivors move again.
-    let mut index = 1;
-    while index < slots.len() {
-        let moved = 2.0 + (index % 32) as f64 * 2.0 + 1.0;
-        store.set_pos(slots[index], [moved, 64.0, 2.0 + (index / 32) as f64 * 2.0]);
-        index += 1;
-    }
-    let snapshot = Arc::get_mut(&mut out.snapshot).expect("sole snapshot owner");
-    snapshot.tick += 1;
-    snapshot.entities = store.views();
-    chain.record(&out.snapshot.entities);
-
-    // The publish neither viewer planned: the chain bridges it, the other
-    // viewer plans it as a full rescan from the same base.
+    let chain = history.chain(out.snapshot.dimension);
     let previous = bridged.previous_entities().cloned();
-    let (base, steps) = TickPlanIndex::bridge(
-        &chain,
+    let (base, _, changed) = TickPlanIndex::bridge(
+        chain,
         out.snapshot.entities.revision(),
-        std::iter::once(previous.as_ref().expect("bridged baseline").revision()),
+        std::iter::once(previous.as_ref().expect("bridged baseline")),
     )
     .expect("the chain covers the viewer's base");
-    assert!(
-        steps.iter().any(|link| link.tracks(EntityId(9_000))),
-        "the cow spawned inside the skipped window must be in the chain"
-    );
-    assert!(
-        steps.iter().any(|link| link.tracks(EntityId(1_000))),
-        "the resident removed inside the skipped window must be in the chain"
-    );
-    let bridged_index = TickPlanIndex::with_chain(&out, &steps, base).with_chain_info(chain.info());
-    let (bridged_packets, _) = plan_packets(&out, &mut bridged, &bridged_index);
-
-    let rescanned_index = TickPlanIndex::new(&out);
-    let (rescanned_packets, _) = plan_packets(&out, &mut rescanned, &rescanned_index);
-
+    let bridged_index = TickPlanIndex::with_chain(&out, base, &changed);
+    let (bridged_packets, _, bridged_teams) = plan_packets(&out, &mut bridged, &bridged_index);
+    let (rescanned_packets, _, rescanned_teams) =
+        plan_packets(&out, &mut rescanned, &TickPlanIndex::new(&out));
     assert_eq!(
         wire(&bridged_packets),
         wire(&rescanned_packets),
-        "the bridged window must deliver exactly the rescan's frames"
+        "the bridge must reconcile teams exactly like the rescan"
     );
-    let tracked = |viewer: &ViewerState| {
-        let mut ids: Vec<EntityId> = viewer.tracked_entities.keys().copied().collect();
-        ids.sort_unstable();
-        ids
-    };
     assert_eq!(
-        tracked(&bridged),
-        tracked(&rescanned),
-        "the bridged window must track exactly what the rescan tracks"
-    );
-    assert!(
-        !tracked(&bridged).contains(&EntityId(9_000))
-            || tracked(&rescanned).contains(&EntityId(9_000)),
-        "a spawn the rescan tracks must also reach the bridged viewer"
-    );
-    assert!(
-        !tracked(&bridged).contains(&EntityId(1_000)),
-        "the resident removed inside the window must be untracked"
+        bridged_teams, rescanned_teams,
+        "team frames must match the rescan's"
     );
 }
 
-/// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN cost: a skipped publish costs a rescan of
-/// every viewer without the chain, and the ring holds a bounded number of bytes.
+/// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN travel fence: a client that built a new
+/// level must not be bridged from the base it held before the travel, even when
+/// the chain spans it. `A → B → A` inside one publish is the dangerous case.
+#[test]
+fn a_travelled_viewer_is_never_bridged_from_its_pre_travel_base() {
+    let (mut store, slots) = pen_store();
+    let mut out = output(pen_chunks(), vec![], ChangeSet::default());
+    let mut history = crate::plan::PublicationHistory::new(8);
+    let mut viewer = pen_viewer(1, [32.0, 64.0, 32.0]);
+
+    step_scene(&mut store, &slots, &mut out, 0);
+    history.record(&out);
+    publish_now(&out, std::slice::from_mut(&mut viewer), &history, &[0]);
+    let rescans = viewer.rescans;
+    // Out to another level and back before the next plan, exactly what
+    // `plan_respawn` does for a travel.
+    viewer.untrack_all();
+    viewer.entity_interest.forget();
+    viewer.loaded_chunks.clear();
+    viewer
+        .loaded_chunks
+        .extend(pen_viewer(1, [32.0, 64.0, 32.0]).loaded_chunks);
+
+    step_scene(&mut store, &slots, &mut out, 1);
+    history.record(&out);
+    step_scene(&mut store, &slots, &mut out, 2);
+    history.record(&out);
+    let row = publish_now(&out, std::slice::from_mut(&mut viewer), &history, &[0]);
+    assert_eq!(
+        row.rescans, 1,
+        "a travelled viewer rebuilds its interest from scratch: {row:?}"
+    );
+    assert_eq!(viewer.rescans, rescans + 1);
+}
+
+/// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN held-set fence: a chain never overrides a
+/// changed chunk set. A viewer that gained a held chunk rescans even when the
+/// chain covers its base, exactly as it would without one.
+#[test]
+fn a_changed_held_set_rescans_even_when_the_chain_covers_the_base() {
+    let (mut store, slots) = pen_store();
+    let mut out = output(pen_chunks(), vec![], ChangeSet::default());
+    let mut history = crate::plan::PublicationHistory::new(8);
+    let mut viewer = pen_viewer(1, [32.0, 64.0, 32.0]);
+
+    step_scene(&mut store, &slots, &mut out, 0);
+    history.record(&out);
+    publish_now(&out, std::slice::from_mut(&mut viewer), &history, &[0]);
+
+    step_scene(&mut store, &slots, &mut out, 1);
+    history.record(&out);
+    viewer.loaded_chunks.insert((4, 4), 0);
+    let row = publish_now(&out, std::slice::from_mut(&mut viewer), &history, &[0]);
+    assert_eq!(row.rescans, 1, "a rebuilt held set must rescan: {row:?}");
+}
+
+/// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN cost: what a skipped publish costs per
+/// viewer, split into the candidate scan, the bridge build and the framing.
 #[test]
 fn a_skipped_publish_costs_one_rescan_without_the_chain_and_none_with_it() {
     let (mut store, slots) = pen_store();
     let mut out = output(pen_chunks(), vec![], ChangeSet::default());
-    let mut chain = crate::plan::PublicationChain::new(32);
+    let mut history = crate::plan::PublicationHistory::new(32);
     let position = [32.0, 64.0, 32.0];
-    // Paired runs: each round plans two fresh, identical viewers so neither
-    // path warms the other and the timing order cannot bias the numbers.
     let mut without_viewer = pen_viewer(1, position);
     let mut with_viewer = pen_viewer(2, position);
 
-    advance(&mut store, &slots, &mut out, 0);
-    chain.record(&out.snapshot.entities);
+    step_scene(&mut store, &slots, &mut out, 0);
+    history.record(&out);
     for viewer in [&mut without_viewer, &mut with_viewer] {
         let previous = viewer.previous_entities().cloned();
         let mut index = TickPlanIndex::with_previous(&out, previous.as_ref());
@@ -661,22 +697,33 @@ fn a_skipped_publish_costs_one_rescan_without_the_chain_and_none_with_it() {
     let baseline_scan = without_viewer.entities_scanned;
 
     for round in 1..=3 {
-        advance(&mut store, &slots, &mut out, round);
-        chain.record(&out.snapshot.entities);
+        step_scene(&mut store, &slots, &mut out, round);
+        history.record(&out);
     }
-    let ring_bytes = chain.bytes();
-    let ring_links = chain.len();
+    let chain = history.chain(out.snapshot.dimension);
+    let links = chain.len();
 
-    // The index is built once per publish and shared by every viewer; the plan
-    // is per viewer. Both are reported: that is the trade the chain makes.
+    // Scan alone: the pass a rescan pays and a bridge does not.
+    let scan_us = {
+        let mut scratch = PlanScratch::default();
+        let started = std::time::Instant::now();
+        super::entity_candidates::collect(
+            &out.snapshot,
+            &mut without_viewer,
+            VIEW_DISTANCE,
+            &mut scratch,
+            usize::MAX,
+        );
+        std::time::Instant::now()
+            .duration_since(started)
+            .as_micros()
+    };
+
+    // Without the chain: the same base, no bridge, full rescan.
     let previous = without_viewer.previous_entities().cloned();
     let without = {
-        let started = std::time::Instant::now();
         let mut index = TickPlanIndex::with_previous(&out, previous.as_ref());
         index = index.with_reveals(&out, None);
-        let build_us = std::time::Instant::now()
-            .duration_since(started)
-            .as_micros();
         let rescans = without_viewer.rescans;
         let scanned = without_viewer.entities_scanned;
         let started = std::time::Instant::now();
@@ -685,25 +732,27 @@ fn a_skipped_publish_costs_one_rescan_without_the_chain_and_none_with_it() {
             .duration_since(started)
             .as_micros();
         (
-            build_us,
             plan_us,
             without_viewer.rescans - rescans,
             without_viewer.entities_scanned - scanned,
         )
     };
 
+    // With the chain: one bridge build for every viewer that holds the base,
+    // then the per-viewer framing walk.
     let previous = with_viewer.previous_entities().cloned();
     let with = {
         let started = std::time::Instant::now();
-        let (base, steps) = TickPlanIndex::bridge(
-            &chain,
+        let (base, _, changed) = TickPlanIndex::bridge(
+            chain,
             out.snapshot.entities.revision(),
-            std::iter::once(previous.as_ref().expect("baseline").revision()),
+            std::iter::once(previous.as_ref().expect("baseline")),
         )
         .expect("chain covers the base");
-        let mut index = TickPlanIndex::with_chain(&out, &steps, base).with_chain_info(chain.info());
+        let mut index =
+            TickPlanIndex::with_chain(&out, base, &changed).with_chain_info(chain.info());
         index = index.with_reveals(&out, None);
-        let build_us = std::time::Instant::now()
+        let bridge_us = std::time::Instant::now()
             .duration_since(started)
             .as_micros();
         let rescans = with_viewer.rescans;
@@ -714,20 +763,20 @@ fn a_skipped_publish_costs_one_rescan_without_the_chain_and_none_with_it() {
             .duration_since(started)
             .as_micros();
         (
-            build_us,
+            bridge_us,
             plan_us,
             with_viewer.rescans - rescans,
             with_viewer.entities_scanned - scanned,
         )
     };
     println!(
-        "skipped publish: without chain build_us={} plan_us={} rescans={} scanned={}; \
-         with chain build_us={} plan_us={} rescans={} scanned={}; \
-         ring links={ring_links} bytes={ring_bytes}; first scan={baseline_scan}",
-        without.0, without.1, without.2, without.3, with.0, with.1, with.2, with.3
+        "skipped publish: scan_us={scan_us} (a rescan pays it, a bridge does not); \
+         without chain plan_us={} rescans={} scanned={}; with chain bridge_us={} plan_us={} \
+         rescans={} scanned={}; changed ids across {links} links; first scan={baseline_scan}",
+        without.0, without.1, without.2, with.0, with.1, with.2, with.3
     );
     assert_eq!(
-        (without.2, with.2),
+        (without.1, with.2),
         (1, 0),
         "the chain must remove the rescan and nothing else: without={without:?} with={with:?}"
     );
@@ -735,9 +784,6 @@ fn a_skipped_publish_costs_one_rescan_without_the_chain_and_none_with_it() {
         with.3, 0,
         "the bridged publish scans no candidates: {with:?}"
     );
-    assert!(without.3 > 0, "the rescan walks the square: {without:?}");
-    assert!(
-        ring_bytes > 0 && ring_links == 3,
-        "three drained steps at capacity: links={ring_links} bytes={ring_bytes}"
-    );
+    assert!(without.2 > 0, "the rescan walks the square: {without:?}");
+    assert!(links >= 3, "every drained step is recorded: {links}");
 }

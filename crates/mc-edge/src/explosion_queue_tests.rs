@@ -395,7 +395,7 @@ async fn stale_skip_closes_only_recipients_of_skipped_knockback() {
         &mut rx,
         &mut viewers,
         &cache,
-        &mut crate::plan::PublicationChain::new(8),
+        &mut crate::plan::PublicationHistory::new(8),
     )
     .await
     .unwrap();
@@ -422,7 +422,7 @@ async fn stale_skip_closes_only_recipients_of_skipped_knockback() {
         &mut rx,
         &mut viewers,
         &cache,
-        &mut crate::plan::PublicationChain::new(8),
+        &mut crate::plan::PublicationHistory::new(8),
     )
     .await
     .unwrap();

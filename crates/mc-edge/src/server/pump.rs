@@ -91,7 +91,7 @@ pub(super) async fn next_publication(
     rx: &mut broadcast::Receiver<TickOutput>,
     viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
     chunk_cache: &crate::plan::ChunkPacketCache,
-    chain: &mut crate::plan::PublicationChain,
+    history: &mut crate::plan::PublicationHistory,
 ) -> Option<TickOutput> {
     loop {
         match rx.recv().await {
@@ -99,16 +99,16 @@ pub(super) async fn next_publication(
                 server.dashboard.record_pump_stale_skipped(1);
                 // The skipped output's deltas still reach the next publish: a
                 // viewer whose base it is must not pay a full rescan.
-                chain.record(&out.snapshot.entities);
+                history.record(&out);
                 skip_publications(server, viewers, chunk_cache, 1);
             }
             Ok(out) => {
-                chain.record(&out.snapshot.entities);
+                history.record(&out);
                 return Some(out);
             }
             Err(broadcast::error::RecvError::Lagged(skipped)) => {
                 // Those outputs are gone for good: nothing may bridge them.
-                chain.cut();
+                history.cut();
                 skip_publications(server, viewers, chunk_cache, skipped);
             }
             Err(broadcast::error::RecvError::Closed) => return None,
@@ -192,7 +192,7 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
         // The outputs this pump drained but did not publish as planned: bounded
         // by exactly the broadcast's window, so a skipped base is bridged only
         // while the core could still have delivered it.
-        let mut chain = crate::plan::PublicationChain::new(server.hub.broadcast_capacity());
+        let mut history = crate::plan::PublicationHistory::new(server.hub.broadcast_capacity());
         // Latest routed global roster; seeds fresh viewers' player profiles
         // so a first routed Roster never mass-removes tracked entities.
         let mut latest_roster: Arc<[mc_core::dimensions::RosterPlayer]> = Arc::from(Vec::new());
@@ -223,7 +223,7 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                 );
             }
             let Some(out) =
-                next_publication(&server, &mut rx, &mut viewers, &chunk_cache, &mut chain).await
+                next_publication(&server, &mut rx, &mut viewers, &chunk_cache, &mut history).await
             else {
                 // Drain terminal reliable disconnects before closing, both
                 // for graceful shutdown and for an authoritative failure.
@@ -278,7 +278,7 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                 &out,
                 &mut chunk_cache,
                 &mut connections,
-                &chain,
+                &history,
             )
             .await;
             broadcast_latencies(
@@ -653,6 +653,7 @@ pub(super) fn close_skipped_knockback(
 
 /// Publish one tick to all viewers and route the addressed packets.
 /// Reliable-overflow victims disconnect.
+#[cfg(test)]
 pub(super) async fn publish_and_route(
     server: &Arc<EdgeServer>,
     pool: &rayon::ThreadPool,
@@ -673,7 +674,7 @@ pub(super) async fn publish_and_route_chained(
     out: &TickOutput,
     chunk_cache: &mut crate::plan::ChunkPacketCache,
     connections: &mut HashMap<ConnectionId, ConnectionHandles>,
-    chain: &crate::plan::PublicationChain,
+    history: &crate::plan::PublicationHistory,
 ) {
     publish_and_route_inner(
         server,
@@ -682,7 +683,7 @@ pub(super) async fn publish_and_route_chained(
         out,
         chunk_cache,
         connections,
-        Some(chain),
+        Some(history),
     )
     .await;
 }
@@ -694,7 +695,7 @@ async fn publish_and_route_inner(
     out: &TickOutput,
     chunk_cache: &mut crate::plan::ChunkPacketCache,
     connections: &mut HashMap<ConnectionId, ConnectionHandles>,
-    chain: Option<&crate::plan::PublicationChain>,
+    history: Option<&crate::plan::PublicationHistory>,
 ) {
     viewers.retain(|id, _| connections.contains_key(id));
     // Planning spends this credit (slots and bytes), but it is not exclusive:
@@ -743,7 +744,7 @@ async fn publish_and_route_inner(
             view_distance,
             &registries,
             chunk_cache,
-            chain,
+            history,
         )
     });
     let recorders = crate::recorder::RecorderTick::of(viewers.values());

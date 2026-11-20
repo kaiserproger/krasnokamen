@@ -32,6 +32,13 @@ pub(super) struct EntityInterest {
 }
 
 impl EntityInterest {
+    /// Forget the delivered base and the seeded view, for a client that built
+    /// a new level (dimension travel): its entity interest is reconciled from
+    /// scratch, never bridged from a base the new level never delivered.
+    pub(super) fn forget(&mut self) {
+        *self = Self::default();
+    }
+
     pub(super) fn previous(&self) -> Option<&mc_core::boundary::EntityViews> {
         self.previous.as_ref()
     }

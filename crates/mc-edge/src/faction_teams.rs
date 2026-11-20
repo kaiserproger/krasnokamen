@@ -102,30 +102,6 @@ impl FactionDelta {
         }
     }
 
-    /// Fold a later continuous step into this one: an entity's entries and
-    /// departures at any step of a coalesced publication still reach the
-    /// viewer, and `base` stays the base the viewer reconciles from.
-    pub(crate) fn merge(&mut self, later: &Self) {
-        self.added.extend(later.added.iter().copied());
-        self.added.sort_by_key(|(faction, _)| *faction);
-        self.added.dedup();
-        self.lost.extend(later.lost.iter().copied());
-        self.lost.sort_unstable();
-        self.lost.dedup();
-        // The held set is a function of the new snapshot, not of this delta.
-        let _ = self.still_held.take();
-    }
-
-    /// Bytes this delta holds, for the publication chain's cost line.
-    pub(crate) fn bytes(&self) -> usize {
-        self.added.capacity() * std::mem::size_of::<(u16, Uuid)>()
-            + self.lost.capacity() * std::mem::size_of::<u16>()
-            + self
-                .still_held
-                .get()
-                .map_or(0, |held| held.capacity() * std::mem::size_of::<u16>())
-    }
-
     pub(crate) fn finish(mut self) -> Self {
         self.added.sort_by_key(|(faction, _)| *faction);
         self.lost.sort_unstable();

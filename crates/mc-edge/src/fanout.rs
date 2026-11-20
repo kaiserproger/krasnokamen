@@ -140,7 +140,7 @@ pub(crate) fn publish_with_registries_chain<'a>(
     view_distance: i32,
     registries: &PlanRegistries<'_>,
     chunk_cache: &mut crate::plan::ChunkPacketCache,
-    chain: Option<&crate::plan::PublicationChain>,
+    history: Option<&crate::plan::PublicationHistory>,
 ) -> Vec<AddressedPacket> {
     let probe = crate::plan::item_probe::enabled().then(std::time::Instant::now);
     chunk_cache.retain_resident(output);
@@ -178,6 +178,7 @@ pub(crate) fn publish_with_registries_chain<'a>(
                         .find(|previous| previous.revision() == entities.revision())
                 });
             let mut index = TickPlanIndex::with_previous(projection, previous);
+            let chain = history.map(|history| history.chain(dimension));
             if index.entity_base.is_none()
                 && let Some(chain) = chain
             {
@@ -190,11 +191,10 @@ pub(crate) fn publish_with_registries_chain<'a>(
                     viewers
                         .iter()
                         .filter(|viewer| viewer.dimension == dimension)
-                        .filter_map(|viewer| viewer.previous_entities())
-                        .map(mc_core::boundary::EntityViews::revision),
+                        .filter_map(|viewer| viewer.previous_entities()),
                 );
-                if let Some((base, steps)) = bridge {
-                    index = TickPlanIndex::with_chain(projection, &steps, base);
+                if let Some((base, _, changed)) = bridge {
+                    index = TickPlanIndex::with_chain(projection, base, &changed);
                 }
             }
             (
@@ -202,11 +202,7 @@ pub(crate) fn publish_with_registries_chain<'a>(
                 index
                     .with_reveals(projection, cache.anti_xray())
                     .with_chunk_delta(chunk_deltas.get(&dimension).cloned().flatten())
-                    .with_chain_info(
-                        chain
-                            .map(crate::plan::PublicationChain::info)
-                            .unwrap_or_default(),
-                    ),
+                    .with_chain_info(chain.map(|chain| chain.info()).unwrap_or_default()),
             )
         })
         .collect();
