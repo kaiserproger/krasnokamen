@@ -8,4 +8,4 @@ source = "mc-core lib gate in wt/IntegB (.analysis/validation/20261120T033845-te
 repro = "cargo"
 regression = ["cargo:mc-core:native_checkpoint_crash_tests::append_failure_halts_tick_without_waiting_for_native_commit"]
 failing_first = "reported"
-fix_commit = "cbfe09803b56c31a927ac9833c22316efc2d2c2f"
+fix_commit = "a114070eeb332e5726b53ca012b4c642d4c94945"
