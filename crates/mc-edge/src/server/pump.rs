@@ -95,6 +95,7 @@ pub(super) async fn next_publication(
     loop {
         match rx.recv().await {
             Ok(out) if stale(&out, std::time::Instant::now(), || !rx.is_empty()) => {
+                server.dashboard.record_pump_stale_skipped(1);
                 skip_publications(server, viewers, chunk_cache, 1);
             }
             Ok(out) => return Some(out),

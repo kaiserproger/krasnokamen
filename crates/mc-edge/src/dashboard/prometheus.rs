@@ -55,6 +55,11 @@ pub(super) fn prometheus(state: &DashboardState) -> String {
         "krasnokamen_pump_skipped_ticks_total",
         snapshot.pump_skipped_ticks,
     );
+    prometheus_gauge(
+        &mut out,
+        "krasnokamen_pump_stale_skipped_ticks_total",
+        snapshot.pump_stale_skipped_ticks,
+    );
     out.push_str("# TYPE krasnokamen_journal_prune_failures_total counter\n");
     prometheus_gauge(
         &mut out,

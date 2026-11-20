@@ -129,13 +129,14 @@ def join_record(log_path: Path, username: str) -> dict[str, Any]:
 
 
 def witness(record: dict[str, Any], knob_on: bool, applied_rate: float | None,
-            skips_delta: int) -> tuple[bool, str]:
+            stale_skips: int, lagged_skips: int = 0) -> tuple[bool, str]:
     """Why an output is known to have aged past the publish budget, on either tree.
 
-    The fixed pump proves it directly: every `pump_skipped_ticks` increment is one output older than
-    the 1.6 s budget (`stale`). A pump without the skip proves it by its measured lag behind the
-    core (`core_tick_seen - pump_tick` over the confirmed tick rate). The knob's warn line alone,
-    a missing admission or an unconfirmed rate are inconclusive, never a symptom.
+    The fixed pump proves it with `pump_stale_skipped_ticks`: that counter moves only at the queue
+    budget (`stale`), never for a broadcast `Lagged` run. A pump without the budget skip proves it
+    by its measured lag behind the core (`core_tick_seen - pump_tick`) over the confirmed rate. A
+    `Lagged`-only skip, the knob's warn line alone, a missing admission or an unconfirmed rate are
+    inconclusive, never a symptom.
     """
     if not knob_on:
         return False, "the pump lag knob never ran: the lagging condition did not occur"
@@ -143,27 +144,28 @@ def witness(record: dict[str, Any], knob_on: bool, applied_rate: float | None,
         return False, "the server never confirmed an applied tick rate: the delay age in seconds is unknown"
     if not record.get("admitted"):
         return False, "the joining client never reached the server (no admission line): infrastructure, not a verdict"
-    if skips_delta > 0:
-        return True, (f"after {skips_delta} stale outputs skipped (each older than the "
-                      f"{PUBLISH_BUDGET_SECONDS:.1f} s budget) at {applied_rate:g} TPS")
+    if stale_skips > 0:
+        return True, (f"the pump skipped {stale_skips} outputs on the publish budget at "
+                      f"{applied_rate:g} TPS")
     lag = record.get("lag")
-    age = None if not lag else lag / applied_rate
-    if age is not None and age > PUBLISH_BUDGET_SECONDS:
-        return True, (f"the pump was {lag} ticks = {age:.2f} s behind at {applied_rate:g} TPS, "
-                      f"past the {PUBLISH_BUDGET_SECONDS:.1f} s budget")
-    return False, (f"neither a stale-output skip nor a delay past the {PUBLISH_BUDGET_SECONDS:.1f} s "
-                   f"budget was witnessed (lag {lag}, rate {applied_rate:g} TPS): the condition did not occur")
+    if lag is not None and applied_rate > 0 and lag / applied_rate > PUBLISH_BUDGET_SECONDS:
+        return True, (f"the pump was {lag} ticks = {lag / applied_rate:.2f} s behind at "
+                      f"{applied_rate:g} TPS, past the {PUBLISH_BUDGET_SECONDS:.1f} s budget")
+    if lagged_skips > 0:
+        return False, (f"only broadcast Lagged skips were counted ({lagged_skips}), not one on the "
+                       f"{PUBLISH_BUDGET_SECONDS:.1f} s budget: the condition did not occur")
+    return False, (f"neither a budget skip nor a delay past the {PUBLISH_BUDGET_SECONDS:.1f} s budget "
+                   f"was witnessed (lag {lag}, rate {applied_rate:g} TPS): the condition did not occur")
 
 
-def join_verdict(record: dict[str, Any], knob_on: bool, applied_rate: float | None, skips_delta: int,
-                 halt: str | None) -> tuple[bool | None, str]:
-    """Row 1 verdict: False only for a held join behind a witnessed over-budget publication; True for
-    a join inside the deadline behind it; anything unwitnessed is None."""
-    witnessed, info = witness(record, knob_on, applied_rate, skips_delta)
+def join_verdict(record: dict[str, Any], knob_on: bool, applied_rate: float | None,
+                 stale_skips: int, lagged_skips: int = 0) -> tuple[bool | None, str]:
+    """Row 1 verdict: False only for a join held past the deadline or timed out behind a witnessed
+    over-budget publication; True for a join inside the deadline behind it; else None. A core halt is
+    row 2's symptom and never makes row 1 false."""
+    witnessed, info = witness(record, knob_on, applied_rate, stale_skips, lagged_skips)
     if not witnessed:
         return None, info
-    if halt:
-        return False, f"the core halted during the delayed pump run: {halt}"
     landing = record.get("landed_seconds")
     if landing is not None:
         if float(landing) > JOIN_BOUND_SECONDS:
@@ -175,10 +177,10 @@ def join_verdict(record: dict[str, Any], knob_on: bool, applied_rate: float | No
     return None, "the join neither landed nor timed out inside the run: no verdict"
 
 
-def halt_verdict(knob_on: bool, record: dict[str, Any], applied_rate: float | None, skips_delta: int,
-                 tick_before: int, tick_after: int, halt: str | None) -> tuple[bool | None, str]:
+def halt_verdict(knob_on: bool, record: dict[str, Any], applied_rate: float | None,
+                 stale_skips: int, tick_before: int, tick_after: int, halt: str | None) -> tuple[bool | None, str]:
     """Row 2 verdict: False only for a halt or a stuck core behind the same witnessed publication."""
-    witnessed, info = witness(record, knob_on, applied_rate, skips_delta)
+    witnessed, info = witness(record, knob_on, applied_rate, stale_skips)
     if not witnessed:
         return None, info
     if halt:
@@ -266,12 +268,17 @@ def applied_tick_rate(chat: list[Any]) -> float | None:
     return None
 
 
-def _skips_now(dashboard_port: int) -> int:
-    """The pump's skipped-output counter, or 0 when the dashboard is silent."""
+def _skip_counters(dashboard_port: int) -> tuple[int, int]:
+    """(budget skips, all pump skips) from the dashboard, or zeros when it is silent.
+
+    The edge keeps `pump_stale_skipped_ticks` for the publish-budget `stale` path only, so the
+    difference `pump_skipped_ticks - stale` is the broadcast `Lagged` share.
+    """
     try:
-        return int(_stat(dashboard_port).get("pump_skipped_ticks") or 0)
+        stats = _stat(dashboard_port)
     except (OSError, ValueError):
-        return 0
+        return 0, 0
+    return int(stats.get("pump_stale_skipped_ticks") or 0), int(stats.get("pump_skipped_ticks") or 0)
 
 
 def _safe_tick(dashboard_port: int) -> int:
@@ -431,7 +438,6 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: int, ad
     try:
         a.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
         a.fixture(f"tick rate {tick_rate}")
-        a.fixture("gamemode creative @s")
         # The server confirms the applied rate in its own `/tick query` reply; the delay age in
         # seconds can only be computed against a confirmed rate.
         a.fixture("tick query")
@@ -459,14 +465,14 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: int, ad
         detail["halt_verdict"] = why
         detail.setdefault("verdicts", {})["live_pump_does_not_halt"] = why
         verdicts["live_pump_does_not_halt"] = ok
-        detail["join_verdict"] = f"the core halted before the join completed: {early_halt}"
+        detail["join_verdict"] = "no join was attempted before the halt: row 1 has no outcome here"
         detail.setdefault("verdicts", {})["join_behind_slow_pump"] = detail["join_verdict"]
-        verdicts["join_behind_slow_pump"] = ok
+        verdicts["join_behind_slow_pump"] = None
         return detail, verdicts
     detail["applied_tick_rate"] = applied_rate
     tick_before = _safe_tick(dashboard_port)
 
-    skips_before = _skips_now(dashboard_port)
+    skips_before = _skip_counters(dashboard_port)
     joiner_process, joiner_mcp = launch_joiner()
     try:
         joiner = ProbeSteps(joiner_mcp, artifact / "join-lag-joiner",
@@ -498,18 +504,20 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: int, ad
         stats_end = _stat(dashboard_port)
     except OSError:
         pass
-    skips_after = _skips_now(dashboard_port)
-    skips_delta = max(0, skips_after - skips_before)
-    detail["join_skips"] = [skips_before, skips_after]
+    skips_after = _skip_counters(dashboard_port)
+    stale_delta = max(0, skips_after[0] - skips_before[0])
+    lagged_delta = max(0, (skips_after[1] - skips_before[1]) - stale_delta)
+    detail["join_stale_skips"] = stale_delta
+    detail["join_lagged_skips"] = lagged_delta
     detail["join_ticks"] = [tick_before, tick_after]
     detail["publish"] = (stats_end or {}).get("publish")
     detail["tps_at_end"] = (stats_end or {}).get("tps")
     detail["halt_line"] = halt
-    ok, why = join_verdict(record, delayed, applied_rate, skips_delta, halt)
+    ok, why = join_verdict(record, delayed, applied_rate, stale_delta, lagged_delta)
     detail["join_verdict"] = why
     detail.setdefault("verdicts", {})["join_behind_slow_pump"] = why
     verdicts["join_behind_slow_pump"] = ok
-    ok2, why2 = halt_verdict(delayed, record, applied_rate, skips_delta, tick_before, tick_after, halt)
+    ok2, why2 = halt_verdict(delayed, record, applied_rate, stale_delta, tick_before, tick_after, halt)
     detail["halt_verdict"] = why2
     detail.setdefault("verdicts", {})["live_pump_does_not_halt"] = why2
     verdicts["live_pump_does_not_halt"] = ok2

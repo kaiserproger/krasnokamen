@@ -220,6 +220,9 @@ pub struct StatsSnapshot {
     /// Core ticks the pump skipped (`broadcast` lag) since start; nonzero
     /// means fanout, not the core, is behind.
     pub pump_skipped_ticks: u64,
+    /// Core ticks the pump skipped because they waited past the publish queue budget (the
+    /// `stale` path only; a broadcast `Lagged` run counts in `pump_skipped_ticks` alone).
+    pub pump_stale_skipped_ticks: u64,
     /// Chunk pipeline counters.
     pub chunks: DashboardChunks,
     /// Entity population totals.
@@ -425,6 +428,7 @@ struct StateInner {
     /// Pump publish time per tick, µs; ring buffer capped at 1200.
     publish_us: VecDeque<u64>,
     pump_skipped_ticks: u64,
+    pump_stale_skipped_ticks: u64,
     chunks: DashboardChunks,
     entities: DashboardEntities,
     coreperf_visibility: Option<CorePerfVisibility>,
