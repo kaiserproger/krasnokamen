@@ -216,14 +216,6 @@ pub(crate) static DELAY_CHECKPOINT_COMMIT: parking_lot::Mutex<
 pub(crate) static PANIC_CHECKPOINT_COMMIT: parking_lot::Mutex<Option<std::path::PathBuf>> =
     parking_lot::const_mutex(None);
 
-/// Per-world test hook: the next native checkpoint commit reports on this
-/// channel when it starts, so a test can order a fault against a commit that is
-/// already in flight instead of sleeping for it.
-#[cfg(test)]
-pub(crate) static CHECKPOINT_COMMIT_STARTED: parking_lot::Mutex<
-    Option<(std::path::PathBuf, std::sync::mpsc::Sender<()>)>,
-> = parking_lot::const_mutex(None);
-
 /// Per-world crash boundary after the durable native commit and before ACK/pruning.
 #[cfg(test)]
 static FAIL_CHECKPOINT_AFTER_NATIVE_COMMIT: std::sync::Mutex<Option<std::path::PathBuf>> =
