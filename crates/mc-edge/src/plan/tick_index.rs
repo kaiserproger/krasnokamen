@@ -72,7 +72,7 @@ pub(crate) struct EntityLink {
 #[derive(Default)]
 pub(crate) struct PublicationChain {
     /// `(link, ids the step changed)`, oldest first, contiguous.
-    links: std::collections::VecDeque<(EntityLink, Arc<[EntityId]>)>,
+    links: std::collections::VecDeque<(EntityLink, Arc<Vec<EntityId>>)>,
     bound: usize,
     /// Newest revision a broadcast `Lagged` dropped before it could be drained.
     lost_through: Option<u64>,
@@ -95,8 +95,10 @@ impl PublicationChain {
             return;
         }
         let Some(&(last, _)) = self.links.back() else {
-            self.links
-                .push_back((EntityLink { base, revision }, Arc::from(entities.changed())));
+            self.links.push_back((
+                EntityLink { base, revision },
+                Arc::clone(entities.changed_arc()),
+            ));
             return;
         };
         if last.revision == revision {
@@ -107,8 +109,10 @@ impl PublicationChain {
             // publish any more.
             self.links.clear();
         }
-        self.links
-            .push_back((EntityLink { base, revision }, Arc::from(entities.changed())));
+        self.links.push_back((
+            EntityLink { base, revision },
+            Arc::clone(entities.changed_arc()),
+        ));
         while self.links.len() > self.bound {
             self.links.pop_front();
         }

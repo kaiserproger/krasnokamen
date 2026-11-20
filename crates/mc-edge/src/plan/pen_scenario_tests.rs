@@ -389,6 +389,29 @@ fn count(row: &mut Publish, packets: &[PlannedPacket]) {
     row.packets += packets.len();
 }
 
+/// Plan one viewer with the fan-out's bridging rule and keep its packets.
+fn publish_now_packets(
+    out: &TickOutput,
+    viewer: &mut ViewerState,
+    history: &crate::plan::PublicationHistory,
+) -> (Vec<PlannedPacket>, usize) {
+    let previous = viewer.previous_entities().cloned();
+    let mut index = TickPlanIndex::with_previous(out, previous.as_ref());
+    let chain = history.chain(out.snapshot.dimension);
+    if index.entity_base.is_none()
+        && let Some((base, _, changed)) = TickPlanIndex::bridge(
+            chain,
+            out.snapshot.entities.revision(),
+            std::iter::once(previous.as_ref()).flatten(),
+        )
+    {
+        index = TickPlanIndex::with_chain(out, base, &changed);
+    }
+    let index = index.with_chain_info(chain.info()).with_reveals(out, None);
+    let (packets, _, teams) = plan_packets(out, viewer, &index);
+    (packets, teams)
+}
+
 /// Plan one viewer against a prepared index and keep its packets.
 fn plan_packets(
     out: &TickOutput,
@@ -536,9 +559,13 @@ fn a_skipped_window_delivers_what_a_full_rescan_delivers() {
 }
 
 /// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN faction fence: the bridge must send the
-/// net team state against the delivered base, not replay the steps. `1 → 2 → 1`
-/// must reach the same frames as a rescan, and a faction mob that spawns and
-/// dies inside the window must leave no team behind.
+/// net team state against the delivered base, not replay the steps.
+///
+/// The baseline really delivers faction 1 (the team and its member packet are
+/// in that publish), faction 2 is published in a skipped step, and the final
+/// snapshot leaves the resident in faction 2 while a faction-3 mob that spawned
+/// and died inside the window leaves nothing behind. A replay would invent
+/// team transitions the client never needed; the bridge must match the rescan.
 #[test]
 fn a_bridged_window_sends_the_net_faction_state() {
     let (mut store, slots) = pen_store();
@@ -548,19 +575,26 @@ fn a_bridged_window_sends_the_net_faction_state() {
     let mut bridged = pen_viewer(1, position);
     let mut rescanned = pen_viewer(2, position);
 
+    // Baseline: the resident is already in faction 1, so the viewer's first
+    // plan delivers team 1 and its member entry.
+    store.set_faction(slots[1], 1);
     step_scene(&mut store, &slots, &mut out, 0);
     history.record(&out);
+    let mut baseline_teams = 0;
     for viewer in [&mut bridged, &mut rescanned] {
         let previous = viewer.previous_entities().cloned();
         let mut index = TickPlanIndex::with_previous(&out, previous.as_ref());
         index = index.with_reveals(&out, None);
-        plan_packets(&out, viewer, &index);
+        let (_, _, teams) = plan_packets(&out, viewer, &index);
+        baseline_teams += teams;
     }
+    assert!(
+        baseline_teams > 0,
+        "the baseline publish must deliver faction 1, not just assume it"
+    );
 
-    // Step one: a resident joins faction 1, a faction-2 mob spawns beside the
-    // viewer. Step two: the resident moves to faction 2 and back to faction 1,
-    // and the faction-2 mob dies.
-    store.set_faction(slots[1], 1);
+    // Skipped step: the resident moves to faction 2 and a faction-3 mob spawns.
+    store.set_faction(slots[1], 2);
     let transient = store.spawn(
         EntityId(9_100),
         uuid::Uuid::from_u128(9_100),
@@ -587,11 +621,12 @@ fn a_bridged_window_sends_the_net_faction_state() {
             attack_reach: 1.0,
         },
     );
-    store.set_faction(transient, 2);
+    store.set_faction(transient, 3);
     step_scene(&mut store, &slots, &mut out, 1);
     history.record(&out);
-    store.set_faction(slots[1], 2);
-    store.set_faction(slots[1], 1);
+
+    // Second skipped step: the transient mob dies and the resident stays where
+    // it is, so the faction change is only visible in the first skipped step.
     store.remove(transient);
     step_scene(&mut store, &slots, &mut out, 2);
     history.record(&out);
@@ -608,20 +643,31 @@ fn a_bridged_window_sends_the_net_faction_state() {
     let (bridged_packets, _, bridged_teams) = plan_packets(&out, &mut bridged, &bridged_index);
     let (rescanned_packets, _, rescanned_teams) =
         plan_packets(&out, &mut rescanned, &TickPlanIndex::new(&out));
+    assert!(
+        rescanned_teams > 0,
+        "the final snapshot really moves the resident to faction 2: {rescanned_teams}"
+    );
+    assert_eq!(
+        bridged_teams, rescanned_teams,
+        "team frames must match the rescan's exactly: bridged={bridged_teams} rescanned={rescanned_teams}"
+    );
     assert_eq!(
         wire(&bridged_packets),
         wire(&rescanned_packets),
         "the bridge must reconcile teams exactly like the rescan"
     );
     assert_eq!(
-        bridged_teams, rescanned_teams,
-        "team frames must match the rescan's"
+        format!("{:?}", bridged.teams),
+        format!("{:?}", rescanned.teams),
+        "the client's team state must end identical, with no team from the mob that died"
     );
 }
 
-/// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN travel fence: a client that built a new
-/// level must not be bridged from the base it held before the travel, even when
-/// the chain spans it. `A → B → A` inside one publish is the dangerous case.
+/// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN travel fence: the real travel handler
+/// (`plan_player_changes` -> `plan_respawn`) must rebuild entity interest, so a
+/// resident that never moved is delivered again after `A → B → A` instead of
+/// being assumed still tracked. The production reset is the only thing under
+/// test here: removing it makes this fail.
 #[test]
 fn a_travelled_viewer_is_never_bridged_from_its_pre_travel_base() {
     let (mut store, slots) = pen_store();
@@ -632,12 +678,31 @@ fn a_travelled_viewer_is_never_bridged_from_its_pre_travel_base() {
     step_scene(&mut store, &slots, &mut out, 0);
     history.record(&out);
     publish_now(&out, std::slice::from_mut(&mut viewer), &history, &[0]);
-    let rescans = viewer.rescans;
-    // Out to another level and back before the next plan, exactly what
-    // `plan_respawn` does for a travel.
-    viewer.untrack_all();
-    viewer.entity_interest.forget();
-    viewer.loaded_chunks.clear();
+    let resident = EntityId(1_000 + 1);
+    assert!(
+        viewer.tracked_entities.contains_key(&resident),
+        "the resident is tracked before the travel"
+    );
+
+    // The outbound and return legs of the real dimension-change handler.
+    let travel = |viewer: &mut ViewerState, dimension| {
+        crate::plan::plan_player_changes(
+            &[mc_core::boundary::PlayerChange::DimensionChanged {
+                teleport_id: 1,
+                dimension,
+                position: [32.0, 64.0, 32.0],
+                yaw: 0.0,
+                pitch: 0.0,
+                game_mode: 0,
+                portal_cooldown: 0,
+            }],
+            viewer,
+        );
+    };
+    travel(&mut viewer, mc_core::dimensions::Dimension::Nether);
+    travel(&mut viewer, mc_core::dimensions::Dimension::Overworld);
+    // The client rebuilt its level; the pen it comes back to is unchanged for
+    // the resident, so only a rebuilt interest can deliver it again.
     viewer
         .loaded_chunks
         .extend(pen_viewer(1, [32.0, 64.0, 32.0]).loaded_chunks);
@@ -646,12 +711,28 @@ fn a_travelled_viewer_is_never_bridged_from_its_pre_travel_base() {
     history.record(&out);
     step_scene(&mut store, &slots, &mut out, 2);
     history.record(&out);
-    let row = publish_now(&out, std::slice::from_mut(&mut viewer), &history, &[0]);
-    assert_eq!(
-        row.rescans, 1,
-        "a travelled viewer rebuilds its interest from scratch: {row:?}"
+    let previous = viewer.previous_entities().cloned();
+    assert!(
+        previous.is_none(),
+        "the travel must have dropped the delivered base, not kept it for a bridge"
     );
-    assert_eq!(viewer.rescans, rescans + 1);
+    assert!(
+        !viewer.tracked_entities.contains_key(&resident),
+        "the travel cleared the client's entities"
+    );
+    let (packets, _) = publish_now_packets(&out, &mut viewer, &history);
+    let spawned = packets
+        .iter()
+        .filter(|packet| packet.id == mc_protocol::packets::play::AddEntity::ID)
+        .count();
+    assert!(
+        spawned > 0,
+        "the rebuilt interest must spawn the visible residents again, not assume them"
+    );
+    assert!(
+        viewer.tracked_entities.contains_key(&resident),
+        "the unchanged resident must be tracked again after the travel"
+    );
 }
 
 /// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN held-set fence: a chain never overrides a

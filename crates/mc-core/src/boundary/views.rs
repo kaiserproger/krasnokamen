@@ -44,6 +44,13 @@ impl EntityViews {
     pub fn changed(&self) -> &[EntityId] {
         &self.changed
     }
+
+    /// The changed list as its own `Arc`: a reader that keeps the ids (a pump's
+    /// publication history) shares this allocation instead of copying it, and
+    /// still pins no page of the view.
+    pub fn changed_arc(&self) -> &Arc<Vec<EntityId>> {
+        &self.changed
+    }
     /// Preserve the publication order: signed chunk coordinates, then wire ID.
     pub fn iter(&self) -> EntityViewIter<'_> {
         EntityViewIter {
