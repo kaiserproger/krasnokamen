@@ -677,6 +677,12 @@ fn refresh(world: &mut TickState, output: &mut TickOutput, mut changes: ChangeSe
     snapshot.raining = world.weather.0 != crate::commands::Weather::Clear;
     snapshot.rain_level = world.rain_level;
     snapshot.thunder_level = world.thunder_level;
+    // Coordinator writers (a respawn consuming an anchor charge, a command
+    // placing a block directly) leave their post-images in the overlay. Fold
+    // them so every block change appended below ships in this chunk image and
+    // revision: the edge explains a later revision by that tick's own block
+    // and light changes, so a fold left to the next tick is never resent.
+    world.world.fold_overlay();
     snapshot.chunks = world.world.snapshot();
     let chunks_done = phase_start.map(|start| start.elapsed()).unwrap_or_default();
     if entity_changes {
