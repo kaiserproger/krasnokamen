@@ -1,0 +1,10 @@
+[[bug]]
+id = "APPEND-HALT-TEST-ORDERS-WITH-SLEEP"
+title = "`append_failure_halts_tick_without_waiting_for_native_commit` orders the append failure with a 400 ms sleep against a 2 s injected commit delay, so under parallel load the failure can land before the checkpoint handoff and `done_rx::recv` panics with `RecvError`"
+area = "harness"
+severity = "major"
+status = "open"
+source = "mc-core lib gate in wt/IntegB (.analysis/validation/20261120T033845-test-u4f1jvf4/test.log:1260-1262): `crates/mc-core/src/native_checkpoint_crash_tests.rs:738` panicked `called Result::unwrap() on an Err value: RecvError` after `crates/mc-core/src/native_checkpoint_crash_tests.rs:721` slept 400 ms hoping the journal had already handed the checkpoint to the delayed native writer; passed in isolation on the same tree (receipt 20261120T040801-test-ipuixbe1)."
+repro = "cargo"
+regression = ["cargo:mc-core:native_checkpoint_crash_tests::append_failure_halts_tick_without_waiting_for_native_commit"]
+failing_first = "reported"

@@ -696,6 +696,10 @@ fn live_journal_with_checkpoint(config: &CoreConfig) -> LiveJournal {
 }
 
 /// Keep appending until the journal's receiver is gone; returns how long that took.
+///
+/// The queue is bounded, so a `send` blocks while the journal is busy and
+/// returns as soon as it has halted: the wait is on the journal itself, not on
+/// a polling interval. `limit` bounds a journal that never halts.
 fn time_to_halt(live: &LiveJournal, limit: std::time::Duration) -> Option<std::time::Duration> {
     let started = std::time::Instant::now();
     for offset in 2.. {
@@ -705,7 +709,6 @@ fn time_to_halt(live: &LiveJournal, limit: std::time::Duration) -> Option<std::t
         if started.elapsed() > limit {
             return None;
         }
-        std::thread::sleep(std::time::Duration::from_millis(10));
     }
     None
 }
@@ -717,25 +720,59 @@ fn append_failure_halts_tick_without_waiting_for_native_commit() {
     let directory = tempfile::tempdir().unwrap();
     let config = CoreConfig::new(directory.path().to_path_buf(), 42);
     let delay = std::time::Duration::from_millis(2000);
+    let (commit_started_tx, commit_started_rx) = std::sync::mpsc::channel();
+    *crate::core::CHECKPOINT_COMMIT_STARTED.lock() =
+        Some((config.world_dir.clone(), commit_started_tx));
     *crate::core::DELAY_CHECKPOINT_COMMIT.lock() = Some((config.world_dir.clone(), delay));
     let live = live_journal_with_checkpoint(&config);
-    // Let the journal thread gate and hand the checkpoint to the native writer.
-    std::thread::sleep(std::time::Duration::from_millis(400));
+    // The fault is injected once the native writer reports the commit it is
+    // holding, so the append failure orders against a commit that is really in
+    // flight instead of against a guessed delay.
+    commit_started_rx
+        .recv_timeout(delay * 5)
+        .expect("the journal must hand its checkpoint to the native writer");
     *FAIL_JOURNAL_APPEND.lock().unwrap() = Some(config.world_dir.clone());
     live.tx.send(append_work(live.tick + 1)).unwrap();
-    let halted = time_to_halt(&live, delay * 2);
+    // The journal drops its receiver the moment the append fails, but its
+    // scoped thread still joins the in-flight native commit: the event to wait
+    // on is the receiver's disappearance, which `send` reports. A bounded
+    // helper thread makes that wait interruptible without polling intervals.
+    let next_tick = live.tick + 2;
+    let started = std::time::Instant::now();
+    let LiveJournal {
+        journal: _journal,
+        done_rx,
+        tx,
+        ..
+    } = live;
+    let deadline = started + delay * 2;
+    let (exited_tx, exited_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        while std::time::Instant::now() < deadline {
+            if tx.send(append_work(next_tick)).is_err() {
+                let _ = exited_tx.send(());
+                return;
+            }
+        }
+    });
+    let halted = exited_rx
+        .recv_timeout(delay)
+        .ok()
+        .map(|()| started.elapsed());
     *FAIL_JOURNAL_APPEND.lock().unwrap() = None;
     *crate::core::DELAY_CHECKPOINT_COMMIT.lock() = None;
-    let LiveJournal {
-        journal, done_rx, ..
-    } = live;
-    journal.join().unwrap();
     assert!(
         halted.is_some_and(|elapsed| elapsed < delay / 2),
-        "tick send kept blocking after the append failure: {halted:?}"
+        "the journal did not halt at once after the append failure: {halted:?}"
     );
     // The in-flight checkpoint was gated before the failure and still completes.
-    assert!(done_rx.recv().unwrap().is_some());
+    assert!(
+        done_rx
+            .recv_timeout(delay * 2)
+            .expect("the in-flight native commit must report on `done`")
+            .is_some(),
+        "the gated checkpoint must still complete after the halt"
+    );
 }
 
 /// A panicking native writer must fail closed: the job reports failure and the

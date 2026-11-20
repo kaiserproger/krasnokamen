@@ -1194,6 +1194,14 @@ pub(super) fn commit_checkpoint(
 ) -> Result<CheckpointWrite, CoreError> {
     let written = job.regions.written();
     #[cfg(test)]
+    if let Some(started) = CHECKPOINT_COMMIT_STARTED
+        .lock()
+        .take_if(|(dir, _)| dir.as_path() == _world_dir)
+        .map(|(_, started)| started)
+    {
+        let _ = started.send(());
+    }
+    #[cfg(test)]
     {
         let delay = DELAY_CHECKPOINT_COMMIT
             .lock()
