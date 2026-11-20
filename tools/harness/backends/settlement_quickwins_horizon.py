@@ -1,15 +1,23 @@
-"""Owner-path acceptance of the settlement quick wins on the owner's client: Horizon 26.3.
+"""Settlement quick wins on the owner's client, Horizon 26.3 — harness profile `settlement-quickwins-horizon`.
 
-A bounded adapter, not a harness profile. It starts a release server (KRASNOKAMEN_SERVER_BINARY), an
-Xvfb display and the pinned Horizon client (`--offscreen`, control socket), then runs the SAME walk
-(`settlement_quickwins_qa.Walk`, `settlement_quickwins_steps.BLOCKS`, the same 33 criteria) with the
+`python3 -m tools.harness run settlement-quickwins-horizon --timeout-seconds N -- [args]` starts the
+server through the harness `Server` (pinned `KRASNOKAMEN_SERVER_BINARY`), an Xvfb display and the
+pinned Horizon client (`--offscreen`, control socket), then runs the SAME walk
+(`settlement_quickwins_qa.Walk`, `settlement_quickwins_steps.BLOCKS`, the same criteria) with the
 perception and input of Horizon's own agent-control tools (`horizon-ctl mcp`): `state`/`screen`/`ui`
 for the open dialog or chest menu, `click_at` / `click` (a mouse press at GUI pixels) for every GUI
 press, `mouse right click` on the bell, `key esc` to close. Fixtures (pad, bell, house, chest stock)
 go through `command`, as in the other clients. Horizon has no `ui_nodes`: the dialog's body, buttons
 and inputs come from `state.dialog.open` and the button rectangles from `ui`.
 
-    python3 -m tools.harness.backends.settlement_quickwins_horizon OUT_DIR [--survey]
+Every process lives in the `ExitStack` of `run`, so a failure at any step (including the server or
+Xvfb start) stops what was started; the harness writes `result.json` with the tree fingerprint and
+this module records the server binary path and its sha256, so the receipt names the pin the walk ran
+against. `Probe.wait` is a push: it observes, and if the predicate still fails it blocks on the
+client's `wait-for state-change --since REV` (the `state.revision` the QA kit adds over the film pin),
+which moves when the dialog, the position, a tracked entity or a block write changes. A `ru_ru` run
+refuses before connect when the client's resources lack `assets/minecraft/lang/ru_ru.json`, because
+such a client shows English item names next to the server's Russian text.
 """
 from __future__ import annotations
 
@@ -20,19 +28,29 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Callable
 
+from .. import runtime
+from ..profiles import ProfileContext
+from .gameplay import prepare_operator_fixture
+from .horizon_lod import Server
+
 W = Path("/run/media/kaiserroman/games/solaris-work")
 HZ_TOOLS = W / "targets/hz-bots/tools"
-CLIENT = W / "receipts/HzBattlePrep/client-pin/horizon-client"
-CTL = W / "receipts/HzBattlePrep/client-pin/horizon-ctl"
-RESOURCES = W / "targets/hzbattleprep-hz/.local/horizon-client/26.3"
+CLIENT = Path(os.environ.get("KRASNOKAMEN_HORIZON_CLIENT",
+                             W / "receipts/HzBattlePrep/client-pin/horizon-client"))
+CTL = Path(os.environ.get("KRASNOKAMEN_HORIZON_CTL", W / "receipts/HzBattlePrep/client-pin/horizon-ctl"))
+RESOURCES = Path(os.environ.get("KRASNOKAMEN_HORIZON_RESOURCES",
+                                W / "targets/hzbattleprep-hz/.local/horizon-client/26.3"))
 NAME = "HzQw"
 SIZE = (1280, 720)
 SCALE = 3
+SEED = 100
 DIALOG_CLASS = "net.minecraft.client.gui.screens.dialog.MultiButtonDialogScreen"
 CONTAINER_CLASS = "net.minecraft.client.gui.screens.inventory.ContainerScreen"
 CHEST_MENU = "net.minecraft.world.inventory.ChestMenu"
@@ -177,12 +195,12 @@ class Gui:
 class Probe:
     """The `ProbeSteps` surface the walk uses, over Horizon's tools."""
 
-    def __init__(self, hz: Any, artifact: Path) -> None:
+    def __init__(self, hz: Any, artifact: Path, deadline_seconds: float = 3300) -> None:
         self.hz, self.artifact_dir = hz, artifact
         self.report: dict[str, Any] = {"id": "quickwins-horizon", "assertions": {}, "fixture_commands": []}
         self.transcript: list[dict[str, Any]] = []
         self.client = None
-        self.deadline = time.monotonic() + 3300
+        self.deadline = time.monotonic() + deadline_seconds
 
     def remaining(self) -> float:
         left = self.deadline - time.monotonic()
@@ -286,132 +304,237 @@ class Probe:
         out["ui_nodes"] = nodes
         return out
 
+    def revision(self) -> int:
+        """The observable-state revision `state` reports (dialog, position, entities, blocks)."""
+        state = self.hz("state")
+        revision = state.get("revision") if isinstance(state, dict) else None
+        if revision is None:
+            raise RuntimeError(f"Horizon state reports no revision: {state}")
+        return int(revision)
+
+    def push(self, observed: int, remaining: float) -> None:
+        """Block until the client publishes the next observable-state revision.
+
+        Horizon's `wait-for state-change` is a push: the client answers once its dialog, the
+        player's position, a tracked entity or a block write changes, so the walk never polls a
+        wall clock. The tool's own timeout is the only error, and the caller re-checks its step
+        deadline after it.
+        """
+        reply = self.hz("wait_for", condition="state-change", since=observed,
+                        timeout=min(30.0, max(0.1, remaining)))
+        if not isinstance(reply, dict):
+            raise RuntimeError(f"Horizon wait_for state-change returned {reply!r}")
+        if reply.get("kind") == "timeout":
+            return
+        if reply.get("error"):
+            raise RuntimeError(f"Horizon wait_for state-change failed: {reply['error']}")
+
     def wait(self, predicate: Callable[[dict[str, Any]], bool], label: str, *, wait_for_play: bool = False,
              outside_play: bool = False, timeout_seconds: float | None = None) -> dict[str, Any]:
         deadline = time.monotonic() + (timeout_seconds or 120)
         while True:
+            observed = self.revision()
             state = self.observe()
             if predicate(state):
                 self.report["assertions"][label] = True
                 return state
-            if time.monotonic() >= deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 self.report["assertions"][label] = False
                 raise TimeoutError(f"timed out waiting for {label}")
-            time.sleep(0.25)
+            self.push(observed, remaining)
 
 
 def shown_title(hz: Any, kind: str) -> str:
     return str(hz("screen").get("title", ""))
 
 
-# ----------------------------------------------------------------------------- hosting
+# ----------------------------------------------------------------------------- lifecycle
 
 
-def host(out: Path):
-    """Server + Xvfb + Horizon client. Returns (processes, address, socket, env, cwd)."""
-    sys.path[:0] = [str(W / "solaris"), str(HZ_TOOLS)]
-    from tools.harness import runtime
-    core = W / "solaris"
-    pin = Path(os.environ["KRASNOKAMEN_SERVER_BINARY"])
-    port = runtime.reserve_port()
-    for sub in ("home", "xdg-data", "xdg-config", "runtime", "plugins"):
-        (out / sub).mkdir(parents=True, exist_ok=True, mode=0o700)
-    conf = (core / "example.toml").read_text()
-    for old, new in [('\nbind_address = "0.0.0.0"', '\nbind_address = "127.0.0.1"'),
-                     ("\nport = 25565\n# Per-address", f"\nport = {port}\n# Per-address"),
-                     ('world_dir = "world"', f'world_dir = {json.dumps(str(out / "world"))}'),
-                     ('directory = "plugins"', f'directory = {json.dumps(str(out / "plugins"))}'),
-                     ("seed = 0", "seed = 100")]:
-        assert conf.count(old) == 1, old
-        conf = conf.replace(old, new, 1)
-    (out / "server.toml").write_text(conf + "\n")
-    offline = uuid.UUID(bytes=hashlib.md5(f"OfflinePlayer:{NAME}".encode(), usedforsecurity=False).digest(), version=3)
-    (out / "ops.json").write_text(json.dumps([{"uuid": str(offline), "name": NAME, "level": 4, "bypassesPlayerLimit": False}]))
-    (out / "home/options.txt").write_text("onboardAccessibility:false\nlang:ru_ru\nguiScale:3\n")
-    env = os.environ.copy()
-    sock = Path("/tmp") / f"hzqw-{uuid.uuid4().hex}.sock"
-    env.update(HOME=str(out / "home"), HORIZON_HOME=str(out / "home"), HORIZON_LAUNCHER_HOME=str(out / "home/launcher"),
-               XDG_DATA_HOME=str(out / "xdg-data"), XDG_CONFIG_HOME=str(out / "xdg-config"),
-               XDG_RUNTIME_DIR=str(out / "runtime"), KRASNOKAMEN_CONTENT_CACHE=str(core / "data/vanilla/26.3"),
-               HORIZON_NO_AUDIO="1", ALSOFT_DRIVERS="null", HORIZON_NO_DISCORD="1", HORIZON_TELEMETRY_URL="off",
-               HORIZON_TEST_LOOPBACK="1")
-    sl, cl = (out / "server.log").open("wb"), (out / "client.log").open("wb")
-    server = runtime.start_server([str(pin), "--config", str(out / "server.toml"), "--no-console"], cwd=out, env=env,
-                                  stdout=sl, stderr=subprocess.STDOUT, start_new_session=True)
-    runtime.wait_port(port, 180, server, log_path=out / "server.log")
-    display, display_name_, _ = runtime.start_xvfb(out)
-    env["DISPLAY"] = display_name_
-    game = subprocess.Popen([str(CLIENT), "--resources", str(RESOURCES), "--offscreen", "--control-socket", str(sock)],
-                            cwd=out / "home", env=env, stdout=cl, stderr=subprocess.STDOUT, start_new_session=True)
-    runtime._wait_for_file(sock, 300, game)
-    return runtime, (server, display, game), f"127.0.0.1:{port}", sock, env, out / "home"
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("out", type=Path)
-    parser.add_argument("--survey", action="store_true")
-    args = parser.parse_args()
-    args.language = "ru_ru"
-    out = args.out.resolve()
-    out.mkdir(parents=True, exist_ok=True)
-    runtime, (server, display, game), address, sock, env, home = host(out)
-    hz = None
-    verdict = {"status": "error"}
+def validate_args(ctx: ProfileContext) -> tuple[argparse.Namespace, float]:
+    parser = argparse.ArgumentParser(prog="settlement-quickwins-horizon")
+    parser.add_argument("--horizon-client", type=Path, default=CLIENT)
+    parser.add_argument("--horizon-ctl", type=Path, default=CTL)
+    parser.add_argument("--horizon-resources", type=Path, default=RESOURCES)
+    parser.add_argument("--survey", action="store_true",
+                        help="run every block and record unmet criteria instead of stopping at the first")
     try:
-        import agent_control_e2e as upstream
-        raw = upstream.Mcp(CTL, sock, home, env)
+        args = parser.parse_args(ctx.extra_args)
+    except SystemExit as error:
+        raise ValueError("invalid settlement-quickwins-horizon arguments") from error
+    for key in ("client", "ctl"):
+        path = getattr(args, f"horizon_{key}")
+        if not path.is_file() or not os.access(path, os.X_OK):
+            raise ValueError(f"--horizon-{key} (or KRASNOKAMEN_HORIZON_{key.upper()}) must name an "
+                             f"existing Horizon executable: {path}")
+    if not args.horizon_resources.is_dir():
+        raise ValueError("--horizon-resources (or KRASNOKAMEN_HORIZON_RESOURCES) must name Horizon's "
+                         f"26.3 resources folder: {args.horizon_resources}")
+    if ctx.platform is not None or ctx.plugins_dir is not None:
+        raise ValueError("settlement-quickwins-horizon runs the bare server without Loader/plugins")
+    args.language = "ru_ru"
+    if args.language != "en_us" and not language_file(args.horizon_resources, args.language).is_file():
+        raise RuntimeError(
+            f"Horizon resources have no assets/minecraft/lang/{args.language}.json "
+            f"({args.horizon_resources}): the client would translate its own text (item names, "
+            f"tooltips) into en_us while the server sends {args.language} literals, so the run is "
+            "not evidence; repair the resources (the QA kit ships the repaired language file)")
+    timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 3600.0
+    if not timeout > 0:
+        raise ValueError("timeout must be positive")
+    return args, timeout
 
-        def hz_call(tool: str, **arguments: Any) -> dict[str, Any]:
-            reply = raw(tool, **arguments)
-            image = reply.pop("_image", None)
-            if tool == "screenshot" and image is not None:  # the MCP tool returns the PNG; keep it where the walk asked
-                Path(arguments["path"]).write_bytes(image)
-            return reply
-        hz = hz_call
-        hz("connect", address=address, name=NAME)
-        hz("wait_for", condition="loaded", timeout=400)
-        hz("wait_ready", seconds=400)
-        shots = out / "screenshots"
+
+def language_file(resources: Path, language: str) -> Path:
+    """Where Horizon keeps one of its translations (`assets/minecraft/lang/<locale>.json`)."""
+    return resources / "assets" / "minecraft" / "lang" / f"{language}.json"
+
+
+def server_config_text(port: int, world: Path, plugins: Path) -> str:
+    """The walk's server: its own loopback port, world and empty plugins folder."""
+    config = (runtime.REPO_ROOT / "example.toml").read_text()
+    for old, new in [
+        ('\nbind_address = "0.0.0.0"', '\nbind_address = "127.0.0.1"'),
+        ("\nport = 25565\n# Per-address", f"\nport = {port}\n# Per-address"),
+        ('world_dir = "world"', f'world_dir = {json.dumps(str(world))}'),
+        ('directory = "plugins"', f'directory = {json.dumps(str(plugins))}'),
+        ("seed = 0", f"seed = {SEED}"),
+    ]:
+        assert config.count(old) == 1, old
+        config = config.replace(old, new, 1)
+    return config + "\n"
+
+
+def client_env(artifact: Path, display: str) -> dict[str, str]:
+    """Horizon's own HOME/XDG tree under the artifact, Russian GUI at scale 3, null audio."""
+    for sub in ("home", "xdg-data", "xdg-config", "runtime"):
+        (artifact / sub).mkdir(parents=True, exist_ok=True, mode=0o700)
+    home = artifact / "home"
+    (home / "options.txt").write_text("onboardAccessibility:false\nlang:ru_ru\nguiScale:3\n")
+    env = os.environ.copy()
+    env.update(
+        HOME=str(home), HORIZON_HOME=str(home), HORIZON_LAUNCHER_HOME=str(home / "launcher"),
+        XDG_DATA_HOME=str(artifact / "xdg-data"), XDG_CONFIG_HOME=str(artifact / "xdg-config"),
+        XDG_RUNTIME_DIR=str(artifact / "runtime"), DISPLAY=display,
+        HORIZON_NO_AUDIO="1", ALSOFT_DRIVERS="null", HORIZON_NO_DISCORD="1",
+        HORIZON_TELEMETRY_URL="off", HORIZON_TEST_LOOPBACK="1",
+    )
+    return env
+
+
+def control(ctl: Path, socket: Path, home: Path, env: dict[str, str]) -> Any:
+    """`horizon-ctl mcp` over the control socket (a seam: tests replace it)."""
+    sys.path[:0] = [str(HZ_TOOLS)]
+    import agent_control_e2e as upstream
+
+    return upstream.Mcp(ctl, socket, home, env)
+
+
+def walk(ctx: ProfileContext, args: argparse.Namespace, raw: Any, address: str, artifact: Path,
+         timeout: float) -> dict[str, Any]:
+    """The quick-wins walk over Horizon's tools; `scenario.json` is written even when it stops."""
+    verdict: dict[str, Any] = {"status": "error"}
+    probe: Probe | None = None
+
+    def hz_call(tool: str, **arguments: Any) -> dict[str, Any]:
+        reply = raw(tool, **arguments)
+        image = reply.pop("_image", None)
+        if tool == "screenshot" and image is not None:
+            Path(arguments["path"]).write_bytes(image)
+        return reply
+
+    try:
+        hz_call("connect", address=address, name=NAME)
+        hz_call("wait_for", condition="loaded", timeout=timeout)
+        hz_call("wait_ready", seconds=timeout)
+        shots = artifact / "screenshots"
         shots.mkdir(exist_ok=True)
-        probe = Probe(hz, shots)
+        probe = Probe(hz_call, shots, deadline_seconds=timeout)
         from . import settlement_quickwins_qa as qa
         from . import settlement_quickwins_steps as steps
         gui = Gui(probe)
-        walk = qa.Walk(probe, shots, gui, args)
-        walk.evidence["client"] = "horizon"
+        session = qa.Walk(probe, shots, gui, args)
+        session.evidence["client"] = "horizon"
         try:
-            steps.setup(walk)
+            steps.setup(session)
             for name, criteria, block in steps.BLOCKS:
-                steps.run_block(walk, name, criteria, block)
-            unmet = [cid for cid in qa.CRITERIA if not walk.results.get(cid, {}).get("ok")]
+                steps.run_block(session, name, criteria, block)
+            unmet = [cid for cid in qa.CRITERIA if not session.results.get(cid, {}).get("ok")]
             probe.check("QW all", not unmet)
             verdict = {"status": "passed"}
         except BaseException as error:
             verdict = {"status": "failed", "error": f"{type(error).__name__}: {error}"}
             raise
-        finally:
-            (out / "scenario.json").write_text(json.dumps({"quickwins": probe.report["quickwins"],
-                                                           "assertions": probe.report["assertions"],
-                                                           "fixture_commands": probe.report["fixture_commands"],
-                                                           "gui_clicks": probe.report.get("gui_clicks", []),
-                                                           "fixture_retries": probe.report.get("fixture_retries", []),
-                                                           **verdict}, ensure_ascii=False, indent=1, default=str) + "\n")
     finally:
-        if hz is not None:
-            for stop in (lambda: hz("quit"), lambda: raw.close()):
-                try:
-                    stop()
-                except Exception:
-                    pass
-        runtime.stop_process(game)
-        sock.unlink(missing_ok=True)
-        runtime.stop_process(display)
-        runtime.stop_process(server, interrupt=True)
-        (out / "result.json").write_text(json.dumps(verdict) + "\n")
-    print(json.dumps(verdict))
-    return 0 if verdict["status"] == "passed" else 1
+        report = probe.report if probe is not None else {"quickwins": {}, "assertions": {}, "fixture_commands": []}
+        (artifact / "scenario.json").write_text(json.dumps({
+            "quickwins": report.get("quickwins", {}), "assertions": report.get("assertions", {}),
+            "fixture_commands": report.get("fixture_commands", []),
+            "gui_clicks": report.get("gui_clicks", []),
+            "fixture_retries": report.get("fixture_retries", []),
+            **verdict,
+        }, ensure_ascii=False, indent=1, default=str) + "\n")
+    return verdict
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+def run(ctx: ProfileContext) -> dict[str, Any]:
+    """`settlement-quickwins-horizon`: the walk on the pinned Horizon client, owned by the harness."""
+    args, timeout = validate_args(ctx)
+    from ..profiles import _server_binary
+
+    artifact = ctx.artifact_dir
+    artifact.mkdir(parents=True, exist_ok=True)
+    binary = _server_binary(ctx, "server-build.log")
+    with binary.open("rb") as source:
+        digest = hashlib.file_digest(source, "sha256").hexdigest()
+    ctx.client_evidence.update(server_binary_path=str(binary), server_binary_sha256=digest,
+                               horizon_client=str(args.horizon_client),
+                               horizon_resources=str(args.horizon_resources))
+    prepare_operator_fixture(ctx, [NAME])
+    world, plugins = artifact / "world", artifact / "plugins"
+    world.mkdir(exist_ok=True)
+    plugins.mkdir(exist_ok=True)
+    port = runtime.reserve_port()
+    report: dict[str, Any] = {
+        "scope": "the settlement quick wins walk on the pinned Horizon client (offscreen, harness Xvfb)",
+        "verdict": {"status": "error"},
+    }
+    ctx.client_evidence["settlement_quickwins_horizon"] = report
+    with ExitStack() as cleanup:
+        socket_dir = Path(cleanup.enter_context(tempfile.TemporaryDirectory(prefix="hzqw-ctl-", dir="/tmp")))
+        socket = socket_dir / "ctl.sock"
+        server = Server(ctx, binary, artifact, "server", server_config_text(port, world, plugins), port)
+        with runtime.phase("server_start"):
+            server.start()
+            cleanup.callback(server.stop)
+            server.wait_ready(timeout)
+        xvfb, display, xvfb_log = runtime.start_xvfb(artifact)
+        cleanup.callback(xvfb_log.close)
+        cleanup.callback(runtime.stop_process, xvfb)
+        env = client_env(artifact, display)
+        home = artifact / "home"
+        client_log = cleanup.enter_context((artifact / "client.log").open("wb"))
+        command = [str(args.horizon_client), "--resources", str(args.horizon_resources),
+                   "--offscreen", "--control-socket", str(socket)]
+        ctx.commands.append(command)
+        ctx.cwds.append(str(home))
+        ctx.exits.append(None)
+        ctx.logs.append(str(artifact / "client.log"))
+        index = len(ctx.commands) - 1
+        client = subprocess.Popen(command, cwd=home, env=env, stdout=client_log,
+                                  stderr=subprocess.STDOUT, start_new_session=True)
+
+        def stop_client() -> None:
+            runtime.stop_process(client)
+            ctx.exits[index] = client.returncode
+
+        cleanup.callback(stop_client)
+        runtime._wait_for_file(socket, timeout, client)
+        raw = control(args.horizon_ctl, socket, home, env)
+        cleanup.callback(raw.close)
+        report["verdict"] = walk(ctx, args, raw, f"127.0.0.1:{port}", artifact, timeout)
+    if report["verdict"]["status"] != "passed":
+        raise RuntimeError("settlement quick wins on Horizon failed: "
+                           + str(report["verdict"].get("error", report["verdict"]["status"])))
+    return report

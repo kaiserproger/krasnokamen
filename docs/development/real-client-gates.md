@@ -858,6 +858,21 @@ the Settings dialog or the map territory.
   coordinate form of `/settlement building certify`. Tab-completion denial has no native or Java client
   tool; the command tree is covered by the `mc-edge` `command_tree` tests.
 
+## Settlement quick wins on Horizon (`settlement-quickwins-horizon`)
+
+`python3 -m tools.harness run settlement-quickwins-horizon --timeout-seconds 3600` runs the same
+quick-wins walk as `settlement-map-qa --scenario quickwins` on the pinned Horizon 26.3 client
+(`--offscreen` under the harness Xvfb; `KRASNOKAMEN_HORIZON_CLIENT|CTL|RESOURCES` or
+`--horizon-client|--horizon-ctl|--horizon-resources`). The harness owns the server (a `Server` with
+its own loopback port, world and empty plugins folder), the Xvfb display and the client in one
+`ExitStack`; a failure at any step stops what was started, and the receipt names the tree fingerprint
+and the server binary path and sha256. Waits are pushes: `Probe.wait` observes and then blocks on the
+client's `wait-for state-change --since REV` (`state.revision`, a read-only extension carried by the QA
+kit at `targets/horizon-qa-kit`), which moves when the dialog, the position, a tracked entity or a
+block write changes. A `ru_ru` run refuses before connect when the client's resources lack
+`assets/minecraft/lang/ru_ru.json` (the film resources carry only `en_us`, so the outcome showed
+English item names next to Russian server text).
+
 ## Distant Horizons gate (`dh-gate`)
 
 `python3 -m tools.harness run dh-gate --platform fabric|neoforge` runs a real
