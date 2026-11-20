@@ -756,8 +756,12 @@ fn enospc_at_every_transfer_wal_byte_refuses_partial_custody() {
     let bytes = batch.frame_len();
     drop(drill);
     let mut actual_faults = 0;
+    // The world's identity does not change while the copy is refused, and
+    // resolving it rebuilds the whole block registry: once, not per byte.
+    let identity = crate::journal::tail_identity(directory.path());
     for cut in 0..=bytes {
-        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
+        let mut writer =
+            JournalWriter::open_test_with_identity(directory.path(), 1, identity).unwrap();
         crate::journal::WAL_WRITE_FAILURE.set(Some(cut));
         let error = writer
             .append(batch.tick, batch.tick, &batch.entries)
