@@ -774,7 +774,7 @@ fn append_failure_halts_tick_without_waiting_for_native_commit() {
     live.tx.send(append_work(live.tick + 1)).unwrap();
     let next_tick = live.tick + 2;
     let LiveJournal {
-        journal: _journal,
+        journal,
         done_rx,
         tx,
         ..
@@ -812,6 +812,10 @@ fn append_failure_halts_tick_without_waiting_for_native_commit() {
             .is_some(),
         "the gated checkpoint must still complete after the halt"
     );
+    // The ACK precedes the crash-point prune and the scope's join, so the
+    // journal thread runs on after it: join it so a late panic cannot hide
+    // behind the tempdir teardown.
+    journal.join().expect("journal thread must exit cleanly");
 }
 
 /// A panicking native writer must fail closed: the job reports failure and the
