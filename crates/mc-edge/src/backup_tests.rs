@@ -492,6 +492,24 @@ fn utc_stamp_formats_known_instants() {
     assert_eq!(utc_stamp(1_709_164_800), "20240229T000000Z");
 }
 
+/// Write a serving configuration the way an operator runs `restore`: the file
+/// names the content cache and the plugin deployment, and the command must read
+/// it instead of falling back to defaults.
+fn restore_config(root: &Path, world: &Path) -> PathBuf {
+    let content = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    let path = root.join("operator.toml");
+    std::fs::write(
+        &path,
+        format!(
+            "[data]\nworld_dir = \"{}\"\nseed = 42\nvanilla_data_dir = \"{}\"\n",
+            world.display(),
+            content.display()
+        ),
+    )
+    .unwrap();
+    path
+}
+
 fn live_config(world: PathBuf) -> mc_core::CoreConfig {
     let mut config = mc_core::CoreConfig::new(world, 42);
     config.vanilla_data_dir =
@@ -630,8 +648,11 @@ async fn the_restore_command_accepts_a_hot_backup_verified_with_content() {
     drop(core);
 
     let restored = root.path().join("restored");
+    let mut cfg = restore_config(root.path(), &restored);
     let cli = crate::operator_cli::Cli::try_parse_from([
         "krasnokamen",
+        "--config",
+        cfg.to_str().unwrap(),
         "restore",
         "--from",
         path.to_str().unwrap(),
@@ -639,9 +660,7 @@ async fn the_restore_command_accepts_a_hot_backup_verified_with_content() {
         restored.to_str().unwrap(),
     ])
     .unwrap();
-    let mut cfg = crate::config::EdgeConfig::default();
-    cfg.data.vanilla_data_dir =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    let mut cfg = crate::operator_cli::load_config(&cli).expect("read the operator configuration");
     assert!(
         crate::operator_cli::run_offline(&cli, &mut cfg)
             .await
@@ -713,4 +732,171 @@ async fn the_restore_command_verifies_a_world_that_records_its_plugin_startup_id
         recovered.checkpoint.globals.contains_key("plugin_startup"),
         "the restored world keeps the plugin startup identity a serve enforces"
     );
+}
+
+/// A real first-party guest whose startup identity contributes native types
+/// (`chisel` declares items, recipes and tools; `basic-economy` contributes an
+/// empty identity and cannot distinguish a deployment from none).
+fn real_plugin_package() -> PathBuf {
+    let root = std::env::var_os("KRASNOKAMEN_DEFAULT_PLUGINS_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../solaris-default-plugins")
+        });
+    let package = root.join("chisel");
+    for file in ["plugin.toml", "plugin.wasm"] {
+        assert!(
+            package.join(file).is_file(),
+            "missing integration prerequisite: {}; deploy the real first-party chisel component or set KRASNOKAMEN_DEFAULT_PLUGINS_ROOT; no substitute guest is allowed",
+            package.join(file).display()
+        );
+    }
+    package
+        .canonicalize()
+        .expect("resolve deployed sibling package")
+}
+
+fn deploy_plugin(source: &Path, destination: &Path) {
+    let package = destination.join("chisel");
+    std::fs::create_dir_all(&package).expect("create isolated deployment");
+    for file in ["plugin.toml", "plugin.wasm"] {
+        std::fs::copy(source.join(file), package.join(file))
+            .expect("copy actual deployed first-party package bytes");
+    }
+    recopy_tree(&source.join("client"), &package.join("client"));
+}
+
+/// Optional client bundles stay optional, but a deployment that carries them
+/// must look exactly like the sibling package it came from.
+fn recopy_tree(source: &Path, destination: &Path) {
+    if !source.is_dir() {
+        return;
+    }
+    std::fs::create_dir_all(destination).unwrap();
+    for entry in std::fs::read_dir(source).unwrap() {
+        let entry = entry.unwrap();
+        let target = destination.join(entry.file_name());
+        if entry.path().is_dir() {
+            recopy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+/// The operator's `server.toml`: content, world and (optionally) the plugin
+/// deployment the CLI must read for `backup` and `restore`.
+fn deployment_config(root: &Path, name: &str, world: &Path, plugins: Option<&Path>) -> PathBuf {
+    let content = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    let path = root.join(format!("{name}.toml"));
+    let plugin_section = plugins.map_or_else(String::new, |directory| {
+        format!("[plugins]\ndirectory = \"{}\"\n", directory.display())
+    });
+    std::fs::write(
+        &path,
+        format!(
+            "[data]\nworld_dir = \"{}\"\nseed = 42\nvanilla_data_dir = \"{}\"\n{plugin_section}",
+            world.display(),
+            content.display()
+        ),
+    )
+    .unwrap();
+    path
+}
+
+/// Served with the real first-party guest, a world records that plugin startup
+/// identity; `backup` and `restore` through the CLI must read `--config` and
+/// verify the copy under the same deployment, and refuse it when the
+/// configuration names no plugins.
+#[tokio::test]
+async fn the_cli_backup_and_restore_verify_under_the_configured_plugin_deployment() {
+    use clap::Parser;
+
+    let root = tempfile::tempdir().unwrap();
+    let deployment = root.path().join("plugins");
+    deploy_plugin(&real_plugin_package(), &deployment);
+    let live = root.path().join("live");
+    let mut config = live_config(live.clone());
+    config.plugin_directory = Some(deployment.clone());
+    let core = mc_core::Core::open(config).unwrap();
+    core.shutdown();
+    drop(core);
+
+    let backups = root.path().join("backups");
+    let with_plugins = deployment_config(root.path(), "with-plugins", &live, Some(&deployment));
+    let backup_cli = crate::operator_cli::Cli::try_parse_from([
+        "krasnokamen",
+        "--config",
+        with_plugins.to_str().unwrap(),
+        "backup",
+        "--world-dir",
+        live.to_str().unwrap(),
+        "--out",
+        backups.to_str().unwrap(),
+    ])
+    .unwrap();
+    let mut cfg =
+        crate::operator_cli::load_config(&backup_cli).expect("read the operator configuration");
+    assert_eq!(
+        cfg.plugins.directory.as_deref(),
+        Some(deployment.as_path()),
+        "the CLI reads the deployment the operator configured"
+    );
+    assert!(
+        crate::operator_cli::run_offline(&backup_cli, &mut cfg)
+            .await
+            .expect("the backup command verifies a world served with its deployment"),
+        "backup is an offline command"
+    );
+
+    let restored = root.path().join("restored");
+    let restore_cli = crate::operator_cli::Cli::try_parse_from([
+        "krasnokamen",
+        "--config",
+        with_plugins.to_str().unwrap(),
+        "restore",
+        "--from",
+        backups.to_str().unwrap(),
+        "--world-dir",
+        restored.to_str().unwrap(),
+    ])
+    .unwrap();
+    let mut cfg =
+        crate::operator_cli::load_config(&restore_cli).expect("read the operator configuration");
+    assert!(
+        crate::operator_cli::run_offline(&restore_cli, &mut cfg)
+            .await
+            .expect("the restore command verifies the copy under the same deployment"),
+        "restore is an offline command"
+    );
+    let mut served = live_config(restored.clone());
+    served.plugin_directory = Some(deployment.clone());
+    mc_core::Core::open(served)
+        .expect("the restored world serves with the deployment")
+        .shutdown();
+
+    // The same backup restored with a configuration that names no deployment is
+    // refused, and the refusal names the plugin startup identity a serve checks.
+    let elsewhere = root.path().join("restored-without-plugins");
+    let without_plugins = deployment_config(root.path(), "without-plugins", &elsewhere, None);
+    let mismatch_cli = crate::operator_cli::Cli::try_parse_from([
+        "krasnokamen",
+        "--config",
+        without_plugins.to_str().unwrap(),
+        "restore",
+        "--from",
+        backups.to_str().unwrap(),
+        "--world-dir",
+        elsewhere.to_str().unwrap(),
+    ])
+    .unwrap();
+    let mut cfg =
+        crate::operator_cli::load_config(&mismatch_cli).expect("read the operator configuration");
+    let error = format!(
+        "{:#}",
+        crate::operator_cli::run_offline(&mismatch_cli, &mut cfg)
+            .await
+            .expect_err("a copy served with plugins is refused without them")
+    );
+    assert!(error.contains("plugin startup"), "{error}");
 }
