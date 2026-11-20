@@ -71,9 +71,9 @@ This is not an approved war/faction model and must not be described as one.
   outside-radius outpost: three paid Spanish houses and a plaza. There must be
   at least two adults; the three-bed plan cannot receive a larger group. Missing
   or relocated members cancel the expedition.
-- Owner D68 (2026-11-20): when no whole household of two or three with two
-  adults exists, a group of two or three residents (at least two adults) splits
-  off a large household and founds the outpost as a new household. Main's
+- Owner D68 (2026-11-20): a group of two or three residents (at least two
+  adults) splits off a large household and founds the outpost as a new
+  household; the three-bed plan stays. Main's
   readings within those limits, open to owner correction: a whole eligible
   household still goes first; otherwise the largest household (ties: lowest
   household key) that keeps at least one adult gives its two lowest-id adults
