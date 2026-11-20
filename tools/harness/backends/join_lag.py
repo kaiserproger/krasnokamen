@@ -253,6 +253,20 @@ def private_xdg_root(artifact: Path) -> str:
     return str(root)
 
 
+def knob_lag(log_path: Path) -> int | None:
+    """The knob's own lag event: the tick-stream backlog when its wait completed (or None).
+
+    `KRASNOKAMEN_PUMP_LAG_TICKS` makes the pump log `pump knob wait completed lag_ticks=<N>` at
+    `RUST_LOG=mc_edge::server::pump=debug`; the harness waits on that line instead of polling.
+    """
+    try:
+        text = log_path.read_text(errors="replace")
+    except OSError:
+        return None
+    matches = list(re.finditer(r"pump knob wait completed.*?lag_ticks=(\d+)", text))
+    return int(matches[-1].group(1)) if matches else None
+
+
 def join_due(lag: int | None, threshold: int) -> bool:
     """Wait for the witnessed lag to pass `threshold` ticks before launching the fresh join.
 
@@ -302,19 +316,19 @@ def _safe_tick(dashboard_port: int) -> int:
         return 0
 
 
-def validate_args(ctx: ProfileContext) -> tuple[float, int, int]:
+def validate_args(ctx: ProfileContext) -> tuple[float, float, int]:
     if ctx.client != "native":
         raise ValueError("join-lag-gate requires --client native")
     if ctx.platform is not None:
         raise ValueError("join-lag-gate accepts only --client, --windowed, --timeout-seconds and its own args")
     parser = argparse.ArgumentParser(prog="join-lag-gate")
     # 20 TPS is the row's own rate: the pump must outpace the tick for the queue to build in seconds.
-    parser.add_argument("--tick-rate", type=int, default=3)
+    parser.add_argument("--tick-rate", type=float, default=3.0)
     # The condition lever: the pump is delayed by K core ticks (KRASNOKAMEN_PUMP_LAG_TICKS, a
     # test/dev knob, never an operator setting).
     parser.add_argument("--pump-lag-ticks", type=int, default=8)
     args = parser.parse_args(ctx.extra_args)
-    if not 1 <= args.tick_rate <= 20:
+    if not 1.0 <= args.tick_rate <= 20.0:
         raise ValueError("join-lag-gate --tick-rate must be in [1, 20]")
     if not 1 <= args.pump_lag_ticks <= 64:
         raise ValueError("join-lag-gate --pump-lag-ticks must be in [1, 64]")
@@ -435,7 +449,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             os.environ["XDG_DATA_HOME"] = previous_xdg
 
 
-def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: int, address: str,
+def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: float, address: str,
           server_log_path: Path, dashboard_port: int, server: subprocess.Popen[Any],
           launch_joiner: Any) -> tuple[dict[str, Any], dict[str, bool | None]]:
     """The walk: the pump runs behind the tick, then a fresh client joins."""
@@ -450,7 +464,7 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: int, ad
     applied_rate: float | None = None
     try:
         a.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
-        a.fixture(f"tick rate {tick_rate}")
+        a.fixture(f"tick rate {tick_rate:g}")
         # The server confirms the applied rate in its own `/tick query` reply; the delay age in
         # seconds can only be computed against a confirmed rate.
         a.fixture("tick query")
@@ -488,17 +502,18 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: int, ad
     skips_before = _skip_counters(dashboard_port)
     join_at_lag = int(os.environ.get("KRASNOKAMEN_JOIN_LAG_GATE_JOIN_AT_LAG", DEFAULT_JOIN_AT_LAG) or 0)
     if join_at_lag:
-        # Row 1's own red control: hold the join until the pump is far enough behind to hold it, yet
-        # before the 10 s drain halt (022858: admitted at lag 26, held 9.28 s). A bounded poll of the
-        # dashboard, not a fixed sleep.
+        # Row 1's own red control: hold the join until the knob's own log event reports the pump at
+        # least that far behind (inotify on the server log, never a poll): 022858 was admitted at
+        # lag 26 and held 9.28 s.
         detail["join_at_lag"] = join_at_lag
-        for _ in range(1200):
-            try:
-                if join_due(_stat(dashboard_port).get("pump_lag_ticks"), join_at_lag):
-                    break
-            except OSError:
-                break
-            time.sleep(0.05)
+        try:
+            triggered = runtime.wait_for_path_condition(
+                server_log_path, JOIN_BOUND_SECONDS,
+                lambda: (join_due(knob_lag(server_log_path), join_at_lag),
+                         knob_lag(server_log_path)), server)
+            detail["join_at_lag_seen"] = triggered
+        except (TimeoutError, runtime.ChildExited):
+            detail["join_at_lag_seen"] = knob_lag(server_log_path)
     joiner_process, joiner_mcp = launch_joiner()
     try:
         joiner = ProbeSteps(joiner_mcp, artifact / "join-lag-joiner",

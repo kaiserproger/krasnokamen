@@ -201,6 +201,11 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                     };
                     remaining = pace_count(remaining, event);
                 }
+                // Knob-only debug event: the tick stream's backlog at the wait's completion, which
+                // is the pump's distance behind the core when the harness holds a join.
+                if let Some(backlog) = tick_rx.len() {
+                    tracing::debug!(lag_ticks = backlog, knob_ticks = ticks, "pump knob wait completed");
+                }
             }
             let Some(out) = next_publication(&server, &mut rx, &mut viewers, &chunk_cache).await
             else {
