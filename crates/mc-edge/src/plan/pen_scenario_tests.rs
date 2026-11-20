@@ -348,8 +348,16 @@ fn contiguous_snapshots_rescan_only_until_the_window_is_known() {
     }
 }
 
-/// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN: a skipped publication must not cost every later publish a
-/// full candidate scan.
+/// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN, index-level reduction: a snapshot whose predecessor the
+/// viewer never planned must not cost a full candidate scan.
+///
+/// This is a REDUCED form and it is NOT sufficient acceptance for a fix on its own: it never
+/// offers the skipped snapshot to the planner, so it can only be satisfied by an index that
+/// accepts a contiguous chain of snapshots (`TickPlanIndex::with_chain`). A pump that unions the
+/// deltas it drained cannot make this test green, and a fix that only satisfies the pump path
+/// cannot satisfy it either. The fix's acceptance gate is the pump-level test that drives
+/// `next_publication` with the skipped output queued (server/pump.rs:88-104), plus a Lagged case
+/// that must keep the full-rescan fallback because those outputs are gone for good.
 ///
 /// The pump can skip tick outputs (`next_publication`, server/pump.rs). A viewer keeps the last
 /// snapshot it actually planned, so after a skip its previous revision is the base of the skipped
@@ -361,7 +369,7 @@ fn contiguous_snapshots_rescan_only_until_the_window_is_known() {
 /// the current code, which is the point of the record.
 #[test]
 #[ignore = "EDGE-PUMP-SKIP-FORCES-FULL-RESCAN: red on this tree; the pump's skip turns every later publish into a rescan"]
-fn a_skipped_publication_must_not_rescan_the_next_one() {
+fn an_index_given_the_chain_must_not_rescan_after_a_skip() {
     let (mut store, slots) = pen_store();
     let mut out = output(pen_chunks(), vec![], ChangeSet::default());
     let mut viewers = vec![pen_viewer(1, [32.0, 64.0, 32.0])];
