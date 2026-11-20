@@ -441,7 +441,7 @@ fn persistence_byte_capture() {
         stable_uuid,
     );
     crate::settlements::transit::bytecheck_put(&mut state, Some(member.clone()), transit_uuid);
-    let mut writer = JournalWriter::open(&world, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&world, 1).unwrap();
     // Regather after transit custody changes; one physical batch per tick.
     let gathered = journal_entries_for_tick(&mut state, &initial_output).unwrap();
     writer.append(K, K, &gathered).unwrap();
@@ -499,7 +499,8 @@ fn persistence_byte_capture() {
                 .map(|v| v.parse().unwrap())
                 .collect();
             let (lo, hi) = (ticks[0], ticks[1]);
-            assert!(crate::journal::read_batch_file(&entry.path()).is_some());
+            let identity = crate::journal::test_wal_identity(&world);
+            assert!(crate::journal::read_batch_file(&entry.path(), identity).is_some());
             if hi > K {
                 assert_eq!(lo, hi);
                 std::fs::copy(entry.path(), wal.join(entry.file_name())).unwrap();
@@ -534,7 +535,8 @@ fn persistence_byte_reopen() {
             .count(),
         1
     );
-    let mut writer = JournalWriter::open_recovered(&world, 1, manifest.tick, state.tick).unwrap();
+    let mut writer =
+        JournalWriter::open_recovered_test(&world, 1, manifest.tick, state.tick).unwrap();
     capture(&mut state, &mut writer, &mut manifest, &world);
     assert_eq!(manifest.tick, T);
     let image = store.read_checkpoint().unwrap();

@@ -262,7 +262,7 @@ fn starter_grant_and_empty_chest_recover_from_wal_without_a_post_grant_checkpoin
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|entry| matches!(entry,
         crate::journal::JournalEntry::StarterChestGranted { player, count: 2 } if *player == PLAYER)));
-    let mut writer = crate::journal::JournalWriter::open(dir.path(), 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(dir.path(), 1).unwrap();
     writer.append(2, 2, &entries).unwrap();
     writer.flush().unwrap();
     assert_eq!(
@@ -375,7 +375,7 @@ fn concurrent_settlements_in_different_dimensions_share_the_global_grant_count()
     )));
     assert!(nether.iter().any(|entry| matches!(entry,
         crate::journal::JournalEntry::Block { pos, .. } if *pos == chest)));
-    let mut writer = crate::journal::JournalWriter::open(dir.path(), 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(dir.path(), 1).unwrap();
     writer.append(2, 2, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
