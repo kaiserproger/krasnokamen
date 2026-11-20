@@ -784,7 +784,7 @@ fn append_failure_halts_tick_without_waiting_for_native_commit() {
     // receiver's disappearance, which `send` reports. A bounded helper thread
     // makes that wait interruptible without polling intervals.
     let started = std::time::Instant::now();
-    let deadline = started + std::time::Duration::from_secs(5);
+    let deadline = started + std::time::Duration::from_secs(10);
     let (exited_tx, exited_rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         while std::time::Instant::now() < deadline {
@@ -794,16 +794,14 @@ fn append_failure_halts_tick_without_waiting_for_native_commit() {
             }
         }
     });
-    let halted = exited_rx.recv_timeout(std::time::Duration::from_secs(1));
+    // Generous bound, no latency assertion: the commit cannot finish while it
+    // is held, so any disconnect observed here happened without waiting for it.
+    // Timing the test thread itself would only add a scheduler SLO back.
+    let halted = exited_rx.recv_timeout(std::time::Duration::from_secs(30));
     *FAIL_JOURNAL_APPEND.lock().unwrap() = None;
     assert!(
         halted.is_ok(),
-        "the tick's send kept blocking behind the in-flight native commit"
-    );
-    assert!(
-        started.elapsed() < std::time::Duration::from_secs(1),
-        "the halt waited for the native commit: {:?}",
-        started.elapsed()
+        "the tick's send kept blocking while the native commit was held"
     );
     // The commit was gated before the failure and still completes on release.
     hold.release();
