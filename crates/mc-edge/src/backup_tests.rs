@@ -738,12 +738,7 @@ async fn the_restore_command_verifies_a_world_that_records_its_plugin_startup_id
 /// (`chisel` declares items, recipes and tools; `basic-economy` contributes an
 /// empty identity and cannot distinguish a deployment from none).
 fn real_plugin_package() -> PathBuf {
-    let root = std::env::var_os("KRASNOKAMEN_DEFAULT_PLUGINS_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../solaris-default-plugins")
-        });
-    let package = root.join("chisel");
+    let package = crate::plugin_tests::default_plugins_root().join("chisel");
     for file in ["plugin.toml", "plugin.wasm"] {
         assert!(
             package.join(file).is_file(),
