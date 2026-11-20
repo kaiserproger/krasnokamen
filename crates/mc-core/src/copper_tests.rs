@@ -32,11 +32,14 @@ fn registry() -> Arc<CoreRegistry> {
 fn fixture(dir: Option<std::path::PathBuf>) -> TickState {
     let registry = registry();
     let generator = Arc::new(Empty(registry.states.air));
-    let mut world = if let Some(dir) = dir {
+    let world = if let Some(dir) = &dir {
         ChunkWorld::new_native(
             42,
-            crate::native_checkpoint::tests::fixture_store(&crate::CoreConfig::new(dir, 42))
-                .unwrap(),
+            crate::native_checkpoint::tests::fixture_store(&crate::CoreConfig::new(
+                dir.clone(),
+                42,
+            ))
+            .unwrap(),
             0,
             generator,
             &registry,
@@ -54,14 +57,30 @@ fn fixture(dir: Option<std::path::PathBuf>) -> TickState {
             mc_world::OVERWORLD_GEOMETRY,
         )
     };
-    world.ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
+    let mut state = TickState::new(registry, world, 0, 512);
+    if let Some(dir) = dir {
+        crate::native_checkpoint::tests::restore_fixture_clock(
+            &mut state,
+            &crate::CoreConfig::new(dir, 42),
+        )
+        .unwrap();
+    }
+    state
+        .world
+        .ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
+    assert!(
+        state.world.load_errors().next().is_none(),
+        "{:?}",
+        state.world.load_errors().next()
+    );
     for x in 0..10 {
         for z in 0..7 {
-            world.set_block(x, 200, z, registry.states.stone);
+            state
+                .world
+                .set_block(x, 200, z, state.registry.states.stone);
         }
     }
-    world.fold_overlay();
-    let mut state = TickState::new(registry, world, 0, 512);
+    state.world.fold_overlay();
     state
         .tickets
         .insert("copper-test".into(), (ChunkPos { x: 0, z: 0 }, 0));

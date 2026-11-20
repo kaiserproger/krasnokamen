@@ -17,6 +17,15 @@ it starts no tick thread. Native rows include their version, capture tick,
 SHA-256 and base64 payload. Export compares every complete output file byte for
 byte, including compressed payloads, region headers and padding.
 The fixture requires the locally imported `data/vanilla` content.
+Both captures start from byte-verified copies of one prepared native store:
+the runner's ignored seed producer closes it before either copy is opened.
+This keeps the WAL v2 store UUID identical without excluding any frame bytes.
+`seed.json` and each producer's `input.json` record every seed file's size and
+SHA-256; cached runs without that immutable seed, or with a changed seed, refuse.
+The negative-control classifier accepts only a complete WAL v2 header (56 bytes,
+payload length at offset 48); the verdict still compares the entire frame.
+Build receipts pin the producer binaries before each private Cargo target is
+discarded, so the two-tree oracle needs only one scratch target at a time.
 
 Run base against itself first: the two captures execute in separate processes
 and must match. For isolated scratch-tree controls, reuse that immutable
@@ -335,10 +344,73 @@ upper bound on the census interval. See the clock images in
 [`journal.rs`](../../crates/mc-core/src/journal.rs) and their
 [`replay`](../../crates/mc-core/src/journal/replay.rs).
 
+Live active-chunk refresh uses the root's decided pair `H(T), H(T-1)`, also
+after dimensional travel; parked Nether/End `TickControl` copies are not clock
+authorities. A dormant activation subtracts held time with checked arithmetic:
+an inconsistent prefix fails before commit rather than wrapping into catch-up
+debt. The already-published WAL remains the recovery boundary.
+
 A process SIGKILL exercises process recovery, not arbitrary power-loss or storage
 hardware durability. The [drills below](#hazards-and-defense-layers) state their
 fault model; [crash-census evidence](../QA_AGENT_PROTOCOL.md#crash-census-evidence)
 keeps lifecycle uncertainty separate from proved loss or conservation.
+
+### Explicit conversion of legacy frozen clocks
+
+Ordinary recovery refuses a frozen legacy clock without debt anchors. On a
+**disposable, stopped copy only**, run
+`krasnokamen --config <matching-config> world upgrade-game-clock --copy <copy>`.
+Keep the original immutable. Canonical paths must differ from the configured
+original (including symlink aliases). The command holds the exclusive copy
+lease and folds checkpoint plus published WAL using the existing running-time
+clock, then writes one checkpoint at recovered native tick `c`. A legacy Held
+checkpoint at `K` without `held_since` uses `K` as its initial boundary; tail
+Held boundaries come from the preceding running counter. Held tail ticks do
+not age dropped items or entity countdowns. Ambiguous transitions refuse
+before checkpoint publication. It archives the old
+`journal` directory untouched after commit; a crash before archive leaves
+covered batches that recovery ignores.
+
+Every winning debt, including cold native-only records, gains an explicit held
+prefix. Active records re-anchor to `(c, H(c))`; inactive records at `L` use
+`max(0, H(c) - (c-L))`. Remaining debt loses `min(remaining, H(c))`, deliberately
+discarding uncertain running debt rather than falsely ageing anything.
+The durable epoch is `sim_debt_anchored_since=c`; anchorless WAL images at or
+after it refuse, including a held world subsequently written by an old binary.
+
+A Held image gets `held_since=c`. When `G>0`, only live-law-eligible Work and
+sleep memories in `[G.saturating_sub(1), c-1]` normalize to the law's targets
+at `r=c-1` (Work saturating subtraction, sleep checked subtraction). An
+eligible value above `c-1` refuses. `G=0` skips normalization, including a one-tick
+world and sleep `None`. Panic deadlines and conversion countdowns stay raw.
+No anchor becomes stale because of this normalization; it is a conservative
+choice, not reconstruction of exact history. An H reset before c9c13b37 can
+overstate G and hide an otherwise fresh value below the chosen range.
+
+The auxiliary conversion record
+`data/krasnokamen-game-clock-upgrade.json` stores checkpoint tick, recovered
+tick, held tail tick count, H, chosen boundary, active/inactive and
+normalized/raw counts and per-chunk dropped debt. The operator command logs
+those totals. Chunk/container post-images, entity tombstones,
+plugin state, migration transit rows and block-log WAL deltas are checkpointed
+before archiving. Existing immutable baselines remain authoritative.
+
+Settlement clocks are restored through their existing owners, not retimed
+generically. Commerce employment `next_due` and caravan `game_deadline`
+distinguish WorldTicks from GameTicks and their restore functions convert
+legacy deadlines once. Production job `next_due` does the same; consumption
+`next_due` is already GameTicks. Migration walking uses game ticks. Production
+`accepted_tick` is provenance, not an elapsed-time clock. Army `next_attack`
+is a native absolute cooldown and remains native. Construction cursors,
+allocator queues and site-turn budgets carry no persisted elapsed-time anchor.
+Villager courtship/despawn/restock and scheduled block/fluid deadlines likewise
+remain native; item ages/countdowns exclude held time during conversion too.
+
+Pre-rename Anvil chunks carrying `SolarisSimLastTick` or `SolarisSimDebt`
+refuse import: the export has no historical held-time H witness. Use a fresh
+world, or convert on a release that still retained held time. Pre-rename
+chunks without debt and vanilla Anvil retain their ordinary import path.
+
 
 ## Checkpoints
 

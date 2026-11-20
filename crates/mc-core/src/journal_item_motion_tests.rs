@@ -243,6 +243,7 @@ fn post_checkpoint_compact_water_motion_reuses_the_native_stack_baseline_exactly
         &config,
         &crate::journal::CheckpointManifest {
             tick: checkpoint_tick,
+            climate: Some(crate::weather::ClimateImage::capture(&state)),
             ..Default::default()
         },
     )
@@ -293,6 +294,7 @@ fn post_checkpoint_compact_water_motion_reuses_the_native_stack_baseline_exactly
     .unwrap();
     assert_eq!(batches.len(), 4);
     let replay = replay_batches(baseline, &batches);
+    crate::journal::validate_replay(&replay).unwrap();
     assert_ne!(replay.entities[&item.0].pos, initial);
     assert_item(&replay, &state, item, 23);
     let replay = replay_batches(replay, &batches);

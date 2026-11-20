@@ -366,6 +366,17 @@ fn assert_tail(entries: &[JournalEntry]) {
 }
 
 #[test]
+#[ignore = "prepares the immutable shared store for tools/dev/bytecheck.sh"]
+fn persistence_byte_seed() {
+    let out = PathBuf::from(
+        std::env::var_os("CORE_UNLOAD_OUT").expect("bytecheck seed output directory"),
+    );
+    let config = config(&out.join("world"));
+    assert!(!config.world_dir.exists(), "bytecheck seed must be fresh");
+    drop(fixture_store(&config).unwrap());
+}
+
+#[test]
 fn persistence_byte_capture() {
     let temporary = tempfile::tempdir().unwrap();
     let out = std::env::var_os("CORE_UNLOAD_OUT")

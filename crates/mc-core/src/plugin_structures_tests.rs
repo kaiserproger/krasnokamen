@@ -237,6 +237,8 @@ fn stored_structure(state: &mut TickState) -> String {
             admission: provenance::Admission::Plugin,
             cells,
             portions: Vec::new(),
+            cut_credits: BTreeMap::new(),
+            crafting_delta: BTreeMap::new(),
         },
     );
     save(state, ledger);

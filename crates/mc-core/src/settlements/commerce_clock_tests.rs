@@ -183,7 +183,7 @@ fn game_time_explicit_pay_stop_and_hire_use_the_same_clock() {
     f.state.tick_control.set_frozen(true);
     for _ in 0..20 {
         f.state.tick += 1;
-        f.state.tick_control.begin_tick();
+        f.state.tick_control.begin_tick(f.state.tick);
     }
     let request = Request::Pay {
         contract: "1".into(),

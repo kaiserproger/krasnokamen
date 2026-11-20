@@ -17,8 +17,8 @@ fn state_with_dir(dir: Option<std::path::PathBuf>, clear: bool) -> TickState {
         Arc::clone(&registry.blocks),
     ));
     let air = mc_world::BlockStateId(registry.states.air);
-    let mut world = if let Some(dir) = dir {
-        let config = crate::CoreConfig::new(dir, 42);
+    let world = if let Some(dir) = &dir {
+        let config = crate::CoreConfig::new(dir.clone(), 42);
         ChunkWorld::new_native(
             42,
             crate::native_checkpoint::tests::fixture_store(&config).unwrap(),
@@ -39,8 +39,22 @@ fn state_with_dir(dir: Option<std::path::PathBuf>, clear: bool) -> TickState {
             mc_world::OVERWORLD_GEOMETRY,
         )
     };
-    world.ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
     let mut state = TickState::new(registry, world, 0, 512);
+    if let Some(dir) = dir {
+        crate::native_checkpoint::tests::restore_fixture_clock(
+            &mut state,
+            &crate::CoreConfig::new(dir, 42),
+        )
+        .unwrap();
+    }
+    state
+        .world
+        .ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
+    assert!(
+        state.world.load_errors().next().is_none(),
+        "{:?}",
+        state.world.load_errors().next()
+    );
     state
         .tickets
         .insert("containers-test".into(), (ChunkPos { x: 0, z: 0 }, 0));
@@ -1106,6 +1120,17 @@ fn hopper_custody_and_cooldown_survive_real_native_checkpoint() {
     let written = capture.write().unwrap();
     assert!(!written.is_empty());
     original.world.mark_flushed(&written);
+    // The standalone dirty-capture writer does not own the native game clock.
+    // Publish the actual boundary, as the production checkpoint owner does.
+    crate::native_checkpoint::tests::write_manifest(
+        &crate::CoreConfig::new(dir.clone(), 42),
+        &crate::journal::CheckpointManifest {
+            tick: checkpoint_tick,
+            climate: Some(crate::weather::ClimateImage::capture(&original)),
+            ..Default::default()
+        },
+    )
+    .unwrap();
     assert!(
         original
             .world

@@ -290,6 +290,7 @@ pub(super) fn modern_fixture(root: &Path, config: &CoreConfig) {
         climate: Some(mc_core::weather::ClimateImage {
             day_time: 18000,
             game_clock: Default::default(),
+            sim_debt_anchored_since: Some(0),
             weather_kind: 2,
             remaining_ticks: 1234,
             thunder_remaining_ticks: 4321,

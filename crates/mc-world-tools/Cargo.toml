@@ -19,3 +19,4 @@ mc-worldgen = { path = "../mc-worldgen" }
 [dev-dependencies]
 uuid = { workspace = true, features = ["v4"] }
 redb = "=3.1.0"
+serde_json.workspace = true

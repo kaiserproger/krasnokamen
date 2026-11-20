@@ -9,7 +9,10 @@ use std::path::{Path, PathBuf};
 // host references: rebased S1 is 123; S3 cuts four (including offline grants).
 // The six remaining QW journal/dimension hooks move in D65 S2/S6; lower then.
 // This rebaselines named paths only; the independent SCC ceiling stays 186.
-pub(super) const CEILING: usize = 119;
+// Main-approved offline legacy clock converter needs hydrated settlement recovery
+// + full re-capture (game_clock_upgrade.rs: finish_recovery / checkpoint_rows).
+// D65 S2 absorbs these into a domain-owned recover-and-capture entry; then 119.
+pub(super) const CEILING: usize = 121;
 
 #[derive(Debug)]
 pub(super) struct Reference {

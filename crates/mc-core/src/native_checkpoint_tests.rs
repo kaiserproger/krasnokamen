@@ -154,6 +154,31 @@ pub(crate) fn read_manifest(config: &CoreConfig) -> Result<CheckpointManifest, C
         .map_err(|e| CoreError::Storage(e.to_string()))
 }
 
+/// Standalone native fixtures must restore the checkpoint clock before admitting
+/// chunks whose simulation-debt anchors were captured at that boundary.
+pub(crate) fn restore_fixture_clock(
+    state: &mut crate::tick::TickState,
+    config: &CoreConfig,
+) -> Result<(), CoreError> {
+    let manifest = read_manifest(config)?;
+    state.tick = manifest.tick;
+    if let Some(climate) = manifest.climate {
+        climate.restore(state)?;
+    } else {
+        state
+            .tick_control
+            .restore_clock(Default::default(), state.tick)?;
+    }
+    state.world.restore_sim_debt(
+        &Replay {
+            tick: state.tick,
+            recovered_held_ticks: state.tick_control.held_ticks_at(state.tick),
+            ..Default::default()
+        },
+        None,
+    )
+}
+
 pub(crate) fn write_manifest(
     config: &CoreConfig,
     manifest: &CheckpointManifest,

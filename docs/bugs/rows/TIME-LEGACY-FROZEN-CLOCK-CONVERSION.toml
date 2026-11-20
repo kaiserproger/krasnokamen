@@ -1,0 +1,10 @@
+[[bug]]
+id = "TIME-LEGACY-FROZEN-CLOCK-CONVERSION"
+title = "Legacy frozen worlds need an explicit offline clock conversion before safe catch-up"
+area = "persistence"
+severity = "major"
+status = "open"
+source = "D54 R4 frozen restart; REVIEW-conversion-opus and R4-CATCHUP-DESIGN-B legacy amendments. Explicit copy-only world upgrade-game-clock folds old recovery, anchors every winning debt at the recovered boundary, drops at most H of remaining per chunk, normalizes only eligible held Work/sleep memories and archives the published WAL untouched. Pre-rename debt imports refuse because they retain no historical H witness. See docs/architecture/persistence.md. Main owns promotion after the fresh and converted saturated-source live gates."
+repro = "command"
+regression = ["cargo:mc-core:native_checkpoint::game_clock_upgrade::tests::conversion_zero_game_one_tick_skips_all_memories", "cargo:mc-core:native_checkpoint::game_clock_upgrade::tests::conversion_memory_inclusive_boundaries_and_future_refusal", "cargo:mc-core:native_checkpoint::game_clock_upgrade::tests::conversion_normalizes_only_the_live_law_gate", "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::clock_conversion_tests::legacy_game_clock_conversion_folds_tail_anchors_active_and_drops_phantom_debt", "cargo:mc-world-conversion:pre_rename::tests::pre_rename_debt_without_historical_held_witness_refuses", "cargo:mc-world-tools:game_clock_upgrade::tests::copy_command_checkpoints_legacy_tail_then_archives_identical_wal"]
+failing_first = "Production-only negative controls: receipts/SpainGrowth/R4-C-NC-memories.log (2 RED), R4-C-NC-debt.log (native drill RED), R4-C-NC-pre-rename.log (refusal RED); restored before C commit 2512760779."

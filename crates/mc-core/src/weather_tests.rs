@@ -276,6 +276,7 @@ fn real_core_reopen_uses_checkpoint_and_tail_climate_not_the_tick_number() {
         let image = ClimateImage {
             day_time: 123_987,
             game_clock: Default::default(),
+            sim_debt_anchored_since: Some(0),
             weather_kind: 2,
             remaining_ticks: 1_234,
             thunder_remaining_ticks: 4321,
@@ -490,7 +491,10 @@ fn invalid_persisted_weather_fails_without_partially_restoring_the_clock() {
             ..valid
         },
         ClimateImage {
-            game_clock: GameClockImage::Held { game_ticks: 1 },
+            game_clock: GameClockImage::Held {
+                game_ticks: 1,
+                held_since: Some(2),
+            },
             ..valid
         },
         ClimateImage {

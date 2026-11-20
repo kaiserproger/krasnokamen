@@ -166,11 +166,7 @@ impl ChunkWorld {
         let start = entries.len();
         entries.extend(self.debt_changes.drain().map(|(_, image)| {
             crate::journal::JournalEntry::SimDebt {
-                image: crate::journal::SimDebtImage {
-                    last_sim: image.last_sim_at(self.sim_tick),
-                    tick: self.sim_tick,
-                    ..image
-                },
+                image: image.at(self.sim_tick, self.sim_held_ticks),
             }
         }));
         entries[start..].sort_unstable_by_key(|entry| match entry {
@@ -188,12 +184,16 @@ impl ChunkWorld {
             .sim_debt
             .iter()
             .filter(|(_, debt)| debt.dirty || debt.remaining > 0 || debt.active)
-            .map(|(pos, debt)| crate::journal::SimDebtImage {
-                chunk: [pos.x, pos.z],
-                last_sim: debt.last_sim,
-                remaining: debt.remaining,
-                active: debt.active,
-                tick,
+            .map(|(pos, debt)| {
+                crate::journal::SimDebtImage {
+                    chunk: [pos.x, pos.z],
+                    last_sim: debt.last_sim,
+                    held_anchor: debt.held_anchor,
+                    remaining: debt.remaining,
+                    active: debt.active,
+                    tick,
+                }
+                .at(tick, self.sim_held_ticks)
             })
             .collect();
         images.sort_unstable_by_key(|image| image.chunk);
@@ -211,14 +211,24 @@ impl ChunkWorld {
     ) -> Result<(), CoreError> {
         // Refuse unrepresentable WAL/manifest authority before activation can
         // consume it or any partial restore can mutate the live map.
+        let held_ticks = replay.recovered_held_ticks;
         for (&[x, z], &image) in &replay.sim_debt {
             crate::debt::native_values(
                 ChunkPos { x, z },
                 image.last_sim_at(replay.tick),
                 image.remaining,
             )?;
+            crate::debt::validate_anchor(
+                ChunkPos { x, z },
+                image.last_sim,
+                image.held_anchor,
+                replay.tick,
+                held_ticks,
+            )?;
         }
         self.sim_tick = replay.tick;
+        self.sim_held_ticks = held_ticks;
+        self.sim_held_before_tick = held_ticks;
         let persisted = checkpoint.map(|base| {
             (
                 base.tick,
@@ -231,9 +241,12 @@ impl ChunkWorld {
         for (&[x, z], &image) in &replay.sim_debt {
             let pos = ChunkPos { x, z };
             let last_sim = image.last_sim_at(replay.tick);
+            let held_anchor = image.at(replay.tick, held_ticks).held_anchor;
             let dirty = persisted.as_ref().is_none_or(|(tick, images)| {
                 images.get(&image.chunk).is_none_or(|base| {
-                    last_sim != base.last_sim_at(*tick) || image.remaining != base.remaining
+                    last_sim != base.last_sim_at(*tick)
+                        || image.remaining != base.remaining
+                        || held_anchor != Some(base.held_anchor.unwrap_or(0))
                 })
             }) || image.active;
             // Recovery closes open debt intervals. A clean manifest anchor may
@@ -243,6 +256,7 @@ impl ChunkWorld {
                 pos,
                 crate::debt::SimDebtRecord {
                     last_sim,
+                    held_anchor,
                     remaining: image.remaining,
                     dirty,
                     active: false,
@@ -254,6 +268,7 @@ impl ChunkWorld {
                     crate::journal::SimDebtImage {
                         chunk: [x, z],
                         last_sim,
+                        held_anchor,
                         remaining: image.remaining,
                         active: false,
                         tick: replay.tick,
@@ -291,6 +306,11 @@ impl ChunkWorld {
             return None;
         };
         (start < end).then_some((start, end))
+    }
+
+    pub(crate) fn set_simulation_clock(&mut self, held_ticks: u64, held_before_tick: u64) {
+        self.sim_held_ticks = held_ticks;
+        self.sim_held_before_tick = held_before_tick;
     }
 
     /// Parent-computed active set with hysteresis, called pre-gameplay, after
@@ -352,6 +372,8 @@ impl ChunkWorld {
     /// [`Self::set_active_chunks`] stores then calls this same method.
     pub fn refresh_active_clock(&mut self, tick: u64) {
         self.sim_tick = tick;
+        let held_ticks = self.sim_held_ticks;
+        let held_before_tick = self.sim_held_before_tick;
         // Hot path: no per-tick allocation or sorting. Disjoint field borrows
         // cover activation, accrual and their storage revisions inline.
         // `debt_changes` order is normalized at WAL drain (`journal_debt`).
@@ -381,6 +403,7 @@ impl ChunkWorld {
                 let image = crate::journal::SimDebtImage {
                     chunk: [pos.x, pos.z],
                     last_sim: debt.last_sim,
+                    held_anchor: debt.held_anchor,
                     remaining: debt.remaining,
                     active: false,
                     tick,
@@ -402,6 +425,7 @@ impl ChunkWorld {
             }
             let record = sim_debt.entry(*pos).or_insert(crate::debt::SimDebtRecord {
                 last_sim: tick,
+                held_anchor: Some(held_ticks),
                 remaining: 0,
                 dirty: false,
                 active: false,
@@ -409,16 +433,26 @@ impl ChunkWorld {
             if record.active {
                 if tick > record.last_sim {
                     record.last_sim = tick;
+                    record.held_anchor = Some(held_ticks);
                 }
                 continue;
             }
-            // Accrue only the inactive interval, never the activation's live tick.
-            record.remaining = record
-                .remaining
-                .saturating_add(tick.saturating_sub(1).saturating_sub(record.last_sim));
+            // Exclude both the activation tick and held ticks from the gap.
+            let through = tick.saturating_sub(1);
+            if through > record.last_sim {
+                let native_gap = through - record.last_sim;
+                let held_gap = held_before_tick
+                    .checked_sub(record.held_anchor.unwrap_or(0))
+                    .expect("simulation held prefix precedes dormant chunk anchor");
+                let running_gap = native_gap
+                    .checked_sub(held_gap)
+                    .expect("simulation held gap exceeds dormant native gap");
+                record.remaining = record.remaining.saturating_add(running_gap);
+            }
             record.active = true;
             *active_revision += 1;
             record.last_sim = tick;
+            record.held_anchor = Some(held_ticks);
             record.dirty = true;
             // Storage-only fence inline (never wire/published/hydration: this
             // is metadata authority, not client-visible content).
@@ -429,6 +463,7 @@ impl ChunkWorld {
             let image = crate::journal::SimDebtImage {
                 chunk: [pos.x, pos.z],
                 last_sim: tick,
+                held_anchor: record.held_anchor,
                 remaining: record.remaining,
                 active: true,
                 tick,
@@ -445,11 +480,13 @@ impl ChunkWorld {
             }
             let record = sim_debt.entry(*pos).or_insert(crate::debt::SimDebtRecord {
                 last_sim: tick,
+                held_anchor: Some(held_ticks),
                 remaining: 0,
                 dirty: false,
                 active: false,
             });
             record.last_sim = tick;
+            record.held_anchor = Some(held_ticks);
             record.remaining = 0;
         }
     }
@@ -483,6 +520,7 @@ impl ChunkWorld {
             crate::journal::SimDebtImage {
                 chunk: [pos.x, pos.z],
                 last_sim: debt.last_sim,
+                held_anchor: debt.held_anchor,
                 remaining: debt.remaining,
                 active: debt.active,
                 tick: self.sim_tick,
@@ -505,6 +543,7 @@ impl ChunkWorld {
             return;
         }
         debt.last_sim = self.sim_tick;
+        debt.held_anchor = Some(self.sim_held_ticks);
         self.consume_simulation_debt(pos, u64::MAX);
     }
 

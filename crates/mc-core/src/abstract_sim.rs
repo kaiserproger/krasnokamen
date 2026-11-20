@@ -43,6 +43,9 @@ pub(crate) fn cancel_external_writes(state: &mut TickState) {
 }
 
 pub(crate) fn run(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>) {
+    if !state.tick_control.runs_normally() {
+        return;
+    }
     let mut chunks = state.world.catch_up_chunks();
     if chunks.is_empty() {
         return;

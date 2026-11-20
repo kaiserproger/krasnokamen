@@ -21,6 +21,8 @@ use mc_world::Chunk;
 pub(crate) const LAST_SIM_KEY: &str = "KrasnokamenSimLastTick";
 /// Root-extra key for outstanding pre-existing catch-up debt.
 pub(crate) const REMAINING_KEY: &str = "KrasnokamenSimDebt";
+/// Held-tick prefix at `last_sim`, including an explicitly stored zero.
+pub(crate) const HELD_ANCHOR_KEY: &str = "KrasnokamenSimHeldTicks";
 
 /// Per-chunk runtime debt authority. Active membership is recomputed by
 /// [`crate::world::ChunkWorld::set_active_chunks`]; the WAL image separately
@@ -29,6 +31,7 @@ pub(crate) const REMAINING_KEY: &str = "KrasnokamenSimDebt";
 pub(crate) struct SimDebtRecord {
     /// Live simulation anchor; outstanding abstract time is separate.
     pub last_sim: u64,
+    pub held_anchor: Option<u64>,
     /// Dormant catch-up time still owed to this entire chunk.
     pub remaining: u64,
     /// Newer than the last acknowledged checkpoint; pins eviction.
@@ -59,29 +62,49 @@ pub(crate) fn native_values(
 
 /// Project authority values into a captured chunk's root extras (durable
 /// only; never read back on the tick path, which uses the record map).
-pub(crate) fn project(chunk: &mut Chunk, last_sim: u64, remaining: u64) -> Result<(), CoreError> {
+pub(crate) fn project(
+    chunk: &mut Chunk,
+    last_sim: u64,
+    remaining: u64,
+    held_anchor: Option<u64>,
+) -> Result<(), CoreError> {
     let (last_sim, remaining) = native_values(chunk.pos, last_sim, remaining)?;
+    let held_anchor = held_anchor.map(i64::try_from).transpose().map_err(|_| {
+        CoreError::Storage(format!(
+            "simulation debt at chunk ({}, {}): {HELD_ANCHOR_KEY} exceeds native Long range",
+            chunk.pos.x, chunk.pos.z,
+        ))
+    })?;
     chunk
         .extras
-        .retain(|(key, _)| key != LAST_SIM_KEY && key != REMAINING_KEY);
+        .retain(|(key, _)| key != LAST_SIM_KEY && key != REMAINING_KEY && key != HELD_ANCHOR_KEY);
     chunk
         .extras
         .push((LAST_SIM_KEY.into(), mc_nbt::Tag::Long(last_sim)));
     chunk
         .extras
         .push((REMAINING_KEY.into(), mc_nbt::Tag::Long(remaining)));
+    if let Some(held_anchor) = held_anchor {
+        chunk
+            .extras
+            .push((HELD_ANCHOR_KEY.into(), mc_nbt::Tag::Long(held_anchor)));
+    }
     chunk.mark_dirty();
     Ok(())
 }
 
-/// Validate persisted authority before admission, even if newer WAL authority
-/// wins. Only an entirely absent pair is a new chunk; malformed or partial
-/// images refuse admission without mutating either the chunk or live record.
+/// Validate only the winning authority. A manifest/WAL record supersedes the
+/// older native extras, including pre-upgrade anchorless extras.
 pub(crate) fn adopt_native_extras(
     pos: mc_world::ChunkPos,
     chunk: &std::sync::Arc<Chunk>,
     records: &mut rustc_hash::FxHashMap<mc_world::ChunkPos, SimDebtRecord>,
+    tick: u64,
+    held_ticks: u64,
 ) -> Result<(), CoreError> {
+    if records.contains_key(&pos) {
+        return Ok(());
+    }
     let read = |key: &str| -> Result<Option<u64>, CoreError> {
         let mut values = chunk.extras.iter().filter(|(name, _)| name == key);
         let Some((_, tag)) = values.next() else {
@@ -103,8 +126,9 @@ pub(crate) fn adopt_native_extras(
             _ => Err(invalid("must be a Long")),
         }
     };
+    let held_anchor = read(HELD_ANCHOR_KEY)?;
     let (last_sim, remaining) = match (read(LAST_SIM_KEY)?, read(REMAINING_KEY)?) {
-        (None, None) => return Ok(()),
+        (None, None) if held_anchor.is_none() => return Ok(()),
         (Some(last_sim), Some(remaining)) => (last_sim, remaining),
         _ => {
             return Err(CoreError::Storage(format!(
@@ -113,11 +137,41 @@ pub(crate) fn adopt_native_extras(
             )));
         }
     };
+    validate_anchor(pos, last_sim, held_anchor, tick, held_ticks)?;
     records.entry(pos).or_insert(SimDebtRecord {
         last_sim,
+        held_anchor: Some(held_anchor.unwrap_or(0)),
         remaining,
         dirty: false,
         active: false,
     });
     Ok(())
 }
+
+/// A held prefix cannot exceed either its native anchor or the current prefix;
+/// the intervening hold cannot be longer than the native interval.
+pub(crate) fn validate_anchor(
+    pos: mc_world::ChunkPos,
+    last_sim: u64,
+    held_anchor: Option<u64>,
+    tick: u64,
+    held_ticks: u64,
+) -> Result<(), CoreError> {
+    let anchor = held_anchor.unwrap_or(0);
+    if last_sim > tick
+        || anchor > last_sim
+        || anchor > held_ticks
+        || held_ticks - anchor > tick - last_sim
+        || anchor > i64::MAX as u64
+    {
+        return Err(CoreError::Storage(format!(
+            "simulation debt at chunk ({}, {}): invalid held anchor {anchor} at native {last_sim}; current tick {tick}, held ticks {held_ticks}",
+            pos.x, pos.z,
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "debt_game_clock_tests.rs"]
+mod game_clock_tests;

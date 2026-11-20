@@ -1,6 +1,21 @@
 use super::*;
 
 #[test]
+fn game_clock_upgrade_requires_explicit_disposable_copy() {
+    assert!(Cli::try_parse_from(["krasnokamen", "world", "upgrade-game-clock"]).is_err());
+    let cli = Cli::try_parse_from([
+        "krasnokamen",
+        "world",
+        "upgrade-game-clock",
+        "--copy",
+        "disposable",
+    ])
+    .unwrap();
+    assert!(
+        matches!(cli.command, Some(Command::World { command: WorldCommand::UpgradeGameClock { copy } }) if copy == PathBuf::from("disposable"))
+    );
+}
+#[test]
 fn content_import_accepts_licensed_jar_or_download_and_pinned_default() {
     for source in [vec![], vec!["--download"], vec!["--from", "server.jar"]] {
         let mut args = vec!["krasnokamen", "content", "import", "--cache", "cache"];
@@ -57,6 +72,7 @@ fn offline_commands_require_exact_paths_and_global_config() {
             | WorldCommand::CustodyCensus(_)
             | WorldCommand::Probe(_)
             | WorldCommand::UpgradeWorldgen
+            | WorldCommand::UpgradeGameClock { .. }
             | WorldCommand::Pregenerate { .. }
             | WorldCommand::Prune { .. }
             | WorldCommand::Compact => unreachable!("conversion names only"),

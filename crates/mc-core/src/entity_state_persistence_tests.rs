@@ -1331,6 +1331,7 @@ fn active_clock(tick: u64) -> std::collections::BTreeMap<[i32; 2], crate::journa
             chunk: [0, 0],
             tick,
             last_sim: tick,
+            held_anchor: Some(0),
             remaining: 0,
             active: true,
         },
@@ -1349,6 +1350,7 @@ fn replay_chunk_clock_counts_every_active_interval_before_projecting_entities() 
         image: crate::journal::SimDebtImage {
             chunk: [0, 0],
             last_sim,
+            held_anchor: Some(0),
             remaining: 0,
             active,
             tick,
@@ -1438,6 +1440,7 @@ fn replay_crossing_image_moves_clock_attribution_without_persisting_intra_chunk_
                     chunk: [1, 0],
                     tick: 21,
                     last_sim: 21,
+                    held_anchor: Some(0),
                     remaining: 0,
                     active: true,
                 },
@@ -1656,3 +1659,6 @@ fn duplicate_tags_in_legacy_wal_normalize_on_entity_restore() {
     };
     assert_eq!(fields, expected);
 }
+
+#[path = "entity_state_game_clock_tests.rs"]
+mod game_clock_tests;
