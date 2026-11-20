@@ -77,13 +77,30 @@ fn configuration(world: &Path, deployment: &Path) -> CoreConfig {
     config
 }
 
-fn real_economy_package() -> PathBuf {
-    let root = std::env::var_os("KRASNOKAMEN_DEFAULT_PLUGINS_ROOT")
-        .map(PathBuf::from)
+/// The sibling `solaris-default-plugins` checkout, shared by every test that
+/// deploys a real first-party package.
+///
+/// `KRASNOKAMEN_DEFAULT_PLUGINS_ROOT` wins; otherwise the sibling sits one
+/// parent above the repository root (`<work>/solaris` -> `<work>/solaris-default-plugins`,
+/// which is also where CI checks the two repositories out side by side), and a
+/// linked worktree one level deeper still (`<work>/wt/<branch>`), so the search
+/// walks the manifest's ancestors instead of naming one depth.
+pub(crate) fn default_plugins_root() -> PathBuf {
+    if let Some(root) = std::env::var_os("KRASNOKAMEN_DEFAULT_PLUGINS_ROOT") {
+        return PathBuf::from(root);
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .skip(1)
+        .map(|ancestor| ancestor.join("solaris-default-plugins"))
+        .find(|candidate| candidate.is_dir())
         .unwrap_or_else(|| {
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../solaris-default-plugins")
-        });
-    let package = root.join("basic-economy");
+        })
+}
+
+fn real_economy_package() -> PathBuf {
+    let package = default_plugins_root().join("basic-economy");
     for file in ["plugin.toml", "config.toml", "plugin.wasm"] {
         assert!(
             package.join(file).is_file(),
