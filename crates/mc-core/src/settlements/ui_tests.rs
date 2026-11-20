@@ -2922,3 +2922,108 @@ fn certification_all_eight_requirements_and_repairs_fit_the_dialog_budget() {
     assert!(shown.has("certify_check") && shown.has("back"));
     assert!(!shown.has("certify_do"));
 }
+
+#[test]
+fn stage_two_certification_dialog_rows_fit_720p_at_gui_scale_three() {
+    fn assert_row_fits(changes: &[PlayerChange], screen: &str) {
+        let dialog = changes
+            .iter()
+            .find_map(|change| match change {
+                PlayerChange::ShowDialog { dialog } => Some(dialog),
+                _ => None,
+            })
+            .expect("stage-two dialog was presented");
+        let buttons = list(field(dialog, "actions"))
+            .iter()
+            .chain(
+                ["yes", "no", "action"]
+                    .into_iter()
+                    .filter_map(|key| field(dialog, key)),
+            )
+            .collect::<Vec<_>>();
+        assert!(!buttons.is_empty(), "{screen}");
+        let columns = match field(dialog, "columns") {
+            Some(Tag::Int(columns)) => usize::try_from(*columns).unwrap(),
+            None => buttons.len(),
+            other => panic!("{screen}: invalid columns {other:?}"),
+        }
+        .min(buttons.len());
+        assert!(columns > 0, "{screen}");
+        let width = buttons
+            .iter()
+            .map(|button| match field(button, "width") {
+                Some(Tag::Int(width)) => usize::try_from(*width).unwrap(),
+                other => panic!("{screen}: missing button width {other:?}"),
+            })
+            .max()
+            .unwrap();
+        // Reserve a conservative 16 GUI px per inter-column gap.
+        let row_width = columns * width + (columns - 1) * 16;
+        assert!(
+            row_width <= 427,
+            "{screen}: {columns} columns × {width} + gaps = {row_width} > 427"
+        );
+    }
+
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    set_locale(&mut state, "ru_ru");
+    assert_row_fits(&click(&mut state, id, "certify", &[]), "initial");
+    assert_row_fits(
+        &click(&mut state, id, "certify_check", &certify_form("castle")),
+        "invalid type",
+    );
+    stand_inside(&mut state, [9.5, 201.0, 9.5]);
+    assert_row_fits(
+        &click(&mut state, id, "certify_check", &certify_form("house")),
+        "discovery refusal",
+    );
+    super::building_discovery::tests::room(&mut state, [3, 3], [7, 7], true);
+    stand_inside(&mut state, [4.5, 201.0, 4.5]);
+    let missing = click(&mut state, id, "certify_check", &certify_form("house"));
+    assert!(!last_dialog(&missing).has("certify_do"));
+    assert_row_fits(&missing, "missing requirements");
+    crate::settlements::allocator::tests::bed(&mut state, 5, 5);
+    state.world.fold_overlay();
+    let ready = click(&mut state, id, "certify_check", &certify_form("house"));
+    let shown = last_dialog(&ready);
+    assert!(shown.has("certify_do") && shown.has("certify_check") && shown.has("back"));
+    assert_eq!(shown.actions.len(), 3);
+    assert_row_fits(&ready, "all requirements passed");
+    let certified = click(&mut state, id, "certify_do", &certify_form("house"));
+    assert_eq!(last_dialog(&certified).actions.len(), 3);
+    assert_row_fits(&certified, "certified next steps");
+    let building = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    assert_row_fits(
+        &click(&mut state, id, "certify_check", &certify_form("house")),
+        "existing certificate recheck",
+    );
+    assert_row_fits(
+        &click(
+            &mut state,
+            id,
+            "certificate_review",
+            &[("b", string(&building.0.to_string()))],
+        ),
+        "certificate level review",
+    );
+    assert_row_fits(
+        &click(
+            &mut state,
+            id,
+            "upgrade",
+            &[
+                ("b", string(&building.0.to_string())),
+                ("level", string("1")),
+            ],
+        ),
+        "certificate upgrade result",
+    );
+}

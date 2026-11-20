@@ -1017,8 +1017,7 @@ fn certify_screen(
     }
     buttons.push(button(ctx.t(Key::CheckHere), "certify_check", ctx.id));
     buttons.push(button(ctx.t(Key::Back), "back", ctx.id));
-    let columns = if buttons.len() == 3 { 3 } else { 2 };
-    let mut dialog = Dialog::multi_action(ctx.t(Key::TitleCertify), buttons).columns(columns);
+    let mut dialog = Dialog::multi_action(ctx.t(Key::TitleCertify), buttons).columns(2);
     if !note.is_empty() {
         dialog = dialog.text_width(note, 408);
     }
