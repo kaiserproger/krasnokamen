@@ -789,6 +789,7 @@ fn replayed_delivery(
     let recovered =
         crate::native_checkpoint::recover_with_reader(config, registry, reader).unwrap();
     recovered.dimensions[&Dimension::Overworld]
+        .settlement_tail
         .settlements
         .get(&town.0)
         .map(|record| record.economy.production.jobs["durable"].delivery.is_some())

@@ -111,7 +111,7 @@ fn one_builder_advance_seals_block_debit_and_cursor_before_closed_writer_replay(
     let (mut restored, _, _) = fixture();
     restored.settlements.apply_image(super::super::RecordImage {
         id,
-        value: Some(replay.settlements[&id.0].clone()),
+        value: Some(replay.settlement_tail.settlements[&id.0].clone()),
     });
     restored.plugins = replay.plugins;
     for ((x, y, z), block) in replay.blocks {

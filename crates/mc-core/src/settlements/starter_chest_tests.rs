@@ -410,7 +410,10 @@ fn starter_grant_hydration_refuses_zero_or_decreasing_wal_counts() {
     let checkpoint = [(key, row)].into_iter().collect();
     for count in [0, 1, 2, 3] {
         let mut replay = crate::journal::Replay::default();
-        replay.starter_chest_grants.insert(PLAYER, count);
+        replay
+            .settlement_tail
+            .starter_chest_grants
+            .insert(PLAYER, count);
         let result = starter_chest::hydrate(&mut state, &checkpoint, &replay);
         assert_eq!(result.is_err(), count < 2, "WAL count {count}: {result:?}");
         if result.is_ok() {

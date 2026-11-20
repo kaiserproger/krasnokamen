@@ -1279,13 +1279,7 @@ pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage
     validate_manifest(&manifest)?;
     let mut globals = world.checkpoint.globals.clone();
     crate::maps::checkpoint(&root.saved_maps, tick, &mut globals)?;
-    // Settlement rows follow every dimension WAL tail: live images overwrite
-    // rows tagged with their home dimension, tombstones delete them. Sequence
-    // is the max over rows, tails, and the durable row so exported worlds
-    // never reuse an id.
-    let mut sequence =
-        crate::settlements::persistence::checkpoint_sequence(&globals, world.manifest.tick)
-            .unwrap_or(0);
+    // Battle and settlement owners project their existing images into globals.
     for (&dimension, replay) in &world.dimensions {
         if let Some(image) = crate::battle::persistence::image(replay) {
             globals.insert(
@@ -1293,38 +1287,13 @@ pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage
                 record(tick, image.as_bytes().to_vec()),
             );
         }
-        sequence = sequence.max(replay.settlement_high_water);
-        for (&id, settlement) in &replay.settlements {
-            sequence = sequence.max(id).max(settlement.id.0);
-            globals.insert(
-                crate::settlements::persistence::row_key(settlement.id),
-                record(
-                    tick,
-                    serde_json::to_vec(&crate::settlements::persistence::Row {
-                        dimension,
-                        value: settlement,
-                    })
-                    .map_err(|e| CoreError::Storage(e.to_string()))?,
-                ),
-            );
-        }
-        for id in &replay.settlement_removed {
-            if !replay.settlements.contains_key(id) {
-                globals.remove(&format!("settlement/{id}"));
-            }
-        }
     }
-    for (&player, &count) in &root.starter_chest_grants {
-        let (key, row) = crate::settlements::starter_chest::checkpoint_row(player, count, tick)?;
-        globals.insert(key, row);
-    }
-    globals.insert(
-        "settlement_sequence".into(),
-        record(
-            tick,
-            serde_json::to_vec(&sequence).map_err(|e| CoreError::Storage(e.to_string()))?,
-        ),
-    );
+    crate::settlements::persistence::fold_checkpoint(
+        &mut globals,
+        &world.dimensions,
+        world.manifest.tick,
+        tick,
+    )?;
     globals.insert(
         "checkpoint".into(),
         record(

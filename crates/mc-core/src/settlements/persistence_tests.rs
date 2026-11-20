@@ -224,21 +224,21 @@ fn journal_captures_touched_only_and_replay_converges() {
     // Fold the batches in order: live images converge, tombstones delete.
     let mut replay = Replay::default();
     replay = crate::journal::apply_batch_images(replay, &[(3, 3, entries)]);
-    assert_eq!(replay.settlements.len(), 2);
-    assert_eq!(replay.settlement_high_water, second.0);
+    assert_eq!(replay.settlement_tail.settlements.len(), 2);
+    assert_eq!(replay.settlement_tail.high_water, second.0);
     replay = crate::journal::apply_batch_images(replay, &[(5, 5, renamed)]);
-    assert_eq!(replay.settlements[&first.0].name, "renamed");
+    assert_eq!(replay.settlement_tail.settlements[&first.0].name, "renamed");
     // Deletion tombstone.
     assert!(state.settlements.remove(first));
     let mut tombstoned = Vec::new();
     journal_entries(&mut state, 6, &mut tombstoned);
     assert_eq!(tombstoned.len(), 1);
     replay = crate::journal::apply_batch_images(replay, &[(6, 6, tombstoned)]);
-    assert!(!replay.settlements.contains_key(&first.0));
-    assert!(replay.settlement_removed.contains(&first.0));
-    assert!(replay.settlements.contains_key(&second.0));
+    assert!(!replay.settlement_tail.settlements.contains_key(&first.0));
+    assert!(replay.settlement_tail.removed.contains(&first.0));
+    assert!(replay.settlement_tail.settlements.contains_key(&second.0));
     // High water survives deletion: never reused.
-    assert_eq!(replay.settlement_high_water, second.0);
+    assert_eq!(replay.settlement_tail.high_water, second.0);
 }
 
 #[test]
@@ -253,8 +253,8 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
     // homed to other dimensions are skipped by this dimension's hydrate.
     let mut reopened = self::state();
     let mut replay = Replay::default();
-    replay.settlement_removed.insert(first.0);
-    replay.settlement_high_water = first.0;
+    replay.settlement_tail.removed.insert(first.0);
+    replay.settlement_tail.high_water = first.0;
     hydrate_dimension(&mut reopened, &rows, &replay, first.0).unwrap();
     assert!(reopened.settlements.get(first).is_none());
     assert_eq!(reopened.settlement_sequence, first.0);

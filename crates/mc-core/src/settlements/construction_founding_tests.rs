@@ -706,8 +706,15 @@ fn founding_sigkill_publishes_all_or_nothing_at_native_wal_boundary() {
                 .count(),
             3
         );
-        assert!(replay.settlements[&parent.0].founding.is_none());
-        assert_eq!(replay.settlements[&child.0].buildings.len(), 4);
+        assert!(
+            replay.settlement_tail.settlements[&parent.0]
+                .founding
+                .is_none()
+        );
+        assert_eq!(
+            replay.settlement_tail.settlements[&child.0].buildings.len(),
+            4
+        );
         for (name, origin) in expedition.sites() {
             assert!(executor::built_at(&state, child, name, origin));
         }

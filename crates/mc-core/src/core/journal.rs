@@ -325,23 +325,6 @@ pub(super) fn start_checkpoint_with_reply(
     work_tx.send(JournalWork::Checkpoint(Box::new(job))).is_ok()
 }
 
-/// Settlement and transit rows the WAL deleted since the previous checkpoint:
-/// present in the durable globals image but absent from this capture. Removing
-/// them here keeps the tombstone and the row deletion in one atomic transaction.
-pub(super) fn list_stale_settlement_rows(
-    globals: &std::collections::BTreeMap<String, mc_world::native::NativeDomainRecord>,
-    captured: &std::collections::BTreeMap<String, mc_world::native::NativeDomainRecord>,
-) -> Vec<String> {
-    globals
-        .keys()
-        .filter(|key| {
-            (key.starts_with("settlement/") || key.starts_with("transit/"))
-                && !captured.contains_key(key.as_str())
-        })
-        .cloned()
-        .collect()
-}
-
 /// Freeze durable ticket post-images on the same tick thread as all world domains.
 pub(crate) fn checkpoint_tickets(
     state: &TickState,
@@ -1265,7 +1248,7 @@ pub(super) fn commit_checkpoint(
     for (key, row) in &job.gameplay {
         globals.insert(key.clone(), row.clone());
     }
-    for key in list_stale_settlement_rows(&globals, &job.gameplay) {
+    for key in crate::settlements::persistence::stale_rows(&globals, &job.gameplay) {
         globals.remove(&key);
     }
     // This runs only on the journal thread (or startup before tick ownership).

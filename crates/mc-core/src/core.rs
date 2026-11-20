@@ -1833,6 +1833,10 @@ mod difficulty_persistence_tests;
 mod settlement_removal_persistence_tests;
 
 #[cfg(test)]
+#[path = "core/persistence_capture_tests.rs"]
+mod persistence_capture_tests;
+
+#[cfg(test)]
 #[path = "core_outbox_tests.rs"]
 mod core_outbox_tests;
 

@@ -522,18 +522,10 @@ fn entry_heap(entry: &JournalEntry) -> usize {
             value.enabled.iter().map(String::len).sum::<usize>()
                 + value.disabled.iter().map(String::len).sum::<usize>()
         }
-        E::Settlement { image, .. } => {
-            std::mem::size_of::<crate::settlements::RecordImage>()
-                + image
-                    .value
-                    .as_ref()
-                    .map_or(0, crate::settlements::SettlementRecord::heap_estimate)
-        }
+        E::Settlement { image, .. } => crate::settlements::persistence::image_heap(image),
         E::Battle { value } => std::mem::size_of::<String>() + value.capacity(),
         E::BattlePatch { value } => value_heap(value),
-        E::Transit { record, .. } => record
-            .as_ref()
-            .map_or(0, |value| std::mem::size_of::<String>() + value.capacity()),
+        E::Transit { record, .. } => crate::settlements::persistence::transit_image_heap(record),
         E::Scoreboard { value } => scoreboard_heap(value),
         E::CommandStorage { value } => value.capacity(),
         E::SavedMap { value, .. } => {

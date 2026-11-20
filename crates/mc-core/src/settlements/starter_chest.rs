@@ -171,7 +171,7 @@ pub(super) fn hydrate(
         }
         grants.players.insert(player, count);
     }
-    for (&player, &count) in &replay.starter_chest_grants {
+    for (&player, &count) in &replay.settlement_tail.starter_chest_grants {
         if count == 0 || count < grants.players.get(&player).copied().unwrap_or(0) {
             return Err(invalid(format!(
                 "WAL player {player}: zero or decreasing grant count"

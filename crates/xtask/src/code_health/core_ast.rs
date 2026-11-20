@@ -76,6 +76,9 @@ pub(super) struct CoreFacts {
     /// Production items (including associated items) plus non-item statements,
     /// keyed by source path. Item statements count once, as declarations.
     pub(super) files: BTreeMap<PathBuf, usize>,
+    /// Named production paths crossing into the D65 move set, below the
+    /// top-level graph's granularity. This never changes the SCC metric.
+    pub(super) domain_refs: Vec<super::domain_boundary::Reference>,
 }
 
 impl CoreFacts {
@@ -152,8 +155,11 @@ pub(super) fn collect(src: &Path) -> Result<CoreFacts, String> {
         child_dir: PathBuf::new(),
         test_lines: Vec::new(),
         errors: &mut errors,
+        domain_refs: super::domain_boundary::Index::default(),
+        field: None,
     };
     collector.walk_file(&file, lines, &lib, src.to_path_buf());
+    let domain_refs = std::mem::take(&mut collector.domain_refs).finish();
     if !errors.is_empty() {
         return Err(errors.join("; "));
     }
@@ -162,6 +168,7 @@ pub(super) fn collect(src: &Path) -> Result<CoreFacts, String> {
         modules: facts,
         root,
         files,
+        domain_refs,
     })
 }
 
@@ -316,6 +323,8 @@ struct Collector<'a> {
     /// Inclusive line ranges of skipped test items in `file`.
     test_lines: Vec<(usize, usize)>,
     errors: &'a mut Vec<String>,
+    domain_refs: super::domain_boundary::Index,
+    field: Option<String>,
 }
 
 impl Collector<'_> {
@@ -368,7 +377,10 @@ impl Collector<'_> {
     /// as written; only `crate::` and `super::` paths can leave the current
     /// top-level module (`self::` stays inside it, and a bare name is a local
     /// or extern item, or an import whose `use` was already recorded).
-    fn reference<'s>(&mut self, mut segments: impl Iterator<Item = &'s str>) {
+    fn reference(&mut self, names: &[String]) {
+        self.domain_refs
+            .record(&self.scope, names, &self.file, self.field.as_deref());
+        let mut segments = names.iter().map(String::as_str);
         if self.scope.is_empty() {
             return; // `lib.rs` is not a graph node.
         }
@@ -410,15 +422,19 @@ impl Collector<'_> {
             }
             UseTree::Name(name) => {
                 prefix.push(name.ident.to_string());
-                self.reference(prefix.iter().map(String::as_str));
+                self.domain_refs
+                    .import(&self.scope, prefix, &name.ident.to_string());
+                self.reference(prefix);
                 prefix.pop();
             }
             UseTree::Rename(rename) => {
                 prefix.push(rename.ident.to_string());
-                self.reference(prefix.iter().map(String::as_str));
+                self.domain_refs
+                    .import(&self.scope, prefix, &rename.rename.to_string());
+                self.reference(prefix);
                 prefix.pop();
             }
-            UseTree::Glob(_) => self.reference(prefix.iter().map(String::as_str)),
+            UseTree::Glob(_) => self.reference(prefix),
             UseTree::Group(group) => {
                 for tree in &group.items {
                     self.use_tree(tree, prefix);
@@ -473,7 +489,7 @@ impl Collector<'_> {
                             segments.push(next.to_string());
                             index += 3;
                         }
-                        self.reference(segments.iter().map(String::as_str));
+                        self.reference(&segments);
                     }
                 }
             }
@@ -639,7 +655,12 @@ impl<'ast> Visit<'ast> for Collector<'_> {
             self.skip(field.span());
             return;
         }
+        let previous = std::mem::replace(
+            &mut self.field,
+            field.ident.as_ref().map(ToString::to_string),
+        );
         visit::visit_field(self, field);
+        self.field = previous;
     }
 
     fn visit_variant(&mut self, variant: &'ast Variant) {
@@ -684,6 +705,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 
     fn visit_item_mod(&mut self, module: &'ast ItemMod) {
         let name = module.ident.to_string();
+        self.domain_refs.module(&self.scope, &name);
         let parent = self.current;
         if self.scope.is_empty() {
             match self.resolver.modules.get(&name) {
@@ -748,17 +770,13 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     }
 
     fn visit_path(&mut self, path: &'ast syn::Path) {
-        let leaves_module = path
-            .segments
-            .first()
-            .is_some_and(|first| first.ident == "crate" || first.ident == "super");
-        if path.leading_colon.is_none() && leaves_module {
+        if path.leading_colon.is_none() && path.segments.len() > 1 {
             let names: Vec<String> = path
                 .segments
                 .iter()
                 .map(|segment| segment.ident.to_string())
                 .collect();
-            self.reference(names.iter().map(String::as_str));
+            self.reference(&names);
         }
         visit::visit_path(self, path);
     }
