@@ -347,3 +347,44 @@ fn contiguous_snapshots_rescan_only_until_the_window_is_known() {
         assert_eq!(row.scanned, 0, "round {round} walked the square: {rows:?}");
     }
 }
+
+/// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN: a skipped publication must not cost every later publish a
+/// full candidate scan.
+///
+/// The pump can skip tick outputs (`next_publication`, server/pump.rs). A viewer keeps the last
+/// snapshot it actually planned, so after a skip its previous revision is the base of the skipped
+/// output, not of the next one. `entity_interest::prepare` (plan/entity_interest.rs:56-58) treats
+/// that as non-contiguous and rescans the whole square — even though the entity delta from the
+/// viewer's base still reaches the new snapshot through the chain the core publishes.
+///
+/// This test encodes the invariant: planning C after B was skipped costs no rescan. It fails on
+/// the current code, which is the point of the record.
+#[test]
+#[ignore = "EDGE-PUMP-SKIP-FORCES-FULL-RESCAN: red on this tree; the pump's skip turns every later publish into a rescan"]
+fn a_skipped_publication_must_not_rescan_the_next_one() {
+    let (mut store, slots) = pen_store();
+    let mut out = output(pen_chunks(), vec![], ChangeSet::default());
+    let mut viewers = vec![pen_viewer(1, [32.0, 64.0, 32.0])];
+
+    advance(&mut store, &slots, &mut out, 0);
+    let previous = viewers[0].previous_entities().cloned();
+    let first = with_plan_debug(|| publish_selected(&out, &mut viewers, previous.as_ref(), &[0]));
+    assert_eq!(first.rescans, 1, "the first publish has no baseline: {first:?}");
+
+    // A contiguous publish (the normal case) walks the delta, no rescan.
+    advance(&mut store, &slots, &mut out, 1);
+    let previous = viewers[0].previous_entities().cloned();
+    let contiguous = with_plan_debug(|| publish_selected(&out, &mut viewers, previous.as_ref(), &[0]));
+    assert_eq!(contiguous.rescans, 0, "a contiguous publish must not rescan: {contiguous:?}");
+
+    // Now a publication is skipped by the pump: the store advances twice before the next plan,
+    // so the new snapshot's base is the skipped one while the viewer still holds the previous.
+    advance(&mut store, &slots, &mut out, 2);
+    advance(&mut store, &slots, &mut out, 3);
+    let previous = viewers[0].previous_entities().cloned();
+    let after_skip = with_plan_debug(|| publish_selected(&out, &mut viewers, previous.as_ref(), &[0]));
+    assert_eq!(
+        after_skip.rescans, 0,
+        "one skipped publication must not cost a full rescan of every viewer: {after_skip:?}"
+    );
+}
