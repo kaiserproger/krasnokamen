@@ -24,7 +24,7 @@ hunks of the second one, which is the part a HEAD control must reverse:
 | the `Verification`/`open_verification`/`OpenedStore` rewrite | `crates/mc-core/src/hot_backup.rs` | one instance over the copy, read-only or repaired scratch in the copy's parent |
 | `verify_copy`, `published_tick_through` | `crates/mc-core/src/hot_backup.rs` | offline verification learns identity/store id/checkpoint from the copy and expects the highest published tick |
 | `verify_restorable` identity check | `crates/mc-core/src/hot_backup.rs` | the hot path keeps its "the copy is this world" check |
-| `open_learning_identity`, `validate_header_shape` | `crates/mc-world/src/native.rs` | open without a caller-supplied identity; the copy is the authority |
+| — (excluded, see below) | `crates/mc-world/src/native.rs` | `open_learning_identity`/`validate_header_shape` |
 | `verify_backup` | `crates/mc-edge/src/backup.rs` | offline verify calls `verify_copy`; the read-only `read_identity`/`read_marker_fields` pair is gone, and with it `backup_expected_tick` |
 | `Backup` arm | `crates/mc-edge/src/operator_cli.rs` | final status printed after verification, no-content mode marked |
 
@@ -35,6 +35,12 @@ keeps its `Core::backup` caller and the refused copy still yields an error, so
 stays green.
 
 ## Exclusions
+
+- `crates/mc-world/src/native.rs` (`open_learning_identity`, `validate_header_shape`):
+  reason (b) — the kept tests call it (`journal::test_wal_identity`,
+  `read_complete_batches_after_test`), so reversing it stops the control from
+  compiling. `hot_backup.rs` at `4785cbc83e` does not use it, so the reversed
+  tree still builds.
 
 - `crates/mc-edge/src/backup_tests.rs` and
   `crates/mc-edge/src/operator_cli_tests.rs` are test hunks; the ledger keeps
