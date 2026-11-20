@@ -965,6 +965,13 @@ publish a client receives about 1.5 KB, far inside any socket buffer, so a
 (off by default), a run ends `inconclusive`, which is the honest outcome; do
 not read it as the row's symptom.
 
+The gate sets `KRASNOKAMEN_PUMP_PUBLISH_PER_SECOND` (default 3 for the run) on
+the server: the pump then publishes at most that many outputs per second, which
+is the rows' condition with a deterministic rate instead of a unit-test park.
+It is a test/dev knob only (unset or 0 = unlimited, the shipped pump; an
+invalid value fails startup and one `warn` line names it), never an operator
+setting; see `crates/mc-edge/src/server/pump.rs` beside the queue budget.
+
 The loopback dashboard (`[dashboard]` written by the gate, no secret) is the
 condition sensor: `pump_skipped_ticks` must grow. A verdict whose condition
 never occurred is `null` (inconclusive: the run ends failed with that reason),

@@ -18,16 +18,16 @@ def context(*extra: str, client: str = "native", timeout: float | None = None) -
 
 class ArgsTest(unittest.TestCase):
     def test_defaults_are_the_gate_options(self) -> None:
-        timeout, tick_rate, flood_clients, flood_steps, scenario = join_lag.validate_args(context())
-        self.assertEqual((timeout, tick_rate, flood_clients, flood_steps, scenario),
-                         (join_lag.TIMEOUT, 20, 3, 60, "all"))
+        timeout, tick_rate, flood_clients, flood_steps, pump_rate, scenario = join_lag.validate_args(context())
+        self.assertEqual((timeout, tick_rate, flood_clients, flood_steps, pump_rate, scenario),
+                         (join_lag.TIMEOUT, 20, 1, 60, 3, "all"))
 
     def test_options_select_a_row_and_the_flood_load(self) -> None:
-        timeout, tick_rate, flood_clients, flood_steps, scenario = join_lag.validate_args(
+        timeout, tick_rate, flood_clients, flood_steps, pump_rate, scenario = join_lag.validate_args(
             context("--scenario", "border-reveal", "--tick-rate", "3", "--flood-clients", "2",
-                    "--flood-steps", "8", timeout=600.0))
-        self.assertEqual((timeout, tick_rate, flood_clients, flood_steps, scenario),
-                         (600.0, 3, 2, 8, "border-reveal"))
+                    "--flood-steps", "8", "--pump-publish-per-second", "10", timeout=600.0))
+        self.assertEqual((timeout, tick_rate, flood_clients, flood_steps, pump_rate, scenario),
+                         (600.0, 3, 2, 8, 10, "border-reveal"))
 
     def test_a_java_client_is_refused(self) -> None:
         with self.assertRaisesRegex(ValueError, "requires --client native"):
@@ -36,7 +36,8 @@ class ArgsTest(unittest.TestCase):
     def test_out_of_range_options_are_refused(self) -> None:
         for argv in (("--tick-rate", "0"), ("--tick-rate", "21"),
                      ("--flood-steps", "3"), ("--flood-steps", "129"),
-                     ("--flood-clients", "0"), ("--flood-clients", "5"),
+                     ("--flood-clients", "-1"), ("--flood-clients", "5"),
+                     ("--pump-publish-per-second", "101"),
                      ("--scenario", "other")):
             with self.subTest(argv=argv):
                 with self.assertRaises((ValueError, SystemExit)):

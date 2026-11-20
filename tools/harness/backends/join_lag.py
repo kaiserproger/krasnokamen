@@ -246,24 +246,30 @@ def validate_args(ctx: ProfileContext) -> tuple[float, int, int, int, int, str]:
     # 20 TPS is the row's own rate: the pump must outpace the tick for the queue to build in
     # seconds; a slower tick needs a queue of dozens of periods and takes minutes to fill.
     parser.add_argument("--tick-rate", type=int, default=20)
-    parser.add_argument("--flood-clients", type=int, default=3)
+    parser.add_argument("--flood-clients", type=int, default=1)
+    # The gate's own condition lever: the server publishes at most this many outputs per second for
+    # the run (KRASNOKAMEN_PUMP_PUBLISH_PER_SECOND, a test/dev knob, never an operator setting).
+    parser.add_argument("--pump-publish-per-second", type=int, default=3)
     parser.add_argument("--flood-steps", type=int, default=60,
                         help="cap on view-wide fills per flood client while waiting for pump skips")
     args = parser.parse_args(ctx.extra_args)
     if not 1 <= args.tick_rate <= 20:
         raise ValueError("join-lag-gate --tick-rate must be in [1, 20]")
-    if not 1 <= args.flood_clients <= 4:
-        raise ValueError("join-lag-gate --flood-clients must be in [1, 4]")
+    if not 0 <= args.flood_clients <= 4:
+        raise ValueError("join-lag-gate --flood-clients must be in [0, 4]")
+    if not 0 <= args.pump_publish_per_second <= 100:
+        raise ValueError("join-lag-gate --pump-publish-per-second must be in [0, 100]")
     if not 4 <= args.flood_steps <= 128:
         raise ValueError("join-lag-gate --flood-steps must be in [4, 128]")
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else TIMEOUT
     if not 0 < timeout <= 2400:
         raise ValueError("join-lag-gate --timeout-seconds must be in (0, 2400]")
-    return timeout, args.tick_rate, args.flood_clients, args.flood_steps, args.scenario
+    return (timeout, args.tick_rate, args.flood_clients, args.flood_steps,
+            args.pump_publish_per_second, args.scenario)
 
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
-    timeout, tick_rate, flood_clients, flood_steps, scenario = validate_args(ctx)
+    timeout, tick_rate, flood_clients, flood_steps, pump_rate, scenario = validate_args(ctx)
     artifact = ctx.artifact_dir
     override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not override:
@@ -309,6 +315,10 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         env["KRASNOKAMEN_HARNESS_LOG_STDOUT"] = "1"
         # The pump's debug `join landed` line is the server-side join timing this gate reads.
         env.setdefault("RUST_LOG", "info,mc_edge::server::pump=debug")
+        if pump_rate:
+            # The pump publishes at most N outputs per second: the deterministic condition of these
+            # rows. Unset or 0 keeps the shipped unlimited pump.
+            env["KRASNOKAMEN_PUMP_PUBLISH_PER_SECOND"] = str(pump_rate)
         server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                                       cwd=runtime.REPO_ROOT, stdout=server_log,
                                       stderr=subprocess.STDOUT, start_new_session=True, env=env)
@@ -350,6 +360,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             detail, verdicts = _gate(a, flooders, ctx, artifact, tick_rate, scenario, flood_steps,
                                      address, server_log_path, dashboard_port,
                                      lambda: launch(peer_context(JOINER), JOINER, display=None))
+            detail["pump_publish_per_second"] = pump_rate
             a.report["details"] = detail
             evidence["flood_client"] = flood_evidence
             outcome, failed = disposition(verdicts)
