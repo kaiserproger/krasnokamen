@@ -956,6 +956,7 @@ pub fn recover_with_reader(
     let recovered_tick = crate::journal::visit_complete_batches_after(
         &config.world_dir.join("journal"),
         manifest.tick,
+        crate::journal::WalIdentity::new(reader.store_uuid(), &registry.blocks),
         |batch| {
             let batches = [batch];
             for (&dimension, replay) in &mut dimensions {

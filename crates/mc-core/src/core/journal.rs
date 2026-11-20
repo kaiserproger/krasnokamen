@@ -707,6 +707,9 @@ pub(super) fn journal_loop(
     // then reads an older tick. The writer's verified startup interval and
     // contiguous append coverage keep that gate independent of pruned files.
     let committed_tick = std::sync::atomic::AtomicU64::new(initial_manifest.tick);
+    // Constant for the writer's lifetime: every batch this process appends and
+    // every batch it verifies is bound to the opened store and palette.
+    let wal_identity = writer.identity();
     // Set by the native writer after a panic; the journal side then halts exactly
     // like an append failure.
     let native_failed = std::sync::atomic::AtomicBool::new(false);
@@ -729,6 +732,7 @@ pub(super) fn journal_loop(
                     &committed_tick,
                     &native_failed,
                     initial_manifest,
+                    wal_identity,
                 );
             })
             .expect("spawn native checkpoint writer");
@@ -914,6 +918,7 @@ pub(super) fn native_writer_loop(
     committed_tick: &std::sync::atomic::AtomicU64,
     native_failed: &std::sync::atomic::AtomicBool,
     initial_manifest: CheckpointManifest,
+    wal_identity: crate::journal::WalIdentity,
 ) {
     // The current complete manifest is the recovery/pruning authority.
     let mut prev_manifest = initial_manifest;
@@ -928,8 +933,11 @@ pub(super) fn native_writer_loop(
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             run_native_work(
                 work,
-                world_dir,
-                &store,
+                &NativeWorld {
+                    world_dir,
+                    store: &store,
+                    wal_identity,
+                },
                 committed_tick,
                 native_failed,
                 &mut prev_manifest,
@@ -961,15 +969,28 @@ pub(super) fn native_writer_loop(
     );
 }
 
+/// The world the native writer works on: the directory and store it writes,
+/// and the WAL identity this writer's frames carry.
+#[derive(Clone, Copy)]
+pub(super) struct NativeWorld<'a> {
+    pub world_dir: &'a std::path::Path,
+    pub store: &'a mc_world::native::NativeStore,
+    pub wal_identity: crate::journal::WalIdentity,
+}
+
 pub(super) fn run_native_work(
     work: NativeWork,
-    world_dir: &std::path::Path,
-    store: &mc_world::native::NativeStore,
+    world: &NativeWorld<'_>,
     committed_tick: &std::sync::atomic::AtomicU64,
     native_failed: &std::sync::atomic::AtomicBool,
     prev_manifest: &mut CheckpointManifest,
     block_log: &mut crate::block_log::Backlog,
 ) -> std::ops::ControlFlow<&'static str> {
+    let NativeWorld {
+        world_dir,
+        store,
+        wal_identity,
+    } = *world;
     match work {
         NativeWork::Shutdown => return std::ops::ControlFlow::Break("shutdown requested"),
         NativeWork::Checkpoint { mut job, plugins } => {
@@ -1103,7 +1124,7 @@ pub(super) fn run_native_work(
                 &mut store.snapshot_reader(),
                 prev_manifest.tick,
                 through,
-                store.store_uuid(),
+                wal_identity,
             );
             match &result {
                 Ok(backup) => tracing::info!(

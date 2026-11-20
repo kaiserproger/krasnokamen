@@ -2346,9 +2346,7 @@ fn high_random_tick_speed_command_performs_more_work_than_the_old_cap() {
 
 #[test]
 fn gamerule_wal_images_preserve_canonical_aliases_and_absent_subsystem_overrides() {
-    use crate::journal::{
-        JournalEntry, JournalWriter, Replay, read_complete_batches_after, replay_batches,
-    };
+    use crate::journal::{JournalEntry, JournalWriter, Replay, replay_batches};
     let (mut state, alice, _) = fixture();
     command(&mut state, alice, "gamerule keepInventory true");
     command(&mut state, alice, "gamerule randomTickSpeed 0");
@@ -2383,11 +2381,12 @@ fn gamerule_wal_images_preserve_canonical_aliases_and_absent_subsystem_overrides
     assert!(!values.contains_key("keepInventory"));
     let dir = std::env::temp_dir().join(format!("mc-core-gamerules-{}", uuid::Uuid::new_v4()));
     {
-        let mut writer = JournalWriter::open(&dir, 1).unwrap();
+        let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
         writer.append(1, output.tick, &entries).unwrap();
         writer.flush().unwrap();
     }
-    let batches = read_complete_batches_after(&dir.join("journal"), 0).unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     let recovered = replay_batches(Replay::default(), &batches);
     assert_eq!(recovered.gamerules, values);
     let replayed_again = replay_batches(recovered, &batches);
@@ -2657,7 +2656,7 @@ fn malformed_item_component_reports_error_without_any_inventory_write() {
 
 #[test]
 fn command_component_inventory_survives_real_wal_replay_and_native_player_checkpoint() {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     use crate::native_checkpoint::tests::{read_player, write_player};
     let (mut state, alice, _) = fixture();
     let (output, _, _) = crate::tick::run_tick(&mut state, &[
@@ -2693,11 +2692,13 @@ fn command_component_inventory_survives_real_wal_replay_and_native_player_checkp
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let directory = tempfile::tempdir().unwrap();
     {
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         writer.append(1, output.tick, &entries).unwrap();
         writer.flush().unwrap();
     }
-    let batches = read_complete_batches_after(&directory.path().join("journal"), 0).unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&directory.path().join("journal"), 0)
+            .unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     assert_eq!(
         replay.players[&uuid].inventory.as_slice(),

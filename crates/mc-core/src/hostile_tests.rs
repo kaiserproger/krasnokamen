@@ -287,7 +287,7 @@ fn skeleton_draws_for_twenty_ticks_and_uses_difficulty_bow_intervals() {
 #[test]
 fn natural_skeleton_arrow_hit_and_tombstone_survive_checkpoint_wal_replay() {
     use crate::boundary::EntityEvent;
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     let (mut state, player, centre) = setup(12.0);
     state.day_time = 18_000;
     state.difficulty = crate::survival::Difficulty::Normal;
@@ -318,7 +318,7 @@ fn natural_skeleton_arrow_hit_and_tombstone_survive_checkpoint_wal_replay() {
         .row(state.entities.slot_of(skeleton).unwrap())
         .uuid;
     let directory = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     let mut checkpoint = None;
     let mut checkpoint_tick = 0;
     let mut hit = None;
@@ -405,8 +405,11 @@ fn natural_skeleton_arrow_hit_and_tombstone_survive_checkpoint_wal_replay() {
     }
     let hit = hit.expect("natural arrow applies damage and publishes causal hit/removal");
     writer.flush().unwrap();
-    let batches =
-        read_complete_batches_after(&directory.path().join("journal"), checkpoint_tick).unwrap();
+    let batches = crate::journal::read_complete_batches_after_test(
+        &directory.path().join("journal"),
+        checkpoint_tick,
+    )
+    .unwrap();
     let recovered = replay_batches(checkpoint.unwrap(), &batches);
     assert!(
         !recovered.entities.contains_key(&hit.0),

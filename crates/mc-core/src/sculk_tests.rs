@@ -600,11 +600,12 @@ fn disk_replay(
     tick: u64,
     entries: &[crate::journal::JournalEntry],
 ) -> crate::journal::Replay {
-    let mut writer = crate::journal::JournalWriter::open(dir, 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(dir, 1).unwrap();
     writer.append(tick, tick, entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = crate::journal::read_complete_batches_after(&dir.join("journal"), 0).unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     let once = crate::journal::replay_batches(Default::default(), &batches);
     crate::journal::replay_batches(once, &batches)
 }

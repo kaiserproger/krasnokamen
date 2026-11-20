@@ -1,7 +1,5 @@
 use super::*;
-use crate::journal::{
-    EntityStateImage, JournalWriter, Replay, read_complete_batches_after, replay_batches,
-};
+use crate::journal::{EntityStateImage, JournalWriter, Replay, replay_batches};
 use crate::mounts::tests::{fixture, hold, slot, spawn, use_entity};
 use crate::tick::run_tick;
 #[test]
@@ -71,11 +69,12 @@ fn actual_region_checkpoint_and_wal_tail_restore_tame_owner_collar_and_equipment
     hold(&mut state, actor, "blue_dye", 1);
     let (out, _, _) = run_tick(&mut state, &[use_entity(wolf)]);
     let entries = journal_entries_for_tick(&mut state, &out).unwrap();
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(1, state.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&dir.join("journal"), 0).unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     let replay = replay_batches(checkpoint, &batches);
     let (mut restored, _, _) = fixture();
     restore_entity(&mut restored, wolf.0, &replay.entities[&wolf.0]).unwrap();
@@ -158,14 +157,16 @@ fn happy_ghast_admission_leave_and_reconnect_survive_wal_recovery() {
             vec![expected]
         );
         let dir = tempfile::tempdir().unwrap();
-        let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(dir.path(), 1).unwrap();
         writer.append(1, baseline.tick, &initial).unwrap();
         writer
             .append(baseline.tick + 1, output.tick, &entries)
             .unwrap();
         writer.flush().unwrap();
         drop(writer);
-        let batches = read_complete_batches_after(&dir.path().join("journal"), 0).unwrap();
+        let batches =
+            crate::journal::read_complete_batches_after_test(&dir.path().join("journal"), 0)
+                .unwrap();
         let replay = replay_batches(Replay::default(), &batches);
         let record = &replay.entities[&ghast.0];
         assert_eq!(record.state.entity_life.mount.riders, vec![expected]);
@@ -301,7 +302,7 @@ fn save_mounts_checkpoint(config: &CoreConfig, state: &mut TickState) {
         panic!("expected native checkpoint capture");
     };
     let mut manifest = crate::native_checkpoint::tests::read_manifest(config).unwrap();
-    let mut writer = JournalWriter::open(&config.world_dir, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&config.world_dir, 1).unwrap();
     writer.append(manifest.tick + 1, state.tick, &[]).unwrap();
     write_checkpoint(
         &config.world_dir,

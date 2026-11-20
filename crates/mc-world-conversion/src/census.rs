@@ -368,10 +368,15 @@ fn census(
     }
 
     let mut tail = 0u64;
-    mc_core::journal::visit_complete_batches_after(&source.join("journal"), manifest.tick, |_| {
-        tail += 1;
-        Ok(())
-    })?;
+    mc_core::journal::visit_complete_batches_after(
+        &source.join("journal"),
+        manifest.tick,
+        mc_core::journal::WalIdentity::new(reader.store_uuid(), &registry.blocks),
+        |_| {
+            tail += 1;
+            Ok(())
+        },
+    )?;
     if tail != 0 {
         return Err(fail(format!(
             "journal holds {tail} complete batches after checkpoint tick {}; census would not \

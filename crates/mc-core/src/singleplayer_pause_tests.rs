@@ -210,7 +210,7 @@ fn singleplayer_pause_holds_scheduled_block_deadline_and_entity() {
             });
         }
     }
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(base + 1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);

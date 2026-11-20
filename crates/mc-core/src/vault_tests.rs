@@ -279,7 +279,7 @@ fn vault_real_use_item_on_input_consumes_key_in_shared_tick() {
 
 #[test]
 fn vault_wal_recovers_rewarded_player_pending_rewards_and_key_debit_together() {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     let dir = std::env::temp_dir().join(format!("vault-wal-{}", uuid::Uuid::new_v4()));
     let mut original = state(Some(dir.clone()));
     let player = join(&mut original, 1);
@@ -309,10 +309,12 @@ fn vault_wal_recovers_rewarded_player_pending_rewards_and_key_debit_together() {
     );
     let entries = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     let before = original.vaults[&key(POS)].clone();
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.gate(checkpoint_tick, output.tick).unwrap();
-    let batches = read_complete_batches_after(&dir.join("journal"), checkpoint_tick).unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), checkpoint_tick)
+            .unwrap();
     let once = replay_batches(Replay::default(), &batches);
     let expected = once.opaque_block_entities.clone();
     let twice = replay_batches(once, &batches);

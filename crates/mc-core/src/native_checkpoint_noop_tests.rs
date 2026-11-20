@@ -145,7 +145,7 @@ fn native_noop_save_twice_keeps_chunks_and_size() {
         );
         let mut manifest = read_manifest(&config).unwrap();
         let mut writer =
-            JournalWriter::open_recovered(&config.world_dir, 1, manifest.tick, manifest.tick)
+            JournalWriter::open_recovered_test(&config.world_dir, 1, manifest.tick, manifest.tick)
                 .unwrap();
         writer.append(1, 2, &[]).unwrap();
         save(&config, &mut initial, &mut writer, &mut manifest, None);
@@ -160,7 +160,8 @@ fn native_noop_save_twice_keeps_chunks_and_size() {
     let mut manifest = read_manifest(&config).unwrap();
     let initial_checkpoint_tick = manifest.tick;
     let mut writer =
-        JournalWriter::open_recovered(&config.world_dir, 1, manifest.tick, state.tick).unwrap();
+        JournalWriter::open_recovered_test(&config.world_dir, 1, manifest.tick, state.tick)
+            .unwrap();
     let first = save(&config, &mut state, &mut writer, &mut manifest, None);
     let second = save(
         &config,
@@ -224,7 +225,8 @@ fn native_active_clock_checkpoints_write_only_changed_chunks() {
         .ensure_blocking(&positions.map(|pos| (pos, 0)).into_iter().collect());
     let mut manifest = read_manifest(&config).unwrap();
     let mut writer =
-        JournalWriter::open_recovered(&config.world_dir, 1, manifest.tick, state.tick).unwrap();
+        JournalWriter::open_recovered_test(&config.world_dir, 1, manifest.tick, state.tick)
+            .unwrap();
     for tick in 1..=4 {
         state.tick = tick;
         state
@@ -289,7 +291,8 @@ fn native_active_clock_checkpoints_write_only_changed_chunks() {
     // the manifest drops that now-inactive, zero-debt record.
     let mut manifest = read_manifest(&config).unwrap();
     let mut writer =
-        JournalWriter::open_recovered(&config.world_dir, 1, manifest.tick, reopened.tick).unwrap();
+        JournalWriter::open_recovered_test(&config.world_dir, 1, manifest.tick, reopened.tick)
+            .unwrap();
     save(&config, &mut reopened, &mut writer, &mut manifest, None);
     drop(writer);
     drop(reopened);
@@ -320,7 +323,8 @@ fn inhabited_interval_closed_after_restart_reaches_native_storage() {
         .ensure_blocking(&[(pos, 0)].into_iter().collect());
     let mut manifest = read_manifest(&config).unwrap();
     let mut writer =
-        JournalWriter::open_recovered(&config.world_dir, 1, manifest.tick, state.tick).unwrap();
+        JournalWriter::open_recovered_test(&config.world_dir, 1, manifest.tick, state.tick)
+            .unwrap();
     for tick in 1..=3 {
         state.tick = tick;
         // No simulation-debt record: only the inhabited interval is in play.
@@ -340,7 +344,8 @@ fn inhabited_interval_closed_after_restart_reaches_native_storage() {
     let mut reopened = recover(&config);
     let mut manifest = read_manifest(&config).unwrap();
     let mut writer =
-        JournalWriter::open_recovered(&config.world_dir, 1, manifest.tick, reopened.tick).unwrap();
+        JournalWriter::open_recovered_test(&config.world_dir, 1, manifest.tick, reopened.tick)
+            .unwrap();
     // One tick without any player: the interval closes and must be persisted.
     let tick = reopened.tick + 1;
     reopened.tick = tick;

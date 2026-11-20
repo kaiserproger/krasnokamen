@@ -1260,7 +1260,13 @@ fn wal_refusal(
         }
         payload.push('\n');
     }
-    let frame = crate::journal::frame_batch(1, 1, payload.as_bytes()).expect("framed batch");
+    let frame = crate::journal::frame_batch(
+        1,
+        1,
+        payload.as_bytes(),
+        crate::journal::WalIdentity::fixture(),
+    )
+    .expect("framed batch");
     let dir = std::env::temp_dir().join(format!(
         "krasnokamen-d8-wal-{}-{}",
         std::process::id(),
@@ -1270,7 +1276,7 @@ fn wal_refusal(
     std::fs::create_dir_all(&dir).expect("batch dir");
     let name = format!("batch-{:020}-{:020}.bin", 1, 1);
     std::fs::write(dir.join(&name), &frame).expect("batch file");
-    let read = crate::journal::read_complete_batches_after(&dir, 0);
+    let read = crate::journal::read_complete_batches_after_test(&dir, 0);
     let _ = std::fs::remove_dir_all(&dir);
     match read {
         Err(error) => error,

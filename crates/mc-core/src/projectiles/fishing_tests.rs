@@ -719,7 +719,7 @@ fn rain_wait_is_journaled_after_native_checkpoint_and_survives_anvil_export() {
     // The checkpoint carries this tick and its capture cleared the emitter's
     // bases, so the first journaled flight tick must emit the hook's image; a
     // compact record here would be a delta of an image outside the tail.
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     for _ in 0..20 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
         let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();

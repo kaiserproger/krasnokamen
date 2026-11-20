@@ -1,5 +1,5 @@
 use super::*;
-use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+use crate::journal::{JournalWriter, Replay, replay_batches};
 fn fixture(range: f64) -> (TickState, EntityId, EntityId, [f64; 3]) {
     let (mut state, player, pos) = crate::hostile_tests::setup(range);
     state.difficulty = crate::survival::Difficulty::Normal;
@@ -132,12 +132,12 @@ fn anger_checkpoint_and_replay_restore_uuid_and_pose() {
         Some(Retained::Warden(expected.clone()))
     );
     std::fs::create_dir_all(&root).unwrap();
-    let mut writer = JournalWriter::open(&root, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&root, 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&root.join("journal"), 0).unwrap(),
+        &crate::journal::read_complete_batches_after_test(&root.join("journal"), 0).unwrap(),
     );
     let record = &replay.entities[&mob.0];
     state.remove_entity(slot);

@@ -260,6 +260,39 @@ impl BlockRegistry {
     pub fn states(&self) -> impl Iterator<Item = &BlockState> {
         self.by_id.iter().map(Arc::as_ref)
     }
+
+    /// Fingerprint of the state-id → block mapping: the first eight bytes of
+    /// SHA-256 over every `(state id, block id, property values)` in id order.
+    ///
+    /// The WAL stores block states as bare numeric ids
+    /// ([`crate::BlockStateId`]), so a tail written under one mapping and
+    /// replayed under another silently becomes different blocks. The journal
+    /// carries this digest in every batch frame and refuses a mismatch (Books
+    /// R5-G5). It names content, not a build: two builds that register the
+    /// same mapping agree, and a changed `blocks.json` or datapack block set
+    /// does not.
+    #[must_use]
+    pub fn palette_digest(&self) -> [u8; 8] {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(b"solaris:block-palette:v1");
+        for state in &self.by_id {
+            hasher.update(state.block.id.as_str().as_bytes());
+            hasher.update([0u8]);
+            for (name, value) in &state.properties {
+                hasher.update(name.as_bytes());
+                hasher.update(b"=");
+                hasher.update(value.as_bytes());
+                hasher.update(b";");
+            }
+            hasher.update(state.id.0.to_be_bytes());
+            hasher.update(b"\n");
+        }
+        let digest = hasher.finalize();
+        let mut out = [0u8; 8];
+        out.copy_from_slice(&digest[..8]);
+        out
+    }
 }
 
 fn props_in_schema_order(

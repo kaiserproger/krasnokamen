@@ -159,7 +159,7 @@ fn offscreen_double_count_checkpoint_reopen_retry_and_downtime() {
         body,
     );
     checkpoint(&mut f, &config, false);
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     step_to(&mut f, &mut writer, first);
     assert_eq!(job(&f).done, 1);
     // Delivery retry must not change the period watermark or manufacture work.
@@ -176,12 +176,12 @@ fn offscreen_double_count_checkpoint_reopen_retry_and_downtime() {
     let mut f = reopen(f, &config, Some(writer), true);
     assert_eq!(f.world.tick, saved_tick, "downtime adds no game time");
     assert_eq!(job(&f).next_due, saved_due);
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     step(&mut f, Some(&mut writer));
     assert_eq!((job(&f).done, job(&f).deferred), (3, 0));
     assert_eq!(total(&f, "minecraft:bread"), 3);
     let mut f = reopen(f, &config, Some(writer), true);
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     step(&mut f, Some(&mut writer));
     assert_eq!(job(&f).done, 3, "restart retry cannot add a portion");
     assert_eq!(total(&f, "minecraft:bread"), 3);
@@ -202,7 +202,7 @@ fn offscreen_wal_commit_progress_apply_cuts() {
         assert_eq!(job(&f).deferred, 1);
         let mut f = reopen(f, &config, None, false);
         assert_eq!(job(&f).deferred, 0);
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         step_to(&mut f, &mut writer, due + period);
         assert_eq!(job(&f).deferred, 2);
         if save_checkpoint {
@@ -215,7 +215,7 @@ fn offscreen_wal_commit_progress_apply_cuts() {
         let mut f = reopen(f, &config, None, true);
         assert_eq!(total(&f, "minecraft:bread"), 0);
         assert_eq!((job(&f).done, job(&f).deferred), (0, 2));
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         step(&mut f, Some(&mut writer));
         if save_checkpoint {
             checkpoint(&mut f, &config, false);
@@ -223,7 +223,7 @@ fn offscreen_wal_commit_progress_apply_cuts() {
         let mut f = reopen(f, &config, Some(writer), true);
         assert_eq!((job(&f).done, job(&f).deferred), (2, 0));
         assert_eq!(total(&f, "minecraft:bread"), 2);
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         step(&mut f, Some(&mut writer));
         assert_eq!(total(&f, "minecraft:bread"), 2);
     }
@@ -257,7 +257,7 @@ fn offscreen_legacy_overdue_conversion_preserves_one_opportunity_only() {
         step(&mut f, None);
         let mut f = reopen(f, &config, None, false);
         assert_eq!(job(&f).deferred, 0);
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         step(&mut f, Some(&mut writer));
         assert_eq!(
             job(&f).deferred,
@@ -268,7 +268,7 @@ fn offscreen_legacy_overdue_conversion_preserves_one_opportunity_only() {
             checkpoint(&mut f, &config, false);
         }
         let mut f = reopen(f, &config, Some(writer), true);
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         step(&mut f, Some(&mut writer));
         assert_eq!((job(&f).done, job(&f).deferred), (1, 0));
         assert_eq!(total(&f, "minecraft:bread"), 1);
@@ -311,7 +311,7 @@ fn offscreen_consumption_debit_credit_and_inventory_share_wal_boundary() {
         assert_eq!(consumption(&f).debit, 1);
         let mut f = reopen(f, &config, None, false);
         assert_eq!(consumption(&f).debit, 0);
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         step_to(&mut f, &mut writer, due);
         if save_checkpoint {
             checkpoint(&mut f, &config, false);
@@ -324,7 +324,7 @@ fn offscreen_consumption_debit_credit_and_inventory_share_wal_boundary() {
         let mut f = reopen(f, &config, None, true);
         assert_eq!((consumption(&f).debit, consumption(&f).credit), (1, 0));
         assert_eq!(total(&f, "minecraft:bread"), 10);
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         step(&mut f, Some(&mut writer));
         if save_checkpoint {
             checkpoint(&mut f, &config, false);
@@ -332,7 +332,7 @@ fn offscreen_consumption_debit_credit_and_inventory_share_wal_boundary() {
         let mut f = reopen(f, &config, Some(writer), true);
         assert_eq!((consumption(&f).debit, consumption(&f).credit), (0, 3));
         assert_eq!(total(&f, "minecraft:bread"), 9);
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         step(&mut f, Some(&mut writer));
         assert_eq!(
             consumption(&f).credit,
@@ -419,7 +419,7 @@ fn paused_retry_zero_after_reopen_cannot_authorize_a_portion() {
     checkpoint(&mut f, &config, false);
     let mut f = reopen(f, &config, None, true);
     assert_eq!(job(&f).retry_at, 0);
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     step(&mut f, Some(&mut writer));
     assert_eq!(job(&f).done, 0);
     assert_eq!(job(&f).next_due, due);
@@ -435,7 +435,7 @@ fn simulated_wait_then_reopen_unload_keeps_only_one_waited_opportunity() {
     let due = job(&f).next_due;
     let period = job(&f).duration;
     checkpoint(&mut f, &config, false);
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     step_to(&mut f, &mut writer, due + 4 * period);
     assert_eq!(job(&f).next_due, due);
     assert!(job(&f).waiting_simulated);
@@ -446,7 +446,7 @@ fn simulated_wait_then_reopen_unload_keeps_only_one_waited_opportunity() {
         "the boundary guard survives restart"
     );
     assert_eq!(job(&f).retry_at, 0, "retry time is not persisted authority");
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     step(&mut f, Some(&mut writer));
     assert_eq!(
         job(&f).deferred,

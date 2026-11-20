@@ -136,7 +136,7 @@ fn baseline(directory: &std::path::Path) {
     join(&mut state);
     assert_eq!(state.tick, 1);
     let entries = mutate(&mut state);
-    let mut writer = JournalWriter::open(directory, 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory, 1).unwrap();
     writer.append(1, 1, &entries).unwrap();
     let job = checkpoint(&mut state);
     let mut manifest = read_manifest(&config).unwrap();
@@ -167,7 +167,7 @@ fn crash_child() {
     join(&mut state);
     let entries = mutate(&mut state);
     let tick = state.tick;
-    let mut writer = JournalWriter::open(&directory, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&directory, 1).unwrap();
     if boundary == "wal_partial" || boundary == "wal_before_fsync" {
         let partial = boundary == "wal_partial";
         *crate::journal::WAL_WRITE_OBSERVER.lock() = Some((
@@ -304,12 +304,12 @@ fn sigkill_during_wal_write_ignores_only_unpublished_tail() {
             .path()
             .join("journal/batch-00000000000000000002-00000000000000000002.bin.tmp");
         let bytes = std::fs::read(tmp).unwrap();
-        let payload_len = u32::from_le_bytes(bytes[24..28].try_into().unwrap()) as usize;
-        assert!(bytes.len() > 32);
+        let payload_len = u32::from_le_bytes(bytes[48..52].try_into().unwrap()) as usize;
+        assert!(bytes.len() > 56);
         if boundary == "wal_partial" {
-            assert!(bytes.len() < 32 + payload_len, "the frame really is torn");
+            assert!(bytes.len() < 56 + payload_len, "the frame really is torn");
         } else {
-            assert_eq!(bytes.len(), 32 + payload_len, "complete but unpublished");
+            assert_eq!(bytes.len(), 56 + payload_len, "complete but unpublished");
         }
         assert_reopens(directory.path(), 1, 1);
     }
@@ -359,8 +359,9 @@ fn published_wal_damage_fails_closed_on_every_reopen() {
             .path()
             .join("journal/batch-00000000000000000002-00000000000000000002.bin");
         if truncate {
+            // Cut inside the payload, past the 56-byte v2 header.
             let file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
-            file.set_len(40).unwrap();
+            file.set_len(60).unwrap();
         } else {
             let mut bytes = std::fs::read(&path).unwrap();
             *bytes.last_mut().unwrap() ^= 1;

@@ -1,6 +1,5 @@
 use super::*;
 use crate::dimensions::Dimension;
-use crate::journal::read_complete_batches_after;
 use crate::native_checkpoint::tests::read_manifest;
 
 fn recovered_world(config: &CoreConfig) -> TickState {
@@ -39,7 +38,7 @@ fn failed_native_transaction_keeps_previous_world_and_wal_without_dirty_ack() {
     let (state, job, done_rx) = captured_world(&config, 2);
     let mut manifest = read_manifest(&config).unwrap();
     let previous = manifest.clone();
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     writer.append(manifest.tick + 1, 2, &[]).unwrap();
     FAIL_CHECKPOINT_AFTER_REGIONS
         .lock()
@@ -61,7 +60,7 @@ fn failed_native_transaction_keeps_previous_world_and_wal_without_dirty_ack() {
         Err(std::sync::mpsc::TryRecvError::Empty)
     ));
     assert_eq!(
-        read_complete_batches_after(&directory.path().join("journal"), 0)
+        crate::journal::read_complete_batches_after_test(&directory.path().join("journal"), 0,)
             .unwrap()
             .len(),
         1
@@ -95,7 +94,7 @@ fn shutdown_with_a_refused_final_checkpoint_leaves_the_tail_prune_refuses() {
         .expect("recover clean world")
         .manifest
         .tick;
-    let mut journal = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut journal = JournalWriter::open_test(directory.path(), 1).unwrap();
     journal
         .append(
             durable + 1,
@@ -150,7 +149,7 @@ fn crash_after_durable_native_commit_recovers_complete_world_without_ack_or_prun
     let config = CoreConfig::new(directory.path().to_path_buf(), 42);
     let (state, job, done_rx) = captured_world(&config, 2);
     let mut manifest = read_manifest(&config).unwrap();
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     writer.append(manifest.tick + 1, 2, &[]).unwrap();
     *FAIL_CHECKPOINT_AFTER_NATIVE_COMMIT
         .lock()
@@ -180,7 +179,7 @@ fn crash_after_durable_native_commit_recovers_complete_world_without_ack_or_prun
         Err(std::sync::mpsc::TryRecvError::Empty)
     ));
     assert_eq!(
-        read_complete_batches_after(&directory.path().join("journal"), 0)
+        crate::journal::read_complete_batches_after_test(&directory.path().join("journal"), 0,)
             .unwrap()
             .len(),
         1
@@ -205,7 +204,7 @@ fn durable_checkpoint_prunes_covered_batches_and_crash_replays_only_tail() {
         let config = CoreConfig::new(directory.path().to_path_buf(), 42);
         let (state, job, done_rx) = captured_world(&config, 2);
         let mut manifest = read_manifest(&config).unwrap();
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         writer.append(1, 1, &[]).unwrap();
         writer.append(2, 2, &[]).unwrap();
         writer.gate(manifest.tick, job.tick).unwrap();
@@ -227,8 +226,11 @@ fn durable_checkpoint_prunes_covered_batches_and_crash_replays_only_tail() {
                 job,
                 plugins: Ok(Box::new(state.plugins.clone())),
             },
-            directory.path(),
-            &crate::native_checkpoint::tests::fixture_store(&config).unwrap(),
+            &NativeWorld {
+                world_dir: directory.path(),
+                store: &crate::native_checkpoint::tests::fixture_store(&config).unwrap(),
+                wal_identity: writer.identity(),
+            },
             &std::sync::atomic::AtomicU64::new(manifest.tick),
             &std::sync::atomic::AtomicBool::new(false),
             &mut manifest,
@@ -250,7 +252,8 @@ fn durable_checkpoint_prunes_covered_batches_and_crash_replays_only_tail() {
                 "batch {tick} is covered by the durable checkpoint (lost ACK: {lose_ack})",
             );
         }
-        let batches = read_complete_batches_after(&journal, manifest.tick).unwrap();
+        let batches =
+            crate::journal::read_complete_batches_after_test(&journal, manifest.tick).unwrap();
         assert_eq!(
             batches
                 .iter()
@@ -413,7 +416,7 @@ async fn queued_save_requests_keep_one_capture_in_flight_and_both_receive_durabl
             &root,
             journal_store,
             journal_rx,
-            JournalWriter::open(&root, 1).unwrap(),
+            JournalWriter::open_test(&root, 1).unwrap(),
             &journal_budget,
             manifest,
             journal_plugins,
@@ -517,7 +520,7 @@ fn plugin_checkpoint_serialization_uses_fifo_mirror_not_later_tick_state() {
             &root,
             journal_store,
             journal_rx,
-            JournalWriter::open(&root, 1).unwrap(),
+            JournalWriter::open_test(&root, 1).unwrap(),
             &crate::journal_budget::JournalBudget::new(crate::journal_budget::JOURNAL_QUEUE_BYTES),
             manifest,
             mirror,
@@ -592,7 +595,7 @@ fn slow_native_commit_does_not_block_wal_appends() {
             &root,
             journal_store,
             journal_rx,
-            JournalWriter::open(&root, 1).unwrap(),
+            JournalWriter::open_test(&root, 1).unwrap(),
             &crate::journal_budget::JournalBudget::new(crate::journal_budget::JOURNAL_QUEUE_BYTES),
             manifest,
             mirror,
@@ -625,7 +628,9 @@ fn slow_native_commit_does_not_block_wal_appends() {
         tick
     );
     // Every append published after the checkpoint is retained for replay.
-    let after = read_complete_batches_after(&config.world_dir.join("journal"), tick).unwrap();
+    let after =
+        crate::journal::read_complete_batches_after_test(&config.world_dir.join("journal"), tick)
+            .unwrap();
     assert_eq!(after.len(), 8);
 }
 
@@ -673,7 +678,7 @@ fn live_journal_with_checkpoint(config: &CoreConfig) -> LiveJournal {
             &root,
             journal_store,
             journal_rx,
-            JournalWriter::open(&root, 1).unwrap(),
+            JournalWriter::open_test(&root, 1).unwrap(),
             &crate::journal_budget::JournalBudget::new(crate::journal_budget::JOURNAL_QUEUE_BYTES),
             manifest,
             mirror,
@@ -804,7 +809,7 @@ fn bee_hive_release_checkpoints_after_kill_and_unload() {
         .row(source.entities.slot_of(cow).unwrap())
         .uuid;
     let mut source_manifest = read_manifest(&source_config).unwrap();
-    let mut source_writer = JournalWriter::open(&source_config.world_dir, 1).unwrap();
+    let mut source_writer = JournalWriter::open_test(&source_config.world_dir, 1).unwrap();
     save(
         &source_config,
         &mut source,
@@ -837,7 +842,7 @@ fn bee_hive_release_checkpoints_after_kill_and_unload() {
     assert_eq!(changes.entities_removed, vec![bee_id]);
     assert!(state.entities.slot_of_uuid_any(bee_uuid).is_none());
     let mut manifest = read_manifest(&config).unwrap();
-    let mut writer = JournalWriter::open(&config.world_dir, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&config.world_dir, 1).unwrap();
     save(&config, &mut state, &mut writer, &mut manifest);
     drop(writer);
     drop(state);
@@ -853,7 +858,7 @@ fn bee_hive_release_checkpoints_after_kill_and_unload() {
     let released_slot = state.entities.slot_of(released).unwrap();
     let released_uuid = state.entities.row(released_slot).uuid;
     assert!(state.entities.row(released_slot).controls.no_ai);
-    let mut writer = JournalWriter::open(&config.world_dir, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&config.world_dir, 1).unwrap();
     save(&config, &mut state, &mut writer, &mut manifest);
     assert_ne!(released_uuid, bee_uuid);
     let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();

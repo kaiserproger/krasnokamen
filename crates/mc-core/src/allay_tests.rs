@@ -4,7 +4,7 @@ use crate::boundary::{ConnectionId, PlayerInput};
 
 #[test]
 fn integrity_partial_allay_pickup_preserves_custody_in_wal_recovery() {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     let mut state = state(None);
     let (mut output, _, _) = crate::tick::run_tick(&mut state, &[]);
     let allay = mob(&mut state, "minecraft:allay", [4.5, 201.0, 6.5]);
@@ -42,14 +42,14 @@ fn integrity_partial_allay_pickup_preserves_custody_in_wal_recovery() {
     output.changes = Arc::new(changes);
     let tail = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(dir.path(), 1).unwrap();
     writer.append(1, 1, &birth).unwrap();
     writer.append(2, 20, &tail).unwrap();
     writer.flush().unwrap();
     drop(writer);
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&dir.path().join("journal"), 0).unwrap(),
+        &crate::journal::read_complete_batches_after_test(&dir.path().join("journal"), 0).unwrap(),
     );
     let remaining = replay.entities[&ground.0].item.as_ref().unwrap();
     let collected = &replay.entities[&allay.0]
@@ -337,7 +337,7 @@ fn jukebox_dance_enables_one_duplicate_and_note_destination_receives_stack() {
 
 #[test]
 fn duplication_disk_wal_replays_once_and_restart_keeps_cooldown_and_debit() {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     use std::sync::Arc;
     let dir = std::env::temp_dir().join(format!("allay-wal-{}", uuid::Uuid::new_v4()));
     let mut original = state(None);
@@ -390,7 +390,7 @@ fn duplication_disk_wal_replays_once_and_restart_keeps_cooldown_and_debit() {
         entry,
         crate::journal::JournalEntry::EntityState { id: saved, .. } if *saved == id.0
     )));
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(1, birth_tick, &birth).unwrap();
     writer
         .append(duplication_tick, duplication_tick, &duplication)
@@ -400,7 +400,8 @@ fn duplication_disk_wal_replays_once_and_restart_keeps_cooldown_and_debit() {
         .unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&dir.join("journal"), 0).unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     let once = serde_json::to_value(&replay.entities).unwrap();
     let players_once = replay.players.clone();
@@ -463,7 +464,7 @@ fn duplication_disk_wal_replays_once_and_restart_keeps_cooldown_and_debit() {
 
 #[test]
 fn lethal_attack_drops_allay_custody_once_and_disk_wal_replays_once() {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     use std::sync::Arc;
     for (mob_drops, held_vanishes) in [(true, false), (false, false), (true, true)] {
         let dir = std::env::temp_dir().join(format!("allay-death-wal-{}", uuid::Uuid::new_v4()));
@@ -548,12 +549,13 @@ fn lethal_attack_drops_allay_custody_once_and_disk_wal_replays_once() {
             assert!(output.changes.entities_spawned.is_empty());
         }
         assert!(original.entities.slot_of_any(id).is_none());
-        let mut writer = JournalWriter::open(&dir, 1).unwrap();
+        let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
         writer.append(1, birth_tick, &birth).unwrap();
         writer.append(death_tick, death_tick, &death).unwrap();
         writer.flush().unwrap();
         drop(writer);
-        let batches = read_complete_batches_after(&dir.join("journal"), 0).unwrap();
+        let batches =
+            crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
         let replay = replay_batches(Replay::default(), &batches);
         assert!(!replay.entities.contains_key(&id.0));
         assert_eq!(replay.entities.len(), expected.len());

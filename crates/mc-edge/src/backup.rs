@@ -226,7 +226,7 @@ fn copy_reader_durable(input: &mut impl Read, destination: &Path) -> Result<Stri
 
 /// Copy a stopped native-v2 world, including its WAL and world metadata.
 /// Neither an active Core nor a separately opened native store may own it.
-pub fn run_backup(world_dir: &Path, out: &Path) -> Result<()> {
+pub fn run_backup(world_dir: &Path, out: &Path) -> Result<usize> {
     let world = std::fs::canonicalize(world_dir)
         .with_context(|| format!("resolving world {}", world_dir.display()))?;
     if !world.is_dir() {
@@ -268,13 +268,9 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<()> {
         manifest.files.insert(name, digest);
     }
     write_manifest(&out, &manifest)?;
-    println!(
-        "backup of {} into {} complete: {} files",
-        world.display(),
-        out.display(),
-        manifest.files.len(),
-    );
-    Ok(())
+    // The caller prints the final status: a backup is not "complete" until the
+    // copy it just wrote has been verified or explicitly marked unverified.
+    Ok(manifest.files.len())
 }
 
 /// Create the manifest last: a directory without it is never a valid backup.
@@ -285,6 +281,37 @@ fn write_manifest(out: &Path, manifest: &BackupManifest) -> Result<()> {
     file.sync_all()?;
     mc_world::atomic_file::sync_parent_dir(&path)?;
     mc_world::atomic_file::sync_parent_dir(out)?;
+    Ok(())
+}
+
+/// Prove a written backup restores with this build (Books R5 G3): open the copy
+/// read-only, derive the world's own seed from its store identity, and run the
+/// ordinary recovery reader and WAL replay over it, requiring the tick the copy
+/// claims. `content` supplies the content root and every non-world input; the
+/// seed comes from the copy itself, so a backup of any world can be verified.
+/// A copy that needs redb repair or cannot replay is reported, never called a
+/// verified backup.
+pub fn verify_backup(dir: &Path, content: &mc_core::config::CoreConfig) -> Result<()> {
+    // One verification instance opens the copy as the next serve would
+    // (read-only, or through a repaired scratch copy when redb would repair a
+    // live image) and supplies the identity, store id and checkpoint from
+    // itself: no second read-only open, which a hot copy fails by design.
+    let tick = mc_core::hot_backup::verify_copy(dir, content)
+        .map_err(|error| anyhow::anyhow!("backup {} does not restore: {error}", dir.display()))?;
+    println!(
+        "backup of {} verified: restores to tick {tick}",
+        dir.display()
+    );
+    Ok(())
+}
+
+/// Verify a backup this command just wrote and, on failure, withdraw it: the
+/// manifest is written last, so a directory without one is never a valid backup.
+pub fn verify_written_backup(out: &Path, content: &mc_core::config::CoreConfig) -> Result<()> {
+    if let Err(error) = verify_backup(out, content) {
+        let _ = std::fs::remove_file(out.join(BACKUP_MANIFEST));
+        bail!("{error}; the backup was withdrawn (no manifest kept)");
+    }
     Ok(())
 }
 

@@ -1,0 +1,10 @@
+[[bug]]
+id = "DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY"
+title = "Two copies restored from one backup keep the same store_uuid, so after they run independently their WAL tails are indistinguishable to the store-binding check: a tail from the other branch, in a matching tick range and under the same palette, replays."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Found by the PersistRows review (receipts/PersistRows/REVIEW-sol.md, finding 5) while proving WAL-BATCH-HAS-NO-STORE-IDENTITY. `run_restore` copies `native/state.redb`, the checkpoint marker and `journal/` verbatim and never rewrites the header id; that is deliberate — a restored backup is the same world, and the marker repeats the id (crates/mc-world/src/native.rs validate_header, store_marker). The consequence: restore one backup twice, start both copies on different hosts, and each keeps a valid `store_uuid` that is equal to the other's. Every batch of either branch then carries a matching 16-byte store id and, with the same content pin, a matching palette digest, so `decode_batch`'s binding accepts branch B's tail on branch A with only the tick range as a limit. The current regression (journal_tests::recovery_refuses_a_journal_copied_from_another_world) creates two independently created stores and therefore does not cover this case; no test claims it does. Not a stated-intent failure: the frame says which world wrote it, and both copies are that world as far as the header knows. Fix direction open (not decided, needs the owner's call because it touches what a restored world is): either a per-instance epoch/lineage written on first start after a restore (a new persisted header field and a WAL frame field), or accept it and document that a diverged copy must not be merged with its sibling."
+regression = []
+failing_first = "not recorded"

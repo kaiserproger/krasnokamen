@@ -249,7 +249,8 @@ impl World {
         }
         let manifest = read_manifest(&config).unwrap();
         let writer =
-            JournalWriter::open_recovered(&config.world_dir, 1, manifest.tick, state.tick).unwrap();
+            JournalWriter::open_recovered_test(&config.world_dir, 1, manifest.tick, state.tick)
+                .unwrap();
         Self {
             manifest,
             writer,
@@ -342,8 +343,11 @@ impl World {
                 job,
                 plugins: Ok(Box::new(self.state.plugins.clone())),
             },
-            &self.config.world_dir,
-            &crate::native_checkpoint::tests::fixture_store(&self.config).unwrap(),
+            &NativeWorld {
+                world_dir: &self.config.world_dir,
+                store: &crate::native_checkpoint::tests::fixture_store(&self.config).unwrap(),
+                wal_identity: self.writer.identity(),
+            },
             &std::sync::atomic::AtomicU64::new(self.manifest.tick),
             &std::sync::atomic::AtomicBool::new(false),
             &mut self.manifest,
@@ -3541,7 +3545,7 @@ fn assert_container_wal_pruned(world: &World) {
             );
         }
     }
-    crate::journal::read_complete_batches_after(&journal, world.manifest.tick).unwrap();
+    crate::journal::read_complete_batches_after_test(&journal, world.manifest.tick).unwrap();
 }
 
 #[test]
