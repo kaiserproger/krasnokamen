@@ -538,7 +538,7 @@ fn finish_lookup(state: &mut TickState) {
 }
 #[test]
 fn saved_maps_two_first_opens_one_map_and_wal_restart_never_regenerates() {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     let (mut state, gate) = explorer_fixture();
     let cells = [(0, 80, 0)];
     assert!(crate::maps::loot::before_open(
@@ -569,15 +569,13 @@ fn saved_maps_two_first_opens_one_map_and_wal_restart_never_regenerates() {
     let checkpoint_tick = state.tick;
     let (output, _, _) = run_tick(&mut state, &[]);
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
-    let mut writer =
-        JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(root.path(), 1).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(
+    let batches = crate::journal::read_complete_batches_after_test(
         &root.path().join("journal"),
         checkpoint_tick,
-        crate::journal::WalIdentity::fixture(),
     )
     .unwrap();
     let replay = replay_batches(
@@ -714,7 +712,7 @@ fn saved_maps_cartography_clone_scale_lock_consumes_one_and_cancels_without_ids(
 
 #[test]
 fn saved_maps_cartographer_offer_and_map_share_replayed_wal_commit() {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     let (mut state, gate) = explorer_fixture();
     let type_id = state
         .registry
@@ -733,8 +731,7 @@ fn saved_maps_cartographer_offer_and_map_share_replayed_wal_commit() {
     state.maps.attempted_trades.insert((uuid, 2));
     let checkpoint_tick = state.tick;
     let root = tempfile::tempdir().unwrap();
-    let mut writer =
-        JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(root.path(), 1).unwrap();
     let (birth, _, _) = run_tick(&mut state, &[]);
     let birth_entries = crate::core::journal_entries_for_tick(&mut state, &birth).unwrap();
     writer
@@ -769,10 +766,9 @@ fn saved_maps_cartographer_offer_and_map_share_replayed_wal_commit() {
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(
+    let batches = crate::journal::read_complete_batches_after_test(
         &root.path().join("journal"),
         checkpoint_tick,
-        crate::journal::WalIdentity::fixture(),
     )
     .unwrap();
     let replay = replay_batches(

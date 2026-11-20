@@ -406,7 +406,7 @@ fn armor_stand_disabled_slots_creative_copy_and_invalid_hit_do_not_duplicate_ite
 #[test]
 fn armor_stand_equipment_and_stored_pose_survive_disk_wal_native_checkpoint_restart_and_anvil_export()
  {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     let (mut state, actor) = fixture();
     let (stand, _) = place(&mut state, actor);
     let pose = Tag::Compound(vec![(
@@ -431,7 +431,7 @@ fn armor_stand_equipment_and_stored_pose_survive_disk_wal_native_checkpoint_rest
         .push(stand);
     let birth = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let root = std::env::temp_dir().join(format!("krasnokamen-stand-{}", uuid::Uuid::new_v4()));
-    let mut writer = JournalWriter::open(&root, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&root, 1).unwrap();
     writer.append(1, output.tick, &birth).unwrap();
     let mut helmet = item(&state, "minecraft:iron_helmet", 1);
     helmet.damage = Some(13);
@@ -442,12 +442,8 @@ fn armor_stand_equipment_and_stored_pose_survive_disk_wal_native_checkpoint_rest
     writer.append(output.tick, output.tick, &equip).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(
-        &root.join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&root.join("journal"), 0).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     let replay = replay_batches(replay, &batches);
     assert_eq!(replay.entities.len(), 1);

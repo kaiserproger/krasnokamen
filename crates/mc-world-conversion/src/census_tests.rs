@@ -433,8 +433,12 @@ fn census_refuses_missing_native_world_without_touching_source() {
 #[test]
 fn census_refuses_journal_tail_instead_of_reporting_stale_counts() {
     let fixture = populated();
-    let mut writer =
-        JournalWriter::open(&fixture.world, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open(
+        &fixture.world,
+        1,
+        mc_core::journal::test_wal_identity(&fixture.world),
+    )
+    .unwrap();
     writer
         .append(fixture.tick + 1, fixture.tick + 1, &[])
         .unwrap();

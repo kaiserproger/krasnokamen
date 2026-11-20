@@ -345,9 +345,7 @@ fn trial_spawner_corrupt_uuid_and_timer_fields_fail_closed() {
 
 #[test]
 fn trial_spawner_wal_postimage_is_idempotent_and_corruption_is_rejected() {
-    use crate::journal::{
-        JournalEntry, JournalWriter, Replay, read_complete_batches_after, replay_batches,
-    };
+    use crate::journal::{JournalEntry, JournalWriter, Replay, replay_batches};
     let dir = std::env::temp_dir().join(format!("trial-wal-{}", uuid::Uuid::new_v4()));
     let mut original = state(Some(dir.clone()));
     place(&mut original);
@@ -372,15 +370,11 @@ fn trial_spawner_wal_postimage_is_idempotent_and_corruption_is_rejected() {
     newest.persist(&mut original, POS);
     let (output, _, _) = run_tick(&mut original, &[]);
     let entries = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
-    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.gate(0, output.tick).unwrap();
-    let batches = read_complete_batches_after(
-        &dir.join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     let expected = replay.opaque_block_entities.clone();
     let twice = replay_batches(replay, &batches);

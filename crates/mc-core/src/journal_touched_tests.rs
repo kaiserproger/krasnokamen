@@ -1,6 +1,6 @@
 use super::*;
 use crate::core::journal_entries_for_tick;
-use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+use crate::journal::{JournalWriter, Replay, replay_batches};
 use crate::tick::BlockEntityState;
 use std::sync::Arc;
 
@@ -226,7 +226,7 @@ fn vehicle_motion_and_rotation_only_changes_survive_wal_replay() {
     let mut state = fixture();
     let cart = spawn_vehicle(&mut state, "chest_minecart", [8.5, 65.0, 8.5]);
     let boat = spawn_vehicle(&mut state, "oak_boat", [10.5, 65.0, 8.5]);
-    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     let entries = step(&mut state);
     writer.append(state.tick, state.tick, &entries).unwrap();
 
@@ -247,12 +247,8 @@ fn vehicle_motion_and_rotation_only_changes_survive_wal_replay() {
     writer.append(state.tick, state.tick, &quiet).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(
-        &dir.join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     assert_eq!(replay.entities[&cart.0].pos, [9.0, 65.0, 8.5]);
     assert_eq!(replay.entities[&cart.0].vel, [2.0, 0.0, 0.0]);
@@ -276,7 +272,7 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
     let zombie = state.spawn_mob(zombie_type, centre, 20.0);
     let slot = state.entities.slot_of(zombie).unwrap();
     state.entities.row_mut(slot).persistent = true;
-    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     for index in 0..20 {
         let entries = step(&mut state);
         writer
@@ -300,12 +296,8 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
     assert!(aggressive(&state), "chase must establish the pose");
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(
-        &dir.join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     let record = &replay.entities[&zombie.0];
     assert!(record.appearance.extra.iter().any(|(index, value)| *index == 15
@@ -406,7 +398,7 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
         !image_ids(&quiet).contains(&zombie.0),
         "quiet tick must not rewrite the repair"
     );
-    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer
         .append(state.tick + 1, state.tick + 1, &repair)
         .unwrap();
@@ -415,12 +407,8 @@ fn zombie_chase_pose_is_journaled_and_repaired_after_recovery() {
         .unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(
-        &dir.join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     let (mut wal_restart, player, _) = crate::hostile_tests::setup(12.0);
     wal_restart.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
@@ -720,8 +708,7 @@ fn kill_nine_reopen_reproduces_touched_only_images() {
             id
         })
         .collect();
-    let mut writer =
-        JournalWriter::open(&dir, 1000, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1000).unwrap();
     for step in 0..96u64 {
         if step == 60 {
             state.tickets.remove("kill9");
@@ -770,12 +757,8 @@ fn kill_nine_reopen_reproduces_touched_only_images() {
     }
     writer.flush().unwrap();
     drop(writer); // no shutdown: kill -9
-    let batches = read_complete_batches_after(
-        &dir.join("journal"),
-        100,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 100).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     for id in &villagers {
         let slot = state.entities.slot_of(*id).unwrap();

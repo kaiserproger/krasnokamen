@@ -1562,12 +1562,7 @@ fn forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops() {
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
     let _ = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     checkpoint_forest(&mut state, &config);
-    let mut writer = crate::journal::JournalWriter::open(
-        directory.path(),
-        1,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(directory.path(), 1).unwrap();
     let mut previous_tick = state.tick;
     for _ in 0..2000 {
         if count(&state, "minecraft:birch_log") >= baseline + 2 {

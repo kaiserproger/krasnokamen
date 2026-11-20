@@ -184,18 +184,14 @@ fn automatic_wages_survive_actual_checkpoint_and_wal_reopen_without_pay_commands
         let request = employ(&f, "1", 2, 5, 6);
         native(&mut f, request);
         checkpoint(&mut f, &config);
-        let mut writer =
-            JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
-                .unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         through(&mut f, &mut writer, hired_at + 10);
         assert_eq!(carry_total(&f.state, f.worker), 4);
         if save_checkpoint {
             checkpoint(&mut f, &config);
         }
         let mut f = reopen(f, &config, writer);
-        let mut writer =
-            JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
-                .unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         step(&mut f, &mut writer); // Real chunk admission hydrates the chests.
         assert_eq!(carry_total(&f.state, f.worker), 4);
         assert_eq!(emerald_total(&f.state, TREASURY_CHEST), 2);
@@ -231,9 +227,7 @@ fn stopped_debt_survives_actual_reopen_and_refill_pays_only_what_was_earned() {
         let request = employ(&f, "1", 3, 5, 12);
         native(&mut f, request);
         checkpoint(&mut f, &config);
-        let mut writer =
-            JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
-                .unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         through(&mut f, &mut writer, hired_at + 5);
         native(
             &mut f,
@@ -246,9 +240,7 @@ fn stopped_debt_survives_actual_reopen_and_refill_pays_only_what_was_earned() {
             checkpoint(&mut f, &config);
         }
         let mut f = reopen(f, &config, writer);
-        let mut writer =
-            JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
-                .unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         step(&mut f, &mut writer);
         assert_eq!(carry_total(&f.state, f.worker), 0);
         stock(&mut f.state, TREASURY_CHEST, f.emerald, 3);
@@ -269,9 +261,7 @@ fn stopped_debt_survives_actual_reopen_and_refill_pays_only_what_was_earned() {
         assert_eq!(carry_total(&f.state, f.worker), 3);
         assert_eq!(emerald_total(&f.state, TREASURY_CHEST), 0);
         let mut f = reopen(f, &config, writer);
-        let mut writer =
-            JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
-                .unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         through(&mut f, &mut writer, 30);
         assert_eq!(carry_total(&f.state, f.worker), 3);
         assert_eq!(emerald_total(&f.state, TREASURY_CHEST), 0);
@@ -352,9 +342,7 @@ fn real_delivery_automatically_pays_escrow_exactly_once_across_disk_reopen() {
         )
         .unwrap();
         checkpoint(&mut f, &config);
-        let mut writer =
-            JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
-                .unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         let start = f
             .state
             .entities
@@ -392,9 +380,7 @@ fn real_delivery_automatically_pays_escrow_exactly_once_across_disk_reopen() {
             checkpoint(&mut f, &config);
         }
         let mut f = reopen(f, &config, writer);
-        let mut writer =
-            JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
-                .unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         for _ in 0..20 {
             step(&mut f, &mut writer);
         }

@@ -495,19 +495,13 @@ fn splitting_is_once_only_and_journal_restart_preserves_half_size_and_equipment(
             tick: original.tick,
         });
         let dir = std::env::temp_dir().join(format!("loot-restart-{}", uuid::Uuid::new_v4()));
-        let mut writer =
-            crate::journal::JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture())
-                .unwrap();
+        let mut writer = crate::journal::JournalWriter::open_test(&dir, 1).unwrap();
         // The fixture jumps directly to the death tick; cover its idle prefix.
         writer.append(1, 20, &entries).unwrap();
         writer.gate(0, original.tick).unwrap();
         drop(writer);
-        let batches = crate::journal::read_complete_batches_after(
-            &dir.join("journal"),
-            0,
-            crate::journal::WalIdentity::fixture(),
-        )
-        .unwrap();
+        let batches =
+            crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
         let replay = crate::journal::replay_batches(crate::journal::Replay::default(), &batches);
         assert!(!replay.entities.contains_key(&parent.0));
         let mut restarted = state();

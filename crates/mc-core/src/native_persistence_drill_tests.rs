@@ -757,9 +757,7 @@ fn enospc_at_every_transfer_wal_byte_refuses_partial_custody() {
     drop(drill);
     let mut actual_faults = 0;
     for cut in 0..=bytes {
-        let mut writer =
-            JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
-                .unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         crate::journal::WAL_WRITE_FAILURE.set(Some(cut));
         let error = writer
             .append(batch.tick, batch.tick, &batch.entries)
@@ -782,8 +780,7 @@ fn enospc_at_every_transfer_wal_byte_refuses_partial_custody() {
         );
     }
     assert_eq!(actual_faults, bytes + 1);
-    let mut writer =
-        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     writer
         .append(batch.tick, batch.tick, &batch.entries)
         .unwrap();

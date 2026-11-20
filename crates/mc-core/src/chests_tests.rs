@@ -345,7 +345,7 @@ fn integrity_unloaded_double_chest_refuses_pickup_shift_and_drag() {
 
 #[test]
 fn integrity_opening_chest_preserves_window_zero_custody_in_wal_and_checkpoint() {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     for cursor in [false, true] {
         for full in [false, true] {
             let mut rig = Rig::new();
@@ -383,19 +383,14 @@ fn integrity_opening_chest_preserves_window_zero_custody_in_wal_and_checkpoint()
                 crate::core::player_record_for(&rig.state, rig.player, output.tick).unwrap();
             let entries = crate::core::journal_entries_for_tick(&mut rig.state, &output).unwrap();
             let dir = tempfile::tempdir().unwrap();
-            let mut writer =
-                JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+            let mut writer = JournalWriter::open_test(dir.path(), 1).unwrap();
             writer.append(1, output.tick, &entries).unwrap();
             writer.flush().unwrap();
             drop(writer);
             let replay = replay_batches(
                 Replay::default(),
-                &read_complete_batches_after(
-                    &dir.path().join("journal"),
-                    0,
-                    crate::journal::WalIdentity::fixture(),
-                )
-                .unwrap(),
+                &crate::journal::read_complete_batches_after_test(&dir.path().join("journal"), 0)
+                    .unwrap(),
             );
             let count = |player: &crate::journal::ReplayPlayer| {
                 player

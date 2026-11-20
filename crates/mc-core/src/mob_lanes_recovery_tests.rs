@@ -29,7 +29,7 @@ fn checkpoint(
     };
     let out = output(state, changes);
     let entries = journal_entries_for_tick(state, &out).unwrap();
-    let mut writer = JournalWriter::open(root, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(root, 1).unwrap();
     writer.append(1, state.tick, &entries).unwrap();
     for dimension in [Dimension::Nether, Dimension::End] {
         let mut child = crate::core::recover_dimension_state(&config, dimension).unwrap();
@@ -100,8 +100,7 @@ fn wandering_trader_native_checkpoint_wal_restart_and_despawn() {
     let entries = journal_entries_for_tick(&mut restarted, &out).unwrap();
     // Journal capture refreshes the derived active-brain flag.
     let expected = restarted.entities.row(trader).villager.clone().unwrap();
-    let mut writer =
-        JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(root.path(), 1).unwrap();
     writer
         .append(restarted.tick, restarted.tick, &entries)
         .unwrap();

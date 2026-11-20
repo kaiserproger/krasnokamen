@@ -94,13 +94,9 @@ fn crash_batches(
     std::fs::write(segment, &complete[..cut]).unwrap();
     let temporary = segment.with_extension("bin.tmp");
     if cut != complete.len() {
-        let error = crate::journal::read_complete_batches_after(
-            &directory.join("journal"),
-            0,
-            crate::journal::WalIdentity::fixture(),
-        )
-        .unwrap_err()
-        .to_string();
+        let error = crate::journal::read_complete_batches_after_test(&directory.join("journal"), 0)
+            .unwrap_err()
+            .to_string();
         assert!(
             error.contains(&format!("journal {}: record ", segment.display()))
                 && error.contains(" offset "),
@@ -108,12 +104,8 @@ fn crash_batches(
         );
         std::fs::rename(segment, &temporary).unwrap();
     }
-    let batches = crate::journal::read_complete_batches_after(
-        &directory.join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&directory.join("journal"), 0).unwrap();
     if cut != complete.len() {
         std::fs::rename(temporary, segment).unwrap();
     }
@@ -725,9 +717,7 @@ fn torn_gateway_pair_wal_replays_both_links_atomically() {
         "krasnokamen-gateway-crash-{}",
         uuid::Uuid::new_v4()
     ));
-    let mut writer =
-        crate::journal::JournalWriter::open(&directory, 1, crate::journal::WalIdentity::fixture())
-            .unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(&directory, 1).unwrap();
     writer
         .append(
             1,
@@ -852,9 +842,7 @@ fn corrupt_gateway_wal_refuses_core_recovery_with_exact_cell() {
         "krasnokamen-gateway-corrupt-{}",
         uuid::Uuid::new_v4()
     ));
-    let mut writer =
-        crate::journal::JournalWriter::open(&directory, 1, crate::journal::WalIdentity::fixture())
-            .unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(&directory, 1).unwrap();
     publish_fixture_manifest(&directory);
     writer
         .append(
@@ -1024,9 +1012,10 @@ fn torn_portal_transfer_wal_recovers_exactly_one_entity_owner() {
     assert!(!transfer.iter().any(|entry| matches!(entry,crate::journal::JournalEntry::Ticket { owner,.. } if owner.starts_with("krasnokamen:portal:"))));
     let directory =
         std::env::temp_dir().join(format!("krasnokamen-portal-crash-{}", uuid::Uuid::new_v4()));
-    let mut writer =
-        crate::journal::JournalWriter::open(&directory, 1, crate::journal::WalIdentity::fixture())
-            .unwrap();
+    // The world exists before its tail: a frame must name the store it belongs
+    // to, and the fixture manifest is what creates that store.
+    publish_fixture_manifest(&directory);
+    let mut writer = crate::journal::JournalWriter::open_test(&directory, 1).unwrap();
     // The native manifest fixture below captures tick 1. Keep its empty WAL
     // interval separate from the newer baseline image.
     writer.append(1, 1, &[]).unwrap();
@@ -1277,24 +1266,16 @@ fn construction_drops_container_contents_and_replays_final_storage() {
             assert!(removal < post_image);
         }
         let directory = tempfile::tempdir().unwrap();
-        let mut writer = crate::journal::JournalWriter::open(
-            directory.path(),
-            1,
-            crate::journal::WalIdentity::fixture(),
-        )
-        .unwrap();
+        let mut writer = crate::journal::JournalWriter::open_test(directory.path(), 1).unwrap();
         writer.append(1, baseline.tick, &initial).unwrap();
         writer
             .append(output.tick, output.tick, &replacement)
             .unwrap();
         writer.flush().unwrap();
         drop(writer);
-        let batches = crate::journal::read_complete_batches_after(
-            &directory.path().join("journal"),
-            0,
-            crate::journal::WalIdentity::fixture(),
-        )
-        .unwrap();
+        let batches =
+            crate::journal::read_complete_batches_after_test(&directory.path().join("journal"), 0)
+                .unwrap();
         let replay = crate::journal::replay_batches(Default::default(), &batches);
         let replay = crate::journal::replay_batches(replay, &batches);
         assert!(!replay.block_entities.contains_key(&(pos.x, pos.y, pos.z)));

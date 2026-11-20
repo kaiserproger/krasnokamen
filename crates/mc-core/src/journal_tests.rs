@@ -3,14 +3,13 @@
 
 use crate::journal::{
     JournalEntry, JournalWriter, Replay, SimDebtImage, journal_prune_stats, player_from_tag,
-    player_to_tag, prune_batches_through, read_complete_batches_after, replay_batches,
+    player_to_tag, prune_batches_through, replay_batches,
 };
 
 #[test]
 fn recovered_writer_reuses_exact_validated_interval_without_decoding_it_again() {
     let root = tempfile::tempdir().unwrap();
-    let mut original =
-        JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut original = JournalWriter::open_test(root.path(), 1).unwrap();
     original.append(1, 2, &[]).unwrap();
     drop(original);
     let recovered = crate::journal::visit_complete_batches_after(
@@ -21,14 +20,7 @@ fn recovered_writer_reuses_exact_validated_interval_without_decoding_it_again() 
     )
     .unwrap();
     assert_eq!(recovered, 2);
-    let mut writer = JournalWriter::open_recovered(
-        root.path(),
-        1,
-        0,
-        recovered,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let mut writer = JournalWriter::open_recovered_test(root.path(), 1, 0, recovered).unwrap();
     // Make a second read observable without a production-only counter/hook.
     // Production retains immutable published files under the exclusive world lease.
     std::fs::rename(
@@ -48,9 +40,7 @@ fn recovered_writer_reuses_exact_validated_interval_without_decoding_it_again() 
     writer.gate(0, 3).unwrap();
     drop(writer);
 
-    let mut later_start =
-        JournalWriter::open_recovered(root.path(), 1, 1, 3, crate::journal::WalIdentity::fixture())
-            .unwrap();
+    let mut later_start = JournalWriter::open_recovered_test(root.path(), 1, 1, 3).unwrap();
     assert!(
         later_start.gate(0, 3).is_err(),
         "the verified interval does not cover tick one without appends either"
@@ -61,9 +51,7 @@ fn recovered_writer_reuses_exact_validated_interval_without_decoding_it_again() 
         "the verified interval does not cover tick one"
     );
     drop(later_start);
-    let mut earlier_end =
-        JournalWriter::open_recovered(root.path(), 1, 0, 2, crate::journal::WalIdentity::fixture())
-            .unwrap();
+    let mut earlier_end = JournalWriter::open_recovered_test(root.path(), 1, 0, 2).unwrap();
     earlier_end.append(5, 5, &[]).unwrap();
     assert!(
         earlier_end.gate(0, 5).is_err(),
@@ -74,8 +62,7 @@ fn recovered_writer_reuses_exact_validated_interval_without_decoding_it_again() 
 #[test]
 fn unverified_writer_still_refuses_corrupt_preopen_tail() {
     let root = tempfile::tempdir().unwrap();
-    let mut original =
-        JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut original = JournalWriter::open_test(root.path(), 1).unwrap();
     original.append(1, 2, &[]).unwrap();
     drop(original);
     std::fs::write(
@@ -84,8 +71,7 @@ fn unverified_writer_still_refuses_corrupt_preopen_tail() {
         b"corrupt published batch",
     )
     .unwrap();
-    let mut writer =
-        JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(root.path(), 1).unwrap();
     writer.append(3, 3, &[]).unwrap();
     assert!(writer.gate(0, 3).is_err());
 }
@@ -181,8 +167,7 @@ fn abrupt_stop_loses_only_unflushed_tail() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("dir");
     {
-        let mut writer =
-            JournalWriter::open(&dir, 1000, crate::journal::WalIdentity::fixture()).expect("open");
+        let mut writer = JournalWriter::open_test(&dir, 1000).expect("open");
         for tick in 1..=5u64 {
             writer
                 .append(
@@ -266,12 +251,8 @@ fn abrupt_stop_loses_only_unflushed_tail() {
         b"SOLJ-partial",
     )
     .expect("torn");
-    let batches = read_complete_batches_after(
-        &dir.join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     assert_eq!(batches.len(), 5);
     let replay = replay_batches(Replay::default(), &batches);
     // All domains converge to the same tick.
@@ -321,8 +302,7 @@ fn crash_recovers_enchanted_item_and_player_exactly() {
         extra: vec![(16, crate::journal::EntityDataValueImage::VarInt(3))],
     };
     {
-        let mut writer =
-            JournalWriter::open(&dir, 1000, crate::journal::WalIdentity::fixture()).expect("open");
+        let mut writer = JournalWriter::open_test(&dir, 1000).expect("open");
         writer
             .append(
                 1,
@@ -353,12 +333,8 @@ fn crash_recovers_enchanted_item_and_player_exactly() {
         writer.flush().expect("flush");
         // Kill: no shutdown.
     }
-    let batches = read_complete_batches_after(
-        &dir.join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     assert_eq!(batches.len(), 1);
     let replay = replay_batches(Replay::default(), &batches);
     let entity = replay.entities.get(&11).expect("entity");
@@ -989,8 +965,7 @@ fn mob_effects_survive_entity_region_and_journal_recovery() {
         tick: 2,
     };
     {
-        let mut writer =
-            JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).expect("writer");
+        let mut writer = JournalWriter::open_test(&dir, 1).expect("writer");
         writer
             .append(2, 2, std::slice::from_ref(&tail))
             .expect("append");
@@ -998,12 +973,7 @@ fn mob_effects_survive_entity_region_and_journal_recovery() {
     }
     let replay = replay_batches(
         base,
-        &read_complete_batches_after(
-            &dir.join("journal"),
-            1,
-            crate::journal::WalIdentity::fixture(),
-        )
-        .unwrap(),
+        &crate::journal::read_complete_batches_after_test(&dir.join("journal"), 1).unwrap(),
     );
     assert_eq!(replay.entities[&7].active_effects, tail_effects);
     assert_eq!(replay.entities[&7].pos, saved.pos);
@@ -1193,8 +1163,7 @@ fn villager_checkpoint_and_wal_recover_absolute_conversion_custody_and_memories(
     latest.conversion_time = Some(321);
     latest.conversion_player = Some(uuid::Uuid::from_u128(55));
     {
-        let mut writer =
-            JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
         writer
             .append(101, 101, &[villager_entry(latest.clone(), 101)])
             .unwrap();
@@ -1214,12 +1183,7 @@ fn villager_checkpoint_and_wal_recover_absolute_conversion_custody_and_memories(
     }
     let replay = replay_batches(
         base,
-        &read_complete_batches_after(
-            &dir.join("journal"),
-            100,
-            crate::journal::WalIdentity::fixture(),
-        )
-        .unwrap(),
+        &crate::journal::read_complete_batches_after_test(&dir.join("journal"), 100).unwrap(),
     );
     latest.conversion_time = Some(320);
     let recovered = &replay.entities[&7];
@@ -1262,7 +1226,7 @@ fn malformed_villager_image_cannot_replace_a_valid_journal_batch() {
         std::env::temp_dir().join(format!("mc-core-villager-invalid-{}", uuid::Uuid::new_v4()));
     let initial = villager_recovery_fixture(&items);
     let valid = villager_entry(initial.clone(), 1);
-    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(1, 1, std::slice::from_ref(&valid)).unwrap();
     let before =
         std::fs::read(dir.join("journal/batch-00000000000000000001-00000000000000000001.bin"))
@@ -1275,13 +1239,9 @@ fn malformed_villager_image_cannot_replace_a_valid_journal_batch() {
             .unwrap();
     assert_eq!(before, after);
     assert_eq!(
-        read_complete_batches_after(
-            &dir.join("journal"),
-            0,
-            crate::journal::WalIdentity::fixture(),
-        )
-        .unwrap()
-        .len(),
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0,)
+            .unwrap()
+            .len(),
         1
     );
     let mut json = serde_json::to_value(valid).unwrap();
@@ -1322,8 +1282,7 @@ fn generated_villager_claim_survives_entity_tombstone_and_manifest_recovery() {
 
 fn decode_failure_fixture() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
-    let mut writer =
-        JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(dir.path(), 1).unwrap();
     for tick in 1..=3 {
         writer
             .append(tick, tick, &[JournalEntry::RemoveEntity { id: 77, tick }])
@@ -1367,13 +1326,10 @@ fn journal_decode_corrupt_final_batch_fails_open_without_writes() {
         }
         std::fs::write(&path, bytes).unwrap();
         let before = journal_recovery_files(dir.path());
-        let error = read_complete_batches_after(
-            &dir.path().join("journal"),
-            0,
-            crate::journal::WalIdentity::fixture(),
-        )
-        .unwrap_err()
-        .to_string();
+        let error =
+            crate::journal::read_complete_batches_after_test(&dir.path().join("journal"), 0)
+                .unwrap_err()
+                .to_string();
         assert!(error.contains(path.to_str().unwrap()), "{error}");
         assert!(error.contains("record 0 offset 0"), "{error}");
         assert_eq!(journal_recovery_files(dir.path()), before);
@@ -1431,12 +1387,8 @@ fn journal_decode_unpublished_tmp_is_ignored_and_open_succeeds() {
         .path()
         .join("journal/batch-00000000000000000999-00000000000000000999.bin.tmp");
     std::fs::write(&path, b"unpublished partial bytes").unwrap();
-    let batches = read_complete_batches_after(
-        &dir.path().join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.path().join("journal"), 0).unwrap();
     assert_eq!(batches.len(), 3);
     assert_eq!(replay_batches(Replay::default(), &batches).tick, 3);
     assert_eq!(std::fs::read(path).unwrap(), b"unpublished partial bytes");
@@ -1501,13 +1453,10 @@ fn journal_decode_crc_valid_invalid_records_fail_open_without_writes() {
             bytes.extend_from_slice(payload.as_bytes());
             std::fs::write(&path, bytes).unwrap();
             let before = journal_recovery_files(dir.path());
-            let error = read_complete_batches_after(
-                &dir.path().join("journal"),
-                0,
-                crate::journal::WalIdentity::fixture(),
-            )
-            .unwrap_err()
-            .to_string();
+            let error =
+                crate::journal::read_complete_batches_after_test(&dir.path().join("journal"), 0)
+                    .unwrap_err()
+                    .to_string();
             assert!(error.contains(path.to_str().unwrap()), "{error}");
             assert!(
                 error.contains(&format!("record 1 offset {}", 56 + prefix.len())),
@@ -1532,13 +1481,9 @@ fn journal_decode_mid_file_crc_damage_fails_open_without_writes() {
     bytes[56] ^= 1;
     std::fs::write(&path, bytes).unwrap();
     let before = journal_recovery_files(dir.path());
-    let error = read_complete_batches_after(
-        &dir.path().join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap_err()
-    .to_string();
+    let error = crate::journal::read_complete_batches_after_test(&dir.path().join("journal"), 0)
+        .unwrap_err()
+        .to_string();
     assert!(error.contains(path.to_str().unwrap()), "{error}");
     assert!(error.contains("record 0 offset 0: CRC mismatch"), "{error}");
     assert_eq!(journal_recovery_files(dir.path()), before);
@@ -1901,21 +1846,15 @@ fn player_opaque_fields_and_advancements_follow_join_checkpoint_and_wal_replay()
         movement_batches.push((output.tick, output.tick, movement));
     }
     let movement_dir = tempfile::tempdir().unwrap();
-    let mut movement_writer = JournalWriter::open(
-        movement_dir.path(),
-        1,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let mut movement_writer = JournalWriter::open_test(movement_dir.path(), 1).unwrap();
     for (lo, hi, entries) in &movement_batches {
         movement_writer.append(*lo, *hi, entries).unwrap();
     }
     movement_writer.flush().unwrap();
     drop(movement_writer);
-    let movement_batches = read_complete_batches_after(
+    let movement_batches = crate::journal::read_complete_batches_after_test(
         &movement_dir.path().join("journal"),
         checkpoint.tick,
-        crate::journal::WalIdentity::fixture(),
     )
     .unwrap();
     let moved = replay_batches(copy_player_replay(&checkpoint), &movement_batches);
@@ -1998,15 +1937,13 @@ fn player_opaque_fields_and_advancements_follow_join_checkpoint_and_wal_replay()
     assert_eq!(captured.unlocked_recipes.len(), 2);
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let mut writer =
-        JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(dir.path(), 1).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(
+    let batches = crate::journal::read_complete_batches_after_test(
         &dir.path().join("journal"),
         checkpoint.tick,
-        crate::journal::WalIdentity::fixture(),
     )
     .unwrap();
     let recovered = replay_batches(checkpoint, &batches);
@@ -2043,8 +1980,7 @@ fn player_opaque_fields_and_advancements_follow_join_checkpoint_and_wal_replay()
 fn open_removes_unpublished_batch_leftovers() {
     let root = tempfile::tempdir().unwrap();
     let journal = root.path().join("journal");
-    let mut writer =
-        JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(root.path(), 1).unwrap();
     writer.append(1, 1, &[]).unwrap();
     writer.flush().unwrap();
     // A real partial frame followed by ENOSPC: the append leaves its tmp.
@@ -2059,7 +1995,7 @@ fn open_removes_unpublished_batch_leftovers() {
     let unrelated = journal.join("operator-notes.tmp");
     std::fs::write(&unrelated, b"keep me").unwrap();
 
-    drop(JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap());
+    drop(JournalWriter::open_test(root.path(), 1).unwrap());
 
     assert!(
         !leftover.exists(),
@@ -2072,7 +2008,7 @@ fn open_removes_unpublished_batch_leftovers() {
     );
     assert!(unrelated.exists(), "only batch temporaries are swept");
     assert_eq!(
-        read_complete_batches_after(&journal, 0, crate::journal::WalIdentity::fixture())
+        crate::journal::read_complete_batches_after_test(&journal, 0)
             .unwrap()
             .len(),
         1
@@ -2145,7 +2081,7 @@ fn open_reports_temporaries_it_cannot_remove() {
         "a refused removal leaves the entry in place"
     );
     // Startup stays non-fatal: the leftover is a warning, not a refusal.
-    drop(JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap());
+    drop(JournalWriter::open_test(root.path(), 1).unwrap());
     assert!(blocked.exists());
 }
 
@@ -2166,7 +2102,7 @@ fn format_one_batch_is_refused_naming_the_clean_stop_path() {
     frame.extend_from_slice(&0u32.to_le_bytes());
     std::fs::write(batch_path(root.path(), 1), &frame).unwrap();
 
-    let error = read_complete_batches_after(&journal, 0, crate::journal::WalIdentity::fixture())
+    let error = crate::journal::read_complete_batches_after_test(&journal, 0)
         .expect_err("format 1 is not read");
     let text = error.to_string();
     assert!(text.contains("format 1"), "{text}");

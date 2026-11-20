@@ -62,8 +62,7 @@ fn default_game_mode_survives_wal_restart_and_checkpoint_and_joins_new_players()
             value: GameMode::Creative
         }
     )));
-    let mut writer =
-        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
 

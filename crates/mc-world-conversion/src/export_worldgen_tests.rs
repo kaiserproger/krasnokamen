@@ -107,7 +107,7 @@ fn append_nether_edit(config: &CoreConfig, pos: ChunkPos, state: u32) {
     let mut writer = JournalWriter::open(
         &config.world_dir,
         1,
-        mc_core::journal::WalIdentity::fixture(),
+        mc_core::journal::test_wal_identity(&config.world_dir),
     )
     .unwrap();
     writer

@@ -528,8 +528,7 @@ fn settlement_ledger_recovers_from_checkpoint_and_wal_tail_with_its_physical_eff
     checkpoint(&mut state, &config);
     let at_checkpoint = snapshot(&state, id, &handle).watermark;
 
-    let mut writer =
-        JournalWriter::open(&live_dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&live_dir, 1).unwrap();
     let mut images = Vec::new();
     for _ in 0..24 {
         journaled_attempt(&mut state, id, builder, &mut writer);
@@ -720,7 +719,7 @@ fn preparation_portion_boundary_and_mid_portion_recover_exact_physical_evidence(
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
     crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     checkpoint(&mut state, &config);
-    let mut writer = JournalWriter::open(&live, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&live, 1).unwrap();
     for step in 0..4 {
         executor::advance(&mut state, id, &handle, uuid).unwrap();
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
@@ -805,8 +804,7 @@ fn preparation_portion_boundary_and_mid_portion_recover_exact_physical_evidence(
     let (output, _, _) = crate::tick::run_tick(&mut restored, &[]);
     let entries = crate::core::journal_entries_for_tick(&mut restored, &output).unwrap();
     {
-        let mut writer =
-            JournalWriter::open(&saved, 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let mut writer = JournalWriter::open_test(&saved, 1).unwrap();
         writer.append(output.tick, output.tick, &entries).unwrap();
     }
     checkpoint(&mut restored, &CoreConfig::new(saved.clone(), 42));

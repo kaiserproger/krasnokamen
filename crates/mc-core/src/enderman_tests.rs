@@ -253,12 +253,7 @@ fn enderman_anger_and_teleport_survive_wal_native_restart_and_anvil_export() {
     let (output, _, _) = run_tick(&mut state, &[]);
     let expected = state.entities.row(slot).special_mob.as_deref().cloned();
     assert!(matches!(expected, Some(Retained::Enderman { .. })));
-    let mut writer = crate::journal::JournalWriter::open(
-        directory.path(),
-        1,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(directory.path(), 1).unwrap();
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     let old = state.entities.pos(slot);

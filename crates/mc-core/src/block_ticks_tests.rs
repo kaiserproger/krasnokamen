@@ -1,10 +1,7 @@
 use std::sync::{Arc, LazyLock};
 
 use super::*;
-use crate::journal::{
-    CheckpointManifest, JournalEntry, JournalWriter, Replay, read_complete_batches_after,
-    replay_batches,
-};
+use crate::journal::{CheckpointManifest, JournalEntry, JournalWriter, Replay, replay_batches};
 use crate::native_checkpoint::tests::{read_manifest, write_manifest};
 use crate::registry::CoreRegistry;
 use crate::world::ChunkWorld;
@@ -250,8 +247,7 @@ fn scheduler_wal_folded_order_fail_closed_against_checkpoint_base() {
         if dimension != Dimension::Overworld {
             entries = vec![JournalEntry::Dimension { dimension, entries }];
         }
-        let mut writer =
-            JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let mut writer = JournalWriter::open_test(dir.path(), 1).unwrap();
         writer.append(2, 2, &entries).unwrap();
         writer.flush().unwrap();
         drop(writer);
@@ -340,8 +336,7 @@ fn scheduler_wal_final_image_fail_closed_before_adoption_or_writes() {
             if dimension != Dimension::Overworld {
                 entries = vec![JournalEntry::Dimension { dimension, entries }];
             }
-            let mut writer =
-                JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+            let mut writer = JournalWriter::open_test(dir.path(), 1).unwrap();
             writer.append(2, 2, &entries).unwrap();
             writer.flush().unwrap();
             drop(writer);
@@ -444,8 +439,7 @@ fn scheduler_fail_closed_boundary_preserves_valid_images_and_final_tombstones() 
             entries: entries.clone(),
         })
         .collect();
-    let mut writer =
-        JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(dir.path(), 1).unwrap();
     writer.append(1, 1, &all_dimensions).unwrap();
     writer.flush().unwrap();
     drop(writer);
@@ -472,12 +466,7 @@ fn scheduler_fail_closed_boundary_preserves_valid_images_and_final_tombstones() 
                 .collect(),
             ..Default::default()
         },
-        &read_complete_batches_after(
-            &dir.path().join("journal"),
-            0,
-            crate::journal::WalIdentity::fixture(),
-        )
-        .unwrap(),
+        &crate::journal::read_complete_batches_after_test(&dir.path().join("journal"), 0).unwrap(),
     );
     for recovered in std::iter::once(&replay).chain(replay.dimensions.values().map(Box::as_ref)) {
         assert_eq!(recovered.fluid_ticks, cleared_fluid);
@@ -686,7 +675,7 @@ fn journal_roundtrip_is_idempotent_and_replays_empty_queue_tombstones() {
         &[(1, 1, entries.clone()), (1, 1, entries.clone())],
     );
     assert_eq!(twice.block_ticks, base.block_ticks);
-    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(1, 1, &entries).unwrap();
     assert_eq!(queue.drain_ready(20, 10, |_| true).len(), 1);
     entries.clear();
@@ -697,12 +686,8 @@ fn journal_roundtrip_is_idempotent_and_replays_empty_queue_tombstones() {
     // The second batch covers the idle interval as well as the consumed tick.
     writer.append(2, 20, &entries).unwrap();
     writer.flush().unwrap();
-    let batches = read_complete_batches_after(
-        &dir.join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     assert_eq!(batches.len(), 2);
     let replay = replay_batches(Replay::default(), &batches);
     assert_eq!(replay.tick, 20);
@@ -773,7 +758,7 @@ fn checkpoint_writes_vanilla_remaining_delay_and_restores_absolute_deadline() {
     queue.schedule(tick(1, 120, -1));
     let mut entries = Vec::new();
     queue.journal_entries(&mut entries);
-    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(1, 100, &entries).unwrap();
     writer.gate(0, 100).unwrap();
     let absent = queue.checkpoint(&mut world, 100);
@@ -825,7 +810,7 @@ fn eviction_and_unloaded_overlay_do_not_consume_due_cells() {
     queue.schedule(tick(1, 10, 0));
     let identity = queue.due.values().next().unwrap().clone();
     assert_eq!(world.evict_outside(&Default::default()), [cpos]);
-    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     let mut entries = Vec::new();
     queue.journal_entries(&mut entries);
     writer.append(1, 5, &entries).unwrap();

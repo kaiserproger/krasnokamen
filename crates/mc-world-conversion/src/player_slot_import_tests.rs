@@ -490,7 +490,7 @@ fn duplicate_wal_player_custody_refuses_offline_export_without_publication() {
         let mut writer = mc_core::journal::JournalWriter::open(
             &native,
             79,
-            mc_core::journal::WalIdentity::fixture(),
+            mc_core::journal::test_wal_identity(&native),
         )
         .unwrap();
         writer.append(80, 80, &[entry]).unwrap();

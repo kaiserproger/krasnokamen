@@ -317,9 +317,7 @@ fn checkpoint_persists_both_light_channels_and_journal_replay_removes_light() {
         );
     }
     drop(store);
-    let mut writer =
-        crate::journal::JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture())
-            .unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(dir.path(), 1).unwrap();
     writer
         .append(
             1,
@@ -330,12 +328,8 @@ fn checkpoint_persists_both_light_channels_and_journal_replay_removes_light() {
             }],
         )
         .unwrap();
-    let batches = crate::journal::read_complete_batches_after(
-        &dir.path().join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.path().join("journal"), 0).unwrap();
     let replay = crate::journal::replay_batches(Default::default(), &batches);
     let (mut reopened, _) = world(Some(dir.path().to_path_buf()), true);
     for ((x, y, z), state) in replay.blocks {

@@ -562,14 +562,8 @@ fn native_offline_population_save_kill_reopen() {
         println!("\npopulation seeded count={count} rss_bytes={rss}");
         std::io::stdout().flush().unwrap();
         let mut manifest = read_manifest_for_population(&config);
-        let mut writer = JournalWriter::open_recovered(
-            &root,
-            1,
-            manifest.tick,
-            initial_tick,
-            crate::journal::WalIdentity::fixture(),
-        )
-        .unwrap();
+        let mut writer =
+            JournalWriter::open_recovered_test(&root, 1, manifest.tick, initial_tick).unwrap();
         let tick = initial_tick.checked_add(1).unwrap();
         state.tick = tick;
         let (work_tx, work_rx) = crate::core::journal_work_channel();

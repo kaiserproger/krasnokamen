@@ -59,6 +59,60 @@ pub struct WalIdentity {
     pub palette: [u8; 8],
 }
 
+/// Identity a WAL tail written into `world_dir` must carry: that world's store
+/// id under this build's palette.
+///
+/// The palette is a property of the build (the embedded block report), not of the
+/// content cache, so a tool that writes or reads a stopped world's journal
+/// outside a running `Core` can compute the same identity a serve would. A
+/// directory without a readable store has nothing to bind to, and the fixed
+/// [`WalIdentity::fixture`] value is returned — it matches only itself.
+///
+/// Tooling support for converters, censuses and tests; the running server
+/// derives its identity from the opened store ([`WalIdentity::new`]).
+#[doc(hidden)]
+#[must_use]
+pub fn test_wal_identity(world_dir: &Path) -> WalIdentity {
+    const CACHE: usize = 1024 * 1024;
+    let store_path = world_dir.join("native/state.redb");
+    // The marker names the store id and is a separate file, so this answer
+    // holds while another handle has the database open — the usual state in a
+    // test whose world is running.
+    if let Ok(Some(marker)) = mc_world::store_marker::read(world_dir) {
+        let blocks = mc_world::BlockRegistry::from_report(
+            &mc_data::blocks::krasnokamen_required_blocks_report(),
+        )
+        .expect("embedded block report");
+        return WalIdentity::new(marker.store_uuid, &blocks);
+    }
+    let store_uuid =
+        mc_world::native::NativeReadOnlyStore::open_learning_identity(&store_path, CACHE)
+            .ok()
+            .and_then(|(store, _)| store.marker_fields().ok().map(|(uuid, _)| uuid))
+            .or_else(|| {
+                mc_world::native::NativeStore::open_learning_identity(&store_path, CACHE)
+                    .ok()
+                    .map(|(store, _)| store.store_uuid())
+            });
+    match store_uuid {
+        Some(store_uuid) => {
+            let blocks = mc_world::BlockRegistry::from_report(
+                &mc_data::blocks::krasnokamen_required_blocks_report(),
+            )
+            .expect("embedded block report");
+            WalIdentity::new(store_uuid, &blocks)
+        }
+        None => WalIdentity::fixture(),
+    }
+}
+
+/// Identity a test's tail must carry so it belongs to the world it is written
+/// into; see [`test_wal_identity`].
+#[cfg(test)]
+pub(crate) fn tail_identity(world_dir: &Path) -> WalIdentity {
+    test_wal_identity(world_dir)
+}
+
 impl WalIdentity {
     /// Identity of `store` under `blocks`.
     #[must_use]
@@ -516,6 +570,27 @@ pub struct JournalWriter {
     /// Immutable pre-open coverage `(checkpoint_tick, recovered_tick]`, decoded
     /// either by startup recovery or the first checkpoint gate.
     pre_open_verified: Option<(u64, u64)>,
+    /// Test support ([`JournalWriter::open_test`]): the world whose identity was
+    /// not yet readable at open, so the frames this writer publishes are
+    /// re-stamped once that world's store exists. Production writers always know
+    /// their identity.
+    #[cfg(test)]
+    pending_world: Option<PathBuf>,
+    /// Test support: the batch files this writer published, to re-stamp above.
+    #[cfg(test)]
+    written: Vec<PathBuf>,
+}
+
+impl Drop for JournalWriter {
+    fn drop(&mut self) {
+        // Test support: a world created after its first tail still gets frames
+        // bound to it (see `bind_pending_frames`). Production writers never
+        // carry a pending world.
+        #[cfg(test)]
+        {
+            let _ = self.bind_pending_frames();
+        }
+    }
 }
 
 /// Test-only rendezvous inside the unpublished WAL write, before file fsync.
@@ -573,6 +648,20 @@ impl From<GateError> for CoreError {
 }
 
 impl JournalWriter {
+    /// Test convenience: open with the identity of the world the journal lives
+    /// in, so a tail a test appends belongs to the store that will replay it.
+    #[cfg(test)]
+    pub(crate) fn open_test(world_dir: &Path, fsync_every: u32) -> Result<Self, CoreError> {
+        let identity = tail_identity(world_dir);
+        let mut writer = Self::open(world_dir, fsync_every, identity)?;
+        // A world built after its first tail: the frames are re-stamped with
+        // that world's identity once its store exists (see `flush`).
+        if identity == WalIdentity::fixture() {
+            writer.pending_world = Some(world_dir.to_path_buf());
+        }
+        Ok(writer)
+    }
+
     /// Open the journal of the world at `world_dir` for a writer whose batches
     /// are bound to `identity`: the opened store's id and the block palette
     /// whose numeric state ids the entries carry.
@@ -616,6 +705,10 @@ impl JournalWriter {
             fsync_every: fsync_every.max(1),
             appended: None,
             pre_open_verified: None,
+            #[cfg(test)]
+            pending_world: None,
+            #[cfg(test)]
+            written: Vec::new(),
         })
     }
 
@@ -631,6 +724,29 @@ impl JournalWriter {
     ) -> Result<Self, CoreError> {
         let mut writer = Self::open(world_dir, fsync_every, identity)?;
         writer.pre_open_verified = Some((checkpoint_tick, recovered_tick));
+        Ok(writer)
+    }
+
+    /// Test convenience for [`JournalWriter::open_recovered`]: the tail is
+    /// bound to the world's own store, re-stamped once that store exists.
+    #[cfg(test)]
+    pub(crate) fn open_recovered_test(
+        world_dir: &Path,
+        fsync_every: u32,
+        checkpoint_tick: u64,
+        recovered_tick: u64,
+    ) -> Result<Self, CoreError> {
+        let identity = tail_identity(world_dir);
+        let mut writer = Self::open_recovered(
+            world_dir,
+            fsync_every,
+            checkpoint_tick,
+            recovered_tick,
+            identity,
+        )?;
+        if identity == WalIdentity::fixture() {
+            writer.pending_world = Some(world_dir.to_path_buf());
+        }
         Ok(writer)
     }
 
@@ -806,6 +922,8 @@ impl JournalWriter {
         }
         std::fs::rename(&tmp, &final_path).map_err(|err| CoreError::Storage(err.to_string()))?;
         #[cfg(test)]
+        self.written.push(final_path.clone());
+        #[cfg(test)]
         wal_stage("published");
         self.appended = Some((self.appended.map_or(tick_lo, |(lo, _)| lo), tick_hi));
         self.pending_fsync += 1;
@@ -836,7 +954,43 @@ impl JournalWriter {
             *skip -= 1;
         }
         fsync_dir(&self.dir).map_err(|err| CoreError::Storage(err.to_string()))?;
+        #[cfg(test)]
+        self.bind_pending_frames()?;
         self.pending_fsync = 0;
+        Ok(())
+    }
+
+    /// Test support: once the world a test writes into exists, rewrite the
+    /// store id and palette of the frames this writer published so they belong
+    /// to it. Only the header is touched — the CRC covers the payload.
+    #[cfg(test)]
+    fn bind_pending_frames(&mut self) -> Result<(), CoreError> {
+        let Some(world) = self.pending_world.clone() else {
+            return Ok(());
+        };
+        let identity = tail_identity(&world);
+        if identity == WalIdentity::fixture() {
+            return Ok(());
+        }
+        use std::io::{Seek, SeekFrom, Write};
+        for path in &self.written {
+            let mut file = match std::fs::OpenOptions::new().write(true).open(path) {
+                Ok(file) => file,
+                // A folded and pruned tail needs no re-stamp.
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(CoreError::Storage(error.to_string())),
+            };
+            file.seek(SeekFrom::Start(8))
+                .map_err(|err| CoreError::Storage(err.to_string()))?;
+            file.write_all(&identity.store)
+                .map_err(|err| CoreError::Storage(err.to_string()))?;
+            file.write_all(&identity.palette)
+                .map_err(|err| CoreError::Storage(err.to_string()))?;
+            file.sync_all()
+                .map_err(|err| CoreError::Storage(err.to_string()))?;
+        }
+        self.identity = identity;
+        self.pending_world = None;
         Ok(())
     }
 }
@@ -863,6 +1017,17 @@ pub(crate) fn parse_batch_name(name: &str) -> Option<(u64, u64)> {
 /// Read complete published batches after the manifest, failing closed on damage
 /// and on a batch that does not belong to `identity`.
 /// Incomplete, unpublished `.tmp` files are ignored.
+/// Test convenience for [`read_complete_batches_after`]: the identity of the
+/// world the journal belongs to, resolved from the journal's directory.
+#[cfg(test)]
+pub(crate) fn read_complete_batches_after_test(
+    journal_dir: &Path,
+    manifest_tick: u64,
+) -> Result<Vec<(u64, u64, Vec<JournalEntry>)>, CoreError> {
+    let world = journal_dir.parent().unwrap_or(journal_dir);
+    read_complete_batches_after(journal_dir, manifest_tick, tail_identity(world))
+}
+
 pub fn read_complete_batches_after(
     journal_dir: &Path,
     manifest_tick: u64,

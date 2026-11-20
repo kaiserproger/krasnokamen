@@ -291,20 +291,12 @@ fn native_miner_changes_publish_the_same_tick_chunk_afterimage() {
         let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         let directory = tempfile::tempdir().unwrap();
         {
-            let mut writer = crate::journal::JournalWriter::open(
-                directory.path(),
-                1,
-                crate::journal::WalIdentity::fixture(),
-            )
-            .unwrap();
+            let mut writer = crate::journal::JournalWriter::open_test(directory.path(), 1).unwrap();
             writer.append(1, output.tick, &entries).unwrap();
         }
-        let batches = crate::journal::read_complete_batches_after(
-            &directory.path().join("journal"),
-            0,
-            crate::journal::WalIdentity::fixture(),
-        )
-        .unwrap();
+        let batches =
+            crate::journal::read_complete_batches_after_test(&directory.path().join("journal"), 0)
+                .unwrap();
         let replay = crate::journal::replay_batches(crate::journal::Replay::default(), &batches);
         assert_eq!(replay.tick, output.tick);
         assert_eq!(

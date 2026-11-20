@@ -1,8 +1,6 @@
 use super::*;
 use crate::boundary::{ChunkPos, ConnectionId, EntityId, PlayerInput};
-use crate::journal::{
-    EntityStateImage, JournalWriter, Replay, read_complete_batches_after, replay_batches,
-};
+use crate::journal::{EntityStateImage, JournalWriter, Replay, replay_batches};
 use crate::registry::CoreRegistry;
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
@@ -284,16 +282,12 @@ fn player_created_flag_survives_checkpoint_fields_and_journal_replay() {
     // WAL: the spawn tick carries the flag, and replay is idempotent.
     let (output, _, _) = run_tick(&mut state, &[]);
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
-    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.gate(0, output.tick).unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(
-        &dir.join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     let once = replay_batches(Replay::default(), &batches);
     assert_eq!(
         once.entities[&id.0].state.special_mob.as_deref(),

@@ -8,7 +8,7 @@ fn seed_world(root: &Path) {
     mc_world::store_marker::write(root, store.store_uuid(), 0).unwrap();
     drop(store);
     let mut journal =
-        mc_core::journal::JournalWriter::open(root, 1, mc_core::journal::WalIdentity::fixture())
+        mc_core::journal::JournalWriter::open(root, 1, mc_core::journal::test_wal_identity(root))
             .unwrap();
     journal.append(1, 1, &[]).unwrap();
     journal.flush().unwrap();

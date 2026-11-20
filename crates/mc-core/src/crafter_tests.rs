@@ -354,7 +354,7 @@ fn crafter_menu_toggles_empty_slots_and_preview_cannot_be_taken() {
 }
 #[test]
 fn crafter_wal_checkpoint_restart_retains_slots_disabled_and_pulse_latch_once() {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     let dir = std::env::temp_dir().join(format!("krasnokamen-crafter-{}", uuid::Uuid::new_v4()));
     let (mut original, _) = fixture(Some(dir.clone()));
     install(&mut original, "north_up");
@@ -368,7 +368,7 @@ fn crafter_wal_checkpoint_restart_retains_slots_disabled_and_pulse_latch_once() 
         .settings
         .disabled_slots = 0x1fe;
     original.crafters.get_mut(&KEY).unwrap().dirty = true;
-    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     let fixture_tick = original.tick;
     let entries = step(&mut original);
     writer
@@ -435,12 +435,8 @@ fn crafter_wal_checkpoint_restart_retains_slots_disabled_and_pulse_latch_once() 
         .append(original.tick, original.tick, &entries)
         .unwrap();
     writer.gate(base, original.tick).unwrap();
-    let batches = read_complete_batches_after(
-        &dir.join("journal"),
-        base,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), base).unwrap();
     let once = replay_batches(Replay::default(), &batches);
     let twice = replay_batches(replay_batches(Replay::default(), &batches), &batches);
     assert_eq!(once.opaque_block_entities, twice.opaque_block_entities);

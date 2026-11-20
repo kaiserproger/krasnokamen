@@ -201,9 +201,7 @@ fn pay(state: &mut TickState, entity: EntityId) {
 #[test]
 fn beacon_menu_payment_tiers_wire_data_and_persistence() {
     use crate::boundary::PlayerChange;
-    use crate::journal::{
-        JournalEntry, JournalWriter, Replay, read_complete_batches_after, replay_batches,
-    };
+    use crate::journal::{JournalEntry, JournalWriter, Replay, replay_batches};
     let (mut state, entity) = fixture();
     pyramid(&mut state, 1);
     let opened = open(&mut state);
@@ -276,8 +274,7 @@ fn beacon_menu_payment_tiers_wire_data_and_persistence() {
         Tag::String("minecraft:haste".into())
     )));
     let dir = tempfile::tempdir().unwrap();
-    let mut writer =
-        JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(dir.path(), 1).unwrap();
     writer
         .append(
             1,
@@ -292,12 +289,7 @@ fn beacon_menu_payment_tiers_wire_data_and_persistence() {
     drop(writer);
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(
-            &dir.path().join("journal"),
-            0,
-            crate::journal::WalIdentity::fixture(),
-        )
-        .unwrap(),
+        &crate::journal::read_complete_batches_after_test(&dir.path().join("journal"), 0).unwrap(),
     );
     assert_eq!(
         replay.opaque_block_entities[&(POS.x, POS.y, POS.z)],

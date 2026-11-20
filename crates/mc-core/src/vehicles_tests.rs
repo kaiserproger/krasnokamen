@@ -1040,7 +1040,7 @@ fn expired_hostile_and_tnt_cart_each_emit_one_tombstone() {
 
 #[test]
 fn entity_region_and_wal_restart_preserve_vehicle_motion_and_custody() {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     let dir = std::env::temp_dir().join(format!(
         "krasnokamen-vehicle-restart-{}",
         uuid::Uuid::new_v4()
@@ -1126,18 +1126,13 @@ fn entity_region_and_wal_restart_preserve_vehicle_motion_and_custody() {
     let (output, _, _) = run_tick(&mut s, &[]);
     let tail = crate::core::journal_entries_for_tick(&mut s, &output).unwrap();
     {
-        let mut writer =
-            JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+        let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
         writer.append(output.tick, output.tick, &tail).unwrap();
         writer.flush().unwrap();
     }
     let base_position = base.entities[&cart.0].pos;
-    let batches = read_complete_batches_after(
-        &dir.join("journal"),
-        base.tick,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), base.tick).unwrap();
     let replay = replay_batches(base, &batches);
     let mut resumed = fixture();
     for (id, record) in &replay.entities {

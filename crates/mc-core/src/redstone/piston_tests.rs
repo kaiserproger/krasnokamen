@@ -1,7 +1,5 @@
 use super::*;
-use crate::journal::{
-    JournalEntry, JournalWriter, Replay, read_complete_batches_after, replay_batches,
-};
+use crate::journal::{JournalEntry, JournalWriter, Replay, replay_batches};
 
 fn cell(x: i32, z: i32) -> BlockPos {
     BlockPos { x, y: 200, z }
@@ -537,18 +535,16 @@ fn queued_adhesive_piston_cycle_survives_native_checkpoint_and_wal_tail_replay()
         pos: [supply.x, supply.y, supply.z],
         state: original.registry.states.air,
     });
-    let mut writer =
-        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     writer.append(1, checkpoint_tick, &[]).unwrap();
     writer
         .append(checkpoint_tick + 1, output.tick, &entries)
         .unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(
+    let batches = crate::journal::read_complete_batches_after_test(
         &directory.path().join("journal"),
         checkpoint_tick,
-        crate::journal::WalIdentity::fixture(),
     )
     .unwrap();
     let replay = replay_batches(

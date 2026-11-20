@@ -465,6 +465,9 @@ struct CoreInner {
     /// The config this world opened with; a hot backup's trial restore recovers
     /// the copy under exactly these inputs.
     config: CoreConfig,
+    /// The WAL binding this world writes and would accept back: its store id
+    /// and the palette of the registry recovery runs on.
+    wal_identity: crate::journal::WalIdentity,
     /// The registry the tick runs on now: a datapack reload replaces it.
     live_registry: Arc<std::sync::RwLock<Arc<CoreRegistry>>>,
     /// `send_command_feedback`, published by the tick for the edge's own replies.
@@ -760,6 +763,14 @@ fn lock_world_lease(world_dir: &std::path::Path) -> Result<std::fs::File, CoreEr
 }
 
 impl Core {
+    /// The WAL binding this world writes and would accept back: the store id
+    /// and the palette of the registry recovery runs on. Tooling and tests that
+    /// read this world's journal beside a running core need exactly this value.
+    #[must_use]
+    pub fn wal_identity(&self) -> crate::journal::WalIdentity {
+        self.inner.wal_identity
+    }
+
     /// Open the world: build registries, recover the journal, spawn the tick
     /// and journal threads.
     pub fn open(mut config: CoreConfig) -> Result<Self, CoreError> {
@@ -1210,6 +1221,7 @@ impl Core {
                 build_gate,
                 require_plugin_login: config.require_plugin_login,
                 config,
+                wal_identity,
                 unlocked_sessions,
                 halt_reason,
                 lod,

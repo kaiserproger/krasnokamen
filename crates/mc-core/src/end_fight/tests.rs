@@ -1,7 +1,7 @@
 use super::*;
 use crate::boundary::{ConnectionId, PlayerInput};
 use crate::dimensions::Dimension;
-use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+use crate::journal::{JournalWriter, Replay, replay_batches};
 use crate::tick::run_tick;
 use std::sync::Arc;
 
@@ -186,8 +186,7 @@ fn mid_fight_native_checkpoint_and_wal_restart_keep_phase_target_and_position() 
     let (out, _, _) = run_tick(&mut s, &[]);
     let entries = crate::core::journal_entries_for_tick(&mut s, &out).unwrap();
     let wal = directory.path().join("journal");
-    let mut writer =
-        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     writer.append(1, out.tick, &entries).unwrap();
     writer.flush().unwrap();
     let base = Replay {
@@ -196,7 +195,7 @@ fn mid_fight_native_checkpoint_and_wal_restart_keep_phase_target_and_position() 
     };
     let replay = replay_batches(
         base,
-        &read_complete_batches_after(&wal, 0, crate::journal::WalIdentity::fixture()).unwrap(),
+        &crate::journal::read_complete_batches_after_test(&wal, 0).unwrap(),
     );
     restored.end_fight = replay.end_fight.unwrap();
     assert_eq!(restored.end_fight, s.end_fight);
@@ -533,8 +532,7 @@ fn interrupted_wal_death_award_reopens_native_checkpoint_without_duplicate_xp() 
         .unwrap()
         .tick;
     s.tick = base;
-    let mut writer =
-        JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     for _ in 0..6 {
         let (out, _, _) = run_tick(&mut s, &[]);
         let entries = crate::core::journal_entries_for_tick(&mut s, &out).unwrap();

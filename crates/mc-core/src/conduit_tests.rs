@@ -254,9 +254,7 @@ fn conduit_full_frame_attacks_hostile_and_syncs_exact_target() {
 }
 #[test]
 fn conduit_be_wal_checkpoint_restart_preserves_last_target_once() {
-    use crate::journal::{
-        JournalEntry, JournalWriter, Replay, read_complete_batches_after, replay_batches,
-    };
+    use crate::journal::{JournalEntry, JournalWriter, Replay, replay_batches};
     let dir = tempfile::tempdir().unwrap();
     let mut original = fixture(Some(dir.path().to_path_buf()));
     frame(&mut original, 42);
@@ -272,17 +270,12 @@ fn conduit_be_wal_checkpoint_restart_preserves_last_target_once() {
         pos: [POS.x, POS.y, POS.z],
         nbt: Some(bytes.clone()),
     };
-    let mut writer =
-        JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(dir.path(), 1).unwrap();
     writer.append(1, 1, &[entry]).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(
-        &dir.path().join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.path().join("journal"), 0).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     assert_eq!(replay.opaque_block_entities.len(), 1);
     assert_eq!(
@@ -335,7 +328,7 @@ fn conduit_be_wal_checkpoint_restart_preserves_last_target_once() {
 }
 #[test]
 fn conduit_corrupt_target_wal_and_chunk_fail_closed() {
-    use crate::journal::{JournalEntry, JournalWriter, read_complete_batches_after};
+    use crate::journal::{JournalEntry, JournalWriter};
     let mut state = fixture(None);
     frame(&mut state, 16);
     let tag = Tag::Compound(vec![
@@ -431,8 +424,7 @@ fn conduit_corrupt_target_wal_and_chunk_fail_closed() {
         .unwrap_err();
     assert_eq!(durable_error.to_string(), stored_error.to_string());
     assert!(!dir.path().join("region").exists());
-    let mut writer =
-        JournalWriter::open(dir.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(dir.path(), 1).unwrap();
     writer
         .append(
             1,
@@ -445,13 +437,9 @@ fn conduit_corrupt_target_wal_and_chunk_fail_closed() {
         .unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let error = read_complete_batches_after(
-        &dir.path().join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap_err()
-    .to_string();
+    let error = crate::journal::read_complete_batches_after_test(&dir.path().join("journal"), 0)
+        .unwrap_err()
+        .to_string();
     assert!(
         error.contains("record 0 offset 56 kind OpaqueBlockEntity"),
         "{error}"

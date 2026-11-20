@@ -93,14 +93,9 @@ fn new_26_3_components_survive_give_creative_checkpoint_and_native_restart() {
         panic!("checkpoint capture")
     };
     let mut manifest = crate::native_checkpoint::tests::read_manifest(&config).unwrap();
-    let mut writer = JournalWriter::open_recovered(
-        &config.world_dir,
-        1,
-        manifest.tick,
-        manifest.tick,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let mut writer =
+        JournalWriter::open_recovered_test(&config.world_dir, 1, manifest.tick, manifest.tick)
+            .unwrap();
     writer.append(1, tick, &[]).unwrap();
     write_checkpoint(
         &config.world_dir,

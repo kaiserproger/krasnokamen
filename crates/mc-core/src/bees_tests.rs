@@ -325,7 +325,7 @@ fn nectar_grows_crops_and_sting_poisons_then_bee_dies() {
 
 #[test]
 fn wal_hive_entry_tombstones_source_and_replays_one_full_bee() {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     let dir = std::env::temp_dir().join(format!("bees-wal-{}", uuid::Uuid::new_v4()));
     let mut original = state(None);
     place(&mut original, POS, "minecraft:beehive");
@@ -345,19 +345,14 @@ fn wal_hive_entry_tombstones_source_and_replays_one_full_bee() {
     let (output, _, _) = crate::tick::run_tick(&mut original, &[]);
     assert!(original.entities.slot_of_any(id).is_none());
     let entry = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
-    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(1, 1, &birth).unwrap();
     writer.append(2, 2, &entry).unwrap();
     writer.flush().unwrap();
     drop(writer);
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(
-            &dir.join("journal"),
-            0,
-            crate::journal::WalIdentity::fixture(),
-        )
-        .unwrap(),
+        &crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap(),
     );
     assert!(!replay.entities.contains_key(&id.0));
     let bytes = replay.opaque_block_entities[&key(POS)].as_ref().unwrap();
@@ -564,7 +559,7 @@ fn hive_place_input(sequence: i32) -> PlayerInput {
 
 #[test]
 fn silk_touch_break_pickup_place_disk_wal_and_checkpoint_have_one_bee_owner() {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     let dir = std::env::temp_dir().join(format!("bees-item-custody-{}", uuid::Uuid::new_v4()));
     let mut original = state(None);
     let actor = joined(&mut original);
@@ -586,7 +581,7 @@ fn silk_touch_break_pickup_place_disk_wal_and_checkpoint_have_one_bee_owner() {
     crate::tick::mining_tests::ready_to_finish(&mut original, ConnectionId(1), POS);
     let (seed_output, _, _) = crate::tick::run_tick(&mut original, &[]);
     let seed_entries = crate::core::journal_entries_for_tick(&mut original, &seed_output).unwrap();
-    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(1, seed_output.tick, &seed_entries).unwrap();
     let (output, _, _) = crate::tick::run_tick(
         &mut original,
@@ -678,12 +673,8 @@ fn silk_touch_break_pickup_place_disk_wal_and_checkpoint_have_one_bee_owner() {
             .slots()
             .all(|slot| original.entities.row(slot).bee.is_none())
     );
-    let batches = read_complete_batches_after(
-        &dir.join("journal"),
-        0,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     let once = replay_batches(Replay::default(), &batches);
     let twice = replay_batches(once, &batches);
     assert!(

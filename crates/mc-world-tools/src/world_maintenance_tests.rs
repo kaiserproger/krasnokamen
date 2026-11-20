@@ -91,7 +91,7 @@ fn append_block_tail(config: &CoreConfig) {
     let mut journal = mc_core::journal::JournalWriter::open(
         &config.world_dir,
         1,
-        mc_core::journal::WalIdentity::fixture(),
+        mc_core::journal::test_wal_identity(&config.world_dir),
     )
     .expect("journal");
     journal

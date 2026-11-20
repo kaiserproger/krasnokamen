@@ -70,7 +70,7 @@ fn inhabited_time_child_dimension_replay_uses_empty_global_batch_clock() {
         )
         .unwrap();
     let mut writer =
-        JournalWriter::open(&source, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
+        JournalWriter::open(&source, 1, mc_core::journal::test_wal_identity(&source)).unwrap();
     writer
         .append(
             1,
@@ -181,7 +181,7 @@ fn export_replays_wal_without_mutating_native_or_journal_and_enumerates_all_dime
         })
         .collect::<Vec<_>>();
     let mut writer =
-        JournalWriter::open(&source, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
+        JournalWriter::open(&source, 1, mc_core::journal::test_wal_identity(&source)).unwrap();
     writer.append(1, 1, &edits).unwrap();
     writer.flush().unwrap();
     drop(writer);
@@ -379,7 +379,7 @@ async fn export_import_does_not_respawn_claimed_dead_generated_villager() {
     // The claim survives its entity's death; no live UUID exists from which
     // import could reconstruct it. Put it in the WAL to cover replay claims.
     let mut writer =
-        JournalWriter::open(&source, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
+        JournalWriter::open(&source, 1, mc_core::journal::test_wal_identity(&source)).unwrap();
     writer
         .append(
             1,
@@ -568,7 +568,7 @@ fn export_hopper_deadlines_become_bounded_portable_remaining_cooldowns() {
         });
     }
     let mut writer =
-        JournalWriter::open(&source, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
+        JournalWriter::open(&source, 1, mc_core::journal::test_wal_identity(&source)).unwrap();
     writer.append(1, 100, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
@@ -676,7 +676,7 @@ fn export_refuses_ambiguous_player_tags_from_real_wal_without_publication() {
         tick: 1,
     };
     let mut writer =
-        JournalWriter::open(&source, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
+        JournalWriter::open(&source, 1, mc_core::journal::test_wal_identity(&source)).unwrap();
     writer.append(1, 1, &[entry]).unwrap();
     writer.flush().unwrap();
     drop(writer);

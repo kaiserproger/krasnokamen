@@ -248,14 +248,9 @@ impl World {
             state.other_dimensions.insert(dimension, Box::new(world));
         }
         let manifest = read_manifest(&config).unwrap();
-        let writer = JournalWriter::open_recovered(
-            &config.world_dir,
-            1,
-            manifest.tick,
-            state.tick,
-            crate::journal::WalIdentity::fixture(),
-        )
-        .unwrap();
+        let writer =
+            JournalWriter::open_recovered_test(&config.world_dir, 1, manifest.tick, state.tick)
+                .unwrap();
         Self {
             manifest,
             writer,
@@ -3550,12 +3545,7 @@ fn assert_container_wal_pruned(world: &World) {
             );
         }
     }
-    crate::journal::read_complete_batches_after(
-        &journal,
-        world.manifest.tick,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    crate::journal::read_complete_batches_after_test(&journal, world.manifest.tick).unwrap();
 }
 
 #[test]

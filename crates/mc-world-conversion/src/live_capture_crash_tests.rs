@@ -122,7 +122,7 @@ async fn crash_roundtrip(domain: Domain) {
     let through = mc_core::journal::visit_complete_batches_after(
         &root.join("journal"),
         evidence.checkpoint_tick,
-        mc_core::journal::WalIdentity::fixture(),
+        mc_core::journal::test_wal_identity(&root),
         |(_, _, entries)| {
             records += entries.len();
             Ok(())

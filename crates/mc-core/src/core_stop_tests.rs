@@ -44,7 +44,7 @@ fn native_writer_channel_close_logs_stop_cause() {
             &AtomicU64::new(0),
             &std::sync::atomic::AtomicBool::new(false),
             CheckpointManifest::default(),
-            crate::journal::WalIdentity::fixture(),
+            crate::journal::tail_identity(root.path()),
         );
     });
     assert!(
@@ -68,7 +68,7 @@ fn native_writer_explicit_shutdown_logs_info_without_waiting_for_channel_close()
             &AtomicU64::new(0),
             &std::sync::atomic::AtomicBool::new(false),
             CheckpointManifest::default(),
-            crate::journal::WalIdentity::fixture(),
+            crate::journal::tail_identity(root.path()),
         );
     });
     assert!(log.contains("INFO"), "{log}");
@@ -81,8 +81,7 @@ fn native_writer_explicit_shutdown_logs_info_without_waiting_for_channel_close()
 #[test]
 fn journal_io_failure_still_logs_error_and_never_acknowledges() {
     let root = tempfile::tempdir().unwrap();
-    let writer =
-        JournalWriter::open(root.path(), 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let writer = JournalWriter::open_test(root.path(), 1).unwrap();
     let journal = root.path().join("journal");
     std::fs::remove_dir(&journal).unwrap();
     std::fs::write(&journal, b"injected non-directory").unwrap();

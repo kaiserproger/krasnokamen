@@ -240,8 +240,7 @@ fn inhabited_time_crash_recovery_checkpoint_tail_share_wal_tick() {
     state
         .world
         .ensure_blocking(&[(pos, 0)].into_iter().collect());
-    let mut writer =
-        JournalWriter::open(&source, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&source, 1).unwrap();
     for tick in 1..=12 {
         assert_eq!(
             append_tick(&mut state.world, &mut writer, pos, tick, true),
@@ -376,12 +375,7 @@ fn inhabited_time_production_tick_wal_recovers_and_closes_without_players_after_
     state
         .world
         .ensure_blocking(&[(pos, 0)].into_iter().collect());
-    let mut writer = crate::journal::JournalWriter::open(
-        directory.path(),
-        1,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(directory.path(), 1).unwrap();
     for tick in 1..=5 {
         let input = if tick == 1 {
             vec![PlayerInput::Join {
@@ -1127,9 +1121,7 @@ fn statistics_native_checkpoint_restart_and_wal_postimage_restore() {
         tick: 2,
     };
     {
-        let mut writer =
-            JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
-                .unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         writer.append(2, 2, std::slice::from_ref(&entry)).unwrap();
     }
     let restarted = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
@@ -1173,9 +1165,7 @@ fn statistics_native_checkpoint_restart_and_wal_postimage_restore() {
         tick: 3,
     };
     {
-        let mut writer =
-            JournalWriter::open(directory.path(), 1, crate::journal::WalIdentity::fixture())
-                .unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         writer.append(3, 3, std::slice::from_ref(&patch)).unwrap();
         // A complete global batch advances time without any player mutation.
         writer.append(4, 203, &[]).unwrap();

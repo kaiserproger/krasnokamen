@@ -75,12 +75,7 @@ fn tail(config: &crate::CoreConfig, state: &TickState, id: EntityId, tags: &Tag)
 }
 
 fn tail_image(config: &crate::CoreConfig, id: EntityId, image: EntityStateImage) {
-    let mut writer = crate::journal::JournalWriter::open(
-        &config.world_dir,
-        1,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(&config.world_dir, 1).unwrap();
     writer
         .append(
             2,
@@ -246,12 +241,7 @@ fn player_tail(tags: &Tag) -> (tempfile::TempDir, crate::CoreConfig, uuid::Uuid)
         unreachable!()
     };
     let uuid = uuid.parse().unwrap();
-    let mut writer = crate::journal::JournalWriter::open(
-        &config.world_dir,
-        1,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(&config.world_dir, 1).unwrap();
     writer.append(2, 2, &[entry]).unwrap();
     writer.flush().unwrap();
     (dir, config, uuid)

@@ -1276,11 +1276,7 @@ fn wal_refusal(
     std::fs::create_dir_all(&dir).expect("batch dir");
     let name = format!("batch-{:020}-{:020}.bin", 1, 1);
     std::fs::write(dir.join(&name), &frame).expect("batch file");
-    let read = crate::journal::read_complete_batches_after(
-        &dir,
-        0,
-        crate::journal::WalIdentity::fixture(),
-    );
+    let read = crate::journal::read_complete_batches_after_test(&dir, 0);
     let _ = std::fs::remove_dir_all(&dir);
     match read {
         Err(error) => error,

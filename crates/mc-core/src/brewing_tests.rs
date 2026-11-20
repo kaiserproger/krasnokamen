@@ -2,9 +2,7 @@ use std::sync::{Arc, LazyLock};
 
 use super::*;
 use crate::boundary::{ChunkPos, ClickMode, DigAction, Hand, PlayerInput};
-use crate::journal::{
-    JournalEntry, JournalWriter, Replay, read_complete_batches_after, replay_batches,
-};
+use crate::journal::{JournalEntry, JournalWriter, Replay, replay_batches};
 use crate::tick::run_tick;
 use crate::world::ChunkWorld;
 
@@ -336,7 +334,7 @@ fn durable_wal_after_checkpoint_restores_newer_timer_and_slots_idempotently() {
     let dir = std::env::temp_dir().join(format!("brewing-replay-{}", uuid::Uuid::new_v4()));
     let mut original = state(Some(dir.clone()));
     install(&mut original, slots());
-    let mut writer = JournalWriter::open(&dir, 1, crate::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     let entries = step(&mut original);
     writer
         .append(original.tick, original.tick, &entries)
@@ -356,12 +354,8 @@ fn durable_wal_after_checkpoint_restores_newer_timer_and_slots_idempotently() {
     }
     let timer = original.brewing[&KEY].clone();
     writer.gate(0, original.tick).unwrap();
-    let batches = read_complete_batches_after(
-        &dir.join("journal"),
-        1,
-        crate::journal::WalIdentity::fixture(),
-    )
-    .unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 1).unwrap();
     let once = replay_batches(Replay::default(), &batches);
     let expected_opaque = once.opaque_block_entities.clone();
     let twice = replay_batches(once, &batches);

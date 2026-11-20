@@ -59,8 +59,12 @@ fn transit(id: u128, record: Option<Arc<String>>, tick: u64) -> JournalEntry {
 }
 
 fn append(fixture: &Fixture, tick: u64, entries: &[JournalEntry]) {
-    let mut writer =
-        JournalWriter::open(&fixture.world, 1, mc_core::journal::WalIdentity::fixture()).unwrap();
+    let mut writer = JournalWriter::open(
+        &fixture.world,
+        1,
+        mc_core::journal::test_wal_identity(&fixture.world),
+    )
+    .unwrap();
     writer.append(tick, tick, entries).unwrap();
     writer.flush().unwrap();
 }

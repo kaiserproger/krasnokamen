@@ -184,7 +184,7 @@ fn crash_census_folds_ordered_wal_and_refuses_a_gap_or_corrupt_frame() {
     let mut writer = JournalWriter::open(
         &config.world_dir,
         1,
-        mc_core::journal::WalIdentity::fixture(),
+        mc_core::journal::test_wal_identity(&config.world_dir),
     )
     .unwrap();
     writer.append(1, 1, &[entry(saved.clone())]).unwrap();
