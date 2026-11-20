@@ -410,7 +410,17 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: int, ad
     except Exception as error:
         # A kicked or stalled join is the symptom, not an infrastructure failure.
         detail["join_error"] = str(error)
-    record = join_record(server_log_path, JOINER)
+    def settled() -> tuple[bool, dict[str, Any]]:
+        current = join_record(server_log_path, JOINER)
+        return current.get("knockout") is not None or current.get("timed_out") is True, current
+
+    try:
+        # The server's own kick line may be written just after the client's tool deadline: wait for
+        # the log event (inotify) with the server pidfd, then judge.
+        record = runtime.wait_for_path_condition(server_log_path, JOIN_BOUND_SECONDS + 15.0,
+                                                 settled, server)
+    except (TimeoutError, runtime.ChildExited):
+        record = join_record(server_log_path, JOINER)
     detail["join"] = record
     detail["join_elapsed_seconds"] = (None if record.get("landed_seconds") is None
                                       else round(float(record["landed_seconds"]), 2))
