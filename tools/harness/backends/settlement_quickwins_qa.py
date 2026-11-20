@@ -461,7 +461,14 @@ class Walk:
             self.probe.fixture(command)
             return
         self.fixture_log.append(command)
-        self.console.run(command)
+        for attempt in range(30):
+            reply = self.console.run(command)
+            if not any("not loaded" in line for line in reply):
+                return
+            # A fill or setblock on chunks that are still generating changed nothing: wait for the server, retry.
+            self.evidence.setdefault("fixture_retries", []).append({"command": command, "attempt": attempt})
+            self.probe.call("minecraft_wait_ticks", {"ticks": 40})
+        raise StepFailed(f"fixture still refused as not loaded after 30 tries: {command}")
 
     def tp(self, x: float, y: float, z: float, tol: float = .05) -> None:
         """Teleport and wait until the client has the player there (`tol` blocks in x and z; y stays exact:
@@ -534,8 +541,12 @@ def run(ctx: Any, args: Any) -> dict[str, Any]:
     if ctx.client not in ("native", "java"):
         raise ValueError("--scenario quickwins requires --client native or --client java (a client that exposes dialog text)")
     maplabel = args.scenario == "maplabel"
+    blueprints = args.scenario == "blueprints"
     stage2 = args.scenario in ("stage2", "stage2op")
-    if stage2:
+    if blueprints:
+        from . import settlement_quickwins_stage2 as stage
+        criteria, blocks = stage.BLUEPRINTS, ()
+    elif stage2:
         from . import settlement_quickwins_stage2 as stage
         criteria, blocks = stage.suite(args.scenario)
     else:
@@ -543,7 +554,7 @@ def run(ctx: Any, args: Any) -> dict[str, Any]:
         criteria, blocks = CRITERIA, stage_one.BLOCKS
     if maplabel and ctx.client != "java":
         raise ValueError("--scenario maplabel requires --client java (GUI scale and language are Java options)")
-    if not maplabel and args.language != "ru_ru":
+    if not maplabel and not blueprints and args.language != "ru_ru":
         raise ValueError("--scenario quickwins judges Russian text: pass -- --language ru_ru")
     java = ctx.client == "java"
 
@@ -569,7 +580,15 @@ def run(ctx: Any, args: Any) -> dict[str, Any]:
             probe.report["translations_loaded"] = not broken
             probe.check("Java translations loaded (no 'Failed to load translations' in client.log)", not broken)
         gui = Gui(probe, artifact, client, args.gui_scale if maplabel else 3, size)
-        walk = Walk(probe, artifact, gui, args, criteria if stage2 else None)
+        walk = Walk(probe, artifact, gui, args, criteria if stage2 or blueprints else None)
+        if blueprints:
+            try:
+                walk_steps.setup(walk)
+                stage.blueprint_walk(walk)
+            finally:
+                gui.close()
+                ctx.client_evidence["blueprints"] = walk.results.get("BL")
+            return walk.shots
         if stage2:
             from .scene_shot_client import scene_username
             walk.console = ConsoleFixtures(artifact, scene_username({}))

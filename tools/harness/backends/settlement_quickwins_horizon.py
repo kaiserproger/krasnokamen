@@ -278,9 +278,16 @@ class Probe:
             for index, text in enumerate(dialog.get("body", [])):
                 nodes.append({"id": f"dialog/body/{index}", "role": "text", "label": text, "enabled": True})
             for widget in hz("ui")["widgets"]:
+                self.report.setdefault("widget_samples", {}).setdefault(widget["kind"], widget)
                 if widget["kind"] != "button" or widget["label"] == "warning":
                     continue
                 x, y, width, height = widget["bounds"]
+                if re.match(r"(Тип постройки|Building type): ", str(widget["label"])):
+                    # Horizon lists the dialog's building-type cycle button as a plain button: give it the input shape.
+                    nodes.append({"id": "dialog/input/kind", "role": "button", "label": widget["label"],
+                                  "enabled": bool(widget["enabled"]),
+                                  "bounds": (round(x * SCALE), round(y * SCALE), round(width * SCALE), round(height * SCALE))})
+                    continue
                 nodes.append({"id": f"dialog/action/{len(nodes)}", "role": "button", "label": widget["label"],
                               "enabled": bool(widget["enabled"]),
                               "bounds": (round(x * SCALE), round(y * SCALE), round(width * SCALE), round(height * SCALE))})
@@ -357,10 +364,13 @@ def validate_args(ctx: ProfileContext) -> tuple[argparse.Namespace, float]:
     parser.add_argument("--horizon-client", type=Path, default=CLIENT)
     parser.add_argument("--horizon-ctl", type=Path, default=CTL)
     parser.add_argument("--horizon-resources", type=Path, default=RESOURCES)
+    parser.add_argument("--scenario", choices=("quickwins", "stage2", "stage2op"), default="quickwins",
+                        help="stage2: the stage-2 walk (certify by standing inside) with a non-operator player and "
+                             "console fixtures; stage2op: the same player at ops.json level 2")
     parser.add_argument("--survey", action="store_true",
                         help="run every block and record unmet criteria instead of stopping at the first")
     try:
-        args = parser.parse_args(ctx.extra_args)
+        args = parser.parse_args(ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args)
     except SystemExit as error:
         raise ValueError("invalid settlement-quickwins-horizon arguments") from error
     for key in ("client", "ctl"):
@@ -454,13 +464,23 @@ def walk(ctx: ProfileContext, args: argparse.Namespace, raw: Any, address: str, 
         from . import settlement_quickwins_qa as qa
         from . import settlement_quickwins_steps as steps
         gui = Gui(probe)
-        session = qa.Walk(probe, shots, gui, args)
+        stage2 = args.scenario in ("stage2", "stage2op")
+        if stage2:
+            from . import settlement_quickwins_stage2 as stage
+            from .settlement_quickwins_console import ConsoleFixtures
+            criteria, blocks = stage.suite(args.scenario, "horizon")
+        else:
+            criteria, blocks = qa.CRITERIA, steps.BLOCKS
+        session = qa.Walk(probe, shots, gui, args, criteria if stage2 else None)
         session.evidence["client"] = "horizon"
+        if stage2:
+            session.console = ConsoleFixtures(artifact, NAME)
+            session.evidence["operator_fixture"] = ctx.client_evidence.get("operator_fixture")
         try:
             steps.setup(session)
-            for name, criteria, block in steps.BLOCKS:
-                steps.run_block(session, name, criteria, block)
-            unmet = [cid for cid in qa.CRITERIA if not session.results.get(cid, {}).get("ok")]
+            for name, owed, block in blocks:
+                steps.run_block(session, name, owed, block)
+            unmet = [cid for cid in criteria if not session.results.get(cid, {}).get("ok")]
             probe.check("QW all", not unmet)
             verdict = {"status": "passed"}
         except BaseException as error:
@@ -473,6 +493,7 @@ def walk(ctx: ProfileContext, args: argparse.Namespace, raw: Any, address: str, 
             "fixture_commands": report.get("fixture_commands", []),
             "gui_clicks": report.get("gui_clicks", []),
             "fixture_retries": report.get("fixture_retries", []),
+            "widget_samples": report.get("widget_samples", {}),
             **verdict,
         }, ensure_ascii=False, indent=1, default=str) + "\n")
     return verdict
@@ -491,7 +512,10 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     ctx.client_evidence.update(server_binary_path=str(binary), server_binary_sha256=digest,
                                horizon_client=str(args.horizon_client),
                                horizon_resources=str(args.horizon_resources))
-    prepare_operator_fixture(ctx, [NAME])
+    if args.scenario == "quickwins":
+        prepare_operator_fixture(ctx, [NAME])
+    elif args.scenario == "stage2op":
+        prepare_operator_fixture(ctx, [NAME], 2)  # level 2 before the server starts (the console `op` grants 4)
     world, plugins = artifact / "world", artifact / "plugins"
     world.mkdir(exist_ok=True)
     plugins.mkdir(exist_ok=True)
@@ -504,7 +528,8 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     with ExitStack() as cleanup:
         socket_dir = Path(cleanup.enter_context(tempfile.TemporaryDirectory(prefix="hzqw-ctl-", dir="/tmp")))
         socket = socket_dir / "ctl.sock"
-        server = Server(ctx, binary, artifact, "server", server_config_text(port, world, plugins), port)
+        server = Server(ctx, binary, artifact, "server", server_config_text(port, world, plugins), port,
+                        console=args.scenario != "quickwins")
         with runtime.phase("server_start"):
             server.start()
             cleanup.callback(server.stop)

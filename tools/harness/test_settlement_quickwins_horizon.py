@@ -32,7 +32,7 @@ class FakeProcess:
 class FakeServer:
     instances: list["FakeServer"] = []
 
-    def __init__(self, ctx, binary, artifact, label, config, port):
+    def __init__(self, ctx, binary, artifact, label, config, port, console=False):
         self.ctx, self.port, self.label = ctx, port, label
         self.argv = [str(binary), "--config", str(artifact / f"{label}.toml")]
         self.log_path = artifact / f"{label}.log"
@@ -107,6 +107,47 @@ class PushWaitTest(unittest.TestCase):
         with self.assertRaises(RuntimeError) as raised:
             probe.wait(lambda _state: True, "QW no revision", timeout_seconds=1)
         self.assertIn("no revision", str(raised.exception))
+
+
+class StageTwoDialogTest(unittest.TestCase):
+    def test_the_building_type_cycle_button_is_an_input_and_the_other_buttons_stay_actions(self):
+        def hz(tool, **_arguments):
+            if tool == "state":
+                return {"player": {"position": [0.0, 64.0, 0.0], "yaw": 0.0, "pitch": 0.0}, "screen": "dialog",
+                        "dialog": {"open": {"title": "Сертификация постройки", "body": ["✔ крыша 1/1"]}}}
+            if tool == "messages":
+                return {"chat": []}
+            if tool == "ui":
+                return {"widgets": [
+                    {"kind": "button", "label": "Тип постройки: Жильё: Дом", "enabled": True, "bounds": [113, 123, 200, 20]},
+                    {"kind": "button", "label": "Сертифицировать", "enabled": True, "bounds": [62, 153, 150, 20]},
+                    {"kind": "button", "label": "warning", "enabled": True, "bounds": [243, 6, 20, 20]}]}
+            raise AssertionError(tool)
+        nodes = horizon.Probe(hz, Path(tempfile.mkdtemp())).observe()["ui_nodes"]
+        inputs = [node for node in nodes if node["id"] == "dialog/input/kind"]
+        self.assertEqual([node["label"] for node in inputs], ["Тип постройки: Жильё: Дом"])
+        self.assertEqual(inputs[0]["bounds"], (339, 369, 600, 60))
+        actions = [node["label"] for node in nodes if node["id"].startswith("dialog/action")]
+        self.assertEqual(actions, ["Сертифицировать"])
+
+    def test_the_stage_two_scenarios_run_the_server_with_a_console_and_the_plain_one_without(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from tools.harness.backends import horizon_lod
+            ctx = SimpleNamespace(commands=[], cwds=[], exits=[], logs=[])
+            plain = horizon_lod.Server(ctx, Path("/bin/true"), Path(tmp), "plain", "", 1)
+            self.assertIsNone(plain.console_path)
+            consoled = horizon_lod.Server(ctx, Path("/bin/true"), Path(tmp), "consoled", "", 2, console=True)
+            self.assertEqual(consoled.console_path, Path(tmp) / "console.fifo")
+            with mock.patch.object(horizon_lod.runtime, "start_server") as start:
+                consoled.start()
+                self.addCleanup(consoled.stop)
+            self.assertIsNotNone(start.call_args.kwargs["stdin"])
+            self.assertNotEqual(start.call_args.kwargs["stdin"], horizon_lod.subprocess.DEVNULL)
+            self.assertTrue(consoled.console_path.exists())
+            with mock.patch.object(horizon_lod.runtime, "start_server") as start:
+                plain.start()
+            self.assertEqual(start.call_args.kwargs["stdin"], horizon_lod.subprocess.DEVNULL)
+        consoled.process = None
 
 
 class LanguageGuardTest(unittest.TestCase):

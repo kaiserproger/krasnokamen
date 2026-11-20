@@ -371,14 +371,14 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     parser.add_argument("--size", choices=("1280x720", "1920x1080"), default="1280x720")
     parser.add_argument("--wrong-click", action="store_true",
                         help="negative control: click Help instead of Settlement")
-    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "stage2", "stage2op"), default="civil",
+    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "stage2", "stage2op", "blueprints"), default="civil",
                         help="quickwins: the owner-path acceptance of the D63 quick wins (native, ru_ru)")
     parser.add_argument("--survey", action="store_true",
                         help="quickwins only: walk every block and record unmet criteria instead of "
                              "stopping at the first (negative-control plumbing check, never acceptance)")
     extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
     args = parser.parse_args(extra)
-    if args.scenario in ("quickwins", "maplabel", "stage2", "stage2op"):
+    if args.scenario in ("quickwins", "maplabel", "stage2", "stage2op", "blueprints"):
         from . import settlement_quickwins_qa
         return settlement_quickwins_qa.run(ctx, args)
     if args.survey:

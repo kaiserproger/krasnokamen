@@ -58,8 +58,9 @@ OP = {
     "OP2": ("the same level-2 player cannot use /op (the fixture is level 2, not 4)", "Main; advisor: console `op` always grants 4"),
 }
 
-G_OFFSETS_X = (-35, -25, -15, 15, 25, 35)
-G_OFFSETS_Z = (-30, -15, 15, 30)
+# Sites lie inside the settlement (radius 48 from the bell): the farthest corner of a 5x5 site is at ~47 blocks.
+G_OFFSETS_X = (-32, -22, -12, 12, 22, 32)
+G_OFFSETS_Z = (-26, -13, 13, 26)
 LIST_ROW = re.compile(r"#(\d+)\s+(.+?)\s+level\s+(\d+)\s+\[(-?\d+),\s*(-?\d+),\s*(-?\d+)\]-\[(-?\d+),\s*(-?\d+),\s*(-?\d+)\]",
                       re.IGNORECASE)
 CHECK_LINE = re.compile(r"^\s*([✔✘])\s*(.+?)\s+(\d+)\s*/\s*(\d+)\s*(?:[—–-]+\s*(.+?))?\s*$")
@@ -575,8 +576,7 @@ def block_op(w: Walk) -> None:
     registered = [row for row in after if row["id"] not in {item["id"] for item in before}
                   and "storage" in row["kind"] and contains(row, point)]
     w.judge("OP1", len(registered) == 1, reply=lines[:6], registered=[f"#{row['id']} {row['kind']}" for row in registered])
-    from .scene_shot_client import scene_username
-    name = scene_username({})
+    name = w.console.player
     reply = w.chat(f"op {name}")
     levels = [(entry["name"], entry["level"]) for entry in w.evidence.get("operator_fixture") or []]
     denied = any(re.search(r"unknown|incomplete|неизвест", line, re.IGNORECASE) for line in reply)
@@ -587,7 +587,9 @@ def block_op(w: Walk) -> None:
 def block_dialogs(w: Walk) -> None:
     states = w.evidence.get("dialog_states", [])
     corners = [(state["label"], state["corner_or_height"]) for state in states if state["corner_or_height"]]
-    many_inputs = [(state["label"], state["inputs"]) for state in states if len(state["inputs"]) != 1]
+    # The forms carry exactly the building-type input; the success dialog carries none.
+    many_inputs = [(state["label"], state["inputs"]) for state in states
+                   if len(state["inputs"]) != (0 if state["label"].endswith("certified") else 1)]
     w.judge("N1", len(states) >= 20 and not corners and not many_inputs, states=len(states), corner_or_height=corners,
             inputs_not_exactly_one=many_inputs)
     hidden = [(state["label"], [c["label"] for c in state["controls"] if not c["inside_720p"]], state["missing"])
@@ -595,12 +597,89 @@ def block_dialogs(w: Walk) -> None:
     w.judge("V1", len(states) >= 20 and not hidden, states=len(states), outside_720p_or_missing=hidden)
 
 
+# ----------------------------------------------------------------------------- blueprint names
+
+BLUEPRINTS = {
+    "BL": ("the blueprint list (Construction page) shows only localized names: no raw ids (snake_case, `spanish_*`, "
+           "`minecraft:`), no «Unknown»/«Неизвестный», every name in the client language, 26 or more distinct blueprints",
+           "Main 2026-11-20 «no raw IDs in the blueprint list» (ru and en)"),
+}
+SNAKE = re.compile(r"\b[a-z]+_[a-z_]+\b|minecraft:")
+
+
+def blueprint_names(language: str, names: list[str]) -> tuple[bool, dict[str, Any]]:
+    """The icon names of the blueprint list (`<name> L1`): localized words only."""
+    base = [re.sub(r"\s+L\d+$", "", name).strip() for name in names]
+    word = r"[А-Яа-яЁё' -]+" if language == "ru_ru" else r"[A-Za-z' -]+"
+    facts = {
+        "language": language, "count": len(base), "distinct": len(set(base)),
+        "raw_ids": sorted({name for name in names if SNAKE.search(name)}),
+        "unknown": sorted({name for name in base if re.search(r"Unknown|Неизвестн", name, re.IGNORECASE)}),
+        "not_in_language": sorted({name for name in base if not re.fullmatch(word, name)}),
+        "names": base,
+    }
+    ok = (facts["distinct"] >= 26 and len(base) == facts["distinct"] and not facts["raw_ids"]
+          and not facts["unknown"] and not facts["not_in_language"])
+    return ok, facts
+
+
+def blueprint_walk(w: Walk) -> None:
+    """`--scenario blueprints`: the player's `/settlement menu projects` opens the blueprint list; every page is read."""
+    names: list[str] = []
+    w.close_all()
+    w.probe.report.setdefault("player_commands", []).append("settlement menu projects")
+    w.probe.call("minecraft_send_chat", {"message": "settlement menu projects", "command": True})
+    shown = w.settle("blueprint list", lambda s: s["kind"] == "menu" and any(re.search(r"\bL1$", n) for n in s["slots"].values()))
+    for _ in range(6):
+        names += [name for name in shown["slots"].values() if re.search(r"\bL1$", name)]
+        w.shot(f"blueprints-{len(names)}")
+        if not matching(r"^(Next page|Следующая страница)$", list(shown["slots"].values())):
+            break
+        shown = w.click_slot(r"^(Next page|Следующая страница)$", "blueprint list next page",
+                             lambda s: s["kind"] == "menu" and s["slots"] != shown["slots"])
+    ok, facts = blueprint_names(w.evidence.get("language", w.probe.report["quickwins"]["language"]), names)
+    w.judge("BL", ok, **facts)
+
+
 # ----------------------------------------------------------------------------- suites
 
 
-def suite(scenario: str) -> tuple[dict[str, tuple[str, str]], tuple[tuple[str, tuple[str, ...], Any], ...]]:
+def tab(w: Walk, text: str) -> tuple[str, bool]:
+    """Type `text` in the chat line of the Horizon client; return the chat line after Tab and whether the client
+    showed suggestions or the argument usage for it before Tab (`chat_suggestions`)."""
+    hz = w.probe.hz
+    w.close_all()
+    hz("key", key="t", action="tap")
+    hz("type", text=text)
+    hz("wait", ticks=6)
+    shown = hz("screen")
+    w.evidence.setdefault("tab_screens", []).append({"typed": text, "screen": shown})
+    hz("key", key="tab", action="tap")
+    hz("wait", ticks=2)
+    got = str(hz("screen").get("chat_input", ""))
+    hz("key", key="esc", action="tap")
+    if hz("screen").get("screen") == "chat":  # Escape first dismisses the suggestions
+        hz("key", key="esc", action="tap")
+    return got, bool(shown.get("chat_suggestions"))
+
+
+def block_completion_probe(w: Walk) -> None:
+    """Horizon only, recorded and NOT judged: what the client shows for /settlement building certify <kind>
+    followed by a space. The coordinates are integer arguments: they offer no Tab suggestion even to a level-2
+    operator (`chat_suggestions` stays false), so completion cannot tell the two trees apart; the tree itself is
+    covered by the mc-edge test `settlement_certification_bounds_are_only_advertised_to_level_two_operators`."""
+    control_in = "/settlement building ce"
+    control, control_shown = tab(w, control_in)
+    coordinates_in = "/settlement building certify storage "
+    after, shown = tab(w, coordinates_in)
+    w.evidence["completion_probe"] = {"control": [control_in, control, control_shown],
+                                      "coordinates": [coordinates_in, after, shown]}
+
+
+def suite(scenario: str, client: str = "native") -> tuple[dict[str, tuple[str, str]], tuple[tuple[str, tuple[str, ...], Any], ...]]:
     if scenario == "stage2op":
-        return OP, (("operator", ("OP1", "OP2"), block_op),)
+        probe = (("completion-probe", (), block_completion_probe),) if client == "horizon" else ()
+        return OP, (("operator", ("OP1", "OP2"), block_op), *probe)
     one_one = {name: (ids, block) for name, ids, block in steps.BLOCKS}
     blocks: list[tuple[str, tuple[str, ...], Any]] = []
     for name in ("create", "hub", "dashboard", "storage", "buildings-empty", "order", "plurals", "project", "resident"):
@@ -613,6 +692,8 @@ def suite(scenario: str) -> tuple[dict[str, tuple[str, str]], tuple[tuple[str, t
     blocks.append(("refusal", ("RF6",), block_refusal))
     blocks.append(("revalidate", ("RV",), block_revalidate))
     blocks.append(("non-operator", ("NO",), block_nonop))
+    if client == "horizon":
+        blocks.append(("completion-probe", (), block_completion_probe))
     for name in ("cards", "guide", "docs", "second-founding"):
         ids, block = one_one[name]
         blocks.append((name, ids, block))

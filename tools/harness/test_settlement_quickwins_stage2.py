@@ -60,6 +60,20 @@ class ChecklistTest(unittest.TestCase):
         self.assertTrue(s2.contains(row, (13, 201, 23)))
         self.assertFalse(s2.contains(row, (15, 201, 23)))
 
+    def test_blueprint_names_must_be_localized_words_without_ids(self) -> None:
+        ru = [f"Чертёж{'абвгдежзийклмнопрстуфхцчшщ'[i]} L1" for i in range(26)]
+        en = [f"Blueprint {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[i]} L1" for i in range(26)]
+        self.assertTrue(s2.blueprint_names("ru_ru", ru)[0])
+        self.assertTrue(s2.blueprint_names("en_us", en)[0])
+        self.assertFalse(s2.blueprint_names("ru_ru", en)[0])  # English names in a Russian client
+        self.assertFalse(s2.blueprint_names("en_us", ru)[0])
+        self.assertFalse(s2.blueprint_names("en_us", [*en[:25], "watch_tower L1"])[0])  # raw id
+        self.assertFalse(s2.blueprint_names("en_us", [*en[:25], "spanish_house L1"])[0])
+        self.assertFalse(s2.blueprint_names("en_us", [*en[:25], "Unknown blueprint L1"])[0])
+        self.assertFalse(s2.blueprint_names("ru_ru", [*ru[:25], "Неизвестный чертёж L1"])[0])
+        self.assertFalse(s2.blueprint_names("en_us", en[:20])[0])  # too few
+        self.assertFalse(s2.blueprint_names("en_us", [*en[:25], en[0]])[0])  # duplicate
+
     def test_criteria_of_the_suite(self) -> None:
         criteria, blocks = s2.suite("stage2")
         owed = {cid for _, ids, _ in blocks for cid in ids}
