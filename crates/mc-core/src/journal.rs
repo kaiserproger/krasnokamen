@@ -658,7 +658,18 @@ impl JournalWriter {
     /// in, so a tail a test appends belongs to the store that will replay it.
     #[cfg(test)]
     pub(crate) fn open_test(world_dir: &Path, fsync_every: u32) -> Result<Self, CoreError> {
-        let identity = tail_identity(world_dir);
+        Self::open_test_with_identity(world_dir, fsync_every, tail_identity(world_dir))
+    }
+
+    /// [`Self::open_test`] for a caller that already resolved the world's
+    /// identity. Resolving it rebuilds the whole block registry, which a loop
+    /// that opens one writer per injected failure must not repeat.
+    #[cfg(test)]
+    pub(crate) fn open_test_with_identity(
+        world_dir: &Path,
+        fsync_every: u32,
+        identity: WalIdentity,
+    ) -> Result<Self, CoreError> {
         let mut writer = Self::open(world_dir, fsync_every, identity)?;
         // A world built after its first tail: the frames are re-stamped with
         // that world's identity once its store exists (see `flush`).
