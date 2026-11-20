@@ -12,7 +12,7 @@ fn game_clock_upgrade_requires_explicit_disposable_copy() {
     ])
     .unwrap();
     assert!(
-        matches!(cli.command, Some(Command::World { command: WorldCommand::UpgradeGameClock { copy } }) if copy == PathBuf::from("disposable"))
+        matches!(cli.command, Some(Command::World { command: WorldCommand::UpgradeGameClock { copy } }) if copy == *"disposable")
     );
 }
 #[test]

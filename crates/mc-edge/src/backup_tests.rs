@@ -648,7 +648,7 @@ async fn the_restore_command_accepts_a_hot_backup_verified_with_content() {
     drop(core);
 
     let restored = root.path().join("restored");
-    let mut cfg = restore_config(root.path(), &restored);
+    let cfg = restore_config(root.path(), &restored);
     let cli = crate::operator_cli::Cli::try_parse_from([
         "krasnokamen",
         "--config",
