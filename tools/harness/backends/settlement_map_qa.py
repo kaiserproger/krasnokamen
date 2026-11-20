@@ -371,15 +371,21 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     parser.add_argument("--size", choices=("1280x720", "1920x1080"), default="1280x720")
     parser.add_argument("--wrong-click", action="store_true",
                         help="negative control: click Help instead of Settlement")
-    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel"), default="civil",
-                        help="quickwins: the owner-path acceptance of the D63 quick wins (native, ru_ru)")
+    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race"), default="civil",
+                        help="quickwins: the owner-path acceptance of the D63 quick wins (native, ru_ru); "
+                             "quickwins-c1-race: the starter chest (C1) founded under block churn in its chunk")
     parser.add_argument("--survey", action="store_true",
                         help="quickwins only: walk every block and record unmet criteria instead of "
                              "stopping at the first (negative-control plumbing check, never acceptance)")
+    parser.add_argument("--founding-clocks", type=int,
+                        help="quickwins-c1-race only: observer clocks in the anchor's chunk (1..6, default 4)")
+    parser.add_argument("--found-after-ticks", type=int,
+                        help="quickwins-c1-race only: ticks between the ready pad and the founding (1..1200, default 100)")
     extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
     args = parser.parse_args(extra)
-    if args.scenario in ("quickwins", "maplabel"):
-        from . import settlement_quickwins_qa
+    from . import settlement_quickwins_qa
+    args.c1_race = settlement_quickwins_qa.c1_race_options(args.scenario, args.founding_clocks, args.found_after_ticks)
+    if args.scenario in ("quickwins", "maplabel", "quickwins-c1-race"):
         return settlement_quickwins_qa.run(ctx, args)
     if args.survey:
         raise ValueError("--survey belongs to --scenario quickwins")

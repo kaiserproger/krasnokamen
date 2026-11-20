@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from tools.harness.backends import settlement_quickwins_qa as gate
 
@@ -123,6 +125,127 @@ class RegistryTests(unittest.TestCase):
         from tools.harness.backends import settlement_quickwins_steps as steps
         owned = [cid for _, ids, _ in steps.BLOCKS for cid in ids]
         self.assertEqual(sorted(owned), sorted(gate.CRITERIA))
+
+
+class C1RaceTests(unittest.TestCase):
+    """`--scenario quickwins-c1-race`: the standing check of JAVA-CLIENT-MISSES-FOUNDING-STARTER-CHEST-BLOCK."""
+
+    def test_options_default_to_four_clocks_and_100_ticks(self):
+        self.assertEqual(gate.c1_race_options(gate.C1_RACE_SCENARIO, None, None), gate.C1Race(4, 100))
+        self.assertEqual(gate.c1_race_options(gate.C1_RACE_SCENARIO, 2, 40), gate.C1Race(2, 40))
+        self.assertEqual(gate.c1_race_options(gate.C1_RACE_SCENARIO, 6, 1200), gate.C1Race(6, 1200))
+        self.assertEqual(gate.c1_race_options(gate.C1_RACE_SCENARIO, 1, 1), gate.C1Race(1, 1))
+
+    def test_options_outside_their_ranges_are_refused(self):
+        for clocks, ticks in ((0, None), (7, None), (-1, None), (None, 0), (None, 1201), (None, -5)):
+            with self.assertRaisesRegex(ValueError, "must be", msg=(clocks, ticks)):
+                gate.c1_race_options(gate.C1_RACE_SCENARIO, clocks, ticks)
+
+    def test_options_belong_to_the_race_scenario_only(self):
+        for scenario in ("civil", "quickwins", "maplabel"):
+            self.assertIsNone(gate.c1_race_options(scenario, None, None))
+            for clocks, ticks in ((4, None), (None, 100)):
+                with self.assertRaisesRegex(ValueError, "belong to --scenario quickwins-c1-race"):
+                    gate.c1_race_options(scenario, clocks, ticks)
+
+    def test_clocks_stay_in_the_anchor_chunk_away_from_the_chest_sites(self):
+        # The layout of the recorded control and fix runs (receipts/ChestDeliveryFix): anchor (128,201,0).
+        self.assertEqual(gate.c1_race_clocks([128, 201, 0], 4),
+                         [([140, 201, z], [141, 201, z]) for z in (2, 4, 6, 8)])
+        for anchor in ([128, 201, 0], [-3, 70, 13], [7, 64, 7], [8, 64, 8], [-16, 64, -1], [15, 90, 15]):
+            pairs = gate.c1_race_clocks(anchor, 6)
+            cells = [cell for pair in pairs for cell in pair]
+            self.assertEqual(len({tuple(cell) for cell in cells}), 12, anchor)
+            for east, west in pairs:
+                self.assertEqual(west, [east[0] + 1, east[1], east[2]], anchor)
+            for cell in cells:
+                self.assertEqual((cell[0] // 16, cell[2] // 16), (anchor[0] // 16, anchor[2] // 16), (anchor, cell))
+                self.assertEqual(cell[1], anchor[1])
+                self.assertGreaterEqual(abs(cell[0] - anchor[0]), 5, (anchor, cell))  # never a chest site
+
+    def test_settlement_map_qa_validates_the_race_arguments_before_any_client_starts(self):
+        from types import SimpleNamespace
+        from tools.harness.backends import settlement_map_qa
+        for extra, message in ((["--", "--founding-clocks", "4"], "belong to"),
+                               (["--", "--scenario", "quickwins", "--found-after-ticks", "10"], "belong to"),
+                               (["--", "--scenario", "quickwins-c1-race", "--founding-clocks", "9"], "must be"),
+                               (["--", "--scenario", "quickwins-c1-race", "--found-after-ticks", "0"], "must be"),
+                               (["--", "--scenario", "quickwins-c1-race", "--survey"], "--survey")):
+            ctx = SimpleNamespace(client="java", extra_args=extra, client_evidence={}, parts=1, logs=[])
+            with patch.object(gate.scene_shot, "run", side_effect=AssertionError("a client started")):
+                with self.assertRaisesRegex(ValueError, message, msg=extra):
+                    settlement_map_qa.run(ctx)
+
+    def test_the_ledger_ref_runs_the_race_on_vanilla_java(self):
+        from tools.harness import regressions
+        from tools.harness.backends import settlement_map_qa
+        command = regressions._profile_command("settlement-map-qa", gate.C1_RACE_VERDICT)
+        self.assertEqual(command[-8:], ["--client", "java", "--windowed", "--timeout-seconds", "3600",
+                                        "--", "--scenario", gate.C1_RACE_SCENARIO])
+        self.assertEqual(regressions._BOOLEAN_PROFILE_VERDICTS["settlement-map-qa"],
+                         {*settlement_map_qa.VERDICTS, gate.C1_RACE_VERDICT})
+
+    def race_run(self, block=None, setup=None):
+        """Run `--scenario quickwins-c1-race` with the client, the GUI and the walk's fixtures replaced."""
+        from types import SimpleNamespace
+        from tools.harness.backends import settlement_quickwins_steps as steps
+
+        def check(name, ok):
+            probe.report["assertions"][name] = bool(ok)
+            if not ok:
+                raise RuntimeError(f"scene-shot assertion failed: {name}")
+        probe = SimpleNamespace(report={"assertions": {}, "fixture_commands": []}, check=check,
+                                client=SimpleNamespace(call_tool=lambda name, arguments=None: {}))
+        ctx = SimpleNamespace(client="java", client_evidence={}, logs=[])
+        args = SimpleNamespace(scenario=gate.C1_RACE_SCENARIO, c1_race=gate.C1Race(3, 50), survey=False,
+                               language="en_us", gui_scale=3)
+        seen = []
+
+        def fake_setup(walk, race):
+            seen.append(race)
+            if setup:
+                setup(walk)
+
+        def scene(ctx_, scenario, script):
+            return script(probe, Path("/nonexistent"), [], "java")
+        with patch.object(gate.scene_shot, "run", scene), patch.object(steps, "setup", fake_setup), \
+                patch.object(steps, "block_create", block), \
+                patch("tools.harness.backends.settlement_map_qa.Gui"):
+            try:
+                gate.run(ctx, args)
+                error = None
+            except Exception as caught:  # noqa: BLE001 - the test inspects what the run raised
+                error = caught
+        self.assertEqual(seen, [gate.C1Race(3, 50)])
+        return ctx.client_evidence, error
+
+    def test_a_seen_chest_publishes_true_and_passes(self):
+        def found(walk):
+            walk.judge("C1", True, chest=[129, 201, 0], anchor=[128, 201, 0])
+        evidence, error = self.race_run(found)
+        self.assertIsNone(error)
+        self.assertEqual(evidence["verdicts"], {gate.C1_RACE_VERDICT: True})
+        self.assertEqual(evidence["quickwins"]["criteria"], {"C1": True})
+
+    def test_a_chest_seen_only_after_reentry_publishes_false_and_fails(self):
+        def resent(walk):
+            walk.results["C1"] = {"ok": False, "visible_only_after_reenter": [129, 201, 0]}
+        evidence, error = self.race_run(resent)
+        self.assertRegex(str(error), f"assertion failed: QW {gate.C1_RACE_VERDICT}")
+        self.assertEqual(evidence["verdicts"], {gate.C1_RACE_VERDICT: False})
+
+    def test_a_chest_never_seen_or_a_run_cut_short_is_no_verdict(self):
+        def never(walk):
+            walk.judge("C1", False, chest=None, anchor=[128, 201, 0])
+        evidence, error = self.race_run(never)
+        self.assertRegex(str(error), "assertion failed: QW C1")
+        self.assertEqual(evidence["verdicts"], {gate.C1_RACE_VERDICT: None})
+
+        def lost(walk):
+            raise gate.StepFailed("the pad did not load")
+        evidence, error = self.race_run(block=lambda walk: None, setup=lost)
+        self.assertIsInstance(error, gate.StepFailed)
+        self.assertEqual(evidence["verdicts"], {gate.C1_RACE_VERDICT: None})
 
 
 if __name__ == "__main__":

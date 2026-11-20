@@ -31,6 +31,7 @@ import re
 import subprocess
 import sys
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -87,6 +88,51 @@ VERDICTS = tuple(CRITERIA) + ("all",)
 
 class StepFailed(RuntimeError):
     """A GUI step could not be walked (a button or screen the criterion needs is missing)."""
+
+
+# `--scenario quickwins-c1-race` (row JAVA-CLIENT-MISSES-FOUNDING-STARTER-CHEST-BLOCK): C1 alone, founded once the
+# connection queue has drained, while observer clocks keep changing blocks of the anchor's chunk. A core
+# that publishes the chest's block change a tick before the chunk image that holds it leaves the client with air
+# there: the edge sends the change with the old image's state and takes the next revision of that chunk as
+# explained by the clocks' own changes, so it never resends the chunk.
+C1_RACE_SCENARIO = "quickwins-c1-race"
+C1_RACE_VERDICT = "starter_chest_race"
+C1_RACE_CLOCKS = range(1, 7)  # rows 2..12 (or 13..3) of the anchor's chunk
+C1_RACE_TICKS = range(1, 1201)
+
+
+@dataclass(frozen=True)
+class C1Race:
+    clocks: int = 4
+    found_after_ticks: int = 100
+
+
+def c1_race_options(scenario: str, clocks: int | None, found_after_ticks: int | None) -> C1Race | None:
+    """The race of `--scenario quickwins-c1-race` (defaults: 4 clocks, found 100 ticks after the pad is ready).
+    The options are refused on any other scenario and outside their ranges."""
+    if scenario != C1_RACE_SCENARIO:
+        if clocks is not None or found_after_ticks is not None:
+            raise ValueError(f"--founding-clocks and --found-after-ticks belong to --scenario {C1_RACE_SCENARIO}")
+        return None
+    race = C1Race(**{name: value for name, value in (("clocks", clocks), ("found_after_ticks", found_after_ticks))
+                     if value is not None})
+    if race.clocks not in C1_RACE_CLOCKS:
+        raise ValueError(f"--founding-clocks must be {C1_RACE_CLOCKS.start}..{C1_RACE_CLOCKS.stop - 1}, got {race.clocks}")
+    if race.found_after_ticks not in C1_RACE_TICKS:
+        raise ValueError(f"--found-after-ticks must be {C1_RACE_TICKS.start}..{C1_RACE_TICKS.stop - 1}, "
+                         f"got {race.found_after_ticks}")
+    return race
+
+
+def c1_race_clocks(anchor: list[int], clocks: int) -> list[tuple[list[int], list[int]]]:
+    """The cells of each observer pair (east-facing, west-facing), two rows apart: inside the anchor's chunk, on
+    its side away from the anchor (at least 5 blocks off in x), so never one of the starter chest's sites (the
+    anchor's 8 neighbours) and never under the player standing at the anchor."""
+    x, y, z = anchor
+    chunk_x, chunk_z = x - x % 16, z - z % 16
+    east = chunk_x + (12 if x - chunk_x < 8 else 2)
+    rows = [chunk_z + (2 + 2 * index if z - chunk_z < 8 else 13 - 2 * index) for index in range(clocks)]
+    return [([east, y, row], [east + 1, y, row]) for row in rows]
 
 
 # ----------------------------------------------------------------------------- pure helpers
@@ -510,13 +556,19 @@ def map_label_walk(w: Walk, args: Any) -> None:
 
 
 def run(ctx: Any, args: Any) -> dict[str, Any]:
-    """`settlement-map-qa --scenario quickwins`: one ru_ru session (native or vanilla Java) on the lifecycle-owned window."""
+    """`settlement-map-qa --scenario quickwins`: one ru_ru session (native or vanilla Java) on the lifecycle-owned window.
+    `--scenario quickwins-c1-race`: the founding and C1 only, under `args.c1_race` (any language). It publishes
+    `details.verdicts[C1_RACE_VERDICT]`: true when the client sees the starter chest, false when it sees it only
+    after leaving the chunk area and coming back (the server has it, the client got it only with a chunk resend)."""
     if ctx.client not in ("native", "java"):
         raise ValueError("--scenario quickwins requires --client native or --client java (a client that exposes dialog text)")
     maplabel = args.scenario == "maplabel"
+    race: C1Race | None = args.c1_race
     if maplabel and ctx.client != "java":
         raise ValueError("--scenario maplabel requires --client java (GUI scale and language are Java options)")
-    if not maplabel and args.language != "ru_ru":
+    if race is not None and args.survey:
+        raise ValueError(f"--survey belongs to --scenario quickwins, not {C1_RACE_SCENARIO}")
+    if not maplabel and race is None and args.language != "ru_ru":
         raise ValueError("--scenario quickwins judges Russian text: pass -- --language ru_ru")
     java = ctx.client == "java"
 
@@ -551,6 +603,21 @@ def run(ctx: Any, args: Any) -> dict[str, Any]:
             finally:
                 gui.close()
                 ctx.client_evidence["maplabel"] = walk.results.get("ML")
+            return walk.shots
+        if race is not None:
+            try:
+                walk_steps.setup(walk, race)
+                walk_steps.run_block(walk, "create", ("C1",), walk_steps.block_create)
+                probe.check(f"QW {C1_RACE_VERDICT}", walk.results["C1"]["ok"])
+            finally:
+                gui.close()
+                # False only for the row's symptom; a chest the client never sees (none on the server either, or
+                # a run cut short) is another failure: None, not evidence either way.
+                c1 = walk.results.get("C1", {})
+                seen = True if c1.get("ok") else False if c1.get("visible_only_after_reenter") else None
+                ctx.client_evidence["verdicts"] = {C1_RACE_VERDICT: seen}
+                ctx.client_evidence["quickwins"] = {"mode": C1_RACE_SCENARIO, "criteria": {"C1": c1.get("ok")},
+                                                    "blocks": dict(walk.blocks)}
             return walk.shots
         try:
             walk_steps.setup(walk)

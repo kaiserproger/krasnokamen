@@ -146,11 +146,12 @@ _BOOLEAN_PROFILE_VERDICTS = {
     'civilization-seed-qa': frozenset({
         'new_house', 'births', 'second_building', 'iron_smelted', 'all',
     }),
-    # backends/settlement_map_qa.py VERDICTS (a test keeps the two in step).
+    # backends/settlement_map_qa.py VERDICTS plus the quickwins-c1-race verdict
+    # (settlement_quickwins_qa.C1_RACE_VERDICT); a test keeps them in step.
     'settlement-map-qa': frozenset({
         'bell_opens_hub', 'dashboard', 'map', 'building_order', 'shortage_icons',
         'storage_transfer', 'project_progress', 'residents', 'resources', 'production_order',
-        'localized_text', 'all',
+        'localized_text', 'all', 'starter_chest_race',
     }),
 }
 # Run arguments of a profile ref: (client, args after `--`) per verdict that needs another client
@@ -158,6 +159,9 @@ _BOOLEAN_PROFILE_VERDICTS = {
 # (it sends ClientInformation `en_us` fixed), so the Russian text check runs on vanilla Java.
 _PROFILE_VERDICT_RUN = {
     ('settlement-map-qa', 'localized_text'): ('java', ['--', '--language', 'ru_ru']),
+    # The starter chest founded under block churn in its chunk (row JAVA-CLIENT-MISSES-FOUNDING-STARTER-CHEST-BLOCK
+    # was seen on vanilla Java 26.3); the scenario's default race: 4 observer clocks, founded 100 ticks after the pad.
+    ('settlement-map-qa', 'starter_chest_race'): ('java', ['--', '--scenario', 'quickwins-c1-race']),
     # The chisel resource-pack admission is a vanilla-Java client behaviour; the native client
     # never asks for the optional pack.
     ('chisel', 'vanilla_optional_admission'): ('java', []),

@@ -15,8 +15,8 @@ from typing import Any
 from .. import runtime
 from . import scene_shot
 from .settlement_quickwins_qa import (
-    CRITERIA, NAME, RADIUS, StepFailed, Walk, blob, expected_shortage, greeting_verdict, guide_verdict, matching,
-    refusal_verdict, shortage_verdict, signature, view, UUID,
+    CRITERIA, NAME, RADIUS, C1Race, StepFailed, Walk, blob, c1_race_clocks, expected_shortage, greeting_verdict,
+    guide_verdict, matching, refusal_verdict, shortage_verdict, signature, view, UUID,
 )
 
 BUILDING_LIST = re.compile(
@@ -55,8 +55,10 @@ def run_block(w: Walk, name: str, criteria: tuple[str, ...], block: Any) -> None
 # ----------------------------------------------------------------------------- setup
 
 
-def setup(w: Walk) -> None:
-    """Privileged prerequisites: a flat pad and a survival player; nothing here is judged."""
+def setup(w: Walk, race: C1Race | None = None) -> None:
+    """Privileged prerequisites: a flat pad and a survival player; nothing here is judged. `race`
+    (`--scenario quickwins-c1-race`): observer clocks in the anchor's chunk, then the founding waits
+    `race.found_after_ticks` so the pad's block and light traffic has left the connection queue."""
     from .buildings_qa import _chunked_fills
     probe = w.probe
     probe.report["setup_not_asserted"] = [
@@ -81,6 +83,14 @@ def setup(w: Walk) -> None:
         w.fixture(command)
     w.tp(x + .5, y, z + .5)
     w.fixture("gamemode survival @s")
+    if race is not None:
+        pairs = c1_race_clocks([x, y, z], race.clocks)
+        for east, west in pairs:
+            w.fixture(f"setblock {east[0]} {east[1]} {east[2]} minecraft:observer[facing=east]")
+            w.fixture(f"setblock {west[0]} {west[1]} {west[2]} minecraft:observer[facing=west]")
+            w.probe.call("minecraft_wait_ticks", {"ticks": 1})  # the 2-tick clocks do not all start in one phase
+        wait_ticks(w, race.found_after_ticks)
+        w.evidence["c1_race"] = {"clocks": [list(pair) for pair in pairs], "found_after_ticks": race.found_after_ticks}
     # The player's own command: found the settlement at the anchor.
     probe.report.setdefault("player_commands", []).append(f"settlement create {NAME} {RADIUS}")
     probe.call("minecraft_send_chat", {"message": f"settlement create {NAME} {RADIUS}", "command": True})
@@ -88,6 +98,14 @@ def setup(w: Walk) -> None:
                                  for line in state.get("recent_chat", [])),
                "QW settlement founded", timeout_seconds=60)
     w.evidence["pad"] = {"anchor": [x, y, z], "ground_y": y - 1, "stand": [x + .5, y, z - 2.0]}
+
+
+def wait_ticks(w: Walk, ticks: int) -> None:
+    """The Java tool accepts at most 255 ticks per call."""
+    while ticks > 0:
+        step = min(ticks, 200)
+        w.probe.call("minecraft_wait_ticks", {"ticks": step})
+        ticks -= step
 
 
 def find_chest(w: Walk, tries: int = 15) -> list[int] | None:
@@ -110,22 +128,23 @@ def block_create(w: Walk) -> None:
     chest = find_chest(w)
     w.evidence["starter_chest"] = chest
     if chest is None:  # diagnostic only: where does the client see chests at all around the anchor
-        wide = w.probe.call("minecraft_scan_blocks", {
-            "min_x": x - 16, "min_y": y - 3, "min_z": z - 16, "max_x": x + 16, "max_y": y + 3, "max_z": z + 16,
-            "max_blocks": 4096 * 2})
-        w.evidence["wide_scan_chests"] = [[r["x"], r["y"], r["z"]] for r in wide["blocks"]
+        # The Java tool refuses more than 4096 blocks per scan: two z-halves of the wide window.
+        halves = [w.probe.call("minecraft_scan_blocks", {
+            "min_x": x - 16, "min_y": y - 3, "min_z": low, "max_x": x + 16, "max_y": y + 3, "max_z": high,
+            "max_blocks": 4096}) for low, high in ((z - 16, z), (z + 1, z + 16))]
+        w.evidence["wide_scan_chests"] = [[r["x"], r["y"], r["z"]] for half in halves for r in half["blocks"]
                                            if r["block_id"] == "minecraft:chest"]
-        w.evidence["wide_scan_count"] = wide.get("count")
+        w.evidence["wide_scan_count"] = sum(half.get("count") or 0 for half in halves)
         w.evidence["chat_tail"] = [str(l) for l in w.probe.observe().get("recent_chat", [])[:8]]
         # Late or lost? Rescan the same window after 60 s, then after the client leaves the chunk area and returns.
-        w.probe.call("minecraft_wait_ticks", {"ticks": 1200})
+        wait_ticks(w, 1200)
         w.evidence["rescan_after_60s"] = find_chest(w, tries=1)
         w.fixture("gamemode creative @s")  # no fall damage while the player is away
         w.fixture(f"tp @s {x + 220.5} {y + 5} {z + 0.5}")
-        w.probe.call("minecraft_wait_ticks", {"ticks": 200})
+        wait_ticks(w, 200)
         w.fixture(f"tp @s {x + .5} {y} {z - 2.0}")
         w.fixture("gamemode survival @s")
-        w.probe.call("minecraft_wait_ticks", {"ticks": 200})
+        wait_ticks(w, 200)
         w.evidence["rescan_after_reenter"] = find_chest(w, tries=1)
     recovered = chest is None and w.evidence.get("rescan_after_reenter")
     if recovered:
