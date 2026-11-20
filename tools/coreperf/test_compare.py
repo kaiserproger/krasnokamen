@@ -379,61 +379,71 @@ class FillBudgetTests(unittest.TestCase):
                     self.assertLessEqual(cells, 32768, f"{mobs} mobs: {command}")
 
     @staticmethod
-    def _pen_sweeps(commands: list[str]) -> list[dict]:
-        """The post-seal sweeps, one entry per pen, in command order.
+    def _sealed_pens(commands: list[str]) -> list[dict]:
+        """Every sealed pen with its roof and the sweep fills that follow it, in command order.
 
-        A pen's block is: floor, a pre-seal air pass, the stone seal (four walls and the roof),
-        then the interior sweep. Only the air fills that follow a stone fill belong to the
-        sweep; the pre-seal passes clear the future pen site before the walls exist and are a
-        different, earlier operation. The roof's own y is the top of the swept range.
+        A pen is identified by its roof — the stone fill that spans both x and z at one y — not by
+        the sweep, so a pen whose sweep went missing is still a pen and fails the cover check. The
+        interior is the roof's footprint inset by one cell; a sweep is legal only if it fills
+        exactly that footprint, from the floor to the cell below the roof. Pre-seal clearing passes
+        come before the roof and never attach to a pen; anything that closes the pen afterwards
+        (the next floor, the active-pen roof tickets, a forceload or a rule) detaches it.
         """
-        sweeps: list[dict] = []
-        sealed_top: int | None = None
+        pens: list[dict] = []
+        open_pen: dict | None = None
         for command in commands:
             fields = command.split()
             if fields[0] != "fill":
-                sealed_top = None
+                open_pen = None
                 continue
             coords = list(map(int, fields[1:7]))
             block = fields[7]
-            is_slab = coords[1] == coords[4]
+            spans_x = coords[0] < coords[3]
+            spans_z = coords[2] < coords[5]
             if block == "minecraft:stone":
-                # The roof is the stone fill that spans the pen at one y; it seals the pen and
-                # its y is the ceiling the sweep must stop below.
-                sealed_top = coords[4] if is_slab and coords[0] < coords[3] else None
+                if coords[1] == coords[4] and spans_x and spans_z:
+                    open_pen = {"roof_y": coords[4], "roof": coords, "fills": [],
+                                "interior": (coords[0] + 1, coords[2] + 1,
+                                             coords[3] - 1, coords[5] - 1)}
+                    pens.append(open_pen)
+                else:
+                    # Walls come before the roof; roof tickets come after the sweep and end the pen.
+                    if open_pen is not None and open_pen["fills"]:
+                        open_pen = None
                 continue
             if block != "minecraft:air":
-                sealed_top = None
+                open_pen = None
                 continue
-            if sealed_top is None:
-                continue  # pre-seal clearing pass
-            if not sweeps or sweeps[-1]["top"] != sealed_top:
-                sweeps.append({"top": sealed_top, "fills": []})
-            sweeps[-1]["fills"].append(coords)
-        return sweeps
+            if open_pen is not None:
+                open_pen["fills"].append(coords)
+        return pens
 
     def test_the_split_sweep_clears_the_same_pen_volume(self):
-        # The repair must not shrink the cleared interior: the post-seal sweep of one pen is
+        # The repair must not shrink the cleared interior: one pen's post-seal sweep is
         # 81x81x7 = 45,927 cells on a roof-71 pen (81x81x4 = 26,244 on a roof-67 spider pen),
-        # split into commands that each stay under vanilla's 32,768. Deleting either layer must
-        # leave a hole, so the union of the sweep fills is checked as an exact cell cover over
-        # x/z and as a gapless y interval, per pen, for the sizes the cache pins.
+        # split into commands that each stay under vanilla's 32,768. Every sealed pen must carry
+        # that sweep — a deleted layer leaves a hole, a deleted sweep leaves a bare pen, a shifted
+        # sweep misses the roof's footprint — and the union is checked as an exact cover.
         for mobs, villagers in ((100000, 0), (100000, 20000), (20000, 64)):
             recipe = compare.fixture(mobs, villagers)
             pens = 0
             for region in recipe["regions"]:
-                for sweep in self._pen_sweeps(region["commands"]):
+                for pen in self._sealed_pens(region["commands"]):
                     pens += 1
-                    top = sweep["top"]
-                    spans = {(fill[0], fill[2], fill[3], fill[5]) for fill in sweep["fills"]}
+                    roof = pen["roof"]
+                    x0, z0, x1, z1 = pen["interior"]
+                    self.assertTrue(
+                        pen["fills"],
+                        f"{mobs}/{villagers}: sealed pen at {roof[:7]} has no post-seal sweep")
+                    spans = {(fill[0], fill[2], fill[3], fill[5]) for fill in pen["fills"]}
                     self.assertEqual(
-                        len(spans), 1,
-                        f"{mobs}/{villagers}: one pen's sweep must share one x/z footprint: "
-                        f"{sorted(spans)}")
-                    x0, z0, x1, z1 = spans.pop()
-                    layers = sorted((fill[1], fill[4]) for fill in sweep["fills"])
-                    self.assertEqual(layers[0][0], 64, f"sweep must start at the floor: {layers}")
-                    self.assertEqual(layers[-1][1], top - 1,
+                        spans, {(x0, z0, x1, z1)},
+                        f"{mobs}/{villagers}: sweep must fill the roof's interior footprint "
+                        f"{(x0, z0, x1, z1)}, got {sorted(spans)}")
+                    layers = sorted((fill[1], fill[4]) for fill in pen["fills"])
+                    self.assertEqual(layers[0][0], 64,
+                                     f"sweep must start at the floor: {layers}")
+                    self.assertEqual(layers[-1][1], pen["roof_y"] - 1,
                                      f"sweep must stop below the roof: {layers}")
                     for (low, high), (next_low, _) in zip(layers, layers[1:]):
                         self.assertEqual(
@@ -441,10 +451,10 @@ class FillBudgetTests(unittest.TestCase):
                             f"sweep layers must tile y without a hole or an overlap: {layers}")
                     covered = sum(high - low + 1 for low, high in layers)
                     self.assertEqual(
-                        covered, top - 64,
-                        f"sweep must cover every layer from 64 to {top - 1}: {layers}")
+                        covered, pen["roof_y"] - 64,
+                        f"sweep must cover every layer from 64 to {pen['roof_y'] - 1}: {layers}")
                     volume = covered * (x1 - x0 + 1) * (z1 - z0 + 1)
                     self.assertEqual(
-                        volume, 81 * 81 * (top - 64),
-                        f"one pen's swept volume changed: {volume} cells at roof {top}")
+                        volume, 81 * 81 * (pen["roof_y"] - 64),
+                        f"one pen's swept volume changed: {volume} cells at roof {pen['roof_y']}")
             self.assertGreater(pens, 0, f"{mobs}/{villagers}: fixture emitted no sealed pen")
