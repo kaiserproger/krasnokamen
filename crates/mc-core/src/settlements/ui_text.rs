@@ -765,6 +765,46 @@ pub(crate) fn map_scale(lang: Lang, scale: i32) -> String {
     )
 }
 
+/// The single display-name table for construction, project cards and map labels.
+pub(crate) fn blueprint(lang: Lang, id: &str) -> &'static str {
+    let (en, ru) = match id {
+        "house" => ("House", "Дом"),
+        "storage" => ("Storage", "Склад"),
+        "farm" => ("Farm", "Ферма"),
+        "mason" => ("Mason's workshop", "Мастерская каменщика"),
+        "shepherd" => ("Shepherd's workshop", "Мастерская пастуха"),
+        "lumber_camp" => ("Lumber camp", "Лесопилка"),
+        "mine" => ("Mine", "Шахта"),
+        "barracks" => ("Barracks", "Казарма"),
+        "wall" => ("Wall", "Стена"),
+        "watch_tower" => ("Watchtower", "Сторожевая башня"),
+        "gate" => ("Gate", "Ворота"),
+        "armorer" => ("Armorer's workshop", "Мастерская бронника"),
+        "butcher" => ("Butcher's workshop", "Мастерская мясника"),
+        "cartographer" => ("Cartographer's workshop", "Мастерская картографа"),
+        "cleric" => ("Cleric's workshop", "Мастерская священника"),
+        "fisherman" => ("Fisherman's workshop", "Мастерская рыбака"),
+        "fletcher" => ("Fletcher's workshop", "Мастерская лучника"),
+        "leatherworker" => ("Leatherworker's workshop", "Мастерская кожевника"),
+        "librarian" => ("Librarian's workshop", "Мастерская библиотекаря"),
+        "toolsmith" => ("Toolsmith's workshop", "Мастерская инструментальщика"),
+        "weaponsmith" => ("Weaponsmith's workshop", "Мастерская оружейника"),
+        "spanish_house" => ("Spanish house", "Испанский дом"),
+        "spanish_church" => ("Spanish church", "Испанская церковь"),
+        "spanish_plaza" => ("Spanish plaza", "Испанская площадь"),
+        "spanish_fortress" => ("Spanish fortress", "Испанская крепость"),
+        "spanish_wall" => ("Spanish wall", "Испанская стена"),
+        "road" => ("Road", "Дорога"),
+        "lamp" => ("Street lamp", "Фонарь"),
+        "meadow" => ("Meadow clearing", "Расчистка луга"),
+        _ => ("Unknown blueprint", "Неизвестный чертёж"),
+    };
+    match lang {
+        Lang::En => en,
+        Lang::Ru => ru,
+    }
+}
+
 /// Names shared by workshop certificates and resident cards.
 pub(crate) fn profession(
     lang: Lang,

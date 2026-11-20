@@ -1517,11 +1517,17 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
 
 #[test]
 fn cultural_project_status_names_active_and_pending_blueprints_in_both_locales() {
-    // Each locale retains the authored cultural names in the full queue view.
+    // Each locale shows localized cultural names in the full queue view.
     for (locale, level) in [("en_us", "L1"), ("ru_ru", "ур. 1")] {
+        let lang = Lang::of(Some(locale));
         for pending in ["spanish_house", "spanish_church", "spanish_fortress"] {
             let mut state = joined(0);
             let id = town(&mut state, PLAYER);
+            let ctx = Ctx {
+                id,
+                manage: true,
+                lang,
+            };
             set_locale(&mut state, locale);
             prep_projects_site(&mut state, id);
             crate::settlements::construction::tests::fund(&mut state, "spanish_plaza", 1);
@@ -1556,9 +1562,17 @@ fn cultural_project_status_names_active_and_pending_blueprints_in_both_locales()
                 pending
             );
             let status = last_dialog(&click(&mut state, id, "project_status_details", &[]));
-            assert!(status.body.contains("spanish_plaza L1"), "{}", status.body);
             assert!(
-                status.body.contains(&format!("{pending} {level}")),
+                status
+                    .body
+                    .contains(&format!("{} L1", blueprint_label(&ctx, "spanish_plaza"))),
+                "{}",
+                status.body
+            );
+            assert!(
+                status
+                    .body
+                    .contains(&format!("{} {level}", blueprint_label(&ctx, pending))),
                 "{}",
                 status.body
             );
@@ -3026,4 +3040,46 @@ fn stage_two_certification_dialog_rows_fit_720p_at_gui_scale_three() {
         ),
         "certificate upgrade result",
     );
+}
+
+#[test]
+fn every_registered_blueprint_has_explicit_russian_and_english_names() {
+    let state = test_state();
+    let blueprints = super::super::blueprints::all(&state.registry);
+    assert!(!blueprints.is_empty());
+    for lang in [Lang::Ru, Lang::En] {
+        let ctx = Ctx {
+            id: SettlementId(0),
+            manage: false,
+            lang,
+        };
+        let unknown = blueprint_label(&ctx, "unregistered_blueprint");
+        for blueprint in blueprints {
+            let label = blueprint_label(&ctx, &blueprint.id);
+            assert!(!label.trim().is_empty(), "{lang:?}: {}", blueprint.id);
+            assert_ne!(label, blueprint.id, "{lang:?}: raw blueprint id");
+            assert_ne!(
+                label, unknown,
+                "{lang:?}: {} has no explicit display name",
+                blueprint.id
+            );
+        }
+    }
+}
+
+#[test]
+fn unknown_blueprint_names_never_expose_raw_identifiers() {
+    for lang in [Lang::Ru, Lang::En] {
+        let ctx = Ctx {
+            id: SettlementId(0),
+            manage: false,
+            lang,
+        };
+        let first = blueprint_label(&ctx, "unregistered_blueprint_one");
+        let second = blueprint_label(&ctx, "unregistered_blueprint_two");
+        assert!(!first.trim().is_empty());
+        assert_eq!(first, second, "{lang:?}: one localized unknown-name policy");
+        assert!(!first.contains("unregistered_blueprint_one"));
+        assert!(!second.contains("unregistered_blueprint_two"));
+    }
 }
