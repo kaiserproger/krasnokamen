@@ -671,15 +671,14 @@ pub(crate) fn apply_batch_images_with_clock(
     batches: &[(u64, u64, Vec<JournalEntry>)],
     game: &ReplayGameClock,
 ) -> Replay {
-    for (lo, hi, entries) in batches {
-        replay = apply_batch_entries(replay, *lo, *hi, entries, game);
+    for (_, hi, entries) in batches {
+        replay = apply_batch_entries(replay, *hi, entries, game);
     }
     replay
 }
 
 fn apply_batch_entries(
     mut replay: Replay,
-    lo: u64,
     hi: u64,
     entries: &[JournalEntry],
     game: &ReplayGameClock,
@@ -732,7 +731,7 @@ fn apply_batch_entries(
             }
             JournalEntry::Dimension { dimension, entries } => {
                 if *dimension == crate::dimensions::Dimension::Overworld {
-                    replay = apply_batch_entries(replay, lo, hi, entries, game);
+                    replay = apply_batch_entries(replay, hi, entries, game);
                 } else {
                     let base = replay
                         .dimensions
@@ -741,7 +740,7 @@ fn apply_batch_entries(
                         .unwrap_or_default();
                     replay.dimensions.insert(
                         *dimension,
-                        Box::new(apply_batch_entries(base, lo, hi, entries, game)),
+                        Box::new(apply_batch_entries(base, hi, entries, game)),
                     );
                 }
             }

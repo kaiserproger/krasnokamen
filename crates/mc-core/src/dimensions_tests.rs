@@ -324,7 +324,7 @@ fn dimension_state(
     let world = if let Some(directory) = &directory {
         crate::world::ChunkWorld::new_native(
             42,
-            crate::native_checkpoint::tests::fixture_store(&import_config(&directory)).unwrap(),
+            crate::native_checkpoint::tests::fixture_store(&import_config(directory)).unwrap(),
             crate::native_checkpoint::dimension_id(dimension),
             generator,
             &registry,
