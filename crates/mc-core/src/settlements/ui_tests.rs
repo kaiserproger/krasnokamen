@@ -1517,11 +1517,17 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
 
 #[test]
 fn cultural_project_status_names_active_and_pending_blueprints_in_both_locales() {
-    // Each locale retains the authored cultural names in the full queue view.
+    // Each locale shows localized cultural names in the full queue view.
     for (locale, level) in [("en_us", "L1"), ("ru_ru", "ур. 1")] {
+        let lang = Lang::of(Some(locale));
         for pending in ["spanish_house", "spanish_church", "spanish_fortress"] {
             let mut state = joined(0);
             let id = town(&mut state, PLAYER);
+            let ctx = Ctx {
+                id,
+                manage: true,
+                lang,
+            };
             set_locale(&mut state, locale);
             prep_projects_site(&mut state, id);
             crate::settlements::construction::tests::fund(&mut state, "spanish_plaza", 1);
@@ -1556,9 +1562,17 @@ fn cultural_project_status_names_active_and_pending_blueprints_in_both_locales()
                 pending
             );
             let status = last_dialog(&click(&mut state, id, "project_status_details", &[]));
-            assert!(status.body.contains("spanish_plaza L1"), "{}", status.body);
             assert!(
-                status.body.contains(&format!("{pending} {level}")),
+                status
+                    .body
+                    .contains(&format!("{} L1", blueprint_label(&ctx, "spanish_plaza"))),
+                "{}",
+                status.body
+            );
+            assert!(
+                status
+                    .body
+                    .contains(&format!("{} {level}", blueprint_label(&ctx, pending))),
                 "{}",
                 status.body
             );
@@ -2921,4 +2935,151 @@ fn certification_all_eight_requirements_and_repairs_fit_the_dialog_budget() {
     assert_eq!(field(dialog, "columns"), Some(&Tag::Int(2)));
     assert!(shown.has("certify_check") && shown.has("back"));
     assert!(!shown.has("certify_do"));
+}
+
+#[test]
+fn stage_two_certification_dialog_rows_fit_720p_at_gui_scale_three() {
+    fn assert_row_fits(changes: &[PlayerChange], screen: &str) {
+        let dialog = changes
+            .iter()
+            .find_map(|change| match change {
+                PlayerChange::ShowDialog { dialog } => Some(dialog),
+                _ => None,
+            })
+            .expect("stage-two dialog was presented");
+        let buttons = list(field(dialog, "actions"))
+            .iter()
+            .chain(
+                ["yes", "no", "action"]
+                    .into_iter()
+                    .filter_map(|key| field(dialog, key)),
+            )
+            .collect::<Vec<_>>();
+        assert!(!buttons.is_empty(), "{screen}");
+        let columns = match field(dialog, "columns") {
+            Some(Tag::Int(columns)) => usize::try_from(*columns).unwrap(),
+            None => buttons.len(),
+            other => panic!("{screen}: invalid columns {other:?}"),
+        }
+        .min(buttons.len());
+        assert!(columns > 0, "{screen}");
+        let width = buttons
+            .iter()
+            .map(|button| match field(button, "width") {
+                Some(Tag::Int(width)) => usize::try_from(*width).unwrap(),
+                other => panic!("{screen}: missing button width {other:?}"),
+            })
+            .max()
+            .unwrap();
+        // Reserve a conservative 16 GUI px per inter-column gap.
+        let row_width = columns * width + (columns - 1) * 16;
+        assert!(
+            row_width <= 427,
+            "{screen}: {columns} columns × {width} + gaps = {row_width} > 427"
+        );
+    }
+
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    set_locale(&mut state, "ru_ru");
+    assert_row_fits(&click(&mut state, id, "certify", &[]), "initial");
+    assert_row_fits(
+        &click(&mut state, id, "certify_check", &certify_form("castle")),
+        "invalid type",
+    );
+    stand_inside(&mut state, [9.5, 201.0, 9.5]);
+    assert_row_fits(
+        &click(&mut state, id, "certify_check", &certify_form("house")),
+        "discovery refusal",
+    );
+    super::building_discovery::tests::room(&mut state, [3, 3], [7, 7], true);
+    stand_inside(&mut state, [4.5, 201.0, 4.5]);
+    let missing = click(&mut state, id, "certify_check", &certify_form("house"));
+    assert!(!last_dialog(&missing).has("certify_do"));
+    assert_row_fits(&missing, "missing requirements");
+    crate::settlements::allocator::tests::bed(&mut state, 5, 5);
+    state.world.fold_overlay();
+    let ready = click(&mut state, id, "certify_check", &certify_form("house"));
+    let shown = last_dialog(&ready);
+    assert!(shown.has("certify_do") && shown.has("certify_check") && shown.has("back"));
+    assert_eq!(shown.actions.len(), 3);
+    assert_row_fits(&ready, "all requirements passed");
+    let certified = click(&mut state, id, "certify_do", &certify_form("house"));
+    assert_eq!(last_dialog(&certified).actions.len(), 3);
+    assert_row_fits(&certified, "certified next steps");
+    let building = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    assert_row_fits(
+        &click(&mut state, id, "certify_check", &certify_form("house")),
+        "existing certificate recheck",
+    );
+    assert_row_fits(
+        &click(
+            &mut state,
+            id,
+            "certificate_review",
+            &[("b", string(&building.0.to_string()))],
+        ),
+        "certificate level review",
+    );
+    assert_row_fits(
+        &click(
+            &mut state,
+            id,
+            "upgrade",
+            &[
+                ("b", string(&building.0.to_string())),
+                ("level", string("1")),
+            ],
+        ),
+        "certificate upgrade result",
+    );
+}
+
+#[test]
+fn every_registered_blueprint_has_explicit_russian_and_english_names() {
+    let state = test_state();
+    let blueprints = super::super::blueprints::all(&state.registry);
+    assert!(!blueprints.is_empty());
+    for lang in [Lang::Ru, Lang::En] {
+        let ctx = Ctx {
+            id: SettlementId(0),
+            manage: false,
+            lang,
+        };
+        let unknown = blueprint_label(&ctx, "unregistered_blueprint");
+        for blueprint in blueprints {
+            let label = blueprint_label(&ctx, &blueprint.id);
+            assert!(!label.trim().is_empty(), "{lang:?}: {}", blueprint.id);
+            assert_ne!(label, blueprint.id, "{lang:?}: raw blueprint id");
+            assert_ne!(
+                label, unknown,
+                "{lang:?}: {} has no explicit display name",
+                blueprint.id
+            );
+        }
+    }
+}
+
+#[test]
+fn unknown_blueprint_names_never_expose_raw_identifiers() {
+    for lang in [Lang::Ru, Lang::En] {
+        let ctx = Ctx {
+            id: SettlementId(0),
+            manage: false,
+            lang,
+        };
+        let first = blueprint_label(&ctx, "unregistered_blueprint_one");
+        let second = blueprint_label(&ctx, "unregistered_blueprint_two");
+        assert!(!first.trim().is_empty());
+        assert_eq!(first, second, "{lang:?}: one localized unknown-name policy");
+        assert!(!first.contains("unregistered_blueprint_one"));
+        assert!(!second.contains("unregistered_blueprint_two"));
+    }
 }

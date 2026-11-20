@@ -1017,8 +1017,7 @@ fn certify_screen(
     }
     buttons.push(button(ctx.t(Key::CheckHere), "certify_check", ctx.id));
     buttons.push(button(ctx.t(Key::Back), "back", ctx.id));
-    let columns = if buttons.len() == 3 { 3 } else { 2 };
-    let mut dialog = Dialog::multi_action(ctx.t(Key::TitleCertify), buttons).columns(columns);
+    let mut dialog = Dialog::multi_action(ctx.t(Key::TitleCertify), buttons).columns(2);
     if !note.is_empty() {
         dialog = dialog.text_width(note, 408);
     }
@@ -2318,58 +2317,8 @@ fn source_reason(lang: Lang, reason: Option<super::construction::SourceReason>) 
     }
 }
 
-fn blueprint_label<'a>(ctx: &Ctx, blueprint: &'a str) -> &'a str {
-    match (ctx.lang, blueprint) {
-        (Lang::En, "house") => "House",
-        (Lang::Ru, "house") => "Дом",
-        (Lang::En, "storage") => "Storage",
-        (Lang::Ru, "storage") => "Склад",
-        (Lang::En, "farm") => "Farm",
-        (Lang::Ru, "farm") => "Ферма",
-        (Lang::En, "mason") => "Mason's workshop",
-        (Lang::Ru, "mason") => "Мастерская каменщика",
-        (Lang::En, "shepherd") => "Shepherd's workshop",
-        (Lang::Ru, "shepherd") => "Мастерская пастуха",
-        (Lang::En, "lumber_camp") => "Lumber camp",
-        (Lang::Ru, "lumber_camp") => "Лесопилка",
-        (Lang::En, "mine") => "Mine",
-        (Lang::Ru, "mine") => "Шахта",
-        (Lang::En, "barracks") => "Barracks",
-        (Lang::Ru, "barracks") => "Казарма",
-        (Lang::En, "wall") => "Wall",
-        (Lang::Ru, "wall") => "Стена",
-        (Lang::En, "watch_tower") => "Watchtower",
-        (Lang::Ru, "watch_tower") => "Сторожевая башня",
-        (Lang::En, "gate") => "Gate",
-        (Lang::Ru, "gate") => "Ворота",
-        (Lang::En, "armorer") => "Armorer's workshop",
-        (Lang::Ru, "armorer") => "Мастерская бронника",
-        (Lang::En, "butcher") => "Butcher's workshop",
-        (Lang::Ru, "butcher") => "Мастерская мясника",
-        (Lang::En, "cartographer") => "Cartographer's workshop",
-        (Lang::Ru, "cartographer") => "Мастерская картографа",
-        (Lang::En, "cleric") => "Cleric's workshop",
-        (Lang::Ru, "cleric") => "Мастерская священника",
-        (Lang::En, "fisherman") => "Fisherman's workshop",
-        (Lang::Ru, "fisherman") => "Мастерская рыбака",
-        (Lang::En, "fletcher") => "Fletcher's workshop",
-        (Lang::Ru, "fletcher") => "Мастерская лучника",
-        (Lang::En, "leatherworker") => "Leatherworker's workshop",
-        (Lang::Ru, "leatherworker") => "Мастерская кожевника",
-        (Lang::En, "librarian") => "Librarian's workshop",
-        (Lang::Ru, "librarian") => "Мастерская библиотекаря",
-        (Lang::En, "toolsmith") => "Toolsmith's workshop",
-        (Lang::Ru, "toolsmith") => "Мастерская инструментальщика",
-        (Lang::En, "weaponsmith") => "Weaponsmith's workshop",
-        (Lang::Ru, "weaponsmith") => "Мастерская оружейника",
-        (Lang::En, "road") => "Road",
-        (Lang::Ru, "road") => "Дорога",
-        (Lang::En, "lamp") => "Street lamp",
-        (Lang::Ru, "lamp") => "Фонарь",
-        (Lang::En, "meadow") => "Meadow clearing",
-        (Lang::Ru, "meadow") => "Расчистка луга",
-        _ => blueprint,
-    }
+fn blueprint_label(ctx: &Ctx, blueprint: &str) -> &'static str {
+    ui_text::blueprint(ctx.lang, blueprint)
 }
 
 fn project_order(

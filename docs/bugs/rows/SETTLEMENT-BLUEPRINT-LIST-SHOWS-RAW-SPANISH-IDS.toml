@@ -1,0 +1,12 @@
+[[bug]]
+id = "SETTLEMENT-BLUEPRINT-LIST-SHOWS-RAW-SPANISH-IDS"
+title = "Construction lists Spanish blueprint IDs instead of localized names"
+area = "client"
+severity = "major"
+status = "open"
+source = "BreakQuickWins reproduced 2/2 on M daafff7b3, native ru_ru: construction slots 21-25 show spanish_house L1, spanish_church L1, spanish_plaza L1, spanish_fortress L1 and spanish_wall L1. BreakQW2 settlement-map-qa receipts 20261119T235152-settlement-map-qa-_niw6wxq and 20261119T235425-settlement-map-qa-6gy6apr0, peer/probe/transcript.json at lines 37594-37638 and 36371-36415 respectively. Root cause: projects_screen formats blueprint_label plus L1; the registry includes five Spanish variants but the old ru/en label match omits them and returns the raw id by default. One ui_text blueprint-name table now covers the registry and supplies a localized generic unknown name. Real-client acceptance remains pending."
+repro = "client"
+regression = ["cargo:mc-core:settlements::ui::tests::every_registered_blueprint_has_explicit_russian_and_english_names", "cargo:mc-core:settlements::ui::tests::unknown_blueprint_names_never_expose_raw_identifiers"]
+failing_first = "reported"
+fix_commit = "0c20eb8b2a2f7fedc064b9337c74aa889781ea10"
+repro_check = "Production-only NC: restore the original ui::blueprint_label and remove the new ui_text::blueprint table, retaining all tests unchanged. Observed compiled red: .analysis/validation/20261120T004057-test-c3bwle7i/test.log, both regressions fail (Ru spanish_house equals its id; two unknown ids leak as different names). Restore green: .analysis/validation/20261120T004204-test-9c8hwdpa/test.log, both regressions plus cultural project-status coverage pass 3/3. L0 UI/building scope: .analysis/validation/20261120T003124-test-l_kan9eh/test.log initially passed 141/142; the sole stale raw-ID expectation was migrated to shared label resolution and passed in the restore run. Real-client acceptance and ledger promotion belong to Main."

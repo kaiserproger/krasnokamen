@@ -11,6 +11,7 @@ Right-click the settlement's anchor bell to open its compact management hub; the
 Anyone can view; only the owner or an operator can manage a claimed settlement. Permissions are rechecked on each click. An autonomous settlement must first be claimed while standing inside its radius, even for an operator to manage it.
 
 The client locale selects the language: `ru*` uses Russian; all other locales use English. Materials use the client's translated item names, workshops use localized profession labels, and authored settlement names stay unchanged. Labels below are English.
+Blueprint names in construction lists, project cards and map labels come from one Russian/English table, including all Spanish variants. Unknown blueprint names use a localized “Unknown blueprint” label, never a raw identifier; identifiers remain internal action targets.
 
 ## Main
 
