@@ -232,20 +232,24 @@ pub struct CrashCensusPaths {
     receipt: PathBuf,
 }
 
-/// Backup/restore need only their explicit paths. A fresh content import also
-/// works before the operator has created a serving configuration.
+/// The operator's configuration, or defaults when the host has none yet.
+///
+/// A present `--config` is never ignored: `backup` and `restore` verify a copy
+/// under the plugins and content cache the file names, so dropping it would
+/// judge every world saved with a deployment against an empty one. Only a
+/// configuration that does not exist falls back to defaults, and only for the
+/// commands that can run before an operator has created one.
 pub fn load_config(cli: &Cli) -> anyhow::Result<crate::config::EdgeConfig> {
-    if matches!(
-        cli.command,
-        Some(Command::Backup { .. } | Command::Restore { .. })
-    ) {
-        return Ok(crate::config::EdgeConfig::default());
-    }
     match std::fs::read_to_string(&cli.config) {
         Ok(text) => crate::server_properties::load(&text, &cli.config),
         Err(error)
             if error.kind() == std::io::ErrorKind::NotFound
-                && matches!(cli.command, Some(Command::Content { .. })) =>
+                && matches!(
+                    cli.command,
+                    Some(
+                        Command::Content { .. } | Command::Backup { .. } | Command::Restore { .. }
+                    )
+                ) =>
         {
             Ok(crate::config::EdgeConfig::default())
         }

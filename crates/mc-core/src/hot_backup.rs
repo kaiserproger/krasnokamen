@@ -452,6 +452,7 @@ fn verify_opened(
     let reader = opened.reader(copy, &store_path)?;
     let mut copy_config = config.clone();
     copy_config.world_dir = copy.to_path_buf();
+    let startup_identity_registry = std::sync::Arc::clone(&registry);
     let recovered = crate::native_checkpoint::recover_with_reader(&copy_config, registry, reader)
         .map_err(|error| {
         CoreError::Storage(format!(
@@ -465,6 +466,34 @@ fn verify_opened(
         .map(|replay| replay.tick)
         .max()
         .unwrap_or(recovered.manifest.tick);
+    // The plugin startup identity a serve enforces (`plugin::validate_startup`):
+    // a copy whose record names other plugins is refused here, so "verified"
+    // never means "verified, except the plugins".
+    let startup_identity = crate::plugin_startup::world_identity(&startup_identity_registry)
+        .map_err(|error| {
+            CoreError::Storage(format!(
+                "hot backup {}: plugin startup identity: {error}",
+                copy.display()
+            ))
+        })?;
+    let carries = crate::plugin::check_startup_identity(
+        recovered.checkpoint.globals.get("plugin_startup"),
+        &startup_identity,
+        recovered_tick,
+    )
+    .map_err(|error| {
+        CoreError::Storage(format!(
+            "hot backup {}: the copy is refused by the plugin startup policy a serve applies: {error}",
+            copy.display()
+        ))
+    })?;
+    if !carries {
+        return Err(CoreError::Storage(format!(
+            "hot backup {}: native world is missing its required plugin startup identity; a serve \
+             would refuse it",
+            copy.display()
+        )));
+    }
     // The recovered world still borrows the copy's store through its reader.
     drop(recovered);
     // Close the store before the scratch directory goes away, on every path.
@@ -534,10 +563,13 @@ pub fn verify_copy(copy: &Path, content: &crate::config::CoreConfig) -> Result<u
     let mut config = content.clone();
     config.seed = i64::from_be_bytes(identity[16..24].try_into().expect("identity seed bytes"));
     config.world_dir = copy.to_path_buf();
+    // The registry a serve would run on, including the plugin startup
+    // contribution: a bare content registry refuses worlds whose native types
+    // come from the deployment (see `native_checkpoint::recovery_registry`).
     let registry = std::sync::Arc::new(
-        crate::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref()).map_err(
-            |error| CoreError::Storage(format!("content for backup verification: {error}")),
-        )?,
+        crate::native_checkpoint::recovery_registry(&config).map_err(|error| {
+            CoreError::Storage(format!("content for backup verification: {error}"))
+        })?,
     );
     verify_opened(copy, &config, registry, expected_tick, opened)
 }

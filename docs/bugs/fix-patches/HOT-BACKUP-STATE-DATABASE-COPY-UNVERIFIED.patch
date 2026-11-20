@@ -1,5 +1,5 @@
 diff --git a/crates/mc-core/src/hot_backup.rs b/crates/mc-core/src/hot_backup.rs
-index ab0961b9a..a33b85f3d 100644
+index ab0961b9a9f04e18b8bbd85f5b13b0e4e061486b..b0f1296ea5a8881016d9c1d4e7f6e3433907ffea 100644
 --- a/crates/mc-core/src/hot_backup.rs
 +++ b/crates/mc-core/src/hot_backup.rs
 @@ -235,13 +235,53 @@ pub(crate) fn copy_world(
@@ -208,7 +208,7 @@ index ab0961b9a..a33b85f3d 100644
          }
          Err(error) => Err(CoreError::Storage(format!(
              "hot backup {}: the copy does not open: {error}",
-@@ -335,27 +395,61 @@ fn open_copy(
+@@ -335,29 +395,64 @@ fn open_copy(
      }
  }
  
@@ -285,9 +285,42 @@ index ab0961b9a..a33b85f3d 100644
 +    let reader = opened.reader(copy, &store_path)?;
      let mut copy_config = config.clone();
      copy_config.world_dir = copy.to_path_buf();
++    let startup_identity_registry = std::sync::Arc::clone(&registry);
      let recovered = crate::native_checkpoint::recover_with_reader(&copy_config, registry, reader)
-@@ -373,19 +467,77 @@ pub fn verify_restorable(
+         .map_err(|error| {
+         CoreError::Storage(format!(
+@@ -371,21 +466,110 @@ pub fn verify_restorable(
+         .map(|replay| replay.tick)
+         .max()
          .unwrap_or(recovered.manifest.tick);
++    // The plugin startup identity a serve enforces (`plugin::validate_startup`):
++    // a copy whose record names other plugins is refused here, so "verified"
++    // never means "verified, except the plugins".
++    let startup_identity = crate::plugin_startup::world_identity(&startup_identity_registry)
++        .map_err(|error| {
++            CoreError::Storage(format!(
++                "hot backup {}: plugin startup identity: {error}",
++                copy.display()
++            ))
++        })?;
++    let carries = crate::plugin::check_startup_identity(
++        recovered.checkpoint.globals.get("plugin_startup"),
++        &startup_identity,
++        recovered_tick,
++    )
++    .map_err(|error| {
++        CoreError::Storage(format!(
++            "hot backup {}: the copy is refused by the plugin startup policy a serve applies: {error}",
++            copy.display()
++        ))
++    })?;
++    if !carries {
++        return Err(CoreError::Storage(format!(
++            "hot backup {}: native world is missing its required plugin startup identity; a serve \
++             would refuse it",
++            copy.display()
++        )));
++    }
      // The recovered world still borrows the copy's store through its reader.
      drop(recovered);
 -    drop(store);
@@ -361,15 +394,18 @@ index ab0961b9a..a33b85f3d 100644
 +    let mut config = content.clone();
 +    config.seed = i64::from_be_bytes(identity[16..24].try_into().expect("identity seed bytes"));
 +    config.world_dir = copy.to_path_buf();
++    // The registry a serve would run on, including the plugin startup
++    // contribution: a bare content registry refuses worlds whose native types
++    // come from the deployment (see `native_checkpoint::recovery_registry`).
 +    let registry = std::sync::Arc::new(
-+        crate::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref()).map_err(
-+            |error| CoreError::Storage(format!("content for backup verification: {error}")),
-+        )?,
++        crate::native_checkpoint::recovery_registry(&config).map_err(|error| {
++            CoreError::Storage(format!("content for backup verification: {error}"))
++        })?,
 +    );
 +    verify_opened(copy, &config, registry, expected_tick, opened)
 +}
 diff --git a/crates/mc-edge/src/backup.rs b/crates/mc-edge/src/backup.rs
-index 3450417f7..d3f02c038 100644
+index 3450417f735df9fef09fc24465fd555fbe61fb03..d3f02c0381a1cd1c613a163a50c706566a259a08 100644
 --- a/crates/mc-edge/src/backup.rs
 +++ b/crates/mc-edge/src/backup.rs
 @@ -226,7 +226,7 @@ fn copy_reader_durable(input: &mut impl Read, destination: &Path) -> Result<Stri
@@ -469,10 +505,44 @@ index 3450417f7..d3f02c038 100644
      );
      Ok(())
 diff --git a/crates/mc-edge/src/operator_cli.rs b/crates/mc-edge/src/operator_cli.rs
-index 00ff693a5..65426c33e 100644
+index 00ff693a58e6cc8ae4f352567a33efb0b70d7fc3..8581a083177b5cd53a9190773f82e880cf3258e7 100644
 --- a/crates/mc-edge/src/operator_cli.rs
 +++ b/crates/mc-edge/src/operator_cli.rs
-@@ -314,15 +314,26 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
+@@ -232,20 +232,24 @@ pub struct CrashCensusPaths {
+     receipt: PathBuf,
+ }
+ 
+-/// Backup/restore need only their explicit paths. A fresh content import also
+-/// works before the operator has created a serving configuration.
++/// The operator's configuration, or defaults when the host has none yet.
++///
++/// A present `--config` is never ignored: `backup` and `restore` verify a copy
++/// under the plugins and content cache the file names, so dropping it would
++/// judge every world saved with a deployment against an empty one. Only a
++/// configuration that does not exist falls back to defaults, and only for the
++/// commands that can run before an operator has created one.
+ pub fn load_config(cli: &Cli) -> anyhow::Result<crate::config::EdgeConfig> {
+-    if matches!(
+-        cli.command,
+-        Some(Command::Backup { .. } | Command::Restore { .. })
+-    ) {
+-        return Ok(crate::config::EdgeConfig::default());
+-    }
+     match std::fs::read_to_string(&cli.config) {
+         Ok(text) => crate::server_properties::load(&text, &cli.config),
+         Err(error)
+             if error.kind() == std::io::ErrorKind::NotFound
+-                && matches!(cli.command, Some(Command::Content { .. })) =>
++                && matches!(
++                    cli.command,
++                    Some(
++                        Command::Content { .. } | Command::Backup { .. } | Command::Restore { .. }
++                    )
++                ) =>
+         {
+             Ok(crate::config::EdgeConfig::default())
+         }
+@@ -314,15 +318,26 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
              }
          }
          Command::Backup { world_dir, out } => {
