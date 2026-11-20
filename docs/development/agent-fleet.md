@@ -19,7 +19,9 @@ Main starts the next item when a slot frees (pull, not push), pre-freeze items
 first. More throughput comes from the second server, not from agents waiting
 for this host's tokens. Backlog streams (the `Tail*` items) wait for the second
 server. One standing review committee (one Opus and one Sol reviewer) serves
-every slice in batches by area; no per-task reviewer spawns. Persistence and D7
+every slice in batches by area; no per-task reviewer spawns. While owner D69
+applies, [its routing](#model-routing-while-claude-is-out-owner-d69) replaces
+the Opus member. Persistence and D7
 changes still need both members' verdicts; other slices may take one member's.
 An agent that needs a build token runs one blocking command that waits for the
 token and then runs (the `mem-run` runner already does); never `timeout N true`,
@@ -138,11 +140,38 @@ the previous one's handoff.
   design. Reviews run on Opus or Sol from a vendor other than the author's
   (D14). Muse or DeepSeek take mechanical bulk. Edit-heavy slices go to Terra,
   Sol or Astra: about 10% of their edits failed against 24–27% for Sonnet and
-  Mistral (owner, 2026-11-17).
+  Mistral (owner, 2026-11-17). While owner D69 applies, [its
+  routing](#model-routing-while-claude-is-out-owner-d69) replaces the Opus and
+  Anthropic parts of this rule.
 - **New context after each finished task.** After sending a task's result, a
   generalist writes its remaining queue and state to its lane's handoff file
   (`receipts/<lane>/HANDOFF.md`) and starts a new context before the next
   task; it does not carry 150–260k tokens of a finished task into every turn.
+
+### Model routing while Claude is out (owner D69)
+
+Owner, 2026-11-20 (Claude weekly limit 98% used, resets Monday 2026-11-23
+12:00; full text `receipts/Stage3/OWNER-DECISIONS-20261117-1000.md` D69):
+
+- **Main** stays on Opus until the Claude limit, then falls back to Sol 6.2
+  (host `retry.fallbackChains`: `anthropic/claude-opus-5-5` →
+  `openai-codex/gpt-6.2-sol:xhigh`).
+- **Critical jobs**: executor Sol 6.2 (`worker-sol`); **both** DeepSeek and
+  Mistral review each one (`committee-deepseek` and `committee-chonk`).
+  Critical means the classes D47 sent to Opus (persistence, protocol, item
+  custody) plus release-tag reviews (laptop reading, open to the owner's
+  correction).
+- **Main load** (about 95%): executor DeepSeek (`worker-deepseek`), reviewed by
+  Sol or Astra 6.2 (`committee-sol` or `committee-astra`).
+- **No new Anthropic agents** (Opus, Sonnet, Fable, including their
+  `committee-*`, `worker-*` and `researcher-*` definitions): at the limit they
+  fall back silently to Sol or Terra and break the reviewer-vendor rule. Work
+  queued for a parked Anthropic agent moves to the routed model with its
+  handoff.
+- Every review receipt records the reviewer's actual model as read from its
+  session, not the definition's.
+- Not decided: GLM 5.3 as a reviewer (owner idea only) and whether this routing
+  ends with the Monday reset (ask the owner then).
 
 ### Fleet speed rules
 
