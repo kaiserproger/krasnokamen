@@ -359,9 +359,9 @@ class FillBudgetTests(unittest.TestCase):
     """COREPERF-PUBLIC-FIXTURE-FILL-EXCEEDS-VANILLA-BUDGET: every emitted fill is legal.
 
     Vanilla refuses a /fill above 32,768 blocks. The pen ceiling sweep used to be 81x81x7 =
-    45,927 in one command; the earlier test sampled one mob count, so it caught the shape but
-    the fix had to keep every canonical size legal. The sweep is split now, and every size the
-    cache pins plus a small one are checked.
+    45,927 cells in one command; it is split now, and every size the cache pins plus a small one
+    are checked. The split must keep the cleared volume, so the sweep's exact cell cover is
+    asserted separately for each sealed pen (a deleted layer leaves a hole and fails).
     """
 
     def test_every_canonical_fixture_fits_the_vanilla_fill_budget(self):
@@ -378,19 +378,73 @@ class FillBudgetTests(unittest.TestCase):
                         cells *= abs(coords[axis] - coords[axis + 3]) + 1
                     self.assertLessEqual(cells, 32768, f"{mobs} mobs: {command}")
 
+    @staticmethod
+    def _pen_sweeps(commands: list[str]) -> list[dict]:
+        """The post-seal sweeps, one entry per pen, in command order.
+
+        A pen's block is: floor, a pre-seal air pass, the stone seal (four walls and the roof),
+        then the interior sweep. Only the air fills that follow a stone fill belong to the
+        sweep; the pre-seal passes clear the future pen site before the walls exist and are a
+        different, earlier operation. The roof's own y is the top of the swept range.
+        """
+        sweeps: list[dict] = []
+        sealed_top: int | None = None
+        for command in commands:
+            fields = command.split()
+            if fields[0] != "fill":
+                sealed_top = None
+                continue
+            coords = list(map(int, fields[1:7]))
+            block = fields[7]
+            is_slab = coords[1] == coords[4]
+            if block == "minecraft:stone":
+                # The roof is the stone fill that spans the pen at one y; it seals the pen and
+                # its y is the ceiling the sweep must stop below.
+                sealed_top = coords[4] if is_slab and coords[0] < coords[3] else None
+                continue
+            if block != "minecraft:air":
+                sealed_top = None
+                continue
+            if sealed_top is None:
+                continue  # pre-seal clearing pass
+            if not sweeps or sweeps[-1]["top"] != sealed_top:
+                sweeps.append({"top": sealed_top, "fills": []})
+            sweeps[-1]["fills"].append(coords)
+        return sweeps
+
     def test_the_split_sweep_clears_the_same_pen_volume(self):
-        # The repair must not shrink the cleared interior: two layers cover y 64..70 on a
-        # 81x81 pen (65,610 cells), whatever the split.
-        cleared = [command for region in compare.fixture(20000, 0)["regions"]
-                   for command in region["commands"]
-                   if command.startswith("fill") and command.endswith("minecraft:air")
-                   and " 64 " in command]
-        cells = 0
-        for command in cleared:
-            coords = list(map(int, command.split()[1:7]))
-            volume = 1
-            for axis in range(3):
-                volume *= abs(coords[axis] - coords[axis + 3]) + 1
-            cells += volume
-        per_pen = cells / max(1, len({command.split()[1] for command in cleared}))
-        self.assertGreater(per_pen, 32768)
+        # The repair must not shrink the cleared interior: the post-seal sweep of one pen is
+        # 81x81x7 = 45,927 cells on a roof-71 pen (81x81x4 = 26,244 on a roof-67 spider pen),
+        # split into commands that each stay under vanilla's 32,768. Deleting either layer must
+        # leave a hole, so the union of the sweep fills is checked as an exact cell cover over
+        # x/z and as a gapless y interval, per pen, for the sizes the cache pins.
+        for mobs, villagers in ((100000, 0), (100000, 20000), (20000, 64)):
+            recipe = compare.fixture(mobs, villagers)
+            pens = 0
+            for region in recipe["regions"]:
+                for sweep in self._pen_sweeps(region["commands"]):
+                    pens += 1
+                    top = sweep["top"]
+                    spans = {(fill[0], fill[2], fill[3], fill[5]) for fill in sweep["fills"]}
+                    self.assertEqual(
+                        len(spans), 1,
+                        f"{mobs}/{villagers}: one pen's sweep must share one x/z footprint: "
+                        f"{sorted(spans)}")
+                    x0, z0, x1, z1 = spans.pop()
+                    layers = sorted((fill[1], fill[4]) for fill in sweep["fills"])
+                    self.assertEqual(layers[0][0], 64, f"sweep must start at the floor: {layers}")
+                    self.assertEqual(layers[-1][1], top - 1,
+                                     f"sweep must stop below the roof: {layers}")
+                    for (low, high), (next_low, _) in zip(layers, layers[1:]):
+                        self.assertEqual(
+                            next_low, high + 1,
+                            f"sweep layers must tile y without a hole or an overlap: {layers}")
+                    covered = sum(high - low + 1 for low, high in layers)
+                    self.assertEqual(
+                        covered, top - 64,
+                        f"sweep must cover every layer from 64 to {top - 1}: {layers}")
+                    volume = covered * (x1 - x0 + 1) * (z1 - z0 + 1)
+                    self.assertEqual(
+                        volume, 81 * 81 * (top - 64),
+                        f"one pen's swept volume changed: {volume} cells at roof {top}")
+            self.assertGreater(pens, 0, f"{mobs}/{villagers}: fixture emitted no sealed pen")
