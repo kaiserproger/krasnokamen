@@ -90,6 +90,14 @@ def setup(w: Walk) -> None:
     w.evidence["pad"] = {"anchor": [x, y, z], "ground_y": y - 1, "stand": [x + .5, y, z - 2.0]}
 
 
+def wait_ticks(w: Walk, ticks: int) -> None:
+    """The Java tool accepts at most 255 ticks per call."""
+    while ticks > 0:
+        step = min(ticks, 200)
+        w.probe.call("minecraft_wait_ticks", {"ticks": step})
+        ticks -= step
+
+
 def find_chest(w: Walk, tries: int = 15) -> list[int] | None:
     """The chest block next to the anchor, by block scan (the bell is set after, so it cannot hide it)."""
     x, y, z = w.evidence["pad"]["anchor"]
@@ -110,22 +118,23 @@ def block_create(w: Walk) -> None:
     chest = find_chest(w)
     w.evidence["starter_chest"] = chest
     if chest is None:  # diagnostic only: where does the client see chests at all around the anchor
-        wide = w.probe.call("minecraft_scan_blocks", {
-            "min_x": x - 16, "min_y": y - 3, "min_z": z - 16, "max_x": x + 16, "max_y": y + 3, "max_z": z + 16,
-            "max_blocks": 4096 * 2})
-        w.evidence["wide_scan_chests"] = [[r["x"], r["y"], r["z"]] for r in wide["blocks"]
+        # The Java tool refuses more than 4096 blocks per scan: two z-halves of the wide window.
+        halves = [w.probe.call("minecraft_scan_blocks", {
+            "min_x": x - 16, "min_y": y - 3, "min_z": low, "max_x": x + 16, "max_y": y + 3, "max_z": high,
+            "max_blocks": 4096}) for low, high in ((z - 16, z), (z + 1, z + 16))]
+        w.evidence["wide_scan_chests"] = [[r["x"], r["y"], r["z"]] for half in halves for r in half["blocks"]
                                            if r["block_id"] == "minecraft:chest"]
-        w.evidence["wide_scan_count"] = wide.get("count")
+        w.evidence["wide_scan_count"] = sum(half.get("count") or 0 for half in halves)
         w.evidence["chat_tail"] = [str(l) for l in w.probe.observe().get("recent_chat", [])[:8]]
         # Late or lost? Rescan the same window after 60 s, then after the client leaves the chunk area and returns.
-        w.probe.call("minecraft_wait_ticks", {"ticks": 1200})
+        wait_ticks(w, 1200)
         w.evidence["rescan_after_60s"] = find_chest(w, tries=1)
         w.fixture("gamemode creative @s")  # no fall damage while the player is away
         w.fixture(f"tp @s {x + 220.5} {y + 5} {z + 0.5}")
-        w.probe.call("minecraft_wait_ticks", {"ticks": 200})
+        wait_ticks(w, 200)
         w.fixture(f"tp @s {x + .5} {y} {z - 2.0}")
         w.fixture("gamemode survival @s")
-        w.probe.call("minecraft_wait_ticks", {"ticks": 200})
+        wait_ticks(w, 200)
         w.evidence["rescan_after_reenter"] = find_chest(w, tries=1)
     recovered = chest is None and w.evidence.get("rescan_after_reenter")
     if recovered:
