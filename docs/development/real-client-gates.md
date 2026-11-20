@@ -846,6 +846,18 @@ the Settings dialog or the map territory.
   criterion is unmet and is never acceptance). Its negative control is the same run on the tree without
   the quick wins, with that tree's own server pin.
 
+  `settlement-map-qa -- --scenario stage2 --language ru_ru` (native and Java) is the stage-2 acceptance of the
+  same decision (certification by standing inside and «Проверить здесь», no corner marking), written from the
+  decision text and the stage-2 rules (`tools/harness/backends/settlement_quickwins_stage2.py`). The player is
+  NOT an operator, so privileged fixtures run on the server console: the scene scenario option
+  `server_console: true` starts the server with stdin on `RUN_DIR/console.fifo` (the battle runner's
+  mechanism, `FifoConsole`); `settlement_quickwins_console.ConsoleFixtures` replaces `@s` with the player's
+  name and returns exactly the reply lines between two unique `say` fences. `-- --scenario stage2op` is the
+  same player written into ops.json at level 2 before the server starts (scenario option
+  `operator_level: 2`; the console `op` always grants level 4) and judges only the operator branch of the
+  coordinate form of `/settlement building certify`. Tab-completion denial has no native or Java client
+  tool; the command tree is covered by the `mc-edge` `command_tree` tests.
+
 ## Distant Horizons gate (`dh-gate`)
 
 `python3 -m tools.harness run dh-gate --platform fabric|neoforge` runs a real
