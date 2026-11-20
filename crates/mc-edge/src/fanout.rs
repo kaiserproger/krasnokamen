@@ -120,6 +120,28 @@ pub fn publish_with_registries<'a>(
     registries: &PlanRegistries<'_>,
     chunk_cache: &mut crate::plan::ChunkPacketCache,
 ) -> Vec<AddressedPacket> {
+    publish_with_registries_chain(
+        output,
+        viewers,
+        view_distance,
+        registries,
+        chunk_cache,
+        None,
+    )
+}
+
+/// [`publish_with_registries`] with the pump's coalesced publication history:
+/// a viewer whose publish was skipped stays contiguous through `chain` instead
+/// of paying a full rescan, and history the chain cannot reach still rescans
+/// with the reason recorded.
+pub(crate) fn publish_with_registries_chain<'a>(
+    output: &TickOutput,
+    viewers: impl Iterator<Item = &'a mut ViewerState> + Send,
+    view_distance: i32,
+    registries: &PlanRegistries<'_>,
+    chunk_cache: &mut crate::plan::ChunkPacketCache,
+    chain: Option<&crate::plan::PublicationChain>,
+) -> Vec<AddressedPacket> {
     let probe = crate::plan::item_probe::enabled().then(std::time::Instant::now);
     chunk_cache.retain_resident(output);
     chunk_cache.deltas.begin();
@@ -155,11 +177,36 @@ pub fn publish_with_registries<'a>(
                         .filter_map(|viewer| viewer.previous_entities())
                         .find(|previous| previous.revision() == entities.revision())
                 });
+            let mut index = TickPlanIndex::with_previous(projection, previous);
+            if index.entity_base.is_none()
+                && let Some(chain) = chain
+            {
+                // The chain can keep the viewers whose publish the pump
+                // skipped contiguous: bridge the base most of them hold, and
+                // let the rest rescan with a named reason.
+                let bridge = TickPlanIndex::bridge(
+                    chain,
+                    entities.revision(),
+                    viewers
+                        .iter()
+                        .filter(|viewer| viewer.dimension == dimension)
+                        .filter_map(|viewer| viewer.previous_entities())
+                        .map(mc_core::boundary::EntityViews::revision),
+                );
+                if let Some((base, steps)) = bridge {
+                    index = TickPlanIndex::with_chain(projection, &steps, base);
+                }
+            }
             (
                 dimension,
-                TickPlanIndex::with_previous(projection, previous)
+                index
                     .with_reveals(projection, cache.anti_xray())
-                    .with_chunk_delta(chunk_deltas.get(&dimension).cloned().flatten()),
+                    .with_chunk_delta(chunk_deltas.get(&dimension).cloned().flatten())
+                    .with_chain_info(
+                        chain
+                            .map(crate::plan::PublicationChain::info)
+                            .unwrap_or_default(),
+                    ),
             )
         })
         .collect();
@@ -184,7 +231,10 @@ pub fn publish_with_registries<'a>(
         0
     };
     let scanned_before = if plan_debug {
-        viewers.iter().map(|viewer| viewer.entities_scanned).sum::<u64>()
+        viewers
+            .iter()
+            .map(|viewer| viewer.entities_scanned)
+            .sum::<u64>()
     } else {
         0
     };
@@ -231,13 +281,14 @@ pub fn publish_with_registries<'a>(
             .flat_map(|(_, packets)| packets.iter())
             .filter(|packet| packet.chunk.is_some())
             .count();
-        let viewers_unplanned = planned.iter().filter(|(_, packets)| packets.is_empty()).count();
-        let (hit, miss) = indices
-            .values()
-            .fold((0u64, 0u64), |(hit, miss), index| {
-                let (h, m) = index.move_tallies();
-                (hit + h, miss + m)
-            });
+        let viewers_unplanned = planned
+            .iter()
+            .filter(|(_, packets)| packets.is_empty())
+            .count();
+        let (hit, miss) = indices.values().fold((0u64, 0u64), |(hit, miss), index| {
+            let (h, m) = index.move_tallies();
+            (hit + h, miss + m)
+        });
         tracing::debug!(
             target: "mc_edge::server::plan",
             tick = output.tick,
@@ -250,6 +301,11 @@ pub fn publish_with_registries<'a>(
             rescans = viewers.iter().map(|viewer| viewer.rescans).sum::<u64>() - rescans_before,
             entities_scanned = viewers.iter().map(|viewer| viewer.entities_scanned).sum::<u64>()
                 - scanned_before,
+            rescan_gap = viewers.iter().map(|viewer| viewer.rescans_gap).sum::<u64>(),
+            rescan_no_history = viewers
+                .iter()
+                .map(|viewer| viewer.rescans_no_history)
+                .sum::<u64>(),
             move_hits = hit,
             move_misses = miss,
             "pump plan"

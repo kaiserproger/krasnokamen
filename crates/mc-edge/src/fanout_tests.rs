@@ -526,8 +526,11 @@ fn plan_debug_line_appears_under_the_go_filter_without_the_phase_log() {
         sky: Some(mc_world::chunk::LightSection::uniform(0xFF)),
     });
     let output = chunk_tick(1, Arc::new(chunk), None);
-    let mut viewer =
-        ViewerState::new(ConnectionId(1), mc_core::boundary::EntityId(1), [8.0, 64.0, 8.0]);
+    let mut viewer = ViewerState::new(
+        ConnectionId(1),
+        mc_core::boundary::EntityId(1),
+        [8.0, 64.0, 8.0],
+    );
     viewer.loaded_chunks.insert((0, 0), 0);
 
     tracing::subscriber::with_default(subscriber, || {
@@ -545,7 +548,13 @@ fn plan_debug_line_appears_under_the_go_filter_without_the_phase_log() {
         text.contains("pump plan"),
         "the GO filter must reach the line, got: {text}"
     );
-    for field in ["move_misses=", "move_hits=", "rescans=", "entities_scanned=", "chunk_packets="] {
+    for field in [
+        "move_misses=",
+        "move_hits=",
+        "rescans=",
+        "entities_scanned=",
+        "chunk_packets=",
+    ] {
         assert!(text.contains(field), "counters missing {field}: {text}");
     }
     let plan_ns: u64 = text

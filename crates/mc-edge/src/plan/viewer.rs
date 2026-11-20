@@ -139,6 +139,12 @@ pub struct ViewerState {
     pub rescans: u64,
     /// Summed `visible` length over those rescans.
     pub entities_scanned: u64,
+    /// The rescans a missing publication chain forced, split by reason: history
+    /// a broadcast `Lagged` dropped (`rescans_gap`) and history the pump's
+    /// chain no longer reached back to (`rescans_no_history`). A viewer that
+    /// joins has no history to miss and is counted in neither.
+    pub rescans_gap: u64,
+    pub rescans_no_history: u64,
     pub world_credit: usize,
     /// Free outbound world-queue bytes, refreshed with `world_credit`
     /// ([`WorldCredit`] explains the soft byte bound).
@@ -216,6 +222,8 @@ impl ViewerState {
             skip_base: None,
             rescans: 0,
             entities_scanned: 0,
+            rescans_gap: 0,
+            rescans_no_history: 0,
             world_credit: usize::MAX,
             world_bytes: usize::MAX,
             recorder: false,

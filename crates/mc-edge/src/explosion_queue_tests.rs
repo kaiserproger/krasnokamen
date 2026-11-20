@@ -390,9 +390,15 @@ async fn stale_skip_closes_only_recipients_of_skipped_knockback() {
     let now = std::time::Instant::now();
     tx.send(output(1, [(delivered, (1, 1))].into(), now))
         .unwrap();
-    let first = next_publication(&server, &mut rx, &mut viewers, &cache)
-        .await
-        .unwrap();
+    let first = next_publication(
+        &server,
+        &mut rx,
+        &mut viewers,
+        &cache,
+        &mut crate::plan::PublicationChain::new(8),
+    )
+    .await
+    .unwrap();
     assert_eq!(first.tick, 1);
     close_skipped_knockback(&server, &first, &mut seen, &mut viewers, &mut connections);
     let skipped_before = server.dashboard.snapshot().pump_skipped_ticks;
@@ -411,9 +417,15 @@ async fn stale_skip_closes_only_recipients_of_skipped_knockback() {
         std::time::Instant::now(),
     ))
     .unwrap();
-    let retained = next_publication(&server, &mut rx, &mut viewers, &cache)
-        .await
-        .unwrap();
+    let retained = next_publication(
+        &server,
+        &mut rx,
+        &mut viewers,
+        &cache,
+        &mut crate::plan::PublicationChain::new(8),
+    )
+    .await
+    .unwrap();
     assert_eq!(retained.tick, 3, "the stale output is skipped");
     assert_eq!(
         server.dashboard.snapshot().pump_skipped_ticks,

@@ -91,15 +91,24 @@ pub(super) async fn next_publication(
     rx: &mut broadcast::Receiver<TickOutput>,
     viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
     chunk_cache: &crate::plan::ChunkPacketCache,
+    chain: &mut crate::plan::PublicationChain,
 ) -> Option<TickOutput> {
     loop {
         match rx.recv().await {
             Ok(out) if stale(&out, std::time::Instant::now(), || !rx.is_empty()) => {
                 server.dashboard.record_pump_stale_skipped(1);
+                // The skipped output's deltas still reach the next publish: a
+                // viewer whose base it is must not pay a full rescan.
+                chain.record(&out.snapshot.entities);
                 skip_publications(server, viewers, chunk_cache, 1);
             }
-            Ok(out) => return Some(out),
+            Ok(out) => {
+                chain.record(&out.snapshot.entities);
+                return Some(out);
+            }
             Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                // Those outputs are gone for good: nothing may bridge them.
+                chain.cut();
                 skip_publications(server, viewers, chunk_cache, skipped);
             }
             Err(broadcast::error::RecvError::Closed) => return None,
@@ -180,6 +189,10 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
         // resync, and recompute forever without ever routing. The cache
         // makes re-plans O(1) per chunk; block changes evict their chunk.
         let mut chunk_cache = crate::plan::ChunkPacketCache::with_anti_xray(anti_xray);
+        // The outputs this pump drained but did not publish as planned: bounded
+        // by exactly the broadcast's window, so a skipped base is bridged only
+        // while the core could still have delivered it.
+        let mut chain = crate::plan::PublicationChain::new(server.hub.broadcast_capacity());
         // Latest routed global roster; seeds fresh viewers' player profiles
         // so a first routed Roster never mass-removes tracked entities.
         let mut latest_roster: Arc<[mc_core::dimensions::RosterPlayer]> = Arc::from(Vec::new());
@@ -209,7 +222,8 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                     "pump knob wait completed"
                 );
             }
-            let Some(out) = next_publication(&server, &mut rx, &mut viewers, &chunk_cache).await
+            let Some(out) =
+                next_publication(&server, &mut rx, &mut viewers, &chunk_cache, &mut chain).await
             else {
                 // Drain terminal reliable disconnects before closing, both
                 // for graceful shutdown and for an authoritative failure.
@@ -257,13 +271,14 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                 &mut connections,
             );
             let publish_start = std::time::Instant::now();
-            publish_and_route(
+            publish_and_route_chained(
                 &server,
                 &pool,
                 &mut viewers,
                 &out,
                 &mut chunk_cache,
                 &mut connections,
+                &chain,
             )
             .await;
             broadcast_latencies(
@@ -646,6 +661,41 @@ pub(super) async fn publish_and_route(
     chunk_cache: &mut crate::plan::ChunkPacketCache,
     connections: &mut HashMap<ConnectionId, ConnectionHandles>,
 ) {
+    publish_and_route_inner(server, pool, viewers, out, chunk_cache, connections, None).await;
+}
+
+/// [`publish_and_route`] carrying the pump's coalesced publication history, so
+/// a viewer whose publish was skipped plans incrementally instead of rescanning.
+pub(super) async fn publish_and_route_chained(
+    server: &Arc<EdgeServer>,
+    pool: &rayon::ThreadPool,
+    viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
+    out: &TickOutput,
+    chunk_cache: &mut crate::plan::ChunkPacketCache,
+    connections: &mut HashMap<ConnectionId, ConnectionHandles>,
+    chain: &crate::plan::PublicationChain,
+) {
+    publish_and_route_inner(
+        server,
+        pool,
+        viewers,
+        out,
+        chunk_cache,
+        connections,
+        Some(chain),
+    )
+    .await;
+}
+
+async fn publish_and_route_inner(
+    server: &Arc<EdgeServer>,
+    pool: &rayon::ThreadPool,
+    viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
+    out: &TickOutput,
+    chunk_cache: &mut crate::plan::ChunkPacketCache,
+    connections: &mut HashMap<ConnectionId, ConnectionHandles>,
+    chain: Option<&crate::plan::PublicationChain>,
+) {
     viewers.retain(|id, _| connections.contains_key(id));
     // Planning spends this credit (slots and bytes), but it is not exclusive:
     // an LOD tile (`lod.rs`) also takes world-queue slots, at any time from
@@ -675,7 +725,7 @@ pub(super) async fn publish_and_route(
         block_entity_types: &server.wire.block_entity_types,
     };
     let packets = pool.install(|| {
-        crate::fanout::publish_with_registries(
+        crate::fanout::publish_with_registries_chain(
             out,
             viewers.values_mut().filter(|viewer| {
                 // A delayed pump may still be draining publications from
@@ -693,6 +743,7 @@ pub(super) async fn publish_and_route(
             view_distance,
             &registries,
             chunk_cache,
+            chain,
         )
     });
     let recorders = crate::recorder::RecorderTick::of(viewers.values());

@@ -505,7 +505,11 @@ fn tallies_count_one_miss_per_encode_and_one_hit_per_reuse() {
     assert_eq!(first.data.as_ptr(), second.data.as_ptr());
     let other = baseline_at([6.0, 64.0, 8.0], 0.0, 0.0, 0.0);
     shared.movement(&mover, other).expect("moved");
-    assert_eq!(shared.move_tallies(), (1, 2), "a different viewer baseline misses");
+    assert_eq!(
+        shared.move_tallies(),
+        (1, 2),
+        "a different viewer baseline misses"
+    );
     // A move below the threshold is cached as None and counted once, then reused as a hit.
     let still = entity(6, [8.0, 64.0, 8.0]);
     let at_rest = baseline_at([8.0, 64.0, 8.0], 0.0, 0.0, 0.0);

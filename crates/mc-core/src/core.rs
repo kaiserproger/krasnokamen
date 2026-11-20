@@ -559,6 +559,9 @@ struct CoreInner {
     /// Weak: only the tick thread owns the `Sender`, so its exit (halt or
     /// shutdown) closes every subscriber instead of leaving them waiting.
     tick_tx: broadcast::WeakSender<TickOutput>,
+    /// Broadcast capacity the tick channel was built with. An edge reader that
+    /// keeps per-output history bounds it by exactly this window.
+    broadcast_cap: usize,
     /// Alias of the canonical epoch map in the latest native publication.
     knockback_publication: KnockbackPublication,
     /// Read-only timings published after all active tick work, never blocking.
@@ -1333,6 +1336,7 @@ impl Core {
                 input_dropped: AtomicU64::new(0),
                 input_drop_warn: DropWarn::new(),
                 tick_tx: tick_tx.downgrade(),
+                broadcast_cap: config.broadcast_cap.max(1),
                 knockback_publication,
                 timing_tx: timing_tx.downgrade(),
                 #[cfg(test)]
@@ -1495,6 +1499,13 @@ impl Core {
         tokio::sync::mpsc::error::SendError<()>,
     > {
         self.inner.input_tx.reserve_many(count).await
+    }
+
+    /// Outputs a subscriber can hold before it sees `Lagged`: the tick
+    /// broadcast's capacity, and the largest history an edge reader may keep
+    /// to bridge a coalesced publish.
+    pub fn broadcast_capacity(&self) -> usize {
+        self.inner.broadcast_cap
     }
 
     /// Subscribe to tick outputs. Bounded broadcast; laggards see `Lagged`

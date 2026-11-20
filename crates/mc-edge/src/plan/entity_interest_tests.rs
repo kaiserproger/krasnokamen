@@ -917,7 +917,10 @@ fn a_window_rescan_is_counted_and_an_incremental_publish_is_not() {
         ChangeSet::default(),
     );
     plan_entities_for(&out, &mut viewer, usize::MAX);
-    assert_eq!(viewer.rescans, 1, "the first publish has no baseline to walk");
+    assert_eq!(
+        viewer.rescans, 1,
+        "the first publish has no baseline to walk"
+    );
     assert!(
         viewer.entities_scanned >= 1,
         "the scan must report the rows it walked, got {}",
@@ -928,7 +931,14 @@ fn a_window_rescan_is_counted_and_an_incremental_publish_is_not() {
     let index = TickPlanIndex::with_previous(&out, viewer.previous_entities());
     let mut interest = std::mem::take(&mut viewer.entity_interest);
     let mut scratch = PlanScratch::default();
-    interest.prepare(&out.snapshot, &mut viewer, 4, &index, &mut scratch, usize::MAX);
+    interest.prepare(
+        &out.snapshot,
+        &mut viewer,
+        4,
+        &index,
+        &mut scratch,
+        usize::MAX,
+    );
     assert_eq!(viewer.rescans, 1, "an unchanged window must not rescan");
     assert_eq!(viewer.entities_scanned, scanned);
 }

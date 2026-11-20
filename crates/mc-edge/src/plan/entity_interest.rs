@@ -76,6 +76,23 @@ impl EntityInterest {
                     == entity_chunk(viewer.position)
         });
         if !contiguous || !window_same || !held_same {
+            // Name why a continuous publication was not available: history a
+            // `Lagged` dropped, or history the pump's chain no longer held.
+            if !contiguous
+                && window_same
+                && held_same
+                && let Some(revision) = revision
+            {
+                if index
+                    .chain_info()
+                    .lost_through
+                    .is_some_and(|lost| revision <= lost)
+                {
+                    viewer.rescans_gap += 1;
+                } else {
+                    viewer.rescans_no_history += 1;
+                }
+            }
             entity_candidates::collect(snapshot, viewer, distance, scratch, credit, spectators);
             viewer.rescans += 1;
             viewer.entities_scanned += scratch.visible.len() as u64;

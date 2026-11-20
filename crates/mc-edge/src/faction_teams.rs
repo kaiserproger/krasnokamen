@@ -64,7 +64,7 @@ pub(crate) fn team_name(faction: u16) -> String {
 /// once per publish in the shared change loop
 /// ([`crate::plan::TickPlanIndex::with_previous`]) and read by every viewer
 /// whose memberships were reconciled at `base`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct FactionDelta {
     base: u64,
     /// `(faction, uuid)` of the rows that entered a nonzero faction,
@@ -100,6 +100,30 @@ impl FactionDelta {
         if let Some(row) = new.filter(|_| new_faction != 0) {
             self.added.push((new_faction, row.uuid));
         }
+    }
+
+    /// Fold a later continuous step into this one: an entity's entries and
+    /// departures at any step of a coalesced publication still reach the
+    /// viewer, and `base` stays the base the viewer reconciles from.
+    pub(crate) fn merge(&mut self, later: &Self) {
+        self.added.extend(later.added.iter().copied());
+        self.added.sort_by_key(|(faction, _)| *faction);
+        self.added.dedup();
+        self.lost.extend(later.lost.iter().copied());
+        self.lost.sort_unstable();
+        self.lost.dedup();
+        // The held set is a function of the new snapshot, not of this delta.
+        let _ = self.still_held.take();
+    }
+
+    /// Bytes this delta holds, for the publication chain's cost line.
+    pub(crate) fn bytes(&self) -> usize {
+        self.added.capacity() * std::mem::size_of::<(u16, Uuid)>()
+            + self.lost.capacity() * std::mem::size_of::<u16>()
+            + self
+                .still_held
+                .get()
+                .map_or(0, |held| held.capacity() * std::mem::size_of::<u16>())
     }
 
     pub(crate) fn finish(mut self) -> Self {

@@ -143,10 +143,12 @@ impl SharedMoves {
 
     /// (hit, miss) move-frame tallies since this snapshot's cache was created.
     pub(crate) fn move_tallies(&self) -> (u64, u64) {
-        self.moves.iter().fold((0u64, 0u64), |(hits, misses), shard| {
-            let guard = shard.lock();
-            (hits + guard.hits, misses + guard.misses)
-        })
+        self.moves
+            .iter()
+            .fold((0u64, 0u64), |(hits, misses), shard| {
+                let guard = shard.lock();
+                (hits + guard.hits, misses + guard.misses)
+            })
     }
 
     /// Shared `RotateHead` frame for `entity`'s current head yaw, keyed by
