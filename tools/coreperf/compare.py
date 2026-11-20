@@ -71,7 +71,12 @@ def fixture(mobs: int, villagers: int) -> dict[str, Any]:
                          # Bound the sweep at ceiling-1: the spider pens roof at 67, and a
                          # sweep to 70 would delete their ceiling (same fix as the scale
                          # builder).
-                         f"fill {x - 8} 64 {z - 8} {x + 72} {ceiling - 1} {z + 72} minecraft:air"]
+                         # Vanilla refuses a /fill above 32,768 blocks and 81x81x7 is 45,927
+                         # (COREPERF-PUBLIC-FIXTURE-FILL-EXCEEDS-VANILLA-BUDGET): the sweep is two
+                         # commands over the same volume, split inside the 32,768 ceiling.
+                         f"fill {x - 8} 64 {z - 8} {x + 72} {min(67, ceiling - 1)} {z + 72} minecraft:air"]
+            if ceiling - 1 > 67:
+                commands.append(f"fill {x - 8} 68 {z - 8} {x + 72} {ceiling - 1} {z + 72} minecraft:air")
             if not group:
                 commands = rules + commands
                 commands.append("setblock 32 64 34 minecraft:crafting_table")

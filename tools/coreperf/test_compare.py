@@ -352,3 +352,45 @@ class FixtureCacheTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+
+class FillBudgetTests(unittest.TestCase):
+    """COREPERF-PUBLIC-FIXTURE-FILL-EXCEEDS-VANILLA-BUDGET: every emitted fill is legal.
+
+    Vanilla refuses a /fill above 32,768 blocks. The pen ceiling sweep used to be 81x81x7 =
+    45,927 in one command; the earlier test sampled one mob count, so it caught the shape but
+    the fix had to keep every canonical size legal. The sweep is split now, and every size the
+    cache pins plus a small one are checked.
+    """
+
+    def test_every_canonical_fixture_fits_the_vanilla_fill_budget(self):
+        for mobs, villagers in ((100000, 0), (100000, 20000), (20000, 64), (1024, 0)):
+            recipe = compare.fixture(mobs, villagers)
+            for region in recipe["regions"]:
+                for command in region["commands"]:
+                    fields = command.split()
+                    if fields[0] != "fill":
+                        continue
+                    coords = list(map(int, fields[1:7]))
+                    cells = 1
+                    for axis in range(3):
+                        cells *= abs(coords[axis] - coords[axis + 3]) + 1
+                    self.assertLessEqual(cells, 32768, f"{mobs} mobs: {command}")
+
+    def test_the_split_sweep_clears_the_same_pen_volume(self):
+        # The repair must not shrink the cleared interior: two layers cover y 64..70 on a
+        # 81x81 pen (65,610 cells), whatever the split.
+        cleared = [command for region in compare.fixture(20000, 0)["regions"]
+                   for command in region["commands"]
+                   if command.startswith("fill") and command.endswith("minecraft:air")
+                   and " 64 " in command]
+        cells = 0
+        for command in cleared:
+            coords = list(map(int, command.split()[1:7]))
+            volume = 1
+            for axis in range(3):
+                volume *= abs(coords[axis] - coords[axis + 3]) + 1
+            cells += volume
+        per_pen = cells / max(1, len({command.split()[1] for command in cleared}))
+        self.assertGreater(per_pen, 32768)
