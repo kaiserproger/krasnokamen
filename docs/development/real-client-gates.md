@@ -955,6 +955,16 @@ longer than a tick, the broadcast queue grows, and the pump falls behind while
 dozens of periods and takes minutes to fill, so 20 is the default and the
 option exists only for experiments.
 
+Measured on the owner host (2026-11-20): with the witness and three flood
+clients the pump's publish stays at p50 0.2-0.8 ms, p95 9-11 ms, p99 21-28 ms,
+max 152-344 ms against the 50 ms tick, a client receives only 4-7 KB/s, and
+`pump_skipped_ticks` stays at 0 — client work alone does not make the pump
+slower than the tick here. A rate-limited client link does not help either: per
+publish a client receives about 1.5 KB, far inside any socket buffer, so a
+2 MB/s link never throttled. Until the server offers a deterministic pump pace
+(off by default), a run ends `inconclusive`, which is the honest outcome; do
+not read it as the row's symptom.
+
 The loopback dashboard (`[dashboard]` written by the gate, no secret) is the
 condition sensor: `pump_skipped_ticks` must grow. A verdict whose condition
 never occurred is `null` (inconclusive: the run ends failed with that reason),
