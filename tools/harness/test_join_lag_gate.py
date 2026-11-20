@@ -17,16 +17,13 @@ def context(*extra: str, client: str = "native", timeout: float | None = None) -
 
 class ArgsTest(unittest.TestCase):
     def test_defaults_are_the_gate_options(self) -> None:
-        timeout, tick_rate, flood_clients, flood_steps, lag_ticks = join_lag.validate_args(context())
-        self.assertEqual((timeout, tick_rate, flood_clients, flood_steps, lag_ticks),
-                         (join_lag.TIMEOUT, 3, 1, 40, 8))
+        timeout, tick_rate, lag_ticks = join_lag.validate_args(context())
+        self.assertEqual((timeout, tick_rate, lag_ticks), (join_lag.TIMEOUT, 3, 8))
 
     def test_options_select_the_load_and_the_rate(self) -> None:
-        timeout, tick_rate, flood_clients, flood_steps, lag_ticks = join_lag.validate_args(
-            context("--tick-rate", "10", "--flood-clients", "2", "--flood-steps", "8",
-                    "--pump-lag-ticks", "6", timeout=600.0))
-        self.assertEqual((timeout, tick_rate, flood_clients, flood_steps, lag_ticks),
-                         (600.0, 10, 2, 8, 6))
+        timeout, tick_rate, lag_ticks = join_lag.validate_args(
+            context("--tick-rate", "10", "--pump-lag-ticks", "6", timeout=600.0))
+        self.assertEqual((timeout, tick_rate, lag_ticks), (600.0, 10, 6))
 
     def test_a_java_client_is_refused(self) -> None:
         with self.assertRaisesRegex(ValueError, "requires --client native"):
@@ -34,8 +31,6 @@ class ArgsTest(unittest.TestCase):
 
     def test_out_of_range_options_are_refused(self) -> None:
         for argv in (("--tick-rate", "0"), ("--tick-rate", "21"),
-                     ("--flood-clients", "-1"), ("--flood-clients", "5"),
-                     ("--flood-steps", "3"), ("--flood-steps", "129"),
                      ("--pump-lag-ticks", "0"), ("--pump-lag-ticks", "65"),
                      ("--scenario", "border-reveal")):
             with self.subTest(argv=argv):

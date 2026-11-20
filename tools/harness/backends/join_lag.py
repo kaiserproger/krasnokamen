@@ -41,7 +41,6 @@ import json
 import os
 import re
 import subprocess
-import threading
 import time
 import urllib.request
 from dataclasses import replace
@@ -56,15 +55,10 @@ from .gameplay import peak_rss_kib, prepare_operator_fixture, require_tools
 from .probe_steps import ProbeSteps
 
 WITNESS = "JoinLagWitness"
-FLOOD = "JoinLagFlood"
 JOINER = "JoinLagJoiner"
 TIMEOUT = 1800.0
 JOIN_BOUND_SECONDS = 10.0  # the server's join deadline the row names
 ENGAGED_LINE = "pump lag enabled"  # the server's warn line for the test/dev knob
-SKIP_WAIT_SECONDS = 20.0   # how long the gate waits for the knob's warn line
-FLOOD_DX = 512             # a flood client's area sits far outside the witness
-FLOOD_RADIUS = 72          # a 145x145 slab covers the whole 9x9 chunk view
-FILL_PAUSE = 0.35          # pacing between a flood client's fills
 CRITERIA = ("join_behind_slow_pump", "live_pump_does_not_halt")
 
 REQUIRED_TOOLS = frozenset({
@@ -206,7 +200,7 @@ def _safe_tick(dashboard_port: int) -> int:
         return 0
 
 
-def validate_args(ctx: ProfileContext) -> tuple[float, int, int, int, int]:
+def validate_args(ctx: ProfileContext) -> tuple[float, int, int]:
     if ctx.client != "native":
         raise ValueError("join-lag-gate requires --client native")
     if ctx.platform is not None:
@@ -214,29 +208,22 @@ def validate_args(ctx: ProfileContext) -> tuple[float, int, int, int, int]:
     parser = argparse.ArgumentParser(prog="join-lag-gate")
     # 20 TPS is the row's own rate: the pump must outpace the tick for the queue to build in seconds.
     parser.add_argument("--tick-rate", type=int, default=3)
-    parser.add_argument("--flood-clients", type=int, default=1)
-    parser.add_argument("--flood-steps", type=int, default=40,
-                        help="cap on view-wide fills per flood client while the pump falls behind")
     # The condition lever: the pump is delayed by K core ticks (KRASNOKAMEN_PUMP_LAG_TICKS, a
     # test/dev knob, never an operator setting).
     parser.add_argument("--pump-lag-ticks", type=int, default=8)
     args = parser.parse_args(ctx.extra_args)
     if not 1 <= args.tick_rate <= 20:
         raise ValueError("join-lag-gate --tick-rate must be in [1, 20]")
-    if not 0 <= args.flood_clients <= 4:
-        raise ValueError("join-lag-gate --flood-clients must be in [0, 4]")
-    if not 4 <= args.flood_steps <= 128:
-        raise ValueError("join-lag-gate --flood-steps must be in [4, 128]")
     if not 1 <= args.pump_lag_ticks <= 64:
         raise ValueError("join-lag-gate --pump-lag-ticks must be in [1, 64]")
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else TIMEOUT
     if not 0 < timeout <= 2400:
         raise ValueError("join-lag-gate --timeout-seconds must be in (0, 2400]")
-    return (timeout, args.tick_rate, args.flood_clients, args.flood_steps, args.pump_lag_ticks)
+    return timeout, args.tick_rate, args.pump_lag_ticks
 
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
-    timeout, tick_rate, flood_clients, flood_steps, lag_ticks = validate_args(ctx)
+    timeout, tick_rate, lag_ticks = validate_args(ctx)
     artifact = ctx.artifact_dir
     override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not override:
@@ -263,7 +250,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     # The dashboard is read-only and loopback-only; the gate reads its tick and publish counters.
     source += f'\n[dashboard]\nenabled = true\nbind_address = "127.0.0.1"\nport = {dashboard_port}\n'
     config.write_text(source)
-    names = [WITNESS, JOINER] + [f"{FLOOD}{index}" for index in range(1, flood_clients + 1)]
+    names = [WITNESS, JOINER]
     prepare_operator_fixture(ctx, names)
     evidence = ctx.client_evidence
     with binary.open("rb") as server_executable:
@@ -271,7 +258,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     evidence.update(server_address=address, server_binary_path=str(binary),
                     server_binary_sha256=server_hash, world_dir=str(artifact / "world"),
                     seed=81, dashboard_address=f"127.0.0.1:{dashboard_port}",
-                    flood_clients=names[2:], pump_lag_ticks=lag_ticks)
+                    pump_lag_ticks=lag_ticks)
     previous_xdg = os.environ.get("XDG_DATA_HOME")
     os.environ["XDG_DATA_HOME"] = private_xdg_root(artifact)
     server = None
@@ -312,23 +299,11 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         with ProbeSteps(mcp_a, artifact / "join-lag-witness", timeout, "native-join-lag-witness") as a:
             require_tools(mcp_a.list_tools(), REQUIRED_TOOLS, "join-lag-gate")
             a.call("minecraft_wait_for_play", {"timeout_seconds": a.remaining()})
-            flooders = []
-            flood_evidence: list[dict[str, Any]] = []
-            for name in names[2:]:
-                owner = peer_context(name)
-                process, mcp = launch(owner, name, display=None)
-                require_tools(mcp.list_tools(), REQUIRED_TOOLS, "join-lag-gate")
-                probe = ProbeSteps(mcp, artifact / name, timeout, f"native-{name.lower()}")
-                probe.__enter__()
-                probe.call("minecraft_wait_for_play", {"timeout_seconds": probe.remaining()})
-                flooders.append((process, probe))
-                flood_evidence.append(dict(owner.client_evidence))
-            detail, verdicts = _gate(a, flooders, ctx, artifact, tick_rate, flood_steps,
-                                     address, server_log_path, dashboard_port,
+            detail, verdicts = _gate(a, ctx, artifact, tick_rate, address, server_log_path,
+                                     dashboard_port, server,
                                      lambda: launch(peer_context(JOINER), JOINER, display=None))
             detail["pump_lag_ticks"] = lag_ticks
             a.report["details"] = detail
-            evidence["flood_client"] = flood_evidence
             outcome, names_out = disposition(verdicts)
             reasons = detail.get("verdicts", {})
             if outcome == "failed":
@@ -358,44 +333,21 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             os.environ["XDG_DATA_HOME"] = previous_xdg
 
 
-def _gate(a: ProbeSteps, flooders: list[tuple[subprocess.Popen[Any], ProbeSteps]],
-          ctx: ProfileContext, artifact: Path, tick_rate: int, flood_steps: int,
-          address: str, server_log_path: Path, dashboard_port: int,
+def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: int, address: str,
+          server_log_path: Path, dashboard_port: int, server: subprocess.Popen[Any],
           launch_joiner: Any) -> tuple[dict[str, Any], dict[str, bool | None]]:
-    """The walk: the pump falls behind under a paced publish rate, then a fresh client joins."""
+    """The walk: the pump runs behind the tick, then a fresh client joins."""
     verdicts: dict[str, bool | None] = {}
-    detail: dict[str, Any] = {"tick_rate": tick_rate, "flood_clients": len(flooders),
-                              "flood_steps": flood_steps}
+    detail: dict[str, Any] = {"tick_rate": tick_rate}
     a.report["details"] = detail  # kept even when a later step fails
     a.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
     a.fixture(f"tick rate {tick_rate}")
     a.fixture("gamemode creative @s")
-
-    def flood(probe: ProbeSteps, index: int, steps: int) -> None:
-        """Keep one flood client's whole view dirty: each publish to it re-encodes 81 chunks."""
-        cx, cy, cz = (a_pos[0] + FLOOD_DX * (index + 1), a_pos[1] + 40, a_pos[2])
-        probe.fixture(f"tp @s {cx} {cy} {cz}")
-        for step in range(1, steps + 1):
-            block = "minecraft:stone" if step % 2 else "minecraft:air"
-            probe.fixture(f"fill {cx - FLOOD_RADIUS} {cy} {cz - FLOOD_RADIUS} "
-                          f"{cx + FLOOD_RADIUS} {cy} {cz + FLOOD_RADIUS} {block}")
-            time.sleep(FILL_PAUSE)
-
-    state = a.call("minecraft_observe")
-    player = state.get("player") or {}
-    a_pos = (int(player.get("x") or 0), int(player.get("y") or 0), int(player.get("z") or 0))
-    a.report["origin_block"] = list(a_pos)
-
-    threads = [threading.Thread(target=flood, args=(probe, index, flood_steps), daemon=True)
-               for index, (_process, probe) in enumerate(flooders)]
-    for thread in threads:
-        thread.start()
-    # The condition is the server's own delay line: wait for its warn line and for the core to tick.
-    deadline = time.monotonic() + SKIP_WAIT_SECONDS
-    while time.monotonic() < deadline and not engaged(server_log_path):
-        time.sleep(0.1)
-    delayed = engaged(server_log_path)
-    detail["delay_line_engaged"] = delayed
+    # The knob's own warn line is written before the server listens; wait for it with inotify so a
+    # late flush is an event, not a sleep.
+    delayed = runtime.wait_for_path_condition(
+        server_log_path, 10.0, lambda: (engaged(server_log_path), engaged(server_log_path)), server)
+    detail["pump_lag_enabled"] = delayed
     tick_before = _safe_tick(dashboard_port)
 
     joiner_process, joiner_mcp = launch_joiner()
@@ -411,15 +363,16 @@ def _gate(a: ProbeSteps, flooders: list[tuple[subprocess.Popen[Any], ProbeSteps]
         detail["join_error"] = str(error)
     elapsed = join_timing(server_log_path, JOINER)
     detail["join_elapsed_seconds"] = None if elapsed is None else round(elapsed, 2)
-    for thread in threads:
-        thread.join(timeout=5)
-    time.sleep(0.5)
     tick_after = _safe_tick(dashboard_port)
     halt = halt_line(server_log_path)
-    stats_end = _stat(dashboard_port)
+    stats_end = None
+    try:
+        stats_end = _stat(dashboard_port)
+    except OSError:
+        pass
     detail["join_ticks"] = [tick_before, tick_after]
-    detail["publish"] = stats_end.get("publish")
-    detail["tps_at_end"] = stats_end.get("tps")
+    detail["publish"] = (stats_end or {}).get("publish")
+    detail["tps_at_end"] = (stats_end or {}).get("tps")
     detail["halt_line"] = halt
     ok, why = join_verdict(elapsed, delayed, halt)
     detail["join_verdict"] = why
