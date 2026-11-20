@@ -660,7 +660,7 @@ pub(crate) fn apply_batch_images(
             return replay;
         }
     };
-    if let Err(error) = clock.observe_batches(batches) {
+    if let Err(error) = clock.observe_batches(batches, false) {
         replay.clock_fault = Some(error.to_string());
         replay.game_clock = Some(clock);
         return replay;
@@ -1401,7 +1401,7 @@ pub(crate) fn advance_replay_clocks(replay: &mut Replay) {
     match clock {
         Ok(clock) => {
             let held_ticks = replay.tick - clock.game_ticks(replay.tick);
-            advance_replay_clocks_with_clock(replay, &clock, held_ticks);
+            advance_replay_clocks_with_clock(replay, &clock, held_ticks, false);
             replay.game_clock = Some(clock);
         }
         Err(error) => replay.clock_fault = Some(error.to_string()),
@@ -1412,19 +1412,24 @@ pub(crate) fn advance_replay_clocks_with_clock(
     replay: &mut Replay,
     game: &ReplayGameClock,
     held_ticks: u64,
+    legacy: bool,
 ) {
     replay.recovered_held_ticks = held_ticks;
     replay.sim_debt_anchored_since = game.anchored_since();
-    for (&[x, z], image) in &replay.sim_debt {
-        if let Err(error) = crate::debt::validate_anchor(
-            mc_world::ChunkPos { x, z },
-            image.last_sim,
-            image.held_anchor,
-            replay.tick,
-            held_ticks,
-        ) {
-            replay.clock_fault = Some(error.to_string());
-            return;
+    // The copy-only converter validates debt after assigning its new anchors.
+    // Ordinary recovery must still refuse invalid persisted authority here.
+    if !legacy {
+        for (&[x, z], image) in &replay.sim_debt {
+            if let Err(error) = crate::debt::validate_anchor(
+                mc_world::ChunkPos { x, z },
+                image.last_sim,
+                image.held_anchor,
+                replay.tick,
+                held_ticks,
+            ) {
+                replay.clock_fault = Some(error.to_string());
+                return;
+            }
         }
     }
     for (&id, record) in &mut replay.entities {
@@ -1472,6 +1477,6 @@ pub(crate) fn advance_replay_clocks_with_clock(
     }
     for dimension in replay.dimensions.values_mut() {
         dimension.tick = dimension.tick.max(replay.tick);
-        advance_replay_clocks_with_clock(dimension, game, held_ticks);
+        advance_replay_clocks_with_clock(dimension, game, held_ticks, legacy);
     }
 }

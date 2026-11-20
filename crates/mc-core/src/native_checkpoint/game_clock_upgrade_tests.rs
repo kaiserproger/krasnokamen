@@ -29,7 +29,7 @@ fn conversion_zero_game_one_tick_skips_all_memories() {
 
 #[test]
 fn conversion_memory_inclusive_boundaries_and_future_refusal() {
-    for (input, expected, normalized) in [(8, 8, 0), (9, 18, 1), (18, 18, 1)] {
+    for (input, expected, normalized) in [(8, 8, 0), (9, 18, 1), (18, 18, 1), (19, 18, 1)] {
         let mut state = villager(input);
         let mut report = Conversion {
             tick: 20,
@@ -52,8 +52,8 @@ fn conversion_memory_inclusive_boundaries_and_future_refusal() {
         tick: 20,
         ..Default::default()
     };
-    assert!(normalize_villager(&mut villager(19), 10, &mut report).is_err());
-    let mut sleep_only = villager(19);
+    assert!(normalize_villager(&mut villager(20), 10, &mut report).is_err());
+    let mut sleep_only = villager(20);
     sleep_only.activity = crate::villager::Activity::Idle;
     assert!(normalize_villager(&mut sleep_only, 10, &mut report).is_err());
 }

@@ -179,8 +179,11 @@ fn game_clock_rejects_ambiguous_counters_and_conflicting_held_boundaries() {
             crate::journal::ReplayGameClock::new(200, Some(Running { held_ticks: 0 })).unwrap();
         climate.game_clock = image;
         assert!(
-            game.observe_batches(&[(201, 210, vec![JournalEntry::Climate { value: climate },])])
-                .is_err()
+            game.observe_batches(
+                &[(201, 210, vec![JournalEntry::Climate { value: climate }])],
+                false,
+            )
+            .is_err()
         );
     }
     let mut game = crate::journal::ReplayGameClock::new(
@@ -192,15 +195,21 @@ fn game_clock_rejects_ambiguous_counters_and_conflicting_held_boundaries() {
     )
     .unwrap();
     climate.game_clock = Running { held_ticks: 110 };
-    game.observe_batches(&[(201, 211, vec![JournalEntry::Climate { value: climate }])])
-        .unwrap();
+    game.observe_batches(
+        &[(201, 211, vec![JournalEntry::Climate { value: climate }])],
+        false,
+    )
+    .unwrap();
     climate.game_clock = Held {
         game_ticks: 101,
         held_since: Some(213),
     };
     assert!(
-        game.observe_batches(&[(212, 220, vec![JournalEntry::Climate { value: climate },])])
-            .is_err()
+        game.observe_batches(
+            &[(212, 220, vec![JournalEntry::Climate { value: climate }])],
+            false,
+        )
+        .is_err()
     );
 }
 

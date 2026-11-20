@@ -815,8 +815,8 @@ pub fn recover_with_reader(
     recover_with_clock(config, registry, reader, false)
 }
 
-/// Explicit offline conversion only: fold the legacy native-tick clock law.
-/// Never used by admission, export, or ordinary server recovery.
+/// Only the explicit offline converter admits legacy missing clock anchors.
+/// Admission, export and ordinary recovery require the persisted current law.
 fn recover_with_clock(
     config: &CoreConfig,
     registry: Arc<crate::registry::CoreRegistry>,
@@ -968,12 +968,17 @@ fn recover_with_clock(
             Ok(())
         })
         .map_err(|e| CoreError::Storage(e.to_string()))?;
-    let mut game_clock = crate::journal::ReplayGameClock::new(
-        manifest.tick,
-        (!legacy)
-            .then(|| manifest.climate.map(|image| image.game_clock))
-            .flatten(),
-    )?;
+    let initial_clock = manifest.climate.map(|image| match image.game_clock {
+        crate::weather::GameClockImage::Held {
+            game_ticks,
+            held_since: None,
+        } if legacy => crate::weather::GameClockImage::Held {
+            game_ticks,
+            held_since: Some(manifest.tick),
+        },
+        clock => clock,
+    });
+    let mut game_clock = crate::journal::ReplayGameClock::new(manifest.tick, initial_clock)?;
     if !legacy {
         game_clock.observe_debt_stamp(manifest.climate, manifest.tick)?;
     }
@@ -982,9 +987,7 @@ fn recover_with_clock(
         manifest.tick,
         |batch| {
             let batches = [batch];
-            if !legacy {
-                game_clock.observe_batches(&batches)?;
-            }
+            game_clock.observe_batches(&batches, legacy)?;
             for (&dimension, replay) in &mut dimensions {
                 let mut routed = crate::dimensions::journal_for_dimension(&batches, dimension);
                 if dimension != Dimension::Overworld {
@@ -1055,7 +1058,7 @@ fn recover_with_clock(
         game_clock.finish_debt_upgrade(clock_tick)?
     };
     for (&dimension, replay) in &mut dimensions {
-        crate::journal::advance_replay_clocks_with_clock(replay, &game_clock, held_ticks);
+        crate::journal::advance_replay_clocks_with_clock(replay, &game_clock, held_ticks, legacy);
         replay.plugins.validate()?;
         replay.block_ticks.validate().map_err(|error| {
             CoreError::Storage(format!(

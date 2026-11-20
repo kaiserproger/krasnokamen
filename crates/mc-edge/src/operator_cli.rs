@@ -361,7 +361,29 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                     )?;
                 }
                 WorldCommand::UpgradeGameClock { copy } => {
-                    mc_world_tools::game_clock_upgrade::upgrade_game_clock(&config, copy)?;
+                    let report =
+                        mc_world_tools::game_clock_upgrade::upgrade_game_clock(&config, copy)?;
+                    let archive = copy.join(format!(
+                        "journal-before-game-clock-{}",
+                        report.checkpoint_tick
+                    ));
+                    println!(
+                        "game-clock conversion: copy={} checkpoint={} tick={} tail_held_ticks={} H={} held_since={:?} active={} inactive={} dropped_debt={} work_normalized={} work_raw={} sleep_normalized={} sleep_raw={} archive={}",
+                        copy.display(),
+                        report.checkpoint_tick,
+                        report.tick,
+                        report.tail_held_ticks,
+                        report.held_ticks,
+                        report.held_since,
+                        report.active_debts,
+                        report.inactive_debts,
+                        report.dropped_debt,
+                        report.work_normalized,
+                        report.work_raw,
+                        report.sleep_normalized,
+                        report.sleep_raw,
+                        archive.display()
+                    );
                 }
                 WorldCommand::UpgradeWorldgen => {
                     let report =

@@ -12,6 +12,13 @@ pub fn upgrade_game_clock(config: &CoreConfig, copy: &Path) -> Result<Conversion
     let storage = |error: &dyn std::fmt::Display| {
         CoreError::Storage(format!("game-clock upgrade {}: {error}", copy.display()))
     };
+    if std::fs::canonicalize(copy).map_err(|error| storage(&error))?
+        == std::fs::canonicalize(&config.world_dir).map_err(|error| storage(&error))?
+    {
+        return Err(storage(
+            &"--copy must name a disposable copy, not the configured original world",
+        ));
+    }
     let mut config = config.clone();
     config.world_dir = copy.to_path_buf();
     let lease = mc_world::storage::open_for_lease(copy).map_err(|error| storage(&error))?;
@@ -40,21 +47,6 @@ pub fn upgrade_game_clock(config: &CoreConfig, copy: &Path) -> Result<Conversion
             .and_then(|dir| dir.sync_all())
             .map_err(|error| storage(&error))?;
     }
-    println!(
-        "game-clock conversion: copy={} tick={} H={} held_since={:?} active={} inactive={} dropped_debt={} work_normalized={} work_raw={} sleep_normalized={} sleep_raw={} archive={}",
-        copy.display(),
-        report.tick,
-        report.held_ticks,
-        report.held_since,
-        report.active_debts,
-        report.inactive_debts,
-        report.dropped_debt,
-        report.work_normalized,
-        report.work_raw,
-        report.sleep_normalized,
-        report.sleep_raw,
-        archive.display()
-    );
     Ok(report)
 }
 

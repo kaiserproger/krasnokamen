@@ -5,6 +5,8 @@ use mc_world::native::{NativeCheckpoint, NativeError, NativeStore};
 
 #[derive(Debug, Default, serde::Serialize)]
 pub struct Conversion {
+    pub checkpoint_tick: u64,
+    pub tail_held_ticks: u64,
     pub tick: u64,
     pub held_ticks: u64,
     pub held_since: Option<u64>,
@@ -49,9 +51,9 @@ fn normalize_villager(
     let lower = game.saturating_sub(1);
     let work = i64::try_from(running.saturating_sub(1)).map_err(storage)?;
     if state.activity == crate::villager::Activity::Work {
-        if state.last_work > work {
+        if state.last_work >= 0 && state.last_work as u64 > running {
             return Err(storage(
-                "eligible last_work exceeds the last-running freshness target",
+                "eligible last_work exceeds the final persisted running boundary",
             ));
         }
         if state.last_work >= 0 && state.last_work as u64 >= lower {
@@ -67,9 +69,9 @@ fn normalize_villager(
     if state.sleeping
         && let Some(value) = state.last_slept
     {
-        if sleep.is_none_or(|target| value > target) {
+        if value > running {
             return Err(storage(
-                "eligible last_slept exceeds the last-running freshness target",
+                "eligible last_slept exceeds the final persisted running boundary",
             ));
         }
         if value >= lower {
@@ -103,7 +105,20 @@ fn convert_images(world: &mut RecoveredWorld) -> Result<Conversion, CoreError> {
         }
         _ => return Err(storage("invalid legacy game clock")),
     };
+    let checkpoint_tick = world.manifest.tick;
+    let checkpoint_held = match world.manifest.climate.map(|image| image.game_clock) {
+        Some(GameClockImage::Held { game_ticks, .. }) => checkpoint_tick
+            .checked_sub(game_ticks)
+            .ok_or_else(|| storage("invalid checkpoint game clock"))?,
+        Some(GameClockImage::Running { held_ticks }) => held_ticks,
+        None => 0,
+    };
+    let tail_held_ticks = held_ticks
+        .checked_sub(checkpoint_held)
+        .ok_or_else(|| storage("held prefix decreased while folding the legacy tail"))?;
     let mut report = Conversion {
+        checkpoint_tick,
+        tail_held_ticks,
         tick,
         held_ticks,
         held_since,
@@ -168,7 +183,7 @@ fn convert_images(world: &mut RecoveredWorld) -> Result<Conversion, CoreError> {
     Ok(report)
 }
 
-/// Recover the OLD law, convert the recovered boundary, then atomically write
+/// Fold the legacy clock exactly, convert its recovered boundary, then atomically write
 /// all domains at that boundary. Only the copy-only world tool calls this.
 /// The original journal is archived by the tool AFTER this checkpoint commits.
 pub fn write_converted_checkpoint(

@@ -83,15 +83,18 @@ impl ReplayGameClock {
     }
 
     /// Inspect unrouted batches once, before any dimension folds entity images.
+    /// The copy-only legacy converter admits missing debt stamps/boundaries,
+    /// but still excludes held time from entity clock advancement.
     pub(crate) fn observe_batches(
         &mut self,
         batches: &[(u64, u64, Vec<JournalEntry>)],
+        legacy: bool,
     ) -> Result<(), CoreError> {
         for (_, hi, entries) in batches {
             if *hi <= self.through_tick {
                 continue;
             }
-            self.observe_entries(entries, Dimension::Overworld, *hi)?;
+            self.observe_entries(entries, Dimension::Overworld, *hi, legacy)?;
             self.through_tick = *hi;
         }
         Ok(())
@@ -102,15 +105,18 @@ impl ReplayGameClock {
         entries: &[JournalEntry],
         dimension: Dimension,
         hi: u64,
+        legacy: bool,
     ) -> Result<(), CoreError> {
         for entry in entries {
             match entry {
                 JournalEntry::Dimension { dimension, entries } => {
-                    self.observe_entries(entries, *dimension, hi)?;
+                    self.observe_entries(entries, *dimension, hi, legacy)?;
                 }
                 JournalEntry::Climate { value } if dimension == Dimension::Overworld => {
-                    self.observe_debt_stamp(Some(*value), hi)?;
-                    self.observe(value.game_clock, hi)?;
+                    if !legacy {
+                        self.observe_debt_stamp(Some(*value), hi)?;
+                    }
+                    self.observe(value.game_clock, hi, legacy)?;
                 }
                 _ => {}
             }
@@ -118,10 +124,28 @@ impl ReplayGameClock {
         Ok(())
     }
 
-    fn observe(&mut self, image: GameClockImage, hi: u64) -> Result<(), CoreError> {
-        image.held_ticks(hi)?;
+    fn observe(
+        &mut self,
+        mut image: GameClockImage,
+        hi: u64,
+        legacy: bool,
+    ) -> Result<(), CoreError> {
         let previous = self.changes.last().copied().unwrap_or(self.initial);
+        if legacy
+            && let GameClockImage::Held {
+                game_ticks,
+                held_since: None,
+            } = image
+            && let GameClockImage::Held {
+                game_ticks: previous_game,
+                ..
+            } = previous.image
+            && game_ticks == previous_game
+        {
+            image = previous.image;
+        }
         if image == previous.image {
+            image.held_ticks(hi)?;
             return Ok(());
         }
         let (held_ticks, game_ticks) = match (previous.image, image) {
@@ -135,6 +159,18 @@ impl ReplayGameClock {
             .checked_add(game_ticks)
             .and_then(|tick| tick.checked_add(1))
             .ok_or_else(|| invalid("transition boundary overflows native time"))?;
+        if legacy
+            && let GameClockImage::Held {
+                game_ticks,
+                held_since: None,
+            } = image
+        {
+            image = GameClockImage::Held {
+                game_ticks,
+                held_since: Some(tick),
+            };
+        }
+        image.held_ticks(hi)?;
         if let GameClockImage::Held {
             held_since: Some(since),
             ..
