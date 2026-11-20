@@ -1,0 +1,11 @@
+[[bug]]
+id = "CIV-UNFUNDED-SITE-SWEEP-BLOCKS-UPGRADE"
+title = "An unfinished site search for a now-unfunded building can delay a paid House upgrade"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Matched mc-core plan_pass fixture on base 99b3bf0154da: two residents share a one-bed House L1, the L2 upgrade is paid and eligible, and the unfinished search for a new House L1 has no candidate. Adding only a retained Farm candidate after Farm funding is withdrawn changes the verdict from upgrade to sweep_waiting, leaving no project. This fixture does not identify the cause of the historical A9 population plateau."
+repro = "cargo"
+regression = []
+failing_first = "reported"
+repro_check = "In the focused planner fixture a_stale_unfunded_sweep_does_not_hold_the_slot_for_a_funded_upgrade, restoring the old global hold makes the stale-scratch pass fail at the upgrade admission assertion. The funded same-kind hold control remains green."
