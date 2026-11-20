@@ -498,7 +498,13 @@ impl RecoveredWorld {
     }
 }
 
-pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError> {
+/// The registry a recovery runs on: content plus the plugin startup
+/// contribution the configured deployment pins.
+///
+/// One function so offline recovery and backup verification cannot disagree
+/// about which native types a world has — a copy verified under a bare registry
+/// would refuse a world that serves perfectly.
+pub fn recovery_registry(config: &CoreConfig) -> Result<crate::registry::CoreRegistry, CoreError> {
     let mut registry = crate::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref())?;
     // Offline recovery resolves the same pinned native types as live startup.
     // No tick events are started and no guest command is applied.
@@ -518,7 +524,11 @@ pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError>
         )?,
     }
     drop(runtime);
-    let registry = Arc::new(registry);
+    Ok(registry)
+}
+
+pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError> {
+    let registry = Arc::new(recovery_registry(config)?);
     let path = config.world_dir.join("native/state.redb");
     if !path.is_file() {
         return Err(import_required(config));

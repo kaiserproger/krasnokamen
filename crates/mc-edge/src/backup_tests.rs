@@ -671,3 +671,46 @@ async fn the_restore_command_accepts_a_hot_backup_verified_with_content() {
     let recovered = mc_core::Core::open(live_config(restored)).unwrap();
     recovered.shutdown();
 }
+
+/// A world a serve produced records its plugin startup identity (the registry a
+/// serve runs on, plugin contribution included). The `restore` command must
+/// verify such a copy with that same registry and keep the record, so a
+/// restored world is one a serve still accepts.
+#[tokio::test]
+async fn the_restore_command_verifies_a_world_that_records_its_plugin_startup_identity() {
+    use clap::Parser;
+
+    let root = tempfile::tempdir().unwrap();
+    let core = mc_core::Core::open(live_config(root.path().join("live"))).unwrap();
+    let backups = root.path().join("backups");
+    let (path, _) = run_hot_backup(&core, &backups).unwrap();
+    core.shutdown();
+    drop(core);
+
+    let restored = root.path().join("restored");
+    let cli = crate::operator_cli::Cli::try_parse_from([
+        "krasnokamen",
+        "restore",
+        "--from",
+        path.to_str().unwrap(),
+        "--world-dir",
+        restored.to_str().unwrap(),
+    ])
+    .unwrap();
+    let mut cfg = crate::config::EdgeConfig::default();
+    cfg.data.vanilla_data_dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    assert!(
+        crate::operator_cli::run_offline(&cli, &mut cfg)
+            .await
+            .expect("the restore command verifies a copy with the plugins a serve resolves"),
+        "restore is an offline command"
+    );
+
+    let recovered = mc_core::native_checkpoint::recover_offline(&live_config(restored.clone()))
+        .expect("the restored world recovers offline");
+    assert!(
+        recovered.checkpoint.globals.contains_key("plugin_startup"),
+        "the restored world keeps the plugin startup identity a serve enforces"
+    );
+}

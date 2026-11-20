@@ -357,3 +357,92 @@ fn backup_refuses_a_copy_that_does_not_restore() {
         );
     }
 }
+
+/// Rewrite the copied world's `plugin_startup` record, as a copy saved under a
+/// different plugin deployment would carry it.
+fn rewrite_plugin_startup(copy: &std::path::Path, payload: &[u8]) {
+    let database = copy.join("native/state.redb");
+    let (store, _) =
+        mc_world::native::NativeStore::open_learning_identity(&database, 1 << 20).unwrap();
+    let image = store.read_checkpoint().unwrap();
+    let tick = image.tick;
+    let mut globals = image.globals.clone();
+    globals.insert(
+        "plugin_startup".into(),
+        crate::native_checkpoint::record(tick, payload.to_vec()),
+    );
+    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    store
+        .commit_checkpoint(
+            mc_world::native::NativeCheckpoint {
+                tick,
+                previous_tick: tick,
+                chunks: &[],
+                entities: &image.entities,
+                players: &[],
+                globals: &globals,
+            },
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
+    mc_world::store_marker::write(copy, store.store_uuid(), tick).unwrap();
+}
+
+/// A verified hot copy is then verified offline exactly as `restore` does, and
+/// the copy's own plugin startup identity — the record a serve enforces — is
+/// part of that verdict: the registry verification applies must be the one a
+/// serve applies, plugin contribution included.
+#[test]
+fn offline_verification_uses_the_registry_and_identity_a_serve_enforces() {
+    let root = tempfile::tempdir().unwrap();
+    let live = root.path().join("live");
+    let copy = root.path().join("copy");
+    let config = config(&live);
+    let core = Core::open(config.clone()).unwrap();
+    std::fs::create_dir(&copy).unwrap();
+    core.backup(&copy).unwrap();
+    core.shutdown();
+
+    // The world a serve produced records its startup identity in the checkpoint.
+    let (store, _) = mc_world::native::NativeStore::open_learning_identity(
+        &copy.join("native/state.redb"),
+        1 << 20,
+    )
+    .unwrap();
+    let image = store.read_checkpoint().unwrap();
+    assert!(
+        image.globals.contains_key("plugin_startup"),
+        "a served world records its plugin startup identity"
+    );
+    drop(store);
+
+    let tick = crate::hot_backup::verify_copy(&copy, &config)
+        .expect("the offline verdict matches what a serve would accept");
+    assert!(tick > 0);
+}
+
+/// The same copy with a startup identity that names another deployment is
+/// refused offline, with the message a serve would give: verification never
+/// calls a copy verified that a serve would reject.
+#[test]
+fn offline_verification_refuses_a_copy_whose_plugin_startup_differs() {
+    let root = tempfile::tempdir().unwrap();
+    let live = root.path().join("live");
+    let copy = root.path().join("copy");
+    let config = config(&live);
+    let core = Core::open(config.clone()).unwrap();
+    std::fs::create_dir(&copy).unwrap();
+    core.backup(&copy).unwrap();
+    core.shutdown();
+    // A world saved under another deployment: the record still parses as the
+    // JSON object every plugin domain row is, but it names other plugins.
+    rewrite_plugin_startup(&copy, br#"{"deployment":"another-plugin-deployment"}"#);
+
+    let error = crate::hot_backup::verify_copy(&copy, &config).unwrap_err();
+    let text = error.to_string();
+    assert!(
+        text.contains("plugin startup"),
+        "the refusal names the startup identity, not a generic failure: {text}"
+    );
+}
