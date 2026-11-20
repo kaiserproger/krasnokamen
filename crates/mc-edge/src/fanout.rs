@@ -174,7 +174,10 @@ pub fn publish_with_registries<'a>(
     let marker_bytes = marker.as_ref().map_or(0, bytes::Bytes::len);
     // Counters for the plan debug line: a rescan is per-viewer O(chunk square), so its
     // per-publish delta says whether a fanout step comes from rescans or from move volume.
-    let plan_debug = tracing::enabled!(tracing::Level::DEBUG);
+    // The guard must name the target the line is emitted on: a bare `enabled!(DEBUG)` asks the
+    // default target (this module, mc_edge::fanout), which a `mc_edge::server::plan=debug` filter
+    // leaves off, and the line would never be written.
+    let plan_debug = tracing::enabled!(target: "mc_edge::server::plan", tracing::Level::DEBUG);
     let rescans_before = if plan_debug {
         viewers.iter().map(|viewer| viewer.rescans).sum::<u64>()
     } else {
@@ -185,7 +188,9 @@ pub fn publish_with_registries<'a>(
     } else {
         0
     };
-    let plan_start = probe.map(|_| std::time::Instant::now());
+    // Independent of the item probe: plan_us must be measured whenever the line is going to
+    // be written, and MC_CORE_PHASE_LOG is never set on a measured leg.
+    let plan_clock = plan_debug.then(std::time::Instant::now);
     let mut planned: Vec<(ConnectionId, Vec<PlannedPacket>)> = Vec::with_capacity(viewers.len());
     let mut marked: Vec<ConnectionId> = Vec::new();
     for (connection, packets, reserved) in viewers
@@ -240,7 +245,8 @@ pub fn publish_with_registries<'a>(
             viewers_unplanned,
             packets,
             chunk_packets,
-            plan_us = plan_start.map_or(0, |start| start.elapsed().as_micros() as u64),
+            plan_ns = plan_clock.map_or(0, |start| start.elapsed().as_nanos() as u64),
+            plan_us = plan_clock.map_or(0, |start| start.elapsed().as_micros() as u64),
             rescans = viewers.iter().map(|viewer| viewer.rescans).sum::<u64>() - rescans_before,
             entities_scanned = viewers.iter().map(|viewer| viewer.entities_scanned).sum::<u64>()
                 - scanned_before,
@@ -289,8 +295,8 @@ pub fn publish_with_registries<'a>(
             viewer.world_frame_unsent();
         }
     }
-    if let (Some(start), Some(index_start), Some(plan_start), Some(fill_start), Some(fill_time)) =
-        (probe, index_start, plan_start, fill_start, fill_time)
+    if let (Some(start), Some(index_start), Some(plan_clock), Some(fill_start), Some(fill_time)) =
+        (probe, index_start, plan_clock, fill_start, fill_time)
     {
         let total_time = start.elapsed();
         let (packets, bytes) = planned
@@ -315,8 +321,8 @@ pub fn publish_with_registries<'a>(
             viewers.len(),
             crate::plan::item_probe::take_line(),
             index_start.duration_since(start).as_secs_f64() * 1000.0,
-            plan_start.duration_since(index_start).as_secs_f64() * 1000.0,
-            fill_start.duration_since(plan_start).as_secs_f64() * 1000.0,
+            plan_clock.duration_since(index_start).as_secs_f64() * 1000.0,
+            fill_start.duration_since(plan_clock).as_secs_f64() * 1000.0,
             fill_time.as_secs_f64() * 1000.0,
             total_time.as_secs_f64() * 1000.0,
             (start.elapsed() - total_time).as_secs_f64() * 1000.0,

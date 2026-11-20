@@ -493,7 +493,7 @@ fn relative_movement_drift_bound_compares_the_policies() {
 fn tallies_count_one_miss_per_encode_and_one_hit_per_reuse() {
     // The plan debug line reports these per publish: a leg whose per-viewer cost grows can be
     // read as more encodes (misses) or the same encodes with more viewers (hits).
-    let shared = SharedMoves::default();
+    let shared = SharedMoves::counting();
     let mover = entity(5, [8.0, 64.0, 8.0]);
     // One block of travel clears the vanilla move threshold; the baseline is what the client holds.
     let baseline = baseline_at([7.0, 64.0, 8.0], 0.0, 0.0, 0.0);
@@ -512,4 +512,16 @@ fn tallies_count_one_miss_per_encode_and_one_hit_per_reuse() {
     assert!(shared.movement(&still, at_rest).is_none());
     assert!(shared.movement(&still, at_rest).is_none());
     assert_eq!(shared.move_tallies(), (2, 3));
+}
+
+#[test]
+fn a_cache_that_was_not_asked_to_count_stays_silent() {
+    // A publish with the plan target off must not pay for counters at all: the same lookups on
+    // the default cache report zeros.
+    let shared = SharedMoves::default();
+    let mover = entity(9, [8.0, 64.0, 8.0]);
+    let baseline = baseline_at([7.0, 64.0, 8.0], 0.0, 0.0, 0.0);
+    assert!(shared.movement(&mover, baseline).is_some());
+    assert!(shared.movement(&mover, baseline).is_some());
+    assert_eq!(shared.move_tallies(), (0, 0));
 }

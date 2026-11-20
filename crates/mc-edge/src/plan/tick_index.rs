@@ -101,6 +101,9 @@ impl TickPlanIndex {
     }
 
     pub(crate) fn new(output: &TickOutput) -> Self {
+        // One `enabled` check per publish: the shared move cache counts hits/misses only when the
+        // plan line will be written, so a server with that target off takes no counters at all
+        // and the tally lives under the shard lock the lookup already holds.
         let mut index = Self {
             spectators: output
                 .snapshot
@@ -113,6 +116,9 @@ impl TickPlanIndex {
         };
         #[cfg(test)]
         SPECTATOR_INDEX_BUILDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if tracing::enabled!(target: "mc_edge::server::plan", tracing::Level::DEBUG) {
+            index.moves = super::shared_moves::SharedMoves::counting();
+        }
         for (i, change) in output.changes.blocks.iter().enumerate() {
             let pos = (
                 change.position.x.div_euclid(16),

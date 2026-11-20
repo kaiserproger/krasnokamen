@@ -80,6 +80,18 @@ fn pen_store() -> (EntityStore, Vec<mc_core::entities::EntitySlot>) {
     (store, slots)
 }
 
+/// The counters exist only while the plan target is enabled (one check per publish), so the
+/// scenario runs under that exact filter, like the leg does.
+fn with_plan_debug<T>(body: impl FnOnce() -> T) -> T {
+    let subscriber = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::filter::EnvFilter::new(
+            "mc_edge::server::plan=debug",
+        ))
+        .with_writer(std::io::sink)
+        .finish();
+    tracing::subscriber::with_default(subscriber, body)
+}
+
 fn pen_viewer(connection: u64, pos: [f64; 3]) -> ViewerState {
     let mut viewer = viewer_at(connection, pos);
     for x in 0..4 {
@@ -228,7 +240,7 @@ fn drive_all(viewers: &mut Vec<ViewerState>) -> Vec<Publish> {
         advance(&mut store, &slots, &mut out, round);
         let previous = viewers[0].previous_entities().cloned();
         let all: Vec<usize> = (0..viewers.len()).collect();
-        let row = publish_selected(&out, viewers, previous.as_ref(), &all);
+        let row = with_plan_debug(|| publish_selected(&out, viewers, previous.as_ref(), &all));
         println!("round {round}: {row:?}");
         rows.push(row);
     }
@@ -290,7 +302,7 @@ fn a_viewer_that_missed_a_publish_pays_its_own_encodes() {
         advance(&mut store, &slots, &mut out, round);
         let previous = viewers[0].previous_entities().cloned();
         let all: Vec<usize> = (0..viewers.len()).collect();
-        let row = publish_selected(&out, &mut viewers, previous.as_ref(), &all);
+        let row = with_plan_debug(|| publish_selected(&out, &mut viewers, previous.as_ref(), &all));
         println!("round {round} all: {row:?}");
         if round == 1 {
             same = row;
@@ -298,7 +310,9 @@ fn a_viewer_that_missed_a_publish_pays_its_own_encodes() {
         if round == 2 {
             // Round 2: four viewers are skipped (deferred by credit in a real leg).
             let keep: Vec<usize> = (0..4).collect();
-            let row = publish_selected(&out, &mut viewers, previous.as_ref(), &keep);
+            let row = with_plan_debug(|| {
+                publish_selected(&out, &mut viewers, previous.as_ref(), &keep)
+            });
             println!("round {round} half: {row:?}");
         }
         if round == 3 {

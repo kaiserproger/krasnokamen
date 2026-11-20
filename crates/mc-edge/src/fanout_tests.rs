@@ -468,3 +468,98 @@ fn mounted_spawn_burst_links_ride_the_world_queue_without_reliable_overflow() {
         (horses + riders_after_vehicle, horses / 2)
     );
 }
+
+/// Smoke for the R3k-6 line: the real logging init (`EnvFilter::try_from_default_env`, exactly
+/// what the server binary runs) with the GO's RUST_LOG and WITHOUT `MC_CORE_PHASE_LOG` must reach
+/// the publish and emit one `pump plan` line with counters and a non-zero plan clock. A bare
+/// `enabled!(DEBUG)` guard asks this module's target (`mc_edge::fanout`) instead, which that
+/// filter leaves off, and `plan_us` used to hang off the item probe.
+#[test]
+fn plan_debug_line_appears_under_the_go_filter_without_the_phase_log() {
+    use std::io::Write;
+    use std::sync::{Arc, Mutex};
+    use tracing_subscriber::filter::EnvFilter;
+
+    #[derive(Clone)]
+    struct Capture(Arc<Mutex<Vec<u8>>>);
+    impl Write for Capture {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    assert!(
+        std::env::var_os("MC_CORE_PHASE_LOG").is_none(),
+        "this smoke proves the plan clock does not depend on the phase log"
+    );
+    // The same filter string the GO puts in RUST_LOG, parsed by the same EnvFilter the binary
+    // installs (`EnvFilter::try_from_default_env`); the crate denies `unsafe`, so the env var
+    // itself is not set here.
+    let filter = EnvFilter::new(GO_RUST_LOG);
+    let buffer = Arc::new(Mutex::new(Vec::new()));
+    let writer = Capture(Arc::clone(&buffer));
+    let subscriber = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(move || writer.clone())
+        .without_time()
+        .finish();
+
+    let (biomes, blocks, items, block_entity_types) = registries_fixture();
+    let registries = PlanRegistries {
+        biomes: &biomes,
+        blocks: &blocks,
+        items: &items,
+        block_entity_types: &block_entity_types,
+    };
+    let mut cache = crate::plan::ChunkPacketCache::new();
+    let mut chunk = mc_world::chunk::Chunk::empty(
+        mc_world::chunk::ChunkPos { x: 0, z: 0 },
+        mc_world::BlockStateId(0),
+        mc_data::Identifier::parse("minecraft:plains").expect("static id"),
+    );
+    chunk.section_lights.fill(mc_world::chunk::SectionLight {
+        block: Some(mc_world::chunk::LightSection::uniform(0)),
+        sky: Some(mc_world::chunk::LightSection::uniform(0xFF)),
+    });
+    let output = chunk_tick(1, Arc::new(chunk), None);
+    let mut viewer =
+        ViewerState::new(ConnectionId(1), mc_core::boundary::EntityId(1), [8.0, 64.0, 8.0]);
+    viewer.loaded_chunks.insert((0, 0), 0);
+
+    tracing::subscriber::with_default(subscriber, || {
+        let packets = publish_with_registries(
+            &output,
+            [&mut viewer].into_iter(),
+            1,
+            &registries,
+            &mut cache,
+        );
+        assert!(!packets.is_empty(), "the publish must plan something");
+    });
+    let text = String::from_utf8(buffer.lock().unwrap().clone()).expect("utf8 log");
+    assert!(
+        text.contains("pump plan"),
+        "the GO filter must reach the line, got: {text}"
+    );
+    for field in ["move_misses=", "move_hits=", "rescans=", "entities_scanned=", "chunk_packets="] {
+        assert!(text.contains(field), "counters missing {field}: {text}");
+    }
+    let plan_ns: u64 = text
+        .split("plan_ns=")
+        .nth(1)
+        .and_then(|rest| rest.split_whitespace().next())
+        .and_then(|value| value.parse().ok())
+        .unwrap_or_else(|| panic!("no plan_ns field: {text}"));
+    assert!(
+        plan_ns > 0,
+        "the plan clock must run without MC_CORE_PHASE_LOG: {text}"
+    );
+}
+
+/// The GO's exact RUST_LOG for the R3k-6 leg.
+const GO_RUST_LOG: &str = "info,mc_edge::server::pump=debug,\
+mc_core::tick::input::session=debug,mc_edge::server::plan=debug";
