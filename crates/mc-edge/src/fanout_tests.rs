@@ -572,3 +572,198 @@ fn plan_debug_line_appears_under_the_go_filter_without_the_phase_log() {
 /// The GO's exact RUST_LOG for the R3k-6 leg.
 const GO_RUST_LOG: &str = "info,mc_edge::server::pump=debug,\
 mc_core::tick::input::session=debug,mc_edge::server::plan=debug";
+
+/// A viewer that already holds the published revision needs no delta at all,
+/// so it must not take the index away from a viewer that is behind and covered
+/// by the pump's chain: the fan-out used to pick that `same` viewer first and
+/// every lagging viewer paid a full rescan.
+#[test]
+fn a_current_viewer_does_not_preempt_the_chain_for_a_stale_one() {
+    use crate::plan::{ChunkPacketCache, PublicationHistory, ViewerState};
+    use mc_core::boundary::EntityId;
+    use mc_core::entities::{ColdFields, EntityKind, EntityStore};
+
+    let (biomes, blocks, items, block_entity_types) = registries_fixture();
+    let registries = PlanRegistries {
+        biomes: &biomes,
+        blocks: &blocks,
+        items: &items,
+        block_entity_types: &block_entity_types,
+    };
+    let type_id = mc_data::entity_types::entity_type_contract_26_1_2_by_name("minecraft:cow")
+        .expect("cow contract")
+        .protocol_id;
+    let cold = |pos: [f64; 3]| ColdFields {
+        pos,
+        vel: [0.0; 3],
+        yaw: 0.0,
+        pitch: 0.0,
+        ground: true,
+        health: 20.0,
+        breed_cooldown: 0,
+        pickup_delay: 0,
+        item: None,
+        appearance: Arc::new(mc_core::boundary::EntityAppearance::default()),
+        movement: mc_core::blueprint::MovementClass::Walker,
+        half_width: 0.45,
+        height: 1.4,
+        speed: 0.1,
+        attack_damage: 1.0,
+        sight_range: 16.0,
+        attack_reach: 1.0,
+    };
+    let mut store = EntityStore::default();
+    let first = store.spawn(
+        EntityId(1_000),
+        uuid::Uuid::from_u128(1_000),
+        EntityKind::Mob { type_id },
+        cold([8.0, 64.0, 8.0]),
+    );
+    let second = store.spawn(
+        EntityId(1_001),
+        uuid::Uuid::from_u128(1_001),
+        EntityKind::Mob { type_id },
+        cold([12.0, 64.0, 8.0]),
+    );
+    let output = |tick: u64, entities| TickOutput {
+        tick,
+        snapshot: Arc::new(WorldSnapshot {
+            tick,
+            day_time: 0,
+            chunks: Default::default(),
+            day_time_rate: 1.0,
+            entities,
+            ..Default::default()
+        }),
+        changes: Arc::new(ChangeSet::default()),
+        times: Default::default(),
+    };
+    let mut history = PublicationHistory::new(8);
+    let one = output(1, store.views());
+    history.record(&one);
+    store.set_pos(first, [9.0, 64.0, 8.0]);
+    store.set_pos(second, [13.0, 64.0, 8.0]);
+    store.spawn(
+        EntityId(1_002),
+        uuid::Uuid::from_u128(1_002),
+        EntityKind::Mob { type_id },
+        cold([16.0, 64.0, 8.0]),
+    );
+    let two = output(2, store.views());
+    history.record(&two);
+    store.set_pos(first, [10.0, 64.0, 8.0]);
+    store.set_pos(second, [14.0, 64.0, 8.0]);
+    let three = output(3, store.views());
+    history.record(&three);
+    assert_ne!(
+        three.snapshot.entities.revision(),
+        one.snapshot.entities.revision()
+    );
+
+    let viewer = |connection: u64| {
+        let mut viewer = ViewerState::new(
+            ConnectionId(connection),
+            EntityId(9_000 + connection as i32),
+            [8.0, 64.0, 8.0],
+        );
+        viewer.dimension = mc_core::dimensions::Dimension::Overworld;
+        viewer.loaded_chunks.insert((0, 0), 0);
+        viewer
+    };
+    let plan = |out: &TickOutput,
+                viewer: &mut ViewerState,
+                cache: &mut ChunkPacketCache,
+                history: Option<&PublicationHistory>| {
+        crate::fanout::publish_with_registries_chain(
+            out,
+            std::iter::once(&mut *viewer),
+            0,
+            &registries,
+            cache,
+            history,
+        )
+    };
+
+    // The current viewer really holds the published revision.
+    let mut current = viewer(1);
+    let mut cache = ChunkPacketCache::new();
+    plan(&three, &mut current, &mut cache, Some(&history));
+    assert_eq!(
+        current.previous_entities().unwrap().revision(),
+        three.snapshot.entities.revision()
+    );
+
+    // The stale viewer holds the first revision: not the published snapshot's
+    // direct predecessor, so only the chain can keep it contiguous.
+    let mut stale = viewer(2);
+    let mut stale_cache = ChunkPacketCache::new();
+    plan(&one, &mut stale, &mut stale_cache, None);
+    assert_eq!(
+        stale.previous_entities().unwrap().revision(),
+        one.snapshot.entities.revision()
+    );
+    assert_ne!(
+        one.snapshot.entities.revision(),
+        three.snapshot.entities.base_revision()
+    );
+
+    // A third viewer from the same base, planned against no history at all:
+    // the rescan reference for the frames the stale viewer must receive.
+    let mut reference = viewer(3);
+    let mut reference_cache = ChunkPacketCache::new();
+    plan(&one, &mut reference, &mut reference_cache, None);
+    let stale_rescans_before = stale.rescans;
+    let current_rescans_before = current.rescans;
+    let reference_rescans_before = reference.rescans;
+
+    let mut cache = ChunkPacketCache::new();
+    let mut both = vec![current, stale];
+    let packets = crate::fanout::publish_with_registries_chain(
+        &three,
+        both.iter_mut(),
+        0,
+        &registries,
+        &mut cache,
+        Some(&history),
+    );
+    let frames = |packets: &[AddressedPacket], connection: ConnectionId| {
+        packets
+            .iter()
+            .filter(|packet| packet.connection == connection)
+            .map(|packet| (packet.priority, packet.data.clone()))
+            .collect::<Vec<_>>()
+    };
+    let stale_frames = frames(&packets, ConnectionId(2));
+    let current_tracked = both[0].tracked_entities.len();
+    assert_eq!(
+        both[1].rescans, stale_rescans_before,
+        "the lagging viewer with covered history must not rescan because a current viewer shares the publish"
+    );
+    assert_eq!(
+        both[0].rescans, current_rescans_before,
+        "the current viewer is `same` and rescans nothing"
+    );
+
+    // The rescan reference from the same base, for the ordered frames.
+    let mut reference_cache = ChunkPacketCache::new();
+    let reference_packets = plan(&three, &mut reference, &mut reference_cache, None);
+    assert_eq!(
+        reference.rescans,
+        reference_rescans_before + 1,
+        "the reference really rescanned"
+    );
+    assert!(
+        !stale_frames.is_empty(),
+        "the lagging viewer received frames"
+    );
+    assert_eq!(
+        stale_frames,
+        frames(&reference_packets, ConnectionId(3)),
+        "the bridged viewer must receive exactly the frames a rescan of its base delivers"
+    );
+    assert_eq!(
+        current_tracked,
+        both[0].tracked_entities.len(),
+        "the current viewer keeps its tracked set"
+    );
+}

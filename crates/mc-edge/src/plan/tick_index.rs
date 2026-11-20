@@ -150,6 +150,30 @@ impl PublicationChain {
         None
     }
 
+    /// Whether every step from `base` to `revision` is held, without
+    /// materializing the ids: the cheap half of [`Self::changed_between`],
+    /// used to pick the base before paying for the union.
+    pub(crate) fn covers(&self, base: u64, revision: u64) -> bool {
+        let mut want = base;
+        let mut seen = false;
+        for (link, _) in &self.links {
+            if !seen {
+                if link.base != base {
+                    continue;
+                }
+                seen = true;
+            }
+            if link.base != want {
+                return false;
+            }
+            want = link.revision;
+            if want == revision {
+                return true;
+            }
+        }
+        false
+    }
+
     /// The changed ids of every step between `base` and `revision`, ascending
     /// and deduplicated: the rows a bridge has to re-examine.
     pub(crate) fn changed_between(&self, base: u64, revision: u64) -> Option<Vec<EntityId>> {
@@ -466,25 +490,30 @@ impl TickPlanIndex {
     }
 
     /// The viewer base most of them hold that the chain can bridge to
-    /// `revision`, with every step between; `None` when it reaches none.
-    pub(crate) fn bridge<'a, 'b>(
-        chain: &'b PublicationChain,
+    /// `revision`, with the union of the steps' changed ids; `None` when it
+    /// reaches none. A viewer already at `revision` needs no bridge and never
+    /// wins the selection, so it cannot preempt the chain for the viewers
+    /// that are behind. Coverage is decided first and the union is built once,
+    /// for the winner only.
+    pub(crate) fn bridge<'a>(
+        chain: &PublicationChain,
         revision: u64,
         bases: impl Iterator<Item = &'a mc_core::boundary::EntityViews>,
     ) -> Option<(&'a mc_core::boundary::EntityViews, u64, Vec<EntityId>)> {
         let mut held: HashMap<u64, (&'a mc_core::boundary::EntityViews, usize)> =
             HashMap::default();
         for base in bases {
+            if base.revision() == revision {
+                continue;
+            }
             held.entry(base.revision()).or_insert((base, 0)).1 += 1;
         }
-        held.into_values()
-            .filter_map(|(base, viewers)| {
-                chain
-                    .changed_between(base.revision(), revision)
-                    .map(|changed| (base, viewers, changed))
-            })
-            .max_by_key(|(base, viewers, _)| (*viewers, base.revision()))
-            .map(|(base, _, changed)| (base, base.revision(), changed))
+        let (base, _) = held
+            .into_values()
+            .filter(|(base, _)| chain.covers(base.revision(), revision))
+            .max_by_key(|(base, viewers)| (*viewers, base.revision()))?;
+        let changed = chain.changed_between(base.revision(), revision)?;
+        Some((base, base.revision(), changed))
     }
 
     pub(crate) fn with_chain_info(mut self, info: ChainInfo) -> Self {

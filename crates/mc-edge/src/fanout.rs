@@ -165,26 +165,39 @@ pub(crate) fn publish_with_registries_chain<'a>(
         .map(|projection| {
             let dimension = projection.snapshot.dimension;
             let entities = &projection.snapshot.entities;
-            let previous = viewers
+            // A viewer that already holds a direct predecessor of this
+            // snapshot gives the cheapest index, so it wins. Otherwise a
+            // viewer that already holds the published revision is a `same`
+            // viewer and needs no delta at all: it must not preempt the chain
+            // for the viewers that are behind, so it is only the fallback when
+            // nobody is behind.
+            let mut direct = None;
+            let mut current = None;
+            let mut behind = false;
+            for viewer in viewers
                 .iter()
                 .filter(|viewer| viewer.dimension == dimension)
-                .filter_map(|viewer| viewer.previous_entities())
-                .find(|previous| previous.revision() == entities.base_revision())
-                .or_else(|| {
-                    viewers
-                        .iter()
-                        .filter(|viewer| viewer.dimension == dimension)
-                        .filter_map(|viewer| viewer.previous_entities())
-                        .find(|previous| previous.revision() == entities.revision())
-                });
-            let mut index = TickPlanIndex::with_previous(projection, previous);
+            {
+                let Some(previous) = viewer.previous_entities() else {
+                    continue;
+                };
+                if previous.revision() == entities.base_revision() {
+                    direct.get_or_insert(previous);
+                } else if previous.revision() == entities.revision() {
+                    current.get_or_insert(previous);
+                } else {
+                    behind = true;
+                }
+            }
+            let mut index = TickPlanIndex::with_previous(projection, direct.or(current));
             let chain = history.map(|history| history.chain(dimension));
-            if index.entity_base.is_none()
+            if direct.is_none()
+                && behind
                 && let Some(chain) = chain
             {
-                // The chain can keep the viewers whose publish the pump
-                // skipped contiguous: bridge the base most of them hold, and
-                // let the rest rescan with a named reason.
+                // The chain keeps the viewers whose publish the pump skipped
+                // contiguous: bridge the base most of them hold, and let the
+                // rest rescan with a named reason.
                 let bridge = TickPlanIndex::bridge(
                     chain,
                     entities.revision(),
