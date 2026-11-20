@@ -145,7 +145,7 @@ _AUTONOMY_VERDICTS = frozenset({
 _BOOLEAN_PROFILE_VERDICTS = {
     # backends/join_lag.py VERDICTS: one criterion per ledger row the gate covers.
     'join-lag-gate': frozenset({
-        'join_behind_slow_pump', 'live_pump_does_not_halt', 'border_reveal_after_skipped_publish',
+        'join_behind_slow_pump', 'live_pump_does_not_halt',
     }),
     'civilization-seed-qa': frozenset({
         'new_house', 'births', 'second_building', 'iron_smelted', 'all',

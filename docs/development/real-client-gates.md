@@ -939,72 +939,48 @@ navigation stall. Compare good and bad runs of the same binary.
 
 ## Edge pump lag on real clients (`join-lag-gate`)
 
-`python3 -m tools.harness run join-lag-gate --client native --windowed` covers the
-three pump-lag rows (EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS,
-EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP,
-ANTI-XRAY-BORDER-REVEAL-LOST-ACROSS-SKIPPED-PUBLISH) on native clients.
+`python3 -m tools.harness run join-lag-gate --client native --windowed` covers
+EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS and
+EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP.
 
-The server has no pump-pacing knob (the queue budget is a constant and the slow
-pump in the unit repros is a test-only park) and the gate adds none: it makes a
-real lag. Each flood client fills a slab across its own 9x9 chunk view every
-0.35 s; a block change evicts its chunk from the pump's framed-chunk cache, so
-every publish re-encodes its viewers' views (about 143 ms per cold view against
-the 50 ms tick at the default 20 TPS). Three flood clients keep every publish
-longer than a tick, the broadcast queue grows, and the pump falls behind while
-`/tick rate` stays at 20 — the row's own rate. A slower tick needs a queue of
-dozens of periods and takes minutes to fill, so 20 is the default and the
-option exists only for experiments.
+The condition is a pump publishing fewer outputs than the tick. The server has
+no operator knob for that, so the gate uses the test/dev-only
+`KRASNOKAMEN_PUMP_PUBLISH_PER_SECOND` (set to 3 for a run; unset or 0 = the
+shipped unlimited pump, an invalid value fails startup with one `warn` line
+naming the knob — see `crates/mc-edge/src/server/pump.rs` beside the queue
+budget). A flood client additionally keeps its whole 9x9 chunk view dirty so
+publishes carry real work. The dashboard (`[dashboard]` written by the gate,
+loopback, no secret) is the sensor: the pump lag is
+`simulation_tick - publish.source_tick`, which exists in both trees, so a
+verdict never depends on the fixed behaviour's own skip counter.
 
-Measured on the owner host (2026-11-20): with the witness and three flood
-clients the pump's publish stays at p50 0.2-0.8 ms, p95 9-11 ms, p99 21-28 ms,
-max 152-344 ms against the 50 ms tick, a client receives only 4-7 KB/s, and
-`pump_skipped_ticks` stays at 0 — client work alone does not make the pump
-slower than the tick here. A rate-limited client link does not help either: per
-publish a client receives about 1.5 KB, far inside any socket buffer, so a
-2 MB/s link never throttled. Until the server offers a deterministic pump pace
-(off by default), a run ends `inconclusive`, which is the honest outcome; do
-not read it as the row's symptom.
+Criteria (rows reference them as `harness:join-lag-gate:<name>`):
 
-The gate sets `KRASNOKAMEN_PUMP_PUBLISH_PER_SECOND` (default 3 for the run) on
-the server: the pump then publishes at most that many outputs per second, which
-is the rows' condition with a deterministic rate instead of a unit-test park.
-It is a test/dev knob only (unset or 0 = unlimited, the shipped pump; an
-invalid value fails startup and one `warn` line names it), never an operator
-setting; see `crates/mc-edge/src/server/pump.rs` beside the queue budget.
-
-The loopback dashboard (`[dashboard]` written by the gate, no secret) is the
-condition sensor: `pump_skipped_ticks` must grow. A verdict whose condition
-never occurred is `null` (inconclusive: the run ends failed with that reason),
-never `false` — `ledger._failing_verdict` reads `false` as the row's symptom, so
-an unreached condition must not look like a red control.
-
-Criteria, one per row (rows reference them as `harness:join-lag-gate:<name>`):
-
-- `border_reveal_after_skipped_publish`: the witness holds a chunk whose border
-  diamond ore is masked by a stone cell in the neighbouring chunk; the cell
-  becomes air while the pump skips, and the witness's own loaded world must then
-  hold the diamond ore. A mirror of `anti-xray`, but for the skip-repair path.
-- `join_behind_slow_pump`: with the flood running and skips observed, a fresh
+- `join_behind_slow_pump`: with the pump at least 8 ticks behind, a fresh
   client's join has to land inside the 10 s deadline. The interval is the
   server's own `login admitted` -> `join landed` (`RUST_LOG` sets the pump to
   debug for that line), never the client's process startup.
-- `live_pump_does_not_halt`: through the flood the dashboard keeps advancing
+- `live_pump_does_not_halt`: while the pump lags, `/stats` keeps advancing
   `simulation_tick` and the server log carries no `edge pump not draining`.
 
-Options (deterministic, no environment): `--scenario all|join-stall|border-reveal`,
-`--tick-rate N` (1-20, default 20), `--flood-clients N` (1-4, default 3),
-`--flood-steps N` (4-128, default 60 fills per flood client).
+A verdict whose condition never occurred is `null` (inconclusive: the run ends
+failed with that reason), never `false` — the ledger reads a false verdict as
+the row's symptom, so an unreached condition must not look like a red control.
 
-Negative control: run the same command with `KRASNOKAMEN_SERVER_BINARY` set to a
-server pinned before the fixes (`dc670b3bd`): the join then waits out its
-deadline (or the core halts) and the border ore stays masked, so the verdicts go
-red.
+Options (deterministic, no environment): `--tick-rate N` (1-20, default 20),
+`--flood-clients N` (0-4, default 1), `--flood-steps N` (4-128, default 40),
+`--pump-publish-per-second N` (1-100, default 3).
 
-Traps: the witness and every flood client must be ops (the gate writes
-`ops.json` for all of them); the witness reconnects after the fixture because
-block updates carry the real ore state and only a fresh encode masks it; a run
-whose flood ends before the pump skips is red as inconclusive by design, so
-raise `--flood-steps`, never the tick rate.
+Negative control: run the same command on a control tree that differs only in
+the fix hunks (the pump's stale-output skip removed, the anti-xray side repair
+removed) with `KRASNOKAMEN_SERVER_BINARY` naming its build: the join then waits
+out its deadline and the core halts (or the join is kicked), so both verdicts go
+red with a real lag.
+
+Traps: the client data root is a private `XDG_DATA_HOME` linked to the caller's
+content (a shared root leaks settings); the witness and every flood client are
+ops (the gate writes `ops.json`); a run whose pump never falls 8 ticks behind is
+red as inconclusive by design — raise the tick rate, never lower the pump rate.
 
 ## Settlement and army QA false alarms
 

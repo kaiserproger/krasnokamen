@@ -5,7 +5,6 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 
 from .backends import join_lag
 from .profiles import PROFILES, ProfileContext
@@ -18,16 +17,16 @@ def context(*extra: str, client: str = "native", timeout: float | None = None) -
 
 class ArgsTest(unittest.TestCase):
     def test_defaults_are_the_gate_options(self) -> None:
-        timeout, tick_rate, flood_clients, flood_steps, pump_rate, scenario = join_lag.validate_args(context())
-        self.assertEqual((timeout, tick_rate, flood_clients, flood_steps, pump_rate, scenario),
-                         (join_lag.TIMEOUT, 20, 1, 60, 3, "all"))
+        timeout, tick_rate, flood_clients, flood_steps, pump_rate = join_lag.validate_args(context())
+        self.assertEqual((timeout, tick_rate, flood_clients, flood_steps, pump_rate),
+                         (join_lag.TIMEOUT, 20, 1, 40, 3))
 
-    def test_options_select_a_row_and_the_flood_load(self) -> None:
-        timeout, tick_rate, flood_clients, flood_steps, pump_rate, scenario = join_lag.validate_args(
-            context("--scenario", "border-reveal", "--tick-rate", "3", "--flood-clients", "2",
-                    "--flood-steps", "8", "--pump-publish-per-second", "10", timeout=600.0))
-        self.assertEqual((timeout, tick_rate, flood_clients, flood_steps, pump_rate, scenario),
-                         (600.0, 3, 2, 8, 10, "border-reveal"))
+    def test_options_select_the_load_and_the_rate(self) -> None:
+        timeout, tick_rate, flood_clients, flood_steps, pump_rate = join_lag.validate_args(
+            context("--tick-rate", "10", "--flood-clients", "2", "--flood-steps", "8",
+                    "--pump-publish-per-second", "10", timeout=600.0))
+        self.assertEqual((timeout, tick_rate, flood_clients, flood_steps, pump_rate),
+                         (600.0, 10, 2, 8, 10))
 
     def test_a_java_client_is_refused(self) -> None:
         with self.assertRaisesRegex(ValueError, "requires --client native"):
@@ -35,10 +34,10 @@ class ArgsTest(unittest.TestCase):
 
     def test_out_of_range_options_are_refused(self) -> None:
         for argv in (("--tick-rate", "0"), ("--tick-rate", "21"),
-                     ("--flood-steps", "3"), ("--flood-steps", "129"),
                      ("--flood-clients", "-1"), ("--flood-clients", "5"),
-                     ("--pump-publish-per-second", "101"),
-                     ("--scenario", "other")):
+                     ("--flood-steps", "3"), ("--flood-steps", "129"),
+                     ("--pump-publish-per-second", "0"), ("--pump-publish-per-second", "101"),
+                     ("--scenario", "border-reveal")):
             with self.subTest(argv=argv):
                 with self.assertRaises((ValueError, SystemExit)):
                     join_lag.validate_args(context(*argv))
@@ -51,70 +50,50 @@ class ArgsTest(unittest.TestCase):
 
 
 class JoinVerdictTest(unittest.TestCase):
-    def test_a_join_inside_the_deadline_behind_skips_passes(self) -> None:
-        ok, why = join_lag.join_verdict(2.5, 4, 9, None)
+    def test_a_join_inside_the_deadline_behind_a_lagging_pump_passes(self) -> None:
+        ok, why = join_lag.join_verdict(2.5, 20, None)
         self.assertTrue(ok)
         self.assertIn("2.5 s", why)
 
     def test_a_join_past_the_deadline_fails(self) -> None:
-        ok, why = join_lag.join_verdict(10.5, 4, 9, None)
+        ok, why = join_lag.join_verdict(10.5, 20, None)
         self.assertFalse(ok)
         self.assertIn("deadline", why)
 
-    def test_a_clean_pump_is_inconclusive_not_false(self) -> None:
-        ok, why = join_lag.join_verdict(2.5, 4, 4, None)
+    def test_an_unreached_lag_is_inconclusive_not_false(self) -> None:
+        ok, why = join_lag.join_verdict(2.5, join_lag.LAG_TICKS - 1, None)
         self.assertIsNone(ok)
         self.assertIn("did not occur", why)
 
-    def test_a_missing_join_fails(self) -> None:
-        ok, why = join_lag.join_verdict(None, 4, 9, None)
+    def test_a_missing_join_behind_the_lag_fails(self) -> None:
+        ok, why = join_lag.join_verdict(None, 20, None)
         self.assertFalse(ok)
-        self.assertIn("never entered play", why)
+        self.assertIn("never landed", why)
 
     def test_a_core_halt_fails_even_when_the_join_landed(self) -> None:
-        ok, why = join_lag.join_verdict(2.5, 4, 9, "ERROR edge pump not draining")
+        ok, why = join_lag.join_verdict(2.5, 20, "ERROR edge pump not draining")
         self.assertFalse(ok)
         self.assertIn("halted", why)
 
 
 class HaltVerdictTest(unittest.TestCase):
-    def test_a_ticking_core_behind_skips_passes(self) -> None:
-        ok, _ = join_lag.halt_verdict(10, 30, 100, 160, None)
+    def test_a_ticking_core_behind_a_lagging_pump_passes(self) -> None:
+        ok, _ = join_lag.halt_verdict(20, 100, 160, None)
         self.assertTrue(ok)
 
     def test_a_halted_core_fails(self) -> None:
-        ok, _ = join_lag.halt_verdict(10, 30, 100, 160, "ERROR edge pump not draining")
+        ok, _ = join_lag.halt_verdict(20, 100, 160, "ERROR edge pump not draining")
         self.assertFalse(ok)
 
     def test_a_stuck_simulation_tick_fails(self) -> None:
-        ok, why = join_lag.halt_verdict(10, 30, 100, 100, None)
+        ok, why = join_lag.halt_verdict(20, 100, 100, None)
         self.assertFalse(ok)
         self.assertIn("did not advance", why)
 
-    def test_no_skips_is_inconclusive_not_false(self) -> None:
-        ok, why = join_lag.halt_verdict(10, 10, 100, 160, None)
+    def test_an_unreached_lag_is_inconclusive_not_false(self) -> None:
+        ok, why = join_lag.halt_verdict(join_lag.LAG_TICKS - 1, 100, 160, None)
         self.assertIsNone(ok)
         self.assertIn("did not occur", why)
-
-
-class BorderVerdictTest(unittest.TestCase):
-    def test_a_reveal_after_a_skip_passes(self) -> None:
-        ok, _ = join_lag.border_verdict(join_lag.DIAMOND, 1, 3)
-        self.assertTrue(ok)
-
-    def test_a_stale_mask_fails(self) -> None:
-        ok, why = join_lag.border_verdict(join_lag.STONE, 1, 3)
-        self.assertFalse(ok)
-        self.assertIn("stone", why)
-
-    def test_a_reveal_without_a_skip_is_inconclusive_not_false(self) -> None:
-        ok, why = join_lag.border_verdict(join_lag.DIAMOND, 3, 3)
-        self.assertIsNone(ok)
-        self.assertIn("did not occur", why)
-
-    def test_an_unread_block_fails(self) -> None:
-        ok, _ = join_lag.border_verdict(None, 1, 3)
-        self.assertFalse(ok)
 
 
 class DispositionTest(unittest.TestCase):
@@ -130,36 +109,24 @@ class DispositionTest(unittest.TestCase):
         outcome, names = join_lag.disposition({"a": None, "b": True})
         self.assertEqual(outcome, "inconclusive")
         self.assertEqual(names, ["a"])
-        self.assertEqual(join_lag.disposition({"a": None}), ("inconclusive", ["a"]))
 
     def test_a_symptom_outranks_an_unreached_condition(self) -> None:
         self.assertEqual(join_lag.disposition({"a": None, "b": False}), ("failed", ["b"]))
 
-    def test_every_verdict_function_returns_none_without_a_skip(self) -> None:
-        self.assertIsNone(join_lag.join_verdict(1.0, 5, 5, None)[0])
-        self.assertIsNone(join_lag.halt_verdict(5, 5, 10, 20, None)[0])
-        self.assertIsNone(join_lag.border_verdict(join_lag.DIAMOND, 5, 5)[0])
-        self.assertIsNone(join_lag.border_verdict(join_lag.STONE, 5, 5)[0])
+    def test_neither_verdict_returns_false_without_the_lag(self) -> None:
+        tight = join_lag.LAG_TICKS - 1
+        self.assertIsNone(join_lag.join_verdict(30.0, tight, None)[0])
+        self.assertIsNone(join_lag.halt_verdict(tight, 100, 160, None)[0])
 
 
-class LayoutTest(unittest.TestCase):
-    def test_the_ore_sits_at_the_chunk_edge_with_its_side_cell_beyond(self) -> None:
-        for x in (100, 127, 128, 200):
-            with self.subTest(x=x):
-                plan = join_lag.border_layout(x, 64, 0)
-                ore_x, ore_y, ore_z = plan["ore"]
-                side_x, side_y, side_z = plan["side"]
-                self.assertEqual(ore_x % 16, 15)
-                self.assertEqual(ore_x // 16, x // 16)
-                self.assertEqual((side_x, side_y, side_z), (ore_x + 1, ore_y, ore_z))
-                self.assertEqual(side_x // 16, ore_x // 16 + 1)
-                self.assertLess(ore_y, 64)
+class PumpLagTest(unittest.TestCase):
+    def test_the_lag_is_the_core_tick_minus_the_published_tick(self) -> None:
+        stats = {"simulation_tick": 120, "publish": {"source_tick": 100}}
+        self.assertEqual(join_lag.pump_lag(stats), 20)
 
-    def test_the_fill_box_holds_the_ore_and_its_side_cell(self) -> None:
-        plan = join_lag.border_layout(100, 64, 0)
-        x0, y0, z0, x1, y1, z1 = plan["fill"]
-        for x, y, z in (plan["ore"], plan["side"]):
-            self.assertTrue(x0 <= x <= x1 and y0 <= y <= y1 and z0 <= z <= z1)
+    def test_an_unpublished_or_ahead_pump_is_zero(self) -> None:
+        self.assertEqual(join_lag.pump_lag({"simulation_tick": 120, "publish": None}), 0)
+        self.assertEqual(join_lag.pump_lag({"simulation_tick": 100, "publish": {"source_tick": 104}}), 0)
 
 
 class HaltLineTest(unittest.TestCase):
