@@ -128,7 +128,6 @@ display_icons! {
     Stonecutter => "minecraft:stonecutter",
     VillagerSpawnEgg => "minecraft:villager_spawn_egg",
     Wheat => "minecraft:wheat",
-    WhiteBanner => "minecraft:white_banner",
     WritableBook => "minecraft:writable_book",
 }
 
@@ -150,7 +149,7 @@ impl Open {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum View {
+pub(super) enum View {
     Dashboard,
     Resources,
     Resource {
@@ -191,11 +190,9 @@ enum View {
     },
     BuildingContext {
         building: BuildingId,
-        origin: Origin,
     },
     BuildingResidents {
         building: BuildingId,
-        origin: Origin,
         page: usize,
     },
     Storage {
@@ -204,57 +201,23 @@ enum View {
     Buildings {
         page: usize,
     },
-    /// Workplaces for one resident, preserving the opening building's origin.
+    /// Workplaces for one resident.
     Assign {
         worker: Uuid,
-        from: Option<(BuildingId, Origin)>,
         page: usize,
     },
     /// Residents who may take a job in `building`.
     Hire {
         building: BuildingId,
-        origin: Origin,
         page: usize,
     },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Origin {
-    List {
-        kind: Option<BuildingKind>,
-        page: usize,
-    },
-    Map {
-        centre: [i32; 2],
-        scale: i32,
-    },
-}
-
-impl Origin {
-    fn fields(self) -> Vec<(String, Tag)> {
-        match self {
-            Self::List { kind, page } => vec![
-                ("from".to_owned(), Tag::String("list".to_owned())),
-                (
-                    "bk".to_owned(),
-                    Tag::String(kind.map_or("", BuildingKind::name).to_owned()),
-                ),
-                ("bp".to_owned(), Tag::String(page.to_string())),
-            ],
-            Self::Map { centre, scale } => vec![
-                ("from".to_owned(), Tag::String("map".to_owned())),
-                ("mx".to_owned(), Tag::String(centre[0].to_string())),
-                ("mz".to_owned(), Tag::String(centre[1].to_string())),
-                ("ms".to_owned(), Tag::String(scale.to_string())),
-            ],
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
 enum Target {
     None,
     Refresh,
+    Back,
     /// One kind of stored item (a count-1 template).
     Stock(ItemStack),
     Show(View),
@@ -262,7 +225,6 @@ enum Target {
     Dialog(&'static str),
     Pick {
         worker: Uuid,
-        from: Option<(BuildingId, Origin)>,
     },
     Assign {
         worker: Uuid,
@@ -282,13 +244,8 @@ enum Target {
         recipe: String,
     },
     Job(String),
-    MapView {
-        centre: [i32; 2],
-        scale: i32,
-    },
     Review {
         building: BuildingId,
-        origin: Origin,
         certificate: bool,
     },
 }
@@ -395,36 +352,8 @@ pub(super) fn building_from(
     connection: ConnectionId,
     ctx: &Ctx,
     building: BuildingId,
-    payload: ClickPayload<'_>,
 ) {
-    let origin = if payload.string("from") == Some("map") {
-        Origin::Map {
-            centre: ["mx", "mz"].map(|key| {
-                payload
-                    .string(key)
-                    .and_then(|value| value.parse().ok())
-                    .unwrap_or(0)
-            }),
-            scale: payload
-                .string("ms")
-                .and_then(|value| value.parse().ok())
-                .unwrap_or(1),
-        }
-    } else {
-        Origin::List {
-            kind: payload.string("bk").and_then(BuildingKind::parse),
-            page: payload
-                .string("bp")
-                .and_then(|value| value.parse().ok())
-                .unwrap_or(0),
-        }
-    };
-    show(
-        state,
-        connection,
-        ctx,
-        View::BuildingContext { building, origin },
-    );
+    show(state, connection, ctx, View::BuildingContext { building });
 }
 
 pub(super) fn filtered_buildings(
@@ -457,6 +386,7 @@ pub(crate) fn input(state: &mut TickState, input: &PlayerInput) -> bool {
     let connection = input.connection();
     if matches!(input, PlayerInput::Leave { .. }) {
         state.settlement_menus.remove(&connection);
+        state.settlement_navigation.remove(&connection);
         return false;
     }
     let Some(window) = state
@@ -508,11 +438,12 @@ pub(crate) fn input(state: &mut TickState, input: &PlayerInput) -> bool {
 
 /// Render `view` and show it: the open window is re-imaged when the title is
 /// unchanged (paging, refresh), otherwise a new window opens.
-fn show(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, view: View) {
+pub(super) fn show(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, view: View) {
     let (view, screen) = render(state, ctx, view);
     let Some(entity) = state.connections.entity_of(connection) else {
         return;
     };
+    super::navigation::menu(state, connection, ctx.id, view);
     let reuse = state
         .settlement_menus
         .get(&connection)
@@ -588,6 +519,12 @@ fn close(state: &mut TickState, connection: ConnectionId, entity: EntityId, serv
         );
     }
     publish(state, connection, entity, effects);
+}
+
+pub(super) fn close_for_dialog(state: &mut TickState, connection: ConnectionId) {
+    if let Some(entity) = state.connections.entity_of(connection) {
+        close(state, connection, entity, true);
+    }
 }
 
 fn publish(
@@ -754,6 +691,7 @@ fn click(
         return show(state, connection, &ctx, view);
     }
     match target {
+        Target::Back => super::navigation::back(state, connection, &ctx),
         Target::Pending { index, order } => {
             close(state, connection, entity, true);
             let payload = Tag::Compound(vec![
@@ -780,20 +718,13 @@ fn click(
                 ClickPayload(Some(&payload)),
             );
         }
-        Target::MapView { centre, scale } => {
-            close(state, connection, entity, true);
-            let payload = Tag::Compound(Origin::Map { centre, scale }.fields());
-            super::dispatch(state, connection, &ctx, "map", ClickPayload(Some(&payload)));
-        }
         Target::Review {
             building,
-            origin,
             certificate,
         } => {
             close(state, connection, entity, true);
-            let mut fields = origin.fields();
-            fields.push(("b".to_owned(), Tag::String(building.0.to_string())));
-            let payload = Tag::Compound(fields);
+            let payload =
+                Tag::Compound(vec![("b".to_owned(), Tag::String(building.0.to_string()))]);
             super::dispatch(
                 state,
                 connection,
@@ -890,12 +821,12 @@ fn click(
                 ),
                 vec![
                     super::button(storage_label(&ctx), "storage", ctx.id),
-                    super::button(ctx.t(Key::Back), "resources", ctx.id),
+                    super::button(ctx.t(Key::Back), "back", ctx.id),
                 ],
             )
             .text(item_label(state, &template))
             .text(text);
-            super::present(state, connection, dialog);
+            super::present(state, connection, &ctx, "stock_detail", dialog);
         }
         Target::None | Target::Refresh | Target::Stock(_) => show(state, connection, &ctx, view),
         Target::Show(next) => show(state, connection, &ctx, next),
@@ -903,20 +834,11 @@ fn click(
             close(state, connection, entity, true);
             super::dispatch(state, connection, &ctx, action, ClickPayload(None));
         }
-        Target::Pick { worker, from } => {
+        Target::Pick { worker } => {
             if !ctx.manage {
                 return deny(state, connection, &ctx, view);
             }
-            show(
-                state,
-                connection,
-                &ctx,
-                View::Assign {
-                    worker,
-                    from,
-                    page: 0,
-                },
-            );
+            show(state, connection, &ctx, View::Assign { worker, page: 0 });
         }
         Target::Assign { worker, building } => {
             if !ctx.manage {
@@ -926,17 +848,7 @@ fn click(
                 Ok(()) => {
                     let note = assigned_text(state, &ctx, worker, building);
                     super::say(state, connection, &note);
-                    let next = match view {
-                        View::Hire {
-                            building, origin, ..
-                        }
-                        | View::Assign {
-                            from: Some((building, origin)),
-                            ..
-                        } => View::BuildingContext { building, origin },
-                        _ => View::Resident { worker },
-                    };
-                    show(state, connection, &ctx, next);
+                    super::navigation::back(state, connection, &ctx);
                 }
                 Err(refusal) => {
                     let profession = people(state, ctx.id)
@@ -1642,56 +1554,33 @@ fn render(state: &TickState, ctx: &Ctx, view: View) -> (View, Screen) {
             view,
             filtered_buildings_screen(state, ctx, &name, kind, page),
         ),
-        View::BuildingContext { building, origin } => {
-            (view, building_context_screen(state, ctx, building, origin))
+        View::BuildingContext { building } => (view, building_context_screen(state, ctx, building)),
+        View::BuildingResidents { building, page } => {
+            (view, building_residents_screen(state, ctx, building, page))
         }
-        View::BuildingResidents {
-            building,
-            origin,
-            page,
-        } => (
-            view,
-            building_residents_screen(state, ctx, building, origin, page),
-        ),
-        View::Assign { worker, from, page } => {
-            match assign_screen(state, ctx, worker, from, page) {
-                Some(screen) => (view, screen),
-                None => (
-                    View::Census { filter: 0, page: 0 },
-                    census_screen(state, ctx, 0, 0),
-                ),
-            }
-        }
-        View::Hire {
-            building,
-            origin,
-            page,
-        } => match hire_screen(state, ctx, building, origin, page) {
+        View::Assign { worker, page } => match assign_screen(state, ctx, worker, page) {
             Some(screen) => (view, screen),
             None => (
-                View::BuildingContext { building, origin },
-                building_context_screen(state, ctx, building, origin),
+                View::Census { filter: 0, page: 0 },
+                census_screen(state, ctx, 0, 0),
+            ),
+        },
+        View::Hire { building, page } => match hire_screen(state, ctx, building, page) {
+            Some(screen) => (view, screen),
+            None => (
+                View::BuildingContext { building },
+                building_context_screen(state, ctx, building),
             ),
         },
     }
 }
 
-fn building_context_screen(
-    state: &TickState,
-    ctx: &Ctx,
-    building: BuildingId,
-    origin: Origin,
-) -> Screen {
-    let back_target = match origin {
-        Origin::List { kind, page } => Target::Show(View::FilteredBuildings { kind, page }),
-        Origin::Map { centre, scale } => Target::MapView { centre, scale },
-    };
-    let Some(mut screen) = building_screen(state, ctx, building, origin) else {
+fn building_context_screen(state: &TickState, ctx: &Ctx, building: BuildingId) -> Screen {
+    let Some(mut screen) = building_screen(state, ctx, building) else {
         let mut screen = Screen::new(ctx.t(Key::BuildingGone).to_owned());
-        screen.put(BACK, back(state, ctx), back_target);
+        screen.put(BACK, back(state, ctx), Target::Back);
         return screen;
     };
-    screen.targets[BACK] = back_target;
     screen.put(
         INFO,
         icon(
@@ -1706,7 +1595,6 @@ fn building_context_screen(
         ),
         Target::Review {
             building,
-            origin,
             certificate: true,
         },
     );
@@ -1728,7 +1616,6 @@ fn building_residents_screen(
     state: &TickState,
     ctx: &Ctx,
     building: BuildingId,
-    origin: Origin,
     page: usize,
 ) -> Screen {
     let Some(home) = state
@@ -1736,7 +1623,7 @@ fn building_residents_screen(
         .get(ctx.id)
         .and_then(|record| record.buildings.get(&building))
     else {
-        return building_context_screen(state, ctx, building, origin);
+        return building_context_screen(state, ctx, building);
     };
     let people = people(state, ctx.id);
     let residents: Vec<_> = people
@@ -1777,17 +1664,9 @@ fn building_residents_screen(
         Target::Refresh,
     );
     navigation(&mut screen, state, ctx, page, pages, |page| {
-        View::BuildingResidents {
-            building,
-            origin,
-            page,
-        }
+        View::BuildingResidents { building, page }
     });
-    screen.put(
-        BACK,
-        back(state, ctx),
-        Target::Show(View::BuildingContext { building, origin }),
-    );
+    screen.put(BACK, back(state, ctx), Target::Back);
     screen
 }
 
@@ -1837,7 +1716,7 @@ fn production_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
             Target::Dialog("order_start"),
         );
     }
-    screen.put(BACK, back(state, ctx), Target::Show(View::Dashboard));
+    screen.put(BACK, back(state, ctx), Target::Back);
     screen
 }
 
@@ -1885,11 +1764,7 @@ fn recipes_screen(
         at,
         page,
     });
-    screen.put(
-        BACK,
-        back(state, ctx),
-        Target::Show(View::Production { page: 0 }),
-    );
+    screen.put(BACK, back(state, ctx), Target::Back);
     screen
 }
 
@@ -1922,8 +1797,6 @@ fn dashboard_screen(state: &TickState, ctx: &Ctx) -> Screen {
         (28, Icon::CraftingTable, Key::ProductionOrders, "orders"),
         (30, Icon::IronPickaxe, Key::Projects, "projects"),
         (32, Icon::IronHelmet, Key::Army, "army"),
-        (34, Icon::WhiteBanner, Key::Neighbours, "neighbours"),
-        (49, Icon::Book, Key::Checklist, "checklist"),
         (52, Icon::LimeDye, Key::NextStep, "next"),
         (53, Icon::Book, Key::Help, "help"),
     ] {
@@ -1933,7 +1806,7 @@ fn dashboard_screen(state: &TickState, ctx: &Ctx) -> Screen {
             Target::Dialog(route),
         );
     }
-    screen.put(BACK, back(state, ctx), Target::Dialog("main"));
+    screen.put(BACK, back(state, ctx), Target::Back);
     screen
 }
 
@@ -2074,7 +1947,7 @@ fn resources_screen(state: &TickState, ctx: &Ctx) -> Screen {
         ),
         Target::Dialog("storage"),
     );
-    screen.put(BACK, back(state, ctx), Target::Show(View::Dashboard));
+    screen.put(BACK, back(state, ctx), Target::Back);
     screen.put(
         ACTION,
         icon(state, Icon::Chest, 1, text(storage_label(ctx)), &[]),
@@ -2147,7 +2020,7 @@ fn resource_screen(state: &TickState, ctx: &Ctx, group: u8, page: usize) -> Scre
     navigation(&mut screen, state, ctx, page, pages, |page| {
         View::Resource { group, page }
     });
-    screen.put(BACK, back(state, ctx), Target::Show(View::Resources));
+    screen.put(BACK, back(state, ctx), Target::Back);
     screen.put(
         ACTION,
         icon(state, Icon::Chest, 1, text(storage_label(ctx)), &[]),
@@ -2194,7 +2067,7 @@ fn projects_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
         icon(state, Icon::IronPickaxe, 1, text(ctx.t(Key::Status)), &[]),
         Target::Show(View::Project { page: 0 }),
     );
-    screen.put(BACK, back(state, ctx), Target::Show(View::Dashboard));
+    screen.put(BACK, back(state, ctx), Target::Back);
     navigation(&mut screen, state, ctx, page, pages, |page| {
         View::Projects { page }
     });
@@ -2202,7 +2075,7 @@ fn projects_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
 }
 
 fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
-    let mut screen = Screen::new(tr(ctx, "Construction", "Строительство").to_owned());
+    let mut screen = Screen::new(ctx.t(Key::Projects).to_owned());
     let Some(record) = state.settlements.get(ctx.id) else {
         return screen;
     };
@@ -2230,7 +2103,7 @@ fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
                 text(name),
                 &lore,
             ),
-            Target::MapAt(project.origin),
+            Target::Dialog("project_status_details"),
         );
     }
     for (index, order) in crate::settlements::construction::orders(record).enumerate() {
@@ -2314,11 +2187,7 @@ fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
         icon(state, Icon::Book, 1, text(ctx.t(Key::Projects)), &[]),
         Target::Show(View::Projects { page: 0 }),
     );
-    screen.put(
-        BACK,
-        back(state, ctx),
-        Target::Show(View::Projects { page: 0 }),
-    );
+    screen.put(BACK, back(state, ctx), Target::Back);
     screen
 }
 
@@ -2443,6 +2312,9 @@ fn storage_screen(state: &TickState, ctx: &Ctx, name: &str, page: usize) -> Scre
         };
         (title, lore)
     };
+    if stock.is_empty() && !stores.images.is_empty() && !stores.unavailable {
+        lore.insert(0, ctx.t(Key::EmptyStorage).to_owned());
+    }
     lore.push(page_text(ctx, page, pages));
     lore.push(tr(ctx, "Click: refresh", "Клик — обновить").to_owned());
     screen.put(
@@ -2450,7 +2322,7 @@ fn storage_screen(state: &TickState, ctx: &Ctx, name: &str, page: usize) -> Scre
         icon(state, Icon::Chest, 1, text(title), &lore),
         Target::Refresh,
     );
-    screen.put(BACK, back(state, ctx), Target::Dialog("main"));
+    screen.put(BACK, back(state, ctx), Target::Back);
     navigation(&mut screen, state, ctx, page, pages, |page| View::Storage {
         page,
     });
@@ -2587,7 +2459,7 @@ fn census_screen(state: &TickState, ctx: &Ctx, filter: u8, page: usize) -> Scree
         filter,
         page,
     });
-    screen.put(BACK, back(state, ctx), Target::Show(View::Dashboard));
+    screen.put(BACK, back(state, ctx), Target::Back);
     screen.put(
         LIST,
         icon(
@@ -2611,11 +2483,7 @@ fn resident_screen(state: &TickState, ctx: &Ctx, worker: Uuid) -> Screen {
             icon(state, Icon::Barrier, 1, text(ctx.t(Key::StateChanged)), &[]),
             Target::Show(View::Census { filter: 0, page: 0 }),
         );
-        screen.put(
-            BACK,
-            back(state, ctx),
-            Target::Show(View::Census { filter: 0, page: 0 }),
-        );
+        screen.put(BACK, back(state, ctx), Target::Back);
         return screen;
     };
     screen.title = format!(
@@ -2644,24 +2512,14 @@ fn resident_screen(state: &TickState, ctx: &Ctx, worker: Uuid) -> Screen {
             .to_owned()],
         ),
         if ctx.manage {
-            Target::Pick { worker, from: None }
+            Target::Pick { worker }
         } else {
             Target::Refresh
         },
     );
     for (slot, item, label, position) in [
-        (
-            12,
-            Icon::RedBed,
-            tr(ctx, "Home / bed", "Дом / кровать"),
-            person.home,
-        ),
-        (
-            14,
-            Icon::FilledMap,
-            tr(ctx, "Workplace", "Место работы"),
-            person.job,
-        ),
+        (12, Icon::RedBed, ctx.t(Key::HomeMap), person.home),
+        (14, Icon::FilledMap, ctx.t(Key::WorkMap), person.job),
     ] {
         let detail = position
             .map(|at| super::corner_text([at.x, at.y, at.z]))
@@ -2698,11 +2556,7 @@ fn resident_screen(state: &TickState, ctx: &Ctx, worker: Uuid) -> Screen {
             page: 0,
         }),
     );
-    screen.put(
-        BACK,
-        back(state, ctx),
-        Target::Show(View::Census { filter: 0, page: 0 }),
-    );
+    screen.put(BACK, back(state, ctx), Target::Back);
     screen.put(
         ACTION,
         icon(
@@ -2713,7 +2567,7 @@ fn resident_screen(state: &TickState, ctx: &Ctx, worker: Uuid) -> Screen {
             &[],
         ),
         if ctx.manage {
-            Target::Pick { worker, from: None }
+            Target::Pick { worker }
         } else {
             Target::Refresh
         },
@@ -2746,11 +2600,7 @@ fn households_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
     navigation(&mut screen, state, ctx, page, pages, |page| {
         View::Households { page }
     });
-    screen.put(
-        BACK,
-        back(state, ctx),
-        Target::Show(View::Census { filter: 0, page: 0 }),
-    );
+    screen.put(BACK, back(state, ctx), Target::Back);
     screen
 }
 
@@ -2849,11 +2699,7 @@ fn household_screen(state: &TickState, ctx: &Ctx, id: Option<(u64, u64)>, page: 
     navigation(&mut screen, state, ctx, page, pages, |page| {
         View::Household { id, page }
     });
-    screen.put(
-        BACK,
-        back(state, ctx),
-        Target::Show(View::Households { page: 0 }),
-    );
+    screen.put(BACK, back(state, ctx), Target::Back);
     screen
 }
 
@@ -2901,7 +2747,6 @@ fn filtered_buildings_screen(
             building_icon(state, ctx, building, &lore),
             Target::Show(View::BuildingContext {
                 building: building.id,
-                origin: Origin::List { kind, page },
             }),
         );
     }
@@ -2915,6 +2760,20 @@ fn filtered_buildings_screen(
         .iter()
         .map(|(category, count)| format!("{category}: {count}"))
         .collect();
+    if count == 0 {
+        lore.push(ctx.t(Key::EmptyBuildings).to_owned());
+        screen.put(
+            22,
+            icon(
+                state,
+                Icon::IronPickaxe,
+                1,
+                text(ctx.t(Key::Projects)),
+                &[ctx.t(Key::EmptyBuildings).to_owned()],
+            ),
+            Target::Dialog("projects"),
+        );
+    }
     lore.push(page_text(ctx, page, pages));
     let title = match ctx.lang {
         Lang::En => format!("Certified buildings: {count}"),
@@ -2925,7 +2784,7 @@ fn filtered_buildings_screen(
         icon(state, Icon::Bricks, 1, text(title), &lore),
         Target::Refresh,
     );
-    screen.put(BACK, back(state, ctx), Target::Show(View::Dashboard));
+    screen.put(BACK, back(state, ctx), Target::Back);
     if ctx.manage {
         screen.put(
             ACTION,
@@ -2956,7 +2815,7 @@ fn filtered_buildings_screen(
     screen
 }
 
-fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId, origin: Origin) -> Option<Screen> {
+fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId) -> Option<Screen> {
     let building = state.settlements.get(ctx.id)?.buildings.get(&id)?.clone();
     let people = people(state, ctx.id);
     let busy = super::busy_workers(state, ctx.id);
@@ -2984,7 +2843,7 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId, origin: Origin)
                     Lang::Ru => format!("Для уровня {next} нужно:"),
                 });
                 upgrade.extend(
-                    super::missing_text(&error)
+                    super::missing_text(ctx, &error)
                         .split(", ")
                         .map(|need| format!("- {need}")),
                 );
@@ -3013,7 +2872,6 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId, origin: Origin)
             ),
             Target::Review {
                 building: id,
-                origin,
                 certificate: true,
             },
         );
@@ -3041,7 +2899,6 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId, origin: Origin)
         if ctx.manage && construction.is_some() {
             Target::Review {
                 building: id,
-                origin,
                 certificate: false,
             }
         } else {
@@ -3092,7 +2949,6 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId, origin: Origin)
                     if ctx.manage {
                         Target::Pick {
                             worker: person.uuid,
-                            from: Some((id, origin)),
                         }
                     } else {
                         Target::Show(View::Resident {
@@ -3117,7 +2973,6 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId, origin: Origin)
                     if ctx.manage {
                         Target::Show(View::Hire {
                             building: id,
-                            origin,
                             page: 0,
                         })
                     } else {
@@ -3173,16 +3028,11 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId, origin: Origin)
             ),
             Target::Show(View::BuildingResidents {
                 building: id,
-                origin,
                 page: 0,
             }),
         );
     }
-    screen.put(
-        BACK,
-        back(state, ctx),
-        Target::Show(View::Buildings { page: 0 }),
-    );
+    screen.put(BACK, back(state, ctx), Target::Back);
     screen.put(
         LIST,
         icon(state, Icon::Paper, 1, text(ctx.t(Key::Buildings)), &[]),
@@ -3191,13 +3041,7 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId, origin: Origin)
     Some(screen)
 }
 
-fn assign_screen(
-    state: &TickState,
-    ctx: &Ctx,
-    worker: Uuid,
-    from: Option<(BuildingId, Origin)>,
-    page: usize,
-) -> Option<Screen> {
+fn assign_screen(state: &TickState, ctx: &Ctx, worker: Uuid, page: usize) -> Option<Screen> {
     let record = state.settlements.get(ctx.id)?;
     let people = people(state, ctx.id);
     let person = people.iter().find(|person| person.uuid == worker)?;
@@ -3247,25 +3091,15 @@ fn assign_screen(
         );
     }
     screen.put(INFO, info, Target::Refresh);
-    let back_to = from.map_or(View::Resident { worker }, |(building, origin)| {
-        View::BuildingContext { building, origin }
-    });
-    screen.put(BACK, back(state, ctx), Target::Show(back_to));
+    screen.put(BACK, back(state, ctx), Target::Back);
     navigation(&mut screen, state, ctx, page, pages, |page| View::Assign {
         worker,
-        from,
         page,
     });
     Some(screen)
 }
 
-fn hire_screen(
-    state: &TickState,
-    ctx: &Ctx,
-    id: BuildingId,
-    origin: Origin,
-    page: usize,
-) -> Option<Screen> {
+fn hire_screen(state: &TickState, ctx: &Ctx, id: BuildingId, page: usize) -> Option<Screen> {
     let building = state.settlements.get(ctx.id)?.buildings.get(&id)?.clone();
     let people = people(state, ctx.id);
     let busy = super::busy_workers(state, ctx.id);
@@ -3303,17 +3137,9 @@ fn hire_screen(
         building_icon(state, ctx, &building, &lore),
         Target::Refresh,
     );
-    screen.put(
-        BACK,
-        back(state, ctx),
-        Target::Show(View::BuildingContext {
-            building: id,
-            origin,
-        }),
-    );
+    screen.put(BACK, back(state, ctx), Target::Back);
     navigation(&mut screen, state, ctx, page, pages, |page| View::Hire {
         building: id,
-        origin,
         page,
     });
     Some(screen)
@@ -3517,27 +3343,7 @@ fn profession_item(profession: Profession) -> Icon {
 }
 
 fn profession_name(ctx: &Ctx, profession: Profession) -> &'static str {
-    match profession {
-        Profession::None => tr(ctx, "Unemployed", "Безработный"),
-        Profession::Nitwit => tr(ctx, "Nitwit", "Бездельник"),
-        Profession::Armorer => tr(ctx, "Armorer", "Бронник"),
-        Profession::Butcher => tr(ctx, "Butcher", "Мясник"),
-        Profession::Cartographer => tr(ctx, "Cartographer", "Картограф"),
-        Profession::Cleric => tr(ctx, "Cleric", "Священник"),
-        Profession::Farmer => tr(ctx, "Farmer", "Фермер"),
-        Profession::Fisherman => tr(ctx, "Fisherman", "Рыбак"),
-        Profession::Fletcher => tr(ctx, "Fletcher", "Лучник"),
-        Profession::Leatherworker => tr(ctx, "Leatherworker", "Кожевник"),
-        Profession::Librarian => tr(ctx, "Librarian", "Библиотекарь"),
-        Profession::Mason => tr(ctx, "Mason", "Каменщик"),
-        Profession::Shepherd => tr(ctx, "Shepherd", "Пастух"),
-        Profession::Toolsmith => tr(ctx, "Toolsmith", "Инструментальщик"),
-        Profession::Weaponsmith => tr(ctx, "Weaponsmith", "Оружейник"),
-        Profession::Miner => tr(ctx, "Miner", "Шахтёр"),
-        Profession::Lumberjack => tr(ctx, "Lumberjack", "Лесоруб"),
-        Profession::Builder => tr(ctx, "Builder", "Строитель"),
-        Profession::Soldier => tr(ctx, "Soldier", "Солдат"),
-    }
+    super::ui_text::profession(ctx.lang, profession)
 }
 
 // ----------------------------------------------------------------------- icons

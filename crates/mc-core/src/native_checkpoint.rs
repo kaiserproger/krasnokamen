@@ -498,7 +498,13 @@ impl RecoveredWorld {
     }
 }
 
-pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError> {
+/// The registry a recovery runs on: content plus the plugin startup
+/// contribution the configured deployment pins.
+///
+/// One function so offline recovery and backup verification cannot disagree
+/// about which native types a world has — a copy verified under a bare registry
+/// would refuse a world that serves perfectly.
+pub fn recovery_registry(config: &CoreConfig) -> Result<crate::registry::CoreRegistry, CoreError> {
     let mut registry = crate::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref())?;
     // Offline recovery resolves the same pinned native types as live startup.
     // No tick events are started and no guest command is applied.
@@ -518,7 +524,11 @@ pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError>
         )?,
     }
     drop(runtime);
-    let registry = Arc::new(registry);
+    Ok(registry)
+}
+
+pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError> {
+    let registry = Arc::new(recovery_registry(config)?);
     let path = config.world_dir.join("native/state.redb");
     if !path.is_file() {
         return Err(import_required(config));
@@ -808,6 +818,17 @@ pub fn recover_with_reader(
     registry: Arc<crate::registry::CoreRegistry>,
     reader: NativeCheckpointReader,
 ) -> Result<RecoveredWorld, CoreError> {
+    recover_with_clock(config, registry, reader, false)
+}
+
+/// Only the explicit offline converter admits legacy missing clock anchors.
+/// Admission, export and ordinary recovery require the persisted current law.
+fn recover_with_clock(
+    config: &CoreConfig,
+    registry: Arc<crate::registry::CoreRegistry>,
+    reader: NativeCheckpointReader,
+    legacy: bool,
+) -> Result<RecoveredWorld, CoreError> {
     let checkpoint = reader
         .read_checkpoint_metadata()
         .map_err(|e| read_refusal(config, e))?;
@@ -953,11 +974,27 @@ pub fn recover_with_reader(
             Ok(())
         })
         .map_err(|e| CoreError::Storage(e.to_string()))?;
+    let initial_clock = manifest.climate.map(|image| match image.game_clock {
+        crate::weather::GameClockImage::Held {
+            game_ticks,
+            held_since: None,
+        } if legacy => crate::weather::GameClockImage::Held {
+            game_ticks,
+            held_since: Some(manifest.tick),
+        },
+        clock => clock,
+    });
+    let mut game_clock = crate::journal::ReplayGameClock::new(manifest.tick, initial_clock)?;
+    if !legacy {
+        game_clock.observe_debt_stamp(manifest.climate, manifest.tick)?;
+    }
     let recovered_tick = crate::journal::visit_complete_batches_after(
         &config.world_dir.join("journal"),
         manifest.tick,
+        crate::journal::WalIdentity::new(reader.store_uuid(), &registry.blocks),
         |batch| {
             let batches = [batch];
+            game_clock.observe_batches(&batches, legacy)?;
             for (&dimension, replay) in &mut dimensions {
                 let mut routed = crate::dimensions::journal_for_dimension(&batches, dimension);
                 if dimension != Dimension::Overworld {
@@ -1011,13 +1048,24 @@ pub fn recover_with_reader(
                         }
                     }
                 }
-                *replay = crate::journal::apply_batch_images(std::mem::take(replay), &routed);
+                *replay = crate::journal::apply_batch_images_with_clock(
+                    std::mem::take(replay),
+                    &routed,
+                    &game_clock,
+                );
             }
             Ok(())
         },
     )?;
+    let clock_tick = dimensions[&Dimension::Overworld].tick;
+    let held_ticks = clock_tick - game_clock.game_ticks(clock_tick);
+    let anchored_since = if legacy {
+        0
+    } else {
+        game_clock.finish_debt_upgrade(clock_tick)?
+    };
     for (&dimension, replay) in &mut dimensions {
-        crate::journal::advance_replay_clocks(replay);
+        crate::journal::advance_replay_clocks_with_clock(replay, &game_clock, held_ticks, legacy);
         replay.plugins.validate()?;
         replay.block_ticks.validate().map_err(|error| {
             CoreError::Storage(format!(
@@ -1047,7 +1095,12 @@ pub fn recover_with_reader(
     }
     let scoreboard = root.scoreboard.clone();
     let bossbars = root.bossbars.clone();
-    let climate = root.climate;
+    let climate = root.climate.map(|mut image| {
+        if !legacy {
+            image.sim_debt_anchored_since = Some(anchored_since);
+        }
+        image
+    });
     let difficulty = root.difficulty;
     let default_game_mode = root.default_game_mode;
     let gamerules = root.gamerules.clone();
@@ -1075,6 +1128,13 @@ pub fn recover_with_reader(
                 )));
             }
         }
+    }
+    #[cfg(test)]
+    {
+        dimensions
+            .get_mut(&Dimension::Overworld)
+            .expect("overworld replay")
+            .game_clock = Some(game_clock);
     }
     Ok(RecoveredWorld {
         config: config.clone(),
@@ -1181,6 +1241,7 @@ pub fn generator(
 pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage, CoreError> {
     let mut manifest = world.manifest.clone();
     let tick = world.dimensions[&Dimension::Overworld].tick;
+    let held_ticks = world.dimensions[&Dimension::Overworld].recovered_held_ticks;
     let mut entities = Vec::new();
     let mut players = Vec::new();
     for (&dimension, replay) in &world.dimensions {
@@ -1210,12 +1271,7 @@ pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage
         image.debt = replay
             .sim_debt
             .values()
-            .map(|image| crate::journal::SimDebtImage {
-                last_sim: image.last_sim_at(tick),
-                remaining: image.remaining,
-                tick,
-                ..*image
-            })
+            .map(|image| image.at(tick, held_ticks))
             .collect();
         image.generated_entity_claims = replay.generated_entity_claims.clone();
         image.tickets = replay.tickets.clone();
@@ -1279,13 +1335,7 @@ pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage
     validate_manifest(&manifest)?;
     let mut globals = world.checkpoint.globals.clone();
     crate::maps::checkpoint(&root.saved_maps, tick, &mut globals)?;
-    // Settlement rows follow every dimension WAL tail: live images overwrite
-    // rows tagged with their home dimension, tombstones delete them. Sequence
-    // is the max over rows, tails, and the durable row so exported worlds
-    // never reuse an id.
-    let mut sequence =
-        crate::settlements::persistence::checkpoint_sequence(&globals, world.manifest.tick)
-            .unwrap_or(0);
+    // Battle and settlement owners project their existing images into globals.
     for (&dimension, replay) in &world.dimensions {
         if let Some(image) = crate::battle::persistence::image(replay) {
             globals.insert(
@@ -1293,34 +1343,13 @@ pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage
                 record(tick, image.as_bytes().to_vec()),
             );
         }
-        sequence = sequence.max(replay.settlement_high_water);
-        for (&id, settlement) in &replay.settlements {
-            sequence = sequence.max(id).max(settlement.id.0);
-            globals.insert(
-                crate::settlements::persistence::row_key(settlement.id),
-                record(
-                    tick,
-                    serde_json::to_vec(&crate::settlements::persistence::Row {
-                        dimension,
-                        value: settlement,
-                    })
-                    .map_err(|e| CoreError::Storage(e.to_string()))?,
-                ),
-            );
-        }
-        for id in &replay.settlement_removed {
-            if !replay.settlements.contains_key(id) {
-                globals.remove(&format!("settlement/{id}"));
-            }
-        }
     }
-    globals.insert(
-        "settlement_sequence".into(),
-        record(
-            tick,
-            serde_json::to_vec(&sequence).map_err(|e| CoreError::Storage(e.to_string()))?,
-        ),
-    );
+    crate::settlements::persistence::fold_checkpoint(
+        &mut globals,
+        &world.dimensions,
+        world.manifest.tick,
+        tick,
+    )?;
     globals.insert(
         "checkpoint".into(),
         record(
@@ -1393,6 +1422,8 @@ pub fn refresh_metadata(
     );
     Ok(())
 }
+
+pub mod game_clock_upgrade;
 
 #[cfg(test)]
 #[path = "native_checkpoint_tests.rs"]

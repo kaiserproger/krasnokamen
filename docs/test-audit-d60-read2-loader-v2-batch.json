@@ -16,7 +16,7 @@
     "source_lines_remaining": 280,
     "physical_source_lines_removed": 59,
     "historical_medium_candidates_finalized": 10,
-    "historical_medium_candidates_unfinalized": 506
+    "historical_medium_candidates_unfinalized": 508
   },
   "coverage": {
     "module_and_helpers_read": "Entire339-line original module: all16 test bodies, setUpModule, _configured_run, nested fake permission click callback, adapter record callback, temporary files/environments and all mock fences.",

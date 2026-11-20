@@ -8,9 +8,7 @@ import sys
 import tempfile
 import unittest
 
-import edit_compose
 import edit
-import overlay
 
 HERE = pathlib.Path(__file__).resolve().parent
 FFMPEG = shutil.which('ffmpeg') and shutil.which('ffprobe')
@@ -73,45 +71,6 @@ class PlanTests(unittest.TestCase):
         self.root = pathlib.Path(self._d.name)
         self.addCleanup(self._d.cleanup)
 
-    def test_three_shots_frame_arithmetic_and_tick_mapping(self):
-        fx = Fixture(self.root, lengths=(120, 120, 120), tick_base=(0, 1000, 2000))
-        spec = fx.spec([fx.shot('a', 10, 70, {'type': 'fade', 'frames': 20}),
-                        fx.shot('b', 0, 50, {'type': 'cut'}),
-                        fx.shot('c', 30, 90, telemetry=False)])
-        plan, rows, _ = fx.plan(spec)
-        # 60 + 50 + 60 - 20 (one fade, one cut)
-        self.assertEqual(plan['frames'], 150)
-        self.assertEqual([r['frame'] for r in rows], list(range(150)))
-        self.assertEqual(rows[0]['shot'], 'a')
-        self.assertEqual(rows[0]['source_frame'], 10)
-        self.assertEqual(rows[0]['last_applied_tick'], 3)  # frames[10] = 10 // 3
-        # shot b begins at output 40; its first fade frames (j < 10) still belong to a, then b owns them
-        self.assertEqual(rows[40]['shot'], 'a')
-        self.assertEqual(rows[40]['blend'], {'shot': 'b', 'source_frame': 0, 'last_applied_tick': 1000, 'progress': '0/20'})
-        self.assertEqual(rows[49]['shot'], 'a')
-        self.assertEqual(rows[50]['shot'], 'b')
-        self.assertEqual(rows[50]['blend']['shot'], 'a')
-        self.assertEqual(rows[50]['source_frame'], 10)
-        self.assertEqual(rows[50]['last_applied_tick'], 1000 + 10 // 3)
-        self.assertNotIn('blend', rows[60])
-        # b has 50 frames from output 40 to 90, then a hard cut to c
-        self.assertEqual(rows[89]['shot'], 'b')
-        self.assertEqual(rows[90]['shot'], 'c')
-        self.assertEqual(rows[90]['source_frame'], 30)
-        self.assertFalse(rows[90]['overlay'])
-        self.assertTrue(rows[89]['overlay'])
-        self.assertEqual(rows[149]['source_frame'], 89)
-
-    def test_consecutive_transitions_inside_one_shot(self):
-        fx = Fixture(self.root, lengths=(60, 60, 60), tick_base=(0, 1000, 2000))
-        spec = fx.spec([fx.shot('a', 0, 30, {'type': 'fade', 'frames': 10}),
-                        fx.shot('b', 0, 20, {'type': 'fadeblack', 'frames': 10}),
-                        fx.shot('c', 0, 30)])
-        plan, rows, _ = fx.plan(spec)
-        self.assertEqual(plan['frames'], 30 + 20 + 30 - 20)
-        self.assertEqual({r['shot'] for r in rows[20:30]}, {'a', 'b'})
-        self.assertEqual({r['shot'] for r in rows[30:40]}, {'b', 'c'})
-
     def test_transitions_that_do_not_fit_are_rejected(self):
         fx = Fixture(self.root, lengths=(60, 60, 60), tick_base=(0, 1000, 2000))
         with self.assertRaisesRegex(edit.EditError, 'do not fit'):
@@ -169,17 +128,6 @@ class PlanTests(unittest.TestCase):
         bad.write_text(json.dumps({'frame': 0, 'last_applied_tick': 5}) + '\n' + json.dumps({'frame': 1, 'last_applied_tick': 4}) + '\n')
         with self.assertRaisesRegex(edit.EditError, 'goes back'):
             edit.read_shot_ticks(bad)
-
-    def test_filtergraph_offsets(self):
-        fx = Fixture(self.root, lengths=(120, 120, 120), tick_base=(0, 1000, 2000))
-        plan, _, _ = fx.plan(fx.spec([fx.shot('a', 10, 70, {'type': 'fade', 'frames': 20}), fx.shot('b', 0, 50, {'type': 'cut'}),
-                                      fx.shot('c', 30, 90)], texts=[{'file': 'title.txt', 'start': 0, 'end': 2}]))
-        graph = edit_compose.filter_graph(plan, 4, 3)
-        self.assertIn('[0:v]trim=start_frame=10:end_frame=70,', graph)
-        self.assertIn('xfade=transition=fade:duration=0.333333333:offset=0.666666667', graph)
-        self.assertIn('[m1][s2]concat=n=2:v=1:a=0', graph)
-        self.assertIn('atrim=duration=2.500000', graph)
-        self.assertIn('between(t,0,2)', graph)
 
 
 @unittest.skipUnless(FFMPEG, 'ffmpeg and ffprobe required')

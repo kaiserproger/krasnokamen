@@ -1,7 +1,6 @@
 use super::*;
 use crate::journal::{
-    EntityStateImage, JournalEntry, JournalWriter, Replay, ReplayEntity,
-    read_complete_batches_after, replay_batches,
+    EntityStateImage, JournalEntry, JournalWriter, Replay, ReplayEntity, replay_batches,
 };
 
 struct Empty(u32);
@@ -310,14 +309,14 @@ fn compact_timer_postimages_replay_without_appearance_or_birth_motion_changes() 
         "krasnokamen-spawn-state-wal-{}",
         uuid::Uuid::new_v4()
     ));
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(1, 1, &birth).unwrap();
     writer.append(2, 2, &tail).unwrap();
     writer.flush().unwrap();
     drop(writer);
     let replay = replay_batches(
         Replay::default(),
-        &read_complete_batches_after(&dir.join("journal"), 0).unwrap(),
+        &crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap(),
     );
     let record = &replay.entities[&id.0];
     assert_eq!(record.state, expected);
@@ -351,7 +350,7 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
     let checkpoint_tick = birth_output.tick;
     let dir =
         std::env::temp_dir().join(format!("krasnokamen-controls-wal-{}", uuid::Uuid::new_v4()));
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer
         .append(checkpoint_tick, checkpoint_tick, &birth)
         .unwrap();
@@ -406,7 +405,8 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
     .unwrap();
     let intermediate = replay_batches(
         intermediate,
-        &read_complete_batches_after(&dir.join("journal"), checkpoint_tick).unwrap(),
+        &crate::journal::read_complete_batches_after_test(&dir.join("journal"), checkpoint_tick)
+            .unwrap(),
     );
     assert!(intermediate.entities[&id.0].state.controls.invulnerable);
     assert!(!intermediate.entities[&id.0].state.controls.no_gravity);
@@ -426,7 +426,8 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
     drop(writer);
     let replay = replay_batches(
         replay,
-        &read_complete_batches_after(&dir.join("journal"), checkpoint_tick).unwrap(),
+        &crate::journal::read_complete_batches_after_test(&dir.join("journal"), checkpoint_tick)
+            .unwrap(),
     );
     let record = &replay.entities[&id.0];
     assert_eq!(record.state, expected);
@@ -1330,6 +1331,7 @@ fn active_clock(tick: u64) -> std::collections::BTreeMap<[i32; 2], crate::journa
             chunk: [0, 0],
             tick,
             last_sim: tick,
+            held_anchor: Some(0),
             remaining: 0,
             active: true,
         },
@@ -1348,6 +1350,7 @@ fn replay_chunk_clock_counts_every_active_interval_before_projecting_entities() 
         image: crate::journal::SimDebtImage {
             chunk: [0, 0],
             last_sim,
+            held_anchor: Some(0),
             remaining: 0,
             active,
             tick,
@@ -1437,6 +1440,7 @@ fn replay_crossing_image_moves_clock_attribution_without_persisting_intra_chunk_
                     chunk: [1, 0],
                     tick: 21,
                     last_sim: 21,
+                    held_anchor: Some(0),
                     remaining: 0,
                     active: true,
                 },
@@ -1655,3 +1659,6 @@ fn duplicate_tags_in_legacy_wal_normalize_on_entity_restore() {
     };
     assert_eq!(fields, expected);
 }
+
+#[path = "entity_state_game_clock_tests.rs"]
+mod game_clock_tests;

@@ -61,12 +61,12 @@ def plugin_directory(ctx: ProfileContext) -> Path:
     return directory
 
 
-def prepare_operator_fixture(ctx: ProfileContext, names: list[str]) -> None:
+def prepare_operator_fixture(ctx: ProfileContext, names: list[str], level: int = 4) -> None:
     """Write vanilla access lists beside the krasnokamen config."""
     entries = [{
         "uuid": str(uuid.UUID(bytes=hashlib.md5(f"OfflinePlayer:{name}".encode(),
                                                usedforsecurity=False).digest(), version=3)),
-        "name": name, "level": 4, "bypassesPlayerLimit": False,
+        "name": name, "level": level, "bypassesPlayerLimit": False,
     } for name in names]
     path = ctx.artifact_dir / "ops.json"
     path.write_text(json.dumps(entries, indent=2) + "\n")

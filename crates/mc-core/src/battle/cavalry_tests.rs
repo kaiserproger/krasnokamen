@@ -33,7 +33,7 @@ fn assert_pair(state: &TickState, rider: EntityId, horse: EntityId) {
 
 #[test]
 fn mob_rider_survives_native_checkpoint_restart_and_rejects_duplicate_or_nested_links() {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     let (mut state, _, pos) = fixture();
     let horse = spawn(&mut state, "horse", pos);
     let rider = spawn(&mut state, "husk", pos);
@@ -49,11 +49,12 @@ fn mob_rider_survives_native_checkpoint_restart_and_rejects_duplicate_or_nested_
         .extend([horse, rider]);
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let root = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(root.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(root.path(), 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&root.path().join("journal"), 0).unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&root.path().join("journal"), 0).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     crate::mounts::persistence::validate_replay(&replay).unwrap();
     let (mut restarted, _, _) = fixture();

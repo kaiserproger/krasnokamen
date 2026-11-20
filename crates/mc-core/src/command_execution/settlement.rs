@@ -51,6 +51,9 @@ pub(super) fn settlement(
                 );
                 return;
             };
+            // Console ownership is "Server", not a player UUID: it receives
+            // no free chest. Removing a town never resets the granted count.
+            let founder = uuid::Uuid::parse_str(&actor).ok();
             match state.settlements.create(
                 &mut state.settlement_sequence,
                 name.clone(),
@@ -59,6 +62,31 @@ pub(super) fn settlement(
                 *radius,
             ) {
                 Ok(id) => {
+                    let eligible = founder.filter(|player| {
+                        crate::settlements::starter_chest::eligible(state, *player)
+                    });
+                    let storage = eligible.and_then(|_| {
+                        crate::settlements::autonomy::storage_chest_site(state, executor, anchor)
+                    });
+                    if let Some(storage) = storage {
+                        crate::settlements::autonomy::ensure_storage_chest(
+                            state,
+                            changes,
+                            id,
+                            anchor,
+                            Some(storage),
+                        );
+                        crate::settlements::starter_chest::record(
+                            state,
+                            eligible.expect("a player grant admitted the chest"),
+                        );
+                    } else if eligible.is_some() {
+                        error(
+                            state,
+                            connection,
+                            "Founded without a starter chest: no safe chest spot was found; your grant remains unused.",
+                        );
+                    }
                     crate::settlements::bind_residents(state, id);
                     crate::settlements::refresh_owner_names(state);
                     let record = state.settlements.get(id).expect("created record");
@@ -356,6 +384,17 @@ pub(super) fn settlement(
                     connection,
                     format!("Native settlement action refused: {failure:?}."),
                 ),
+            }
+        }
+        SettlementCommand::BuildingCertifyHere { kind } => {
+            match crate::settlements::building_commands::certify_here(
+                state,
+                executor,
+                actor.as_deref(),
+                operator,
+                kind,
+            ) {
+                Ok(message) | Err(message) => error(state, connection, message),
             }
         }
         SettlementCommand::BuildingCertify { kind, min, max } => {

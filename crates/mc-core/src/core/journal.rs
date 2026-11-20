@@ -113,7 +113,7 @@ pub(super) fn start_checkpoint(
 
 /// The WAL can own only one inventory in an otherwise unloaded chunk. Hydrate
 /// its neighbours before freezing slots or projecting the opaque container owners.
-fn prepare_container_checkpoint(state: &mut TickState) -> bool {
+pub(crate) fn prepare_container_checkpoint(state: &mut TickState) -> bool {
     let materialized = state
         .world
         .materialize_container_chunks(state.block_entities.keys().copied());
@@ -325,23 +325,6 @@ pub(super) fn start_checkpoint_with_reply(
     work_tx.send(JournalWork::Checkpoint(Box::new(job))).is_ok()
 }
 
-/// Settlement and transit rows the WAL deleted since the previous checkpoint:
-/// present in the durable globals image but absent from this capture. Removing
-/// them here keeps the tombstone and the row deletion in one atomic transaction.
-pub(super) fn list_stale_settlement_rows(
-    globals: &std::collections::BTreeMap<String, mc_world::native::NativeDomainRecord>,
-    captured: &std::collections::BTreeMap<String, mc_world::native::NativeDomainRecord>,
-) -> Vec<String> {
-    globals
-        .keys()
-        .filter(|key| {
-            (key.starts_with("settlement/") || key.starts_with("transit/"))
-                && !captured.contains_key(key.as_str())
-        })
-        .cloned()
-        .collect()
-}
-
 /// Freeze durable ticket post-images on the same tick thread as all world domains.
 pub(crate) fn checkpoint_tickets(
     state: &TickState,
@@ -416,6 +399,7 @@ pub(crate) fn journal_entries_for_tick(
     crate::abstract_sim::cancel_external_writes(state);
     let mut entries = Vec::new();
     crate::plugin::journal(state, &mut entries);
+    crate::settlements::starter_chest::journal_entries(state, &mut entries);
     // Native gameplay owners always ride an explicit Dimension envelope,
     // including Overworld. Child ticks extend the raw images and the existing
     // child wrap below supplies their envelope.
@@ -723,6 +707,9 @@ pub(super) fn journal_loop(
     // then reads an older tick. The writer's verified startup interval and
     // contiguous append coverage keep that gate independent of pruned files.
     let committed_tick = std::sync::atomic::AtomicU64::new(initial_manifest.tick);
+    // Constant for the writer's lifetime: every batch this process appends and
+    // every batch it verifies is bound to the opened store and palette.
+    let wal_identity = writer.identity();
     // Set by the native writer after a panic; the journal side then halts exactly
     // like an append failure.
     let native_failed = std::sync::atomic::AtomicBool::new(false);
@@ -745,6 +732,7 @@ pub(super) fn journal_loop(
                     &committed_tick,
                     &native_failed,
                     initial_manifest,
+                    wal_identity,
                 );
             })
             .expect("spawn native checkpoint writer");
@@ -930,6 +918,7 @@ pub(super) fn native_writer_loop(
     committed_tick: &std::sync::atomic::AtomicU64,
     native_failed: &std::sync::atomic::AtomicBool,
     initial_manifest: CheckpointManifest,
+    wal_identity: crate::journal::WalIdentity,
 ) {
     // The current complete manifest is the recovery/pruning authority.
     let mut prev_manifest = initial_manifest;
@@ -944,8 +933,11 @@ pub(super) fn native_writer_loop(
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             run_native_work(
                 work,
-                world_dir,
-                &store,
+                &NativeWorld {
+                    world_dir,
+                    store: &store,
+                    wal_identity,
+                },
                 committed_tick,
                 native_failed,
                 &mut prev_manifest,
@@ -977,15 +969,28 @@ pub(super) fn native_writer_loop(
     );
 }
 
+/// The world the native writer works on: the directory and store it writes,
+/// and the WAL identity this writer's frames carry.
+#[derive(Clone, Copy)]
+pub(super) struct NativeWorld<'a> {
+    pub world_dir: &'a std::path::Path,
+    pub store: &'a mc_world::native::NativeStore,
+    pub wal_identity: crate::journal::WalIdentity,
+}
+
 pub(super) fn run_native_work(
     work: NativeWork,
-    world_dir: &std::path::Path,
-    store: &mc_world::native::NativeStore,
+    world: &NativeWorld<'_>,
     committed_tick: &std::sync::atomic::AtomicU64,
     native_failed: &std::sync::atomic::AtomicBool,
     prev_manifest: &mut CheckpointManifest,
     block_log: &mut crate::block_log::Backlog,
 ) -> std::ops::ControlFlow<&'static str> {
+    let NativeWorld {
+        world_dir,
+        store,
+        wal_identity,
+    } = *world;
     match work {
         NativeWork::Shutdown => return std::ops::ControlFlow::Break("shutdown requested"),
         NativeWork::Checkpoint { mut job, plugins } => {
@@ -1119,7 +1124,7 @@ pub(super) fn run_native_work(
                 &mut store.snapshot_reader(),
                 prev_manifest.tick,
                 through,
-                store.store_uuid(),
+                wal_identity,
             );
             match &result {
                 Ok(backup) => tracing::info!(
@@ -1264,7 +1269,7 @@ pub(super) fn commit_checkpoint(
     for (key, row) in &job.gameplay {
         globals.insert(key.clone(), row.clone());
     }
-    for key in list_stale_settlement_rows(&globals, &job.gameplay) {
+    for key in crate::settlements::persistence::stale_rows(&globals, &job.gameplay) {
         globals.remove(&key);
     }
     // This runs only on the journal thread (or startup before tick ownership).

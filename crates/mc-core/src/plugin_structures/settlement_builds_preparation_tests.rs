@@ -12,6 +12,67 @@ fn counts(state: &TickState) -> BTreeMap<u32, i32> {
 }
 
 #[test]
+fn a_native_haul_journals_recipe_changes_but_not_custody_transfers() {
+    let (mut state, id, slot) = crate::settlements::construction::tests::fixture();
+    crate::settlements::construction::tests::start(&mut state, id, "house", 1, None);
+    crate::settlements::construction::tests::fund(&mut state, "house", 1);
+    let item = |name| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap()
+    };
+    let logs = item("minecraft:oak_log");
+    let planks = item("minecraft:oak_planks");
+    for stack in &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots {
+        if stack.item_id == planks && !stack.is_empty() {
+            *stack = mc_data::ItemStack::new(logs, (stack.count + 3) / 4);
+        }
+    }
+    let uuid = state.entities.row(slot).uuid;
+    let project = &mut state.settlements.get_mut(id).unwrap().projects[0];
+    project.builder = Some((uuid, None));
+    let handle = project.structure.clone();
+    let before = counts(&state);
+    let next = next_material(&state, id, &handle).unwrap().unwrap().0;
+    fetch(&mut state, uuid, &handle, [1, 201, 1], next).unwrap();
+    let mut physical_delta: BTreeMap<_, i64> = counts(&state)
+        .into_iter()
+        .map(|(item, count)| (item, i64::from(count)))
+        .collect();
+    for stack in state
+        .entities
+        .row(slot)
+        .villager
+        .as_ref()
+        .unwrap()
+        .inventory
+        .iter()
+        .flatten()
+    {
+        *physical_delta.entry(stack.item_id).or_default() += i64::from(stack.count);
+    }
+    for (item, count) in before {
+        *physical_delta.entry(item).or_default() -= i64::from(count);
+    }
+    physical_delta.retain(|_, count| *count != 0);
+    assert_eq!(
+        physical_delta.len(),
+        2,
+        "only the log-to-plank recipe transforms stock"
+    );
+    assert!(physical_delta[&logs] < 0);
+    assert_eq!(physical_delta[&planks], -4 * physical_delta[&logs]);
+    state.plugins.structure_cache.decoded.take();
+    let recovered = ledger(&state).unwrap();
+    assert_eq!(
+        recovered.structures()[&handle].crafting_delta,
+        physical_delta
+    );
+}
+
+#[test]
 fn an_upgrade_clear_cell_credits_its_drops_exactly_once() {
     let (mut state, id, builder, project, root, _) = crate::settlements::forestry::tests::forest();
     let mut project = project;
@@ -47,6 +108,7 @@ fn an_upgrade_clear_cell_credits_its_drops_exactly_once() {
             &cells,
             &before_ids,
             false,
+            &mut BTreeMap::new(),
         ),
         Ok(())
     );
@@ -108,6 +170,7 @@ fn an_upgrade_clear_cell_credits_a_foreign_blocks_drop_exactly_once() {
             &cells,
             &expected_identity,
             false,
+            &mut BTreeMap::new(),
         ),
         Ok(())
     );
@@ -159,6 +222,7 @@ fn non_tree_log_variants_cannot_pass_uncredited_through_preparation_debit() {
                 &cells,
                 &expected,
                 false,
+                &mut BTreeMap::new(),
             ),
             Err(Failure::Blocked),
             "{name}"
@@ -247,6 +311,7 @@ fn touching_grove_is_felled_whole_with_exact_drops() {
                 &cells,
                 &admitted,
                 false,
+                &mut BTreeMap::new(),
             ),
             Ok(()),
             "one-cell grove debit at {:?}",
@@ -385,6 +450,7 @@ fn late_player_log_in_an_admitted_manifest_is_not_felled() {
             &cells,
             &admitted,
             false,
+            &mut BTreeMap::new(),
         ),
         Err(Failure::Blocked),
         "a late player block is not felled"
@@ -506,6 +572,7 @@ fn planted_tree_is_felled_cell_by_cell_to_the_end() {
                 &cells,
                 &admitted,
                 false,
+                &mut BTreeMap::new(),
             ),
             Ok(()),
             "one-cell debit at {:?}",
@@ -573,7 +640,17 @@ fn a_dug_out_free_pavement_cell_writes_nothing_and_the_plan_completes() {
     let empty: BTreeMap<String, u64> = BTreeMap::new();
     let builder = uuid.to_string();
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &empty, &[], &[], false),
+        debit(
+            &mut state,
+            id,
+            &handle,
+            &builder,
+            &empty,
+            &[],
+            &[],
+            false,
+            &mut BTreeMap::new()
+        ),
         Ok(()),
         "the debit is not where the dug cell is refused"
     );
@@ -612,7 +689,17 @@ fn a_foreign_block_in_a_free_pavement_cell_is_untouched() {
     let builder = uuid.to_string();
     let empty: BTreeMap<String, u64> = BTreeMap::new();
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &empty, &[], &[], false),
+        debit(
+            &mut state,
+            id,
+            &handle,
+            &builder,
+            &empty,
+            &[],
+            &[],
+            false,
+            &mut BTreeMap::new()
+        ),
         Ok(())
     );
     advance(&mut state, id, &handle, uuid).expect("the stage advances past the foreign cell");
@@ -655,7 +742,17 @@ fn a_dug_out_free_retirement_cell_never_reopens_the_house() {
     let builder = uuid.to_string();
     let empty: BTreeMap<String, u64> = BTreeMap::new();
     assert_eq!(
-        debit(&mut state, id, &handle, &builder, &empty, &[], &[], false),
+        debit(
+            &mut state,
+            id,
+            &handle,
+            &builder,
+            &empty,
+            &[],
+            &[],
+            false,
+            &mut BTreeMap::new()
+        ),
         Ok(())
     );
     let dirt_item = state

@@ -1,0 +1,19 @@
+diff --git a/crates/mc-core/src/journal.rs b/crates/mc-core/src/journal.rs
+index f859a9e..fa461de 100644
+--- a/crates/mc-core/src/journal.rs
++++ b/crates/mc-core/src/journal.rs
+@@ -1037,6 +1037,14 @@ fn verify_bindings(
+             uuid::Uuid::from_bytes(identity.store),
+         )));
+     }
++    if palette != identity.palette {
++        return Err(BatchDecodeError::Framing(format!(
++            "batch was written under block palette {} but this build registers {}; block-state \
++             ids would remap, so the tail is refused",
++            identity_hex(&palette),
++            identity_hex(&identity.palette),
++        )));
++    }
+     Ok(())
+ }
+ 

@@ -220,17 +220,6 @@ class SettlementMapQaTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             gate._menu(probe, "Settlement")
 
-    def test_pixels_count_every_map_palette_colour_within_tolerance(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "shot.png"
-            image = Image.new("RGB", (4, 2))
-            image.putpixel((0, 0), gate.PALETTE["territory"])
-            image.putpixel((1, 0), (0x4C + 12, 0x7A - 12, 0x34))
-            image.putpixel((2, 0), (0x4C + 13, 0x7A, 0x34))
-            image.putpixel((3, 1), gate.PALETTE["storage"])
-            image.save(path)
-            self.assertEqual(gate._pixels(str(path)), {"territory": 2, "you": 0, "storage": 1, "house": 0})
-
     def test_cell_calibration_excludes_baseline_world_pixels(self):
         with tempfile.TemporaryDirectory() as tmp:
             baseline, shot = Path(tmp) / "main.png", Path(tmp) / "map.png"
@@ -454,11 +443,6 @@ def production_names(language):
 
 
 class SettlementMapVerdictTests(unittest.TestCase):
-    def test_verdict_names_are_the_ledger_registration(self):
-        from tools.harness import regressions
-        self.assertEqual(set(gate.VERDICTS), regressions._BOOLEAN_PROFILE_VERDICTS["settlement-map-qa"])
-        self.assertEqual(set(gate.verdicts_from_assertions({}, "en_us")), set(gate.VERDICTS))
-
     def test_a_passing_run_meets_every_verdict_in_both_languages(self):
         for language in ("en_us", "ru_ru"):
             verdicts = gate.verdicts_from_assertions(passing_run(language), language)

@@ -53,6 +53,7 @@ fn furnace_bank_survives_wal_and_native_chunk_checkpoint() {
         .write()
         .unwrap();
     let registry = Arc::clone(&state.registry);
+    let checkpoint_tick = state.tick;
     drop(state);
     let config = crate::CoreConfig::new(dir.clone(), 42);
     let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
@@ -70,8 +71,16 @@ fn furnace_bank_survives_wal_and_native_chunk_checkpoint() {
         [8, 201, 10],
         mc_world::OVERWORLD_GEOMETRY,
     );
-    world.ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
+    world.refresh_active_clock(checkpoint_tick);
+    let pos = ChunkPos { x: 0, z: 0 };
+    world.ensure_blocking(&[(pos, 0)].into_iter().collect());
+    assert!(
+        world.load_error(pos).is_none(),
+        "{:?}",
+        world.load_error(pos)
+    );
     let mut restored = TickState::new(registry, world, 0, 512);
+    restored.tick = checkpoint_tick;
     sync_chunk_block_entities(&mut restored);
     let rules = restored.registry.item_rules();
     let bank = restored

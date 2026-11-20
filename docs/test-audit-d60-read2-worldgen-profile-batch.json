@@ -1,0 +1,111 @@
+{
+  "decision": "D60.2",
+  "base": "3154fe7fbaa0fdb62d00c0be1ce9501d48115626",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/worldgen_diff/test_profile.py",
+  "source_sha256_before": "c82265bcf319f8a2b2d8fe12a9a013be42f359af6ce6522a9ce04c74466c5042",
+  "status": "Every test body, shared fixture and nested callback read; Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 3,
+    "removed_R4": 1,
+    "removed_R1": 0,
+    "removed_R3": 0,
+    "retained_K1": 0,
+    "retained_K2": 0,
+    "retained_U": 2,
+    "historical_medium_candidates_finalized": 1,
+    "source_lines_before": 29,
+    "source_lines_remaining": 19,
+    "physical_source_lines_removed": 10
+  },
+  "coverage": {
+    "module_and_helpers_read": "Whole 29-line module, generator callbacks, whole profile.py and full920209ff3 parser/test correction read.",
+    "retained_assertions": "Retained bodies and shared fixtures unchanged.",
+    "production_unchanged": true,
+    "removed_scaffolding": []
+  },
+  "evidence": {
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 3,
+      "external_matches": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "worktrees_checked": 578,
+      "source_file_present": 575,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": [
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/PerfABMid",
+          "warning: could not open directory 'tools/worldgen_diff/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/Stage2ServerRed0102",
+          "warning: could not open directory 'tools/worldgen_diff/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/Stage2ServerRed23",
+          "warning: could not open directory 'tools/worldgen_diff/': No such file or directory\n"
+        ]
+      ]
+    },
+    "candidate_count_basis": "Only original 799 R4/medium IDs; additional U removals do not enlarge denominator.",
+    "provenance": [
+      "No real profiling run executed or speedup claimed; regression-like prefix correction retained U without observed-failure provenance."
+    ]
+  },
+  "records": [
+    {
+      "id": "tools/worldgen_diff/test_profile.py::ProfileReceiptTests::test_libtest_prefix_does_not_hide_first_sample",
+      "name": "test_libtest_prefix_does_not_hide_first_sample",
+      "file": "tools/worldgen_diff/test_profile.py",
+      "original_fn_line": 7,
+      "original_end_line": 11,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Preserves the first STAGES sample when libtest prefixes its line; 920209ff3 includes the startswith-to-partition correction but no observed dropped-sample receipt read.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/worldgen_diff/test_profile.py::ProfileReceiptTests::test_reads_exact_three_seed_stage_rows",
+      "name": "test_reads_exact_three_seed_stage_rows",
+      "file": "tools/worldgen_diff/test_profile.py",
+      "original_fn_line": 13,
+      "original_end_line": 21,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Generates own expected seed/size/timing literals then checks parser returns them; no independent captured profile output or actual parse defect in feature19936a5f68.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/worldgen_diff/test_profile.py::ProfileReceiptTests::test_missing_samples_cannot_be_reported_as_a_speedup",
+      "name": "test_missing_samples_cannot_be_reported_as_a_speedup",
+      "file": "tools/worldgen_diff/test_profile.py",
+      "original_fn_line": 23,
+      "original_end_line": 25,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Refuses successful test output without the required seed samples so an empty measurement cannot become a claimed speedup; no actual false-speedup receipt established.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": "not-run; Main owns verification",
+  "verify_command": "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest tools.worldgen_diff.test_profile"
+}

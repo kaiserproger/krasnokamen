@@ -33,6 +33,8 @@ mod old_world_import_tests;
 #[cfg(test)]
 mod path_tests;
 #[cfg(test)]
+mod persistence_byte_tests;
+#[cfg(test)]
 mod player_slot_import_tests;
 mod pre_rename;
 #[cfg(test)]

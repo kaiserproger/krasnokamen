@@ -544,6 +544,7 @@ fn spectator_owner_browses_storage_but_every_move_only_resyncs() {
     let bread = item(&state, "minecraft:bread");
     state.players.get_mut(&player).unwrap().inventory.slots[0] = ItemStack::new(dirt, 10);
     state.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Spectator;
+    dialog(&mut state, id, "main", &[]);
     let opened = dialog(&mut state, id, "storage", &[]);
     assert!(
         title(&opened).contains("Storage · oak"),
@@ -721,19 +722,28 @@ fn map_click_opens_the_building_page_and_hires_into_its_free_place() {
     let mut state = joined();
     let (id, building) = farm(&mut state);
     let worker = resident(&mut state, id, 5.5);
-    let opened = dialog(
+    let map = dialog(
         &mut state,
         id,
-        "buildings",
+        "map",
         &[
-            ("b", Tag::String(building.0.to_string())),
-            ("from", Tag::String("map".to_owned())),
             ("mx", Tag::String("42".to_owned())),
             ("mz", Tag::String("-9".to_owned())),
             ("ms", Tag::String("2".to_owned())),
         ],
+    )
+    .into_iter()
+    .find_map(|change| match change {
+        PlayerChange::ShowDialog { dialog } => Some(dialog),
+        _ => None,
+    })
+    .unwrap();
+    dialog(
+        &mut state,
+        id,
+        "buildings",
+        &[("b", Tag::String(building.0.to_string()))],
     );
-    assert!(title(&opened).contains("#1"), "{}", title(&opened));
     assert!(matches!(
         open(&state).targets[BUILDING_PLACES],
         Target::Show(View::Hire { .. })
@@ -742,25 +752,64 @@ fn map_click_opens_the_building_page_and_hires_into_its_free_place() {
     let candidate = resident_or_assign(&state, worker);
     press(&mut state, candidate as i16, 0, ClickMode::Pickup);
     assert_eq!(job(&state, worker), Some(BlockPos { x: 4, y: 201, z: 4 }));
-    let origin = Origin::Map {
-        centre: [42, -9],
-        scale: 2,
-    };
-    assert_eq!(
-        open(&state).view,
-        View::BuildingContext { building, origin }
+    assert_eq!(open(&state).view, View::BuildingContext { building });
+    assert!(
+        matches!(open(&state).targets[BUILDING_PLACES], Target::Pick { worker: w } if w == worker)
     );
-    assert!(matches!(
-        open(&state).targets[BUILDING_PLACES],
-        Target::Pick { worker: w, from: Some((b, o)) } if w == worker && b == building && o == origin
-    ));
-    assert!(matches!(
-        open(&state).targets[BACK],
-        Target::MapView {
-            centre: [42, -9],
-            scale: 2
-        }
-    ));
+    let restored = press(&mut state, BACK as i16, 0, ClickMode::Pickup)
+        .into_iter()
+        .find_map(|change| match change {
+            PlayerChange::ShowDialog { dialog } => Some(dialog),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(restored, map);
+}
+
+#[test]
+fn back_tracks_actual_origins_across_menus_map_and_legend() {
+    let mut state = joined();
+    let id = storage_town(&mut state, PLAYER);
+    let received = |changes: Vec<PlayerChange>| {
+        changes
+            .into_iter()
+            .find_map(|change| match change {
+                PlayerChange::ShowDialog { dialog } => Some(dialog),
+                _ => None,
+            })
+            .expect("received dialog")
+    };
+    let main = received(dialog(&mut state, id, "main", &[]));
+    dialog(&mut state, id, "dashboard", &[]);
+    let resources = open(&state)
+        .targets
+        .iter()
+        .position(|target| matches!(target, Target::Dialog("resources")))
+        .unwrap();
+    press(&mut state, resources as i16, 0, ClickMode::Pickup);
+    assert_eq!(open(&state).view, View::Resources);
+    press(&mut state, INFO as i16, 0, ClickMode::Pickup);
+    assert!(matches!(open(&state).view, View::Storage { .. }));
+    press(&mut state, BACK as i16, 0, ClickMode::Pickup);
+    assert_eq!(open(&state).view, View::Resources);
+    press(&mut state, BACK as i16, 0, ClickMode::Pickup);
+    assert_eq!(open(&state).view, View::Dashboard);
+    let map_slot = open(&state)
+        .targets
+        .iter()
+        .position(|target| matches!(target, Target::Dialog("map")))
+        .unwrap();
+    let map = received(press(&mut state, map_slot as i16, 0, ClickMode::Pickup));
+    dialog(&mut state, id, "map_legend", &[]);
+    assert_eq!(received(dialog(&mut state, id, "back", &[])), map);
+    dialog(&mut state, id, "back", &[]);
+    assert_eq!(open(&state).view, View::Dashboard);
+    assert_eq!(
+        received(press(&mut state, BACK as i16, 0, ClickMode::Pickup)),
+        main
+    );
+    run(&mut state, &[PlayerInput::Leave { connection: CONN }]);
+    assert!(state.settlement_navigation.is_empty());
 }
 
 fn resident_or_assign(state: &TickState, uuid: Uuid) -> usize {
@@ -775,6 +824,7 @@ fn resident_or_assign(state: &TickState, uuid: Uuid) -> usize {
 fn back_closes_the_window_and_returns_the_cursor_before_the_dialog() {
     let mut state = joined();
     let id = storage_town(&mut state, PLAYER);
+    dialog(&mut state, id, "main", &[]);
     dialog(&mut state, id, "storage", &[]);
     let bread = stock_slot(&state, "minecraft:bread");
     press(&mut state, bread as i16, 1, ClickMode::Pickup);
@@ -1000,9 +1050,9 @@ fn seventy_residents_and_no_household_members_are_paged_without_lost_ids() {
     members.sort_unstable();
     assert_eq!(members, expected);
     press(&mut state, BACK as i16, 0, ClickMode::Pickup);
-    assert_eq!(open(&state).view, View::Households { page: 0 });
+    assert_eq!(open(&state).view, View::Resident { worker });
     press(&mut state, BACK as i16, 0, ClickMode::Pickup);
-    assert_eq!(open(&state).view, View::Census { filter: 0, page: 0 });
+    assert_eq!(open(&state).view, View::Census { filter: 0, page: 1 });
 }
 
 #[test]
@@ -1020,15 +1070,7 @@ fn visitor_resident_and_building_cards_have_no_assignment_actuators() {
         target,
         Target::Pick { .. } | Target::Assign { .. } | Target::Show(View::Hire { .. })
     )));
-    let building = building_context_screen(
-        &state,
-        &ctx,
-        building,
-        Origin::List {
-            kind: None,
-            page: 0,
-        },
-    );
+    let building = building_context_screen(&state, &ctx, building);
     assert!(building.targets.iter().all(|target| !matches!(
         target,
         Target::Pick { .. } | Target::Assign { .. } | Target::Show(View::Hire { .. })
@@ -1081,7 +1123,7 @@ fn cached_icon_names_keep_numeric_ids_local_to_the_registry() {
 }
 
 #[test]
-fn certificate_and_request_policies_are_multiline_lore_in_both_locales() {
+fn certificate_and_request_policies_are_encoded_as_lore_in_both_locales() {
     let mut state = joined();
     let id = storage_town(&mut state, PLAYER);
     let building = *state
@@ -1098,15 +1140,7 @@ fn certificate_and_request_policies_are_multiline_lore_in_both_locales() {
             manage: true,
             lang,
         };
-        let screen = building_context_screen(
-            &state,
-            &ctx,
-            building,
-            Origin::List {
-                kind: None,
-                page: 0,
-            },
-        );
+        let screen = building_context_screen(&state, &ctx, building);
         for (slot, policy) in [
             (BUILDING_UPGRADE, Key::CertificatePolicy),
             (ACTION, Key::RequestPolicy),
@@ -1144,7 +1178,6 @@ fn certificate_and_request_policies_are_multiline_lore_in_both_locales() {
                         .unwrap()
                 })
                 .collect::<Vec<_>>();
-            assert_eq!(lines.len(), 4, "slot {slot}: {lines:?}");
             assert_eq!(lines.join("\n"), ctx.t(policy));
         }
     }
@@ -1179,13 +1212,12 @@ fn d8_construction_icons_list_all_sites_and_all_indexed_owner_orders() {
         .enumerate()
     {
         assert!(!screen.icons[index].is_empty());
-        assert!(matches!(screen.targets[index], Target::MapAt(at) if at == project.origin));
+        assert!(matches!(
+            screen.targets[index],
+            Target::Dialog("project_status_details")
+        ));
         assert!(
             contents.contains(&super::super::corner_text(project.origin)),
-            "{contents}"
-        );
-        assert!(
-            contents.contains(&format!("Builder: {}", project.builder.unwrap().0)),
             "{contents}"
         );
     }

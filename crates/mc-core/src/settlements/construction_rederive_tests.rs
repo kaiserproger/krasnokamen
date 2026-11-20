@@ -407,7 +407,7 @@ fn restart_credits_once(edits: [&str; 3], expect: &[(&str, i32)]) {
     let (output, _, _) = crate::tick::run_tick(&mut s.state, &[]);
     crate::core::journal_entries_for_tick(&mut s.state, &output).unwrap();
     checkpoint(&mut s.state, &config);
-    let mut writer = JournalWriter::open(&live, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&live, 1).unwrap();
     let mut copies = Vec::new();
     for index in 0..3 {
         let before = work.path().join(format!("before-{index}"));
@@ -782,7 +782,7 @@ fn preparation_portions_hold_their_order_through_restarts_mid_portion_and_repair
     let (output, _, _) = crate::tick::run_tick(&mut s.state, &[]);
     crate::core::journal_entries_for_tick(&mut s.state, &output).unwrap();
     checkpoint(&mut s.state, &config);
-    let mut writer = JournalWriter::open(&live, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&live, 1).unwrap();
     // Restart points: after step 4 (cut, one cell done), after step 6 (fill,
     // one cell done).
     let mut saved = Vec::new();
@@ -1513,7 +1513,7 @@ fn a_terrain_stage_restart_pays_planks_once_and_dirt_nothing() {
     let (output, _, _) = crate::tick::run_tick(&mut s.state, &[]);
     crate::core::journal_entries_for_tick(&mut s.state, &output).unwrap();
     checkpoint(&mut s.state, &config);
-    let mut writer = JournalWriter::open(&live, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&live, 1).unwrap();
     // Run the terrain stage out, journaling every step to the WAL, and stop
     // before the build stage publishes.
     while status(&s).current_stage_index == 0 && status(&s).state != ScriptStructureState::Committed
@@ -1738,7 +1738,7 @@ fn planned_upgrade_cut_and_terrain_credits_survive_a_native_restart_before_build
             .world
             .mark_block_entity_dirty(crate::boundary::BlockPos { x: 1, y: Y, z: 1 });
         checkpoint(&mut s.state, &CoreConfig::new(live.clone(), 42));
-        let mut writer = JournalWriter::open(&live, 1).unwrap();
+        let mut writer = JournalWriter::open_test(&live, 1).unwrap();
         for _ in 0..4096 {
             if status(&s).current_stage_index as usize >= build {
                 break;
@@ -1789,7 +1789,7 @@ fn planned_upgrade_cut_and_terrain_credits_survive_a_native_restart_before_build
             .entities
             .slot_of_uuid(restored.builder)
             .unwrap();
-        let mut writer = JournalWriter::open(&saved, 1).unwrap();
+        let mut writer = JournalWriter::open_test(&saved, 1).unwrap();
         for _ in 0..4096 {
             if restored
                 .state

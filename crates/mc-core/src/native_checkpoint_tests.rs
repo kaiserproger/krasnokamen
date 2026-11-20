@@ -154,6 +154,31 @@ pub(crate) fn read_manifest(config: &CoreConfig) -> Result<CheckpointManifest, C
         .map_err(|e| CoreError::Storage(e.to_string()))
 }
 
+/// Standalone native fixtures must restore the checkpoint clock before admitting
+/// chunks whose simulation-debt anchors were captured at that boundary.
+pub(crate) fn restore_fixture_clock(
+    state: &mut crate::tick::TickState,
+    config: &CoreConfig,
+) -> Result<(), CoreError> {
+    let manifest = read_manifest(config)?;
+    state.tick = manifest.tick;
+    if let Some(climate) = manifest.climate {
+        climate.restore(state)?;
+    } else {
+        state
+            .tick_control
+            .restore_clock(Default::default(), state.tick)?;
+    }
+    state.world.restore_sim_debt(
+        &Replay {
+            tick: state.tick,
+            recovered_held_ticks: state.tick_control.held_ticks_at(state.tick),
+            ..Default::default()
+        },
+        None,
+    )
+}
+
 pub(crate) fn write_manifest(
     config: &CoreConfig,
     manifest: &CheckpointManifest,
@@ -240,7 +265,7 @@ fn inhabited_time_crash_recovery_checkpoint_tail_share_wal_tick() {
     state
         .world
         .ensure_blocking(&[(pos, 0)].into_iter().collect());
-    let mut writer = JournalWriter::open(&source, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&source, 1).unwrap();
     for tick in 1..=12 {
         assert_eq!(
             append_tick(&mut state.world, &mut writer, pos, tick, true),
@@ -375,7 +400,7 @@ fn inhabited_time_production_tick_wal_recovers_and_closes_without_players_after_
     state
         .world
         .ensure_blocking(&[(pos, 0)].into_iter().collect());
-    let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(directory.path(), 1).unwrap();
     for tick in 1..=5 {
         let input = if tick == 1 {
             vec![PlayerInput::Join {
@@ -1121,7 +1146,7 @@ fn statistics_native_checkpoint_restart_and_wal_postimage_restore() {
         tick: 2,
     };
     {
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         writer.append(2, 2, std::slice::from_ref(&entry)).unwrap();
     }
     let restarted = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
@@ -1165,7 +1190,7 @@ fn statistics_native_checkpoint_restart_and_wal_postimage_restore() {
         tick: 3,
     };
     {
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         writer.append(3, 3, std::slice::from_ref(&patch)).unwrap();
         // A complete global batch advances time without any player mutation.
         writer.append(4, 203, &[]).unwrap();

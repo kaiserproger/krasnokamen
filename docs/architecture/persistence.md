@@ -6,12 +6,92 @@ world and plugin domains. Anvil is offline import/export, never serving
 fallback or dual-write. See [ADR 0013](../decisions/0013-core-model-v2.md) and
 [operations](../OPERATING.md).
 
+### CoreUnload byte oracle
+
+`tools/dev/bytecheck.sh BASE_TREE SLICE_TREE --out ABSOLUTE_RECEIPT_DIR`
+compares the D65 deterministic fixture at matching ticks: checkpoint rows at
+tick 1, the raw single-tick WAL frames at ticks 2–3, live recovery and offline
+`recover_offline → encode_checkpoint` at tick 3, then export and both custody
+and crash censuses. Recovery always reads fresh copies of the **base** world;
+it starts no tick thread. Native rows include their version, capture tick,
+SHA-256 and base64 payload. Export compares every complete output file byte for
+byte, including compressed payloads, region headers and padding.
+The fixture requires the locally imported `data/vanilla` content.
+Both captures start from byte-verified copies of one prepared native store:
+the runner's ignored seed producer closes it before either copy is opened.
+This keeps the WAL v2 store UUID identical without excluding any frame bytes.
+`seed.json` and each producer's `input.json` record every seed file's size and
+SHA-256; cached runs without that immutable seed, or with a changed seed, refuse.
+The negative-control classifier accepts only a complete WAL v2 header (56 bytes,
+payload length at offset 48); the verdict still compares the entire frame.
+Build receipts pin the producer binaries before each private Cargo target is
+discarded, so the two-tree oracle needs only one scratch target at a time.
+
+Run base against itself first: the two captures execute in separate processes
+and must match. For isolated scratch-tree controls, reuse that immutable
+`--base-run RECEIPT/base` and pass `--control X1|X2|X3`.
+`BASE_TREE` must remain the originally recorded tree at its recorded HEAD and
+source fingerprint; a mismatched cached run is refused before any producer runs.
+X1 swaps the `SettlementRecord.owner_name`/`anchor` declaration order; X2 swaps the
+`VillagerState.mining_progress`/`lumber_progress` declaration order; X3 swaps
+only those two progress NBT pushes. X2 also reaches transit JSON through
+`Transit.Record.members`' embedded `ReplayEntity.villager`: both checkpoint
+transit rows and the surviving transit's live-reopen row change, as do WAL
+`Entity` and `Transit` images. A control is red only after all producers
+successfully finish and its exact expected row/WAL/export diff is observed.
+Compilation, recovery and missing-artifact errors never count as a red control.
+Any byte difference refuses an ordinary comparison; `verdict.json` records each
+artifact independently.
+
+For the additional real-image gate, run
+`python3 tools/dev/bytecheck_real.py BASE_TREE SLICE_TREE RETAINED_RUN --out ABSOLUTE_RECEIPT_DIR`.
+The stopped retained run contains `world/`, `plugins/` and `server.toml`.
+The runner records every source file's SHA-256, verifies its snapshot, then uses
+the base pin's normal `NativeStore::open/drop` to repair redb on that copy only.
+It records post-repair hashes, refuses changes outside `native/state.redb`,
+freezes the repaired input read-only and makes fresh writable operation copies.
+The original is never opened as a database; its hashes are rechecked afterward.
+A public-API probe is linked against each
+tree's own libraries and pinned with source and binary fingerprints. It compares
+all encoded global/player/entity rows, complete export files, custody and crash
+censuses, plus ordinary census after frozen Core startup/shutdown. The ordinary
+census projection excludes source paths and backing-file CRCs, not its checkpoint
+tick or authoritative counts; the complete receipt remains alongside it.
+The tail must advance the checkpoint and the image must contain settlements.
+`tail-records.json` states which domain records it actually carries; replayed
+climate/game-clock state is retained too. A frozen real image is not presented
+as an active settlement or transit tail. The synthetic oracle supplies that
+non-vacuous WAL coverage. `--world PATH` selects a certified world subdirectory
+when it is not `RETAINED_RUN/world`; only that world, plugins and config are copied.
+Build manifests record a path-and-content SHA-256 of ignored `data/vanilla`
+inputs separately from Git provenance. A reused older base's current data hash
+is labelled as an observation, not retroactively claimed as its build-time hash.
+For a slice-only real-image repeat, `--base-run PREVIOUS_RECEIPT` verifies and
+reuses its frozen input, base source fingerprint, binary pin and artifacts.
+`--census-refusal EXACT_ERROR` requires the same canonical refusal on both pins;
+that result proves matching fail-closed behaviour, not a successful ordinary census.
+
 ## WAL
 
 `crates/mc-core/src/journal.rs` writes `batch-<lo>-<hi>.bin` containing whole
-ticks. Its little-endian frame is `[magic u32][version u32][tick_lo u64]
-[tick_hi u64][length u32][crc32 u32][payload]`; the payload is JSON lines of
-absolute post-images and tombstones. The writer writes
+ticks. Its little-endian frame is `[magic u32][version u32][store id 16][block
+palette 8][tick_lo u64][tick_hi u64][length u32][crc32 u32][payload]`; the
+payload is JSON lines of absolute post-images and tombstones. Frame version 2
+binds every batch to the store that wrote it and to the block-state palette its
+numeric block ids mean (Books R4-P3, R5-G5): the store id is the native header's
+required random `store_uuid`, and the palette is the first eight bytes of
+SHA-256 over the registry's `(state id, block, properties)` mapping. Recovery
+opens the batch only when both match the opened store and the registry this
+build replays with; a foreign journal directory, a copy of another world's tail
+or a tail written under a changed palette is refused by name, never replayed
+with a warning. Both fields are compared unconditionally: a zero id or digest is
+a value, not a wildcard, because the CRC covers only the payload and the header
+can be rewritten. A format-1 frame is refused too, with the way out in the
+message: start the world once with the build that wrote it, stop it and confirm
+its final checkpoint covers the last published batch (ADR 0013 keeps no
+compatibility surface of our own; `docs/OPERATING.md` has the two upgrade
+procedures). A batch at or below a published checkpoint is never replayed, so no
+journal file has to be removed or moved. The writer writes
 `batch-<lo>-<hi>.bin.tmp`, fsyncs that file, renames it to publish the batch, and
 fsyncs the journal directory once per `CoreConfig.journal_fsync_every_batches`
 published batches (default 10, `[data] journal_fsync_every_batches`); a
@@ -264,10 +344,79 @@ upper bound on the census interval. See the clock images in
 [`journal.rs`](../../crates/mc-core/src/journal.rs) and their
 [`replay`](../../crates/mc-core/src/journal/replay.rs).
 
+Live active-chunk refresh uses the root's decided pair `H(T), H(T-1)`, also
+after dimensional travel; parked Nether/End `TickControl` copies are not clock
+authorities. A dormant activation subtracts held time with checked arithmetic:
+an inconsistent prefix fails before commit rather than wrapping into catch-up
+debt. The already-published WAL remains the recovery boundary.
+
+Recovery installs the recovered native tick and held prefix before admitting
+chunks. An extras-only debt anchor ahead of that boundary is invalid. A
+checkpoint and its WAL tail also share the climate image's debt epoch; a test
+that captures a checkpoint and then keeps writing with the same live state
+must persist that image rather than synthesizing a legacy base.
+
 A process SIGKILL exercises process recovery, not arbitrary power-loss or storage
 hardware durability. The [drills below](#hazards-and-defense-layers) state their
 fault model; [crash-census evidence](../QA_AGENT_PROTOCOL.md#crash-census-evidence)
 keeps lifecycle uncertainty separate from proved loss or conservation.
+
+### Explicit conversion of legacy frozen clocks
+
+Ordinary recovery refuses a frozen legacy clock without debt anchors. On a
+**disposable, stopped copy only**, run
+`krasnokamen --config <matching-config> world upgrade-game-clock --copy <copy>`.
+Keep the original immutable. Canonical paths must differ from the configured
+original (including symlink aliases). The command holds the exclusive copy
+lease and folds checkpoint plus published WAL using the existing running-time
+clock, then writes one checkpoint at recovered native tick `c`. A legacy Held
+checkpoint at `K` without `held_since` uses `K` as its initial boundary; tail
+Held boundaries come from the preceding running counter. Held tail ticks do
+not age dropped items or entity countdowns. Ambiguous transitions refuse
+before checkpoint publication. It archives the old
+`journal` directory untouched after commit; a crash before archive leaves
+covered batches that recovery ignores.
+
+Every winning debt, including cold native-only records, gains an explicit held
+prefix. Active records re-anchor to `(c, H(c))`; inactive records at `L` use
+`max(0, H(c) - (c-L))`. Remaining debt loses `min(remaining, H(c))`, deliberately
+discarding uncertain running debt rather than falsely ageing anything.
+The durable epoch is `sim_debt_anchored_since=c`; anchorless WAL images at or
+after it refuse, including a held world subsequently written by an old binary.
+
+A Held image gets `held_since=c`. When `G>0`, only live-law-eligible Work and
+sleep memories in `[G.saturating_sub(1), c-1]` normalize to the law's targets
+at `r=c-1` (Work saturating subtraction, sleep checked subtraction). An
+eligible value above `c-1` refuses. `G=0` skips normalization, including a one-tick
+world and sleep `None`. Panic deadlines and conversion countdowns stay raw.
+No anchor becomes stale because of this normalization; it is a conservative
+choice, not reconstruction of exact history. An H reset before c9c13b37 can
+overstate G and hide an otherwise fresh value below the chosen range.
+
+The auxiliary conversion record
+`data/krasnokamen-game-clock-upgrade.json` stores checkpoint tick, recovered
+tick, held tail tick count, H, chosen boundary, active/inactive and
+normalized/raw counts and per-chunk dropped debt. The operator command logs
+those totals. Chunk/container post-images, entity tombstones,
+plugin state, migration transit rows and block-log WAL deltas are checkpointed
+before archiving. Existing immutable baselines remain authoritative.
+
+Settlement clocks are restored through their existing owners, not retimed
+generically. Commerce employment `next_due` and caravan `game_deadline`
+distinguish WorldTicks from GameTicks and their restore functions convert
+legacy deadlines once. Production job `next_due` does the same; consumption
+`next_due` is already GameTicks. Migration walking uses game ticks. Production
+`accepted_tick` is provenance, not an elapsed-time clock. Army `next_attack`
+is a native absolute cooldown and remains native. Construction cursors,
+allocator queues and site-turn budgets carry no persisted elapsed-time anchor.
+Villager courtship/despawn/restock and scheduled block/fluid deadlines likewise
+remain native; item ages/countdowns exclude held time during conversion too.
+
+Pre-rename Anvil chunks carrying `SolarisSimLastTick` or `SolarisSimDebt`
+refuse import: the export has no historical held-time H witness. Use a fresh
+world, or convert on a release that still retained held time. Pre-rename
+chunks without debt and vanilla Anvil retain their ordinary import path.
+
 
 ## Checkpoints
 
@@ -341,8 +490,13 @@ committed checkpoint. The offline backup copies it as an ordinary world file and
 covers it by the manifest digest. `world restore` verifies every hash, then the
 restored pair — store id and checkpoint tick read back from the copied store
 against the copied marker — and on a mismatch removes what it copied and reports
-no world. WAL batches still carry no store identity of their own; the marker
-binds a store to its own checkpoints, not a foreign journal directory to it.
+no world. A hot backup is not reported successful until it has been tried: the
+finished copy is opened read-only and the ordinary recovery reader and WAL
+replay run over it, requiring the recovered tick the copy claims
+(`HOT-BACKUP-STATE-DATABASE-COPY-UNVERIFIED`). Every batch of the copied tail is
+bound to the same store id and palette as the world that wrote it, so a
+CRC-clean but unreplayable batch fails the trial restore instead of surfacing
+at disaster time.
 
 Every offline tool that opens a store without `Core::open` goes through the same
 entry (`NativeStore::open_checked`, or `check_marker_file` where the worldgen
@@ -781,11 +935,21 @@ restore verifies the backup inventory and checksums. The running console
 of the committed checkpoint plus its WAL, and it decodes and CRC-checks every
 batch it copies, so a byte-identical copy of a damaged source is refused
 instead of being published as a backup (Books R5 G3). A `journal/` directory
-belongs to the store it was written with: batches carry no store identity, so a
-foreign or mismatched tail replays into the wrong world without a refusal.
-Never mix the two — `backup` and `restore` always move both, and restoring only
-`native/state.redb` over an existing `journal/` is operator error, not a
-supported path (Books R4-P3). Use the documented operator commands
+belongs to the store it was written with: every batch carries that store's id
+and block-palette digest, so replay refuses a foreign or mismatched tail by
+name instead of folding it into the wrong world (Books R4-P3, R5-G5). Neither
+success path is reported until the copy has been opened as the next serve
+would open it — read-only, or through a repaired scratch copy when redb would
+repair a live store's image, never by writing the backup itself — and the
+ordinary recovery reader and WAL replay run over it to the tick the copy
+claims; a copy that does not replay is withdrawn. The scratch repair copies the
+database inside the destination directory's parent (never inside the archive
+inventory, and never into a system temporary directory on another volume), so
+verification peaks at archive plus one database; the directory is removed after
+the store is closed and a failed removal is reported, and a process crash during
+verification can leave a `.verify-<pid>-<n>` directory to delete by hand. Use
+the documented operator
+commands
 and check their results; a filesystem copy of a live writer is not equivalent.
 Anvil export is not a native backup: native-only plugin and settlement state
 and block-log history are not represented. See [operations](../OPERATING.md)

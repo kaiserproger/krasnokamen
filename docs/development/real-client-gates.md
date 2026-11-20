@@ -821,7 +821,74 @@ the Settings dialog or the map territory.
   `false` as red and `null` as no evidence. A ledger ref
   `harness:settlement-map-qa:localized_text` runs `--client java ... --language ru_ru`
   (the receipt needs the Java prerequisites env, `receipts/BuildHost/java-prereqs.env`);
-  every other verdict runs native with `--timeout-seconds 3600`.
+  `harness:settlement-map-qa:starter_chest_race` runs `--client java ... --scenario quickwins-c1-race`
+  (below); every other verdict runs native with `--timeout-seconds 3600`.
+  A Java run whose client could not load the requested language fails before connect
+  (`scene_shot_client.check_java_language`, marker `Failed to load translations for
+  <locale> from pack vanilla`): such a client still reports the locale to the server but
+  translates item names and vanilla tooltips into `en_us`, so its scene is no evidence
+  for any client-localized text. An asset store missing the `minecraft/lang/<locale>.json`
+  objects is the usual cause (2026-11-19: all 144 lang objects were absent); repair the
+  store instead of accepting the run.
+
+  `settlement-map-qa -- --scenario quickwins --language ru_ru` (native only; the client takes the language
+  from `KRASNOKAMEN_CLIENT_LANGUAGE`, which the lifecycle sets from `client_settings.language`) is the
+  owner-path acceptance of the D63 settlement quick wins, written from the decision text and
+  `receipts/SettlementUX/REPORT.md` section 5 by an agent that did not see the implementation
+  (`tools/harness/backends/settlement_quickwins_qa.py` lists every criterion with its source). One session
+  walks `/settlement create` → the empty starter chest as storage (Storage page count, `data get block`,
+  a Shift-click deposit) → hub → next step → dashboard → Storage → empty Buildings → an order on empty
+  storage with its Russian outcome and storage link → Back to where each screen came from → the active
+  project's icon and status → certifying a small house by marking its two floor corners while standing
+  on its floor → the Buildings list and map → `/settlement guide`. Each criterion is the assertion
+  `QW <id>`; the default run stops at the first unmet one and the receipt names it
+  (`details.client_evidence.quickwins.first_unmet`). `-- --survey` walks every block and records the unmet
+  criteria instead (negative-control plumbing check on a tree without the changes; it fails when any
+  criterion is unmet and is never acceptance). Its negative control is the same run on the tree without
+  the quick wins, with that tree's own server pin.
+
+  `settlement-map-qa -- --scenario quickwins-c1-race [--founding-clocks 1..6] [--found-after-ticks 1..1200]`
+  (native or Java, any language) is the standing check of
+  JAVA-CLIENT-MISSES-FOUNDING-STARTER-CHEST-BLOCK: the same pad and `/settlement create`, but first observer
+  clocks (default 4) on the anchor chunk's far side keep changing blocks of that chunk, and the founding waits
+  (default 100 ticks) until the pad's traffic has left the connection queue; then only C1 is judged with the
+  quickwins diagnostics (15 scans, a ±16 scan, a rescan after 60 s and after a teleport 220 blocks away and
+  back). It publishes `details.verdicts.starter_chest_race`: `true` when the client sees the chest, `false`
+  when it sees it only after coming back (the server had it; only a chunk resend delivered it), `null`
+  otherwise. On the unfixed core (pin `7393780e37a4`) the client missed the chest in every run (Java 7/7,
+  Horizon 2/2, `receipts/ChestDeliveryFix/REVIEW-BRIEF.md`). The options exist only on this scenario.
+
+  `settlement-map-qa -- --scenario stage2 --language ru_ru` (native and Java) is the stage-2 acceptance of the
+  same decision (certification by standing inside and «Проверить здесь», no corner marking), written from the
+  decision text and the stage-2 rules (`tools/harness/backends/settlement_quickwins_stage2.py`). The player is
+  NOT an operator, so privileged fixtures run on the server console: the scene scenario option
+  `server_console: true` starts the server with stdin on `RUN_DIR/console.fifo` (the battle runner's
+  mechanism, `FifoConsole`); `settlement_quickwins_console.ConsoleFixtures` replaces `@s` with the player's
+  name and returns exactly the reply lines between two unique `say` fences. `-- --scenario stage2op` is the
+  same player written into ops.json at level 2 before the server starts (scenario option
+  `operator_level: 2`; the console `op` always grants level 4) and judges only the operator branch of the
+  coordinate form of `/settlement building certify`. Tab-completion denial has no native or Java client
+  tool; the command tree is covered by the `mc-edge` `command_tree` tests. `settlement-map-qa -- --scenario
+  blueprints --language ru_ru|en_us` opens the blueprint list with the player's `/settlement menu projects`
+  and judges that every icon name is a localized word (no snake_case or `minecraft:` ids, no «Unknown»,
+  26 or more distinct names).
+
+## Settlement quick wins on Horizon (`settlement-quickwins-horizon`)
+
+`python3 -m tools.harness run settlement-quickwins-horizon --timeout-seconds 3600` runs the same
+quick-wins walk as `settlement-map-qa --scenario quickwins` on the pinned Horizon 26.3 client
+(`--offscreen` under the harness Xvfb; `KRASNOKAMEN_HORIZON_CLIENT|CTL|RESOURCES` or
+`--horizon-client|--horizon-ctl|--horizon-resources`; `-- --scenario stage2|stage2op` runs the stage-2 walk with a
+non-operator player and console fixtures, or the same player at ops.json level 2; Tab completion there is
+recorded, not judged: the coordinate arguments are integers and offer no suggestion even to a level-2 operator). The harness owns the server (a `Server` with
+its own loopback port, world and empty plugins folder), the Xvfb display and the client in one
+`ExitStack`; a failure at any step stops what was started, and the receipt names the tree fingerprint
+and the server binary path and sha256. Waits are pushes: `Probe.wait` observes and then blocks on the
+client's `wait-for state-change --since REV` (`state.revision`, a read-only extension carried by the QA
+kit at `targets/horizon-qa-kit`), which moves when the dialog, the position, a tracked entity or a
+block write changes. A `ru_ru` run refuses before connect when the client's resources lack
+`assets/minecraft/lang/ru_ru.json` (the film resources carry only `en_us`, so the outcome showed
+English item names next to Russian server text).
 
 ## Distant Horizons gate (`dh-gate`)
 
@@ -936,6 +1003,66 @@ To trace villagers temporarily (never merge): a `tracing::debug!(target:
 server), then grep `server.log` per entity id. `path=0` with a fixed target for
 thousands of ticks means no route; the same position with `path>0` means a
 navigation stall. Compare good and bad runs of the same binary.
+
+## Edge pump lag on real clients (`join-lag-gate`)
+
+`python3 -m tools.harness run join-lag-gate --client native --windowed` covers
+EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS and
+EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP.
+
+The condition is a pump behind the tick. There is no operator knob for that, so
+the gate sets the test/dev-only `KRASNOKAMEN_PUMP_LAG_TICKS=K`: with it, the
+pump waits for K core tick events (the light tick-time stream, subscribed only
+when the knob is set) before each call to the unchanged `next_publication`,
+which then meets a backlog and applies its own skip/drain — the production path
+stays the only path, so a control tree that reverts the fix is exercised exactly
+as the fix is. No clock is read by the knob. Unset or 0 keeps the shipped pump;
+an invalid value fails startup and one `warn` line names the knob (see
+`crates/mc-edge/src/server/pump.rs` beside the queue budget).
+
+The gate runs `/tick rate 3` with K=8: about 2.7 s per publication, past the
+1.6 s publish budget (so the skip applies) and under the 10 s outbox watch (so
+the fixed pump keeps draining), while the pre-fix queue still grows to the whole
+broadcast window. The gate opens its verdicts only on the server's
+`pump lag enabled` warn line, which it waits for with
+`runtime.wait_for_path_condition` (inotify), and it reads the join interval from
+the server's own `login admitted` -> `join landed` pair (`RUST_LOG` sets the pump
+to debug for that line), never from the client's process startup. The gate
+harness itself takes no wall-clock sleep: the join is awaited as a client MCP
+event and the warn line as a filesystem event.
+
+Criteria (rows reference them as `harness:join-lag-gate:<name>`):
+
+- `join_behind_slow_pump`: behind the delayed pump, a fresh client's join has to
+  land inside the 10 s deadline.
+- `live_pump_does_not_halt`: behind the delayed pump, `/stats` keeps advancing
+  `simulation_tick` and the server log carries no `edge pump not draining`.
+
+A verdict whose condition never occurred is `null` (inconclusive: the run ends
+failed with that reason), never `false` — the ledger reads a false verdict as
+the row's symptom, so an unreached condition must not look like a red control.
+
+Options (deterministic, no environment): `--tick-rate N` (1-20, default 3) and
+`--pump-lag-ticks N` (1-64, default 8).
+
+Negative control: run the same command on a control tree that differs only in
+the fix hunks (`stale()` never skips on the queue budget; the anti-xray side
+repair removed) with `KRASNOKAMEN_SERVER_BINARY` naming its build: the join then
+misses its deadline and the core halts with `edge pump not draining`, so both
+verdicts go red.
+
+Not covered here: ANTI-XRAY-BORDER-REVEAL-LOST-ACROSS-SKIPPED-PUBLISH. A held
+chunk's reveal reaches a real client through the plain block-update path in
+both trees, so a client-world read cannot discriminate the chunk-frame repair;
+that row keeps its frame-level unit tests, and a packet/frame-level witness is
+backlog.
+
+Traps: the client data root is a private `XDG_DATA_HOME` linked to the caller's
+content (a shared root leaks settings); the witness and the joiner are ops (the
+gate writes `ops.json` for both); a run without the `pump lag enabled` line is
+red as inconclusive by design, never green; the flood clients the first design
+had are gone — real client work never made a publish longer than a tick here,
+and the load collapsed the core's own rate instead.
 
 ## Settlement and army QA false alarms
 

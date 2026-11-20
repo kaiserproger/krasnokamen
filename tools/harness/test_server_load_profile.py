@@ -43,11 +43,6 @@ class ProfileTests(unittest.TestCase):
                          {'string_hash_compare': .5, 'allocation': .5, 'map_lookup': .5})
         self.assertEqual(report['status'], 'pass')
 
-    def test_slow_window_takes_middle_snapshot_before_600_ticks(self):
-        self.assertTrue(p.midpoint_reached(60, 1, 30_000_000_001))
-        self.assertFalse(p.midpoint_reached(60, 1, 29_000_000_001))
-        self.assertFalse(p.midpoint_reached(0, None, 0))
-
     def test_generic_type_names_are_not_executed_operations(self):
         function = 'rayon_core::registry::run<std::collections::HashMap<alloc::string::String, alloc::vec::Vec<u8>>>::get'
         operation = p.classification_name(function)

@@ -22,7 +22,7 @@ fn checkpoint(root: &std::path::Path, state: &mut TickState) -> CheckpointManife
     state.world.refresh_active_clock(state.tick);
     let out = output(state, ChangeSet::default());
     let entries = journal_entries_for_tick(state, &out).unwrap();
-    let mut writer = JournalWriter::open(root, 1).unwrap();
+    let mut writer = JournalWriter::open_test(root, 1).unwrap();
     writer.append(1, state.tick, &entries).unwrap();
     for dimension in [Dimension::Nether, Dimension::End] {
         let mut child = crate::core::recover_dimension_state(&config, dimension).unwrap();
@@ -168,7 +168,7 @@ fn raids_checkpoint_restart_and_wal_wave_removal_resume_without_duplicates() {
     restored.world.refresh_active_clock(restored.tick);
     let out = output(&restored, changes);
     let entries = journal_entries_for_tick(&mut restored, &out).unwrap();
-    let mut writer = JournalWriter::open(root.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(root.path(), 1).unwrap();
     writer
         .append(restored.tick, restored.tick, &entries)
         .unwrap();
@@ -228,7 +228,7 @@ fn raids_idle_ticks_skip_wal_and_restore_exact_elapsed_counters() {
     crate::raids::run(&mut state, &mut ChangeSet::default());
     state.tick += 1;
     checkpoint(root.path(), &mut state);
-    let mut writer = JournalWriter::open(root.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(root.path(), 1).unwrap();
     for _ in 0..100 {
         crate::raids::run(&mut state, &mut ChangeSet::default());
         state.tick += 1;
@@ -293,7 +293,7 @@ fn high_random_tick_speed_survives_checkpoint_and_wal_recovery() {
     recovered.world.refresh_active_clock(recovered.tick);
     let out = output(&recovered, ChangeSet::default());
     let entries = journal_entries_for_tick(&mut recovered, &out).unwrap();
-    let mut writer = JournalWriter::open(root.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(root.path(), 1).unwrap();
     writer
         .append(recovered.tick, recovered.tick, &entries)
         .unwrap();

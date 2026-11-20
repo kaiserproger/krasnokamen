@@ -50,6 +50,9 @@ mod entity_interest_tests;
 #[path = "plan/books_frames_tests.rs"]
 mod books_frames_tests;
 
+#[path = "plan/coordinator_block_tests.rs"]
+mod coordinator_block_tests;
+
 fn with_cache<T>(f: impl FnOnce(&ChunkPacketCache) -> T) -> T {
     f(&ChunkPacketCache::new())
 }

@@ -30,9 +30,56 @@ For authoring, `tools/blueprints.py check` checks structure, `tools/blueprints.p
 
 ## Planning and streets
 
-Keep the anchor, storage and worksite chunks loaded. Construction uses real items in certified storage and the generated village's bootstrap container, not player inventories. A player-founded settlement has no free stock; certify storage and stock it.
+Keep the anchor, storage and worksite chunks loaded. Construction uses real items in certified storage and the settlement's bootstrap container, not player inventories. A founding grants its own free empty chest only while the player's lifetime granted count is below the number of settlements that player currently owns across dimensions, including the new one. Concurrent settlements can each receive a chest; removing settlements, breaking chests and restarting never decrease the granted count. The chest is placed beside the anchor only when a supported site permits the founding player to place blocks, with headroom and no neighbouring or underlying container. Otherwise founding succeeds without a chest and leaves the count unchanged; place and certify your own storage, or use the unspent entitlement on a later founding. Console-owned settlements receive no player grant. Existing containers are never adopted or emptied by player founding. Per-player granted counts live in the global registry, stored as `settlement_chest/<uuid>` native rows and absolute `StarterChestGranted` WAL images.
 
 The planner selects one active settlement every 20 ticks. It considers missing kinds in this order: storage; houses when certified house capacity is below population; farm; lumber camp; mine; Builder hut (`mason`); barracks from 6 residents; tower from 8. Natural mine and lumber zones do not count as built blueprint kinds. The shepherd's hut and the ten profession workshops are never started autonomously; the owner orders them, and so are single wall sections and gates (`/settlement build wall|gate`): from 10 residents the planner instead walls the settlement in itself, see [perimeter, gates and well](#perimeter-gates-and-well). Funded upgrades are considered for eligible blueprint-built certificates; workshops requiring iron or flint are not on this automatic list. A need without available stock or a capable local source does not conjure materials or have to block another funded kind.
+
+**Receiving capacity (owner D54).** When fewer than one quarter of the physical
+deposit slots are empty, another storehouse takes priority over other autonomous
+construction. The existing owner-order precedence is unchanged. At most one
+storehouse may be active or pending; there is no store-count cap beyond the
+ordinary territory and legal lots. Capacity uses the executor's own deduplicated
+source images, including its physical-container limit, not a second chest index.
+The first cultural store remains unchanged; further Spanish capacity uses the
+ordinary wood/cobblestone `storage` warehouse, not another calcite civic plaza.
+Emergency priority and the receiving-capacity fence apply after a storehouse is
+completed; a missing first civic store keeps its ordinary admission and fallback
+to other funded work.
+
+An additional storehouse's bill is ordered by resource name before the existing
+species and joint-reservation funding proof, rather than by protocol item id.
+Consuming an owed small stack can then make real room for a later recipe output;
+no recipe or capacity check is waived. This funding projection never supplies
+slots to the preparation fence, which still reads the current physical images.
+The selected haul is ordered by its concrete resource names as well, so a small
+owed stack can leave the bank before a recipe needs its slot. The existing
+one-pass packing, joint reservations and atomic inventory commit are unchanged.
+Hauling is not moved ahead of terrain clearing, and no future loan is counted as
+receiving capacity.
+
+A pressured storehouse is refused **inside the normal candidate sweep** if its
+early drops cannot be conservatively received. The bound counts current empty
+bank slots plus the minimum current empty carry slots of eligible builders:
+one per possible terrain/plant cut and two per retired crop. It never counts
+future fetching, filling, deposits or partial-stack merge room. Terrain heights
+also bound cuts above the authored roof. Any tree on the lot or a possible
+walking corridor still refuses that candidate, because its whole registered
+crown can extend outside the footprint and have random loot. The sweep reuses
+its tree-column answers and walk without materializing preparation per candidate.
+
+Excavation credits storage first, as before. Soil the bank cannot receive stays
+in the bound Builder's real native carry, atomically journaled with the cut.
+Fill consumes that same soil. Unspent excavation stock is included in the
+site's durable return duty and deposited into the first storage with room after
+the work, including the new warehouse. Cumulative cut-credit receipts own the
+accounting, not a second item inventory. Exhausted bank and carry refuse without
+changing the block; a later Fill never pretends to have opened room already.
+
+Native hauls also journal their canonical recipe plan's net inputs and outputs,
+before custody transfers; zero-net intermediate ingredient kinds stay recorded.
+Together with cumulative cut credits and the existing consumed bill, this
+reconciles physical construction stock without treating receipts as custody or
+excusing unrelated world changes.
 
 An unfunded priority bill does not stop the search for funded buildings or upgrades. Its staffed extraction worker is protected from Builder recruitment for autonomous work, leaving another resident free to build; explicit owner projects retain their active-bill gathering rules. Optional street projects still wait for that priority bill.
 
@@ -43,6 +90,23 @@ For a Spanish owner cohort, a missing `spanish_church` is an additional autonomo
 Construction admits up to **eight active projects** and retains up to **eight pending owner orders**. Active work keeps its slot even before its first cell; later requests never replace or preempt it. Pending orders are considered in submission order, but an unfunded or site-blocked order permits a later funded owner order to use a free slot. Any pending order fences unrelated autonomous admission, including houses. When the queue is empty, the planner may choose a fully fundable culture-appropriate house if live paired, roofed bed capacity is at or below population and a site is available. This need uses the allocator's completed physical POI index, not certificate levels.
 
 A pending unfunded order still allows its own furnace prerequisite, paid through ordinary construction when that order's iron or shears demand has raw iron, fuel and furnace materials. It does not allow a furnace for unrelated autonomous demand. An already prepared founding expedition can also hand over a fully built outpost or cancel after losing its eligible household; admitting an expedition or starting another outpost structure waits for the pending order.
+
+The Spain trial driver skips cultural blueprints already completed or active in
+the observed parent settlement before issuing its next order. In particular,
+it does not order a second autonomous fortress and leave an unfunded duplicate
+fencing all later autonomous housing.
+The population-16 expansion gift is one bounded manifest, not a new grant on
+each census. It tops up observed existing stacks before using empty slots and
+delivers only its remaining units at later scheduled censuses as storage clears.
+`run.json` records that remainder explicitly; initial and daughter fixtures
+still require their complete delivery before observation continues.
+Long Spain phase profiles use disk output (omit `--scratch`). Console stdout is
+captured separately from diagnostic stderr before filtering: a native timing
+line can be written in pieces while a console reply arrives, so merging the
+pipes first could discard that real reply. Every raw byte remains retained.
+Command readers exclude timing and item diagnostics. The settlement tail
+measures Overworld laps only: a search logs the current tick, and its completed
+native phase header names the following tick.
 
 The native `civilization-seed-qa` census uses `minecraft_list_entities` cursor pages of 16 across the original 128-block radius, without reducing or dropping entity kinds. Native type filtering is used only for the targeted newborn refresh; birth proof still requires that same UUID's received baby metadata, targeted screenshot and final checkpoint audit. This chooses native cursor pagination rather than replacing the client census with server counts: the original client-visible coverage remains intact while each MCP reply stays below its transport byte limit. Use a pinned client exporting these optional arguments through `mcp-schema`; the Loader schema remains its own actual Java catalog.
 
@@ -185,13 +249,45 @@ A queued upgrade retains the exact level confirmed by the owner. The next reques
 
 Certification inspects loaded blocks without placing them or charging materials. Certify and list select the settlement containing the player, choosing the nearest anchor and then lowest ID if radii overlap. Certification requires the owner or an operator of a claimed settlement; certificate upgrades address a building globally and require management permission for its settlement.
 
-- `/settlement building certify <kind> <x1> <y1> <z1> <x2> <y2> <z2>` certifies level 1 using inclusive, ordered minimum and maximum coordinates. Include floor and roof where required.
+- `/settlement building certify <kind>` discovers and certifies the room or open work area at your position. The certification dialog's **Check here** shows every requirement before committing.
+- Operators (level 2+) additionally have an explicit-bounds administration/fixture command: `/settlement building certify <kind> <x1> <y1> <z1> <x2> <y2> <z2>`. Ordinary owners cannot use coordinates; this branch is not offered in their completion tree.
 - `/settlement building upgrade <id>` checks the existing bounds for the next certificate level, up to 3; build the extra blocks first. This does not order Builder work.
 - `/settlement building list` shows IDs, kinds, levels and bounds.
 
 Re-certifying the same kind with bounds containing an existing certificate refreshes or expands it without changing its ID or level. Other overlapping certificates are rejected. Bounds must fit inside the settlement and loaded chunks, with at most 64 blocks per axis and 32,768 blocks in total. A settlement can have at most 1,024 buildings.
 
 Kinds are `house`, `storage`, `barracks`, `wall`, `tower`, `gate`, `mine`, `lumber_camp` and profession workshops: `armorer`, `butcher`, `cartographer`, `cleric`, `farmer`, `fisherman`, `fletcher`, `leatherworker`, `librarian`, `mason`, `builder`, `shepherd`, `toolsmith`, `weaponsmith`.
+
+### Position-based bounds
+
+House, Barracks and Tower need a closed head-height air component; solid blocks
+and doors (including open doors) delimit one room. Discovery includes its floor,
+outer walls and roof. Missing roofs remain checklist failures; open walls,
+unloaded cells and exceeded limits refuse. Adjacent rooms do not pool resources.
+
+For Storage, every profession Workshop, Mine and LumberCamp, an enclosed room is
+used when present. Otherwise stand within four blocks of matching free
+containers/workstations: the smallest box containing you and those blocks gains
+a one-block horizontal border, the supporting floor and at least four cells of
+work-space height. No walls or roof are invented or required; native inspection
+still checks the real floor and work points. The floor is the first
+collision-bearing block in the eight cells strictly below your feet cell:
+upper slabs over air count, while a bottom slab or carpet in your feet cell
+keeps the structural floor underneath. A bottom slab over air has no such
+floor and refuses certification. An existing same-kind open certificate
+containing you keeps its bounds and re-inspects current blocks.
+
+For Wall, stand within two blocks of its base: discovery follows the nearest
+straight continuous wall in its longer cardinal axis, including its supporting
+floor and column tops. For Gate, stand within four blocks of its door: discovery
+follows the connected collision frame above the floor, within four horizontal
+blocks of the door and eight blocks of height. A frame connected beyond that
+budget refuses rather than claiming a truncated piece. Native length, height,
+door and frame requirements remain authoritative.
+
+Open discovery excludes other certificate volumes and refuses overlapping boxes.
+No relevant free blocks gives a localized instruction to approach the selected
+work area, wall or gate. None of these player paths accepts corners.
 
 ## Certificate requirements
 

@@ -244,7 +244,9 @@ fn town(config: &CoreConfig, directory: &Path) -> Town {
     }
     let uuids = members.map(|id| state.entities.row(state.entities.slot_of(id).unwrap()).uuid);
     checkpoint(&mut state, config, false);
-    let writer = JournalWriter::open(directory, 1).unwrap();
+    let store = crate::native_checkpoint::tests::fixture_store(config).unwrap();
+    let identity = crate::journal::WalIdentity::new(store.store_uuid(), &state.registry.blocks);
+    let writer = JournalWriter::open(directory, 1, identity).unwrap();
     Town {
         state,
         writer,
@@ -330,7 +332,9 @@ fn arrival_cut_recovers_the_same_villagers_and_drops_the_row() {
     checkpoint(&mut t.state, &config, false);
     let (uuids, family, destination) = (t.uuids, t.family.clone(), t.destination);
     let mut state = reopen(t.state, t.writer, &config);
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let identity = crate::journal::WalIdentity::new(store.store_uuid(), &state.registry.blocks);
+    let mut writer = JournalWriter::open(directory.path(), 1, identity).unwrap();
     let mut ticks = 0;
     while !state.settlements.transit.records.is_empty() {
         ticks += 1;
@@ -379,7 +383,7 @@ fn arrival_cut_recovers_the_same_villagers_and_drops_the_row() {
     // The next checkpoint deletes the row the WAL tombstoned.
     checkpoint(&mut state, &config, false);
     assert_eq!(stored_rows(&config), 0);
-    let writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     let state = reopen(state, writer, &config);
     for uuid in uuids {
         assert_eq!(places(&state, uuid), 1);

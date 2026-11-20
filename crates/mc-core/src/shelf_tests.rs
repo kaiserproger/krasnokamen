@@ -178,6 +178,7 @@ fn shelf_checkpoint_native_chunk_restart_preserves_stacks_and_alignment() {
         [8, 201, 10],
         mc_world::OVERWORLD_GEOMETRY,
     );
+    loaded.refresh_active_clock(state.tick);
     loaded.ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
     let chunk = loaded.chunk(ChunkPos { x: 0, z: 0 }).unwrap();
     let custody = crate::redstone::custody::BlockEntities::default();

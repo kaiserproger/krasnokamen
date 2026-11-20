@@ -1,0 +1,235 @@
+{
+  "decision": "D60.2",
+  "base": "440f6741e01ee37cf5cbadf0318ec3322a78be03",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_screens_voice_qa.py",
+  "source_sha256_before": "12c91ce73ada39f2cd552141e19efa0105f2414dd1b48d7f44db8668a43d8277",
+  "status": "Every test body, shared fixture and nested callback read; Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 10,
+    "removed_R4": 0,
+    "removed_R1": 0,
+    "removed_R3": 0,
+    "retained_K1": 7,
+    "retained_K2": 0,
+    "retained_U": 3,
+    "historical_medium_candidates_finalized": 1,
+    "source_lines_before": 181,
+    "source_lines_remaining": 181,
+    "physical_source_lines_removed": 0
+  },
+  "coverage": {
+    "module_and_helpers_read": "Whole module, ten test bodies, run_leg_commands and nested leg/ready/check/observe callbacks read. Exercised endpoint/run/audio Recording and reconnect/helper bodies plus screens/voice fixture prefixes read. Four complete regression rows read; remaining group-list timeout remains open. No actual audio/client gate run.",
+    "retained_assertions": "Retained bodies and shared fixtures unchanged.",
+    "production_unchanged": true,
+    "removed_scaffolding": []
+  },
+  "evidence": {
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 10,
+      "external_matches": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/promotions/HARNESS-VOICE-PIN-ENDPOINT.hunks.md:9:Proving ref: `python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_leg_launches_with_svc_pinned_version`; symptom assertion `tools/harness/test_screens_voice_qa.py:103`. It selects only voice, runs the real leg scoping path, and asserts the child Minecraft endpoint; a preceding screens failure cannot mask it. Red/green output: `receipts/HarnessFix4Proof/voice.red.log` and `voice.green.log`. The red says voice lacks `-PminecraftVersion=26.1.2`, not an import/setup error.\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/promotions/HARNESS-VOICE-PIN-ENDPOINT.json:17:    \"python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_run_scopes_pinned_endpoints_to_each_leg\": {\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/promotions/HARNESS-VOICE-PIN-ENDPOINT.json:21:    \"python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_endpoint_refuses_conflicting_selectors\": {\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/promotions/HARNESS-VOICE-PIN-ENDPOINT.json:25:    \"python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_leg_launches_with_svc_pinned_version\": {\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/promotions/HARNESS-VOICE-PIN-ENDPOINT.json:31:    \"python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_run_scopes_pinned_endpoints_to_each_leg\": {\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/promotions/HARNESS-VOICE-PIN-ENDPOINT.json:35:    \"python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_endpoint_refuses_conflicting_selectors\": {\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/promotions/HARNESS-VOICE-PIN-ENDPOINT.json:39:    \"python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_leg_launches_with_svc_pinned_version\": {\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-VOICE-PIN-ENDPOINT.toml:10:  \"python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_run_scopes_pinned_endpoints_to_each_leg\",\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-VOICE-PIN-ENDPOINT.toml:11:  \"python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_leg_launches_with_svc_pinned_version\",\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-VOICE-PIN-ENDPOINT.toml:12:  \"python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_endpoint_refuses_conflicting_selectors\",\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-VOICE-RECONNECT-CAPABILITY-REGISTRATION.toml:9:regression = [\"python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_reset_allows_fresh_capability_registration_only_after_reconnect\"]\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-SVC-GROUP-KEY-UNBOUND.toml:9:regression = [\"python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_fixture_binds_the_group_key_it_presses\"]\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-MONITOR-ADMISSION-VERDICT-MISSING.toml:9:regression = [\"python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_screen_manifest_records_missing_monitor_after_loader_acknowledgement\"]\n",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "worktrees_checked": 578,
+      "source_file_present": 351,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": []
+    },
+    "candidate_count_basis": "Only original 799 R4/medium IDs; additional U removals do not enlarge denominator."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_screens_voice_qa.py::ScreensVoiceHelperTests::test_facing_puts_the_crosshair_on_the_target",
+      "name": "test_facing_puts_the_crosshair_on_the_target",
+      "file": "tools/harness/test_screens_voice_qa.py",
+      "original_fn_line": 14,
+      "original_end_line": 21,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Crosshair orientation must aim from eye height with vanilla yaw/pitch signs; authored cardinal/diagonal expectations have no independently read vanilla oracle.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_screens_voice_qa.py::ScreensVoiceHelperTests::test_recording_measures_only_the_tone_that_was_heard",
+      "name": "test_recording_measures_only_the_tone_that_was_heard",
+      "file": "tools/harness/test_screens_voice_qa.py",
+      "original_fn_line": 23,
+      "original_end_line": 31,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Recording detector must distinguish440/660Hz and empty sample ranges; generated own WAV is not actual relayed audio acceptance or independent capture.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_screens_voice_qa.py::ScreensVoiceHelperTests::test_a_packetized_tone_is_heard_despite_phase_jumps",
+      "name": "test_a_packetized_tone_is_heard_despite_phase_jumps",
+      "file": "tools/harness/test_screens_voice_qa.py",
+      "original_fn_line": 33,
+      "original_end_line": 42,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Detector must tolerate phase restarts in packetized440Hz without hearing660Hz; synthetic sine fixture lacks observed phase-jump failure provenance.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_screens_voice_qa.py::ScreensVoiceHelperTests::test_voice_endpoint_comes_from_svc_pin_and_does_not_leak_to_screens",
+      "name": "test_voice_endpoint_comes_from_svc_pin_and_does_not_leak_to_screens",
+      "file": "tools/harness/test_screens_voice_qa.py",
+      "original_fn_line": 44,
+      "original_end_line": 62,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: SVC pin endpoint selection/environment restoration supports actual HARNESS-VOICE-PIN-ENDPOINT mismatch between pinned26.1.2 and Loader default26.3; API fixture alone not live gate.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_screens_voice_qa.py::ScreensVoiceHelperTests::test_voice_endpoint_refuses_conflicting_selectors",
+      "name": "test_voice_endpoint_refuses_conflicting_selectors",
+      "file": "tools/harness/test_screens_voice_qa.py",
+      "original_fn_line": 64,
+      "original_end_line": 71,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Exact HARNESS-VOICE-PIN-ENDPOINT selector prevents ambient version/platform from overriding pinned endpoint; row includes transmitted launcher red/green proof.",
+      "disposition": "keep",
+      "protected_references": [
+        "docs/bugs/promotions/HARNESS-VOICE-PIN-ENDPOINT.json",
+        "docs/bugs/rows/HARNESS-VOICE-PIN-ENDPOINT.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/HARNESS-VOICE-PIN-ENDPOINT.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_screens_voice_qa.py::ScreensVoiceHelperTests::test_run_scopes_pinned_endpoints_to_each_leg",
+      "name": "test_run_scopes_pinned_endpoints_to_each_leg",
+      "file": "tools/harness/test_screens_voice_qa.py",
+      "original_fn_line": 95,
+      "original_end_line": 98,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Exact HARNESS-VOICE-PIN-ENDPOINT selector captures both run-leg launcher versions after actual wrong-default endpoint failure.",
+      "disposition": "keep",
+      "protected_references": [
+        "docs/bugs/promotions/HARNESS-VOICE-PIN-ENDPOINT.json",
+        "docs/bugs/rows/HARNESS-VOICE-PIN-ENDPOINT.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/HARNESS-VOICE-PIN-ENDPOINT.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_screens_voice_qa.py::ScreensVoiceHelperTests::test_voice_leg_launches_with_svc_pinned_version",
+      "name": "test_voice_leg_launches_with_svc_pinned_version",
+      "file": "tools/harness/test_screens_voice_qa.py",
+      "original_fn_line": 100,
+      "original_end_line": 104,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Voice-only causal HARNESS-VOICE-PIN-ENDPOINT proving ref asserts26.1.2 child argv independently of screens; row reports voice.red.log/green.log.",
+      "disposition": "keep",
+      "protected_references": [
+        "docs/bugs/promotions/HARNESS-VOICE-PIN-ENDPOINT.hunks.md",
+        "docs/bugs/promotions/HARNESS-VOICE-PIN-ENDPOINT.json",
+        "docs/bugs/rows/HARNESS-VOICE-PIN-ENDPOINT.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/HARNESS-VOICE-PIN-ENDPOINT.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_screens_voice_qa.py::ScreensVoiceHelperTests::test_voice_fixture_binds_the_group_key_it_presses",
+      "name": "test_voice_fixture_binds_the_group_key_it_presses",
+      "file": "tools/harness/test_screens_voice_qa.py",
+      "original_fn_line": 106,
+      "original_end_line": 122,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Exact HARNESS-SVC-GROUP-KEY-UNBOUND repro: pinned bytecode leaves group key unknown while gate pressesG; row reports red/green and remaining real group-list timeout.",
+      "disposition": "keep",
+      "protected_references": [
+        "docs/bugs/rows/HARNESS-SVC-GROUP-KEY-UNBOUND.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/HARNESS-SVC-GROUP-KEY-UNBOUND.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_screens_voice_qa.py::ScreensVoiceHelperTests::test_voice_reset_allows_fresh_capability_registration_only_after_reconnect",
+      "name": "test_voice_reset_allows_fresh_capability_registration_only_after_reconnect",
+      "file": "tools/harness/test_screens_voice_qa.py",
+      "original_fn_line": 124,
+      "original_end_line": 146,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Exact HARNESS-VOICE-RECONNECT-CAPABILITY-REGISTRATION regression distinguishes fresh registration from stale voice/HUD after real031638 false verdict.",
+      "disposition": "keep",
+      "protected_references": [
+        "docs/bugs/rows/HARNESS-VOICE-RECONNECT-CAPABILITY-REGISTRATION.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/HARNESS-VOICE-RECONNECT-CAPABILITY-REGISTRATION.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_screens_voice_qa.py::ScreensVoiceHelperTests::test_screen_manifest_records_missing_monitor_after_loader_acknowledgement",
+      "name": "test_screen_manifest_records_missing_monitor_after_loader_acknowledgement",
+      "file": "tools/harness/test_screens_voice_qa.py",
+      "original_fn_line": 148,
+      "original_end_line": 177,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Exact HARNESS-MONITOR-ADMISSION-VERDICT-MISSING regression records false after terminal Loader manifest instead of waiting forever; row reports None-is-not-False control.",
+      "disposition": "keep",
+      "protected_references": [
+        "docs/bugs/rows/HARNESS-MONITOR-ADMISSION-VERDICT-MISSING.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/HARNESS-MONITOR-ADMISSION-VERDICT-MISSING.toml"
+      ]
+    }
+  ],
+  "verification": "not-run; Main owns verification",
+  "verify_command": "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest tools.harness.test_screens_voice_qa"
+}

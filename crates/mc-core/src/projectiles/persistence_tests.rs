@@ -1,7 +1,6 @@
 use super::*;
 use crate::journal::{
-    EntityAppearanceImage, JournalEntry, JournalWriter, Replay, ReplayEntity,
-    read_complete_batches_after, replay_batches,
+    EntityAppearanceImage, JournalEntry, JournalWriter, Replay, ReplayEntity, replay_batches,
 };
 
 fn items() -> ItemRegistry {
@@ -138,7 +137,7 @@ fn in_flight_checkpoint_and_journal_reopen_preserve_motion_and_single_custody() 
     let pos = [-2.75, 70.1, 4.5];
     let vel = [4.95, 1.0, -29.7];
     {
-        let mut writer = JournalWriter::open(&dir, 1).unwrap();
+        let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
         writer
             .append(11, 11, &[entry(&projectile, pos, vel)])
             .unwrap();
@@ -146,7 +145,7 @@ fn in_flight_checkpoint_and_journal_reopen_preserve_motion_and_single_custody() 
     }
     let recovered = replay_batches(
         base,
-        &read_complete_batches_after(&dir.join("journal"), 10).unwrap(),
+        &crate::journal::read_complete_batches_after_test(&dir.join("journal"), 10).unwrap(),
     );
     let recovered = &recovered.entities[&7];
     assert_eq!(recovered.pos, pos);
@@ -165,7 +164,7 @@ fn in_flight_checkpoint_and_journal_reopen_preserve_motion_and_single_custody() 
     );
     // Pickup/removal is a tombstone, so the checkpoint cannot resurrect ammo.
     {
-        let mut writer = JournalWriter::open(&dir, 1).unwrap();
+        let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
         writer
             .append(12, 12, &[JournalEntry::RemoveEntity { id: 7, tick: 12 }])
             .unwrap();
@@ -176,7 +175,7 @@ fn in_flight_checkpoint_and_journal_reopen_preserve_motion_and_single_custody() 
         .insert(7, replay_image(saved, from_entity(saved, &items).unwrap()));
     let recovered = replay_batches(
         base,
-        &read_complete_batches_after(&dir.join("journal"), 10).unwrap(),
+        &crate::journal::read_complete_batches_after_test(&dir.join("journal"), 10).unwrap(),
     );
     assert!(!recovered.entities.contains_key(&7));
     std::fs::remove_dir_all(dir).unwrap();
@@ -438,7 +437,7 @@ fn ammo_consumption_and_pickup_tombstone_share_restart_custody() {
     );
     projectile.pickup = true;
     {
-        let mut writer = JournalWriter::open(&dir, 1).unwrap();
+        let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
         writer
             .append(
                 11,
@@ -456,7 +455,7 @@ fn ammo_consumption_and_pickup_tombstone_share_restart_custody() {
         .insert(owner.clone(), checkpoint_player.clone());
     let recovered = replay_batches(
         base,
-        &read_complete_batches_after(&dir.join("journal"), 10).unwrap(),
+        &crate::journal::read_complete_batches_after_test(&dir.join("journal"), 10).unwrap(),
     );
     assert!(
         recovered.players[&owner]
@@ -469,7 +468,7 @@ fn ammo_consumption_and_pickup_tombstone_share_restart_custody() {
         ammo
     );
     {
-        let mut writer = JournalWriter::open(&dir, 1).unwrap();
+        let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
         writer
             .append(
                 12,
@@ -486,7 +485,7 @@ fn ammo_consumption_and_pickup_tombstone_share_restart_custody() {
     base.players.insert(owner.clone(), checkpoint_player);
     let recovered = replay_batches(
         base,
-        &read_complete_batches_after(&dir.join("journal"), 10).unwrap(),
+        &crate::journal::read_complete_batches_after_test(&dir.join("journal"), 10).unwrap(),
     );
     assert!(!recovered.entities.contains_key(&7));
     assert_eq!(
@@ -653,10 +652,10 @@ fn bad_projectile_numbers_never_publish_a_journal_frame() {
     };
     projectile.damage = f32::NAN;
     let dir = world("bad-journal");
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     assert!(writer.append(11, 11, &[invalid]).is_err());
     assert!(
-        read_complete_batches_after(&dir.join("journal"), 0)
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0,)
             .unwrap()
             .is_empty()
     );
@@ -846,7 +845,7 @@ fn battle_arrow_real_checkpoint_wal_restart_matches_uninterrupted_expiry() {
     assert_eq!(saved.projectile.as_ref().unwrap().ground_age(saved.age), 37);
 
     let directory = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     for _ in 0..13 {
         let (output, _, _) = crate::tick::run_tick(&mut live, &[]);
         let entries = crate::core::journal_entries_for_tick(&mut live, &output).unwrap();
@@ -854,8 +853,11 @@ fn battle_arrow_real_checkpoint_wal_restart_matches_uninterrupted_expiry() {
     }
     writer.flush().unwrap();
     drop(writer);
-    let batches =
-        read_complete_batches_after(&directory.path().join("journal"), checkpoint_tick).unwrap();
+    let batches = crate::journal::read_complete_batches_after_test(
+        &directory.path().join("journal"),
+        checkpoint_tick,
+    )
+    .unwrap();
     assert_eq!(batches.len(), 13);
     assert!(
         batches.iter().any(|(_, _, entries)| !entries.is_empty()),
@@ -941,7 +943,7 @@ fn battle_arrow_support_loss_clears_anchor_across_checkpoint_and_wal_restart() {
             .map(|image| (image.chunk, image)),
     );
     let directory = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     // The tail starts here (the pre-fall ticks are not journaled), and a compact
     // record is a delta of an image in the same tail, so this state emits the
     // image exactly as it does right after a checkpoint capture.
@@ -986,8 +988,11 @@ fn battle_arrow_support_loss_clears_anchor_across_checkpoint_and_wal_restart() {
             .grounded_at_age,
         None
     );
-    let batches =
-        read_complete_batches_after(&directory.path().join("journal"), checkpoint_tick).unwrap();
+    let batches = crate::journal::read_complete_batches_after_test(
+        &directory.path().join("journal"),
+        checkpoint_tick,
+    )
+    .unwrap();
     assert_eq!(batches.len(), 1);
     assert!(!batches[0].2.is_empty());
     let replay = replay_batches(base, &batches);
@@ -1087,6 +1092,7 @@ fn lazy_ground_clock_survives_native_checkpoint_wal_active_pause_and_age_wrap() 
             crate::journal::SimDebtImage {
                 chunk: [-1, 0],
                 last_sim: 100,
+                held_anchor: Some(0),
                 remaining: 0,
                 active,
                 tick: 100,

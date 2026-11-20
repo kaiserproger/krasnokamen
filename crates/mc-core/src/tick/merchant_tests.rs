@@ -1239,6 +1239,7 @@ fn accepted_trade_cancels_old_chunk_restock_debt() {
                     crate::journal::SimDebtImage {
                         chunk: [chunk.x, chunk.z],
                         last_sim: tick,
+                        held_anchor: Some(0),
                         remaining: 600,
                         active: false,
                         tick,

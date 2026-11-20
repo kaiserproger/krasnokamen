@@ -14,6 +14,9 @@ All paths below are under `crates/mc-core/src/settlements/` unless noted:
   `crates/mc-core/src/villager/` owns resident brains and state.
 - `buildings.rs`, `construction.rs`, `autonomy.rs`, `blueprints.rs`: certified
   buildings, construction and generated-village adoption.
+- `building_discovery.rs`: bounded room discovery from a player's standing cell;
+  its bounds feed the existing `buildings.rs` inspection and certificate record,
+  without a new persistence format or a second certification authority.
 - `construction_access.rs`: the construction module's narrow surface (owner
   D9.3). Code outside `construction*.rs` reads the record's projects and
   pending orders only through it; the `code-health` ratchet counts direct field
@@ -150,6 +153,7 @@ WAL. Checkpoints store individual `settlement/<id>` rows and the shared
 `settlement_sequence` high-water row, not a single unbounded registry blob; the
 checkpoint that no longer carries a removed settlement deletes its row in the
 same native transaction.
+Global starter-chest granted counts use `settlement_chest/<uuid>` rows and absolute root `StarterChestGranted` WAL images; live checkpoints and offline WAL-tail checkpoint encoding share one row encoder, and recovery refuses zero or decreasing WAL counts.
 The villager membership column is persisted with the entity in the same
 recovery boundary. Recovery validates settlement references instead of silently
 clearing them; unsupported old plugin settlement state does not become a

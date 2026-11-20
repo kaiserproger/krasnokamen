@@ -1,6 +1,21 @@
 use super::*;
 
 #[test]
+fn game_clock_upgrade_requires_explicit_disposable_copy() {
+    assert!(Cli::try_parse_from(["krasnokamen", "world", "upgrade-game-clock"]).is_err());
+    let cli = Cli::try_parse_from([
+        "krasnokamen",
+        "world",
+        "upgrade-game-clock",
+        "--copy",
+        "disposable",
+    ])
+    .unwrap();
+    assert!(
+        matches!(cli.command, Some(Command::World { command: WorldCommand::UpgradeGameClock { copy } }) if copy == *"disposable")
+    );
+}
+#[test]
 fn content_import_accepts_licensed_jar_or_download_and_pinned_default() {
     for source in [vec![], vec!["--download"], vec!["--from", "server.jar"]] {
         let mut args = vec!["krasnokamen", "content", "import", "--cache", "cache"];
@@ -57,6 +72,7 @@ fn offline_commands_require_exact_paths_and_global_config() {
             | WorldCommand::CustodyCensus(_)
             | WorldCommand::Probe(_)
             | WorldCommand::UpgradeWorldgen
+            | WorldCommand::UpgradeGameClock { .. }
             | WorldCommand::Pregenerate { .. }
             | WorldCommand::Prune { .. }
             | WorldCommand::Compact => unreachable!("conversion names only"),
@@ -444,7 +460,8 @@ fn path_only_offline_commands_do_not_require_a_serving_config() {
         "backup",
     ])
     .unwrap();
-    assert!(load_config(&cli).is_ok());
+    // Backup uses an existing config to verify the content and plugin identity.
+    assert!(load_config(&cli).is_err());
     let cli = Cli::try_parse_from([
         "krasnokamen",
         "--config",
@@ -470,11 +487,18 @@ fn world_with_unrecovered_block_write(world_dir: &std::path::Path) -> crate::con
     mc_core::Core::open(config.clone())
         .expect("create world")
         .shutdown();
-    let durable = mc_core::native_checkpoint::recover_offline(&config)
-        .expect("recover clean world")
-        .manifest
-        .tick;
-    let mut journal = mc_core::journal::JournalWriter::open(world_dir, 1).unwrap();
+    let recovered =
+        mc_core::native_checkpoint::recover_offline(&config).expect("recover clean world");
+    let durable = recovered.manifest.tick;
+    let store_uuid = recovered.reader.store_uuid();
+    let registry = mc_core::registry::CoreRegistry::load(Some(&cfg.data.vanilla_data_dir))
+        .expect("content registry");
+    let mut journal = mc_core::journal::JournalWriter::open(
+        world_dir,
+        1,
+        mc_core::journal::WalIdentity::new(store_uuid, &registry.blocks),
+    )
+    .unwrap();
     journal
         .append(
             durable + 1,

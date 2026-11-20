@@ -259,6 +259,7 @@ fn shulker_checkpoint_native_restart_keeps_slot_twenty_six_and_components() {
         [8, 201, 10],
         mc_world::OVERWORLD_GEOMETRY,
     );
+    world.refresh_active_clock(state.tick);
     world.ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
     let chunk = world.chunk(ChunkPos { x: 0, z: 0 }).unwrap();
     assert!(!chunk.chests.contains_key(&POS));

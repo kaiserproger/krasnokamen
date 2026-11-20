@@ -7,6 +7,10 @@ use mc_data::Identifier;
 use std::sync::{Arc, LazyLock};
 const POS: BlockPos = BlockPos { x: 8, y: 201, z: 8 };
 fn state(dir: Option<std::path::PathBuf>) -> TickState {
+    state_at_tick(dir, 0)
+}
+
+fn state_at_tick(dir: Option<std::path::PathBuf>, tick: u64) -> TickState {
     static REGISTRY: LazyLock<Arc<CoreRegistry>> =
         LazyLock::new(|| Arc::new(CoreRegistry::load(None).unwrap()));
     let registry = Arc::clone(&REGISTRY);
@@ -36,8 +40,10 @@ fn state(dir: Option<std::path::PathBuf>) -> TickState {
             mc_world::OVERWORLD_GEOMETRY,
         )
     };
+    world.refresh_active_clock(tick);
     world.ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
     let mut state = TickState::new(registry, world, 0, 512);
+    state.tick = tick;
     state
         .tickets
         .insert("vault-test".into(), (ChunkPos { x: 0, z: 0 }, 0));
@@ -226,8 +232,9 @@ fn vault_mid_ejection_checkpoint_retains_remaining_items_and_rewarded_uuid() {
         .capture_dirty(&BTreeMap::new())
         .write()
         .unwrap();
+    let checkpoint_tick = original.tick;
     drop(original);
-    let mut restored = state(Some(dir.clone()));
+    let mut restored = state_at_tick(Some(dir.clone()), checkpoint_tick);
     crate::tick::sync_chunk_block_entities(&mut restored);
     let after = &restored.vaults[&key(POS)];
     assert_eq!(after.rewarded, before.rewarded);
@@ -279,7 +286,7 @@ fn vault_real_use_item_on_input_consumes_key_in_shared_tick() {
 
 #[test]
 fn vault_wal_recovers_rewarded_player_pending_rewards_and_key_debit_together() {
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     let dir = std::env::temp_dir().join(format!("vault-wal-{}", uuid::Uuid::new_v4()));
     let mut original = state(Some(dir.clone()));
     let player = join(&mut original, 1);
@@ -309,17 +316,18 @@ fn vault_wal_recovers_rewarded_player_pending_rewards_and_key_debit_together() {
     );
     let entries = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     let before = original.vaults[&key(POS)].clone();
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.gate(checkpoint_tick, output.tick).unwrap();
-    let batches = read_complete_batches_after(&dir.join("journal"), checkpoint_tick).unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), checkpoint_tick)
+            .unwrap();
     let once = replay_batches(Replay::default(), &batches);
     let expected = once.opaque_block_entities.clone();
     let twice = replay_batches(once, &batches);
     assert_eq!(twice.opaque_block_entities, expected);
     assert_eq!(twice.players[&uuid.to_string()].inventory[0].count, 1);
-    let mut restored = state(Some(dir.clone()));
-    restored.tick = twice.tick;
+    let mut restored = state_at_tick(Some(dir.clone()), twice.tick);
     for (&(x, y, z), &block) in &twice.blocks {
         restored.world.set_block(x, y, z, block);
     }

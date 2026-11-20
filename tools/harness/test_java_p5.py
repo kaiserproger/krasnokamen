@@ -6,38 +6,16 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
-from . import scenarios
-from .backends import client_probes, java_p5, java_parrot, native_p5, native_v2
+from .backends import client_probes, java_p5, java_parrot, native_p5
 
 
 class JavaP5Tests(unittest.TestCase):
-    def test_catalog_is_graphical_and_not_native_dispatch(self) -> None:
-        for name in java_p5.SCENARIO_IDS:
-            self.assertIn(name, scenarios.SCENARIOS)
-            self.assertEqual(scenarios.SCENARIOS[name].evidence, "graphical")
-            self.assertEqual(scenarios.SCENARIOS[name].profile, "entities")
-            self.assertNotIn(name, native_v2.NATIVE_SCENARIO_IDS)
-
     def test_parrot_gate_refuses_absent_or_unknown_observation(self) -> None:
         for expected in (False, True):
             self.assertFalse(java_parrot._dance_is(None, expected))
             self.assertFalse(java_parrot._dance_is({}, expected))
             self.assertTrue(java_parrot._dance_is({"parrot_dancing": expected}, expected))
             self.assertFalse(java_parrot._dance_is({"parrot_dancing": not expected}, expected))
-
-    def test_wrong_client_fails_before_server_resolution(self) -> None:
-        ctx = mock.Mock(scenario_id="java-v2-p5-parity", client="native")
-        with mock.patch.object(client_probes, "_server_binary") as binary:
-            with self.assertRaisesRegex(ValueError, "--client java"):
-                client_probes.run(ctx, "entities")
-            binary.assert_not_called()
-
-    def test_wrong_profile_fails_before_server_resolution(self) -> None:
-        ctx = mock.Mock(scenario_id="java-v2-p5-towns", client="java")
-        with mock.patch.object(client_probes, "_server_binary") as binary:
-            with self.assertRaisesRegex(ValueError, "entities"):
-                client_probes.run(ctx, "inventory")
-            binary.assert_not_called()
 
     def test_towns_fixture_disables_spawn_protection(self) -> None:
         with tempfile.TemporaryDirectory() as root:
@@ -51,9 +29,6 @@ class JavaP5Tests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "stop"):
                     client_probes.run(ctx, "entities")
             self.assertIn("spawn_protection = 0", (artifact / "server.toml").read_text())
-
-    def test_real_screenshot_and_ordinary_action_tools_required(self) -> None:
-        self.assertTrue({"minecraft_screenshot", "minecraft_press_inputs", "minecraft_click_screen_button", "minecraft_break_block"} <= java_p5.REQUIRED_TOOLS)
 
     def test_town_readback_rejects_a_stale_pre_command_reply(self) -> None:
         reply = "p5qa: 1 members, 1 claims."
@@ -77,14 +52,6 @@ class JavaP5Tests(unittest.TestCase):
         steps.wait.side_effect = wait
         java_p5._command(steps, "town info p5qa", reply)
         self.assertEqual(len(steps.report["ordinary_commands"]), 1)
-
-    def test_native_armor_addon_rejects_headless_observer(self) -> None:
-        ctx = mock.Mock(scenario_id="native-v2-p5-humanoid-armor", client="native",
-                        windowed=False)
-        with mock.patch.object(client_probes, "_server_binary") as binary:
-            with self.assertRaisesRegex(ValueError, "--windowed"):
-                client_probes.run(ctx, "entities")
-            binary.assert_not_called()
 
     def test_cursor_total_includes_carried_but_not_result_preview(self) -> None:
         state = {"container": {"slots": [

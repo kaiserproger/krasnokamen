@@ -6,5 +6,6 @@ severity = "major"
 status = "open"
 source = "Main 2026-11-20 on main c438111be (also red on dea563aa5, reported by Perf1MR3): `python3 -m unittest tools.coreperf.test_compare` fails test_public_fill_commands_fit_vanilla_budget (`45927 not less than or equal to 32768`, tools/coreperf/test_compare.py:160). `tools/coreperf` tests are outside L2 and outside the harness discover. Likely introduced by 3b0147686 (seal pens before clearing: walls and roof first, then one bounded interior clear at roof-1), which changed the builders' fill commands. Fixing it changes the canonical recipe digest and forces a fixture re-prepare, so it waits until Perf1M R3k-5 (cache key 1390b660) has finished."
 repro = "source"
-regression = ["python:tools.coreperf.test_compare:CompareContractTests.test_public_fill_commands_fit_vanilla_budget"]
+regression = ["python:tools.coreperf.test_compare:CompareContractTests.test_public_fill_commands_fit_vanilla_budget", "python:tools.coreperf.test_compare:FillBudgetTests.test_every_canonical_fixture_fits_the_vanilla_fill_budget"]
+fix_commit = "2fd723b98"
 failing_first = "reported"

@@ -52,11 +52,7 @@ pub(crate) fn containing(
     best.map(|(id, _)| id)
 }
 
-/// Certify `kind` over `min..=max` in the executor's settlement (nearest
-/// anchor containing the executor). Owner or operator of a claimed settlement
-/// only: an autonomous settlement grants neither, so it is refused with the
-/// claim instruction instead of an owner/operator message. Returns the
-/// chat-ready success line.
+/// Explicit bounds are an operator-only administration/fixture capability.
 pub(crate) fn certify(
     state: &mut TickState,
     executor: EntityId,
@@ -66,23 +62,46 @@ pub(crate) fn certify(
     min: [i32; 3],
     max: [i32; 3],
 ) -> Result<String, String> {
-    use crate::settlements::buildings::{BuildingKind, certify as certify_building};
-
-    let Some(building_kind) = BuildingKind::parse(kind) else {
-        return Err(format!("Unknown building kind '{kind}'."));
-    };
-    let kind_name = building_kind.name();
+    if !operator {
+        return Err("Explicit building bounds require operator level 2. Stand inside and use «Проверить здесь» or /settlement building certify <kind>.".to_owned());
+    }
+    let (id, kind) = admit(state, executor, actor, operator, kind)?;
     let bounds =
         mc_script::ScriptWorldBounds::new(min, max).map_err(|_| "Invalid building bounds.")?;
-    let Some(id) = containing(state, executor) else {
-        return Err(NO_SETTLEMENT.to_owned());
+    certify_bounds(state, id, kind, bounds)
+}
+
+/// Ordinary players certify only the room they currently stand inside.
+pub(crate) fn certify_here(
+    state: &mut TickState,
+    executor: EntityId,
+    actor: Option<&str>,
+    operator: bool,
+    kind: &str,
+) -> Result<String, String> {
+    let (id, kind) = admit(state, executor, actor, operator, kind)?;
+    let feet = executor_pos(state, executor)
+        .ok_or(NO_SETTLEMENT)?
+        .map(|v| v.floor() as i32);
+    let bounds = super::building_discovery::find_for_kind(state, feet, kind).map_err(|reason| {
+        super::ui_text::discovery_refusal(super::ui_text::Lang::En, reason).to_owned()
+    })?;
+    certify_bounds(state, id, kind, bounds)
+}
+
+fn admit(
+    state: &TickState,
+    executor: EntityId,
+    actor: Option<&str>,
+    operator: bool,
+    kind: &str,
+) -> Result<(super::SettlementId, super::buildings::BuildingKind), String> {
+    let Some(kind) = super::buildings::BuildingKind::parse(kind) else {
+        return Err(format!("Unknown building kind '{kind}'."));
     };
-    let Some(record) = state.settlements.get(id) else {
-        return Err("Settlement not found.".to_owned());
-    };
-    let Some(actor) = actor else {
-        return Err(ADMISSION_UNAVAILABLE.to_owned());
-    };
+    let id = containing(state, executor).ok_or(NO_SETTLEMENT)?;
+    let record = state.settlements.get(id).ok_or("Settlement not found.")?;
+    let actor = actor.ok_or(ADMISSION_UNAVAILABLE)?;
     if record.owner.is_none() {
         return Err(format!(
             "{} is an autonomous settlement; claim it before managing it.",
@@ -92,7 +111,16 @@ pub(crate) fn certify(
     if !record.can_manage(actor, operator) {
         return Err("Only the owner or an operator certifies buildings.".to_owned());
     }
-    match certify_building(state, id, building_kind, bounds) {
+    Ok((id, kind))
+}
+
+fn certify_bounds(
+    state: &mut TickState,
+    id: super::SettlementId,
+    kind: super::buildings::BuildingKind,
+    bounds: mc_script::ScriptWorldBounds,
+) -> Result<String, String> {
+    match super::buildings::certify(state, id, kind, bounds) {
         Ok(building) => {
             let level = state
                 .settlements
@@ -101,7 +129,8 @@ pub(crate) fn certify(
                 .expect("certified building")
                 .level;
             Ok(format!(
-                "Certified {kind_name} #{} (level {level}).",
+                "Certified {} #{} (level {level}).",
+                kind.name(),
                 building.0
             ))
         }

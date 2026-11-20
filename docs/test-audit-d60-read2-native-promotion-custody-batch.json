@@ -1,0 +1,140 @@
+{
+  "decision": "D60.2",
+  "base": "7ec51e8356eb3f8a481f9217dac8ddaddea85220",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_native_promotion_custody.py",
+  "source_sha256_before": "b440e819a9e56db8d4b22449dcb0d3f060349c310769116e247338fdd0e9f979",
+  "status": "Every 5 body and shared fixture/callback read; Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 5,
+    "removed_R4": 2,
+    "removed_R1": 0,
+    "retained_K1": 3,
+    "retained_K2": 0,
+    "retained_U": 0,
+    "historical_medium_candidates_finalized": 1,
+    "source_lines_before": 112,
+    "source_lines_remaining": 98,
+    "physical_source_lines_removed": 14,
+    "historical_medium_candidates_unfinalized": 251
+  },
+  "coverage": {
+    "module_and_helpers_read": "Complete 112-line module including report/packet fixtures, steps/check and receipt lambdas. PackWireReceipt, _cargo_exact, mount startup guard, _pack and run; container_slot sparse decoder. Full 510657a25 production/test correction delta and 83ccb7ca6 message; complete P2/CUSTODY-MOUNT-EXPORT/NATIVE-MOUNT-MENU-KIND rows and real-client-gates optional-pack section read.",
+    "retained_assertions": "Retained bodies and shared fixture unchanged.",
+    "production_unchanged": true,
+    "removed_scaffolding": []
+  },
+  "evidence": {
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 5,
+      "external_matches": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "worktrees_checked": 577,
+      "source_file_present": 571,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": []
+    },
+    "candidate_count_basis": "Only original 799 R4/medium IDs; additional U removals do not enlarge denominator.",
+    "scope_limit": "P2 ledger still names former decline assertion while current backend/docs require accepted then failed download. Observed pre-existing stale metadata; ledger is outside test-audit write set. No ledger change or fixed promotion performed."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_native_promotion_custody.py::PromotionCustodyTests::test_pack_wire_records_actual_offer_status_history_and_play_order",
+      "name": "test_pack_wire_records_actual_offer_status_history_and_play_order",
+      "file": "tools/harness/test_native_promotion_custody.py",
+      "original_fn_line": 13,
+      "original_end_line": 42,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Known P2 optional pack join regression gate requires exact offer/status/Play ordering; 510657a25 corrects former decline-only observer to accepted then failed-download history. Keep observer evidence dependency for real bug, not independent packet oracle or current graphical proof.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/P2.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_custody.py::PromotionCustodyTests::test_both_scenarios_refuse_headless_before_any_actions",
+      "name": "test_both_scenarios_refuse_headless_before_any_actions",
+      "file": "tools/harness/test_native_promotion_custody.py",
+      "original_fn_line": 58,
+      "original_end_line": 64,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Mocked absent window guard only; no actual headless custody promotion false acceptance established.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_promotion_custody.py::PromotionCustodyTests::test_mount_requires_conversion_hook",
+      "name": "test_mount_requires_conversion_hook",
+      "file": "tools/harness/test_native_promotion_custody.py",
+      "original_fn_line": 66,
+      "original_end_line": 70,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Mocked absent conversion hook guard only; actual mount cargo defect is covered by retained cargo oracle, not by hook absence.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_native_promotion_custody.py::PromotionCustodyTests::test_pack_requires_matching_accepted_failed_download_before_play",
+      "name": "test_pack_requires_matching_accepted_failed_download_before_play",
+      "file": "tools/harness/test_native_promotion_custody.py",
+      "original_fn_line": 72,
+      "original_end_line": 98,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Known P2 optional pack disconnect case; required guard matches current documented automatic HTTP policy, exact offer UUID and accepted/failed-download before Play. 510657a25 replaces obsolete decline requirement; authored controls are not real join acceptance.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/P2.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_custody.py::PromotionCustodyTests::test_cargo_oracle_rejects_resurrected_or_extra_stacks",
+      "name": "test_cargo_oracle_rejects_resurrected_or_extra_stacks",
+      "file": "tools/harness/test_native_promotion_custody.py",
+      "original_fn_line": 100,
+      "original_end_line": 108,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Exact CUSTODY-MOUNT-EXPORT observed cargo resurrection/deposit-loss bug; retained oracle rejects resurrected diamond stacks and carried extra stock alongside expected emeralds. Row reports failing-first; actual graphical gate also exposed NATIVE-MOUNT-MENU-KIND. Unit oracle is not promotion proof.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/CUSTODY-MOUNT-EXPORT.toml"
+      ]
+    }
+  ],
+  "verification": {
+    "performed": false,
+    "owner": "Main",
+    "requested_check": "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest tools.harness.test_native_promotion_custody",
+    "negative_control": "none run",
+    "runtime_saving": "Not measured."
+  },
+  "gaps": []
+}

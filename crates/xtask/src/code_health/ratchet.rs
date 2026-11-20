@@ -214,6 +214,7 @@ pub(super) fn check(root: &Path, ceilings: &Ceilings, findings: &mut Vec<Finding
             return;
         }
     };
+    super::domain_boundary::check(&src, &facts.domain_refs, findings);
     println!("mc-core coherence ratchets (syn, production code; above a ceiling fails):");
     let total_lines: usize =
         facts.modules.iter().map(|m| m.lines).sum::<usize>() + facts.root.lines;

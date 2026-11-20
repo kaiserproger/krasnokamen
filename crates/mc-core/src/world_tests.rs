@@ -22,6 +22,10 @@ pub(crate) fn native_store(
         return Arc::new(NativeStore::open(&path, [1; 32]).unwrap());
     }
     let store = Arc::new(NativeStore::create(&path, [1; 32]).unwrap());
+    // Publish the checkpoint marker a real first start writes: the store id is
+    // then readable without opening (and locking) the database, which is what a
+    // test writing this world's WAL tail needs to bind its frames to it.
+    mc_world::store_marker::write(directory, store.store_uuid(), 0).unwrap();
     let manifest = serde_json::json!({
         "tick":0,"dimensions":{},"end_fight":null,"raids":null,"tickets":{},"players":{},
         "world_spawn":[0,64,0],"world_spawn_rotation":[0,0],"generated_entity_claims":[],
@@ -1400,6 +1404,7 @@ fn durable_bookkeeping_is_clean_but_newer_wal_and_active_clock_projection_are_di
                 crate::journal::SimDebtImage {
                     chunk: [0, 0],
                     last_sim,
+                    held_anchor: Some(0),
                     remaining: 7,
                     active,
                     tick: image_tick,
@@ -1419,6 +1424,7 @@ fn durable_bookkeeping_is_clean_but_newer_wal_and_active_clock_projection_are_di
             debt: vec![crate::journal::SimDebtImage {
                 chunk: [0, 0],
                 last_sim: 20,
+                held_anchor: Some(0),
                 remaining: 7,
                 active,
                 tick: 20,

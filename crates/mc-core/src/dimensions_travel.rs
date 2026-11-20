@@ -627,7 +627,12 @@ pub(crate) fn execute(
     ))
 }
 
-fn refresh(world: &mut TickState, output: &mut TickOutput, mut changes: ChangeSet) {
+fn refresh(
+    world: &mut TickState,
+    output: &mut TickOutput,
+    mut changes: ChangeSet,
+    held: (u64, u64),
+) {
     Arc::get_mut(&mut output.snapshot)
         .expect("unpublished dimensional snapshot")
         .cameras = Arc::clone(&world.cameras);
@@ -659,11 +664,11 @@ fn refresh(world: &mut TickState, output: &mut TickOutput, mut changes: ChangeSe
     let phase_start = std::env::var_os("MC_CORE_PHASE_LOG")
         .is_some()
         .then(std::time::Instant::now);
-    world.refresh_active_chunks(output.tick);
+    world.refresh_active_chunks_with_clock(output.tick, held);
     let want = world.desired_chunks();
     let desired_done = phase_start.map(|start| start.elapsed()).unwrap_or_default();
     changes.chunks_loaded.extend(world.world.ensure(&want));
-    world.refresh_active_chunks(output.tick);
+    world.refresh_active_chunks_with_clock(output.tick, held);
     let ensure_done = phase_start.map(|start| start.elapsed()).unwrap_or_default();
     let snapshot = Arc::get_mut(&mut output.snapshot).expect("unpublished dimensional snapshot");
     snapshot.day_time = world.day_time;
@@ -677,6 +682,12 @@ fn refresh(world: &mut TickState, output: &mut TickOutput, mut changes: ChangeSe
     snapshot.raining = world.weather.0 != crate::commands::Weather::Clear;
     snapshot.rain_level = world.rain_level;
     snapshot.thunder_level = world.thunder_level;
+    // Coordinator writers (a respawn consuming an anchor charge, a command
+    // placing a block directly) leave their post-images in the overlay. Fold
+    // them so every block change appended below ships in this chunk image and
+    // revision: the edge explains a later revision by that tick's own block
+    // and light changes, so a fold left to the next tick is never resent.
+    world.world.fold_overlay();
     snapshot.chunks = world.world.snapshot();
     let chunks_done = phase_start.map(|start| start.elapsed()).unwrap_or_default();
     if entity_changes {
@@ -801,8 +812,9 @@ pub(crate) fn finish(
     let respawns_done = phase_start.map(|start| start.elapsed()).unwrap_or_default();
     crate::portals::travel::finish(state, &mut changes);
     let portals_done = phase_start.map(|start| start.elapsed()).unwrap_or_default();
+    let held = state.tick_control.simulation_clock();
     if let Some(changes) = changes.remove(&state.dimension) {
-        refresh(state, output, changes);
+        refresh(state, output, changes, held);
     }
     for (dimension, changes) in changes {
         let world = state
@@ -817,6 +829,7 @@ pub(crate) fn finish(
                 .get_mut(&dimension)
                 .expect("published world"),
             changes,
+            held,
         );
     }
     let refresh_done = phase_start.map(|start| start.elapsed()).unwrap_or_default();

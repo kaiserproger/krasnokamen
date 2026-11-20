@@ -298,6 +298,15 @@ struct Structure {
     /// §2.3). Required: a record without it does not decode.
     admission: provenance::Admission,
     cells: Vec<Vec<Cell>>,
+    /// Cumulative actual excavation credits, not a second inventory. Native
+    /// custody holds the items; these receipts reconcile cut/fill and identify
+    /// surplus kinds the bound builder must return.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    cut_credits: BTreeMap<u32, u64>,
+    /// Canonical recipe inputs/outputs, independent of custody transfers.
+    /// Zero net counts retain touched intermediate kinds; placement is consumed.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    crafting_delta: BTreeMap<u32, i64>,
     portions: Vec<portions::Portion>,
 }
 #[derive(Clone, Serialize, Deserialize)]
@@ -1061,6 +1070,8 @@ fn execute_operation(
                     blueprint_hash: blueprint.content_hash().to_owned(),
                     image,
                     portions: Vec::new(),
+                    cut_credits: BTreeMap::new(),
+                    crafting_delta: BTreeMap::new(),
                     admission: provenance::Admission::Plugin,
                     cells,
                 },
@@ -1210,6 +1221,7 @@ fn execute_operation(
             receipt.validate().map_err(|_| Failure::InvalidRequest)?;
             // Debit and placement are preflighted on the same single tick owner.
             // Their queues and the durable receipt join the root tick WAL image.
+            let portion = &record.cells[index][offset..offset + count];
             if let Some(settlement) = record.settlement {
                 settlement_builds::debit(
                     state,
@@ -1220,6 +1232,7 @@ fn execute_operation(
                     portion,
                     &record.portions[index].expected[offset..offset + count],
                     portions::PortionKind::is_terrain(&record.snapshot.stages[index].stage),
+                    &mut record.cut_credits,
                 )?;
             } else {
                 let reservation = inventories::reservation(state, owner, reservation_ref)?;
@@ -1593,6 +1606,10 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
             // revision and adds one to its watermark; nothing lowers either.
             || record.snapshot.watermark > record.snapshot.revision
             || record.cells.len() != record.snapshot.stages.len()
+            || (record.settlement.is_none() && !record.cut_credits.is_empty())
+            || record.cut_credits.iter().any(|(item, count)| *count == 0 || state.registry.items.name_of(*item).is_none())
+            || (record.settlement.is_none() && !record.crafting_delta.is_empty())
+            || record.crafting_delta.keys().any(|item| state.registry.items.name_of(*item).is_none())
             || record.settlement.is_some() == (record.admission == provenance::Admission::Plugin)
             || matches!(record.admission, provenance::Admission::Captured { since }
                 if since > MAX_SCRIPT_WORLD_TIME)

@@ -1,0 +1,14 @@
+[[bug]]
+id = "PERSIST-METADATA-RECAPTURE-BYTE-ORDER"
+title = "Refreshing an unchanged owned metadata field moves it to the end and changes native checkpoint bytes"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "The B nonzero-held-prefix running capture/load/capture byte gate exposed level_metadata::put removing then appending each owned field: saved DataVersion/data compound order changes despite identical values. Preserve the first field's slot and remove duplicate keys without allocating another key. This is independent of deliberate online-to-offline player clock normalization; the byte fixture has an active item/debt world with no online session transition."
+regression = ["cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::game_clock_tests::native_debt_game_clock_running_nonzero_epoch_capture_load_capture_is_byte_identical", "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::running_tail_clock_tests::game_clock_running_nonzero_held_prefix_nonempty_tail_matches_live_checkpoint"]
+failing_first = "reported"
+repro_check = [
+  ".analysis/validation/20261119T202620-test-153b6xsc/test.log: unchanged level_metadata payload differs at byte 35; runtime DataVersion/data became data/DataVersion",
+  "PASS 20261119T203846-test-jylii98t compares persisted native globals, player rows and entity payload bytes after actual recapture/commit at running H=3. F4 adds a two-output nonempty running tail, with Climate H=3 on every batch and active debt; recovered entity payloads and serialized manifest debt/climate equal a live checkpoint at the same tick (receipts/SpainGrowth/R4-F4-test.log and R4-final-L0.log PASS for this test). Reverting only production hunks, including the original metadata remove/append update, makes the unchanged original test fail on native domain level_metadata in 20261119T204022-test-nfa0xf1e. Restored; Main L2 remains required.",
+]

@@ -1,0 +1,1052 @@
+{
+  "decision": "D60.2",
+  "base": "456b0c578c6abcb80eb628d100e9976634ac9304",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/battle/test_run_battle.py",
+  "source_sha256_before": "cd229307288ad027754687d49e2803b858bd9620dc1889e7d81c831d2e6b384f",
+  "status": "Every test body, shared fixture and nested callback read; Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 46,
+    "removed_R4": 13,
+    "removed_R1": 0,
+    "removed_R3": 0,
+    "retained_K1": 14,
+    "retained_K2": 0,
+    "retained_U": 19,
+    "historical_medium_candidates_finalized": 11,
+    "source_lines_before": 967,
+    "source_lines_remaining": 794,
+    "physical_source_lines_removed": 173
+  },
+  "coverage": {
+    "module_and_helpers_read": "Whole967-line module with46 bodies, FAKE_SERVER/FAKE_RECORDER embedded callback programs, run_fake_battle, TickQueue/Recorder/Watched and all nested capture/export/reap/kill/copy callbacks read; whole crash_snapshot and invoked battle_crash witness/census helpers read. Full two referenced bug rows and detailed d86cc7199/610f31cb0 provenance read.",
+    "retained_assertions": "Retained bodies and shared fixtures unchanged.",
+    "production_unchanged": true,
+    "removed_scaffolding": []
+  },
+  "evidence": {
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 46,
+      "external_matches": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/HARNESS-BATTLE-CRASH-HANDOFF-LOST-ON-EARLY-SIGKILL.toml:9:regression = [\"python:tools.battle.test_run_battle:BattleRunnerTests.test_crash_handoff_sees_sigkill_while_crash_watcher_holds_waitpid\", \"harness:battle-crash-recovery:battle-crash-handoff\"]\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/JAVA-BATTLE-TAKE-END-CAMERA.toml:10:  \"python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_holds_shutdown_until_scenario_releases\",\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/JAVA-BATTLE-TAKE-END-CAMERA.toml:11:  \"python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_deadline_fails_closed\",\n/run/media/kaiserroman/games/solaris-work/wt/D60Read2/docs/bugs/rows/JAVA-BATTLE-TAKE-END-CAMERA.toml:12:  \"python:tools.battle.test_run_battle:BattleRunnerTests.test_completion_barrier_accepts_capture_before_recorder_finishes\",\n",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "worktrees_checked": 578,
+      "source_file_present": 404,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": [
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BattleBaseline",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BattleBaselineHost",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BattleBaselineHost2",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BuildSpeed",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BvArmorAssetsCore",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BvCombatActions",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BvEdgeRecorder",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BvFormations",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BvSwingCmd",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/BvSwingGate",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/CivSim",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/CivSim5",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ClientBugsCore",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ClientBugsGaps2",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ClientLoaderGate",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ClientQ02BHarness",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/CompatAudit",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ContentNoJava",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/CrateSplit",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/CrateSplit2",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H07Portals",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H08HostGate",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H08MainGate",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H08Orbs",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H10Light",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H11MapGate",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H11MapNegative",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H11Maps",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/H16Spawn",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/HarnessTimeoutReap",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/HorizonPin",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerCommands",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerDamage",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerDamageNeg",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerDamageReview",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerMatrix",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerMobs",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerMobsNegative",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerOpsCore",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/LedgerPromote",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/M00Ext",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/OpaqueTagsFix",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/PerfABMid",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/PerfABMid2",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/PerfABMid3",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/PerfABMid4",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/PersistenceDrills",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/PlayerVisibility",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ProtocolQA2",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ProtocolQANeg",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/RC5WorldConversion-rc5",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ScanLocalA",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ScanLocalB",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/ScenarioCampaign",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/SlowTests2",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/Stage2ServerRed0102",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/Stage2ServerRed18",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/Stage2ServerRed23",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/Top100-M00",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/Top100H02",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/WeakHardware",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ],
+        [
+          "/run/media/kaiserroman/games/solaris-work/wt/rc4-notes-fix",
+          "warning: could not open directory 'tools/battle/': No such file or directory\n"
+        ]
+      ]
+    },
+    "candidate_count_basis": "Only original 799 R4/medium IDs; additional U removals do not enlarge denominator.",
+    "provenance": [
+      "JAVA-BATTLE-TAKE-END-CAMERA and HARNESS-BATTLE-CRASH-HANDOFF-LOST-ON-EARLY-SIGKILL remain open; no current real-client verdict from synthetic process fixtures.",
+      "d86cc7199 explicitly describes real Loader invocations dying with AttributeError after merge lost options and wiring; these causal tests retained, not blanket removed as parser self-tests."
+    ]
+  },
+  "records": [
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_dry_run_shows_commands_without_creating_run",
+      "name": "test_dry_run_shows_commands_without_creating_run",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 172,
+      "original_end_line": 196,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Pins authored dry-run prose and command ordering without running server or recorder; no observed plan-output defect.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_resource_pack_offer_is_written_to_effective_server_config",
+      "name": "test_resource_pack_offer_is_written_to_effective_server_config",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 198,
+      "original_end_line": 212,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Exercises restored resource-pack CLI options/config after d86cc7199 reports every real Loader battle invocation died from merge-lost argparse fields.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_crash_handoff_uses_explicit_empty_plugin_directory",
+      "name": "test_crash_handoff_uses_explicit_empty_plugin_directory",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 214,
+      "original_end_line": 223,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Parses an explicit empty-plugin path to fence isolated crash recovery; no actual plugin-contaminated recovery receipt read.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_non_ascii_pack_url_is_refused_not_written_as_surrogates",
+      "name": "test_non_ascii_pack_url_is_refused_not_written_as_surrogates",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 225,
+      "original_end_line": 236,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Prevents non-BMP URL surrogate escapes from producing unreadable server TOML; comment states red before fix but no actual caller receipt established.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_invalid_count_fails_without_starting",
+      "name": "test_invalid_count_fails_without_starting",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 238,
+      "original_end_line": 247,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Injects own out-of-range count and checks dry-run exit/no directory; no actual invalid battle launch or independent limit oracle.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_incremental_server_pin_is_refused",
+      "name": "test_incremental_server_pin_is_refused",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 249,
+      "original_end_line": 267,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Rejects incremental measurement pins while preserving legacy manifest acceptance; dummy binary is not independent performance provenance.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_early_server_exit_writes_failed_receipt",
+      "name": "test_early_server_exit_writes_failed_receipt",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 269,
+      "original_end_line": 293,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Runs a real immediately failing child and requires failed receipt rather than lost startup evidence; no observed historical server failure established.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_paused_ladder_waits_for_tick_span",
+      "name": "test_paused_ladder_waits_for_tick_span",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 295,
+      "original_end_line": 318,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Drives queued ticks to require the complete fresh paused span instead of using sample count; no real insufficient warmup receipt read.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_population_barrier_uses_fresh_fully_active_status",
+      "name": "test_population_barrier_uses_fresh_fully_active_status",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 320,
+      "original_end_line": 331,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Requires fresh complete active soldiers rather than stale or partially active census before start; authored status queue is not a real population oracle.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_population_barrier_refuses_a_missing_horse_or_inactive_soldier_before_start",
+      "name": "test_population_barrier_refuses_a_missing_horse_or_inactive_soldier_before_start",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 333,
+      "original_end_line": 346,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Rejects missing cavalry and soldiers leaving active area before accepting population coverage; no real failing census receipt read.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_telemetry_flush_reaches_last_recorded_tick",
+      "name": "test_telemetry_flush_reaches_last_recorded_tick",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 348,
+      "original_end_line": 357,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Drains telemetry through the last recorded tick to preserve complete take attribution; generated queue is not recorded replay evidence.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_take_arguments_default_to_a_quiet_window",
+      "name": "test_take_arguments_default_to_a_quiet_window",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 359,
+      "original_end_line": 371,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Checks own take/default parser settings and duration-derived cadence without observing a quiet measured window.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_take_refuses_a_cadence_inside_the_take",
+      "name": "test_take_refuses_a_cadence_inside_the_take",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 373,
+      "original_end_line": 382,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Refuses a checkpoint period that contaminates its own measurement window before launch; no real contaminated-take receipt established.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_dry_run_prints_the_config_key_and_take_plan",
+      "name": "test_dry_run_prints_the_config_key_and_take_plan",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 384,
+      "original_end_line": 404,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Pins dry-run config text and printed quiet-window prose/order; does not observe a checkpoint or real noisy take.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_server_environment_removes_an_inherited_phase_log",
+      "name": "test_server_environment_removes_an_inherited_phase_log",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 406,
+      "original_end_line": 411,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Sets own phase-log environment flag and checks helper removal/addition without executing a server or observed inherited-log failure.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_status_policy_polls_only_while_the_barrier_is_open_or_on_request",
+      "name": "test_status_policy_polls_only_while_the_barrier_is_open_or_on_request",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 413,
+      "original_end_line": 421,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Pins arbitrary own status-cadence due ticks and barrier toggle without measured polling or a real contention defect.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_parse_status_reads_running_and_extended_fields",
+      "name": "test_parse_status_reads_running_and_extended_fields",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 423,
+      "original_end_line": 429,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Parses authored status literals and checks their echoed fields; no independent captured status transcript or actual parse failure.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_trace_arguments_are_off_by_default_and_bounded_like_the_core",
+      "name": "test_trace_arguments_are_off_by_default_and_bounded_like_the_core",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 431,
+      "original_end_line": 446,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Pins own trace defaults, formatting and injected parser bounds; does not obtain core trace evidence or an observed rejected run.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_trace_policy_sends_only_while_active_at_its_cadence",
+      "name": "test_trace_policy_sends_only_while_active_at_its_cadence",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 448,
+      "original_end_line": 462,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Checks authored trace scheduler tick lists and start/stop toggles without executing a trace workload or real scheduling failure.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_parse_trace_reads_members_flags_and_the_limit_marker",
+      "name": "test_parse_trace_reads_members_flags_and_the_limit_marker",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 464,
+      "original_end_line": 476,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Echoes hand-authored trace values/flags and malformed-string guards with no independent received trace oracle.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_trace_log_pairs_each_reply_with_its_request_in_order",
+      "name": "test_trace_log_pairs_each_reply_with_its_request_in_order",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 478,
+      "original_end_line": 491,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Exercises restored trace-reply recording dropped by the merge in d86cc7199, preserving request attribution and unmatched replies.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_dry_run_shows_the_trace_plan_only_when_asked",
+      "name": "test_dry_run_shows_the_trace_plan_only_when_asked",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 493,
+      "original_end_line": 501,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Checks own optional dry-run trace prose and relative print order without receiving or recording any trace reply.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_server_scope_wraps_only_the_server",
+      "name": "test_server_scope_wraps_only_the_server",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 503,
+      "original_end_line": 512,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Retains server-wrapper argument construction for actual merge-lost --server-wrapper invocation failure documented by d86cc7199.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_telemetry_gaps_are_recorded_in_a_take_and_fatal_otherwise",
+      "name": "test_telemetry_gaps_are_recorded_in_a_take_and_fatal_otherwise",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 514,
+      "original_end_line": 535,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Distinguishes retained take gaps from invalid strict telemetry instead of silently claiming contiguous coverage; fabricated batches are not independent take evidence.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_window_summary_finds_a_checkpoint_spike_and_clean_windows",
+      "name": "test_window_summary_finds_a_checkpoint_spike_and_clean_windows",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 537,
+      "original_end_line": 548,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Separates selected-window spikes, missing ticks and RSS from excluded samples before reporting performance; no actual measurement oracle read.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_take_report_is_unclean_for_a_spike_gap_phase_log_or_polling",
+      "name": "test_take_report_is_unclean_for_a_spike_gap_phase_log_or_polling",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 550,
+      "original_end_line": 578,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Rejects dirty take evidence including gaps, tracing and ignored cadence key rather than publishing clean performance; synthetic controls are not a real take.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_server_checkpoint_ticks_come_from_the_info_log_not_the_phase_log",
+      "name": "test_server_checkpoint_ticks_come_from_the_info_log_not_the_phase_log",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 580,
+      "original_end_line": 585,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Avoids treating phase-log capture text as actual committed checkpoint evidence; supplied log lines are authored not independently recorded.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_completion_barrier_holds_shutdown_until_scenario_releases",
+      "name": "test_completion_barrier_holds_shutdown_until_scenario_releases",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 621,
+      "original_end_line": 645,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Preserves end-camera capture before shutdown for full JAVA-BATTLE-TAKE-END-CAMERA row and its real seed46 late-capture failure.",
+      "disposition": "keep",
+      "protected_references": [
+        "docs/bugs/rows/JAVA-BATTLE-TAKE-END-CAMERA.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/JAVA-BATTLE-TAKE-END-CAMERA.toml"
+      ]
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_completion_barrier_deadline_fails_closed",
+      "name": "test_completion_barrier_deadline_fails_closed",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 647,
+      "original_end_line": 657,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Fails unreleased capture barrier without pause/stop for JAVA-BATTLE-TAKE-END-CAMERA rather than silently accepting incomplete camera evidence.",
+      "disposition": "keep",
+      "protected_references": [
+        "docs/bugs/rows/JAVA-BATTLE-TAKE-END-CAMERA.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/JAVA-BATTLE-TAKE-END-CAMERA.toml"
+      ]
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_completion_barrier_accepts_capture_before_recorder_finishes",
+      "name": "test_completion_barrier_accepts_capture_before_recorder_finishes",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 659,
+      "original_end_line": 667,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Keeps early capture completion valid for JAVA-BATTLE-TAKE-END-CAMERA explicit barrier lifecycle; fake recorder is not current graphical acceptance.",
+      "disposition": "keep",
+      "protected_references": [
+        "docs/bugs/rows/JAVA-BATTLE-TAKE-END-CAMERA.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/JAVA-BATTLE-TAKE-END-CAMERA.toml"
+      ]
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_take_refuses_a_server_pin_that_ignores_the_cadence_key",
+      "name": "test_take_refuses_a_server_pin_that_ignores_the_cadence_key",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 669,
+      "original_end_line": 674,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Covers ignored cadence-key refusal wiring explicitly restored after d86cc7199 merge regression instead of accepting an unsupported measurement pin.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_take_run_forces_one_checkpoint_before_start_and_stays_quiet_in_the_window",
+      "name": "test_take_run_forces_one_checkpoint_before_start_and_stays_quiet_in_the_window",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 676,
+      "original_end_line": 703,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Exercises process orchestration and clean-window attribution with a fake checkpoint model, not independent core timing or a real take oracle.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_default_run_keeps_the_phase_log_and_polls_status_after_start",
+      "name": "test_default_run_keeps_the_phase_log_and_polls_status_after_start",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 705,
+      "original_end_line": 715,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Checks authored default configuration and expected fake-server command absence/presence, without actual default-mode bug or independent behavior oracle.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_live_roles_parse_flags_and_reject_bad_names",
+      "name": "test_live_roles_parse_flags_and_reject_bad_names",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 717,
+      "original_end_line": 734,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Exercises --live-player/--live-spectator/--live-timeout restored for d86cc7199 actual AttributeError failures in every real battle invocation.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_dry_run_waits_for_live_players_before_the_recorder_and_places_them_before_start",
+      "name": "test_dry_run_waits_for_live_players_before_the_recorder_and_places_them_before_start",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 736,
+      "original_end_line": 748,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Protects live presence/barrier ordering lost in d86cc7199 merge; dry-run output is supporting coverage, not actual player acceptance.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_take_waits_for_live_players_then_places_them_before_the_checkpoint_and_start",
+      "name": "test_take_waits_for_live_players_then_places_them_before_the_checkpoint_and_start",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 750,
+      "original_end_line": 767,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Exercises restored live-presence event wiring and placement barrier for d86cc7199 merge regression through real child processes with synthetic participants.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_live_barrier_times_out_before_the_recorder_starts",
+      "name": "test_live_barrier_times_out_before_the_recorder_starts",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 769,
+      "original_end_line": 776,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Fails missing live presence before recording for d86cc7199 lost-barrier wiring; fake missing join does not replace a real-client verification.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_wal_archive_keeps_renamed_batch_after_normal_prune",
+      "name": "test_wal_archive_keeps_renamed_batch_after_normal_prune",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 778,
+      "original_end_line": 793,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Observes filesystem rename/archive retention after source prune without changing normal WAL policy; authored frame bytes are not real WAL recovery evidence.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_crash_handoff_on_real_sigkill_keeps_world_and_reports_restart",
+      "name": "test_crash_handoff_on_real_sigkill_keeps_world_and_reports_restart",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 795,
+      "original_end_line": 811,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Really kills the fake server and checks WAL handoff custody/exit while preserving normal pruning; no real core crash-image oracle used.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_crash_handoff_copies_stopped_world_and_backups_before_recovery",
+      "name": "test_crash_handoff_copies_stopped_world_and_backups_before_recovery",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 813,
+      "original_end_line": 869,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Verifies immutable copied files, hashes and witnesses before exec and refuses changed inspection; stopped-world fixture lacks actual independent crash provenance.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_crash_handoff_rejects_changed_copy_against_original_hashes",
+      "name": "test_crash_handoff_rejects_changed_copy_against_original_hashes",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 871,
+      "original_end_line": 889,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Corrupts a copy operation and refuses publishing mismatched original/copy evidence; eb69d0746 gives no actual corruption incident receipt.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_crash_handoff_rejects_non_sigkill",
+      "name": "test_crash_handoff_rejects_non_sigkill",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 891,
+      "original_end_line": 895,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Injects returncode0 and checks own SIGKILL guard text without a real incorrectly classified crash or independent recovery oracle.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_crash_handoff_sees_sigkill_while_crash_watcher_holds_waitpid",
+      "name": "test_crash_handoff_sees_sigkill_while_crash_watcher_holds_waitpid",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 897,
+      "original_end_line": 915,
+      "historical_category": "K1",
+      "historical_confidence": "high",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Kills a real child behind poll-None wrapper for HARNESS-BATTLE-CRASH-HANDOFF-LOST-ON-EARLY-SIGKILL actual2/5 lost handoffs; full row/610f31cb0 provenance read.",
+      "disposition": "keep",
+      "protected_references": [
+        "docs/bugs/rows/HARNESS-BATTLE-CRASH-HANDOFF-LOST-ON-EARLY-SIGKILL.toml"
+      ],
+      "ledger_references": [
+        "docs/bugs/rows/HARNESS-BATTLE-CRASH-HANDOFF-LOST-ON-EARLY-SIGKILL.toml"
+      ]
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_console_fifo_forwards_each_written_line_to_the_console",
+      "name": "test_console_fifo_forwards_each_written_line_to_the_console",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 917,
+      "original_end_line": 928,
+      "historical_category": "U",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Exercises FIFO worker restoration explicitly lost by d86cc7199 merge, using real FIFO writes rather than source-text pinning.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_take_with_trace_probes_after_staging_and_traces_the_battle_at_its_cadence",
+      "name": "test_take_with_trace_probes_after_staging_and_traces_the_battle_at_its_cadence",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 930,
+      "original_end_line": 955,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Exercises restored trace reply wiring from d86cc7199 through child-process take and receipts; synthetic server is not real battle trace acceptance.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/battle/test_run_battle.py::BattleRunnerTests::test_trace_on_a_pin_without_the_command_fails_before_the_roster",
+      "name": "test_trace_on_a_pin_without_the_command_fails_before_the_roster",
+      "file": "tools/battle/test_run_battle.py",
+      "original_fn_line": 957,
+      "original_end_line": 963,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Refuses unsupported trace pin before battle start rather than claiming a traced take; fake command refusal has no actual unsupported-pin incident established.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": "not-run; Main owns verification",
+  "verify_command": "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest tools.battle.test_run_battle"
+}

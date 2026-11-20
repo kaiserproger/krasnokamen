@@ -290,6 +290,7 @@ pub(super) fn modern_fixture(root: &Path, config: &CoreConfig) {
         climate: Some(mc_core::weather::ClimateImage {
             day_time: 18000,
             game_clock: Default::default(),
+            sim_debt_anchored_since: Some(0),
             weather_kind: 2,
             remaining_ticks: 1234,
             thunder_remaining_ticks: 4321,
@@ -1678,7 +1679,8 @@ fn advancements_survive_native_checkpoint_wal_and_lossless_anvil_interchange() {
         tick: 80,
     };
     drop(world);
-    let mut writer = JournalWriter::open(&native, 1).unwrap();
+    let mut writer =
+        JournalWriter::open(&native, 1, mc_core::journal::test_wal_identity(&native)).unwrap();
     writer.append(80, 80, &[entry]).unwrap();
     writer.flush().unwrap();
     drop(writer);

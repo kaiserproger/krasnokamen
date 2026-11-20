@@ -326,17 +326,18 @@ impl ChunkWorld {
                 // Non-resident debt rides the deferred path (frozen image,
                 // journal-thread application, revision-fenced ACK) — never
                 // dropped pre-ACK.
-                let (last_sim, remaining) = self
+                let (last_sim, held_anchor, remaining) = self
                     .sim_debt
                     .get(&pos)
-                    .map(|debt| (debt.last_sim, debt.remaining))
-                    .unwrap_or((0, 0));
+                    .map(|debt| (debt.last_sim, debt.held_anchor, debt.remaining))
+                    .expect("selected debt authority");
                 self.dirty.insert(pos);
                 self.bump_storage_revision(pos);
                 if let Some(deferred) = self.defer_checkpoint_chunk(pos, &mut capture) {
                     deferred.debt = Some(crate::journal::SimDebtImage {
                         chunk: [pos.x, pos.z],
                         last_sim,
+                        held_anchor,
                         remaining,
                         active: false,
                         tick: self.inhabited_tick,
@@ -345,12 +346,13 @@ impl ChunkWorld {
                 continue;
             }
             if let Some(chunk) = self.chunks.get_mut(&pos) {
-                let (last_sim, remaining) = self
+                let (last_sim, held_anchor, remaining) = self
                     .sim_debt
                     .get(&pos)
-                    .map(|debt| (debt.last_sim, debt.remaining))
-                    .unwrap_or((0, 0));
-                if let Err(error) = crate::debt::project(Arc::make_mut(chunk), last_sim, remaining)
+                    .map(|debt| (debt.last_sim, debt.held_anchor, debt.remaining))
+                    .expect("selected debt authority");
+                if let Err(error) =
+                    crate::debt::project(Arc::make_mut(chunk), last_sim, remaining, held_anchor)
                 {
                     capture.load_error = Some(ChunkLoadError {
                         dimension: self.source.dimension,

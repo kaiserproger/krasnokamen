@@ -1,0 +1,57 @@
+diff --git a/crates/mc-core/src/journal.rs b/crates/mc-core/src/journal.rs
+index 031a583..3f663dd 100644
+--- a/crates/mc-core/src/journal.rs
++++ b/crates/mc-core/src/journal.rs
+@@ -1579,11 +1579,24 @@ fn record_prune_failure(journal_dir: &Path, report: &PruneReport) {
+ /// append (`journal append failed; world halting`), which is the fatal path.
+ pub fn prune_batches_through(journal_dir: &Path, manifest_tick: u64) -> PruneReport {
+     let mut report = PruneReport::default();
+-    let Ok(entries) = std::fs::read_dir(journal_dir) else {
+-        return report;
++    let entries = match std::fs::read_dir(journal_dir) {
++        Ok(entries) => entries,
++        Err(error) => {
++            report.failed += 1;
++            report.error = Some(error.to_string());
++            record_prune_failure(journal_dir, &report);
++            return report;
++        }
+     };
+     for entry in entries {
+-        let Ok(entry) = entry else { continue };
++        let entry = match entry {
++            Ok(entry) => entry,
++            Err(error) => {
++                report.failed += 1;
++                report.error.get_or_insert_with(|| error.to_string());
++                continue;
++            }
++        };
+         let name = entry.file_name().to_string_lossy().into_owned();
+         let Some((_, hi)) = parse_batch_name(&name) else {
+             continue;
+@@ -1591,10 +1604,22 @@ pub fn prune_batches_through(journal_dir: &Path, manifest_tick: u64) -> PruneRep
+         if hi > manifest_tick {
+             continue;
+         }
+-        if std::fs::remove_file(entry.path()).is_ok() {
+-            report.removed += 1;
++        match std::fs::remove_file(entry.path()) {
++            Ok(()) => report.removed += 1,
++            Err(error) => {
++                report.failed += 1;
++                report.retained_bytes += entry.metadata().map(|meta| meta.len()).unwrap_or(0);
++                report
++                    .error
++                    .get_or_insert_with(|| format!("{}: {error}", entry.path().display()));
++            }
+         }
+     }
++    if report.failed == 0 {
++        PRUNE_RETAINED_BYTES.store(0, Ordering::Relaxed);
++    } else {
++        record_prune_failure(journal_dir, &report);
++    }
+     report
+ }
+ 

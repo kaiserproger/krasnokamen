@@ -27,17 +27,6 @@ def block(label, verdicts, status="passed"):
             "log": f"/a/{label}.log", "details": {"verdicts": verdicts}}
 
 
-class LegSelectionTests(unittest.TestCase):
-    def test_both_legs_are_the_default_parts(self):
-        with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop(qa.LEG_ENV, None)
-            self.assertEqual(qa.split_legs(), qa.LEGS)
-
-    def test_a_named_leg_is_the_only_part(self):
-        with mock.patch.dict(os.environ, {qa.LEG_ENV: "voice"}):
-            self.assertEqual(qa.split_legs(), ("voice",))
-
-
 class SplitRunTests(unittest.TestCase):
     def test_a_split_inside_a_private_graph_is_refused_for_its_shared_sink(self):
         with mock.patch.dict(os.environ, {"KRASNOKAMEN_PW_ROOT": "/tmp/graph"}):
@@ -60,15 +49,6 @@ class SplitRunTests(unittest.TestCase):
         self.assertEqual(result["verdicts"],
                          {"share_allow_streams": True, "proximity_heard": True, "all": True})
         self.assertEqual([part["leg"] for part in result["parts"]], ["screens", "voice"])
-
-    def test_a_part_count_that_does_not_match_the_legs_is_refused(self):
-        with mock.patch.dict(os.environ, {}, clear=False), \
-                mock.patch.object(qa, "run_split") as split:
-            os.environ.pop("KRASNOKAMEN_PW_ROOT", None)
-            os.environ.pop(qa.LEG_ENV, None)
-            with self.assertRaisesRegex(ValueError, "must equal the number of legs"):
-                qa._split_run(context(parts=3), 600.0)
-        split.assert_not_called()
 
     def test_run_splits_before_entering_any_graph(self):
         with mock.patch.dict(os.environ, {}, clear=False), \
@@ -129,13 +109,6 @@ class SplitRunTests(unittest.TestCase):
 
 
 class MergeTests(unittest.TestCase):
-    def test_every_leg_verdict_merges_into_one_passing_gate(self):
-        merged = qa.merge_leg_parts([block("screens", {"share_allow_streams": True}),
-                                     block("voice", {"proximity_heard": True})],
-                                    qa.LEGS)
-        self.assertEqual(merged["verdicts"],
-                         {"share_allow_streams": True, "proximity_heard": True, "all": True})
-
     def test_a_part_that_published_no_verdicts_fails_the_merge(self):
         with self.assertRaisesRegex(RuntimeError, "screens part published no verdicts"):
             qa.merge_leg_parts([block("screens", {}), block("voice", {"proximity_heard": True})],

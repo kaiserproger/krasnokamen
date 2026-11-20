@@ -1,0 +1,32 @@
+diff --git a/crates/mc-core/src/journal.rs b/crates/mc-core/src/journal.rs
+index d059423..3f663dd 100644
+--- a/crates/mc-core/src/journal.rs
++++ b/crates/mc-core/src/journal.rs
+@@ -677,6 +677,27 @@ impl JournalWriter {
+         // later recovery cannot find.
+         mc_world::atomic_file::create_dir_all_durable(&dir)
+             .map_err(|err| CoreError::Storage(err.to_string()))?;
++        // Safe here and only here: the caller holds the exclusive world lease
++        // and no append exists yet, so every `*.bin.tmp` is a leftover of a
++        // failed or interrupted append. Pruning must not sweep them, because a
++        // live append writes its tmp between create and rename.
++        let sweep = sweep_unpublished_batches(&dir);
++        if sweep.removed_files > 0 {
++            tracing::warn!(
++                dir = %dir.display(),
++                files = sweep.removed_files,
++                bytes = sweep.removed_bytes,
++                "removed unpublished journal batches left by a failed or interrupted append"
++            );
++        }
++        if sweep.failed > 0 {
++            tracing::warn!(
++                dir = %dir.display(),
++                failed = sweep.failed,
++                error = sweep.first_error.as_deref().unwrap_or("unknown"),
++                "unpublished journal batches could not be removed; they stay on disk"
++            );
++        }
+         Ok(Self {
+             dir,
+             identity,

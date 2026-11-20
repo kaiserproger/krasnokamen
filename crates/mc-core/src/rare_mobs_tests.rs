@@ -1,7 +1,7 @@
 use crate::boundary::EntityId;
 use crate::dimensions::Dimension;
 use crate::effects::{ActiveEffect, EffectId};
-use crate::journal::{JournalWriter, read_complete_batches_after, replay_batches};
+use crate::journal::{JournalWriter, replay_batches};
 use crate::tick::{TickState, run_tick};
 
 fn spawn(state: &mut TickState, name: &str, pos: [f64; 3]) -> EntityId {
@@ -32,6 +32,7 @@ fn checkpoint_restart(state: &TickState, directory: &std::path::Path) -> crate::
         &config,
         &crate::journal::CheckpointManifest {
             tick: state.tick,
+            climate: Some(crate::weather::ClimateImage::capture(state)),
             ..Default::default()
         },
     )
@@ -141,7 +142,7 @@ fn illusioner_casts_invisibility_and_blindness_and_shoots_durable_bow_arrows() {
     let root = tempfile::tempdir().unwrap();
     // Replay every post-checkpoint tick through target acquisition and casting.
     let base = checkpoint_restart(&state, &root.path().join("base"));
-    let mut writer = JournalWriter::open(&root.path().join("wal"), 1).unwrap();
+    let mut writer = JournalWriter::open_test(&root.path().join("wal"), 1).unwrap();
     let output = (0..crate::special_mobs::raiders::SEARCH_INTERVAL)
         .find_map(|_| {
             let (output, _, _) = run_tick(&mut state, &[]);
@@ -195,8 +196,13 @@ fn illusioner_casts_invisibility_and_blindness_and_shoots_durable_bow_arrows() {
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&root.path().join("wal/journal"), base.tick).unwrap();
+    let batches = crate::journal::read_complete_batches_after_test(
+        &root.path().join("wal/journal"),
+        base.tick,
+    )
+    .unwrap();
     let replay = replay_batches(base, &batches);
+    crate::journal::validate_replay(&replay).expect("replay the checkpoint's WAL tail");
     assert!(
         replay.entities[&id.0]
             .active_effects

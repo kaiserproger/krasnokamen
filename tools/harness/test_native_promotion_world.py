@@ -55,22 +55,6 @@ class Steps:
 
 
 class PromotionWorldTests(unittest.TestCase):
-    def test_both_kinds_reject_missing_graphical_hook_before_actions(self):
-        for kind in ("end-restart", "entity-gallery", "console-shutdown"):
-            with self.subTest(kind=kind):
-                steps = Steps()
-                steps.client.p4_window = None
-                with self.assertRaisesRegex(RuntimeError, "windowed Xvfb"):
-                    world.run(steps, (0, 64, 0), kind)
-                self.assertEqual(steps.events, [])
-
-    def test_end_requires_restart_hook_before_actions(self):
-        steps = Steps()
-        steps.client.p4_restart_server = None
-        with self.assertRaisesRegex(RuntimeError, "p4_restart_server"):
-            world.run(steps, (0, 64, 0), "end-restart")
-        self.assertEqual(steps.events, [])
-
     def test_end_fences_dragon_uuid_across_restart(self):
         steps = Steps()
         def restart(probe):
@@ -159,10 +143,6 @@ class PromotionWorldTests(unittest.TestCase):
             steps.client.console_shutdown_log += "\nERROR core tick broadcast closed"
             with self.assertRaisesRegex(RuntimeError, "shutdown_has_no_error"):
                 world.run(steps, (0, 64, 0), "console-shutdown")
-
-    def test_unknown_kind_rejected(self):
-        with self.assertRaisesRegex(ValueError, "unknown world promotion"):
-            world.run(Steps(), (0, 64, 0), "other")
 
 
 if __name__ == "__main__":

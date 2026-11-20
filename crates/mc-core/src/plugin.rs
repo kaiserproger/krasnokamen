@@ -965,15 +965,37 @@ pub(crate) fn journal(state: &mut TickState, entries: &mut Vec<crate::journal::J
     }
 }
 
+/// The persisted plugin startup identity of a native world, checked against the
+/// plugins this process resolved.
+///
+/// Serve ([`validate_startup`]) and offline verification both apply exactly this
+/// rule: `Ok(true)` — the checkpoint carries a record and it matches; `Ok(false)`
+/// — the world has no record (a first start may publish one, an existing world
+/// may not); `Err` — the record is corrupt, newer than the world, or names other
+/// plugins.
+pub(crate) fn check_startup_identity(
+    record: Option<&mc_world::native::NativeDomainRecord>,
+    identity: &[u8],
+    tick: u64,
+) -> Result<bool, CoreError> {
+    let Some(record) = record else {
+        return Ok(false);
+    };
+    if record.version != 1 || record.captured_tick > tick || record.payload != identity {
+        return Err(CoreError::Plugin(
+            "native world plugin startup policy differs from its checkpoint".into(),
+        ));
+    }
+    Ok(true)
+}
+
 pub(crate) fn validate_startup(state: &mut TickState, fresh: bool) -> Result<(), CoreError> {
     let identity = crate::plugin_startup::world_identity(&state.registry)?;
-    if let Some(record) = state.native_globals.get("plugin_startup") {
-        if record.version != 1 || record.captured_tick > state.tick || record.payload != identity {
-            return Err(CoreError::Plugin(
-                "native world plugin startup policy differs from its checkpoint".into(),
-            ));
-        }
-    } else {
+    if !check_startup_identity(
+        state.native_globals.get("plugin_startup"),
+        &identity,
+        state.tick,
+    )? {
         if !fresh {
             return Err(CoreError::Plugin(
                 "native world is missing its required plugin startup identity".into(),

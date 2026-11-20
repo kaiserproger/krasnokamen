@@ -47,7 +47,7 @@ const SETTLEMENT_HELP: &[(&str, &str)] = &[
     ),
     (
         "building",
-        "Certify or upgrade player-built buildings: list | certify <kind> <x1 y1 z1 x2 y2 z2> | upgrade <id>.",
+        "Stand inside and certify <kind>, or use Check here in the certification screen; list | upgrade <id>.",
     ),
     (
         "build",
@@ -109,21 +109,6 @@ const SETTLEMENT_HELP: &[(&str, &str)] = &[
         "Native soldiers: list | recruit | dismiss <uuid> | order <all|uuid> follow|guard|patrol|return (owner/operator for mutations).",
     ),
 ];
-
-pub(crate) const SETTLEMENT_GUIDE: &str = concat!(
-    "Settlements / Поселения — quick start:\n",
-    "1. Stand at your town centre: /settlement create Oak (optional radius 1-256; default 48).\n",
-    "   Then /settlement (or /settlement menu) opens the dialogs: buildings (certify/upgrade), residents & jobs, production orders, settings.\n",
-    "2. Place beds and workstations: composter=Farmer, lectern=Librarian, barrel=Fisherman; /help settlement lists all jobs.\n",
-    "3. Keep the village loaded: adults take free stations during day ticks 2000-8999, within 48 blocks via a walkable path. Nitwits never work; traded villagers keep their profession.\n",
-    "4. Stand next to a villager: /settlement bind Oak (nearest within 8 blocks). /settlement unbind releases the nearest; optional native UUID targets one explicitly. Villagers work without binding; bound villagers search inside the town.\n",
-    "5. Read villagers' nameplates/status labels; /settlement info Oak shows population and jobs, /settlement list shows towns. Changes require owner/operator; reads and founding are public.\n",
-    "6. /settlement production Oak status — real worker recipes (start/pause/resume/cancel).\n",
-    "7. /settlement commerce Oak status — emerald trades and escrow (quote/accept/cancel/reserve/payout).\n",
-    "8. /settlement payroll Oak status — funded worker contracts (employ/stop/dismiss/pay).\n",
-    "9. /settlement caravan Oak status — physical deliveries (open/pickup/unload/cancel/block).\n",
-    "Action syntax: /help settlement <domain> Oak. Guide: docs/SETTLEMENTS_GUIDE.md",
-);
 
 // Native economy uses compact endpoint/coordinate/route tokens (":" / "," /
 // ";") that Brigadier's unquoted word parser rejects. Advertise each action's

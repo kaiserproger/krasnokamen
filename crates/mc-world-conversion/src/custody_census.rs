@@ -119,65 +119,19 @@ fn census(config: &CoreConfig, receipt: &mut CustodyReceipt) -> Result<(), CoreE
     receipt.entities = bodies.len() as u64;
 
     // Settlement households: checkpoint rows, then each dimension's WAL images.
-    let mut households: BTreeMap<u64, BTreeSet<String>> = BTreeMap::new();
-    for (key, row) in &world.checkpoint.globals {
-        let Some(id) = key.strip_prefix("settlement/") else {
-            continue;
-        };
-        let id: u64 = id
-            .parse()
-            .map_err(|_| invalid(format!("row {key} has no numeric id")))?;
-        let row: Value = serde_json::from_slice(&row.payload)
-            .map_err(|error| invalid(format!("row {key} unreadable: {error}")))?;
-        let keys = row["value"]["households"]
-            .as_object()
-            .ok_or_else(|| invalid(format!("row {key} has no households")))?;
-        households.insert(id, keys.keys().cloned().collect());
-    }
-    for replay in world.dimensions.values() {
-        for id in &replay.settlement_removed {
-            households.remove(id);
-        }
-        for (&id, record) in &replay.settlements {
-            households.insert(id, record.households.keys().cloned().collect());
-        }
-    }
+    let households = mc_core::settlements::persistence::custody_households(
+        &world.checkpoint.globals,
+        &world.dimensions,
+    )?;
     let settled: BTreeSet<&str> = households.values().flatten().map(String::as_str).collect();
 
     // Transit records per (dimension, id), as recovery hydrates each dimension:
     // its checkpoint rows, then its own WAL images and tombstones. Uniqueness
     // across dimensions is checked afterwards, never masked by the fold.
-    let mut records: BTreeMap<(Dimension, uuid::Uuid), Value> = BTreeMap::new();
-    for (key, row) in &world.checkpoint.globals {
-        let Some(id) = key.strip_prefix("transit/") else {
-            continue;
-        };
-        let id: uuid::Uuid = id
-            .parse()
-            .map_err(|_| invalid(format!("row {key} has no record UUID")))?;
-        let mut row: Value = serde_json::from_slice(&row.payload)
-            .map_err(|error| invalid(format!("row {key} unreadable: {error}")))?;
-        let dimension: Dimension = serde_json::from_value(row["dimension"].take())
-            .map_err(|error| invalid(format!("row {key} dimension: {error}")))?;
-        records.insert((dimension, id), row["value"].take());
-    }
-    for (&dimension, replay) in &world.dimensions {
-        for (id, image) in &replay.transits {
-            match image {
-                Some(payload) => {
-                    let value = serde_json::from_str(payload).map_err(|error| {
-                        invalid(format!(
-                            "WAL image of transit record {id} unreadable: {error}"
-                        ))
-                    })?;
-                    records.insert((dimension, *id), value);
-                }
-                None => {
-                    records.remove(&(dimension, *id));
-                }
-            }
-        }
-    }
+    let records = mc_core::settlements::persistence::custody_transits(
+        &world.checkpoint.globals,
+        &world.dimensions,
+    )?;
     let mut members: BTreeMap<uuid::Uuid, (Dimension, uuid::Uuid)> = BTreeMap::new();
     let mut travelling: BTreeMap<String, uuid::Uuid> = BTreeMap::new();
     for (&(dimension, id), value) in &records {

@@ -462,6 +462,12 @@ struct CoreInner {
     /// Immutable game data the tick runs on (recipes, items, blocks), as the
     /// world opened with it.
     registry: Arc<CoreRegistry>,
+    /// The config this world opened with; a hot backup's trial restore recovers
+    /// the copy under exactly these inputs.
+    config: CoreConfig,
+    /// The WAL binding this world writes and would accept back: its store id
+    /// and the palette of the registry recovery runs on.
+    wal_identity: crate::journal::WalIdentity,
     /// The registry the tick runs on now: a datapack reload replaces it.
     live_registry: Arc<std::sync::RwLock<Arc<CoreRegistry>>>,
     /// `send_command_feedback`, published by the tick for the edge's own replies.
@@ -757,6 +763,14 @@ fn lock_world_lease(world_dir: &std::path::Path) -> Result<std::fs::File, CoreEr
 }
 
 impl Core {
+    /// The WAL binding this world writes and would accept back: the store id
+    /// and the palette of the registry recovery runs on. Tooling and tests that
+    /// read this world's journal beside a running core need exactly this value.
+    #[must_use]
+    pub fn wal_identity(&self) -> crate::journal::WalIdentity {
+        self.inner.wal_identity
+    }
+
     /// Open the world: build registries, recover the journal, spawn the tick
     /// and journal threads.
     pub fn open(mut config: CoreConfig) -> Result<Self, CoreError> {
@@ -1001,6 +1015,12 @@ impl Core {
             ),
         ];
         let world_dir = config.world_dir.clone();
+        // The WAL is bound to this store and to the block palette recovery
+        // replayed it under (Books R4-P3, R5-G5): derived once, from the same
+        // base registry `recover_with_reader` used, so the tail this process
+        // writes is exactly the tail it would accept back.
+        let wal_identity =
+            crate::journal::WalIdentity::new(store.store_uuid(), &base_registry.blocks);
         // Fresh worlds pin worldgen inputs in their first checkpoint. Existing
         // worlds adopt diagnostic metadata on the next positive-tick checkpoint.
         if fresh || (salt_minted && tick_state.tick > 0) {
@@ -1016,13 +1036,14 @@ impl Core {
                 unreachable!()
             };
             let mut writer = if fresh {
-                JournalWriter::open(&world_dir, config.journal_fsync_every_batches)?
+                JournalWriter::open(&world_dir, config.journal_fsync_every_batches, wal_identity)?
             } else {
                 JournalWriter::open_recovered(
                     &world_dir,
                     config.journal_fsync_every_batches,
                     root_manifest.tick,
                     tick_state.tick,
+                    wal_identity,
                 )?
             };
             write_checkpoint(
@@ -1066,6 +1087,7 @@ impl Core {
             config.journal_fsync_every_batches,
             root_manifest.tick,
             tick_state.tick,
+            wal_identity,
         )?;
         let checkpoint_every = config.checkpoint_every_ticks.max(1);
         let journal_budget = Arc::new(JournalBudget::new(JOURNAL_QUEUE_BYTES));
@@ -1198,6 +1220,8 @@ impl Core {
                 plugin_stats,
                 build_gate,
                 require_plugin_login: config.require_plugin_login,
+                config,
+                wal_identity,
                 unlocked_sessions,
                 halt_reason,
                 lod,
@@ -1617,9 +1641,18 @@ impl Core {
         if self.inner.backup_tx.send(job).is_err() {
             return Err(CoreError::Storage("hot backup: the core stopped".into()));
         }
-        result
+        let backup = result
             .recv()
-            .unwrap_or_else(|_| Err(CoreError::Storage("hot backup: the core stopped".into())))
+            .unwrap_or_else(|_| Err(CoreError::Storage("hot backup: the core stopped".into())))?;
+        // Books R5-G3: a copy is reported successful only after it restores.
+        // Verify the copy on this caller's thread; the world keeps ticking.
+        crate::hot_backup::verify_restorable(
+            out,
+            &self.inner.config,
+            Arc::clone(&self.inner.registry),
+            backup.wal_tick,
+        )?;
+        Ok(backup)
     }
 
     /// Whether graceful shutdown has been requested through this core handle.
@@ -1831,6 +1864,10 @@ mod difficulty_persistence_tests;
 #[cfg(test)]
 #[path = "core/settlement_removal_persistence_tests.rs"]
 mod settlement_removal_persistence_tests;
+
+#[cfg(test)]
+#[path = "core/persistence_capture_tests.rs"]
+mod persistence_capture_tests;
 
 #[cfg(test)]
 #[path = "core_outbox_tests.rs"]

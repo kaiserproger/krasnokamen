@@ -118,6 +118,10 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
     operator = scenario.get("operator", True)
     if type(operator) is not bool:
         raise ValueError("operator must be true or false")
+    if scenario.get("operator_level", 4) not in (1, 2, 3, 4):
+        raise ValueError("operator_level must be 1..4")
+    if type(scenario.get("server_console", False)) is not bool:
+        raise ValueError("server_console must be true or false")
     if "lod_enabled" in scenario and type(scenario["lod_enabled"]) is not bool:
         raise ValueError("lod_enabled must be true or false")
     if "lod_share_terrain_keys" in scenario:
@@ -196,7 +200,7 @@ def run(
         shutil.copytree(Path(scenario["world"]).expanduser().resolve(), artifact / "world")
     stage_plugins(ctx.plugins_dir, artifact / "plugins")
     if operator:
-        _qa.prepare_operator_fixture(ctx, [username])
+        _qa.prepare_operator_fixture(ctx, [username], scenario.get("operator_level", 4))
     xdg = artifact / "xdg"
     settings_path = xdg / "krasnokamen-client" / "client-settings.json"
     settings_path.parent.mkdir(parents=True)
@@ -226,7 +230,13 @@ def run(
     settings_path.write_text(json.dumps(base, indent=2) + "\n")
     server = client = xvfb = mcp = log = client_log = proxy = probe = None
     server_index = len(ctx.commands)
-    server_command = [str(binary), "--config", str(config), "--no-console"]
+    # `server_console`: the server reads operator commands from RUN_DIR/console.fifo (the battle runner's
+    # mechanism, `battle_recovery.FifoConsole`), so privileged fixtures never depend on the player's own op level.
+    console_fd = None
+    if scenario.get("server_console", False):
+        os.mkfifo(artifact / "console.fifo")
+        console_fd = os.open(artifact / "console.fifo", os.O_RDWR)  # read+write: never blocks, never sees EOF
+    server_command = [str(binary), "--config", str(config)] + ([] if console_fd is not None else ["--no-console"])
     ctx.commands.append(server_command)
     ctx.cwds.append(str(runtime.REPO_ROOT))
     ctx.exits.append(None)
@@ -237,7 +247,7 @@ def run(
         with binary.open("rb") as server_executable:
             server_hash = hashlib.file_digest(server_executable, "sha256").hexdigest()
         ctx.client_evidence.update(server_binary_path=str(binary), server_binary_sha256=server_hash)
-        server = runtime.start_server(server_command, cwd=runtime.REPO_ROOT, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        server = runtime.start_server(server_command, cwd=runtime.REPO_ROOT, stdin=console_fd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         runtime.wait_port(port, timeout, server, log_path=artifact / "server.log")
         client_port = port
         (artifact / "lifecycle-progress.json").write_text(json.dumps({"phase": "proxy_start", "timeout_seconds": 8, "started_unix": time.time()}) + "\n")
@@ -255,9 +265,12 @@ def run(
         old_xdg = os.environ.get("XDG_DATA_HOME")
         old_settings = os.environ.get("KRASNOKAMEN_CLIENT_SETTINGS")
         old_packs = os.environ.get("KRASNOKAMEN_CLIENT_RESOURCE_PACKS")
+        old_language = os.environ.get("KRASNOKAMEN_CLIENT_LANGUAGE")
         try:
             os.environ["XDG_DATA_HOME"] = str(xdg)
             os.environ["KRASNOKAMEN_CLIENT_SETTINGS"] = str(settings_path)
+            if ctx.client != "java" and "language" in settings:
+                os.environ["KRASNOKAMEN_CLIENT_LANGUAGE"] = settings["language"]
             if ctx.scenario_id == "native-player-head":
                 pack = player_head_skin_pack(artifact)
                 os.environ["KRASNOKAMEN_CLIENT_RESOURCE_PACKS"] = os.pathsep.join(
@@ -274,7 +287,8 @@ def run(
                 client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f"127.0.0.1:{client_port}", username, timeout, display=display)
         finally:
             for key, old in (("XDG_DATA_HOME", old_xdg), ("KRASNOKAMEN_CLIENT_SETTINGS", old_settings),
-                             ("KRASNOKAMEN_CLIENT_RESOURCE_PACKS", old_packs)):
+                             ("KRASNOKAMEN_CLIENT_RESOURCE_PACKS", old_packs),
+                             ("KRASNOKAMEN_CLIENT_LANGUAGE", old_language)):
                 if old is None:
                     os.environ.pop(key, None)
                 else:
@@ -347,6 +361,8 @@ def run(
         runtime.stop_process(server, interrupt=True)
         if server is not None:
             ctx.exits[server_index] = server.returncode
+        if console_fd is not None:
+            os.close(console_fd)
         (artifact / "teardown-progress.json").write_text(json.dumps({"component": "display", "timeout_seconds": 13, "started_unix": time.time()}) + "\n")
         runtime.stop_process(xvfb)
         if log is not None:

@@ -487,6 +487,26 @@ fail when they rise above their ceiling in
   This is a syntactic proxy for `SettlementRecord`, not receiver type resolution:
   unrelated same-named fields count too. Baseline: 31 on `b58021e61`, 2026-11-17.
 
+D65 also has an independent inbound-domain-path ceiling in
+`code_health/domain_boundary.rs`: named production references from outside
+settlements and villager AI into the approved move set, with villager targets
+classified at submodule granularity. The module walk, test exclusions, `use`
+tree expansion and paths share the `syn` collector above. Qualified alias uses,
+module-relative paths and explicit re-exports resolve after the module walk;
+imports are also references. Method resolution and opaque macro-generated paths
+are not a completeness claim.
+The original baseline is 116; S3 lowered it to 113 before D63. On approved
+batch B, D63's seven starter-chest host references make the rebased S1 baseline
+123; S3 lowers it to **119**, including the offline grant projection cut.
+The six remaining QW journal/dimension hooks move in D65 S2/S6 and lower the
+ceiling then. This incoming-baseline adjustment was approved by Main.
+The report identifies exact field/type allowances through C1 (journal images
+and replay tail), C2 (`TickState.settlements`) and C3 (villager settlement and
+soldier identities). These references remain counted, not blanket exemptions
+for their files. The top-level SCC ceiling stays **186**, independently:
+passing either metric cannot compensate for failing the other. An AST fixture
+negative control adds one domain import while its largest SCC stays at one.
+
 Macro bodies count too: a body that parses as comma-separated expressions
 (`format!`, `matches!`, `assert!`) is visited like code; any other body
 (`macro_rules!`, `vec![x; n]`, tracing fields) is read token by token only for

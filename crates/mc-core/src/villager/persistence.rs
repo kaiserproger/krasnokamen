@@ -333,7 +333,15 @@ pub(crate) mod block_pos_option {
 /// their tick anchor. Events, resets and clock admission changes still differ
 /// from this projection and therefore retain an absolute image.
 pub(crate) fn advance_clocks(state: &mut VillagerState, from: u64, to: u64) {
-    let elapsed = to.saturating_sub(from);
+    if from < to {
+        advance_running_clocks(state, from, from + 1, to);
+    }
+}
+
+/// Project one uninterrupted span of running output ticks. `from` is the
+/// previous running output boundary, even when a hold separates it from `first`.
+pub(crate) fn advance_running_clocks(state: &mut VillagerState, from: u64, first: u64, to: u64) {
+    let elapsed = to - first + 1;
     if state.brain_clock && !state.wandering && state.conversion_time.is_none() {
         let delta = elapsed.min(u64::from(u32::MAX)) as i64;
         state.age = if state.age < 0 {
@@ -348,7 +356,11 @@ pub(crate) fn advance_clocks(state: &mut VillagerState, from: u64, to: u64) {
         if state.sleeping && state.last_slept == from.checked_sub(1) {
             state.last_slept = to.checked_sub(1);
         }
-        if state.activity == Activity::Panic && state.panic_until == from.saturating_add(99) {
+        // Panic is an absolute native deadline, not a paused countdown.
+        if state.activity == Activity::Panic
+            && state.panic_until == from.saturating_add(99)
+            && state.panic_until >= first
+        {
             state.panic_until = to.saturating_add(99);
         }
     }

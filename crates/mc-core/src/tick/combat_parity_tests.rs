@@ -658,7 +658,7 @@ fn custom_death_protection_removes_only_effects_in_named_tag() {
 fn death_protection_rescue_wal_replays_health_effects_and_inventory_custody_together() {
     use crate::command_items::ItemArgument;
     use crate::effects::EffectId;
-    use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
+    use crate::journal::{JournalWriter, Replay, replay_batches};
     let (mut state, player, _) = flat_player_fixture();
     let mut protection = ItemArgument::parse(
         "stick[death_protection={death_effects:[{type:'minecraft:apply_effects',effects:[{id:'minecraft:regeneration',duration:120}]}]}]",
@@ -692,11 +692,12 @@ fn death_protection_rescue_wal_replays_health_effects_and_inventory_custody_toge
     assert_eq!(expected.grid[0].count, 4);
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(dir.path(), 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&dir.path().join("journal"), 0).unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.path().join("journal"), 0).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     assert!(replay.players[&uuid].eq_except_statistics(&expected));
     let replay = replay_batches(replay, &batches);

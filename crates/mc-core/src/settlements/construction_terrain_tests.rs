@@ -607,9 +607,9 @@ fn excavated_solids_are_credited_once_and_the_fill_is_debited() {
     }
 }
 
-/// Full storage waits: the cut cell and its material stay until space exists.
+/// Full storage and carry wait: the cut and its material stay until space exists.
 #[test]
-fn a_full_store_waits_without_editing_or_losing_the_excavated_block() {
+fn a_full_store_and_carry_wait_without_editing_or_losing_the_excavated_block() {
     let (mut state, id, builder) = fixture();
     let site = only_lot(&mut state, id);
     let pillar = pillar(&mut state, &site, "sand", "sand", 1);
@@ -625,13 +625,23 @@ fn a_full_store_waits_without_editing_or_losing_the_excavated_block() {
         }
     }
     request_started(&mut state, id, "storage");
+    for slot in &mut state
+        .entities
+        .row_mut(builder)
+        .villager
+        .as_mut()
+        .unwrap()
+        .inventory
+    {
+        *slot = Some(mc_data::ItemStack::new(sticks, 64));
+    }
     for _ in 0..3 {
         attempt(&mut state, id, builder);
     }
     assert_eq!(
         name_of(&state, pillar.cells[0]),
         "sand",
-        "a full store must not edit the cell"
+        "full storage and carry must not edit the cell"
     );
     assert_eq!(stock(&state, pillar.item), 0, "nothing may be lost either");
     // One free slot is enough for the credit.
@@ -1383,7 +1393,7 @@ fn a_credited_cut_survives_a_journal_reopen() {
     let checkpointed = state.tick;
     let sand = stock(&state, pillar.item);
     assert_eq!(name_of(&state, cut_at), "sand");
-    let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(directory.path(), 1).unwrap();
     let mut cut_frame = None;
     for _ in 0..6000 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);

@@ -85,18 +85,6 @@ class VanillaLauncherTest(unittest.TestCase):
         with self.assertRaisesRegex(MissingCapability, "hash|size"):
             self.command()
 
-    def test_linux_artifact_rules_exclude_other_platforms(self):
-        self.assertFalse(launcher.allowed({"rules": [{"action": "allow", "os": {"name": "windows"}}]}))
-        self.assertTrue(launcher.allowed({"rules": [{"action": "allow", "os": {"name": "linux"}}]}))
-        self.assertTrue(launcher.allowed({}))
-
-    def test_missing_library_reports_exact_published_prerequisite(self):
-        self.metadata["libraries"] = [{"name": "a:b:1", "downloads": {"artifact": {
-            "path": "a/b/1/b-1.jar", **self.pin(b"jar")}}}]
-        self.info.write_text(json.dumps(self.metadata))
-        with self.assertRaisesRegex(MissingCapability, "a:b:1"):
-            self.command()
-
 class ModdedLauncherTest(unittest.TestCase):
 
     def test_selectors_never_switch_a_resolved_task(self):

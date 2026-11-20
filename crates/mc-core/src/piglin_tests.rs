@@ -508,9 +508,7 @@ fn admiring_survives_native_checkpoint_restart_and_anvil_export() {
 fn barter_start_remainder_and_payout_survive_checkpoint_plus_disk_wal_restart() {
     use crate::boundary::{ConnectionId, PlayerInput};
     use crate::dimensions::Dimension;
-    use crate::journal::{
-        CheckpointManifest, JournalWriter, read_complete_batches_after, replay_batches,
-    };
+    use crate::journal::{CheckpointManifest, JournalWriter, replay_batches};
     use crate::native_checkpoint::{encode_entities, encode_players, record, refresh_metadata};
     use mc_world::native::NativeCheckpoint;
 
@@ -589,7 +587,7 @@ fn barter_start_remainder_and_payout_survive_checkpoint_plus_disk_wal_restart() 
                 location: [0.0; 3],
             }]
         };
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         let (output, _, _) = run_tick(&mut state, &inputs);
         assert!(output.changes.entities_appearance_changed.contains(&piglin));
         if let Some(item) = payment {
@@ -654,9 +652,11 @@ fn barter_start_remainder_and_payout_survive_checkpoint_plus_disk_wal_restart() 
         } else {
             assert_eq!(replay.players[&player_uuid].inventory[0].count, 1);
         }
-        let batches =
-            read_complete_batches_after(&directory.path().join("journal"), checkpoint_tick)
-                .unwrap();
+        let batches = crate::journal::read_complete_batches_after_test(
+            &directory.path().join("journal"),
+            checkpoint_tick,
+        )
+        .unwrap();
         let once = serde_json::to_value(&replay.entities).unwrap();
         let twice = replay_batches(replay, &batches);
         assert_eq!(serde_json::to_value(&twice.entities).unwrap(), once);

@@ -20,6 +20,7 @@ These Linux host tools are intended for coordinated Krasnokamen development, not
 - `test-server/` contains the local metrics collector and remote fresh-world deployment, service, and soak tools; see `test-server/README.md` before use.
 - `winqa/` contains a noVNC driver; run `npm install --prefix tools/dev/winqa` once, then `node tools/dev/winqa/cs-daemon.js`, and follow `winqa/RECIPE.md`.
 - `wt-new`, `wt-done`, `wt-gc`, `pin-release` (with the shared `wtlib.py`) create, archive and audit agent worktrees and pin release binaries; `in-use` marks paths other agents rely on, `slot-gc` clears dead artifacts from idle target slots, `main-guard` reports unexpected changes in Main's source dirs; see [Worktree and release-pin tools](#worktree-and-release-pin-tools-owner-host).
+- `bytecheck*` pins deterministic and real-image persistence comparisons; see the [CoreUnload byte oracle](../../docs/architecture/persistence.md#coreunload-byte-oracle).
 
 ## Fresh machine setup
 

@@ -31,6 +31,37 @@ use crate::settlements::{RecordImage, SettlementId, SettlementRecord, validate_r
 use crate::tick::TickState;
 use mc_world::native::NativeDomainRecord;
 
+#[path = "persistence_tail.rs"]
+mod tail;
+pub use tail::Tail;
+pub(crate) use tail::{fold_checkpoint, image_heap, stale_rows, transit_image_heap};
+
+#[path = "persistence_census.rs"]
+mod census;
+pub use census::{checkpoint_records, custody_households, custody_transits};
+
+/// Dimension checkpoint admission at the existing recovery stage, before
+/// entities hydrate. An absent sequence is valid only for a fresh empty owner.
+pub(crate) fn hydrate_checkpoint_dimension(
+    state: &mut TickState,
+    checkpoint: &BTreeMap<String, NativeDomainRecord>,
+    replay: &Replay,
+    checkpoint_tick: u64,
+) -> Result<(), CoreError> {
+    let sequence = match checkpoint_sequence(checkpoint, checkpoint_tick) {
+        Ok(sequence) => sequence,
+        Err(_)
+            if !checkpoint
+                .keys()
+                .any(|key| key == "settlement_sequence" || key.starts_with("settlement/")) =>
+        {
+            0
+        }
+        Err(error) => return Err(error),
+    };
+    hydrate_dimension(state, checkpoint, replay, sequence)
+}
+
 /// Native global key for one live settlement record (one row per global id).
 pub(crate) fn row_key(id: SettlementId) -> String {
     format!("settlement/{}", id.0)
@@ -73,6 +104,7 @@ pub(crate) fn checkpoint_rows(
     tick: u64,
 ) -> Result<BTreeMap<String, NativeDomainRecord>, CoreError> {
     let mut rows = BTreeMap::new();
+    super::starter_chest::checkpoint_rows(state, tick, &mut rows)?;
     for world in std::iter::once(state).chain(state.other_dimensions.values().map(|world| &**world))
     {
         for record in world.settlements.records() {
@@ -134,21 +166,11 @@ pub(crate) fn hydrate_dimension(
     sequence: u64,
 ) -> Result<(), CoreError> {
     let invalid = |reason: String| CoreError::Storage(format!("native settlement: {reason}"));
-    for (key, record) in checkpoint {
-        let Some(id) = parse_row_key(key) else {
-            continue;
-        };
-        if record.version != 1 {
-            return Err(invalid(format!("row {key} has unsupported version")));
-        }
-        let row: Row = serde_json::from_slice(&record.payload)
-            .map_err(|error| invalid(format!("row {key} unreadable: {error}")))?;
-        if row.value.id != id {
-            return Err(invalid(format!("row {key} identity mismatch")));
-        }
-        validate_record(&row.value).map_err(|error| invalid(format!("row {key}: {error}")))?;
+    for row in checkpoint_records(checkpoint) {
+        let row = row?;
+        let id = row.value.id;
         super::construction::validate_pending(&state.registry, &row.value)
-            .map_err(|error| invalid(format!("row {key}: {error}")))?;
+            .map_err(|error| invalid(format!("row {}: {error}", row_key(id))))?;
         if row.dimension != state.dimension {
             continue;
         }
@@ -160,7 +182,7 @@ pub(crate) fn hydrate_dimension(
     // WAL tail live images converge over rows; tombstones delete rows below.
     // Duplicate-name validation runs in [`finish_recovery`] once rows, images,
     // and tombstones have converged.
-    for (&id, record) in &replay.settlements {
+    for (&id, record) in &replay.settlement_tail.settlements {
         let image = RecordImage {
             id: SettlementId(id),
             value: Some(record.clone()),
@@ -179,8 +201,8 @@ pub(crate) fn hydrate_dimension(
     // Tombstones are row deletions: a checkpoint row the tail removed stays
     // removed until a later live image recreates the id (which never happens:
     // ids are never reused, so any live image here is strictly newer state).
-    for id in &replay.settlement_removed {
-        if !replay.settlements.contains_key(id) {
+    for id in &replay.settlement_tail.removed {
+        if !replay.settlement_tail.settlements.contains_key(id) {
             state.settlements.apply_image(RecordImage {
                 id: SettlementId(*id),
                 value: None,
@@ -190,20 +212,21 @@ pub(crate) fn hydrate_dimension(
     state.settlements.set_high_water(sequence);
     state
         .settlements
-        .set_high_water(replay.settlement_high_water);
+        .set_high_water(replay.settlement_tail.high_water);
     // Per-dimension floor; the global max is set in [`finish_recovery`] once
     // every dimension has hydrated (monotonic, never reused across dims).
     let water = state.settlements.high_water().max(sequence);
     state.settlements.set_high_water(water);
     state.settlement_sequence = state.settlement_sequence.max(water);
     super::transit::hydrate(state, checkpoint, replay)?;
+    super::starter_chest::hydrate(state, checkpoint, replay)?;
     // Drained: hydration images must not re-enter the next tick's WAL.
     let _ = state.settlements.take_images();
     Ok(())
 }
 
-/// Decode the durable allocator sequence row. Tombstones and live images' settlement tombstones
-/// ride the WAL tail (Replay settlements / settlement_removed).
+/// Decode the durable allocator sequence row. The owner tail retains removed
+/// identities as well as live records, so neither can lower its high water.
 pub fn checkpoint_sequence(
     checkpoint: &BTreeMap<String, NativeDomainRecord>,
     tick: u64,
@@ -229,7 +252,7 @@ pub fn checkpoint_sequence(
 /// `paid-blob-v1/*`, `production-root-v2`, `production-journal-v1`,
 /// `production-v2/*`). NPC custody refuses only settlement-owned rows (see
 /// below); unrelated NPC consumers stay admitted.
-pub(crate) fn refuse_legacy_plugin_state(state: &TickState) -> Result<(), CoreError> {
+fn refuse_legacy_plugin_state(state: &TickState) -> Result<(), CoreError> {
     const OWNER: &str = "krasnokamen-settlements";
     let refused = |detail: &str| {
         CoreError::Storage(format!(
@@ -322,6 +345,7 @@ fn key_marks_settlement_state(key: &str) -> bool {
 /// never reused across dimensions or reopens. Each registry keeps its own
 /// records and high water.
 pub(crate) fn finish_recovery(state: &mut TickState) -> Result<(), CoreError> {
+    refuse_legacy_plugin_state(state)?;
     super::commerce::restore_economy_clocks(state)?;
     super::production::restore_clocks(state)?;
     for world in

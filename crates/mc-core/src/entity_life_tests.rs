@@ -448,7 +448,7 @@ fn journal_file_replay_restores_child_cooldown_love_and_harvest_exactly() {
         .extend([id, parent]);
     let first = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let dir = std::env::temp_dir().join(format!("krasnokamen-life-{}", uuid::Uuid::new_v4()));
-    let mut writer = crate::journal::JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(1, output.tick, &first).unwrap();
     let (second_output, _, _) = run_tick(&mut state, &[]);
     let expected = row(&state, id).entity_life.clone();
@@ -459,7 +459,8 @@ fn journal_file_replay_restores_child_cooldown_love_and_harvest_exactly() {
         .unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = crate::journal::read_complete_batches_after(&dir.join("journal"), 0).unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     let replay = crate::journal::replay_batches(crate::journal::Replay::default(), &batches);
     let record = &replay.entities[&id.0];
     assert_eq!(record.state.entity_life, expected);

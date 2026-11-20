@@ -1,6 +1,31 @@
 use super::{Owner, PreRename};
 use mc_nbt::{ListTag, Tag, tag_type};
 
+#[test]
+fn pre_rename_debt_without_historical_held_witness_refuses() {
+    for key in ["SolarisSimLastTick", "SolarisSimDebt"] {
+        let mut tag = compound(vec![(key, Tag::Long(350))]);
+        let original = tag.clone();
+        let error = PreRename::default()
+            .rename(&mut tag, Owner::Chunk, &|| "chunk 1,2".into())
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("no historical held-time H witness"),
+            "{error}"
+        );
+        assert_eq!(tag, original, "refuse before renaming anything");
+    }
+    for fields in [vec![], vec![("SolarisJournalLsn", Tag::Long(10))]] {
+        PreRename::default()
+            .rename(&mut compound(fields), Owner::Chunk, &|| {
+                "ordinary import".into()
+            })
+            .unwrap();
+    }
+}
+
 fn compound(fields: Vec<(&str, Tag)>) -> Tag {
     Tag::Compound(
         fields
@@ -75,7 +100,7 @@ fn foreign_nested_keys_survive_pre_rename_in_every_record_owner() {
 #[test]
 fn nested_owned_entity_block_and_metadata_keys_are_renamed_only_at_their_owner() {
     let mut chunk = compound(vec![
-        ("SolarisSimDebt", Tag::Long(1)),
+        ("SolarisJournalLsn", Tag::Long(1)),
         (
             "Entities",
             Tag::List(ListTag {
@@ -109,7 +134,7 @@ fn nested_owned_entity_block_and_metadata_keys_are_renamed_only_at_their_owner()
     let Tag::Compound(fields) = &chunk else {
         unreachable!()
     };
-    assert_eq!(fields[0].0, "KrasnokamenSimDebt");
+    assert_eq!(fields[0].0, "KrasnokamenJournalLsn");
     let Tag::List(entities) = &fields[1].1 else {
         unreachable!()
     };

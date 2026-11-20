@@ -1,0 +1,18 @@
+diff --git a/crates/mc-core/src/settlements/building_discovery.rs b/crates/mc-core/src/settlements/building_discovery.rs
+--- a/crates/mc-core/src/settlements/building_discovery.rs
++++ b/crates/mc-core/src/settlements/building_discovery.rs
+@@ -176,10 +176,10 @@
+     let head = feet[1].checked_add(1).ok_or(Refusal::TooLarge)?;
+     let (min, max) = footprint(state, feet, head)?;
+     let floor = floor_below(state, feet)?;
+-    let x0 = min[0];
+-    let z0 = min[1];
+-    let x1 = max[0];
+-    let z1 = max[1];
++    let x0 = min[0].checked_sub(1).ok_or(Refusal::TooLarge)?;
++    let z0 = min[1].checked_sub(1).ok_or(Refusal::TooLarge)?;
++    let x1 = max[0].checked_add(1).ok_or(Refusal::TooLarge)?;
++    let z1 = max[1].checked_add(1).ok_or(Refusal::TooLarge)?;
+     let area = (x1 - x0 + 1) * (z1 - z0 + 1);
+     let top = floor
+         .checked_add((MAX_VOLUME / area).min(MAX_AXIS) - 1)

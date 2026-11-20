@@ -16,7 +16,7 @@
     "source_lines_remaining": 345,
     "physical_source_lines_removed": 165,
     "historical_medium_candidates_finalized": 10,
-    "historical_medium_candidates_unfinalized": 526
+    "historical_medium_candidates_unfinalized": 528
   },
   "coverage": {
     "module_and_helpers_read": "Entire510-line original module/all23 methods, every local socket peer/serve/click/wait/craft/launch/read/command recorder and shared observation builder. Authored temp jars, receipts, journal bytes and socket packets are not actual server or WAL artifacts.",

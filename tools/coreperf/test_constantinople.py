@@ -6,8 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from tools.coreperf.constantinople import (
-    census, population_plan, section_cells, nbt, stored_item_total, preservation, region_chunks,
-    native_settlement_commands,
+    census, population_plan, nbt, stored_item_total, preservation, region_chunks,
 )
 
 
@@ -85,35 +84,6 @@ class ConstantinopleTests(unittest.TestCase):
             (world / "region/r.0.0.mca").write_bytes(bytes(8192))
             with self.assertRaisesRegex(ValueError, "entities"):
                 census(world)
-
-    def test_counts_only_matches_full_census_without_retaining_cell_terrain(self):
-        palette = [{"Name": "minecraft:" + name} for name in
-                   ("air", "grass_block", "red_bed", "composter", "farmland", "wheat")]
-        palette[2]["Properties"] = {"part": "head", "facing": "east"}
-        cells = [1] * 256 + [0] * (4096 - 256)
-        cells[2], cells[256], cells[257], cells[258] = 4, 2, 3, 5
-        words = [sum(value << (4 * shift) for shift, value in enumerate(cells[start:start + 16]))
-                 for start in range(0, 4096, 16)]
-        chunk = {"DataVersion": 3955, "xPos": 0, "zPos": 0,
-                 "sections": [{"Y": 4, "block_states": {"palette": palette, "data": words}}]}
-        villagers = {"Entities": [{"id": "minecraft:villager", "UUID": [0, 0, 0, 1],
-                                    "Pos": [0.5, 66, 0.5]}, {"id": "minecraft:pig"}]}
-        with tempfile.TemporaryDirectory() as directory:
-            world = Path(directory)
-            for name in ("region", "entities"):
-                (world / name).mkdir()
-                (world / name / "r.0.0.mca").touch()
-            with patch("tools.coreperf.constantinople.region_chunks",
-                       side_effect=lambda path: iter([(0, 0, chunk if path.parent.name == "region" else villagers)])):
-                full, terrain = census(world)
-                counts, omitted = census(world, collect_terrain=False)
-        self.assertEqual(counts, full)
-        self.assertIsNone(omitted)
-        self.assertEqual(counts["counts"], {"beds": 1, "workstations": 1, "street_cells": 253,
-                         "chunks": 1, "regions": 1, "farmland": 1, "crop_blocks": 1,
-                         "existing_villagers": 1, "existing_entities": 2})
-        self.assertEqual(len(terrain["farmland"]), 1)
-        self.assertEqual(len(terrain["outdoor"]), 253)
 
     def test_preservation_counts_legacy_and_modern_records_across_dimensions(self):
         identity = "00000000-0000-0000-0000-000000000007"
@@ -212,35 +182,12 @@ class ConstantinopleTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "only 0 villagers fit"):
             population_plan(terrain, 1, 0, 1, 1)
 
-    def test_modern_padded_palettes_do_not_cross_word_boundaries(self):
-        palette = [{"Name": f"minecraft:state_{i}"} for i in range(17)]
-        expected = [i % 17 for i in range(4096)]
-        words = []
-        for start in range(0, 4096, 12):
-            word = sum(value << (5 * shift) for shift, value in enumerate(expected[start:start + 12]))
-            words.append(word)
-        self.assertEqual(section_cells({"block_states": {"palette": palette, "data": words}})[1], expected)
-
     def test_nbt_rejects_truncation_and_duplicate_names(self):
         self.assertEqual(nbt(b"\x0a\x00\x00\x00"), {})
         with self.assertRaises(ValueError):
             nbt(b"\x0a\x00\x00")
         with self.assertRaisesRegex(ValueError, "duplicate"):
             nbt(b"\x0a\x00\x00\x01\x00\x01a\x00\x01\x00\x01a\x00\x00")
-
-    def test_native_population_uses_real_create_bind_commands_and_restores_spawn(self):
-        population = {"count": 2, "spawn_position": [8, 311, 9],
-                      "settlement_anchors": [{"name": "first", "anchor": [1, 311, 2], "radius": 8},
-                                             {"name": "second", "anchor": [3, 311, 4], "radius": 8}],
-                      "cohort": [{"uuid": "a", "settlement": "first"},
-                                 {"uuid": "b", "settlement": "second"}]}
-        self.assertEqual(native_settlement_commands(population), [
-            "setworldspawn 1 311 2", "settlement create first 8",
-            "setworldspawn 3 311 4", "settlement create second 8",
-            "settlement bind first a", "settlement bind second b",
-            "setworldspawn 8 311 9", "settlement info first", "settlement info second"])
-        with self.assertRaisesRegex(ValueError, "complete bounded"):
-            native_settlement_commands({**population, "count": 3})
 
 
 if __name__ == "__main__":

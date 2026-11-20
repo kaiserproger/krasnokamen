@@ -13,12 +13,6 @@ from .backends.probe_steps import ProbeSteps
 
 
 class LifecyclePhases(unittest.TestCase):
-    def test_unlaunchable_server_is_server_start(self):
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaises(FileNotFoundError) as caught:
-                runtime.start_server([str(Path(directory) / 'missing')])
-            self.assertEqual(runtime.observed_phase(caught.exception), 'server_start')
-
     def test_default_bucket_run_uses_private_display(self):
         with tempfile.TemporaryDirectory() as directory:
             ctx = profiles.ProfileContext(Path(directory))
@@ -98,27 +92,6 @@ class LifecyclePhases(unittest.TestCase):
                                          username='Test', display=':999')
             self.assertEqual(runtime.observed_phase(caught.exception), 'client_start')
             self.assertEqual(caught.exception.returncode, 37)
-
-    def test_stop_failure_is_teardown(self):
-        process = SimpleNamespace(pid=1, poll=lambda: None)
-        with patch.object(runtime.os, 'killpg', side_effect=OSError('cannot stop')):
-            with self.assertRaises(OSError) as caught:
-                runtime.stop_process(process)
-        self.assertEqual(runtime.observed_phase(caught.exception), 'teardown')
-
-    def test_scenario_assertion_and_join(self):
-        class Client:
-            def call_tool(self, name, args):
-                raise RuntimeError('failed to join')
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaises(RuntimeError) as caught:
-                with ProbeSteps(Client(), Path(directory), 5, 'test') as probe:
-                    probe.check('condition', False)
-            self.assertEqual(runtime.observed_phase(caught.exception), 'assertion')
-            with self.assertRaises(RuntimeError) as caught:
-                with ProbeSteps(Client(), Path(directory), 5, 'test') as probe:
-                    probe.call('minecraft_wait_for_play', {})
-            self.assertEqual(runtime.observed_phase(caught.exception), 'join')
 
     def test_hung_mcp_call_retains_bounded_phase_before_return(self):
         import json

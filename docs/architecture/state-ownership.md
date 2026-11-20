@@ -15,6 +15,7 @@ and [mutations.md](mutations.md) for routes.
 | World clock, weather, rules and dimensions | native tick owner | edge time/weather packets, console/admin reads | native domain images in the same tick stream |
 | Plugin KV, operation receipts and native plugin effects | native core plugin admission/merge | component callbacks and immutable observations | same native tick recovery boundary; no independent plugin state files |
 | Native NPC work, custody and settlement operations | native core admitted operation paths, including [settlements](settlements.md) | guest policy receives opaque handles and outcomes | native records/effects journaled with their owning tick |
+| Starter storage chest grants | global tick-owned `settlements/starter_chest.rs` granted counts; moved with global custody between dimension phases, never reset by town removal | founding admission compares lifetime grants with current owned towns; the per-dimension ownership view is derived and never persisted | `settlement_chest/<uuid>` native row and absolute root `StarterChestGranted` WAL image, in the same batch as the chest's dimension-wrapped block/container effects |
 | Settlement migrant in transit (household or lone resident between two settlements) | `settlements/transit.rs` ledger, one record per unit ([ADR 0023](../decisions/0023-offscreen-settlement-simulation.md)); no world entity exists for a member while its record does | `settlement info` and policy read `inbound`/`summary`; the migration policy receives the `Arrival`s `transit::tick` returns in the same tick; offline census and crash-copy custody census | `transit/<uuid>` checkpoint row and `Transit` tick-WAL image; recovery refuses a UUID held both as an entity and in a record |
 | Other plugin product policy | deployed component in its own repository | UI and guest callbacks | persisted only through admitted native plugin storage operations |
 | Connection/session and Loader negotiation | `mc-edge` | routing, auth state, held wire baselines and queue credit | connection-scoped, not gameplay persistence |
@@ -44,10 +45,45 @@ advances it once. Edge `SET_TIME` uses that simulated age, not the WAL frame.
 `day_time` and its client rate remain independent daylight-clock projections.
 The climate post-image persists the simulated clock as the quantity its mode
 keeps constant: the held-tick count while frames simulate, the game age while
-they are held. It changes only when the mode does, so a held WAL tail needs no
-entry per frame; recovery derives the held offset at the recovered frame. Freeze
-and step control themselves stay session-only, as in vanilla. Older images
-without the clock recover with their frame as age.
+they are held. Held also retains `held_since`, the first native output tick of
+the uninterrupted hold; its last running boundary is `held_since - 1`.
+Both values stay constant throughout that hold, so the WAL needs no entry per
+frame. Restore preserves this image even before the first tick; freeze and
+step requests themselves stay session-only, as in vanilla. A legacy Held
+without the boundary refuses recovery rather than guessing it. Older images
+without a clock recover with their frame as age.
+
+Recovery builds one global piecewise running prefix `R(t) = t - H(t)` from
+unrouted Overworld climate images before folding any dimension's entities.
+Active chunk intervals use that prefix uniformly for all compact entity paths
+and final projection. Villager age and conversion countdowns use running elapsed;
+fresh Work/sleep anchors bridge to the last running native boundary, while
+stale anchors and expired absolute panic deadlines remain stale/expired.
+The prefix survives streamed folds and repeated projections until recovery
+ends. Ambiguous same-mode counters or contradictory native boundaries fail
+closed. Daylight time and native absolute deadlines are not retimed.
+
+Catch-up debt stores a native anchor `L` and the held prefix `A = H(L)`.
+Activation at output `T` owes `max(0, (T - 1 - L) - (H(T - 1) - A))`, excluding
+both held frames and activation itself. Live, block-only and cancellation
+writes advance both anchors together. Active recovery/checkpoint images use
+one global recovered prefix for every dimension; inactive anchors and
+outstanding `remaining` debt do not project. Only running ticks spend debt.
+Accepted external edits and item births still cancel old debt while frozen.
+Native extras retain the optional `KrasnokamenSimHeldTicks` Long, including
+zero, and newer manifest/WAL authority supersedes older native extras.
+
+Climate also retains a constant `sim_debt_anchored_since` tick. An unflagged
+legacy running world with `H = 0` upgrades after its entire old tail is folded;
+the first new output tick starts the epoch. Missing older anchors mean zero
+exactly. Unflagged held/nonzero-prefix worlds refuse ordinary recovery, as do
+anchorless WAL images at or after the epoch or a writer removing the epoch.
+No ordinary open scans cold chunks or guesses a held prefix. Historical
+pre-c9c13b37 restarts that reset `H` can already have overstated running time;
+the exact upgrade does not repair that history or already-accrued legacy debt.
+For unchanged running clock/debt state, capture/load/capture preserves the
+stored bytes. Owned metadata updates preserve field positions; online-player
+to offline-player session-clock normalization is a distinct state change.
 
 ### Mob death and corpses
 

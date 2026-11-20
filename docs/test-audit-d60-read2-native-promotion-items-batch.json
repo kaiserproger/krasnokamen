@@ -1,0 +1,105 @@
+{
+  "decision": "D60.2",
+  "base": "10b3afd3785c30c76327dc59b9c37aea5dcc4462",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_native_promotion_items.py",
+  "source_sha256_before": "51196299a452f80a50243cbf0d6afc351ed933d7c5de423bea572d10a2d662fc",
+  "status": "Every 3 body and shared fixture/callback read; Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 3,
+    "removed_R4": 1,
+    "removed_R1": 0,
+    "retained_K1": 2,
+    "retained_K2": 0,
+    "retained_U": 0,
+    "historical_medium_candidates_finalized": 3,
+    "source_lines_before": 77,
+    "source_lines_remaining": 70,
+    "physical_source_lines_removed": 7,
+    "historical_medium_candidates_unfinalized": 248
+  },
+  "coverage": {
+    "module_and_helpers_read": "Complete 77-line module, state/Steps and every nested callback, complete 108-line backend and shared item_count. HUNT-CURSOR-CLOSE/MODEL-BANNER-PLACEMENT rows and 2a71b5815 commit message read; original cursor graphical baseline path established by ledger, receipt body not read.",
+    "retained_assertions": "Retained bodies and shared fixture unchanged.",
+    "production_unchanged": true,
+    "removed_scaffolding": []
+  },
+  "evidence": {
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 3,
+      "external_matches": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "worktrees_checked": 577,
+      "source_file_present": 571,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": []
+    },
+    "candidate_count_basis": "Only original 799 R4/medium IDs; additional U removals do not enlarge denominator."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_native_promotion_items.py::CursorPromotionTests::test_phantom_is_captured_then_rejected_without_repair_click",
+      "name": "test_phantom_is_captured_then_rejected_without_repair_click",
+      "file": "tools/harness/test_native_promotion_items.py",
+      "original_fn_line": 42,
+      "original_end_line": 53,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: HUNT-CURSOR-CLOSE actual graphical phantom cursor after inventory close, with baseline failure receipt in row. Preserve original three-apple inventory/crafting-table scenario and capture/reject before any repair click; 2a71b5815 records three runs and one-fix-reversed control. Mocked unit test is supporting evidence, not current real-client acceptance.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/HUNT-CURSOR-CLOSE.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_items.py::CursorPromotionTests::test_both_original_menus_conserve_three_apples_with_only_pickup_clicks",
+      "name": "test_both_original_menus_conserve_three_apples_with_only_pickup_clicks",
+      "file": "tools/harness/test_native_promotion_items.py",
+      "original_fn_line": 55,
+      "original_end_line": 66,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: HUNT-CURSOR-CLOSE actual graphical phantom cursor after inventory close, with baseline failure receipt in row. Preserve original three-apple inventory/crafting-table scenario and capture/reject before any repair click; 2a71b5815 records three runs and one-fix-reversed control. Mocked unit test is supporting evidence, not current real-client acceptance.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": [
+        "docs/bugs/rows/HUNT-CURSOR-CLOSE.toml"
+      ]
+    },
+    {
+      "id": "tools/harness/test_native_promotion_items.py::CursorPromotionTests::test_placement_does_not_accept_without_unmodified_wire_receipt",
+      "name": "test_placement_does_not_accept_without_unmodified_wire_receipt",
+      "file": "tools/harness/test_native_promotion_items.py",
+      "original_fn_line": 68,
+      "original_end_line": 73,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Deliberately absent fake receipt callback tests only own guard, not actual banner component loss; no missing-observer incident established.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": {
+    "performed": false,
+    "owner": "Main",
+    "requested_check": "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest tools.harness.test_native_promotion_items",
+    "negative_control": "none run",
+    "runtime_saving": "Not measured."
+  },
+  "gaps": []
+}

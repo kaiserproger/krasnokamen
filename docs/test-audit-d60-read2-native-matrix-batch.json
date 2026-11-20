@@ -16,7 +16,7 @@
     "source_lines_remaining": 495,
     "physical_source_lines_removed": 83,
     "historical_medium_candidates_finalized": 9,
-    "historical_medium_candidates_unfinalized": 497
+    "historical_medium_candidates_unfinalized": 499
   },
   "coverage": {
     "module_and_helpers_read": "Entire578-line original module: all26 test bodies, _loaded_lane, nested MCP implementations, mocked wave/startup/health snapshots, temporary files and callback bodies. Derived AST assertion contracts were matched to the reviewed bodies before verdicts.",

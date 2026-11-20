@@ -280,7 +280,7 @@ fn reopen(f: Disk, config: &CoreConfig, mut writer: JournalWriter) -> (Disk, Jou
         worker,
         chest,
     };
-    let mut writer = JournalWriter::open(&config.world_dir, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&config.world_dir, 1).unwrap();
     // Hydrate real block entities without advancing the scenario obligation.
     // Restore due values BEFORE collecting the absolute tick post-image. The
     // hydration frame is published, not silently skipped in the WAL sequence.
@@ -430,7 +430,7 @@ fn obligation_and_both_inventories_recover_through_actual_wal_and_checkpoint() {
             let config = CoreConfig::new(directory.path().to_path_buf(), 42);
             let mut f = fixture(&config);
             checkpoint(&mut f, &config);
-            let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+            let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
             reach_phase(&mut f, &mut writer, phase);
             let expected = image(&mut f);
             writer.flush().unwrap();
@@ -476,7 +476,7 @@ fn unpublished_store_rolls_back_but_published_store_replays_exactly_once() {
         let config = CoreConfig::new(directory.path().to_path_buf(), 42);
         let mut f = fixture(&config);
         checkpoint(&mut f, &config);
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         reach_phase(&mut f, &mut writer, Phase::Pending);
         if checkpoint_pending {
             checkpoint(&mut f, &config);
@@ -552,7 +552,7 @@ fn unpublished_production_does_not_leave_an_obligation_without_its_items() {
         let config = CoreConfig::new(directory.path().to_path_buf(), 42);
         let mut f = fixture(&config);
         checkpoint(&mut f, &config);
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         let due = f
             .world
             .settlements
@@ -609,7 +609,7 @@ fn cancelled_partial_obligation_stays_unpaid_when_same_uuid_delivers_a_new_job_a
         let config = CoreConfig::new(directory.path().to_path_buf(), 42);
         let mut f = fixture(&config);
         checkpoint(&mut f, &config);
-        let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
         reach_phase(&mut f, &mut writer, Phase::Cancelled);
         let old = f
             .world
@@ -789,6 +789,7 @@ fn replayed_delivery(
     let recovered =
         crate::native_checkpoint::recover_with_reader(config, registry, reader).unwrap();
     recovered.dimensions[&Dimension::Overworld]
+        .settlement_tail
         .settlements
         .get(&town.0)
         .map(|record| record.economy.production.jobs["durable"].delivery.is_some())
@@ -803,7 +804,7 @@ fn refuses_legacy_recovery(save_checkpoint: bool) {
         checkpoint_delivery(&f, &config).is_object(),
         "baseline has tracked delivery"
     );
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     persist_legacy(&mut f);
     publish_exact(&mut f, &mut writer);
     if save_checkpoint {
@@ -893,7 +894,7 @@ fn wal_new_policy_supersedes_legacy_checkpoint_before_guard() {
         .unwrap()
         .delivery = delivery;
     f.world.settlements.finish_economy(f.town, revision, true);
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     publish_exact(&mut f, &mut writer);
     assert!(
         checkpoint_delivery(&f, &config).is_null(),

@@ -128,7 +128,7 @@ def _client_command(profile, scenario):
 _WINDOWED_PROFILES = frozenset({
     'survival', 'inventory', 'entities', 'core-client', 'native-lifecycle',
     'logical-native', 'native-scale', 'native-matrix', 'title-connect', 'singleplayer-regressions',
-    'dialogs', 'admin-commands', 'chisel', 'anti-xray', 'block-log',
+    'dialogs', 'admin-commands', 'chisel', 'anti-xray', 'join-lag-gate', 'block-log',
     'composter-chance', 'chat-visibility', 'datapack-reload', 'village-qa', 'village-autonomy-qa',
     'civilization-seed-qa', 'village-owner-order-qa', 'scene-shot',
     'settlement-map-qa', 'claim-only-qa', 'buildings-qa', 'army-qa', 'autocraft-qa', 'screen-share',
@@ -143,14 +143,19 @@ _AUTONOMY_VERDICTS = frozenset({
     'restart_resume',
 })
 _BOOLEAN_PROFILE_VERDICTS = {
+    # backends/join_lag.py VERDICTS: one criterion per ledger row the gate covers.
+    'join-lag-gate': frozenset({
+        'join_behind_slow_pump', 'live_pump_does_not_halt',
+    }),
     'civilization-seed-qa': frozenset({
         'new_house', 'births', 'second_building', 'iron_smelted', 'all',
     }),
-    # backends/settlement_map_qa.py VERDICTS (a test keeps the two in step).
+    # backends/settlement_map_qa.py VERDICTS plus the quickwins-c1-race verdict
+    # (settlement_quickwins_qa.C1_RACE_VERDICT); a test keeps them in step.
     'settlement-map-qa': frozenset({
         'bell_opens_hub', 'dashboard', 'map', 'building_order', 'shortage_icons',
         'storage_transfer', 'project_progress', 'residents', 'resources', 'production_order',
-        'localized_text', 'all',
+        'localized_text', 'all', 'starter_chest_race',
     }),
 }
 # Run arguments of a profile ref: (client, args after `--`) per verdict that needs another client
@@ -158,6 +163,9 @@ _BOOLEAN_PROFILE_VERDICTS = {
 # (it sends ClientInformation `en_us` fixed), so the Russian text check runs on vanilla Java.
 _PROFILE_VERDICT_RUN = {
     ('settlement-map-qa', 'localized_text'): ('java', ['--', '--language', 'ru_ru']),
+    # The starter chest founded under block churn in its chunk (row JAVA-CLIENT-MISSES-FOUNDING-STARTER-CHEST-BLOCK
+    # was seen on vanilla Java 26.3); the scenario's default race: 4 observer clocks, founded 100 ticks after the pad.
+    ('settlement-map-qa', 'starter_chest_race'): ('java', ['--', '--scenario', 'quickwins-c1-race']),
     # The chisel resource-pack admission is a vanilla-Java client behaviour; the native client
     # never asks for the optional pack.
     ('chisel', 'vanilla_optional_admission'): ('java', []),

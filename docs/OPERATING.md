@@ -1066,6 +1066,46 @@ startup. A checkpoint containing the old `krasnokamen:Rider` key is also
 refused, even after a clean stop. Back up the world and test opening a copy with
 the new binary before deployment. See [ADR 0013](decisions/0013-core-model-v2.md).
 
+### Upgrading a world whose WAL this build cannot read
+
+A journal frame names the store and block palette that wrote it (format 2). This
+build refuses format-1 frames and refuses to replay a tail from another store or
+another palette, so an upgrade from a build that wrote format 1 needs one of the
+two procedures below. **There is no dual reader and no serving fallback, and no
+procedure asks you to delete or move the `journal/` directory**: a journal file
+at or below a published checkpoint is never replayed, so leaving it in place is
+harmless.
+
+**A release whose native header predates `store_uuid` (RC5 and older).** This
+build refuses that store outright ("native store id missing"), before any WAL
+frame is decoded, so no pin swap reads the world at all. Recover with the old
+build: start the old pin on the world, let it settle, then export the world with
+its `world export-anvil` and import the result into a fresh world with this
+build. Native-only state — checkpointed chunk overlays that were never exported,
+settlement and plugin rows, entity payloads, the block log — is **lost** in that
+conversion; the export/import procedure and its losses are described in
+[MIGRATION.md](MIGRATION.md) (see "Exporting and importing a world"). Keep the
+original directory until the imported world has been checked in play.
+
+**A compatible native pin that writes WAL format 1** (same native schema and
+header identity as this build). The checkpoint is readable, only the tail is
+not, so:
+
+1. Start the **same old binary** with the **same content cache and packs** the
+   world was last run with, and stop it with `save-all flush` followed by
+   `stop`; wait for the process to exit and for its final checkpoint to be
+   published (the console prints the checkpoint tick).
+2. Confirm that checkpoint tick is at least the highest published batch tick
+   (`ls journal/batch-*-*.bin`, the second number of the last name). If it is
+   lower — a refused final checkpoint — start the old binary again and stop it
+   again; a world that cannot publish a covering checkpoint must not be upgraded.
+3. Start this build. Batches below the covering checkpoint are ignored and any
+   format-1 batch above it is refused, which means step 2 was not met.
+
+Do not remove, rename or "move aside" journal files to get past a refusal: the
+refusal is the check that keeps a tail from being applied to a world it does not
+belong to.
+
 **Stop cleanly before upgrading and before changing worldgen packs or the content
 cache.** A WAL edit on a chunk whose immutable baseline is not in the native
 database replays only when the saved worldgen identity proves the inputs that would
@@ -1229,16 +1269,34 @@ krasnokamen restore --from /backups/world-2026-10-15 --world-dir /srv/krasnokame
 krasnokamen --config restored-server.toml
 ```
 
+Pass the world's serving config with `--config` when its content cache or plugin
+deployment differs from the defaults. Backup and restore read an existing config
+for verification and reject a malformed one. Only an absent config uses defaults.
+
 A backup holds the native database, WAL/journal and other world files with a
-versioned SHA-256 manifest (lease files excluded). Never mix a `journal/`
-directory with a store it was not written by: batches carry no store identity,
-so a foreign tail replays into the wrong world without a refusal. `backup` and
+versioned SHA-256 manifest (lease files excluded). A `journal/` directory
+belongs to the store it was written with: every batch carries that store's id
+and block-palette digest, and startup refuses a foreign tail by name instead of
+replaying it into the wrong world. `backup` and
 `restore` always move both together; restoring only `native/state.redb` over an
-existing `journal/` is operator error, not a supported path. Restore verifies the full
+existing `journal/` is refused at the next start, not a supported path. Restore verifies the full
 inventory and hashes before writing; the target must be empty or absent and
 separate from the backup. Missing, changed or extra files, incompatible
 manifests and symlinks are refused. Retain the TOML, plugin artifacts and access
-lists separately; backups are never pruned automatically.
+lists separately; backups are never pruned automatically. Before reporting
+success, `backup` restores the copy it just wrote into its own directory and
+runs ordinary recovery and WAL replay over it (a copy redb would repair is
+repaired on a scratch copy, never in the backup); a copy that does not replay is
+withdrawn, and a host without a content cache prints the final status as
+`complete but NOT verified` instead of implying a check that did not run. A hot
+copy of a running store always needs that redb repair, so verification places
+the scratch copy in the destination directory's parent — outside the backup it
+is checking and on the same filesystem as the backup, not in a system temporary
+directory on another volume — and verifies to the highest published WAL tick.
+Peak space during a hot backup is therefore the finished copy plus one database;
+the scratch `.verify-<pid>-<n>` directory is removed after the store closes, a
+failed removal is logged, and a process crash during verification can leave one
+behind to delete by hand.
 
 Database copies read through the file handle holding the lease, including on
 Windows; they do not release the lock or reopen `state.redb` to copy it.

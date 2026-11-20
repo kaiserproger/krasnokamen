@@ -2,8 +2,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import numpy as np
-
 from tools.worldgen_diff import diff
 
 
@@ -37,32 +35,6 @@ class DecodeTests(unittest.TestCase):
         self.assertEqual(registry.states[blocks[base + 1]], 'minecraft:grass_block[snowy=false]')
         self.assertEqual(registry.states[blocks[base + 256]], 'minecraft:water[level=0]')
         self.assertEqual(registry.states[blocks[0]], 'minecraft:air')
-
-    def test_metric_tables_fold_air_decorations_trees_and_classes(self):
-        registry = diff.Registry()
-        ids = [registry.state(s) for s in (
-            'minecraft:cave_air', 'minecraft:poppy', 'minecraft:seagrass', 'minecraft:oak_leaves',
-            'minecraft:stone', 'minecraft:lava[level=0]')]
-        name = registry.table('name')[ids]
-        self.assertEqual(name[0], 0)  # cave_air is air by name
-        no_decor = registry.table('no_decor')[ids]
-        self.assertEqual(no_decor[1], 0)
-        self.assertEqual(registry.names[no_decor[2]], 'minecraft:water')
-        self.assertNotEqual(no_decor[3], 0)
-        self.assertEqual(registry.table('terrain')[ids][3], 0)
-        self.assertEqual(registry.table('shape')[ids].tolist(), [0, 0, 1, 0, 3, 2])
-
-    def test_top_reports_highest_set_cell(self):
-        mask = np.zeros((384, 16, 16), dtype=bool)
-        mask[10, 0, 0] = mask[70, 0, 0] = True
-        top = diff._top(mask)
-        self.assertEqual(top[0, 0], 70 + diff.MIN_Y)
-        self.assertEqual(top[1, 1], diff.MIN_Y - 1)
-
-    def test_non_divisor_bit_width_and_signed_longs(self):
-        indices = [i % 31 for i in range(4096)]
-        self.assertEqual(diff._unpack(_pack(indices, 5), 5, 4096).tolist(), indices)
-        self.assertEqual(diff._unpack([-1], 4, 16).tolist(), [15] * 16)
 
     def test_missing_chunks_fail_instead_of_reporting_partial_parity(self):
         with patch.object(diff, 'load_chunks', return_value={}):

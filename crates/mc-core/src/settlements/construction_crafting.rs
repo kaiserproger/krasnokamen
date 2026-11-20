@@ -430,19 +430,28 @@ pub(crate) fn craft(
 }
 
 /// Craft until `need` units of `item` exist in `post` (a haul of many units).
+/// Successful paths return the kinds touched by recipe mutations, including
+/// intermediate ingredients that are produced and consumed in the same plan.
 pub(crate) fn ensure_units(
     state: &TickState,
     post: &mut Vec<Vec<ItemStack>>,
     item: u32,
     need: i32,
     reserved: &BTreeMap<u32, i32>,
-) -> bool {
+) -> Option<impl Iterator<Item = u32> + use<>> {
     let mut work = Work {
         reserved: Some(reserved),
         totals: SlotTotals::from_slots(post),
         ..Work::default()
     };
-    ensure(state, post, &mut work, item, need, 0)
+    if !ensure(state, post, &mut work, item, need, 0) {
+        return None;
+    }
+    Some(
+        work.undo
+            .into_iter()
+            .filter_map(|(_, _, previous)| (!previous.is_empty()).then_some(previous.item_id)),
+    )
 }
 
 /// Single-authority probe: delegates to [`craft`] so no second recipe
@@ -843,6 +852,20 @@ pub(crate) fn add_stack(
     template: &ItemStack,
 ) -> bool {
     add_stack_recorded(state, post, template, |_, _, _, _, _| {})
+}
+
+/// Credit what fits and return the unplaced count, without duplicating a
+/// partially inserted stack when another physical receiver takes the rest.
+pub(crate) fn add_stack_partial(
+    state: &TickState,
+    post: &mut [Vec<ItemStack>],
+    template: &ItemStack,
+) -> i32 {
+    let mut remaining = template.count;
+    add_stack_recorded(state, post, template, |_, _, before, _, count| {
+        remaining -= count - if before.is_empty() { 0 } else { before.count };
+    });
+    remaining
 }
 
 fn add_stack_recorded(

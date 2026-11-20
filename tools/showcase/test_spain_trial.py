@@ -1,4 +1,5 @@
 """Bounded received-entity census used by the real Spain trial."""
+from collections import Counter
 import json
 import os
 import subprocess
@@ -8,7 +9,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from tools.showcase.spain_trial import hud_visible, order_build, publish, resident_census, spawn_on
+from tools.showcase.spain_trial import (
+    PhaseLog, hud_visible, next_order, order_build, publish, resident_census,
+    settlement_tick_tail, spawn_on, supply,
+)
 
 
 class ScratchPublishTests(unittest.TestCase):
@@ -121,6 +125,59 @@ class ScriptedChat:
         return state
 
 
+class SupplyTests(unittest.TestCase):
+    def test_tops_up_later_chest_before_spending_earlier_empty_slots(self):
+        first = {slot: {'item_id': 'minecraft:stone', 'count': 64} for slot in range(26)}
+        second = {slot: {'item_id': 'minecraft:stone', 'count': 64} for slot in range(27)}
+        second[0] = {'item_id': 'minecraft:terracotta', 'count': 40}
+        stock, run, console = Counter(terracotta=24, white_bed=1), {}, Mock()
+        with patch('tools.showcase.spain_trial.village._open_chest', side_effect=[first, second]):
+            supply(Mock(), console, [(1, 2, 3), (4, 5, 6)], stock, run)
+        self.assertEqual(stock, {})
+        self.assertEqual(run['material_fixture_commands'], [
+            'item replace block 4 5 6 container.0 with minecraft:terracotta 64',
+            'item replace block 1 2 3 container.26 with minecraft:white_bed 1',
+        ])
+        self.assertEqual(second[0]['count'], 40, 'top-up planning does not pretend the console ran')
+
+    def test_full_storage_retains_the_bounded_remainder_for_a_later_census(self):
+        slots = {slot: {'item_id': 'minecraft:stone', 'count': 64} for slot in range(27)}
+        console, stock, run = Mock(), Counter(white_bed=1), {}
+        with patch('tools.showcase.spain_trial.village._open_chest', return_value=slots):
+            supply(Mock(), console, [(1, 2, 3)], stock, run)
+        self.assertEqual(stock, {'white_bed': 1})
+        self.assertEqual(run['material_fixture_remaining'], {'white_bed': 1})
+        self.assertEqual(run['material_fixture_commands'], [])
+        del slots[26]  # ordinary construction made room before the next census
+        with patch('tools.showcase.spain_trial.village._open_chest', return_value=slots):
+            supply(Mock(), console, [(1, 2, 3)], stock, run)
+        self.assertEqual(stock, {})
+        self.assertEqual(run['material_fixture_remaining'], {})
+        self.assertEqual(run['material_fixture_commands'], [
+            'item replace block 1 2 3 container.26 with minecraft:white_bed 1'])
+
+
+class BuildingQueueTests(unittest.TestCase):
+    def test_autonomous_completed_fortress_is_not_ordered_again(self):
+        parent = {'buildings': [{'blueprint': 'spanish_church'}, {'blueprint': 'spanish_fortress'}],
+                  'project': {'projects': []}}
+        queue = ['spanish_fortress']
+        self.assertIsNone(next_order(queue, parent))
+        self.assertEqual(queue, [])
+
+    def test_active_autonomous_building_is_skipped_before_the_next_missing_one(self):
+        parent = {'buildings': [{'blueprint': 'spanish_house'}],
+                  'project': {'projects': [{'blueprint': 'spanish_church'}]}}
+        queue = ['spanish_house', 'spanish_church', 'spanish_fortress']
+        self.assertEqual(next_order(queue, parent), 'spanish_fortress')
+        self.assertEqual(queue, ['spanish_fortress'])
+
+    def test_missing_building_remains_at_the_head_until_admitted(self):
+        queue = ['spanish_house', 'spanish_church']
+        self.assertEqual(next_order(queue, {'buildings': [], 'project': {'projects': []}}), 'spanish_house')
+        self.assertEqual(queue, ['spanish_house', 'spanish_church'])
+
+
 class BuildingOrderTests(unittest.TestCase):
     def test_started_and_queued_are_native_admission_not_client_send_success(self):
         for reply in ['Started spanish_house construction.', 'Queued spanish_house: busy']:
@@ -159,6 +216,82 @@ class BuildingOrderTests(unittest.TestCase):
                 with self.assertRaises(TimeoutError):
                     order_build(probe, 'spanish_house', run)
                 probe.check.assert_not_called()
+
+
+class SettlementTickTailTests(unittest.TestCase):
+    def test_native_laps_are_joined_to_search_ticks_without_reusing_a_previous_lap(self):
+        result = settlement_tick_tail([
+            'DEBUG settlement_storehouse_search game_tick=262080 settlement=1 attempts=64\n',
+            '  commit detail ms: bees_conversion=0.01 settlements=120.01 villager_brain=1.00\n',
+            'phase ms: tick=262081 intents=0 dimension=Overworld commit=121.02\n',
+            '  commit detail ms: settlements=2066.30 villager_brain=1.00\n',
+            'phase ms: tick=262081 intents=0 dimension=Nether commit=2067.30\n',
+            '  commit detail ms: settlements=100.00 villager_brain=1.00\n',
+            'phase ms: tick=262082 intents=0 dimension=Overworld commit=101.00\n',
+            '  commit detail ms: settlements=3.50 villager_brain=1.00\n',
+            'phase ms: tick=262083 intents=0 dimension=Overworld commit=4.50\n',
+            'phase ms: tick=262084 intents=0 dimension=Overworld commit=1.00\n',
+        ])
+        self.assertTrue(result['enabled'])
+        self.assertEqual(result['search_ticks'], 1)
+        self.assertEqual(result['with_storehouse_search'],
+                         {'samples': 1, 'max_ms': 120.01, 'over_100ms': 1})
+        self.assertEqual(result['without_storehouse_search'],
+                         {'samples': 2, 'max_ms': 100.0, 'over_100ms': 0})
+
+    def test_missing_opt_in_phase_log_is_explicit_not_a_zero_cost_measurement(self):
+        result = settlement_tick_tail(['DEBUG settlement_storehouse_search game_tick=20\n'])
+        self.assertFalse(result['enabled'])
+        self.assertEqual(result['with_storehouse_search'],
+                         {'samples': 0, 'max_ms': None, 'over_100ms': 0})
+
+
+class PhaseLogTests(unittest.TestCase):
+    def test_split_streams_keep_replies_written_during_partial_diagnostic_lines(self):
+        ordinary = (b'Game is frozen\nThe time is 4531\n'
+                    b'Villager has the following entity data: []\n'
+                    b'journal build ms: a genuine stdout reply\n')
+        trace = b'DEBUG settlement_storehouse_search game_tick=20\n'
+        verbose = (b'settlement resident: uuid=actor lumber=lots-of-details\n'
+                   b'  block detail ms: farming=10.0\n'
+                   b'dimension envelope ms: elapsed=1.0\n'
+                   b'  edge items: queued=0\n'
+                   b'  post detail us: pickup=0 hostile=0\n'
+                   b'  battle detail us: total=1 counters=1\n'
+                   b'items views: pending=1 items_pending=0\n'
+                   b'items census: tick=262081 dimension=Overworld items=48\n'
+                   b'items merge: tick=262081 merged=0\n'
+                   b'chunk admission cpu: loaded=1 total_us=731\n')
+        timing = (b'  commit detail ms: settlements=120.01\n'
+                  b'phase ms: tick=21 dimension=Overworld commit=121.02\n')
+        partial = b'journal build ms: tick=5624 after_entities=0.01'
+        script = (f'import os; os.write(2, {partial!r}); os.write(1, {ordinary!r}); '
+                  f'os.write(2, {bytes([10]) + trace + verbose + timing!r})')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'server.log'
+            capture = PhaseLog(path)
+            try:
+                subprocess.run([sys.executable, '-c', script], stdout=capture,
+                               stderr=capture.stderr, check=True)
+            finally:
+                capture.close()
+            self.assertEqual(Counter(capture.raw_path.read_bytes().splitlines(keepends=True)),
+                             Counter((ordinary + partial + b'\n' + trace + verbose + timing).splitlines(keepends=True)))
+            self.assertEqual(Counter(path.read_bytes().splitlines(keepends=True)),
+                             Counter((ordinary + trace).splitlines(keepends=True)))
+            self.assertEqual(capture.phase_path.read_bytes(), trace + timing)
+            with capture.phase_path.open() as lines:
+                tail = settlement_tick_tail(lines)
+            self.assertEqual(tail['with_storehouse_search'],
+                             {'samples': 1, 'max_ms': 120.01, 'over_100ms': 1})
+
+    def test_capture_failure_is_not_silently_reported_as_complete_logging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            capture = PhaseLog(Path(directory) / 'server.log')
+            capture._raw.close()
+            os.write(capture.fileno(), b'Game is frozen\n')
+            with self.assertRaisesRegex(RuntimeError, 'phase log capture failed'):
+                capture.close()
 
 
 if __name__ == "__main__":

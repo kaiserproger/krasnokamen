@@ -1,0 +1,130 @@
+{
+  "decision": "D60.2",
+  "base": "8010e2c7e13469c7f9b17e7576a29eb7b5beb3cf",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "crates/mc-test-harness/src/bin/player_scale_bots_native.rs",
+  "source_sha256_before": "066a3873a68eabe9dfd962d90dd4fcf37a36b6124aed8d8a973481d15499f708",
+  "status": "Every test body, shared fixture and nested callback read; Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 5,
+    "removed_R4": 0,
+    "removed_R1": 0,
+    "removed_R3": 0,
+    "retained_K1": 1,
+    "retained_K2": 0,
+    "retained_U": 4,
+    "historical_medium_candidates_finalized": 3,
+    "source_lines_before": 612,
+    "source_lines_remaining": 612,
+    "physical_source_lines_removed": 0
+  },
+  "coverage": {
+    "module_and_helpers_read": "Whole612-line module read including all five tests, record closure, synthetic NBT/region fixtures and native observation helpers; full08b54a691 test correction and MAP-FRAME-MARKER-RECOVERY-LIMIT row read.",
+    "retained_assertions": "All source unchanged.",
+    "production_unchanged": true,
+    "removed_scaffolding": []
+  },
+  "evidence": {
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 5,
+      "external_matches": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "worktrees_checked": 578,
+      "source_file_present": 578,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": []
+    },
+    "candidate_count_basis": "Only original 799 R4/medium IDs.",
+    "provenance": [
+      "Map row is a source finding with explicit real-hunk control on300 markers; do not claim destructive restart or new runtime acceptance. All source retained."
+    ]
+  },
+  "records": [
+    {
+      "id": "mc-test-harness::tests::snapshot_globals_uses_map_recovery_validation",
+      "name": "snapshot_globals_uses_map_recovery_validation",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_native.rs",
+      "original_fn_line": 464,
+      "original_end_line": 526,
+      "historical_category": "K1",
+      "historical_confidence": "medium",
+      "category": "K1",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "K1: Uses real map recovery decoding and preserves 257 retained frame markers while rejecting 257 banners for MAP-FRAME-MARKER-RECOVERY-LIMIT; full row records source finding and real-hunk recovery control, not destructive restart.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::tests::native_json_does_not_collapse_duplicate_owner_fields",
+      "name": "native_json_does_not_collapse_duplicate_owner_fields",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_native.rs",
+      "original_fn_line": 529,
+      "original_end_line": 536,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Rejects duplicate NBT owner fields and nonfinite numbers rather than silently publishing ambiguous checkpoint evidence; no actual corrupt record receipt established.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::tests::native_compound_decodes_committed_global_and_player_records",
+      "name": "native_compound_decodes_committed_global_and_player_records",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_native.rs",
+      "original_fn_line": 539,
+      "original_end_line": 560,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Preserves compound health/position data and rejects trailing, JSON or scalar impostors in checkpoint evidence; own NBT writer fixtures are not independently committed records.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::tests::native_poi_requires_real_dimension_and_integer_position",
+      "name": "native_poi_requires_real_dimension_and_integer_position",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_native.rs",
+      "original_fn_line": 563,
+      "original_end_line": 573,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Excludes fractional or non-overworld memories from an overworld POI witness; authored JSON lacks a real incorrect villager-brain receipt.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "mc-test-harness::tests::readonly_export_decoder_checks_actual_region_chunk_identity",
+      "name": "readonly_export_decoder_checks_actual_region_chunk_identity",
+      "file": "crates/mc-test-harness/src/bin/player_scale_bots_native.rs",
+      "original_fn_line": 576,
+      "original_end_line": 611,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Reads a real temporary region file and refuses absent or out-of-file chunk locations instead of inventing empty data; hand-built NBT/header bytes are not independent exported-world evidence.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": "not-run; Main owns verification",
+  "verify_command": "cargo-test mc-test-harness native_probe::tests::"
+}

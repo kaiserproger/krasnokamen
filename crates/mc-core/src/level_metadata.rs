@@ -55,8 +55,13 @@ fn field<'a>(fields: &'a [(String, Tag)], key: &str) -> Option<&'a Tag> {
 }
 
 fn put(fields: &mut Fields, key: &str, value: Tag) {
-    fields.retain(|(name, _)| name != key);
-    fields.push((key.into(), value));
+    if let Some(index) = fields.iter().position(|(name, _)| name == key) {
+        fields[index].1 = value;
+        let mut first = true;
+        fields.retain(|(name, _)| name != key || std::mem::replace(&mut first, false));
+    } else {
+        fields.push((key.into(), value));
+    }
 }
 
 /// Validate converter-owned relative paths without consulting the filesystem.
@@ -255,6 +260,7 @@ pub fn import_tags(
     let mut climate = ClimateImage {
         day_time: 0,
         game_clock: Default::default(),
+        sim_debt_anchored_since: Some(0),
         weather_kind: 0,
         remaining_ticks: 12000,
         thunder_remaining_ticks: 12000,
@@ -921,6 +927,7 @@ mod tests {
             climate: Some(ClimateImage {
                 day_time: 18000,
                 game_clock: Default::default(),
+                sim_debt_anchored_since: Some(0),
                 weather_kind: 2,
                 remaining_ticks: 1234,
                 thunder_remaining_ticks: 4321,

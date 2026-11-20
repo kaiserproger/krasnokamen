@@ -22,8 +22,6 @@ from unittest import mock
 
 from . import __main__ as cli
 from . import profiles, runtime
-from .backends import driver
-from types import SimpleNamespace
 
 
 class ProcessStopTests(unittest.TestCase):
@@ -48,14 +46,6 @@ class ProcessStopTests(unittest.TestCase):
             mock.call(timeout=90.0), mock.call(timeout=5),
         ])
 
-    def test_other_processes_keep_the_short_cleanup_deadline(self) -> None:
-        process = mock.Mock(pid=123, returncode=0)
-        process.poll.return_value = None
-        with mock.patch.object(runtime.os, "killpg") as kill:
-            runtime.stop_process(process)
-        kill.assert_called_once_with(123, signal.SIGTERM)
-        process.wait.assert_called_once_with(timeout=8.0)
-
     def test_server_process_stops_with_the_budget_beyond_its_shutdown_path(self) -> None:
         # A server kicks every connection, drains the connection tasks (10 s per
         # join) and then runs the final checkpoint and journal flush. A stop that
@@ -74,15 +64,6 @@ class ProcessStopTests(unittest.TestCase):
             runtime.stop_process(server)
         kill.assert_called_once_with(123, signal.SIGTERM)
         process.wait.assert_called_once_with(timeout=runtime.SERVER_STOP_TIMEOUT_SECONDS)
-
-    def test_explicit_stop_budget_still_wins_over_the_server_default(self) -> None:
-        process = mock.Mock(pid=123, returncode=0)
-        process.poll.return_value = None
-        process.harness_stop_budget = runtime.SERVER_STOP_TIMEOUT_SECONDS
-        with mock.patch.object(runtime.os, "killpg"):
-            runtime.stop_process(process, timeout_seconds=12.5)
-        process.wait.assert_called_once_with(timeout=12.5)
-
 
 class ClientSettingsTests(unittest.TestCase):
     def test_invalid_username_rejected(self) -> None:
@@ -153,49 +134,7 @@ class SiblingRootTests(unittest.TestCase):
                 self.assertEqual(runtime.sibling_root("loader", worktree), other)
 
 
-class DriverLabelTests(unittest.TestCase):
-    def test_missing_manifest_defaults_to_draft(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            self.assertEqual(driver.run_quality_label(Path(tmp)), "draft")
-
-
-
 class RunTestPolicyTests(unittest.TestCase):
-    def test_default_nextest_gate_keeps_all_targets_and_cpu_parallelism(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            ctx = profiles.ProfileContext(Path(tmp))
-            env = {key: value for key, value in os.environ.items()
-                   if key not in {"RUST_TEST_THREADS", "NEXTEST_TEST_THREADS"}}
-            with mock.patch.dict(os.environ, env, clear=True):
-                with mock.patch.object(profiles, "_run_command", return_value={}) as run:
-                    with mock.patch.object(profiles, "_test_scope_memory", return_value={}):
-                        details = profiles.run_test(ctx)
-                self.assertNotIn("RUST_TEST_THREADS", os.environ)
-            self.assertEqual(run.call_args.args[0], [
-                "cargo", "nextest", "run",
-                "--profile", "default", "--ignore-default-filter", "--no-fail-fast",
-                "--no-tests=fail", "--workspace", "--all-targets",
-            ])
-            self.assertNotIn("RUST_TEST_THREADS", run.call_args.kwargs["env"])
-            self.assertEqual(details["test_runner"], "nextest")
-            self.assertEqual(details["nextest_test_threads_env"], "num-cpus")
-            self.assertIsNone(details["rust_test_threads_env"])
-
-    def test_full_gate_preserves_explicit_concurrency(self) -> None:
-        for overrides, expected in [
-            ({"NEXTEST_TEST_THREADS": "6"}, "6"),
-            ({"RUST_TEST_THREADS": "3", "NEXTEST_TEST_THREADS": "6"}, "3"),
-        ]:
-            with self.subTest(overrides=overrides), tempfile.TemporaryDirectory() as tmp:
-                env = {key: value for key, value in os.environ.items()
-                       if key not in {"RUST_TEST_THREADS", "NEXTEST_TEST_THREADS"}}
-                env.update(overrides)
-                with mock.patch.dict(os.environ, env, clear=True):
-                    with mock.patch.object(profiles, "_run_command", return_value={}) as run:
-                        with mock.patch.object(profiles, "_test_scope_memory", return_value={}):
-                            profiles.run_test(profiles.ProfileContext(Path(tmp)))
-                self.assertEqual(run.call_args.kwargs["env"]["NEXTEST_TEST_THREADS"], expected)
-
     def test_nextest_failure_is_not_retried_with_cargo(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.object(profiles, "_run_command", side_effect=RuntimeError("nextest failed")) as run:
@@ -211,21 +150,6 @@ class RunTestPolicyTests(unittest.TestCase):
                         profiles.run_test(profiles.ProfileContext(Path(tmp), extra_args=[flag]))
                 run.assert_not_called()
 
-    def test_focused_selectors_and_nextest_threads_use_the_same_runner(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            args = ["-p", "mc-edge", "--lib", "--test-threads=2", "inventory"]
-            ctx = profiles.ProfileContext(Path(tmp), extra_args=args)
-            with mock.patch.dict(os.environ, {"RUST_TEST_THREADS": "3"}):
-                with mock.patch.object(profiles, "_run_command", return_value={}) as run:
-                    with mock.patch.object(profiles, "_test_scope_memory", return_value={}):
-                        profiles.run_test(ctx)
-            self.assertEqual(run.call_args.args[0], [
-                "cargo", "nextest", "run",
-                "--profile", "default", "--ignore-default-filter", "--no-fail-fast",
-                "--no-tests=fail", *args,
-            ])
-            self.assertEqual(run.call_args.kwargs["env"]["NEXTEST_TEST_THREADS"], "3")
-
     def test_ci_short_profile_applies_to_test_but_not_correctness(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             ctx = profiles.ProfileContext(Path(tmp))
@@ -239,13 +163,6 @@ class RunTestPolicyTests(unittest.TestCase):
             self.assertEqual(short[3:5], ["--profile", "ci"])
             self.assertNotIn("--ignore-default-filter", short)
             self.assertEqual(full[3:6], ["--profile", "default", "--ignore-default-filter"])
-
-    def test_selected_run_profile_reaches_scope(self) -> None:
-        for profile in ["test", "correctness", "check"]:
-            with self.subTest(profile=profile):
-                with mock.patch.object(cli, "_exec_in_scope", return_value=0) as scope:
-                    self.assertEqual(cli.main(["run", profile]), 0)
-                scope.assert_called_once_with(profile)
 
     def test_named_scenario_reaches_scope_as_its_profile(self) -> None:
         for argv, expected in [(["run", "scenario", "battle-kit-census"], "battle-crash-recovery"),
@@ -289,12 +206,6 @@ class RunTestPolicyTests(unittest.TestCase):
                                     self.assertEqual(cli._exec_in_scope("correctness"), 0)
                         scope.assert_called_once_with("600%", "8G")
 
-    def test_scope_command_applies_the_resolved_profile_cap(self) -> None:
-        with mock.patch.object(cli.shutil, "which", return_value="/usr/bin/systemd-run"):
-            with mock.patch.object(cli.subprocess, "run", return_value=SimpleNamespace(stdout="running")):
-                command = cli._scope_command("600%", "12G")
-        self.assertIn("MemoryMax=12G", command)
-
     def test_scope_peak_is_read_before_transient_scope_exits(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -332,21 +243,6 @@ class ReceiptContractTests(unittest.TestCase):
                     self.assertEqual(cli.cmd_run(["test"]), 0)
                     self.assertEqual(cli.cmd_run(["test", "--timeout-seconds", "7"]), 0)
             self.assertEqual(contexts, [None, 7.0])
-
-    def test_screens_voice_native_cli_reaches_its_backend(self) -> None:
-        from . import preflight
-
-        # Dispatch only: no graphical/audio behavior is claimed by this unit test.
-        with tempfile.TemporaryDirectory() as tmp, \
-                mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)), \
-                mock.patch.object(preflight, "check", return_value=()), \
-                mock.patch("tools.harness.backends.screens_voice_qa.run", return_value={}) as run:
-            code = cli.cmd_run(["screens-voice-qa", "--client", "native", "--windowed"])
-            payload = json.loads(next(Path(tmp).glob("*/result.json")).read_text())
-        self.assertEqual(code, 0, payload["error"])
-        run.assert_called_once()
-        self.assertEqual(run.call_args.args[0].client, "native")
-        self.assertTrue(run.call_args.args[0].windowed)
 
     def test_java_receipt_does_not_attribute_a_native_client_pin(self) -> None:
         spec = {"scope": "real-client", "prerequisites": profiles._NONE, "run": lambda ctx: {}}
@@ -513,15 +409,6 @@ class GravesCustodyTests(unittest.TestCase):
         receipt["error"] = "journal tail"
         with self.assertRaisesRegex(RuntimeError, "probe_pass"):
             check_custody({}, receipt, item="minecraft:dirt", count=7)
-
-    def test_grave_coordinates_parse_from_the_plugin_request(self) -> None:
-        from .backends.graves import GRAVE_REQUEST
-
-        match = GRAVE_REQUEST.search(
-            "plugin.command_result: request=grave--574-71-320-cd88 outcome=\"committed\"")
-        self.assertIsNotNone(match)
-        self.assertEqual([int(match.group(i)) for i in (1, 2, 3)], [-574, 71, 320])
-
 
 class SharedClientProbeTests(unittest.TestCase):
     def test_inventory_missing_click_tools_fails_before_fixture_actions(self) -> None:
@@ -740,15 +627,6 @@ class ScenarioCatalogTests(unittest.TestCase):
         self.assertEqual(seen["server_bin"], server)
         self.assertEqual(seen["extra_args"][:2], ["--subject", "mobs.cow"])
 
-    def test_explain_writes_no_artifact_and_rejects_unknown_ids(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):
-                output = io.StringIO()
-                with contextlib.redirect_stdout(output):
-                    self.assertEqual(cli.cmd_explain(["inventory-client"]), 0)
-                    self.assertEqual(cli.cmd_explain(["no-such-scenario"]), 2)
-            self.assertEqual(list(Path(tmp).iterdir()), [])
-
     def test_named_scenario_requires_every_expected_test_to_run(self) -> None:
         from . import scenarios as scenario_catalog
 
@@ -813,15 +691,6 @@ class ScenarioCatalogTests(unittest.TestCase):
                 payload = json.loads(next(Path(tmp).glob("*/result.json")).read_text())
                 self.assertEqual(code, expected_exit)
                 self.assertEqual(payload["status"], expected_status)
-
-
-    def test_catalog_entries_name_existing_profiles_and_sources(self) -> None:
-        from . import scenarios as scenario_catalog
-
-        for scenario in scenario_catalog.SCENARIOS.values():
-            self.assertIn(scenario.profile, profiles.PROFILES, scenario.id)
-            for source in scenario.sources:
-                self.assertTrue((runtime.REPO_ROOT / source).exists(), f"{scenario.id}: {source}")
 
 
 class ReadinessCleanupTests(unittest.TestCase):

@@ -106,6 +106,12 @@ pub enum WorldCommand {
     /// stay as generated; only not-yet-generated chunks use the new generator.
     /// Refuses when anything but the revision differs (seed comes from --config).
     UpgradeWorldgen,
+    /// Convert legacy frozen clocks offline, only on a disposable stopped copy.
+    /// Folds the old WAL, writes one checkpoint and archives the WAL untouched.
+    UpgradeGameClock {
+        #[arg(long)]
+        copy: PathBuf,
+    },
     /// Generate missing overworld chunks offline and store them, so joining
     /// players load them instead of waiting for worldgen. Holds the world
     /// lease; rerunning skips chunks already stored.
@@ -232,25 +238,38 @@ pub struct CrashCensusPaths {
     receipt: PathBuf,
 }
 
-/// Backup/restore need only their explicit paths. A fresh content import also
-/// works before the operator has created a serving configuration.
+/// The operator's configuration, or defaults when the host has none yet.
+///
+/// A present `--config` is never ignored: `backup` and `restore` verify a copy
+/// under the plugins and content cache the file names, so dropping it would
+/// judge every world saved with a deployment against an empty one. Only a
+/// configuration that does not exist falls back to defaults, and only for the
+/// commands that can run before an operator has created one.
 pub fn load_config(cli: &Cli) -> anyhow::Result<crate::config::EdgeConfig> {
-    if matches!(
-        cli.command,
-        Some(Command::Backup { .. } | Command::Restore { .. })
-    ) {
-        return Ok(crate::config::EdgeConfig::default());
-    }
     match std::fs::read_to_string(&cli.config) {
         Ok(text) => crate::server_properties::load(&text, &cli.config),
         Err(error)
             if error.kind() == std::io::ErrorKind::NotFound
-                && matches!(cli.command, Some(Command::Content { .. })) =>
+                && matches!(
+                    cli.command,
+                    Some(
+                        Command::Content { .. } | Command::Backup { .. } | Command::Restore { .. }
+                    )
+                ) =>
         {
             Ok(crate::config::EdgeConfig::default())
         }
         Err(error) => Err(error.into()),
     }
+}
+
+/// Content inputs for trial-restoring a backup, or the reason they are missing
+/// (a host without a content cache can still copy a world; it cannot replay it).
+fn verify_content(
+    cfg: &mut crate::config::EdgeConfig,
+) -> anyhow::Result<mc_core::config::CoreConfig> {
+    crate::server::resolve_content_config(cfg)?;
+    Ok(crate::server::core_config(cfg))
 }
 
 /// Returns true for a completed offline command, false for normal serving.
@@ -304,8 +323,40 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                 }
             }
         }
-        Command::Backup { world_dir, out } => crate::backup::run_backup(world_dir, out)?,
-        Command::Restore { from, world_dir } => crate::backup::run_restore(from, world_dir)?,
+        Command::Backup { world_dir, out } => {
+            let files = crate::backup::run_backup(world_dir, out)?;
+            // Books R5 G3: a backup is reported successful only after it
+            // restores, so the final status is printed here, after the check.
+            // Without a content cache there is nothing to replay the copy
+            // against; the status then says unverified instead of implying a
+            // check that did not run.
+            match verify_content(cfg) {
+                Ok(content) => {
+                    crate::backup::verify_written_backup(out, &content)?;
+                    println!(
+                        "backup of {} into {} complete and verified: {files} files",
+                        world_dir.display(),
+                        out.display(),
+                    );
+                }
+                Err(error) => println!(
+                    "backup of {} into {} complete but NOT verified: {files} files; no content \
+                     cache for recovery: {error}",
+                    world_dir.display(),
+                    out.display(),
+                ),
+            }
+        }
+        Command::Restore { from, world_dir } => {
+            // Refuse a backup that cannot replay before copying it into place.
+            match verify_content(cfg) {
+                Ok(content) => crate::backup::verify_backup(from, &content)?,
+                Err(error) => {
+                    eprintln!("restore proceeds unverified: no content cache for recovery: {error}")
+                }
+            }
+            crate::backup::run_restore(from, world_dir)?;
+        }
         Command::World { command } => {
             crate::server::resolve_content_config(cfg)?;
             let config = crate::server::core_config(cfg);
@@ -353,6 +404,31 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
                         &paths.blocks,
                         &paths.receipt,
                     )?;
+                }
+                WorldCommand::UpgradeGameClock { copy } => {
+                    let report =
+                        mc_world_tools::game_clock_upgrade::upgrade_game_clock(&config, copy)?;
+                    let archive = copy.join(format!(
+                        "journal-before-game-clock-{}",
+                        report.checkpoint_tick
+                    ));
+                    println!(
+                        "game-clock conversion: copy={} checkpoint={} tick={} tail_held_ticks={} H={} held_since={:?} active={} inactive={} dropped_debt={} work_normalized={} work_raw={} sleep_normalized={} sleep_raw={} archive={}",
+                        copy.display(),
+                        report.checkpoint_tick,
+                        report.tick,
+                        report.tail_held_ticks,
+                        report.held_ticks,
+                        report.held_since,
+                        report.active_debts,
+                        report.inactive_debts,
+                        report.dropped_debt,
+                        report.work_normalized,
+                        report.work_raw,
+                        report.sleep_normalized,
+                        report.sleep_raw,
+                        archive.display()
+                    );
                 }
                 WorldCommand::UpgradeWorldgen => {
                     let report =

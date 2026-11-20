@@ -69,11 +69,12 @@ fn one_builder_advance_seals_block_debit_and_cursor_before_closed_writer_replay(
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let directory = tempfile::tempdir().unwrap();
     {
-        let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).unwrap();
+        let mut writer = crate::journal::JournalWriter::open_test(directory.path(), 1).unwrap();
         writer.append(output.tick, output.tick, &entries).unwrap();
     }
     let batches =
-        crate::journal::read_complete_batches_after(&directory.path().join("journal"), 0).unwrap();
+        crate::journal::read_complete_batches_after_test(&directory.path().join("journal"), 0)
+            .unwrap();
     let replay = crate::journal::replay_batches(crate::journal::Replay::default(), &batches);
     assert_eq!(replay.tick, output.tick);
     assert_eq!(
@@ -111,7 +112,7 @@ fn one_builder_advance_seals_block_debit_and_cursor_before_closed_writer_replay(
     let (mut restored, _, _) = fixture();
     restored.settlements.apply_image(super::super::RecordImage {
         id,
-        value: Some(replay.settlements[&id.0].clone()),
+        value: Some(replay.settlement_tail.settlements[&id.0].clone()),
     });
     restored.plugins = replay.plugins;
     for ((x, y, z), block) in replay.blocks {

@@ -19,7 +19,7 @@ pub(crate) use availability::gatherer_for_item;
 mod access;
 pub(crate) use access::projects_of;
 pub(crate) use access::{
-    bind_builder, bound_builder, head_order, idle, orders, project_for_structure,
+    bind_builder, bound_builder, head_order, idle, orders, pending_missing, project_for_structure,
     project_of_builder, projects, record_heap_bytes, unbound_project, upgrading,
 };
 
@@ -51,6 +51,11 @@ mod upgrade;
 #[path = "construction_builders.rs"]
 mod builders;
 use builders::{assign_builder, builder_free, probe_storage};
+
+#[path = "construction_storage.rs"]
+mod storage;
+use storage::candidate_kinds;
+pub(crate) use storage::order_storage_haul;
 
 pub(crate) const PLAN_CADENCE: u64 = 20;
 /// Active projects a settlement may hold at once: one per builder candidate the
@@ -1104,23 +1109,6 @@ fn priority_house(
         .then_some(blueprint)
 }
 
-fn candidate_kinds<'a>(
-    state: &'a TickState,
-    record: &'a SettlementRecord,
-    images: &'a [super::inventory::Image],
-) -> impl Iterator<Item = BuildingKind> + 'a {
-    let _ = images;
-    let cleric = BuildingKind::Workshop(Profession::Cleric);
-    needed_kinds(record, state.settlements.member_count(record.id)).chain(
-        (spanish_faction(state, record)
-            && !record
-                .buildings
-                .values()
-                .any(|building| building.kind == cleric))
-        .then_some(cleric),
-    )
-}
-
 pub(crate) fn sources(state: &TickState, id: SettlementId) -> Vec<[i32; 3]> {
     buildings::storage_points(state, id)
 }
@@ -1429,7 +1417,7 @@ fn catalog(
     state: &TickState,
     record: &SettlementRecord,
 ) -> impl Iterator<Item = &'static blueprints::Blueprint> + Clone + use<> {
-    blueprints::catalog(&state.registry, spanish_faction(state, record))
+    storage::autonomous_catalog(state, record, spanish_faction(state, record))
 }
 
 /// The next-level blueprint of a blueprint-built building, with the placement
@@ -1558,11 +1546,22 @@ fn site_project<'a>(
         let floors = std::array::from_fn(|turns| {
             site_refusals::floor_columns(blueprint, u8::try_from(turns).expect("quarter turns"))
         });
-        let Some((species, color)) = funded_variant(state, record.id, &level.materials, images)
+        let Some((species, color)) =
+            storage::funded_variant(state, record, blueprint, &level.materials, images)
         else {
             report.reject(site_refusals::Reason::MaterialBill, record.anchor);
             continue;
         };
+        survey.storage = storage::Capacity::for_blueprint(state, record, blueprint, images);
+        if blueprint.kind == BuildingKind::Storage {
+            tracing::debug!(
+                game_tick = state.tick,
+                settlement = record.id.0,
+                pressured = survey.storage.is_some(),
+                attempts = share,
+                "settlement_storehouse_search"
+            );
+        }
         let mut budget = share;
         match site_refusals::advance(
             state,
@@ -1696,6 +1695,10 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     if plan_order(state, id, budget) {
         return false;
     }
+    let images = executor::source_images(state, id);
+    if let Some(started) = storage::plan(state, id, budget, &images) {
+        return started;
+    }
     if founding::plan(state, id) {
         return false;
     }
@@ -1716,9 +1719,6 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     if residents == 0 {
         return false;
     }
-    // Probe one canonical storage image set; an unfundable early autonomous
-    // need cannot monopolize the single project slot.
-    let images = executor::source_images(state, id);
     // Keep the priority material worker out of optional street work, not out
     // of the entire planner: another resident can build a funded later kind.
     let gathering = gatherer_demand(state, record, &images)
@@ -1853,7 +1853,6 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     };
     begin_cells(state, site.project, site.bounds, site.cells)
 }
-
 /// The next funded piece of the perimeter wall, its gates or the well, from
 /// [`FORTIFY_RESIDENTS`] residents. Each wall stretch, gatehouse or well is a
 /// project of its own, bought from real stock like a lamp post; the world, not
@@ -2583,7 +2582,7 @@ fn restore_borrowed_gatherer(state: &mut TickState, id: SettlementId, profession
 pub(crate) fn owe_carry(state: &mut TickState, id: SettlementId, uuid: uuid::Uuid, handle: &str) {
     // Placed items count too: a load the remaining bill no longer asks for
     // (a finished stage, a finished project) is still project stock.
-    let items = plan_items(state, id, handle);
+    let items = executor::return_items(state, id, handle).ok();
     let Some(slot) = state.entities.slot_of_uuid(uuid) else {
         return;
     };
@@ -2920,22 +2919,6 @@ pub(crate) struct WaitingNeed {
     pub(crate) total: u64,
     pub(crate) source_item: Option<String>,
     pub(crate) no_source: Option<SourceReason>,
-}
-
-/// Every item the project's plan uses, placed or still to place: a released
-/// builder's load of any of them is project stock it owes storage (D8 review
-/// R4-1), even once the remaining bill no longer asks for it.
-fn plan_items(state: &TickState, id: SettlementId, handle: &str) -> Option<Vec<u32>> {
-    let snapshot = executor::status(state, id, handle).ok()?;
-    snapshot
-        .consumed
-        .iter()
-        .chain(&snapshot.remaining)
-        .map(|material| {
-            let name = mc_data::Identifier::parse(&material.resource).ok()?;
-            state.registry.items.id_of(&name)
-        })
-        .collect()
 }
 
 /// One project's remaining bill, net of the carry of the builder bound to it.

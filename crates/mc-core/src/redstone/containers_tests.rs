@@ -17,8 +17,8 @@ fn state_with_dir(dir: Option<std::path::PathBuf>, clear: bool) -> TickState {
         Arc::clone(&registry.blocks),
     ));
     let air = mc_world::BlockStateId(registry.states.air);
-    let mut world = if let Some(dir) = dir {
-        let config = crate::CoreConfig::new(dir, 42);
+    let world = if let Some(dir) = &dir {
+        let config = crate::CoreConfig::new(dir.clone(), 42);
         ChunkWorld::new_native(
             42,
             crate::native_checkpoint::tests::fixture_store(&config).unwrap(),
@@ -39,8 +39,22 @@ fn state_with_dir(dir: Option<std::path::PathBuf>, clear: bool) -> TickState {
             mc_world::OVERWORLD_GEOMETRY,
         )
     };
-    world.ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
     let mut state = TickState::new(registry, world, 0, 512);
+    if let Some(dir) = dir {
+        crate::native_checkpoint::tests::restore_fixture_clock(
+            &mut state,
+            &crate::CoreConfig::new(dir, 42),
+        )
+        .unwrap();
+    }
+    state
+        .world
+        .ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
+    assert!(
+        state.world.load_errors().next().is_none(),
+        "{:?}",
+        state.world.load_errors().next()
+    );
     state
         .tickets
         .insert("containers-test".into(), (ChunkPos { x: 0, z: 0 }, 0));
@@ -1106,6 +1120,17 @@ fn hopper_custody_and_cooldown_survive_real_native_checkpoint() {
     let written = capture.write().unwrap();
     assert!(!written.is_empty());
     original.world.mark_flushed(&written);
+    // The standalone dirty-capture writer does not own the native game clock.
+    // Publish the actual boundary, as the production checkpoint owner does.
+    crate::native_checkpoint::tests::write_manifest(
+        &crate::CoreConfig::new(dir.clone(), 42),
+        &crate::journal::CheckpointManifest {
+            tick: checkpoint_tick,
+            climate: Some(crate::weather::ClimateImage::capture(&original)),
+            ..Default::default()
+        },
+    )
+    .unwrap();
     assert!(
         original
             .world
@@ -1147,8 +1172,7 @@ fn hopper_custody_and_cooldown_survive_real_native_checkpoint() {
 #[test]
 fn full_suction_wal_batch_replays_inventory_cooldown_and_entity_tombstone() {
     use crate::journal::{
-        EntityAppearanceImage, JournalEntry, JournalWriter, Replay, read_complete_batches_after,
-        replay_batches,
+        EntityAppearanceImage, JournalEntry, JournalWriter, Replay, replay_batches,
     };
     let dir = std::env::temp_dir().join(format!("hopper-wal-{}", uuid::Uuid::new_v4()));
     let mut state = state();
@@ -1179,7 +1203,7 @@ fn full_suction_wal_batch_replays_inventory_cooldown_and_entity_tombstone() {
         yaw: 0.0,
         pitch: 0.0,
     };
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     writer.append(1, 1, &[birth]).unwrap();
     step(&mut state);
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
@@ -1209,7 +1233,8 @@ fn full_suction_wal_batch_replays_inventory_cooldown_and_entity_tombstone() {
     writer.append(2, 2, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = read_complete_batches_after(&dir.join("journal"), 0).unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&dir.join("journal"), 0).unwrap();
     let replay = replay_batches(Replay::default(), &batches);
     assert!(!replay.entities.contains_key(&id.0));
     assert_eq!(replay.block_entities[&key(HOPPER)].slots[0], stone);
@@ -1701,7 +1726,7 @@ fn built_base_cooling_hopper_wal_has_no_per_tick_timer_images() {
         .map(|c| (c.pos, c.revision))
         .collect();
     let dir = std::env::temp_dir().join(format!("hopper-timer-wal-{}", uuid::Uuid::new_v4()));
-    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let mut writer = JournalWriter::open_test(&dir, 1).unwrap();
     let mut opaque_per_tick = Vec::new();
     let mut bytes_per_tick = Vec::new();
     for _ in 0..7 {

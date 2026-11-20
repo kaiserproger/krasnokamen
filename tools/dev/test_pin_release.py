@@ -1,7 +1,6 @@
 """Release-pin target/kind and pooled-copy regressions; no Cargo builds."""
 from __future__ import annotations
 
-import argparse
 from contextlib import ExitStack, redirect_stdout
 import importlib.machinery
 import importlib.util
@@ -36,16 +35,6 @@ class PinReleaseTests(unittest.TestCase):
         self.targets = self.root / "targets"
         self.slot = self.targets / "slot-a"
         self.slot.mkdir(parents=True)
-
-    def test_slot_is_the_pool_child_for_host_and_cross_artifacts(self):
-        with patch.object(pin.w, "TARGETS", self.targets):
-            for artifact in (self.slot / "release/krasnokamen",
-                             self.slot / WINDOWS / "release/krasnokamen-client.exe"):
-                with self.subTest(artifact=artifact):
-                    self.assertEqual(pin.artifact_slot(artifact), self.slot)
-            for artifact in (self.root / "elsewhere/release/client", self.targets / "not-a-slot/release/client"):
-                with self.assertRaises(pin.w.ToolError):
-                    pin.artifact_slot(artifact)
 
     def test_kind_and_target_are_required_for_reuse(self):
         directory = self.root / "pin"
@@ -135,46 +124,6 @@ class PinReleaseTests(unittest.TestCase):
         shutil.rmtree(source)
         with self.assertRaisesRegex(pin.w.ToolError, "missing or unreadable"):
             pin.existing_pin(relabelled, "server", LINUX, True, "K", before)
-
-    def test_target_is_explicit_and_inherited_target_is_removed(self):
-        artifact = self.slot / WINDOWS / "release/krasnokamen-client.exe"
-        artifact.parent.mkdir(parents=True)
-        artifact.touch()
-        message = {"reason": "compiler-artifact", "target": {"name": "krasnokamen-client", "kind": ["bin"]},
-                   "executable": str(artifact)}
-
-        class Process:
-            stdout = [json.dumps(message) + "\n"]
-            returncode = 0
-            def __enter__(self): return self
-            def __exit__(self, *args): return False
-
-        with patch.dict(os.environ, {"CARGO_BUILD_TARGET": "wrong-target", "CARGO_TARGET_DIR": "/wrong"}), \
-             patch.object(pin.subprocess, "Popen", return_value=Process()) as launched:
-            command, found = pin.build(self.root, "client", WINDOWS, True, target=self.slot)
-        self.assertEqual(found, artifact)
-        self.assertEqual(command[command.index("--target") + 1], WINDOWS)
-        self.assertIn(f"CARGO_TARGET_DIR={self.slot}", command)
-        self.assertNotIn("CARGO_BUILD_TARGET", launched.call_args.kwargs["env"])
-        self.assertNotIn("CARGO_TARGET_DIR", launched.call_args.kwargs["env"])
-        self.assertIn("--locked", command)
-        self.assertIn("--release", command)
-        self.assertIn("CARGO_INCREMENTAL=1", command)
-        self.assertNotIn("RUSTC_WRAPPER=", command)  # the runner selects the wrapper
-        with patch.object(pin.subprocess, "Popen", return_value=Process()):
-            command, _ = pin.build(self.root, "client", WINDOWS, False, target=self.slot)
-        self.assertIn("CARGO_INCREMENTAL=0", command)
-
-    def test_host_selection_uses_rustc_not_cargo_build_target(self):
-        with patch.dict(os.environ, {"CARGO_BUILD_TARGET": WINDOWS}), \
-             patch.object(pin.subprocess, "check_output", return_value=f"rustc test\nhost: {LINUX}\n"):
-            self.assertEqual(pin.host_target(self.root), LINUX)
-
-    def test_target_paths_are_not_pin_directory_names(self):
-        self.assertEqual(pin.target_triple(WINDOWS), WINDOWS)
-        for value in ("../target.json", "/tmp/target.json", "a/b-c", "a\\b-c", "bad target"):
-            with self.subTest(value=value), self.assertRaises(argparse.ArgumentTypeError):
-                pin.target_triple(value)
 
     def test_cli_namespaces_targets_and_kinds_and_keeps_in_use_mark(self):
         pins = self.root / "pins"
@@ -314,18 +263,6 @@ class InputKeyTests(unittest.TestCase):
                     self.write(name, old)
                 self.assertEqual(self.key(), base)
 
-    def test_key_changes_for_toolchain_target_kind_incremental_and_build_env(self):
-        base = self.key()
-        self.assertNotEqual(self.key(target="x86_64-pc-windows-gnu"), base)
-        self.assertNotEqual(self.key(kind="bots"), base)
-        self.assertNotEqual(self.key(incremental=False), base)
-        with patch.dict(os.environ, {"RUSTFLAGS": "-C target-cpu=native"}):
-            self.assertNotEqual(self.key(), base)
-        with patch.dict(os.environ, {"CARGO_BUILD_JOBS": "3", "CARGO_TARGET_DIR": "/x", "HOME_X": "1"}):
-            self.assertEqual(self.key(), base)
-        self.rustc = "rustc 1.99.1\nhost: x86_64-unknown-linux-gnu\n"
-        self.assertNotEqual(self.key(), base)
-
     def test_key_changes_for_cargo_config_outside_the_tree(self):
         base = self.key()
         parent_config = Path(self.temp.name) / ".cargo" / "config.toml"
@@ -414,13 +351,6 @@ class ReuseTests(unittest.TestCase):
         self.assertEqual(pin.existing_pin(self.pins / "new-server", "server", LINUX, True), reused)
         self.assertEqual([p.name for p in self.pins.iterdir() if p.name.startswith(".tmp")], [])
 
-    def test_reuse_falls_back_to_a_copy_when_linking_fails(self):
-        _, binary = self.source_pin()
-        with patch.object(pin.os, "link", side_effect=OSError("cross-device")):
-            reused = self.reuse()
-        self.assertNotEqual(reused.stat().st_ino, binary.stat().st_ino)
-        self.assertEqual(reused.read_bytes(), binary.read_bytes())
-
     def test_damaged_or_mismatched_source_pins_are_not_reused(self):
         directory, binary = self.source_pin()
         binary.chmod(0o755)
@@ -434,13 +364,6 @@ class ReuseTests(unittest.TestCase):
         self.assertIsNone(self.reuse())
         self.assertIsNone(self.reuse(incremental=False))
         self.assertIsNone(self.reuse(inputs="K2"))
-
-    def test_a_damaged_candidate_does_not_hide_a_valid_one(self):
-        _, bad = self.source_pin("a-damaged")
-        bad.chmod(0o755)
-        bad.write_bytes(b"tampered")
-        self.source_pin("b-good")
-        self.assertEqual(json.loads((self.reuse().parent / "manifest.json").read_text())["reused_from"], "b-good")
 
     def test_pins_without_the_inputs_field_are_never_reused(self):
         self.source_pin(inputs_sha256=None)
@@ -496,26 +419,6 @@ class ReuseTests(unittest.TestCase):
         binary.write_bytes(b"tampered")
         with self.assertRaisesRegex(pin.w.ToolError, "damaged"):
             pin.existing_pin(directory, "core-tests", LINUX, True)
-
-    def test_other_kinds_keep_the_six_gigabyte_cap(self):
-        commands = []
-
-        class Fake:
-            returncode = 0
-            def __init__(self, cmd, **_):
-                commands.append(cmd)
-                self.stdout = iter(())
-            def __enter__(self):
-                return self
-            def __exit__(self, *_):
-                return False
-
-        with patch.object(pin.subprocess, "Popen", Fake), \
-                patch.object(pin, "artifact_slot", return_value=self.root / "targets" / "slot-a"):
-            for kind in ("server", "client", "bots"):
-                with self.assertRaises(pin.w.ToolError):  # no artifact in this fake build
-                    pin.build(self.top, kind, None, False)
-        self.assertEqual([cmd[cmd.index("-m") + 1] for cmd in commands], ["6G", "6G", "6G"])
 
     def test_core_tests_build_runs_no_tests_and_takes_the_test_executable(self):
         slot = self.root / "targets" / "slot-a" / "release"

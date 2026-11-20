@@ -352,6 +352,28 @@ fn validate_globals(
     } else if settlement_rows != 0 {
         return Err(failure("settlement_sequence", "missing sequence row"));
     }
+    let mut starter_chest_rows = 0;
+    for (key, record) in globals {
+        let Some(id) = key.strip_prefix("settlement_chest/") else {
+            continue;
+        };
+        let player = id
+            .parse::<uuid::Uuid>()
+            .map_err(|error| failure(key, error))?;
+        if player.to_string() != id {
+            return Err(failure(key, "non-canonical starter chest player"));
+        }
+        validate_envelope(record)?;
+        if record.captured_tick != tick {
+            return Err(failure(key, "capture tick mismatch"));
+        }
+        let (payload, count): (uuid::Uuid, u64) =
+            serde_json::from_slice(&record.payload).map_err(|error| failure(key, error))?;
+        if payload != player || count == 0 {
+            return Err(failure(key, "invalid starter chest player or grant count"));
+        }
+        starter_chest_rows += 1;
+    }
     let mut map_rows = 0;
     let mut next_map_id = 0_i64;
     for (key, record) in globals {
@@ -432,6 +454,7 @@ fn validate_globals(
         != DOMAINS.len()
             + plugin_domains.len()
             + settlement_rows
+            + starter_chest_rows
             + sequence_rows
             + map_rows
             + map_sequence_rows
@@ -1140,6 +1163,7 @@ impl NativeStore {
     pub fn checkpoint_reader(&self) -> Result<NativeCheckpointReader, NativeError> {
         Ok(NativeCheckpointReader {
             tx: db(self.database.begin_read())?,
+            store_uuid: self.store_uuid,
         })
     }
     pub fn read_chunk(
@@ -1233,11 +1257,25 @@ fn validate_player_map(
 /// One pinned read image for offline conversion; all reads share this transaction.
 pub struct NativeCheckpointReader {
     pub(super) tx: redb::ReadTransaction,
+    /// The store's immutable id, so a reader can bind the WAL it replays to the
+    /// store it read (Books R4-P3).
+    store_uuid: [u8; 16],
 }
+
+impl NativeCheckpointReader {
+    /// The immutable id of the store this reader was opened on.
+    #[must_use]
+    pub fn store_uuid(&self) -> [u8; 16] {
+        self.store_uuid
+    }
+}
+
 impl NativeReadOnlyStore {
     pub fn checkpoint_reader(&self) -> Result<NativeCheckpointReader, NativeError> {
+        let (store_uuid, _) = self.marker_fields()?;
         Ok(NativeCheckpointReader {
             tx: db(self.database.begin_read())?,
+            store_uuid,
         })
     }
     pub fn read_checkpoint(&self) -> Result<NativeCheckpointImage, NativeError> {

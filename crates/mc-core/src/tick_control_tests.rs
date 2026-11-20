@@ -12,7 +12,7 @@ fn default_manager_runs_at_twenty_ticks_per_second() {
     let mut control = TickControl::default();
     assert_eq!(control.rate(), 20.0);
     assert_eq!(control.period(), Duration::from_millis(50));
-    assert!(control.begin_tick().is_none());
+    assert!(control.begin_tick(1).is_none());
     assert!(control.runs_normally());
 }
 
@@ -31,19 +31,19 @@ fn frozen_ticks_do_not_simulate_until_stepped() {
     let mut control = TickControl::default();
     assert!(!control.step(3), "only a frozen game steps");
     control.set_frozen(true);
-    control.begin_tick();
+    control.begin_tick(1);
     assert!(!control.runs_normally());
     assert!(control.step(2));
-    for _ in 0..2 {
-        control.begin_tick();
+    for tick in 2..=3 {
+        control.begin_tick(tick);
         assert!(control.runs_normally());
     }
-    control.begin_tick();
+    control.begin_tick(4);
     assert!(!control.runs_normally(), "the step budget is spent");
     assert!(control.step(5));
     assert!(control.stop_stepping());
     assert!(!control.stop_stepping());
-    control.begin_tick();
+    control.begin_tick(5);
     assert!(!control.runs_normally());
 }
 
@@ -54,13 +54,13 @@ fn sprint_unfreezes_counts_down_and_restores_the_previous_freeze() {
     assert!(!control.request_sprint(3, REQUESTER));
     assert!(!control.frozen());
     assert!(control.sprinting());
-    for _ in 0..3 {
-        assert!(control.begin_tick().is_none());
+    for tick in 1..=3 {
+        assert!(control.begin_tick(tick).is_none());
         assert!(control.runs_normally());
         control.record_tick(2_000);
     }
     let report = control
-        .begin_tick()
+        .begin_tick(4)
         .expect("sprint report after the last tick");
     assert_eq!(report.requester, REQUESTER);
     // 3 ticks in 6 ms: 500 ticks per second, 2.00 ms per tick.
@@ -75,12 +75,12 @@ fn stopping_a_sprint_reports_the_completed_part_and_a_second_request_interrupts(
     let mut control = TickControl::default();
     assert!(control.stop_sprint().is_none());
     control.request_sprint(10, REQUESTER);
-    for _ in 0..4 {
-        control.begin_tick();
+    for tick in 1..=4 {
+        control.begin_tick(tick);
         control.record_tick(1_000);
     }
     assert!(control.request_sprint(20, REQUESTER), "restart interrupts");
-    control.begin_tick();
+    control.begin_tick(5);
     control.record_tick(1_000);
     let report = control.stop_sprint().expect("running sprint");
     assert_eq!(report.ticks_per_second, 1_000);
@@ -407,6 +407,75 @@ fn frozen_frame_time_query_matches_published_game_age() {
                     })
             }),
             "query must report the age published by the same held frame"
+        );
+    }
+}
+
+#[test]
+fn game_clock_held_restore_preserves_capture_before_first_tick_and_restart_modes() {
+    let image = GameClockImage::Held {
+        game_ticks: 10,
+        held_since: Some(15),
+    };
+    for start_frozen in [false, true] {
+        let mut control = TickControl::default();
+        control.restore_clock(image, 40).unwrap();
+        assert!(!control.runs_normally());
+        assert_eq!(control.clock_image(40), image, "pre-tick capture");
+        control.set_frozen(start_frozen);
+        control.begin_tick(41);
+        assert_eq!(
+            control.clock_image(41),
+            if start_frozen {
+                image
+            } else {
+                GameClockImage::Running { held_ticks: 30 }
+            }
+        );
+        assert_eq!(control.held_since, start_frozen.then_some(15));
+    }
+}
+
+#[test]
+fn game_clock_sprint_final_tick_runs_before_a_new_hold_boundary() {
+    let mut control = TickControl::default();
+    control.set_frozen(true);
+    control.begin_tick(1);
+    assert!(!control.request_sprint(2, REQUESTER));
+    for tick in 2..=3 {
+        assert!(control.begin_tick(tick).is_none());
+        assert!(control.runs_normally());
+    }
+    assert!(control.begin_tick(4).is_some());
+    assert!(control.runs_normally());
+    assert!(control.frozen());
+    assert_eq!(control.held_since, None);
+    control.begin_tick(5);
+    assert_eq!(
+        control.clock_image(5),
+        GameClockImage::Held {
+            game_ticks: 3,
+            held_since: Some(5),
+        }
+    );
+}
+
+#[test]
+fn game_clock_two_single_steps_start_distinct_holds() {
+    let mut control = TickControl::default();
+    control.set_frozen(true);
+    control.begin_tick(11);
+    for (step, hold, game) in [(12, 13, 11), (14, 15, 12)] {
+        assert!(control.step(1));
+        control.begin_tick(step);
+        assert!(control.runs_normally());
+        control.begin_tick(hold);
+        assert_eq!(
+            control.clock_image(hold),
+            GameClockImage::Held {
+                game_ticks: game,
+                held_since: Some(hold),
+            }
         );
     }
 }

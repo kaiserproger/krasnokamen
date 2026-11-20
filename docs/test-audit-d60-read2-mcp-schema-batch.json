@@ -1,0 +1,151 @@
+{
+  "decision": "D60.2",
+  "base": "91ce317d8e384fe075bbe3affbcfbf55cdcbdb7a",
+  "worktree": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+  "file": "tools/harness/test_mcp_schema.py",
+  "source_sha256_before": "87eaf5d79d3e3d2874bb035f917b25dc0e083f072d997fa68436827a92c48531",
+  "status": "Every 6 body and shared fixture/callback read; Main owns verification.",
+  "counts": {
+    "historical_test_ids_finalized": 6,
+    "removed_R4": 3,
+    "removed_R1": 0,
+    "retained_K1": 0,
+    "retained_K2": 0,
+    "retained_U": 3,
+    "historical_medium_candidates_finalized": 2,
+    "source_lines_before": 105,
+    "source_lines_remaining": 65,
+    "physical_source_lines_removed": 40,
+    "historical_medium_candidates_unfinalized": 254
+  },
+  "coverage": {
+    "module_and_helpers_read": "Complete 105-line test module, all fixtures and generated shell/source strings; mcp_schema.native_schema/validate/_static/validate_source and _fully_known; preflight schema-selection/source-validation path. Full 34e651b3b test/autocraft fix patch and 4e6874ded test delta/message read. No real invalid-ticks run established; landing explicitly preserved census tests.",
+    "retained_assertions": "Retained bodies and shared fixture unchanged.",
+    "production_unchanged": true,
+    "removed_scaffolding": [
+      "Same-file exact-name os/preflight/profiles/autocraft_qa grep found imports and removed autocraft body only; drop those imports, retain json/mock/Path/tempfile used by census and static-source tests. No helper removed."
+    ]
+  },
+  "evidence": {
+    "reference_fence": {
+      "scope": "/run/media/kaiserroman/games/solaris-work/wt/D60Read2",
+      "all_test_names_checked": 6,
+      "external_matches": "",
+      "own_module_and_audit_json_excluded": true
+    },
+    "other_worktree_dirty_fence": {
+      "worktrees_checked": 577,
+      "source_file_present": 568,
+      "dirty_overlaps": [],
+      "errors": [],
+      "warnings": []
+    },
+    "candidate_count_basis": "Only original 799 R4/medium IDs; additional U removals do not enlarge denominator."
+  },
+  "records": [
+    {
+      "id": "tools/harness/test_mcp_schema.py::SchemaTests::test_binary_without_export_fails_closed",
+      "name": "test_binary_without_export_fails_closed",
+      "file": "tools/harness/test_mcp_schema.py",
+      "original_fn_line": 14,
+      "original_end_line": 16,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Uses /bin/true as deliberately invalid client without actual selected-client export incident.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_mcp_schema.py::SchemaTests::test_release_predating_export_is_recorded_not_validated",
+      "name": "test_release_predating_export_is_recorded_not_validated",
+      "file": "tools/harness/test_mcp_schema.py",
+      "original_fn_line": 18,
+      "original_end_line": 23,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Authored shell executable emits own compatibility error string; no actual old-client receipt established.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_mcp_schema.py::SchemaTests::test_native_census_extensions_come_from_selected_binary",
+      "name": "test_native_census_extensions_come_from_selected_binary",
+      "file": "tools/harness/test_mcp_schema.py",
+      "original_fn_line": 25,
+      "original_end_line": 48,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Selected native binary must own census argument schema rather than Loader catalog; 4e6874ded explicitly preserved census test during landing, but actual selected-client mismatch receipt not read; retain conservatively, not K1/K2.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_mcp_schema.py::SchemaTests::test_autocraft_literal_is_checked_before_game_launch",
+      "name": "test_autocraft_literal_is_checked_before_game_launch",
+      "file": "tools/harness/test_mcp_schema.py",
+      "original_fn_line": 50,
+      "original_end_line": 75,
+      "historical_category": "R4",
+      "historical_confidence": "medium",
+      "category": "R4",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "R4: Rewrites currently valid source literal to injected 1200 and validates fake client schema; 34e651b3b adds this control but does not show an actual invalid-ticks autocraft failure.",
+      "disposition": "remove",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_mcp_schema.py::SchemaTests::test_known_literal_argument_checked_against_export",
+      "name": "test_known_literal_argument_checked_against_export",
+      "file": "tools/harness/test_mcp_schema.py",
+      "original_fn_line": 77,
+      "original_end_line": 95,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: Static literal/constant/local values must be checked while parameter shadowing remains dynamic; generated schemas/source are not independent exported catalog oracle; actual invalid-call provenance not established.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    },
+    {
+      "id": "tools/harness/test_mcp_schema.py::SchemaTests::test_unknown_dynamic_value_does_not_hide_static_invalid_argument",
+      "name": "test_unknown_dynamic_value_does_not_hide_static_invalid_argument",
+      "file": "tools/harness/test_mcp_schema.py",
+      "original_fn_line": 97,
+      "original_end_line": 105,
+      "historical_category": "U",
+      "historical_confidence": "low",
+      "category": "U",
+      "basis": "read",
+      "confidence": "high",
+      "reason": "U: One dynamic argument must not suppress validation of another known invalid argument; authored source/schema, actual preflight failure provenance not established.",
+      "disposition": "keep",
+      "protected_references": [],
+      "ledger_references": []
+    }
+  ],
+  "verification": {
+    "performed": false,
+    "owner": "Main",
+    "requested_check": "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m unittest tools.harness.test_mcp_schema",
+    "negative_control": "none run",
+    "runtime_saving": "Not measured."
+  },
+  "gaps": []
+}

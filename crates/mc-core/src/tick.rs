@@ -480,10 +480,11 @@ pub struct TickState {
     pub(crate) settlements: crate::settlements::Registry,
     pub(crate) settlement_sequence: u64,
     pub(crate) autonomy_queue: crate::settlements::autonomy::AutonomyQueue,
-    /// Per-connection certify-dialog corner marks (transient UI draft, never persisted).
-    pub(crate) settlement_marks: HashMap<ConnectionId, crate::settlements::ui::Marks>,
     /// Per-connection settlement icon menu (transient display window, never persisted).
     pub(crate) settlement_menus: HashMap<ConnectionId, crate::settlements::ui::menus::Open>,
+    /// Unified settlement Back history, discarded on disconnect.
+    pub(crate) settlement_navigation:
+        HashMap<ConnectionId, crate::settlements::ui::navigation::Navigation>,
     pub(crate) tick_budget: crate::tick_budget::Budget,
     /// Global `/tick` rate manager (moved between worlds with the other globals).
     pub(crate) tick_control: crate::tick_control::TickControl,

@@ -6,9 +6,10 @@
 //! `ConstructionFieldAccess`) and its ceiling is zero. Callers use the
 //! functions below instead, which is also how the store changed shape from one
 //! project and one order to vectors without touching them.
-use super::{OwnerOrder, Project};
+use super::{OwnerOrder, Project, blueprints, executor, funded_variant, selected_bill};
 use crate::settlements::buildings::BuildingId;
 use crate::settlements::{Registry, SettlementId, SettlementRecord};
+use crate::tick::TickState;
 use crate::villager::VillagerProfession;
 
 /// Every active project, in admission order.
@@ -116,6 +117,44 @@ pub(crate) fn project_of_builder(
 /// Every pending owner request, in the order it was submitted.
 pub(crate) fn orders(record: &SettlementRecord) -> impl Iterator<Item = &OwnerOrder> {
     record.orders.iter()
+}
+
+/// Physical item deficits for an unfunded queued order. A bill fundable through
+/// recipes or a stocked variant has no shortage to present.
+pub(crate) fn pending_missing(
+    state: &TickState,
+    id: SettlementId,
+    index: usize,
+) -> Vec<(String, u32)> {
+    let Some(order) = state
+        .settlements
+        .get(id)
+        .and_then(|record| orders(record).nth(index))
+    else {
+        return Vec::new();
+    };
+    let Some(level) = blueprints::get(&state.registry, &order.blueprint)
+        .and_then(|blueprint| blueprint.level(order.level))
+    else {
+        return Vec::new();
+    };
+    let images = executor::source_images(state, id);
+    if funded_variant(state, id, &level.materials, &images).is_some() {
+        return Vec::new();
+    }
+    let Some(bill) = selected_bill(state, id, &level.materials, &images) else {
+        return Vec::new();
+    };
+    super::super::construction_crafting::missing_base(state, &bill, &images)
+        .into_iter()
+        .filter_map(|(item, count)| {
+            state
+                .registry
+                .items
+                .name_of(item)
+                .map(|name| (name.to_string(), count))
+        })
+        .collect()
 }
 
 /// The request the planner may start on its next free slot: the queue head.

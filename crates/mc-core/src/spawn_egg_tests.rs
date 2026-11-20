@@ -39,11 +39,12 @@ fn spawn_egg_villager_and_single_debit_survive_wal_replay_and_native_restart() {
     assert!(state.entities.row(slot).villager.is_some());
     let root = std::env::temp_dir().join(format!("krasnokamen-spawn-egg-{}", uuid::Uuid::new_v4()));
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
-    let mut writer = crate::journal::JournalWriter::open(&root, 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(&root, 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let batches = crate::journal::read_complete_batches_after(&root.join("journal"), 0).unwrap();
+    let batches =
+        crate::journal::read_complete_batches_after_test(&root.join("journal"), 0).unwrap();
     let replay = crate::journal::replay_batches(crate::journal::Replay::default(), &batches);
     let replay = crate::journal::replay_batches(replay, &batches);
     assert_eq!(

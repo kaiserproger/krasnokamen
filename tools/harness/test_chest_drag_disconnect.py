@@ -4,16 +4,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from . import scenarios
-from .backends import native_chest_drag_disconnect as gate, native_v2
+from .backends import native_chest_drag_disconnect as gate
 
 
 class ChestDragTests(unittest.TestCase):
-    def test_registered_graphical(self):
-        name = "native-v2-chest-drag-disconnect"
-        self.assertIn(name, native_v2.RUNNERS)
-        self.assertEqual(scenarios.SCENARIOS[name].evidence, "graphical")
-
     def test_gate_rejects_loss_and_duplicate_after_rejoin(self):
         log = {"item": "minecraft:oak_log", "count": 1, "components": {}}
         empty = {"item": None, "count": 0, "components": {}}

@@ -347,7 +347,7 @@ fn old_checkpoint_and_wal_rows_default_founding_to_none() {
         high_water: parent.0,
         tick,
     };
-    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let mut writer = JournalWriter::open_test(directory.path(), 1).unwrap();
     writer
         .append(tick, tick, std::slice::from_ref(&entry))
         .unwrap();
@@ -367,9 +367,9 @@ fn old_checkpoint_and_wal_rows_default_founding_to_none() {
         .join("journal")
         .join(format!("batch-{tick:020}-{tick:020}.bin"));
     let mut frame = std::fs::read(&path).unwrap();
-    frame.truncate(32);
-    frame[24..28].copy_from_slice(&u32::try_from(payload.len()).unwrap().to_le_bytes());
-    frame[28..32].copy_from_slice(&crc32fast::hash(&payload).to_le_bytes());
+    frame.truncate(56);
+    frame[48..52].copy_from_slice(&u32::try_from(payload.len()).unwrap().to_le_bytes());
+    frame[52..56].copy_from_slice(&crc32fast::hash(&payload).to_le_bytes());
     frame.extend_from_slice(&payload);
     std::fs::write(path, frame).unwrap();
     let restored = crate::core::recover_dimension_state(&config, Dimension::Overworld).unwrap();
@@ -678,6 +678,11 @@ fn founding_sigkill_publishes_all_or_nothing_at_native_wal_boundary() {
         crate::core::journal_entries_for_tick(&mut state, &baseline).unwrap();
         assert!(state.settlements.get(parent).unwrap().founding.is_some());
         checkpoint(&mut state, &config);
+        let replay_baseline = Replay {
+            tick: state.tick,
+            climate: Some(crate::weather::ClimateImage::capture(&state)),
+            ..Default::default()
+        };
         std::fs::write(
             directory.join("before.json"),
             serde_json::to_vec(&civil_image(&state)).unwrap(),
@@ -692,9 +697,10 @@ fn founding_sigkill_publishes_all_or_nothing_at_native_wal_boundary() {
         );
         let child = state.settlements.find("colony_2").unwrap().id;
         let replay = crate::journal::apply_batch_images(
-            Replay::default(),
+            replay_baseline,
             &[(output.tick, output.tick, entries.clone())],
         );
+        crate::journal::validate_replay(&replay).unwrap();
         assert_eq!(
             replay
                 .entities
@@ -706,8 +712,15 @@ fn founding_sigkill_publishes_all_or_nothing_at_native_wal_boundary() {
                 .count(),
             3
         );
-        assert!(replay.settlements[&parent.0].founding.is_none());
-        assert_eq!(replay.settlements[&child.0].buildings.len(), 4);
+        assert!(
+            replay.settlement_tail.settlements[&parent.0]
+                .founding
+                .is_none()
+        );
+        assert_eq!(
+            replay.settlement_tail.settlements[&child.0].buildings.len(),
+            4
+        );
         for (name, origin) in expedition.sites() {
             assert!(executor::built_at(&state, child, name, origin));
         }
@@ -730,7 +743,7 @@ fn founding_sigkill_publishes_all_or_nothing_at_native_wal_boundary() {
                 }),
             ));
         }
-        let mut writer = JournalWriter::open(&directory, 1).unwrap();
+        let mut writer = JournalWriter::open_test(&directory, 1).unwrap();
         writer.append(output.tick, output.tick, &entries).unwrap();
         writer.flush().unwrap();
         println!("READY published");
@@ -858,7 +871,7 @@ fn review_command_certificate_cannot_outlive_a_cancelled_expedition_claim() {
         &mut state,
         executor,
         Some("owner"),
-        false,
+        true,
         "house",
         bounds.min,
         bounds.max,

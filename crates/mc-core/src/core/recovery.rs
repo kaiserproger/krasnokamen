@@ -4,7 +4,7 @@
 use super::*;
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn load_dimension_state(
+pub(crate) fn load_dimension_state(
     config: &CoreConfig,
     registry: Arc<CoreRegistry>,
     dimension: crate::dimensions::Dimension,
@@ -144,6 +144,9 @@ pub(super) fn load_dimension_state(
     tick_state.config_view_distance = i32::from(config.view_distance);
     tick_state.dimension = dimension;
     tick_state.tick = recovered_tick;
+    if let Some(since) = replay.sim_debt_anchored_since {
+        tick_state.tick_control.restore_debt_anchor(since);
+    }
     // Settlement registries are per-dimension authorities: every dimension
     // hydrates its own rows (matched by home dimension) folded with its
     // dimension-routed WAL tail. Membership columns hydrate with entities below.
@@ -153,27 +156,11 @@ pub(super) fn load_dimension_state(
             tick_state.hostile.battle.journaled =
                 Some(crate::battle::persistence::Journaled::full_due());
         }
-        let sequence = match crate::settlements::persistence::checkpoint_sequence(
-            settlement_globals,
-            root_manifest.tick,
-        ) {
-            Ok(sequence) => sequence,
-            // Fresh worlds and unit fixtures predate the sequence row and
-            // hold no settlement rows either; anything else is corruption.
-            Err(_)
-                if !settlement_globals
-                    .keys()
-                    .any(|key| key == "settlement_sequence" || key.starts_with("settlement/")) =>
-            {
-                0
-            }
-            Err(error) => return Err(error),
-        };
-        crate::settlements::persistence::hydrate_dimension(
+        crate::settlements::persistence::hydrate_checkpoint_dimension(
             &mut tick_state,
             settlement_globals,
             &replay,
-            sequence,
+            root_manifest.tick,
         )?;
     }
     tick_state.plugins = replay.plugins;
@@ -355,7 +342,6 @@ pub(crate) fn recover_dimension_state(
         None,
     )?;
     state.native_globals = recovered.checkpoint.globals;
-    crate::settlements::persistence::refuse_legacy_plugin_state(&state)?;
     crate::settlements::persistence::finish_recovery(&mut state)?;
     Ok(state)
 }
@@ -485,7 +471,6 @@ pub(crate) fn recover_tick_state(
     }
     tick_state.datapacks.install(packs, root, base);
     let salt_minted = crate::entity_uuid::install_salt(&mut tick_state)?;
-    crate::settlements::persistence::refuse_legacy_plugin_state(&tick_state)?;
     crate::settlements::persistence::finish_recovery(&mut tick_state)?;
     tick_state.plugin_runtime = plugin_runtime;
     tick_state.build_queries = build_queries;

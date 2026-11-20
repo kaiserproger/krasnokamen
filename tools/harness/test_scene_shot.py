@@ -77,6 +77,26 @@ class SceneShotTests(unittest.TestCase):
                 scene_shot.wait_java_bootstrap(object(), process, 30)
             self.assertEqual(ready.call_count, 1)
 
+    def test_console_and_operator_level_options_are_validated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx = scene_shot.ProfileContext(Path(tmp), client='native', windowed=True)
+            for scenario, message in (({'steps': [], 'server_console': 1}, 'server_console'),
+                                      ({'steps': [], 'operator_level': 5}, 'operator_level'),
+                                      ({'steps': [], 'operator_level': 0}, 'operator_level')):
+                with self.assertRaisesRegex(ValueError, message):
+                    scene_shot.validate_scenario(ctx, scenario)
+            self.assertEqual(scene_shot.validate_scenario(
+                ctx, {'steps': [], 'server_console': True, 'operator': False, 'operator_level': 2})[0]['operator_level'], 2)
+
+    def test_operator_fixture_writes_the_requested_level(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx = scene_shot.ProfileContext(Path(tmp), client='native', windowed=True)
+            scene_shot.prepare_operator_fixture(ctx, ['SceneShot'], 2)
+            entries = json.loads((ctx.artifact_dir / 'ops.json').read_text())
+            self.assertEqual([(entry['name'], entry['level']) for entry in entries], [('SceneShot', 2)])
+            scene_shot.prepare_operator_fixture(ctx, ['SceneShot'])
+            self.assertEqual(json.loads((ctx.artifact_dir / 'ops.json').read_text())[0]['level'], 4)
+
     def test_require_entities_fails_before_shot_when_summon_did_not_create_subject(self):
         class Probe:
             def __init__(self, entities):

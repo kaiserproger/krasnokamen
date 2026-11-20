@@ -115,12 +115,12 @@ fn integrity_same_tick_dimension_round_trip_survives_wal_recovery() {
     assert!(output.changes.entities_removed.contains(&item));
     assert!(output.changes.entities_spawned.contains(&item));
     let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
-    let mut writer = crate::journal::JournalWriter::open(&directory.0, 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(&directory.0, 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
     let batches =
-        crate::journal::read_complete_batches_after(&directory.0.join("journal"), 0).unwrap();
+        crate::journal::read_complete_batches_after_test(&directory.0.join("journal"), 0).unwrap();
     let replay = crate::journal::replay_batches(
         Default::default(),
         &journal_for_dimension(&batches, Dimension::Overworld),
@@ -321,10 +321,10 @@ fn dimension_state(
             Arc::new(mc_worldgen::EndGenerator::try_new(42, Arc::clone(&registry.blocks)).unwrap())
         }
     };
-    let world = if let Some(directory) = directory {
+    let world = if let Some(directory) = &directory {
         crate::world::ChunkWorld::new_native(
             42,
-            crate::native_checkpoint::tests::fixture_store(&import_config(&directory)).unwrap(),
+            crate::native_checkpoint::tests::fixture_store(&import_config(directory)).unwrap(),
             crate::native_checkpoint::dimension_id(dimension),
             generator,
             &registry,
@@ -345,10 +345,22 @@ fn dimension_state(
     let mut state = TickState::new(registry, world, 0, 4096);
     state.dimension = dimension;
     state.gamerules.insert("spawn_mobs".into(), "false".into());
+    if let Some(directory) = directory {
+        crate::native_checkpoint::tests::restore_fixture_clock(
+            &mut state,
+            &import_config(&directory),
+        )
+        .unwrap();
+    }
     let want = [(mc_world::ChunkPos { x: 0, z: 0 }, 0)]
         .into_iter()
         .collect();
     state.world.ensure_blocking(&want);
+    assert!(
+        state.world.load_errors().next().is_none(),
+        "{:?}",
+        state.world.load_errors().next()
+    );
     for x in 0..16 {
         for z in 0..16 {
             state
@@ -952,14 +964,14 @@ fn cross_dimension_wal_then_checkpoint_restart_preserves_player_and_world_custod
         ..Default::default()
     };
     crate::native_checkpoint::tests::write_manifest(&config, &initial).unwrap();
-    let mut writer = crate::journal::JournalWriter::open(&directory.0, 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(&directory.0, 1).unwrap();
     // Manifest and player fixture publication captures tick 2. Split the
     // empty earlier interval from the tail that runtime recovery must replay.
     writer.append(1, 2, &[]).unwrap();
     writer.append(3, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     let batches =
-        crate::journal::read_complete_batches_after(&directory.0.join("journal"), 0).unwrap();
+        crate::journal::read_complete_batches_after_test(&directory.0.join("journal"), 0).unwrap();
     let replay = crate::journal::replay_batches(
         Default::default(),
         &journal_for_dimension(&batches, Dimension::Nether),
@@ -1309,7 +1321,7 @@ fn native_checkpoint_keeps_ids_stable_for_wal_only_removal_and_health_replay() {
         .tick;
     let removed = assigned[&uuid::Uuid::from_u128(1)];
     let modified = assigned[&uuid::Uuid::from_u128(2)];
-    let mut writer = crate::journal::JournalWriter::open(&directory.0, 1).unwrap();
+    let mut writer = crate::journal::JournalWriter::open_test(&directory.0, 1).unwrap();
     writer
         .append(
             base + 1,
@@ -1824,6 +1836,62 @@ fn anchor_respawn_waits_for_loaded_area_and_consumes_one_charge() {
     );
     assert_eq!(travel::locate(&state, bob).unwrap().0, Dimension::Overworld);
     assert_eq!(state.players[&bob].respawn_point, None);
+}
+
+/// A respawn into another dimension spends the anchor charge at the
+/// coordinator boundary. The published Nether projection carries that block
+/// change, so its chunk image and revision must carry the spent charge too.
+#[test]
+fn cross_dimension_anchor_respawn_publishes_the_spent_charge_in_its_chunk_image() {
+    let (mut state, alice, _) = worlds();
+    let nether = state.other_dimensions.get_mut(&Dimension::Nether).unwrap();
+    load_spawn_area(nether);
+    nether.tickets.insert(
+        "anchor-respawn".into(),
+        (mc_world::ChunkPos { x: 0, z: 0 }, 1),
+    );
+    let anchor = block(nether, "respawn_anchor");
+    let charged = rules::anchor_state(nether, anchor, 2).unwrap();
+    let spent = rules::anchor_state(nether, anchor, 1).unwrap();
+    nether.world.set_block(4, 150, 4, charged);
+    nether.world.fold_overlay();
+    let player = state.players.get_mut(&alice).unwrap();
+    player.respawn_point = Some([4, 150, 4]);
+    player.respawn_dimension = Dimension::Nether;
+    player.respawn_forced = false;
+    let (killed, _) = command(&mut state, 1, "kill");
+    let image = |output: &crate::boundary::TickOutput| {
+        let chunk = output.snapshot.dimensions[&Dimension::Nether]
+            .snapshot
+            .chunks
+            .iter()
+            .find(|chunk| (chunk.pos.x, chunk.pos.z) == (0, 0))
+            .unwrap();
+        (chunk.revision, chunk.chunk.get_block(4, 150, 4))
+    };
+    let (before, _) = image(&killed);
+    let (respawned, _, _) = crate::tick::run_tick(
+        &mut state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(1),
+        }],
+    );
+    assert_eq!(travel::locate(&state, alice).unwrap().0, Dimension::Nether);
+    let anchor_at = crate::boundary::BlockPos { x: 4, y: 150, z: 4 };
+    assert!(
+        respawned.snapshot.dimensions[&Dimension::Nether]
+            .changes
+            .blocks
+            .iter()
+            .any(|change| change.position == anchor_at && change.state == spent),
+        "the coordinator respawn spends the charge in this tick"
+    );
+    let (revision, published) = image(&respawned);
+    assert_eq!(published, Some(mc_world::BlockStateId(spent)));
+    assert_ne!(
+        revision, before,
+        "the spent charge moves the chunk revision"
+    );
 }
 
 #[test]

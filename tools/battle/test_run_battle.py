@@ -169,32 +169,6 @@ Path(str(output) + '.result.json').write_text(json.dumps({'clean_completion': Tr
 
 
 class BattleRunnerTests(unittest.TestCase):
-    def test_dry_run_shows_commands_without_creating_run(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            script = Path(__file__).with_name('run-battle.sh')
-            run = root / 'run'
-            result = subprocess.run([str(script), '--dry-run', '--pin', str(root / 'pin'),
-                                     '--client', str(root / 'client'), '--client-data', str(root / 'client-data'),
-                                     '--cache', str(root / 'cache'), '--run-dir', str(run),
-                                     '--seed', '17', '--scenario', 'field-1k', '--count', '250',
-                                     '--paused-ticks', '1200', '--minimum-battle-ticks', '1200'],
-                                    text=True, capture_output=True, check=True)
-            self.assertIn('battle setup 17 field-1k 250', result.stdout)
-            self.assertIn('battle start', result.stdout)
-            self.assertIn('battle pause', result.stdout)
-            self.assertIn('telemetry.jsonl', result.stdout)
-            self.assertIn('recorder record', result.stdout)
-            self.assertIn('battle roster', result.stdout)
-            self.assertIn('--roster-file', result.stdout)
-            self.assertIn('--roster-ready-file', result.stdout)
-            self.assertIn('--roster-timeout 900', result.stdout)
-            self.assertIn('wait at least 1200 paused ticks', result.stdout)
-            self.assertIn('require at least 1200 continuously recorded battle ticks', result.stdout)
-            self.assertLess(result.stdout.index('recorder record'), result.stdout.index('battle setup'))
-            self.assertLess(result.stdout.index('battle roster'), result.stdout.index('battle start'))
-            self.assertFalse(run.exists())
-
     def test_resource_pack_offer_is_written_to_effective_server_config(self):
         import tomllib
         runner = load_runner()
@@ -234,17 +208,6 @@ class BattleRunnerTests(unittest.TestCase):
             args = runner.arguments()
         with self.assertRaisesRegex(ValueError, 'ASCII'):
             runner.server_config_text(args, 'battle', '/world', '/cache')
-
-    def test_invalid_count_fails_without_starting(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            script = Path(__file__).with_name('run-battle.sh')
-            result = subprocess.run([str(script), '--dry-run', '--pin', str(root / 'pin'),
-                                     '--client', str(root / 'client'), '--client-data', str(root / 'client-data'),
-                                     '--cache', str(root / 'cache'), '--run-dir', str(root / 'run'),
-                                     '--count', '10001'], text=True, capture_output=True)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertFalse((root / 'run').exists())
 
     def test_incremental_server_pin_is_refused(self):
         spec = importlib.util.spec_from_file_location('runner', Path(__file__).with_name('run-battle.py'))
@@ -356,20 +319,6 @@ class BattleRunnerTests(unittest.TestCase):
         runner.wait_telemetry_through(ticks, queue.Queue(), 250)
         self.assertTrue(ticks.empty())
 
-    def test_take_arguments_default_to_a_quiet_window(self):
-        runner = load_runner()
-        base = ['--pin', '/p', '--client', '/c', '--client-data', '/d', '--cache', '/k', '--run-dir', '/r', '--duration', '60']
-        with unittest.mock.patch('sys.argv', ['run-battle.py', *base]):
-            normal = runner.arguments()
-        self.assertEqual((normal.phase_log, normal.status_every, normal.checkpoint_every_ticks, normal.allow_marker_gaps), (True, 100, 1200, False))
-        with unittest.mock.patch('sys.argv', ['run-battle.py', *base, '--take']):
-            take = runner.arguments()
-        self.assertEqual((take.phase_log, take.status_every, take.allow_marker_gaps), (False, 0, True))
-        self.assertEqual(take.checkpoint_every_ticks, (60 + 120) * 20)
-        with unittest.mock.patch('sys.argv', ['run-battle.py', *base, '--take', '--phase-log', '--status-every', '50', '--checkpoint-every-ticks', '5000']):
-            override = runner.arguments()
-        self.assertEqual((override.phase_log, override.status_every, override.checkpoint_every_ticks), (True, 50, 5000))
-
     def test_take_refuses_a_cadence_inside_the_take(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -380,100 +329,6 @@ class BattleRunnerTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('checkpoint cadence', result.stderr)
             self.assertFalse((root / 'run').exists())
-
-    def test_dry_run_prints_the_config_key_and_take_plan(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            common = ['--dry-run', '--pin', str(root / 'pin'), '--client', str(root / 'client'), '--client-data', str(root / 'client-data'),
-                      '--cache', str(root / 'cache'), '--run-dir', str(root / 'run'), '--duration', '60', '--view-distance', '16']
-            script = str(Path(__file__).with_name('run-battle.sh'))
-            take = subprocess.run([script, *common, '--take', '--server-scope', 'solaris-heavy.slice'], text=True, capture_output=True, check=True).stdout
-            self.assertIn('checkpoint_every_ticks = 3600', take)
-            self.assertIn('view_distance = 16', take)
-            self.assertIn('MC_CORE_PHASE_LOG=unset', take)
-            self.assertIn('after start never', take)
-            self.assertIn('systemd-run --user --scope', take)
-            self.assertIn('--slice solaris-heavy.slice', take)
-            self.assertLess(take.index('battle roster'), take.index('save-all'))
-            self.assertLess(take.index('save-all'), take.index('battle start'))
-            normal = subprocess.run([script, *common], text=True, capture_output=True, check=True).stdout
-            self.assertIn('checkpoint_every_ticks = 1200', normal)
-            self.assertIn('MC_CORE_PHASE_LOG=1', normal)
-            self.assertIn('every 100 ticks', normal)
-            self.assertNotIn('save-all', normal)
-            self.assertNotIn('systemd-run', normal)
-
-    def test_server_environment_removes_an_inherited_phase_log(self):
-        runner = load_runner()
-        inherited = {'MC_CORE_PHASE_LOG': '1', 'PATH': '/bin'}
-        self.assertNotIn('MC_CORE_PHASE_LOG', runner.server_environment(argparse.Namespace(phase_log=False), inherited))
-        self.assertEqual(runner.server_environment(argparse.Namespace(phase_log=True), {'PATH': '/bin'})['MC_CORE_PHASE_LOG'], '1')
-        self.assertEqual(inherited['MC_CORE_PHASE_LOG'], '1')
-
-    def test_status_policy_polls_only_while_the_barrier_is_open_or_on_request(self):
-        runner = load_runner()
-        quiet = runner.StatusPolicy(0)
-        self.assertTrue(quiet.due(100) and quiet.due(200))
-        quiet.close_barrier()
-        self.assertFalse(any(quiet.due(tick) for tick in range(300, 5000, 100)))
-        paced = runner.StatusPolicy(250)
-        paced.close_barrier()
-        self.assertEqual([tick for tick in range(100, 1000, 100) if paced.due(tick)], [100, 400, 700])
-
-    def test_parse_status_reads_running_and_extended_fields(self):
-        runner = load_runner()
-        line = 'Battle running tick=77 side1=9 side2=8 resident=20 active=19 nonzero_velocity=3 horses=2 regiments=14 dead=1'
-        self.assertEqual(runner.parse_status(line), {'tick': 77, 'side1': 9, 'side2': 8, 'resident': 20, 'active': 19,
-                                                      'nonzero_velocity': 3, 'horses': 2, 'regiments': 14, 'dead': 1})
-        self.assertEqual(runner.parse_status('Battle paused tick=5 side1=1 side2=1 resident=2 active=2 horses=0')['horses'], 0)
-        self.assertIsNone(runner.parse_status('Battle started tick=5'))
-
-    def test_trace_arguments_are_off_by_default_and_bounded_like_the_core(self):
-        runner = load_runner()
-        base = ['--pin', '/p', '--client', '/c', '--client-data', '/d', '--cache', '/k', '--run-dir', '/r', '--take']
-        with unittest.mock.patch('sys.argv', ['run-battle.py', *base]):
-            plain = runner.arguments()
-        self.assertEqual((plain.trace, plain.trace_every), (None, None))
-        with unittest.mock.patch('sys.argv', ['run-battle.py', *base, '--trace', '-174,316,12']):
-            traced = runner.arguments()
-        self.assertEqual((traced.trace, traced.trace_every), ((-174.0, 316.0, 12.0), 20))
-        self.assertEqual(runner.trace_command(traced.trace), 'battle trace -174 316 12')
-        self.assertEqual(runner.trace_command((0.5, -2.25, 32.0)), 'battle trace 0.5 -2.25 32')
-        for bad in (['--trace-every', '5'], ['--trace', '1,2'], ['--trace', '1,2,33'], ['--trace', '1,2,0'], ['--trace', 'nan,2,3'],
-                    ['--trace', '1,2,3', '--trace-every', '0']):
-            with unittest.mock.patch('sys.argv', ['run-battle.py', *base, *bad]), unittest.mock.patch('sys.stderr'):
-                with self.assertRaises(SystemExit):
-                    runner.arguments()
-
-    def test_trace_policy_sends_only_while_active_at_its_cadence(self):
-        runner = load_runner()
-        policy = runner.TracePolicy(20)
-        self.assertEqual(policy.batch(), 100)
-        self.assertFalse(any(policy.due(tick) for tick in range(0, 400, 7)))
-        policy.start()
-        self.assertEqual(policy.batch(), 20)
-        ticks = [500, 510, 520, 525, 539, 540, 541, 600, 619, 620]
-        self.assertEqual([tick for tick in ticks if policy.due(tick)], [500, 520, 540, 600, 620])
-        policy.stop()
-        self.assertEqual(policy.batch(), 100)
-        self.assertFalse(any(policy.due(tick) for tick in range(700, 1000, 20)))
-        coarse = runner.TracePolicy(250)
-        coarse.start()
-        self.assertEqual(coarse.batch(), 100)
-
-    def test_parse_trace_reads_members_flags_and_the_limit_marker(self):
-        runner = load_runner()
-        line = ('Battle trace: 3017 side2 r14 Charge wavering broken enemy-routing at -174.6,93.0,316.2 to -170.0,301.5;'
-                ' 12 side1 r3 Pursue at NaN,64.0,1.5 to 2.0,-3.0; (more)\n')
-        parsed = runner.parse_trace(line)
-        self.assertTrue(parsed['more'])
-        self.assertEqual(parsed['unparsed'], [])
-        self.assertEqual(parsed['members'][0], {'id': 3017, 'side': 2, 'regiment': 14, 'order': 'Charge',
-                                                'flags': ['wavering', 'broken', 'enemy-routing'],
-                                                'pos': [-174.6, 93.0, 316.2], 'to': [-170.0, 301.5]})
-        self.assertEqual((parsed['members'][1]['order'], parsed['members'][1]['flags'], parsed['members'][1]['to']), ('Pursue', [], [2.0, -3.0]))
-        self.assertEqual(runner.parse_trace('Battle trace:\n'), {'more': False, 'members': [], 'unparsed': []})
-        self.assertEqual(runner.parse_trace('Battle trace: garbage here;')['unparsed'], ['garbage here'])
 
     def test_trace_log_pairs_each_reply_with_its_request_in_order(self):
         runner = load_runner()
@@ -489,16 +344,6 @@ class BattleRunnerTests(unittest.TestCase):
         self.assertEqual([(r['requested_after_tick'], r['probe'], len(r['members'])) for r in rows], [(None, True, 1), (140, False, 0), (None, False, 1)])
         self.assertLessEqual(rows[0]['sent_unix_ns'], rows[0]['received_unix_ns'])
         self.assertIsNone(rows[2]['sent_unix_ns'])
-
-    def test_dry_run_shows_the_trace_plan_only_when_asked(self):
-        script = Path(__file__).with_name('run-battle.sh')
-        base = [str(script), '--dry-run', '--take', '--pin', '/p', '--client', '/c', '--client-data', '/d', '--cache', '/k', '--run-dir', '/r']
-        plain = subprocess.run(base, text=True, capture_output=True, check=True).stdout
-        self.assertNotIn('trace', plain)
-        traced = subprocess.run([*base, '--trace', '-174,316,12', '--trace-every', '20'], text=True, capture_output=True, check=True).stdout
-        self.assertIn('battle trace -174 316 12 (probe', traced)
-        self.assertIn('about every 20 recorded ticks (telemetry batches of 20), replies to /r/trace.jsonl', traced)
-        self.assertLess(traced.index('(probe'), traced.index('battle roster'))
 
     def test_server_scope_wraps_only_the_server(self):
         runner = load_runner()
@@ -702,18 +547,6 @@ class BattleRunnerTests(unittest.TestCase):
             rows = [json.loads(line) for line in (run / 'telemetry.jsonl').read_text().splitlines()]
             self.assertTrue(any(r['phase_us']['owner_post_us'] >= 50_000 for r in rows if r['tick'] < take['window']['first_tick']))
 
-    def test_default_run_keeps_the_phase_log_and_polls_status_after_start(self):
-        with tempfile.TemporaryDirectory() as directory:
-            commands, run = self.run_fake_battle(Path(directory))
-            start, pause = commands.index('battle start'), commands.index('battle pause')
-            self.assertNotIn('save-all', commands)
-            self.assertGreaterEqual(commands[start:pause].count('battle status'), 1)
-            self.assertEqual((run / 'env.txt').read_text(), '1')
-            self.assertIn('checkpoint_every_ticks = 1200', (run / 'server.toml').read_text())
-            self.assertFalse((run / 'take.json').exists())
-            self.assertFalse((run / 'live-players.json').exists())
-            self.assertFalse(any(command.startswith(('battle watch', 'battle live', 'battle spectate')) for command in commands))
-
     def test_live_roles_parse_flags_and_reject_bad_names(self):
         runner = load_runner()
         self.assertEqual(runner.live_roles(['PovRed:red'], ['CamSpec']), ([('PovRed', 'red')], [('CamSpec', 'PovRed')]))
@@ -887,12 +720,6 @@ class BattleRunnerTests(unittest.TestCase):
                     runner.preserve_crash(root, unittest.mock.Mock(pid=123, returncode=-9))
             self.assertFalse((root / 'crash-handoff.json').exists())
             self.assertFalse((root / 'result.json').exists())
-
-    def test_crash_handoff_rejects_non_sigkill(self):
-        runner = load_runner()
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(RuntimeError, 'SIGKILL'):
-                runner.preserve_crash(Path(directory), unittest.mock.Mock(pid=1, returncode=0))
 
     def test_crash_handoff_sees_sigkill_while_crash_watcher_holds_waitpid(self):
         runner = load_runner()

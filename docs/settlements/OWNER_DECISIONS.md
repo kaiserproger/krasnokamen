@@ -307,6 +307,8 @@ the parallel behaviour lands,
 - If growth to 24 residents does not fit the A9 trial, the trial is lengthened
   to the measured need and the work continues on what slows growth. The
   founding threshold stays 24.
+- House priority still applies only while physical roofed bed capacity is at
+  or below population. Measure the wait before proposing a policy change.
 - Site search is to be spread over ticks, targeting no settlement tick over
   100 ms while preserving the chosen site. This tightens the earlier 1 s target
   for settlement work.

@@ -146,9 +146,35 @@ fn recruit_priority(
 /// extraction workers) could take it, and it stood unbound for 30k ticks
 /// while it held the planner.
 pub(super) fn builder_free(state: &TickState, id: SettlementId) -> bool {
+    available_builders(state, id).next().is_some()
+}
+
+/// Current physical room guaranteed whichever eligible builder takes the site.
+/// A future fetch, fill, return or newly recruited resident supplies no room.
+pub(super) fn receiving_slots(state: &TickState, id: SettlementId) -> Option<usize> {
+    available_builders(state, id)
+        .map(|slot| {
+            state
+                .entities
+                .row(slot)
+                .villager
+                .as_ref()
+                .unwrap()
+                .inventory
+                .iter()
+                .filter(|stack| stack.as_ref().is_none_or(mc_data::ItemStack::is_empty))
+                .count()
+        })
+        .min()
+}
+
+fn available_builders(
+    state: &TickState,
+    id: SettlementId,
+) -> impl Iterator<Item = EntitySlot> + '_ {
     let may_borrow = access::projects_of(&state.settlements, id).next().is_none();
     let protected = protected_gatherer(state, id, false);
-    residents(state, id).any(|slot| {
+    residents(state, id).filter(move |&slot| {
         !storage_unreached(state, slot)
             && (free_native_builder(state, id, slot)
                 || recruit_priority(state, id, slot, may_borrow, protected).is_some())

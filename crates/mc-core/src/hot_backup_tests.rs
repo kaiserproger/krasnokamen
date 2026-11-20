@@ -11,13 +11,27 @@ fn copy_world(
 ) -> Result<crate::hot_backup::HotBackup, crate::config::CoreError> {
     let mut database = std::fs::File::open(world.join("native/state.redb")).unwrap();
     database.try_lock().unwrap();
-    crate::hot_backup::copy_world(world, out, &mut database, checkpoint, through, [9; 16])
+    crate::hot_backup::copy_world(
+        world,
+        out,
+        &mut database,
+        checkpoint,
+        through,
+        identity([9; 16]),
+    )
+}
+
+fn identity(store: [u8; 16]) -> crate::journal::WalIdentity {
+    crate::journal::WalIdentity {
+        store,
+        palette: [0; 8],
+    }
 }
 
 fn batch(dir: &std::path::Path, lo: u64, hi: u64) {
     std::fs::write(
         dir.join(format!("batch-{lo:020}-{hi:020}.bin")),
-        crate::journal::frame_batch(lo, hi, b"").unwrap(),
+        crate::journal::frame_batch(lo, hi, b"", identity([9; 16])).unwrap(),
     )
     .unwrap();
 }
@@ -87,7 +101,7 @@ fn copy_reads_the_owned_database_snapshot_not_a_second_path_handle() {
         &mut bytes.as_slice(),
         10,
         10,
-        [9; 16],
+        identity([9; 16]),
     )
     .unwrap();
     assert_eq!(
@@ -114,7 +128,7 @@ fn copy_refuses_a_marker_ahead_of_the_committed_checkpoint() {
         &mut b"database".as_slice(),
         9,
         9,
-        [9; 16],
+        identity([9; 16]),
     )
     .unwrap_err();
     assert!(
@@ -135,7 +149,7 @@ fn copy_refuses_a_marker_from_another_store() {
         &mut b"database".as_slice(),
         10,
         10,
-        [8; 16],
+        identity([8; 16]),
     )
     .unwrap_err();
     assert!(
@@ -291,8 +305,9 @@ fn copy_refuses_a_source_batch_that_fails_its_crc() {
     let journal = world.path().join("journal");
     batch(&journal, 11, 11);
     let damaged = journal.join("batch-00000000000000000012-00000000000000000012.bin");
-    let mut frame = crate::journal::frame_batch(12, 12, b"{}\n").unwrap();
-    frame[32] ^= 0xff; // flip one payload byte; the frame's CRC stays the old one
+    let mut frame = crate::journal::frame_batch(12, 12, b"{}\n", identity([9; 16])).unwrap();
+    let last = frame.len() - 2;
+    frame[last] ^= 0xff; // flip one payload byte; the frame's CRC stays the old one
     std::fs::write(&damaged, frame).unwrap();
     let out = tempfile::tempdir().unwrap();
 
@@ -313,5 +328,121 @@ fn copy_refuses_a_source_batch_that_fails_its_crc() {
             .join("journal/batch-00000000000000000012-00000000000000000012.bin")
             .exists(),
         "the damaged batch is never published into the backup"
+    );
+}
+
+/// HOT-BACKUP-STATE-DATABASE-COPY-UNVERIFIED: a backup reports success only
+/// after the finished copy restores. A copy whose database was damaged, and a
+/// copy whose CRC-clean tail carries a record recovery refuses, each fail the
+/// backup instead of being published as verified.
+#[test]
+fn backup_refuses_a_copy_that_does_not_restore() {
+    for mode in [
+        crate::hot_backup::test_hooks::DATABASE,
+        crate::hot_backup::test_hooks::UNREPLAYABLE_BATCH,
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let live = root.path().join("live");
+        let copy = root.path().join("copy");
+        let core = Core::open(config(&live)).unwrap();
+        std::fs::create_dir(&copy).unwrap();
+        crate::hot_backup::test_hooks::arm(mode);
+        let error = core
+            .backup(&copy)
+            .expect_err("an unrestorable copy is not a backup");
+        core.shutdown();
+        assert!(
+            error.to_string().contains("does not"),
+            "the refusal names the failed step: {error}"
+        );
+    }
+}
+
+/// Rewrite the copied world's `plugin_startup` record, as a copy saved under a
+/// different plugin deployment would carry it.
+fn rewrite_plugin_startup(copy: &std::path::Path, payload: &[u8]) {
+    let database = copy.join("native/state.redb");
+    let (store, _) =
+        mc_world::native::NativeStore::open_learning_identity(&database, 1 << 20).unwrap();
+    let image = store.read_checkpoint().unwrap();
+    let tick = image.tick;
+    let mut globals = image.globals.clone();
+    globals.insert(
+        "plugin_startup".into(),
+        crate::native_checkpoint::record(tick, payload.to_vec()),
+    );
+    let registry = crate::registry::CoreRegistry::load(None).unwrap();
+    store
+        .commit_checkpoint(
+            mc_world::native::NativeCheckpoint {
+                tick,
+                previous_tick: tick,
+                chunks: &[],
+                entities: &image.entities,
+                players: &[],
+                globals: &globals,
+            },
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
+    mc_world::store_marker::write(copy, store.store_uuid(), tick).unwrap();
+}
+
+/// A verified hot copy is then verified offline exactly as `restore` does, and
+/// the copy's own plugin startup identity — the record a serve enforces — is
+/// part of that verdict: the registry verification applies must be the one a
+/// serve applies, plugin contribution included.
+#[test]
+fn offline_verification_uses_the_registry_and_identity_a_serve_enforces() {
+    let root = tempfile::tempdir().unwrap();
+    let live = root.path().join("live");
+    let copy = root.path().join("copy");
+    let config = config(&live);
+    let core = Core::open(config.clone()).unwrap();
+    std::fs::create_dir(&copy).unwrap();
+    core.backup(&copy).unwrap();
+    core.shutdown();
+
+    // The world a serve produced records its startup identity in the checkpoint.
+    let (store, _) = mc_world::native::NativeStore::open_learning_identity(
+        &copy.join("native/state.redb"),
+        1 << 20,
+    )
+    .unwrap();
+    let image = store.read_checkpoint().unwrap();
+    assert!(
+        image.globals.contains_key("plugin_startup"),
+        "a served world records its plugin startup identity"
+    );
+    drop(store);
+
+    let tick = crate::hot_backup::verify_copy(&copy, &config)
+        .expect("the offline verdict matches what a serve would accept");
+    assert!(tick > 0);
+}
+
+/// The same copy with a startup identity that names another deployment is
+/// refused offline, with the message a serve would give: verification never
+/// calls a copy verified that a serve would reject.
+#[test]
+fn offline_verification_refuses_a_copy_whose_plugin_startup_differs() {
+    let root = tempfile::tempdir().unwrap();
+    let live = root.path().join("live");
+    let copy = root.path().join("copy");
+    let config = config(&live);
+    let core = Core::open(config.clone()).unwrap();
+    std::fs::create_dir(&copy).unwrap();
+    core.backup(&copy).unwrap();
+    core.shutdown();
+    // A world saved under another deployment: the record still parses as the
+    // JSON object every plugin domain row is, but it names other plugins.
+    rewrite_plugin_startup(&copy, br#"{"deployment":"another-plugin-deployment"}"#);
+
+    let error = crate::hot_backup::verify_copy(&copy, &config).unwrap_err();
+    let text = error.to_string();
+    assert!(
+        text.contains("plugin startup"),
+        "the refusal names the startup identity, not a generic failure: {text}"
     );
 }

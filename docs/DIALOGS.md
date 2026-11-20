@@ -70,6 +70,9 @@ Registered owners: `dialog_probe` (test hook) and `settlement` (`settlements::ui
 `/settlement menu [page]`; every click re-resolves the settlement from the `s` payload entry and
 re-checks owner/operator before mutating). Keep forms compact: a vanilla dialog scrolls, but a small
 window at GUI scale 3 shows only ~240 GUI pixels, so put the buttons inside that height.
+Certification has one building-type input and **Check here**: discovery starts at the player's current position, with no corner or height inputs or cached marks. The checklist shows every localized requirement and found/required count at width 408, with ✔/✘ and a short repair instruction for each ✘; **Certify** appears when the inspection passes. Discovery and native certification recheck the current world on submission. Settlement maps keep only the 13-row grid above navigation; all active-site details remain in cell hovers, the legend and project cards.
+A `multi_action` slot follows its own label (`settlements::ui::map::label_width`): vanilla keeps a 2-pixel margin per side and scrolls text wider than the slot, so a fixed slot clipped «Строительство» at GUI scale 2.
+At 1280×720 and GUI scale 3, action rows must fit within 427 GUI pixels including gaps. Certification keeps at most two default-width (150 px) buttons per row, including the all-✔ state; its three-button success follow-up also uses two columns.
 
 Civil settlement navigation combines these compact dialogs with native icon container menus
 (`settlements/ui_menus.rs`), not a client mod or a second management authority. The hub opens

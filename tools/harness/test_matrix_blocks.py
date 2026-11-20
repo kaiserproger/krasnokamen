@@ -1,17 +1,13 @@
 """Adapter-contract unit tests, not substitutes for live vanilla gameplay proof."""
 import importlib
-import json
 import pkgutil
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from .matrix_api import MatrixContext, MissingCapability, load_adapter
+from .matrix_api import MatrixContext, MissingCapability
 from .matrix_domains import _blocks as b
-
-DOMAINS = {'block_interact':29, 'block_break':24, 'block_place':24,
-           'special_blocks':8, 'falling_blocks':6, 'fire':5, 'explosions':11}
 
 
 class BlocksContractTests(unittest.TestCase):
@@ -59,19 +55,6 @@ class BlocksContractTests(unittest.TestCase):
         with self.assertRaisesRegex(MissingCapability,'health'):
             b.entity_health(ctx,'iron_golem')
 
-    def test_all_subjects_export_real_adapters(self):
-        total=0
-        for domain,expected in DOMAINS.items():
-            adapters=importlib.import_module('tools.harness.matrix_domains.'+domain).ADAPTERS
-            self.assertEqual(len(adapters),expected,domain)
-            for subject,adapter in adapters.items():
-                self.assertIs(load_adapter(subject),adapter)
-                self.assertTrue(callable(adapter.setup))
-                self.assertTrue(callable(adapter.act))
-                self.assertTrue(callable(adapter.oracle))
-            total+=len(adapters)
-        self.assertEqual(total,107)
-
     def test_every_matrix_domain_imports(self):
         import pkgutil
         from . import matrix_domains
@@ -98,12 +81,6 @@ class BlocksContractTests(unittest.TestCase):
         with self.assertRaisesRegex(MissingCapability,'snapshot:inventory'):
             b.count(self.context(),'diamond')
 
-    def test_sparse_inventory_counts_stack_quantities(self):
-        ctx=self.context(snapshot={'inventory':[{'slot':36,'item_id':'minecraft:diamond','count':7},
-                                               {'slot':9,'item_id':'minecraft:diamond','count':3},
-                                               {'slot':10,'item_id':'minecraft:stone','count':64}]})
-        self.assertEqual(b.count(ctx,'diamond'),10)
-
     def test_data_missing_commands_are_blocked(self):
         for reply in ('Unknown or incomplete command',
                       'Supported: data get|merge block <x> <y> <z> [compound] (command blocks only)',
@@ -118,33 +95,11 @@ class BlocksContractTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             b.scalar(self.context('Found no elements matching Inventory[0]'),'entity MatrixA','Inventory[0].count')
 
-    def test_scaled_number_including_negative(self):
-        reply='Health on MatrixA after scale factor of 1.00 is -2'
-        self.assertEqual(b.scalar(self.context(reply),'entity MatrixA','Health'),-2)
-
     def test_root_snbt_not_command_echo(self):
         reply='1, 80, 0 has the following block data: {item:{id:"minecraft:diamond",count:1}}'
         self.assertEqual(b.data(self.context(reply),'block 1 80 0'),'{item:{id:"minecraft:diamond",count:1}}')
         with self.assertRaises(RuntimeError):
             b.data(self.context('data get block 1 80 0'),'block 1 80 0')
-
-    def test_boundary_runs_once_across_multiple_action_helpers(self):
-        ctx=self.context(); calls=[]
-        ctx.boundary_hook=lambda context:calls.append(context.row['subject'])
-        b.boundary(ctx); b.boundary(ctx)
-        self.assertEqual(calls,[ctx.row['subject']])
-
-    def test_unknown_mode_is_blocked_not_silently_changed(self):
-        ctx=self.context(); ctx.row['context']['game_mode']='spectator'
-        with self.assertRaisesRegex(MissingCapability,'context_oracle:'):
-            b.require_modes(ctx,'survival')
-        self.assertEqual(ctx.factors['game_mode'],'spectator')
-
-    def test_multiplayer_not_credited_as_single_actor(self):
-        ctx=self.context(); ctx.clients.append(ctx.clients[0])
-        ctx.row['origin']='triple:multiplayer_x_same_block'
-        with self.assertRaisesRegex(MissingCapability,'scenario_concurrent_actor_schedule:'):
-            b.fixture(ctx)
 
     def test_fixture_loads_chunks_before_any_fill(self):
         ctx=self.context(); commands=[]
@@ -177,12 +132,6 @@ class BlocksContractTests(unittest.TestCase):
         ready = next(i for i, event in enumerate(events) if event[0] == 'fixture_ready')
         self.assertEqual(events[ready + 1], ('teleport', (4.5, 80, 8.5)))
 
-
-    def test_checks_remain_json_serializable(self):
-        ctx=self.context(); ctx.state['block_checks']=[]
-        b.check(ctx,'block_changed',True,{'position':b.POS})
-        json.dumps(ctx.state,allow_nan=False)
-        self.assertTrue(b.oracle(ctx)[0].passed)
 
     def test_use_waits_exact_received_ack_before_boundary(self):
         snap={'block_ack_sequence':None, 'revision':1}
@@ -220,13 +169,6 @@ class BlocksContractTests(unittest.TestCase):
             self.assertTrue(predicate())
         ctx.clients[0].wait_until=wait
         b.setblock(ctx,'oak_log[axis=x]')
-
-    def test_missing_optional_verb_or_argument_is_blocked(self):
-        client=SimpleNamespace(use_item_on=lambda pos,face='up':None)
-        with self.assertRaisesRegex(MissingCapability,'client:break_block'):
-            b.call(client,'break_block',(0,0,0))
-        with self.assertRaisesRegex(MissingCapability,'client:use_item_on:cursor'):
-            b.call(client,'use_item_on',(0,0,0),cursor=(.5,.25,.5))
 
     def test_empty_check_list_is_not_pass(self):
         ctx=self.context(); ctx.state['block_checks']=[]

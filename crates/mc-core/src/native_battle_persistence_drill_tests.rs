@@ -691,9 +691,12 @@ fn battle_resume_encoding_failure_halts_before_wal_or_publication() {
         "authority halt reliably disconnects the live player"
     );
     assert!(
-        read_complete_batches_after(&config.world_dir.join("journal"), failed_tick - 1)
-            .unwrap()
-            .is_empty(),
+        crate::journal::read_complete_batches_after_test(
+            &config.world_dir.join("journal"),
+            failed_tick - 1,
+        )
+        .unwrap()
+        .is_empty(),
         "failed image tick cannot reach the durable WAL"
     );
     assert_eq!(

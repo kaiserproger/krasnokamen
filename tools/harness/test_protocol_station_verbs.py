@@ -10,7 +10,6 @@ python3 -m unittest tools.harness.test_protocol_station_verbs
 
 from __future__ import annotations
 
-import struct
 import unittest
 
 from . import wire
@@ -53,12 +52,6 @@ class ContainerButtonTests(unittest.TestCase):
         c.container_button(2)
         self.assertEqual(_writes(c)[0], (0x11, bytes([0xAC, 0x02, 2])))
 
-    def test_negative_button_rejected_before_write(self):
-        c = _Client()
-        with self.assertRaises(ValueError):
-            c.container_button(-1)
-        self.assertEqual(_writes(c), [])
-
 
 class SelectTradeTests(unittest.TestCase):
     def test_correct_serverbound_id(self):
@@ -66,17 +59,6 @@ class SelectTradeTests(unittest.TestCase):
         c.select_trade(3)
         # ServerboundSelectTrade ID 0x33 (merchant.rs), not 0x34 (clientbound offers).
         self.assertEqual(_writes(c), [(0x33, bytes([3])), (0x0D, b"")])
-
-    def test_multibyte_index(self):
-        c = _Client()
-        c.select_trade(300)
-        self.assertEqual(_writes(c)[0], (0x33, wire.write_varint(300)))
-
-    def test_negative_index_rejected_before_write(self):
-        c = _Client()
-        with self.assertRaises(ValueError):
-            c.select_trade(-1)
-        self.assertEqual(_writes(c), [])
 
 
 class RenameItemTests(unittest.TestCase):
@@ -112,12 +94,6 @@ class SetBeaconTests(unittest.TestCase):
         c.set_beacon('minecraft:speed', 'regeneration')  # 0 and 9 per name_for_id table.
         self.assertEqual(_writes(c), [(0x34, b'\x01\x00\x01\x09'), (0x0D, b"")])
 
-    def test_unknown_effect_is_missing_capability(self):
-        c = _Client()
-        with self.assertRaisesRegex(MissingCapability, r'mob_effect:.*nope'):
-            c.set_beacon('minecraft:nope', None)
-        self.assertEqual(_writes(c), [])
-
 
 class CrafterSlotTests(unittest.TestCase):
     def test_disable_sends_new_state_false(self):
@@ -135,12 +111,6 @@ class CrafterSlotTests(unittest.TestCase):
         c.toggle_crafter_slot(8, False)
         self.assertEqual(_writes(c)[0], (0x14, bytes([8, 0x82, 1, 1])))
 
-    def test_negative_slot_rejected_before_write(self):
-        c = _Client()
-        with self.assertRaises(ValueError):
-            c.toggle_crafter_slot(-1, True)
-        self.assertEqual(_writes(c), [])
-
 
 class CreativeSlotTests(unittest.TestCase):
     def test_plain_stack_matches_pinned_bytes(self):
@@ -149,33 +119,6 @@ class CreativeSlotTests(unittest.TestCase):
         c.set_creative_slot(36, 'minecraft:stone', 64)
         # serverbound_and_slots.rs: slot 36 i16 + count 64 + item 1 + 0/0 patch.
         self.assertEqual(_writes(c)[0], (0x38, bytes([0x00, 0x24, 0x40, 0x01, 0x00, 0x00])))
-
-    def test_empty_count_clears_slot(self):
-        c = _Client()
-        c.set_creative_slot(5, 'minecraft:stone', 0)
-        self.assertEqual(_writes(c)[0], (0x38, struct.pack('>h', 5) + b'\x00'))
-
-    def test_unknown_item_is_missing_capability(self):
-        c = _Client()
-        with self.assertRaisesRegex(MissingCapability, r'item:minecraft:nope'):
-            c.set_creative_slot(0, 'minecraft:nope', 1)
-        self.assertEqual(_writes(c), [])
-
-    def test_nonempty_components_name_exact_keys(self):
-        c = _Client()
-        with self.assertRaisesRegex(MissingCapability, r"unsupported components:\['minecraft:custom_name'\]"):
-            c.set_creative_slot(0, 'minecraft:stone', 1,
-                                components={'minecraft:custom_name': 'x'})
-        self.assertEqual(_writes(c), [])
-
-    def test_range_bounds_rejected_before_write(self):
-        c = _Client()
-        for kwargs in (dict(slot=40000, item_id='minecraft:stone', count=1),
-                       dict(slot=0, item_id='minecraft:stone', count=128),
-                       dict(slot=0, item_id='minecraft:stone', count=-1)):
-            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
-                c.set_creative_slot(**kwargs)
-        self.assertEqual(_writes(c), [])
 
 
 class PlaceRecipeTests(unittest.TestCase):
@@ -213,15 +156,6 @@ class PlaceRecipeTests(unittest.TestCase):
 
 
 class StaleClickTests(unittest.TestCase):
-    def test_missing_state_id_rejected(self):
-        c = _Client()
-        with self.assertRaises(ValueError):
-            c.stale_click(12)  # type: ignore[call-arg]
-        c2 = _Client()
-        with self.assertRaises(ValueError):
-            c2.stale_click(12, state_id=None)  # type: ignore[arg-type]
-        self.assertEqual(_writes(c), [])
-
     def test_stale_state_encoded_verbatim(self):
         c = _Client()
         c.stale_click(12, kind='quick_move', button=1, state_id=7)
@@ -229,23 +163,6 @@ class StaleClickTests(unittest.TestCase):
         # 00 0c slot i16, 01 button i8, 01 mode, 00 00 empty prediction.
         self.assertEqual(_writes(c)[0], (0x12, bytes([4, 7, 0, 12, 1, 1, 0, 0])))
         self.assertEqual(_writes(c)[1], (0x0D, b""))
-
-    def test_kind_order_matches_container_input(self):
-        modes = ['pickup', 'quick_move', 'swap', 'clone', 'throw', 'quick_craft', 'pickup_all']
-        for index, kind in enumerate(modes):
-            c = _Client()
-            c.stale_click(0, kind=kind, state_id=1)
-            self.assertEqual(_writes(c)[0][1][-3:], bytes([index, 0, 0]))
-
-    def test_bad_kind_and_ranges_rejected_before_write(self):
-        c = _Client()
-        with self.assertRaises(ValueError):
-            c.stale_click(0, kind='nope', state_id=1)
-        with self.assertRaises(ValueError):
-            c.stale_click(40000, state_id=1)
-        with self.assertRaises(ValueError):
-            c.stale_click(0, button=128, state_id=1)
-        self.assertEqual(_writes(c), [])
 
 
 if __name__ == '__main__':

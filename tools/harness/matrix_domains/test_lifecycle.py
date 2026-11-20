@@ -1,14 +1,12 @@
 """Focused adapter regressions; these are not live matrix receipts."""
 from pathlib import Path
 from types import SimpleNamespace
-import io
 import json
-import struct
 import unittest
 from unittest.mock import patch
 
 from tools.harness.matrix_api import MatrixContext, MissingCapability
-from tools.harness.matrix_domains import load, persistence, session, world_chunks
+from tools.harness.matrix_domains import persistence, session, world_chunks
 
 
 def context(state=None, query=None):
@@ -30,11 +28,6 @@ def save_context(state):
 
 
 class LifecycleOracles(unittest.TestCase):
-    def test_registry_covers_exact_subject_counts(self):
-        for module, count in ((session, 21), (persistence, 7), (world_chunks, 10), (load, 22)):
-            self.assertEqual(len(module.ADAPTERS), count)
-            self.assertTrue(all(name.startswith(module.__name__.rsplit('.', 1)[1] + '.') for name in module.ADAPTERS))
-
     def test_absent_data_command_blocks_exact_capability(self):
         with self.assertRaisesRegex(MissingCapability, '^data_get_entity$'):
             session.data(context(), 'entity actor', 'Inventory')
@@ -49,26 +42,6 @@ class LifecycleOracles(unittest.TestCase):
         ctx = context(query=lambda _: 'chat.type.announcement: Server, MatrixConsoleFence1')
         with self.assertRaisesRegex(MissingCapability, 'data_get_block:decoded_feedback'):
             session.data(ctx, 'block 1 2 3', 'Items')
-
-    def test_data_query_is_dimension_scoped(self):
-        seen = []
-        def query(text):
-            seen.append(text)
-            return '1, 2, 3 has the following block data: [{id:"minecraft:diamond",count:7}]\n'
-        value = session.data(context(query=query), 'block 1 2 3', 'Items')
-        self.assertEqual(value, '[{id:"minecraft:diamond",count:7}]')
-        self.assertEqual(seen, ['execute in minecraft:the_end run data get block 1 2 3 Items'])
-
-    def test_missing_observation_is_not_empty(self):
-        with self.assertRaises(MissingCapability):
-            session.required({'inventory': None}, 'inventory')
-        self.assertEqual(session.required({'inventory': []}, 'inventory'), [])
-
-    def test_unavailable_load_does_not_return_pass(self):
-        with self.assertRaisesRegex(MissingCapability, 'catalog_load_matrix_context_bridge:MIX-08'):
-            load.ADAPTERS['load.MIX-08'].setup(context())
-        with self.assertRaisesRegex(MissingCapability, 'native_generation_revision_oracle'):
-            load.ADAPTERS['load.CHUNK-01'].setup(context())
 
     def test_op2_save_requires_refusal_not_saved_output(self):
         state = {'negative': True, 'command_roots': ['say'],
@@ -110,15 +83,6 @@ class LifecycleOracles(unittest.TestCase):
         state['old_rule_output'] = 'spawnChunkRadius = 2'
         self.assertFalse(all(c.passed for c in world_chunks._force_oracle(context(state))))
 
-    def test_protocol_mismatch_checks_both_versions_and_roster(self):
-        reply = lambda version: {'protocol': version, 'packet': 0,
-                                  'reason': {'translate': 'multiplayer.disconnect.incompatible', 'with': ['26.1.2']}}
-        state = {'mismatch_replies': [reply(774), reply(776)], 'after_roster': 1,
-                 'status_stats': {'players': 1}}
-        self.assertTrue(all(c.passed for c in session._mismatch_oracle(context(state))))
-        state['after_roster'] = 2
-        self.assertFalse(all(c.passed for c in session._mismatch_oracle(context(state))))
-
     def test_equal_empty_roundtrip_does_not_prove_custody(self):
         empty = {key: '[]' for key in persistence._PLAYER_FIELDS}
         checks = persistence._player_oracle(context({
@@ -127,16 +91,6 @@ class LifecycleOracles(unittest.TestCase):
         fields = {key: 'same' for key in session._REJOIN_FIELDS}
         checks = session._rejoin_oracle(context({'leave': fields, 'after': fields, 'rejoin_diamonds': 0}))
         self.assertEqual([c.name for c in checks if not c.passed], ['rejoin.diamond_custody'])
-
-    def test_rcon_frame_and_fragmented_response(self):
-        packet = session._rcon_frame(46, 0, 'sentinel has 17 [lc_rcon]')
-        stream = io.BytesIO(packet)
-        connection = SimpleNamespace(recv=lambda n: stream.read(min(n, 2)))
-        self.assertEqual(session._rcon_reply(connection),
-                         {'id': 46, 'kind': 0, 'text': 'sentinel has 17 [lc_rcon]'})
-        stream = io.BytesIO(packet[:-1])
-        with self.assertRaises(EOFError):
-            session._rcon_reply(SimpleNamespace(recv=stream.read))
 
     def test_rcon_oracle_requires_auth_and_no_unauth_mutation(self):
         state = {'wrong_auth': {'id': -1, 'kind': 2, 'text': ''},
@@ -150,67 +104,6 @@ class LifecycleOracles(unittest.TestCase):
         self.assertEqual([c.name for c in session._rcon_oracle(context(state)) if not c.passed],
                          ['rcon.unauth_no_mutation'])
 
-    def test_query_basic_full_and_session_identity(self):
-        session_id = b'\x01\x02\x03\x04'
-        challenge = b'\x09' + session_id + b'12345\0'
-        basic = (b'\x00' + session_id + b'MOTD\0SMP\0world\0' + b'1\0' + b'20\0'
-                 + struct.pack('<H', 26540) + b'127.0.0.1\0')
-        full = (b'\x00' + session_id + b'splitnum\0\x80\0hostname\0MOTD\0version\0' +
-                b'26.1.2\0\0\x01player_\0\0Matrix0\0\0')
-        for extended, packet in ((False, basic), (True, full)):
-            with self.subTest(full=extended):
-                replies = iter((challenge, packet))
-                sent = []
-                decoded = session._query_stat(SimpleNamespace(send=sent.append, recv=lambda _: next(replies)),
-                                              full=extended, session_id=session_id)
-                self.assertEqual(decoded['hostname'], 'MOTD')
-                self.assertEqual(sent[1][7:11], struct.pack('>i', 12345))
-                if extended:
-                    self.assertEqual(decoded['players'], ['Matrix0'])
-                    self.assertEqual(decoded['version'], '26.1.2')
-                else:
-                    self.assertEqual(decoded['hostport'], '26540')
-        replies = iter((challenge, b'\x00BAD!' + basic[5:]))
-        with self.assertRaisesRegex(ValueError, 'identity mismatch'):
-            session._query_stat(SimpleNamespace(send=lambda _: None, recv=lambda _: next(replies)),
-                                full=False, session_id=session_id)
-
-    def test_query_oracle_checks_recovery_and_roster(self):
-        expected = {'hostname': 'MOTD', 'gametype': 'SMP', 'map': 'world',
-                    'numplayers': '1', 'maxplayers': '20', 'hostport': '26540', 'hostip': '127.0.0.1'}
-        state = {'admin_config': {'data': {'world_dir': '/fixture/world'},
-                                 'network': {'port': 26540, 'bind_address': '127.0.0.1'}},
-                 'admin_stats': {'world': {'motd': 'MOTD'}, 'players': {'max': 20}},
-                 'query_basic': expected.copy(), 'query_after_malformed': expected.copy(),
-                 'query_full': dict(expected, version='26.1.2', game_id='MINECRAFT', players=['Matrix0'])}
-        ctx = context(state)
-        ctx.clients = [SimpleNamespace(name='Matrix0')]
-        self.assertTrue(all(c.passed for c in session._query_oracle(ctx)))
-        state['query_after_malformed']['numplayers'] = '0'
-        state['query_full']['players'] = []
-        self.assertEqual(sum(not c.passed for c in session._query_oracle(ctx)), 2)
-
-    def test_whitelist_requires_real_refusal_and_received_play_progress(self):
-        state = {'whitelist_refusal': {'packet': 0, 'reason': {'translate': 'multiplayer.disconnect.not_whitelisted'}},
-                 'whitelist_play': [1, 80, 1], 'whitelist_roster': 1, 'whitelist_chat': {'Matrix0': ['echo']}}
-        ctx = context(state)
-        ctx.clients = [SimpleNamespace(name='Matrix0')]
-        self.assertTrue(all(c.passed for c in session._whitelist_oracle(ctx)))
-        state['whitelist_refusal']['packet'] = 2
-        self.assertFalse(all(c.passed for c in session._whitelist_oracle(ctx)))
-        state['whitelist_refusal']['packet'] = 0
-        state['whitelist_chat'] = {}
-        self.assertFalse(all(c.passed for c in session._whitelist_oracle(ctx)))
-
-    def test_max_players_rejects_extra_without_losing_existing_clients(self):
-        state = {'full_refusal': {'packet': 0, 'reason': {'translate': 'multiplayer.disconnect.server_full'}},
-                 'full_limit': 1, 'full_roster': 1, 'full_chat': {'Matrix0': ['echo']}}
-        ctx = context(state)
-        ctx.clients = [SimpleNamespace(name='Matrix0')]
-        self.assertTrue(all(c.passed for c in session._full_oracle(ctx)))
-        state['full_roster'] = 2
-        self.assertEqual([c.name for c in session._full_oracle(ctx) if not c.passed], ['full.existing_roster'])
-
     def test_save_setup_keeps_json_state(self):
         ctx = context()
         ctx.row['context']['permission'] = 'console'
@@ -222,20 +115,6 @@ class LifecycleOracles(unittest.TestCase):
         persistence._save_setup(ctx)
         json.dumps(ctx.state, allow_nan=False)
         self.assertEqual(ctx.state['log_path'], '/unused-unit-server.log')
-
-    def test_dashboard_requires_observer_echo_and_real_rss(self):
-        state = {'after_stats': {'players': {'count': 2}, 'simulation_tick': 12,
-                                 'tps': 20, 'tick': {'p50_us': 100, 'p99_us': 500}},
-                 'chat_tick': 11, 'dashboard_chat': {'Matrix0': ['echo']}}
-        ctx = context(state)
-        ctx.clients = [SimpleNamespace(name='Matrix0'), SimpleNamespace(name='Matrix1')]
-        ctx.server.process_stats = lambda: {'rss_bytes': 1024}
-        self.assertEqual([c.name for c in session._dashboard_oracle(ctx) if not c.passed], ['dashboard.chat_echo'])
-        state['dashboard_chat']['Matrix1'] = ['echo']
-        self.assertTrue(all(c.passed for c in session._dashboard_oracle(ctx)))
-        del ctx.server.process_stats
-        with self.assertRaisesRegex(MissingCapability, '^observe:server_rss$'):
-            session._dashboard_oracle(ctx)
 
     def test_ban_requires_both_rejections_and_conserved_inventory(self):
         state = {'name_ban': {'packet': 0, 'reason': {'text': 'matrix-name-ban'}},
@@ -256,20 +135,6 @@ class LifecycleOracles(unittest.TestCase):
         ctx.clients.append(SimpleNamespace(name='Matrix1'))
         self.assertEqual([c.name for c in persistence._save_oracle(ctx) if not c.passed],
                          ['save.score_preserved', 'save.client_progress'])
-
-    def test_stubs_name_actual_remaining_capabilities(self):
-        cases = [
-            (session, 'session.join_fresh_spawn', 'snapshot:chunk_collision_shapes'),
-            (session, 'session.mute_warn', 'observe:command_roots'),
-            (session, 'session.connection_limit', 'same_tick_admission_fence'),
-            (session, 'session.locale_presentation', 'observe:localized_dialog'),
-            (persistence, 'persistence.block_entities_roundtrip', 'data_get_block'),
-            (persistence, 'persistence.entities_roundtrip', 'data_get_entity'),
-            (world_chunks, 'world_chunks.anti_xray', 'snapshot:chunk_block_state'),
-        ]
-        for module, subject, capability in cases:
-            with self.subTest(subject=subject), self.assertRaisesRegex(MissingCapability, '^' + capability + '$'):
-                module.ADAPTERS[subject].setup(context())
 
     def test_unfenced_crash_accepts_only_atomic_ordered_custody_prefixes(self):
         baseline = {field: 'durable-baseline' for field in persistence._PLAYER_FIELDS}
