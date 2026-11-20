@@ -422,21 +422,48 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: int, ad
     verdicts: dict[str, bool | None] = {}
     detail: dict[str, Any] = {"tick_rate": tick_rate}
     a.report["details"] = detail  # kept even when a later step fails
-    a.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
-    a.fixture(f"tick rate {tick_rate}")
-    a.fixture("gamemode creative @s")
-    # The server confirms the applied rate in its own `/tick query` reply; the delay age in seconds
-    # can only be computed against a confirmed rate, so the join waits for it.
-    a.fixture("tick query")
-    applied = a.wait(lambda s: applied_tick_rate(s.get("recent_chat") or []) is not None,
-                     "tick_rate_applied")
-    applied_rate = applied_tick_rate(applied.get("recent_chat") or [])
-    detail["applied_tick_rate"] = applied_rate
     # The knob's own warn line is written before the server listens; wait for it with inotify so a
     # late flush is an event, not a sleep.
     delayed = runtime.wait_for_path_condition(
         server_log_path, 10.0, lambda: (engaged(server_log_path), engaged(server_log_path)), server)
     detail["pump_lag_enabled"] = delayed
+    applied_rate: float | None = None
+    try:
+        a.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
+        a.fixture(f"tick rate {tick_rate}")
+        a.fixture("gamemode creative @s")
+        # The server confirms the applied rate in its own `/tick query` reply; the delay age in
+        # seconds can only be computed against a confirmed rate.
+        a.fixture("tick query")
+        applied = a.wait(lambda s: applied_tick_rate(s.get("recent_chat") or []) is not None,
+                         "tick_rate_applied")
+        applied_rate = applied_tick_rate(applied.get("recent_chat") or [])
+    except Exception as error:
+        # A pump that never drains halts the core before any join: that is row 2's symptom, judged
+        # from the witness client's own landing record and the halt line, not an infrastructure error.
+        # The halt line can land a moment after the client's own disconnect: wait for it as an event.
+        try:
+            early_halt = runtime.wait_for_path_condition(
+                server_log_path, 20.0,
+                lambda: (halt_line(server_log_path) is not None, halt_line(server_log_path)), server)
+        except (TimeoutError, runtime.ChildExited):
+            early_halt = halt_line(server_log_path)
+        if early_halt is None:
+            raise
+        detail["early_error"] = str(error)
+        detail["halt_line"] = early_halt
+        record = join_record(server_log_path, WITNESS)
+        detail["witness_record"] = record
+        witnessed, info = witness(record, delayed, tick_rate, 0)
+        ok, why = (None, info) if not witnessed else (False, f"the core halted before the join: {early_halt}")
+        detail["halt_verdict"] = why
+        detail.setdefault("verdicts", {})["live_pump_does_not_halt"] = why
+        verdicts["live_pump_does_not_halt"] = ok
+        detail["join_verdict"] = f"the core halted before the join completed: {early_halt}"
+        detail.setdefault("verdicts", {})["join_behind_slow_pump"] = detail["join_verdict"]
+        verdicts["join_behind_slow_pump"] = ok
+        return detail, verdicts
+    detail["applied_tick_rate"] = applied_rate
     tick_before = _safe_tick(dashboard_port)
 
     skips_before = _skips_now(dashboard_port)
