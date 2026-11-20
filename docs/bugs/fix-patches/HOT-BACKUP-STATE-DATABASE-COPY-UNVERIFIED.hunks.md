@@ -15,6 +15,9 @@ hunks of the second one, which is the part a HEAD control must reverse:
   The ref it left red is still registered (`hot_backup_tests::
   backup_refuses_a_copy_that_does_not_restore`); it is not the control used here.
 - `92a28e7186` — offline/CLI verification from the copy's own one open.
+- `57f90fd920` — `load_config` reads a present `--config` for `backup`/`restore`
+  (a missing file still falls back to defaults), so the deployment and content
+  cache an operator configured reach the verification.
 - `7988d0db4b` — the same path under the plugins a serve resolves: `verify_copy`
   uses `native_checkpoint::recovery_registry` (content + plugin startup
   contribution) and `verify_opened` applies `plugin::check_startup_identity`.
