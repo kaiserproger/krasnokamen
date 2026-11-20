@@ -69,6 +69,9 @@ pub enum SettlementCommand {
         settlement: String,
         arguments: Vec<String>,
     },
+    BuildingCertifyHere {
+        kind: String,
+    },
     BuildingCertify {
         kind: String,
         min: [i32; 3],
@@ -245,6 +248,9 @@ pub fn parse(args: &[&str]) -> Result<SettlementCommand, CommandError> {
             })
         }
         "building" => match rest {
+            ["certify", kind] => Ok(SettlementCommand::BuildingCertifyHere {
+                kind: (*kind).to_owned(),
+            }),
             ["certify", kind, x1, y1, z1, x2, y2, z2] => {
                 let parse_triplet = |words: [&str; 3]| -> Result<[i32; 3], CommandError> {
                     let mut out = [0i32; 3];

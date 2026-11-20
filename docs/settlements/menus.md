@@ -11,6 +11,7 @@ Right-click the settlement's anchor bell to open its compact management hub; the
 Anyone can view; only the owner or an operator can manage a claimed settlement. Permissions are rechecked on each click. An autonomous settlement must first be claimed while standing inside its radius, even for an operator to manage it.
 
 The client locale selects the language: `ru*` uses Russian; all other locales use English. Materials use the client's translated item names, workshops use localized profession labels, and authored settlement names stay unchanged. Labels below are English.
+Blueprint names in construction lists, project cards and map labels come from one Russian/English table, including all Spanish variants. Unknown blueprint names use a localized “Unknown blueprint” label, never a raw identifier; identifiers remain internal action targets.
 
 ## Main
 
@@ -30,7 +31,7 @@ The map is a snapshot: **Refresh** redraws it. **Buildings** opens the building 
 
 Buildings are a paged chest list with type filters and an icon card for each certificate. Empty lists explain how to order new construction or certify your own building. A card shows level requirements, workplaces and staffing. Certificate checking is separate from ordering physical blueprint construction; managers review the target before confirming either action. Free workplaces open resident selection, missing workstations are marked, and storage buildings link to **Storage**.
 
-**Certify new building** opens a dialog: choose **Building type**, enter two inclusive opposite corners as `x y z`, and set **Height above corners**. For **Corner 1 here** / **Corner 2 here**, stand on the floor: marks use the supporting cell, `floor(feet Y − ε)`, including slabs and beds. After the first mark, close the dialog and walk; the clickable chat link reopens the saved type and marks. A complete one-block wall ring around marked inner floor corners is included automatically; typed bounds remain exact. **Certify** reports localized found/required counters and what to add. Success offers residents/jobs and the next certificate level. See [construction](construction.md) for the rules.
+**Certify new building** opens a building-type selector. Stand inside and press **Check here** («Проверить здесь»): the server discovers the room and displays every localized requirement, ✔/✘ and found/required count, with a short repair instruction beside each ✘. Fix it and check again; **Certify** appears when ready. There are no corner marks, coordinate fields, walking links or height slider. Open storage/work areas use nearby matching containers/workstations; stand beside a wall or the door of a gate to discover those. Success offers residents/jobs and the next certificate level. See [construction](construction.md) for the rules.
 
 ## Residents & jobs
 
@@ -150,7 +151,8 @@ Names contain 1–64 ASCII letters, digits, `_` or `-`. For management commands 
 | `/settlement transit list` | Read this dimension's transit records, member counts, status and departure/arrival game times. | Operator (level 2+) or console |
 | `/settlement` or `/settlement menu [page]` | Open the screens above. | Anyone; mutations require owner/operator |
 | `/settlement building list` | List certificates in the settlement containing you. | Anyone |
-| `/settlement building certify <kind> <x1> <y1> <z1> <x2> <y2> <z2>` | Certify a building. | Owner/operator |
+| `/settlement building certify <kind>` | Discover and certify the building/work area at your position. | Owner/operator |
+| `/settlement building certify <kind> <x1> <y1> <z1> <x2> <y2> <z2>` | Explicit-bounds administration/fixture tool, absent from non-operator completion and the in-game guide. | Operator (level 2+) only |
 | `/settlement building upgrade <id>` | Upgrade a certificate. | Owner/operator |
 | `/settlement build <blueprint>` or `/settlement build upgrade <id>` | Request construction or a native-built upgrade in the settlement containing you. | Owner/operator |
 | `/settlement build cancel [index]` | Cancel the pending order at the one-based index (default: head). | Owner/operator |

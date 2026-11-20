@@ -871,7 +871,7 @@ fn review_command_certificate_cannot_outlive_a_cancelled_expedition_claim() {
         &mut state,
         executor,
         Some("owner"),
-        false,
+        true,
         "house",
         bounds.min,
         bounds.max,

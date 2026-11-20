@@ -81,24 +81,24 @@ pub(crate) enum Key {
 
     TitleCertify,
     Certify,
-    TipCorners,
-    Corner1,
-    TipCorner1,
-    Corner2,
-    TipCorner2,
+    CheckHere,
+    InspectHelp,
+    InspectOpenAir,
+    InspectNotEnclosed,
+    InspectTooLarge,
+    InspectUnloaded,
+    InspectNoFloor,
+    InspectNoWorkPoint,
+    InspectNoWall,
+    InspectNoGate,
+    InspectOccupied,
     LabelKind,
-    LabelFrom,
-    LabelTo,
-    LabelExtra,
     ChooseKind,
-    BadCorners,
-    InvalidCorners,
     Certified,
     CannotCertify,
     BuildingGone,
     Upgraded,
     CannotUpgrade,
-    CornerSet,
 
     JobCancelled,
     JobDone,
@@ -231,9 +231,6 @@ pub(crate) enum Key {
     EmptyStorage,
     NeedStorage,
     StorageFirst,
-    WalkCorner2,
-    OpenCertify,
-    CloseWalk,
     AfterCertified,
     Guide,
     Welcome,
@@ -271,12 +268,6 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
             "Сначала нужен склад: сертифицируйте постройку с сундуком, затем принесите материалы.",
         ),
         Key::StorageFirst => ("Next: storage needed", "Дальше: нужен склад"),
-        Key::WalkCorner2 => (
-            "Corner 1 saved ({at}). Walk to corner 2, then press ",
-            "Метка 1 сохранена ({at}). Подойдите к углу 2 и нажмите ",
-        ),
-        Key::OpenCertify => ("[Open certification]", "[Открыть сертификацию]"),
-        Key::CloseWalk => ("Close and walk to corner 2", "Закрыть и идти к углу 2"),
         Key::AfterCertified => (
             "Next: assign residents, or build the next level and recheck its certificate.",
             "Дальше: назначьте жителей или достройте следующий уровень и проверьте сертификат.",
@@ -286,8 +277,8 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
             "Поселения: /settlement guide",
         ),
         Key::Guide => (
-            "1. Found your town: /settlement create Oak. Open management with /settlement.\n2. First, storage: stock your starter chest if a safe spot was found, or place and certify storage. Each concurrent town can receive a chest; removing towns does not renew grants. Shift-click stacks in Storage.\n3. Construction: choose a blueprint, review materials and order. Put missing materials in storage.\n4. Built it yourself? Certify it: mark two floor corners, then check the building.\n5. Residents and jobs: place beds and workstations; assign residents to certified workplaces.\n6. Check Construction for progress, Storage for supplies and Map for locations. Back returns to your previous screen.",
-            "1. Основать поселение: /settlement create Oak. Управление: /settlement.\n2. Сначала склад: наполните стартовый сундук, если нашлось безопасное место, или поставьте и сертифицируйте свой склад. Каждое одновременное поселение может получить сундук; удаление поселений не возобновляет выдачу. Перенос стаков — Shift+клик.\n3. Строительство: выберите чертёж, проверьте материалы и закажите. Недостающее принесите на склад.\n4. Построили сами? Сертифицируйте: отметьте два угла пола и проверьте здание.\n5. Жители и работа: поставьте кровати и рабочие блоки; назначьте жителей в засчитанные мастерские.\n6. Ход работ — в «Строительстве», материалы — в «Складе», расположение — на «Карте». «Назад» вернёт на предыдущий экран.",
+            "1. Found your town: /settlement create Oak. Open management with /settlement.\n2. First, storage: stock your starter chest if a safe spot was found, or place and certify storage. Each concurrent town can receive a chest; removing towns does not renew grants. Shift-click stacks in Storage.\n3. Construction: choose a blueprint, review materials and order. Put missing materials in storage.\n4. Built it yourself? Stand inside, choose its type and Check here. Read every requirement and fix the crosses; Certify when ready. No corner marks needed.\n5. Residents and jobs: place beds and workstations; assign residents to certified workplaces.\n6. Check Construction for progress, Storage for supplies and Map for locations. Back returns to your previous screen.",
+            "1. Основать поселение: /settlement create Oak. Управление: /settlement.\n2. Сначала склад: наполните стартовый сундук, если нашлось безопасное место, или поставьте и сертифицируйте свой склад. Каждое одновременное поселение может получить сундук; удаление поселений не возобновляет выдачу. Перенос стаков — Shift+клик.\n3. Строительство: выберите чертёж, проверьте материалы и закажите. Недостающее принесите на склад.\n4. Построили сами? Встаньте внутри, выберите тип и нажмите «Проверить здесь». Исправьте пункты с ✘ и сертифицируйте готовое здание. Углы отмечать не нужно.\n5. Жители и работа: поставьте кровати и рабочие блоки; назначьте жителей в засчитанные мастерские.\n6. Ход работ — в «Строительстве», материалы — в «Складе», расположение — на «Карте». «Назад» вернёт на предыдущий экран.",
         ),
         Key::ConstructionStarted => (
             "Construction started: {blueprint}.",
@@ -431,33 +422,52 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
 
         Key::TitleCertify => ("Certify building", "Сертификация постройки"),
         Key::Certify => ("Certify", "Сертифицировать"),
-        Key::TipCorners => (
-            "Corners are two opposite corners of the finished building, inclusive. Height adds blocks above the higher corner.",
-            "Углы — две противоположные вершины готовой постройки, включительно. Высота добавляет блоки выше верхнего угла.",
+        Key::CheckHere => ("Check here", "Проверить здесь"),
+        Key::InspectHelp => (
+            "Stand inside the room, choose its type and Check here. Doors separate rooms.",
+            "Встаньте внутри комнаты, выберите тип и нажмите «Проверить здесь». Двери разделяют комнаты.",
         ),
-        Key::Corner1 => ("Corner 1 here", "Угол 1 = моя позиция"),
-        Key::TipCorner1 => (
-            "Stand on the floor corner. Save it, close the dialog and walk; the chat link reopens this form with your marks.",
-            "Встаньте на угол пола. Сохраните метку, закройте диалог и идите; ссылка в чате откроет форму с вашими метками.",
+        Key::InspectOpenAir => (
+            "No surrounding walls found. Stand inside a building (search limit: 64 blocks).",
+            "Стены вокруг не найдены. Встаньте внутри постройки (предел поиска — 64 блока).",
         ),
-        Key::Corner2 => ("Corner 2 here", "Угол 2 = моя позиция"),
-        Key::TipCorner2 => (
-            "Stand in the opposite corner block and press this.",
-            "Встаньте в противоположный угловой блок и нажмите.",
+        Key::InspectNotEnclosed => (
+            "No enclosed room found. Close wall openings and stand inside one room.",
+            "Замкнутая комната не найдена. Закройте проёмы в стенах и встаньте внутри одной комнаты.",
+        ),
+        Key::InspectTooLarge => (
+            "The room is open or too large: at most 64 blocks per axis and 32768 blocks total. Enclose a smaller room.",
+            "Комната не замкнута или слишком большая: до 64 блоков по оси и 32768 блоков всего. Отделите меньшую комнату.",
+        ),
+        Key::InspectUnloaded => (
+            "The building extends into unloaded terrain. Load the surrounding chunks before checking.",
+            "Часть постройки не загружена. Загрузите соседние чанки перед проверкой.",
+        ),
+        Key::InspectNoFloor => (
+            "No solid floor found within eight blocks below you. Stand on the room's floor.",
+            "Сплошной пол не найден в восьми блоках под вами. Встаньте на пол комнаты.",
+        ),
+        Key::InspectNoWorkPoint => (
+            "No free matching chest or workstation within four blocks. Approach the work area and check again.",
+            "В четырёх блоках нет свободного сундука или рабочего блока выбранного типа. Подойдите к рабочей площадке и проверьте снова.",
+        ),
+        Key::InspectNoWall => (
+            "No free wall block within two blocks. Stand beside the wall and check again.",
+            "В двух блоках нет свободного блока стены. Встаньте рядом со стеной и проверьте снова.",
+        ),
+        Key::InspectNoGate => (
+            "No free gate door within four blocks. Approach the door in its frame and check again.",
+            "В четырёх блоках нет свободной двери ворот. Подойдите к двери в раме и проверьте снова.",
+        ),
+        Key::InspectOccupied => (
+            "This area overlaps another certificate. Stand in a separate work area or inside the existing building of the selected type.",
+            "Площадка пересекается с другим сертификатом. Встаньте на отдельной площадке или внутри существующей постройки выбранного типа.",
         ),
         Key::LabelKind => ("Building type", "Тип постройки"),
-        Key::LabelFrom => ("Floor corner 1 (x y z)", "Угол пола 1 (x y z)"),
-        Key::LabelTo => ("Floor corner 2 (x y z)", "Угол пола 2 (x y z)"),
-        Key::LabelExtra => ("Height above corners", "Высота над углами"),
         Key::ChooseKind => ("Choose a building type.", "Выберите тип постройки."),
-        Key::BadCorners => (
-            "Corners must be three whole numbers: x y z.",
-            "Углы задаются тремя целыми числами: x y z.",
-        ),
-        Key::InvalidCorners => ("Invalid corners.", "Неверные углы."),
         Key::Certified => (
-            "Certified {kind} #{id} (level 1).",
-            "Постройка сертифицирована: {kind} #{id} (уровень 1).",
+            "Certified {kind} #{id} (level {level}).",
+            "Постройка сертифицирована: {kind} #{id} (уровень {level}).",
         ),
         Key::CannotCertify => (
             "Cannot certify {kind}. Missing: {missing}.",
@@ -475,7 +485,6 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
             "Cannot upgrade #{id}. Missing: {missing}.",
             "Не удалось улучшить #{id}. Не хватает: {missing}.",
         ),
-        Key::CornerSet => ("Corner {n} = {at}.", "Угол {n} = {at}."),
 
         Key::JobCancelled => ("cancelled", "отменён"),
         Key::JobDone => ("done", "готово"),
@@ -756,6 +765,46 @@ pub(crate) fn map_scale(lang: Lang, scale: i32) -> String {
     )
 }
 
+/// The single display-name table for construction, project cards and map labels.
+pub(crate) fn blueprint(lang: Lang, id: &str) -> &'static str {
+    let (en, ru) = match id {
+        "house" => ("House", "Дом"),
+        "storage" => ("Storage", "Склад"),
+        "farm" => ("Farm", "Ферма"),
+        "mason" => ("Mason's workshop", "Мастерская каменщика"),
+        "shepherd" => ("Shepherd's workshop", "Мастерская пастуха"),
+        "lumber_camp" => ("Lumber camp", "Лесопилка"),
+        "mine" => ("Mine", "Шахта"),
+        "barracks" => ("Barracks", "Казарма"),
+        "wall" => ("Wall", "Стена"),
+        "watch_tower" => ("Watchtower", "Сторожевая башня"),
+        "gate" => ("Gate", "Ворота"),
+        "armorer" => ("Armorer's workshop", "Мастерская бронника"),
+        "butcher" => ("Butcher's workshop", "Мастерская мясника"),
+        "cartographer" => ("Cartographer's workshop", "Мастерская картографа"),
+        "cleric" => ("Cleric's workshop", "Мастерская священника"),
+        "fisherman" => ("Fisherman's workshop", "Мастерская рыбака"),
+        "fletcher" => ("Fletcher's workshop", "Мастерская лучника"),
+        "leatherworker" => ("Leatherworker's workshop", "Мастерская кожевника"),
+        "librarian" => ("Librarian's workshop", "Мастерская библиотекаря"),
+        "toolsmith" => ("Toolsmith's workshop", "Мастерская инструментальщика"),
+        "weaponsmith" => ("Weaponsmith's workshop", "Мастерская оружейника"),
+        "spanish_house" => ("Spanish house", "Испанский дом"),
+        "spanish_church" => ("Spanish church", "Испанская церковь"),
+        "spanish_plaza" => ("Spanish plaza", "Испанская площадь"),
+        "spanish_fortress" => ("Spanish fortress", "Испанская крепость"),
+        "spanish_wall" => ("Spanish wall", "Испанская стена"),
+        "road" => ("Road", "Дорога"),
+        "lamp" => ("Street lamp", "Фонарь"),
+        "meadow" => ("Meadow clearing", "Расчистка луга"),
+        _ => ("Unknown blueprint", "Неизвестный чертёж"),
+    };
+    match lang {
+        Lang::En => en,
+        Lang::Ru => ru,
+    }
+}
+
 /// Names shared by workshop certificates and resident cards.
 pub(crate) fn profession(
     lang: Lang,
@@ -789,6 +838,27 @@ pub(crate) fn profession(
     }
 }
 
+pub(super) fn discovery_refusal(
+    lang: Lang,
+    reason: super::building_discovery::Refusal,
+) -> &'static str {
+    use super::building_discovery::Refusal;
+    text(
+        lang,
+        match reason {
+            Refusal::OpenAir => Key::InspectOpenAir,
+            Refusal::NotEnclosed => Key::InspectNotEnclosed,
+            Refusal::TooLarge => Key::InspectTooLarge,
+            Refusal::Unloaded => Key::InspectUnloaded,
+            Refusal::NoFloor => Key::InspectNoFloor,
+            Refusal::NoWorkPoint => Key::InspectNoWorkPoint,
+            Refusal::NoWall => Key::InspectNoWall,
+            Refusal::NoGate => Key::InspectNoGate,
+            Refusal::Occupied => Key::InspectOccupied,
+        },
+    )
+}
+
 /// Certificate geometry counters and the action that satisfies each counter.
 pub(crate) fn requirement(lang: Lang, code: &str) -> (&str, &'static str) {
     let (en, ru, en_action, ru_action) = match code {
@@ -813,8 +883,8 @@ pub(crate) fn requirement(lang: Lang, code: &str) -> (&str, &'static str) {
         "roof" => (
             "roof",
             "крыша",
-            "complete the roof at the top corner height",
-            "достройте крышу на высоте верхнего угла",
+            "close the holes in the roof",
+            "закройте отверстия в крыше",
         ),
         "enclosure" => (
             "perimeter walls",
@@ -864,7 +934,7 @@ pub(crate) fn requirement(lang: Lang, code: &str) -> (&str, &'static str) {
             "complete the gate frame",
             "достройте раму ворот",
         ),
-        _ => return (code, text(lang, Key::TipCorners)),
+        _ => return (code, text(lang, Key::InspectHelp)),
     };
     match lang {
         Lang::En => (en, en_action),

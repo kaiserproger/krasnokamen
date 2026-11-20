@@ -386,6 +386,17 @@ pub(super) fn settlement(
                 ),
             }
         }
+        SettlementCommand::BuildingCertifyHere { kind } => {
+            match crate::settlements::building_commands::certify_here(
+                state,
+                executor,
+                actor.as_deref(),
+                operator,
+                kind,
+            ) {
+                Ok(message) | Err(message) => error(state, connection, message),
+            }
+        }
         SettlementCommand::BuildingCertify { kind, min, max } => {
             match crate::settlements::building_commands::certify(
                 state,

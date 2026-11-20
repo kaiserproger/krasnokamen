@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import uuid
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -122,8 +123,12 @@ class Server:
     """One server process on the shared world, with its own log."""
 
     def __init__(self, ctx: ProfileContext, binary: Path, artifact: Path, label: str,
-                 config: str, port: int):
+                 config: str, port: int, console: bool = False):
         self.ctx, self.label, self.port = ctx, label, port
+        # `console`: the server reads operator commands from ARTIFACT/console.fifo (`battle_recovery.FifoConsole`
+        # writes it, replies come back through the server log); the read-write end keeps the pipe open.
+        self.console_path = artifact / "console.fifo" if console else None
+        self.console_fd = None
         self.config_path = artifact / f"{label}.toml"
         self.log_path = artifact / f"{label}.log"
         self.config_path.write_text(config)
@@ -133,13 +138,17 @@ class Server:
 
     def start(self) -> None:
         self.log = self.log_path.open("wb")
+        if self.console_path is not None:
+            os.mkfifo(self.console_path)
+            self.console_fd = os.open(self.console_path, os.O_RDWR)
         self.ctx.commands.append(self.argv)
         self.ctx.cwds.append(str(runtime.REPO_ROOT))
         self.ctx.exits.append(None)
         self.ctx.logs.append(str(self.log_path.relative_to(runtime.REPO_ROOT))
                              if self.log_path.is_relative_to(runtime.REPO_ROOT) else str(self.log_path))
         self.process = runtime.start_server(
-            self.argv, cwd=runtime.REPO_ROOT, stdin=subprocess.DEVNULL, stdout=self.log,
+            self.argv, cwd=runtime.REPO_ROOT, stdin=subprocess.DEVNULL if self.console_fd is None else self.console_fd,
+            stdout=self.log,
             stderr=subprocess.STDOUT, start_new_session=True)
 
     def wait_ready(self, timeout: float) -> None:
@@ -147,6 +156,9 @@ class Server:
 
     def stop(self) -> int | None:
         runtime.stop_process(self.process)
+        if self.console_fd is not None:
+            os.close(self.console_fd)
+            self.console_fd = None
         if self.log is not None:
             self.log.close()
         if self.process is not None:

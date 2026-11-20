@@ -646,10 +646,11 @@ def block_cards(w: Walk) -> None:
     x, y, z = w.evidence["pad"]["anchor"]
     ground = y - 1
     low, high = (x + 12, ground, z - 20), (x + 16, ground + 3, z - 16)
-    w.fixture(f"fill {low[0]} {ground} {low[2]} {high[0]} {ground + 5} {high[2]} minecraft:air")
-    w.fixture(f"fill {low[0]} {ground} {low[2]} {high[0]} {ground} {high[2]} minecraft:stone")
-    w.fixture(f"setblock {x + 14} {ground + 1} {z - 18} minecraft:cartography_table")
-    w.fixture(f"settlement building certify cartographer {low[0]} {low[1]} {low[2]} {high[0]} {high[1]} {high[2]}")
+    if not w.stage2:  # stage 2: the Workshop of the certification cases is already registered, by the player
+        w.fixture(f"fill {low[0]} {ground} {low[2]} {high[0]} {ground + 5} {high[2]} minecraft:air")
+        w.fixture(f"fill {low[0]} {ground} {low[2]} {high[0]} {ground} {high[2]} minecraft:stone")
+        w.fixture(f"setblock {x + 14} {ground + 1} {z - 18} minecraft:cartography_table")
+        w.fixture(f"settlement building certify cartographer {low[0]} {low[1]} {low[2]} {high[0]} {high[1]} {high[2]}")
     open_dashboard(w)
     listing = w.click_slot(r"^Постройки$", "dashboard Buildings", lambda s: s["kind"] == "menu")
     w.shot("buildings-list")

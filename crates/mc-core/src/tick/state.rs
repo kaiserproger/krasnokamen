@@ -183,7 +183,6 @@ impl TickState {
             settlements: Default::default(),
             settlement_sequence: 0,
             autonomy_queue: Default::default(),
-            settlement_marks: HashMap::default(),
             settlement_menus: HashMap::default(),
             settlement_navigation: HashMap::default(),
             tick_budget: Default::default(),

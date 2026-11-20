@@ -11,6 +11,7 @@ mod autocraft;
 pub(crate) mod autonomy;
 pub mod blueprints;
 pub(crate) mod building_commands;
+mod building_discovery;
 pub mod buildings;
 mod caravan;
 pub(crate) mod commands;

@@ -14,6 +14,9 @@ All paths below are under `crates/mc-core/src/settlements/` unless noted:
   `crates/mc-core/src/villager/` owns resident brains and state.
 - `buildings.rs`, `construction.rs`, `autonomy.rs`, `blueprints.rs`: certified
   buildings, construction and generated-village adoption.
+- `building_discovery.rs`: bounded room discovery from a player's standing cell;
+  its bounds feed the existing `buildings.rs` inspection and certificate record,
+  without a new persistence format or a second certification authority.
 - `construction_access.rs`: the construction module's narrow surface (owner
   D9.3). Code outside `construction*.rs` reads the record's projects and
   pending orders only through it; the `code-health` ratchet counts direct field

@@ -858,6 +858,38 @@ the Settings dialog or the map territory.
   otherwise. On the unfixed core (pin `7393780e37a4`) the client missed the chest in every run (Java 7/7,
   Horizon 2/2, `receipts/ChestDeliveryFix/REVIEW-BRIEF.md`). The options exist only on this scenario.
 
+  `settlement-map-qa -- --scenario stage2 --language ru_ru` (native and Java) is the stage-2 acceptance of the
+  same decision (certification by standing inside and «Проверить здесь», no corner marking), written from the
+  decision text and the stage-2 rules (`tools/harness/backends/settlement_quickwins_stage2.py`). The player is
+  NOT an operator, so privileged fixtures run on the server console: the scene scenario option
+  `server_console: true` starts the server with stdin on `RUN_DIR/console.fifo` (the battle runner's
+  mechanism, `FifoConsole`); `settlement_quickwins_console.ConsoleFixtures` replaces `@s` with the player's
+  name and returns exactly the reply lines between two unique `say` fences. `-- --scenario stage2op` is the
+  same player written into ops.json at level 2 before the server starts (scenario option
+  `operator_level: 2`; the console `op` always grants level 4) and judges only the operator branch of the
+  coordinate form of `/settlement building certify`. Tab-completion denial has no native or Java client
+  tool; the command tree is covered by the `mc-edge` `command_tree` tests. `settlement-map-qa -- --scenario
+  blueprints --language ru_ru|en_us` opens the blueprint list with the player's `/settlement menu projects`
+  and judges that every icon name is a localized word (no snake_case or `minecraft:` ids, no «Unknown»,
+  26 or more distinct names).
+
+## Settlement quick wins on Horizon (`settlement-quickwins-horizon`)
+
+`python3 -m tools.harness run settlement-quickwins-horizon --timeout-seconds 3600` runs the same
+quick-wins walk as `settlement-map-qa --scenario quickwins` on the pinned Horizon 26.3 client
+(`--offscreen` under the harness Xvfb; `KRASNOKAMEN_HORIZON_CLIENT|CTL|RESOURCES` or
+`--horizon-client|--horizon-ctl|--horizon-resources`; `-- --scenario stage2|stage2op` runs the stage-2 walk with a
+non-operator player and console fixtures, or the same player at ops.json level 2; Tab completion there is
+recorded, not judged: the coordinate arguments are integers and offer no suggestion even to a level-2 operator). The harness owns the server (a `Server` with
+its own loopback port, world and empty plugins folder), the Xvfb display and the client in one
+`ExitStack`; a failure at any step stops what was started, and the receipt names the tree fingerprint
+and the server binary path and sha256. Waits are pushes: `Probe.wait` observes and then blocks on the
+client's `wait-for state-change --since REV` (`state.revision`, a read-only extension carried by the QA
+kit at `targets/horizon-qa-kit`), which moves when the dialog, the position, a tracked entity or a
+block write changes. A `ru_ru` run refuses before connect when the client's resources lack
+`assets/minecraft/lang/ru_ru.json` (the film resources carry only `en_us`, so the outcome showed
+English item names next to Russian server text).
+
 ## Distant Horizons gate (`dh-gate`)
 
 `python3 -m tools.harness run dh-gate --platform fabric|neoforge` runs a real

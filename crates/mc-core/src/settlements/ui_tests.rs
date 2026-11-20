@@ -361,12 +361,18 @@ fn station(state: &mut TickState, at: [i32; 3], name: &str) {
 }
 
 fn certify_form(kind: &str) -> Vec<(&'static str, Tag)> {
-    vec![
-        ("kind", string(kind)),
-        ("from", string("3 200 3")),
-        ("to", string("7 200 7")),
-        ("extra", Tag::Float(4.0)),
-    ]
+    vec![("kind", string(kind))]
+}
+
+fn stand_inside(state: &mut TickState, at: [f64; 3]) {
+    let entity = state.connections.entity_of(CONN).unwrap();
+    let slot = state.entities.slot_of(entity).unwrap();
+    state.entities.set_pos(slot, at);
+}
+
+fn workshop_room(state: &mut TickState) {
+    super::building_discovery::tests::room(state, [3, 3], [7, 7], true);
+    stand_inside(state, [5.5, 201.0, 4.5]);
 }
 
 fn use_bell(state: &mut TickState, at: [i32; 3]) -> Vec<PlayerChange> {
@@ -585,6 +591,7 @@ fn non_owner_sees_the_screens_read_only_and_every_mutating_click_is_refused() {
 
     station(&mut state, [4, 201, 4], "minecraft:composter");
     for (action, extra) in [
+        ("certify_check", certify_form("farmer")),
         ("certify_do", certify_form("farmer")),
         ("certify", vec![]),
         ("order_start", vec![]),
@@ -648,11 +655,11 @@ fn stale_or_foreign_ids_never_panic_or_leak() {
 fn certify_reports_missing_requirements_then_certifies_and_lists_with_upgrade_needs() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
-    // Nothing built: the form comes back with the reasons and the typed values.
+    workshop_room(&mut state);
     let failed = last_dialog(&click(
         &mut state,
         id,
-        "certify_do",
+        "certify_check",
         &certify_form("farmer"),
     ));
     assert_eq!(failed.title, "Certify building");
@@ -660,7 +667,7 @@ fn certify_reports_missing_requirements_then_certifies_and_lists_with_upgrade_ne
         "{} 0/1",
         ui_text::requirement(Lang::En, "workstations").0,
     )));
-    assert_eq!(failed.inputs, ["kind", "from", "to", "extra"]);
+    assert_eq!(failed.inputs, ["kind"]);
     assert!(state.settlements.get(id).unwrap().buildings.is_empty());
 
     station(&mut state, [4, 201, 4], "minecraft:composter");
@@ -747,38 +754,38 @@ fn certify_reports_missing_requirements_then_certifies_and_lists_with_upgrade_ne
 }
 
 #[test]
-fn marking_corners_prefills_the_certify_form_and_bad_input_is_explained() {
+fn certification_uses_only_type_and_player_position_not_forged_corners() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
-    click(&mut state, id, "mark1", &certify_form("house"));
-    let at = floor_pos(&state, CONN).unwrap();
-    assert_eq!(state.settlement_marks[&CONN].corners[0], Some(at));
-    // Reopening from the buildings screen uses the stored mark as corner 1.
-    click(&mut state, id, "buildings", &[]);
+    workshop_room(&mut state);
     let reopened = last_dialog(&click(&mut state, id, "certify", &[]));
-    assert_eq!(reopened.inputs, ["kind", "from", "to", "extra"]);
-    let bad = last_dialog(&click(
+    assert_eq!(reopened.inputs, ["kind"]);
+    assert!(reopened.has("certify_check"));
+    assert!(!reopened.has("certify_do"));
+    let checked = last_dialog(&click(
         &mut state,
         id,
-        "certify_do",
+        "certify_check",
         &[
-            ("kind", string("house")),
+            ("kind", string("farmer")),
             ("from", string("a b c")),
             ("to", string("1 2 3")),
+            ("extra", Tag::Float(999.0)),
         ],
     ));
-    assert!(bad.body.contains("three whole numbers"));
+    let (label, _) = ui_text::requirement(Lang::En, "workstations");
+    assert!(checked.body.contains(&format!("{label} 0/1")));
     let unknown = last_dialog(&click(
         &mut state,
         id,
-        "certify_do",
-        &[
-            ("kind", string("castle")),
-            ("from", string("1 2 3")),
-            ("to", string("1 2 3")),
-        ],
+        "certify_check",
+        &certify_form("castle"),
     ));
-    assert!(unknown.body.contains("Choose a building type"));
+    assert!(
+        unknown
+            .body
+            .contains(ui_text::text(Lang::En, Key::ChooseKind))
+    );
 }
 
 /// A finished workshop house on the fixture floor: solid floor at y=200, a wall
@@ -805,17 +812,8 @@ fn finished_workshop_house_certifies_with_its_inclusive_bounds() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
     finished_workshop_house(&mut state);
-    click(
-        &mut state,
-        id,
-        "certify_do",
-        &[
-            ("kind", string("farmer")),
-            ("from", string("1 200 1")),
-            ("to", string("5 204 5")),
-            ("extra", Tag::Float(0.0)),
-        ],
-    );
+    stand_inside(&mut state, [2.5, 201.0, 2.5]);
+    click(&mut state, id, "certify_do", &certify_form("farmer"));
     assert_eq!(
         state.settlements.get(id).unwrap().buildings.len(),
         1,
@@ -823,42 +821,30 @@ fn finished_workshop_house_certifies_with_its_inclusive_bounds() {
     );
 }
 
-/// CERTIFY-CORNER-MARKS-USE-FEET-INSIDE-WALLS: the corner marks store the
-/// player's feet block (`pos.floor()`), and certify takes the two marks as
-/// inclusive bounds, so a player who stands in a corner block of a finished
-/// house — exactly what the tooltip asks — marks the air layer above the floor.
 #[test]
-fn corner_marks_taken_inside_a_finished_house_certify_it() {
+fn standing_inside_a_finished_house_certifies_its_floor_wall_and_roof_bounds() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
     finished_workshop_house(&mut state);
-    let entity = state.connections.entity_of(CONN).unwrap();
-    let slot = state.entities.slot_of(entity).unwrap();
-    // Follow the tooltip: stand in one inner corner block, then the opposite one.
-    state.entities.set_pos(slot, [2.5, 201.0, 2.5]);
-    click(&mut state, id, "mark1", &certify_form("farmer"));
-    state.entities.set_pos(slot, [4.5, 201.0, 4.5]);
-    click(&mut state, id, "mark2", &certify_form("farmer"));
-    let marks = state.settlement_marks[&CONN].corners;
-    let corner = |at: [i32; 3]| format!("{} {} {}", at[0], at[1], at[2]);
-    let from = corner(marks[0].expect("mark1 stored a corner"));
-    let to = corner(marks[1].expect("mark2 stored a corner"));
-    let rejected = last_dialog(&click(
+    stand_inside(&mut state, [2.5, 201.0, 2.5]);
+    let checked = last_dialog(&click(
+        &mut state,
+        id,
+        "certify_check",
+        &certify_form("farmer"),
+    ));
+    assert!(checked.has("certify_do"), "{}", checked.body);
+    let done = last_dialog(&click(
         &mut state,
         id,
         "certify_do",
-        &[
-            ("kind", string("farmer")),
-            ("from", string(&from)),
-            ("to", string(&to)),
-            ("extra", Tag::Float(4.0)),
-        ],
+        &certify_form("farmer"),
     ));
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(record.buildings.len(), 1, "{}", done.body);
     assert_eq!(
-        state.settlements.get(id).unwrap().buildings.len(),
-        1,
-        "marks taken at {from} .. {to} (the feet block) must certify the house; the server says: {}",
-        rejected.body
+        record.buildings.values().next().unwrap().bounds,
+        ScriptWorldBounds::new([1, 200, 1], [5, 204, 5]).unwrap()
     );
 }
 
@@ -905,6 +891,7 @@ fn census_idle_filter_excludes_nitwits_and_recovery_keeps_the_workers_profession
     assert!(!idle_page.body.contains("Nitwit"));
     // Certifying a matching workshop and claiming its work point recovers the
     // worker; the profession is kept throughout.
+    workshop_room(&mut state);
     station(&mut state, [4, 201, 4], "minecraft:composter");
     click(&mut state, id, "certify_do", &certify_form("farmer"));
     let dimension = state.dimension.name().to_owned();
@@ -936,6 +923,7 @@ fn census_idle_filter_excludes_nitwits_and_recovery_keeps_the_workers_profession
 fn residents_screen_lists_jobs_and_free_slots() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
+    workshop_room(&mut state);
     station(&mut state, [4, 201, 4], "minecraft:composter");
     click(&mut state, id, "certify_do", &certify_form("farmer"));
     let uuid = bound_resident(&mut state, id);
@@ -966,6 +954,7 @@ fn residents_screen_lists_jobs_and_free_slots() {
 fn production_order_flow_creates_pauses_and_cancels_a_real_job() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
+    workshop_room(&mut state);
     station(&mut state, [4, 201, 4], "minecraft:composter");
     station(&mut state, [5, 201, 5], "minecraft:crafting_table");
     click(&mut state, id, "certify_do", &certify_form("farmer"));
@@ -1096,6 +1085,7 @@ fn production_order_flow_creates_pauses_and_cancels_a_real_job() {
 fn production_autocraft_order_plans_missing_ingredients_or_says_why_not() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
+    workshop_room(&mut state);
     station(&mut state, [4, 201, 4], "minecraft:composter");
     station(&mut state, [5, 201, 5], "minecraft:crafting_table");
     click(&mut state, id, "certify_do", &certify_form("farmer"));
@@ -1193,6 +1183,7 @@ fn production_autocraft_order_plans_missing_ingredients_or_says_why_not() {
 fn production_without_a_crafting_table_says_what_to_place() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
+    workshop_room(&mut state);
     station(&mut state, [4, 201, 4], "minecraft:composter");
     click(&mut state, id, "certify_do", &certify_form("farmer"));
     let note = last_dialog(&click(&mut state, id, "order_start", &[]));
@@ -1526,11 +1517,17 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
 
 #[test]
 fn cultural_project_status_names_active_and_pending_blueprints_in_both_locales() {
-    // Each locale retains the authored cultural names in the full queue view.
+    // Each locale shows localized cultural names in the full queue view.
     for (locale, level) in [("en_us", "L1"), ("ru_ru", "ур. 1")] {
+        let lang = Lang::of(Some(locale));
         for pending in ["spanish_house", "spanish_church", "spanish_fortress"] {
             let mut state = joined(0);
             let id = town(&mut state, PLAYER);
+            let ctx = Ctx {
+                id,
+                manage: true,
+                lang,
+            };
             set_locale(&mut state, locale);
             prep_projects_site(&mut state, id);
             crate::settlements::construction::tests::fund(&mut state, "spanish_plaza", 1);
@@ -1565,9 +1562,17 @@ fn cultural_project_status_names_active_and_pending_blueprints_in_both_locales()
                 pending
             );
             let status = last_dialog(&click(&mut state, id, "project_status_details", &[]));
-            assert!(status.body.contains("spanish_plaza L1"), "{}", status.body);
             assert!(
-                status.body.contains(&format!("{pending} {level}")),
+                status
+                    .body
+                    .contains(&format!("{} L1", blueprint_label(&ctx, "spanish_plaza"))),
+                "{}",
+                status.body
+            );
+            assert!(
+                status
+                    .body
+                    .contains(&format!("{} {level}", blueprint_label(&ctx, pending))),
                 "{}",
                 status.body
             );
@@ -1708,6 +1713,7 @@ fn building_card_offers_construction_upgrade_only_for_blueprint_built_buildings(
     // A player-certified building of the same kind is never offered an upgrade.
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
+    workshop_room(&mut state);
     station(&mut state, [4, 201, 4], "minecraft:composter");
     click(&mut state, id, "certify_do", &certify_form("farmer"));
     let building = BuildingId(id.0 << 32 | 1);
@@ -2668,22 +2674,15 @@ fn d8_cached_cancel_refuses_an_identical_order_that_shifted_into_its_index() {
 }
 
 #[test]
-fn certificate_marks_use_the_supporting_cell_on_full_blocks_slabs_and_beds() {
+fn checking_here_keeps_the_dialog_open_without_corner_marking_chat() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
-    let slot = state
-        .entities
-        .slot_of(state.connections.entity_of(CONN).unwrap())
-        .unwrap();
-    for y in [201.0, 200.5, 200.5625] {
-        state.entities.set_pos(slot, [2.5, y, 2.5]);
-        click(
-            &mut state,
-            id,
-            "mark1",
-            &[("kind", string("house")), ("extra", string("4"))],
-        );
-        assert_eq!(state.settlement_marks[&CONN].corners[0], Some([2, 200, 2]));
+    workshop_room(&mut state);
+    for y in [201.0, 201.5, 201.5625] {
+        stand_inside(&mut state, [5.5, y, 4.5]);
+        let changes = click(&mut state, id, "certify_check", &certify_form("farmer"));
+        assert!(chat(&changes).is_empty());
+        assert_eq!(last_dialog(&changes).inputs, ["kind"]);
     }
 }
 
@@ -2810,41 +2809,17 @@ fn accepted_order_keeps_actions_above_the_long_material_bill() {
 }
 
 #[test]
-fn certification_refusal_keeps_retry_actions_compact_without_losing_details() {
+fn certification_checklist_shows_passes_failures_counts_and_repairs_in_russian() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
     set_locale(&mut state, "ru_ru");
-    // run16: a complete floor, perimeter and doorway, but no bed or roof.
-    for x in 3..=7 {
-        for z in 3..=7 {
-            if x == 3 || x == 7 || z == 3 || z == 7 {
-                for y in 201..204 {
-                    state.world.set_block(x, y, z, state.registry.states.stone);
-                }
-            }
-        }
-    }
-    let lower = block(&state, "minecraft:oak_door", &[("half", "lower")]);
-    let upper = block(&state, "minecraft:oak_door", &[("half", "upper")]);
-    state.world.set_block(3, 201, 5, lower);
-    state.world.set_block(3, 202, 5, upper);
-    state.world.fold_overlay();
-    let error = buildings::certify(
-        &mut state,
-        id,
-        BuildingKind::House,
-        ScriptWorldBounds::new([3, 200, 3], [7, 204, 7]).unwrap(),
-    )
-    .unwrap_err();
-    assert_eq!(
-        error
-            .missing
-            .iter()
-            .map(|r| r.description.as_str())
-            .collect::<Vec<_>>(),
-        ["beds", "roof"]
-    );
-    let changes = click(&mut state, id, "certify_do", &certify_form("house"));
+    super::building_discovery::tests::room(&mut state, [3, 3], [7, 7], false);
+    stand_inside(&mut state, [4.5, 201.0, 4.5]);
+    let bounds = building_discovery::find(&state, [4, 201, 4]).unwrap();
+    let requirements = buildings::assess(&state, BuildingKind::House, 1, bounds)
+        .unwrap()
+        .requirements;
+    let changes = click(&mut state, id, "certify_check", &certify_form("house"));
     let dialog = changes
         .iter()
         .find_map(|change| match change {
@@ -2854,37 +2829,33 @@ fn certification_refusal_keeps_retry_actions_compact_without_losing_details() {
         .unwrap();
     let body = list(field(dialog, "body"));
     assert_eq!(body.len(), 1);
-    let contents = field(&body[0], "contents").unwrap();
-    for requirement in &error.missing {
-        let (label, _) = ui_text::requirement(Lang::Ru, &requirement.description);
-        assert!(text(contents).contains(&format!(
-            "{label} {}/{}",
-            requirement.found, requirement.required
-        )));
-    }
     assert_eq!(field(&body[0], "width"), Some(&Tag::Int(408)));
-    let full = field(field(contents, "hover_event").unwrap(), "value").unwrap();
-    assert!(text(full).chars().count() > 80);
-    let certify = list(field(dialog, "actions"))
-        .iter()
-        .find(|button| {
-            field(button, "action").and_then(|action| field(action, "id"))
-                == Some(&string("krasnokamen:settlement/certify_do"))
-        })
-        .unwrap();
-    assert_eq!(field(certify, "tooltip"), Some(full));
     let shown = shown(dialog);
-    assert_eq!(shown.inputs.len(), 4);
-    assert!(
-        ["certify_do", "mark1", "mark2", "back"]
-            .iter()
-            .all(|action| shown.has(action))
-    );
+    for requirement in &requirements {
+        let (label, instruction) = ui_text::requirement(Lang::Ru, &requirement.description);
+        let complete = requirement.found >= requirement.required;
+        let line = format!(
+            "{} {label} {}/{}",
+            if complete { "✔" } else { "✘" },
+            requirement.found,
+            requirement.required
+        );
+        assert!(shown.body.contains(&line), "{}", shown.body);
+        assert_eq!(
+            shown.body.contains(instruction),
+            !complete,
+            "{}",
+            shown.body
+        );
+    }
+    assert_eq!(shown.inputs, ["kind"]);
+    assert!(shown.has("certify_check") && shown.has("back"));
+    assert!(!shown.has("certify_do"));
     assert!(state.settlements.get(id).unwrap().buildings.is_empty());
 }
 
 #[test]
-fn certification_refusal_all_eight_requirements_fit_the_retry_body_budget() {
+fn certification_all_eight_requirements_and_repairs_fit_the_dialog_budget() {
     let mut state = joined(0);
     let id = town(&mut state, PLAYER);
     set_locale(&mut state, "ru_ru");
@@ -2893,29 +2864,31 @@ fn certification_refusal_all_eight_requirements_fit_the_retry_body_budget() {
         manage: true,
         lang: Lang::Ru,
     };
-    let error = CertError {
-        missing: [
-            "footprint",
-            "height",
-            "beds",
-            "roof",
-            "enclosure",
-            "entrance",
-            "workstations",
-            "containers",
-        ]
-        .into_iter()
-        .map(|code| buildings::Requirement {
-            description: code.to_owned(),
-            found: 0,
-            required: 9,
-        })
-        .collect(),
-    };
-    let summary = missing_summary(&ctx, &error);
-    let details = missing_text(&ctx, &error);
-    let form = form_of(&state, CONN, ClickPayload(None));
-    certify_screen(&mut state, CONN, &ctx, &form, &summary, Some(&details));
+    let requirements = [
+        "footprint",
+        "height",
+        "beds",
+        "roof",
+        "enclosure",
+        "entrance",
+        "workstations",
+        "containers",
+    ]
+    .into_iter()
+    .map(|code| buildings::Requirement {
+        description: code.to_owned(),
+        found: 0,
+        required: 9,
+    })
+    .collect::<Vec<_>>();
+    certify_screen(
+        &mut state,
+        CONN,
+        &ctx,
+        BuildingKind::House,
+        "",
+        &requirements,
+    );
     let changes = run(&mut state, &[]);
     let dialog = changes
         .iter()
@@ -2928,29 +2901,185 @@ fn certification_refusal_all_eight_requirements_fit_the_retry_body_budget() {
     assert_eq!(body.len(), 1);
     assert_eq!(field(&body[0], "width"), Some(&Tag::Int(408)));
     let shown = shown(dialog);
-    for requirement in &error.missing {
-        let (label, _) = ui_text::requirement(Lang::Ru, &requirement.description);
-        assert!(shown.body.contains(&format!("{label} 0/9")));
+    for requirement in &requirements {
+        let (label, instruction) = ui_text::requirement(Lang::Ru, &requirement.description);
+        assert!(
+            shown
+                .body
+                .contains(&format!("✘ {label} 0/9 — {instruction}"))
+        );
     }
-    // Conservative default-font bound: each Cyrillic glyph is at most 8 px.
-    let mut lines = 1;
-    let mut used = 0;
-    for word in shown.body.split_whitespace() {
-        let width = word.chars().count() * 8;
-        assert!(width <= 408);
-        if used != 0 && used + 8 + width > 408 {
-            lines += 1;
-            used = width;
-        } else {
-            used += usize::from(used != 0) * 8 + width;
+    // Default-font conservative bound, preserving explicit checklist newlines.
+    let lines: usize = shown
+        .body
+        .lines()
+        .map(|line| {
+            let mut lines = 1;
+            let mut used = 0;
+            for word in line.split_whitespace() {
+                let width = word.chars().count() * 8;
+                assert!(width <= 408);
+                if used != 0 && used + 8 + width > 408 {
+                    lines += 1;
+                    used = width;
+                } else {
+                    used += usize::from(used != 0) * 8 + width;
+                }
+            }
+            lines
+        })
+        .sum();
+    // 9 px per line, 40 input + 20 actions + 28 title/margins, in ~240 GUI px.
+    assert!(lines * 9 + 88 <= 240, "{lines} lines: {}", shown.body);
+    assert_eq!(shown.inputs, ["kind"]);
+    assert_eq!(field(dialog, "columns"), Some(&Tag::Int(2)));
+    assert!(shown.has("certify_check") && shown.has("back"));
+    assert!(!shown.has("certify_do"));
+}
+
+#[test]
+fn stage_two_certification_dialog_rows_fit_720p_at_gui_scale_three() {
+    fn assert_row_fits(changes: &[PlayerChange], screen: &str) {
+        let dialog = changes
+            .iter()
+            .find_map(|change| match change {
+                PlayerChange::ShowDialog { dialog } => Some(dialog),
+                _ => None,
+            })
+            .expect("stage-two dialog was presented");
+        let buttons = list(field(dialog, "actions"))
+            .iter()
+            .chain(
+                ["yes", "no", "action"]
+                    .into_iter()
+                    .filter_map(|key| field(dialog, key)),
+            )
+            .collect::<Vec<_>>();
+        assert!(!buttons.is_empty(), "{screen}");
+        let columns = match field(dialog, "columns") {
+            Some(Tag::Int(columns)) => usize::try_from(*columns).unwrap(),
+            None => buttons.len(),
+            other => panic!("{screen}: invalid columns {other:?}"),
+        }
+        .min(buttons.len());
+        assert!(columns > 0, "{screen}");
+        let width = buttons
+            .iter()
+            .map(|button| match field(button, "width") {
+                Some(Tag::Int(width)) => usize::try_from(*width).unwrap(),
+                other => panic!("{screen}: missing button width {other:?}"),
+            })
+            .max()
+            .unwrap();
+        // Reserve a conservative 16 GUI px per inter-column gap.
+        let row_width = columns * width + (columns - 1) * 16;
+        assert!(
+            row_width <= 427,
+            "{screen}: {columns} columns × {width} + gaps = {row_width} > 427"
+        );
+    }
+
+    let mut state = joined(0);
+    let id = town(&mut state, PLAYER);
+    set_locale(&mut state, "ru_ru");
+    assert_row_fits(&click(&mut state, id, "certify", &[]), "initial");
+    assert_row_fits(
+        &click(&mut state, id, "certify_check", &certify_form("castle")),
+        "invalid type",
+    );
+    stand_inside(&mut state, [9.5, 201.0, 9.5]);
+    assert_row_fits(
+        &click(&mut state, id, "certify_check", &certify_form("house")),
+        "discovery refusal",
+    );
+    super::building_discovery::tests::room(&mut state, [3, 3], [7, 7], true);
+    stand_inside(&mut state, [4.5, 201.0, 4.5]);
+    let missing = click(&mut state, id, "certify_check", &certify_form("house"));
+    assert!(!last_dialog(&missing).has("certify_do"));
+    assert_row_fits(&missing, "missing requirements");
+    crate::settlements::allocator::tests::bed(&mut state, 5, 5);
+    state.world.fold_overlay();
+    let ready = click(&mut state, id, "certify_check", &certify_form("house"));
+    let shown = last_dialog(&ready);
+    assert!(shown.has("certify_do") && shown.has("certify_check") && shown.has("back"));
+    assert_eq!(shown.actions.len(), 3);
+    assert_row_fits(&ready, "all requirements passed");
+    let certified = click(&mut state, id, "certify_do", &certify_form("house"));
+    assert_eq!(last_dialog(&certified).actions.len(), 3);
+    assert_row_fits(&certified, "certified next steps");
+    let building = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    assert_row_fits(
+        &click(&mut state, id, "certify_check", &certify_form("house")),
+        "existing certificate recheck",
+    );
+    assert_row_fits(
+        &click(
+            &mut state,
+            id,
+            "certificate_review",
+            &[("b", string(&building.0.to_string()))],
+        ),
+        "certificate level review",
+    );
+    assert_row_fits(
+        &click(
+            &mut state,
+            id,
+            "upgrade",
+            &[
+                ("b", string(&building.0.to_string())),
+                ("level", string("1")),
+            ],
+        ),
+        "certificate upgrade result",
+    );
+}
+
+#[test]
+fn every_registered_blueprint_has_explicit_russian_and_english_names() {
+    let state = test_state();
+    let blueprints = super::super::blueprints::all(&state.registry);
+    assert!(!blueprints.is_empty());
+    for lang in [Lang::Ru, Lang::En] {
+        let ctx = Ctx {
+            id: SettlementId(0),
+            manage: false,
+            lang,
+        };
+        let unknown = blueprint_label(&ctx, "unregistered_blueprint");
+        for blueprint in blueprints {
+            let label = blueprint_label(&ctx, &blueprint.id);
+            assert!(!label.trim().is_empty(), "{lang:?}: {}", blueprint.id);
+            assert_ne!(label, blueprint.id, "{lang:?}: raw blueprint id");
+            assert_ne!(
+                label, unknown,
+                "{lang:?}: {} has no explicit display name",
+                blueprint.id
+            );
         }
     }
-    assert!(lines <= 4, "{lines} lines: {}", shown.body);
-    assert_eq!(shown.inputs.len(), 4);
-    assert_eq!(field(dialog, "columns"), Some(&Tag::Int(4)));
-    assert!(
-        ["certify_do", "mark1", "mark2", "back"]
-            .iter()
-            .all(|action| shown.has(action))
-    );
+}
+
+#[test]
+fn unknown_blueprint_names_never_expose_raw_identifiers() {
+    for lang in [Lang::Ru, Lang::En] {
+        let ctx = Ctx {
+            id: SettlementId(0),
+            manage: false,
+            lang,
+        };
+        let first = blueprint_label(&ctx, "unregistered_blueprint_one");
+        let second = blueprint_label(&ctx, "unregistered_blueprint_two");
+        assert!(!first.trim().is_empty());
+        assert_eq!(first, second, "{lang:?}: one localized unknown-name policy");
+        assert!(!first.contains("unregistered_blueprint_one"));
+        assert!(!second.contains("unregistered_blueprint_two"));
+    }
 }

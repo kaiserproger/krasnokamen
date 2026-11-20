@@ -249,13 +249,45 @@ A queued upgrade retains the exact level confirmed by the owner. The next reques
 
 Certification inspects loaded blocks without placing them or charging materials. Certify and list select the settlement containing the player, choosing the nearest anchor and then lowest ID if radii overlap. Certification requires the owner or an operator of a claimed settlement; certificate upgrades address a building globally and require management permission for its settlement.
 
-- `/settlement building certify <kind> <x1> <y1> <z1> <x2> <y2> <z2>` certifies level 1 using inclusive, ordered minimum and maximum coordinates. Include floor and roof where required.
+- `/settlement building certify <kind>` discovers and certifies the room or open work area at your position. The certification dialog's **Check here** shows every requirement before committing.
+- Operators (level 2+) additionally have an explicit-bounds administration/fixture command: `/settlement building certify <kind> <x1> <y1> <z1> <x2> <y2> <z2>`. Ordinary owners cannot use coordinates; this branch is not offered in their completion tree.
 - `/settlement building upgrade <id>` checks the existing bounds for the next certificate level, up to 3; build the extra blocks first. This does not order Builder work.
 - `/settlement building list` shows IDs, kinds, levels and bounds.
 
 Re-certifying the same kind with bounds containing an existing certificate refreshes or expands it without changing its ID or level. Other overlapping certificates are rejected. Bounds must fit inside the settlement and loaded chunks, with at most 64 blocks per axis and 32,768 blocks in total. A settlement can have at most 1,024 buildings.
 
 Kinds are `house`, `storage`, `barracks`, `wall`, `tower`, `gate`, `mine`, `lumber_camp` and profession workshops: `armorer`, `butcher`, `cartographer`, `cleric`, `farmer`, `fisherman`, `fletcher`, `leatherworker`, `librarian`, `mason`, `builder`, `shepherd`, `toolsmith`, `weaponsmith`.
+
+### Position-based bounds
+
+House, Barracks and Tower need a closed head-height air component; solid blocks
+and doors (including open doors) delimit one room. Discovery includes its floor,
+outer walls and roof. Missing roofs remain checklist failures; open walls,
+unloaded cells and exceeded limits refuse. Adjacent rooms do not pool resources.
+
+For Storage, every profession Workshop, Mine and LumberCamp, an enclosed room is
+used when present. Otherwise stand within four blocks of matching free
+containers/workstations: the smallest box containing you and those blocks gains
+a one-block horizontal border, the supporting floor and at least four cells of
+work-space height. No walls or roof are invented or required; native inspection
+still checks the real floor and work points. The floor is the first
+collision-bearing block in the eight cells strictly below your feet cell:
+upper slabs over air count, while a bottom slab or carpet in your feet cell
+keeps the structural floor underneath. A bottom slab over air has no such
+floor and refuses certification. An existing same-kind open certificate
+containing you keeps its bounds and re-inspects current blocks.
+
+For Wall, stand within two blocks of its base: discovery follows the nearest
+straight continuous wall in its longer cardinal axis, including its supporting
+floor and column tops. For Gate, stand within four blocks of its door: discovery
+follows the connected collision frame above the floor, within four horizontal
+blocks of the door and eight blocks of height. A frame connected beyond that
+budget refuses rather than claiming a truncated piece. Native length, height,
+door and frame requirements remain authoritative.
+
+Open discovery excludes other certificate volumes and refuses overlapping boxes.
+No relevant free blocks gives a localized instruction to approach the selected
+work area, wall or gate. None of these player paths accepts corners.
 
 ## Certificate requirements
 

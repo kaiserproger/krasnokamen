@@ -3111,9 +3111,8 @@ fn settlement_building_commands_select_executor_town_and_enforce_owner() {
     let (mut state, alice, bob) = fixture();
     let alice_slot = state.entities.slot_of(alice).unwrap();
     state.entities.set_pos(alice_slot, [-0.5, 80.0, -0.5]);
-    // Unknown kinds and bad coordinates refuse at parse; execution is never
-    // reached and nothing is created.
-    assert!(parse("settlement building certify castle 0 80 0 4 82 4", true).is_ok());
+    // Type validation happens at execution; incomplete coordinate forms refuse.
+    assert!(parse("settlement building certify castle", true).is_ok());
     assert!(parse("settlement building certify house 0 80", true).is_err());
     assert!(parse("settlement building upgrade nope", true).is_err());
     assert!(parse("settlement building list extra", true).is_err());
@@ -3135,20 +3134,11 @@ fn settlement_building_commands_select_executor_town_and_enforce_owner() {
     );
     // Strangers cannot certify in Alice's town even standing inside it.
     state.entities.set_pos(bob_slot, [-0.5, 80.0, -0.5]);
-    command(
-        &mut state,
-        bob,
-        "settlement building certify house -4 80 -4 4 82 4",
-    );
+    command(&mut state, bob, "settlement building certify house");
     let record = state.settlements.get(town).unwrap();
     assert!(record.buildings.is_empty(), "strangers certify nothing");
-    // Alice's own certify reaches the helper (empty dirt volume reports the
-    // native missing-requirements error, not an authorization refusal).
-    command(
-        &mut state,
-        alice,
-        "settlement building certify house -4 80 -4 4 82 4",
-    );
+    // Alice's standing-inside form reaches discovery, not an authorization refusal.
+    command(&mut state, alice, "settlement building certify house");
     let queue = &state.outbox[&ConnectionId(1)];
     assert!(
         queue.iter().any(|change| matches!(
@@ -3667,4 +3657,51 @@ fn settlement_build_upgrade_owner_command_starts_a_real_blueprint_upgrade() {
     assert!(queued.contains("minecraft:cobblestone"), "{queued}");
     assert_eq!(state.plugin_block_writes.len(), before_writes);
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, before_stock);
+}
+
+#[test]
+fn coordinate_certification_requires_level_two_even_for_the_owner() {
+    let (mut state, alice, _) = fixture();
+    let slot = state.entities.slot_of(alice).unwrap();
+    state.entities.set_pos(slot, [3.5, 80.0, 3.5]);
+    command(&mut state, alice, "settlement create bounds_admin");
+    let town = state.settlements.find("bounds_admin").unwrap().id;
+    state.world.ensure_blocking(
+        &[(crate::boundary::ChunkPos { x: 0, z: 0 }, 0)]
+            .into_iter()
+            .collect(),
+    );
+    for x in 1..=5 {
+        for z in 1..=5 {
+            state.world.set_block(x, 79, z, state.registry.states.stone);
+        }
+    }
+    let chest = crate::settlements::allocator::tests::block(&state, "minecraft:chest", &[]);
+    state.world.set_block(2, 80, 2, chest);
+    state.world.fold_overlay();
+    for level in [0, 1] {
+        state
+            .plugin_players
+            .observe_permission(ConnectionId(1), level);
+        command(
+            &mut state,
+            alice,
+            "settlement building certify storage 1 79 1 5 82 5",
+        );
+        assert!(state.settlements.get(town).unwrap().buildings.is_empty());
+        assert!(state.outbox[&ConnectionId(1)].iter().any(|change|
+            matches!(change, PlayerChange::Chat { message, .. } if message.contains("Проверить здесь"))));
+    }
+    state.plugin_players.observe_permission(ConnectionId(1), 2);
+    command(
+        &mut state,
+        alice,
+        "settlement building certify storage 1 79 1 5 82 5",
+    );
+    assert_eq!(
+        state.settlements.get(town).unwrap().buildings.len(),
+        1,
+        "{:?}",
+        state.outbox[&ConnectionId(1)]
+    );
 }

@@ -371,7 +371,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     parser.add_argument("--size", choices=("1280x720", "1920x1080"), default="1280x720")
     parser.add_argument("--wrong-click", action="store_true",
                         help="negative control: click Help instead of Settlement")
-    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race"), default="civil",
+    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race", "stage2", "stage2op", "blueprints"), default="civil",
                         help="quickwins: the owner-path acceptance of the D63 quick wins (native, ru_ru); "
                              "quickwins-c1-race: the starter chest (C1) founded under block churn in its chunk")
     parser.add_argument("--survey", action="store_true",
@@ -385,7 +385,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     args = parser.parse_args(extra)
     from . import settlement_quickwins_qa
     args.c1_race = settlement_quickwins_qa.c1_race_options(args.scenario, args.founding_clocks, args.found_after_ticks)
-    if args.scenario in ("quickwins", "maplabel", "quickwins-c1-race"):
+    if args.scenario in ("quickwins", "maplabel", "quickwins-c1-race", "stage2", "stage2op", "blueprints"):
         return settlement_quickwins_qa.run(ctx, args)
     if args.survey:
         raise ValueError("--survey belongs to --scenario quickwins")

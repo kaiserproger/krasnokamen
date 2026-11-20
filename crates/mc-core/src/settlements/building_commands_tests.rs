@@ -84,59 +84,21 @@ fn certify_needs_owner_or_operator_and_known_kind() {
     let mut state = test_state();
     raise_workshop(&mut state);
     town(&mut state, "town", "owner", [8, 201, 8]);
-    let executor = player(&mut state, [8.0, 201.0, 8.0]);
-    let bounds = workshop_bounds();
-    let (min, max) = (bounds.min, bounds.max);
-    assert!(certify(&mut state, executor, None, false, "farmer", min, max).is_err());
+    let executor = player(&mut state, [5.0, 201.0, 5.0]);
+    assert!(certify_here(&mut state, executor, None, false, "farmer").is_err());
     assert_eq!(
-        certify(
-            &mut state,
-            executor,
-            Some("stranger"),
-            false,
-            "farmer",
-            min,
-            max
-        )
-        .unwrap_err(),
+        certify_here(&mut state, executor, Some("stranger"), false, "farmer").unwrap_err(),
         "Only the owner or an operator certifies buildings.",
     );
     assert_eq!(
-        certify(
-            &mut state,
-            executor,
-            Some("owner"),
-            false,
-            "castle",
-            min,
-            max
-        )
-        .unwrap_err(),
+        certify_here(&mut state, executor, Some("owner"), false, "castle").unwrap_err(),
         "Unknown building kind 'castle'.",
     );
-    let reply = certify(
-        &mut state,
-        executor,
-        Some("owner"),
-        false,
-        "farmer",
-        min,
-        max,
-    )
-    .unwrap();
+    let reply = certify_here(&mut state, executor, Some("owner"), false, "farmer").unwrap();
     assert!(reply.starts_with("Certified farmer #"), "{reply}");
     // A stranger with operator rights recertifies the same kind over the same
     // bounds (same-kind expansion path): must succeed.
-    let recert = certify(
-        &mut state,
-        executor,
-        Some("stranger"),
-        true,
-        "farmer",
-        min,
-        max,
-    )
-    .unwrap();
+    let recert = certify_here(&mut state, executor, Some("stranger"), true, "farmer").unwrap();
     assert!(recert.starts_with("Certified farmer #"), "{recert}");
 }
 
@@ -152,7 +114,7 @@ fn upgrade_authorizes_home_owner_from_anywhere_and_resolves_globally() {
         &mut state,
         home_executor,
         Some("owner"),
-        false,
+        true,
         "farmer",
         bounds.min,
         bounds.max,
@@ -213,7 +175,7 @@ fn list_is_public_and_shows_id_kind_level_bounds() {
         &mut state,
         executor,
         Some("owner"),
-        false,
+        true,
         "farmer",
         bounds.min,
         bounds.max,
@@ -263,7 +225,7 @@ fn overlapping_village_resolution_refusal_names_the_claim_requirement() {
             &mut state,
             midway,
             Some("alice"),
-            false,
+            true,
             "farmer",
             bounds.min,
             bounds.max,
@@ -278,7 +240,7 @@ fn overlapping_village_resolution_refusal_names_the_claim_requirement() {
         &mut state,
         founder,
         Some("alice"),
-        false,
+        true,
         "farmer",
         bounds.min,
         bounds.max,
@@ -308,7 +270,7 @@ fn autonomous_village_refuses_certify_until_claimed() {
             &mut state,
             executor,
             Some("carol"),
-            false,
+            true,
             "farmer",
             bounds.min,
             bounds.max,
@@ -338,11 +300,327 @@ fn autonomous_village_refuses_certify_until_claimed() {
         &mut state,
         executor,
         Some("carol"),
-        false,
+        true,
         "farmer",
         bounds.min,
         bounds.max,
     )
     .unwrap();
     assert!(reply.starts_with("Certified farmer #"), "{reply}");
+}
+
+#[test]
+fn explicit_bounds_require_an_operator_even_when_the_actor_owns_the_town() {
+    let mut state = test_state();
+    raise_workshop(&mut state);
+    town(&mut state, "town", "owner", [8, 201, 8]);
+    let executor = player(&mut state, [8.0, 201.0, 8.0]);
+    let bounds = workshop_bounds();
+    let refusal = certify(
+        &mut state,
+        executor,
+        Some("owner"),
+        false,
+        "farmer",
+        bounds.min,
+        bounds.max,
+    )
+    .unwrap_err();
+    assert!(refusal.contains("operator level 2") && refusal.contains("Проверить здесь"));
+    assert!(
+        state
+            .settlements
+            .records()
+            .next()
+            .unwrap()
+            .buildings
+            .is_empty()
+    );
+    certify(
+        &mut state,
+        executor,
+        Some("owner"),
+        true,
+        "farmer",
+        bounds.min,
+        bounds.max,
+    )
+    .unwrap();
+    assert_eq!(
+        state.settlements.records().next().unwrap().buildings.len(),
+        1
+    );
+}
+
+#[test]
+fn non_operator_owner_certifies_open_storage_and_rechecks_the_same_certificate() {
+    let mut state = test_state();
+    let id = town(&mut state, "town", "owner", [8, 201, 8]);
+    let executor = player(&mut state, [5.5, 201.0, 5.5]);
+    station(&mut state, [4, 201, 4], "minecraft:chest");
+    certify_here(&mut state, executor, Some("owner"), false, "storage").unwrap();
+    let before = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .values()
+        .next()
+        .unwrap()
+        .clone();
+    certify_here(&mut state, executor, Some("owner"), false, "storage").unwrap();
+    let buildings = &state.settlements.get(id).unwrap().buildings;
+    assert_eq!(buildings.len(), 1);
+    assert_eq!(buildings[&before.id].bounds, before.bounds);
+    assert_eq!(buildings[&before.id].work_points, [[4, 201, 4]]);
+}
+
+#[test]
+fn non_operator_owner_certifies_open_mine_camp_and_every_workshop() {
+    let mut state = test_state();
+    let id = town(&mut state, "town", "owner", [8, 201, 8]);
+    let executor = player(&mut state, [5.5, 201.0, 5.5]);
+    for (kind, name) in [
+        ("mine", "smithing_table"),
+        ("lumber_camp", "fletching_table"),
+        ("builder", "crafting_table"),
+        ("armorer", "blast_furnace"),
+        ("butcher", "smoker"),
+        ("cartographer", "cartography_table"),
+        ("cleric", "brewing_stand"),
+        ("farmer", "composter"),
+        ("fisherman", "barrel"),
+        ("fletcher", "fletching_table"),
+        ("leatherworker", "cauldron"),
+        ("librarian", "lectern"),
+        ("mason", "stonecutter"),
+        ("shepherd", "loom"),
+        ("toolsmith", "smithing_table"),
+        ("weaponsmith", "grindstone"),
+    ] {
+        station(&mut state, [4, 201, 4], &format!("minecraft:{name}"));
+        certify_here(&mut state, executor, Some("owner"), false, kind)
+            .unwrap_or_else(|error| panic!("{kind}: {error}"));
+        assert_eq!(
+            state
+                .settlements
+                .get(id)
+                .unwrap()
+                .buildings
+                .values()
+                .next()
+                .unwrap()
+                .work_points,
+            [[4, 201, 4]]
+        );
+        state.settlements.get_mut(id).unwrap().buildings.clear();
+    }
+}
+
+#[test]
+fn non_operator_owner_certifies_the_straight_wall_beside_them() {
+    let mut state = test_state();
+    let id = town(&mut state, "town", "owner", [8, 201, 8]);
+    let executor = player(&mut state, [5.5, 201.0, 4.5]);
+    for x in 3..=7 {
+        for y in 201..=203 {
+            state.world.set_block(x, y, 3, state.registry.states.stone);
+        }
+    }
+    state.world.fold_overlay();
+    certify_here(&mut state, executor, Some("owner"), false, "wall").unwrap();
+    assert_eq!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .buildings
+            .values()
+            .next()
+            .unwrap()
+            .bounds,
+        mc_script::ScriptWorldBounds::new([3, 200, 3], [7, 203, 3]).unwrap()
+    );
+}
+
+#[test]
+fn non_operator_owner_certifies_the_gate_frame_beside_its_door() {
+    let mut state = test_state();
+    let id = town(&mut state, "town", "owner", [8, 201, 8]);
+    let executor = player(&mut state, [5.5, 201.0, 4.5]);
+    for x in 3..=7 {
+        for z in 5..=7 {
+            for y in 201..=203 {
+                if ((x == 3 || x == 7) && (z == 5 || z == 7))
+                    || (y == 203 && (x == 3 || x == 7 || z == 5 || z == 7))
+                {
+                    state.world.set_block(x, y, z, state.registry.states.stone);
+                }
+            }
+        }
+    }
+    for (y, half) in [(201, "lower"), (202, "upper")] {
+        let door = block(&state, "minecraft:oak_door", &[("half", half)]);
+        state.world.set_block(5, y, 5, door);
+    }
+    state.world.fold_overlay();
+    certify_here(&mut state, executor, Some("owner"), false, "gate").unwrap();
+    assert_eq!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .buildings
+            .values()
+            .next()
+            .unwrap()
+            .bounds,
+        mc_script::ScriptWorldBounds::new([3, 200, 5], [7, 203, 7]).unwrap()
+    );
+}
+
+#[test]
+fn open_work_area_does_not_borrow_another_certificates_workstation() {
+    let mut state = test_state();
+    let id = town(&mut state, "town", "owner", [8, 201, 8]);
+    let executor = player(&mut state, [5.5, 201.0, 5.5]);
+    station(&mut state, [4, 201, 4], "minecraft:chest");
+    certify_here(&mut state, executor, Some("owner"), false, "storage").unwrap();
+    station(&mut state, [6, 201, 4], "minecraft:smithing_table");
+    let slot = state.entities.slot_of(executor).unwrap();
+    state.entities.set_pos(slot, [8.5, 201.0, 4.5]);
+    let refusal = certify_here(&mut state, executor, Some("owner"), false, "mine").unwrap_err();
+    assert_eq!(
+        refusal,
+        crate::settlements::ui_text::text(
+            crate::settlements::ui_text::Lang::En,
+            crate::settlements::ui_text::Key::InspectNoWorkPoint
+        )
+    );
+    station(&mut state, [10, 201, 4], "minecraft:smithing_table");
+    certify_here(&mut state, executor, Some("owner"), false, "mine").unwrap();
+    let mine = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .values()
+        .find(|building| building.kind == BuildingKind::Mine)
+        .unwrap();
+    assert_eq!(mine.work_points, [[10, 201, 4]]);
+}
+
+#[test]
+fn non_operator_wall_selection_inside_a_room_does_not_claim_the_whole_room() {
+    let mut state = test_state();
+    let id = town(&mut state, "town", "owner", [8, 201, 8]);
+    crate::settlements::building_discovery::tests::room(&mut state, [3, 3], [7, 7], true);
+    let executor = player(&mut state, [5.5, 201.0, 5.5]);
+    certify_here(&mut state, executor, Some("owner"), false, "wall").unwrap();
+    let wall = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .values()
+        .next()
+        .unwrap();
+    assert_eq!(
+        wall.bounds,
+        mc_script::ScriptWorldBounds::new([3, 200, 3], [7, 204, 3]).unwrap()
+    );
+}
+
+#[test]
+fn non_operator_gate_selection_inside_a_room_finds_the_nearby_frame_not_the_room() {
+    let mut state = test_state();
+    let id = town(&mut state, "town", "owner", [8, 201, 8]);
+    crate::settlements::building_discovery::tests::room(&mut state, [3, 9], [7, 13], true);
+    for y in 201..=202 {
+        state.world.set_block(3, y, 11, state.registry.states.stone);
+    }
+    for x in 3..=7 {
+        for z in 5..=7 {
+            for y in 201..=203 {
+                if ((x == 3 || x == 7) && (z == 5 || z == 7))
+                    || (y == 203 && (x == 3 || x == 7 || z == 5 || z == 7))
+                {
+                    state.world.set_block(x, y, z, state.registry.states.stone);
+                }
+            }
+        }
+    }
+    for (y, half) in [(201, "lower"), (202, "upper")] {
+        let door = block(&state, "minecraft:oak_door", &[("half", half)]);
+        state.world.set_block(5, y, 7, door);
+    }
+    state.world.fold_overlay();
+    let executor = player(&mut state, [5.5, 201.0, 10.5]);
+    certify_here(&mut state, executor, Some("owner"), false, "gate").unwrap();
+    let gate = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .values()
+        .next()
+        .unwrap();
+    assert_eq!(
+        gate.bounds,
+        mc_script::ScriptWorldBounds::new([3, 200, 5], [7, 203, 7]).unwrap()
+    );
+}
+
+fn certify_house_with_floor_surface(surface: &str, feet_y: f64, floor_y: i32) {
+    let mut state = test_state();
+    let id = town(&mut state, "town", "owner", [8, 201, 8]);
+    crate::settlements::building_discovery::tests::room(&mut state, [3, 3], [7, 7], true);
+    crate::settlements::allocator::tests::bed(&mut state, 5, 5);
+    if surface == "carpet" {
+        let carpet = block(&state, "minecraft:red_carpet", &[]);
+        state.world.set_block(4, 201, 4, carpet);
+    } else {
+        let slab = block(&state, "minecraft:stone_slab", &[("type", surface)]);
+        for x in 3..=7 {
+            for z in 3..=7 {
+                state.world.set_block(x, 200, z, slab);
+                for y in 193..=199 {
+                    state.world.set_block(
+                        x,
+                        y,
+                        z,
+                        if surface == "top" {
+                            state.registry.states.air
+                        } else {
+                            state.registry.states.stone
+                        },
+                    );
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let expected = mc_script::ScriptWorldBounds::new([3, floor_y, 3], [7, 204, 7]).unwrap();
+    // The unchanged native validator accepts the actual structural floor.
+    crate::settlements::buildings::inspect(&state, BuildingKind::House, 1, expected).unwrap();
+    let executor = player(&mut state, [4.5, feet_y, 4.5]);
+    certify_here(&mut state, executor, Some("owner"), false, "house").unwrap();
+    let buildings = &state.settlements.get(id).unwrap().buildings;
+    assert_eq!(buildings.len(), 1);
+    assert_eq!(buildings.values().next().unwrap().bounds, expected);
+}
+
+#[test]
+fn non_operator_house_upper_slab_floor_over_air_certifies() {
+    certify_house_with_floor_surface("top", 201.0, 200);
+}
+
+#[test]
+fn non_operator_house_bottom_slab_floor_on_ground_still_certifies() {
+    certify_house_with_floor_surface("bottom", 200.5, 199);
+}
+
+#[test]
+fn non_operator_house_carpet_above_solid_floor_still_certifies() {
+    certify_house_with_floor_surface("carpet", 201.0625, 200);
 }

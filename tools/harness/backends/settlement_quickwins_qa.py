@@ -38,6 +38,7 @@ from typing import Any, Callable
 from .. import runtime
 from . import scene_shot
 from .native_settlement_storage import plain, since
+from .settlement_quickwins_console import ConsoleFixtures
 from .probe_steps import ProbeSteps
 
 NAME = "qw"
@@ -165,7 +166,9 @@ def java_nodes(state: dict[str, Any]) -> list[dict[str, Any]]:
         if not (is_input or is_button) and (not text or text == "warning"):
             continue
         if is_input:
-            role, kind = "input", "input"
+            role = "textbox" if widget.get("edit_box") else "slider" if "Slider" in simple else "button"
+            kind = "input"
+            node_id = "dialog/input/kind" if "Cycle" in simple else f"dialog/input/{simple.lower()}{counts['input']}"
         elif is_button:
             role, kind = "button", "action"
         else:
@@ -174,7 +177,7 @@ def java_nodes(state: dict[str, Any]) -> list[dict[str, Any]]:
         clip = widget.get("clip")
         clipped = bool(clip) and not (x >= clip["x"] and y >= clip["y"] and x + width <= clip["x"] + clip["width"]
                                       and y + height <= clip["y"] + clip["height"])
-        nodes.append({"id": f"dialog/{kind}/{counts[kind]}", "role": role, "label": text,
+        nodes.append({"id": node_id if kind == "input" else f"dialog/{kind}/{counts[kind]}", "role": role, "label": text,
                       "enabled": bool(widget.get("active", True)), "clipped": clipped,
                       "bounds": (x * scale, y * scale, width * scale, height * scale)})
         counts[kind] += 1
@@ -201,7 +204,10 @@ def view(state: dict[str, Any]) -> dict[str, Any]:
              if int(row["slot"]) < 54}
     ready = (kind == "dialog" and bool(body or buttons)) or (
         kind == "menu" and container.get("slot_count") == STAGE and bool(slots))
-    return {"kind": kind, "title": str(screen.get("title") or ""), "body": body, "buttons": buttons,
+    inputs = [{"id": str(node["id"]), "role": node.get("role"), "label": str(node.get("label") or ""),
+               "bounds": node.get("bounds")} for node in nodes
+              if str(node.get("id", "")).startswith("dialog/input/") and node.get("role") in ("button", "textbox", "slider")]
+    return {"kind": kind, "title": str(screen.get("title") or ""), "body": body, "buttons": buttons, "inputs": inputs,
             "slots": slots, "items": items, "ready": ready}
 
 
@@ -337,8 +343,12 @@ def corner_text(position: list[int]) -> str:
 class Walk:
     """One real-client session: physical input, fixtures through chat, judged criteria."""
 
-    def __init__(self, probe: ProbeSteps, artifact: Path, gui: Any, args: Any) -> None:
+    def __init__(self, probe: ProbeSteps, artifact: Path, gui: Any, args: Any,
+                 criteria: dict[str, tuple[str, str]] | None = None) -> None:
         self.probe, self.artifact, self.gui = probe, artifact, gui
+        self.criteria = CRITERIA if criteria is None else criteria
+        self.stage2 = criteria is not None
+        self.console = None  # stage 2: the server console (settlement_quickwins_console.ConsoleFixtures)
         self.strict = not args.survey
         self.survey = args.survey
         self.shots: list[str] = []
@@ -356,7 +366,7 @@ class Walk:
     def judge(self, cid: str, ok: bool, **facts: Any) -> bool:
         if self.evidence.get("survey_fixture_chest") and cid in ("C2", "C3", "C4", "Q8b", "Q8a", "Q9"):
             facts["fixture_chest"] = True  # survey on a tree without the starter chest: not the tree's chest
-        self.results[cid] = {"ok": bool(ok), "what": CRITERIA[cid][0], "source": CRITERIA[cid][1], **facts}
+        self.results[cid] = {"ok": bool(ok), "what": self.criteria[cid][0], "source": self.criteria[cid][1], **facts}
         if self.strict:
             self.probe.check(f"QW {cid}", bool(ok))
         else:
@@ -491,7 +501,20 @@ class Walk:
 
     # ---- fixtures and server reads
     def fixture(self, command: str) -> None:
-        self.probe.fixture(command)
+        """A privileged fixture. Stage 2 runs a non-operator player: the fixture goes through the server's own
+        console (`settlement_quickwins_console`), which returns once the server has applied the command."""
+        if self.console is None:
+            self.probe.fixture(command)
+            return
+        self.fixture_log.append(command)
+        for attempt in range(30):
+            reply = self.console.run(command)
+            if not any("not loaded" in line for line in reply):
+                return
+            # A fill or setblock on chunks that are still generating changed nothing: wait for the server, retry.
+            self.evidence.setdefault("fixture_retries", []).append({"command": command, "attempt": attempt})
+            self.probe.call("minecraft_wait_ticks", {"ticks": 40})
+        raise StepFailed(f"fixture still refused as not loaded after 30 tries: {command}")
 
     def tp(self, x: float, y: float, z: float, tol: float = .05) -> None:
         """Teleport and wait until the client has the player there (`tol` blocks in x and z; y stays exact:
@@ -500,8 +523,12 @@ class Walk:
         self.probe.wait(lambda state: abs(state["player"]["x"] - x) <= tol and abs(state["player"]["y"] - y) < .05
                         and abs(state["player"]["z"] - z) <= tol, f"QW player at {x} {y} {z}", timeout_seconds=30)
 
-    def chat(self, message: str, command: bool = True, settle_ticks: int = 20) -> list[str]:
-        """Send `message` after a fresh chat marker; return the lines that arrived after it, oldest first."""
+    def chat(self, message: str, command: bool = True, settle_ticks: int = 20, server: bool = False) -> list[str]:
+        """Send `message` after a fresh chat marker; return the lines that arrived after it, oldest first.
+        `server=True` is a read the PLAYER could not make (stage 2: a non-operator): it runs on the server
+        console and returns that command's own reply lines (newest first, like chat)."""
+        if server and self.console is not None:
+            return list(reversed(self.console.run(message)))
         marker = f"qw {uuid.uuid4().hex[:8]}"
         self.probe.call("minecraft_send_chat", {"message": marker, "command": False})
         self.probe.wait(lambda state: any(marker in str(line) for line in state.get("recent_chat", [])),
@@ -520,7 +547,7 @@ class Walk:
         self.probe.call("minecraft_wait_ticks", {"ticks": 6})
 
     def chest_items(self, at: list[int]) -> str:
-        return "\n".join(self.chat(f"data get block {at[0]} {at[1]} {at[2]} Items"))
+        return "\n".join(self.chat(f"data get block {at[0]} {at[1]} {at[2]} Items", server=True))
 
 
 # ----------------------------------------------------------------------------- entry
@@ -564,11 +591,22 @@ def run(ctx: Any, args: Any) -> dict[str, Any]:
         raise ValueError("--scenario quickwins requires --client native or --client java (a client that exposes dialog text)")
     maplabel = args.scenario == "maplabel"
     race: C1Race | None = args.c1_race
+    blueprints = args.scenario == "blueprints"
+    stage2 = args.scenario in ("stage2", "stage2op")
+    if blueprints:
+        from . import settlement_quickwins_stage2 as stage
+        criteria, blocks = stage.BLUEPRINTS, ()
+    elif stage2:
+        from . import settlement_quickwins_stage2 as stage
+        criteria, blocks = stage.suite(args.scenario)
+    else:
+        from . import settlement_quickwins_steps as stage_one
+        criteria, blocks = CRITERIA, stage_one.BLOCKS
     if maplabel and ctx.client != "java":
         raise ValueError("--scenario maplabel requires --client java (GUI scale and language are Java options)")
     if race is not None and args.survey:
         raise ValueError(f"--survey belongs to --scenario quickwins, not {C1_RACE_SCENARIO}")
-    if not maplabel and race is None and args.language != "ru_ru":
+    if not maplabel and not blueprints and race is None and args.language != "ru_ru":
         raise ValueError("--scenario quickwins judges Russian text: pass -- --language ru_ru")
     java = ctx.client == "java"
 
@@ -594,7 +632,20 @@ def run(ctx: Any, args: Any) -> dict[str, Any]:
             probe.report["translations_loaded"] = not broken
             probe.check("Java translations loaded (no 'Failed to load translations' in client.log)", not broken)
         gui = Gui(probe, artifact, client, args.gui_scale if maplabel else 3, size)
-        walk = Walk(probe, artifact, gui, args)
+        walk = Walk(probe, artifact, gui, args, criteria if stage2 or blueprints else None)
+        if blueprints:
+            try:
+                walk_steps.setup(walk)
+                stage.blueprint_walk(walk)
+            finally:
+                gui.close()
+                ctx.client_evidence["blueprints"] = walk.results.get("BL")
+            return walk.shots
+        if stage2:
+            from .scene_shot_client import scene_username
+            walk.console = ConsoleFixtures(artifact, scene_username({}))
+            walk.evidence["operator_fixture"] = ctx.client_evidence.get("operator_fixture")
+            walk.evidence["console_fixtures"] = "server console via RUN_DIR/console.fifo; replies attributed by say-fences"
         walk.evidence["client"] = ctx.client
         if maplabel:
             try:
@@ -621,21 +672,29 @@ def run(ctx: Any, args: Any) -> dict[str, Any]:
             return walk.shots
         try:
             walk_steps.setup(walk)
-            for name, criteria, block in walk_steps.BLOCKS:
-                walk_steps.run_block(walk, name, criteria, block)
-            unmet = [cid for cid in CRITERIA if not walk.results.get(cid, {}).get("ok")]
+            for name, owed, block in blocks:
+                walk_steps.run_block(walk, name, owed, block)
+            unmet = [cid for cid in criteria if not walk.results.get(cid, {}).get("ok")]
             probe.check("QW all", not unmet)
         finally:
             gui.close()
-            order = [cid for _, ids, _ in walk_steps.BLOCKS for cid in ids]
+            order = [cid for _, ids, _ in blocks for cid in ids]
             first = next((cid for cid in order if not walk.results.get(cid, {}).get("ok")), None)
             ctx.client_evidence["quickwins"] = {
                 "mode": "survey" if args.survey else "strict",
                 "first_unmet": first,
-                "criteria": {cid: walk.results.get(cid, {}).get("ok") for cid in CRITERIA},
+                "criteria": {cid: walk.results.get(cid, {}).get("ok") for cid in criteria},
                 "blocks": dict(walk.blocks),
             }
         return walk.shots
 
     settings = {"gui_scale": args.gui_scale if maplabel else 3, "language": args.language, "screen_size": [1280, 720]} if java else {"language": args.language}
-    return scene_shot.run(ctx, scenario={"steps": [], "java_plain": java, "client_settings": settings}, script=script)
+    scenario: dict[str, Any] = {"steps": [], "java_plain": java, "client_settings": settings}
+    if stage2:
+        # No player fixture may depend on the owner's own operator rights: the privileged commands run on the
+        # server console. `stage2` is the plain owner (not an operator); `stage2op` is the same player written
+        # into ops.json at permission level 2 BEFORE the server starts (the console `op` always grants 4).
+        scenario.update(operator=args.scenario == "stage2op", server_console=True)
+        if args.scenario == "stage2op":
+            scenario["operator_level"] = 2
+    return scene_shot.run(ctx, scenario=scenario, script=script)
