@@ -1214,25 +1214,88 @@ class LedgerToolTests(unittest.TestCase):
         with self.assertRaisesRegex(ledger.Refused, 'unknown ledger id'):
             ledger.probe(bugs, ['NOPE'], client=False, ctx=ctx, runner=runner)
 
+    def test_probe_receipt_binds_dirty_tree_and_refuses_changed_tree(self):
+        for change_during_probe in (False, True):
+            with self.subTest(change_during_probe=change_during_probe):
+                root = self.scratch()
+                (root / 'src/engine.rs').write_text('dirty candidate\n')
+                expected = ledger.tree_fingerprint(root)
+                output = self.artifacts / 'out.json'
+                ctx = profiles.ProfileContext(self.artifacts)
+
+                def run(bugs, ids, *, client, ctx):
+                    if change_during_probe:
+                        (root / 'src/engine.rs').write_text('changed during probe\n')
+                    return {'BUG': {'verdict': ledger.GREEN, 'reason': '', 'status': 'open',
+                                    'refs': {'cargo:mc-core:mod::t': {'state': ledger.GREEN, 'detail': ''}}}}
+
+                with patch.object(ledger, 'REPO_ROOT', root), patch.object(ledger, '_artifact_ctx', return_value=ctx), \
+                        patch.object(ledger, 'probe', side_effect=run), patch('builtins.print'):
+                    status = ledger.main(['probe', 'BUG', '--out', str(output)])
+                receipt = json.loads(output.read_text())
+                self.assertEqual(receipt['tree_start'], expected)
+                self.assertEqual(receipt['tree_end'], ledger.tree_fingerprint(root))
+                self.assertEqual(receipt['tree_stable'], not change_during_probe)
+                self.assertEqual(status, 2 if change_during_probe else 0)
+                self.assertEqual(receipt['rows']['BUG']['verdict'],
+                                 ledger.UNRUNNABLE if change_during_probe else ledger.GREEN)
+                self.assertEqual(receipt['rows']['BUG']['refs']['cargo:mc-core:mod::t']['state'], ledger.GREEN)
+
     def test_cargo_results_are_parsed_per_test(self):
         listing = {'rust-suites': {'lib': {'package-name': 'mc-core', 'testcases': {
-            'a::ok': {'filter-match': {'status': 'matches'}}, 'a::bad': {'filter-match': {'status': 'matches'}},
-            'a::ignored': {'filter-match': {'status': 'matches'}, 'ignored': True}}}}}
+            name: {'filter-match': {'status': 'matches'}} for name in
+            ('a::ok', 'a::bad', 'a::timeout', 'a::abort', 'a::tmpass')
+        }}}}
+        listing['rust-suites']['lib']['testcases']['a::ignored'] = {
+            'filter-match': {'status': 'matches'}, 'ignored': True}
         def run_command(argv, ctx, name, cwd=None, env=None):
             text = json.dumps(listing) if argv[2] == 'list' else (
-                '        PASS [   0.010s] (1/2) mc-core a::ok\n        FAIL [   0.020s] (2/2) mc-core a::bad\n')
+                '        PASS [   0.010s] (1/5) mc-core a::ok\n'
+                '        FAIL [   0.020s] (2/5) mc-core a::bad\n'
+                '     TIMEOUT [   2.001s] (3/5) mc-core a::timeout\n'
+                '       ABORT [   0.001s] (4/5) mc-core a::abort\n'
+                '      TMPASS [   2.001s] (5/5) mc-core a::tmpass\n'
+                '        SLOW [  90.001s] mc-core a::ok\n')
             (ctx.artifact_dir / name).write_text(text)
             ctx.logs.append(name)
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         ctx = profiles.ProfileContext(Path(directory.name))
-        tests = {('mc-core', 'a::ok'), ('mc-core', 'a::bad'), ('mc-core', 'a::ignored'), ('mc-core', 'a::missing')}
+        tests = {('mc-core', f'a::{name}') for name in
+                 ('ok', 'bad', 'timeout', 'abort', 'tmpass', 'ignored', 'missing')}
         with patch.object(profiles, '_run_command', run_command), patch.object(regressions, 'MEM_RUN', Path('/nonexistent/mem-run.sh')):
             results = ledger._run_cargo(ctx, tests, Path('.'))
         self.assertEqual(results[('mc-core', 'a::ok')][0], ledger.GREEN)
         self.assertEqual(results[('mc-core', 'a::bad')], (ledger.RED, 'FAIL'))
+        self.assertEqual(results[('mc-core', 'a::timeout')], (ledger.UNRUNNABLE, 'TIMEOUT; see log'))
+        self.assertEqual(results[('mc-core', 'a::abort')], (ledger.UNRUNNABLE, 'ABORT; see log'))
+        self.assertEqual(results[('mc-core', 'a::tmpass')], (ledger.UNRUNNABLE, 'TMPASS; see log'))
         self.assertEqual(results[('mc-core', 'a::ignored')][0], ledger.UNRUNNABLE)
         self.assertEqual(results[('mc-core', 'a::missing')][0], ledger.UNRUNNABLE)
+
+    def test_cargo_timeout_cannot_promote_as_a_negative_control(self):
+        root = self.scratch()
+        before = ledger.document(root)
+        listing = {'rust-suites': {'lib': {'package-name': 'mc-core', 'testcases': {
+            'mod::t': {'filter-match': {'status': 'matches'}}}}}}
+        runs = []
+
+        def run_command(argv, ctx, name, cwd=None, env=None):
+            runs.append(argv[2])
+            if argv[2] == 'list':
+                (ctx.artifact_dir / name).write_text(json.dumps(listing))
+                ctx.logs.append(name)
+                return
+            (ctx.artifact_dir / name).write_text('     TIMEOUT [   2.001s] mc-core mod::t\n')
+            ctx.logs.append(name)
+            raise RuntimeError('test timed out')
+
+        with patch.object(profiles, '_run_command', run_command), \
+                patch.object(regressions, 'MEM_RUN', Path('/nonexistent/mem-run.sh')):
+            with self.assertRaisesRegex(ledger.Refused, 'negative control .* did not go red'):
+                self.promote(root, ledger.run_refs, dry_run=True)
+        self.assertEqual(runs, ['list', 'run'])
+        self.assertEqual(ledger.document(root), before)
 
     def test_control_worktree_gets_a_private_copy_of_the_vanilla_cache(self):
         root = self.scratch()

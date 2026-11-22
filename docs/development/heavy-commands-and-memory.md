@@ -44,9 +44,12 @@ process to 15 GiB RSS; an OOM killed all agents, while worktrees survived.
   and `gradlew`, `pin-release`, harness `run build|clippy|code-health|
   correctness|test|regressions|regressions-client|java|standard-pack` and
   harness `ledger probe|promote`. Running built binaries, gates and servers
-  takes no token and starts while all three are held; a build hidden inside
-  `sh -c` is not seen. A compile re-execs the runner under
-  `tools/dev/slot-lock.py` (the same helper as `scene-slot.sh`), which blocks
+  takes no token and starts while all three are held. A build hidden inside
+  `sh -c` or `bash -c` is not classified: pass the actual build or harness
+  command as runner argv, not through a shell. This is an argv classifier,
+  not a security boundary; do not infer that a shell command holds a token.
+  A compile re-execs the runner under `tools/dev/slot-lock.py` (the scene-slot
+  helper), which blocks
   on all three locks `/tmp/solaris-mem-slots/tokens/token-{1,2,3}.lock` at once
   and takes whichever frees first: no polling, no CPU while waiting, and the
   runner prints `mem-run: build tokens 1,2,3 are in use; waiting`. With

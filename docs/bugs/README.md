@@ -356,11 +356,21 @@ distinct ref, and prints one line per row:
 Cargo discovery and execution select only the packages named by the requested
 refs (`-p <crate>`), not the whole workspace. Exact-name matching and refusal
 of missing or ignored tests still apply.
+For Cargo refs, only a nextest `FAIL` result is red; `TIMEOUT`, `ABORT`,
+`TMPASS` and other non-pass statuses are unrunnable, not negative controls.
+`FAIL` alone does not prove the original symptom: review its failure and
+assertion against the repro.
 
-`--out` writes the full per-ref result as JSON (also valid YAML). Hand a worker
-only rows that are not `green`: a row already green at base is fixed in
-practice and needs promotion (or a better check), not a fix. Probe never
-changes the ledger; it is not promotion.
+`--out` writes the full per-ref result as JSON (also valid YAML). The receipt
+records the candidate fingerprint before and after the probe. If they differ,
+`tree_stable` is false, every row is `unrunnable` and the command exits 2:
+per-ref observations remain in the receipt but cannot be attributed to one tree.
+The fingerprint excludes `docs/bugs` and ignored files, and matching endpoints
+do not rule out a transient edit during the run.
+Probe exits 0 after classification even when a row is red or unrunnable: inspect
+each row and its refs. A green check alone does not close a row; compare it with
+the original symptom and required client evidence. Probe never changes the
+ledger and is not promotion.
 
 `--client` (and `promote` of a client row) needs the real-client environment of
 [real-client gates](../development/real-client-gates.md#3-environment-block):

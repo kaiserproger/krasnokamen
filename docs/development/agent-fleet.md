@@ -61,7 +61,10 @@ the owner's priorities and current limits.
 
 Checkpoint and park excess owners at safe immutable commit/patch boundaries;
 preserve ownership and partial/negative proof, and never kill an in-flight
-proof merely to reduce the counter. Waiting background commands consume no
+proof merely to reduce the counter. A sealed review input is immutable: corrections
+go in a separate addendum with old and new identities, never by rewriting its
+manifest or referenced evidence. If bytes were lost, retain that gap; a hash
+alone cannot restore them. Waiting background commands consume no
 LLM turns, but cannot hide concurrently writing owners. Already allocated
 laptop W2 is a separate measurement job, not another host implementation
 slot. Existing build, memory and measurement safeguards remain.

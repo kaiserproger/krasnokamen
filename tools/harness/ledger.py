@@ -301,6 +301,8 @@ def _run_cargo(ctx, tests, tree):
     ok, text = _exec(ctx, argv, 'run', tree, env)
     seen = {}
     for status, binary, name in _RESULT_LINE.findall(text):
+        if status == 'SLOW':
+            continue  # nextest's slow summary follows the terminal PASS/FAIL
         seen[(binary.split('::', 1)[0], name)] = status
     for test in runnable:
         status = seen.get(test)
@@ -308,8 +310,10 @@ def _run_cargo(ctx, tests, tree):
             results[test] = (UNRUNNABLE, 'no result line (build error or run aborted); see log' if not ok else 'no result line')
         elif status in ('PASS', 'LEAK PASS'):
             results[test] = (GREEN, '')
-        else:
+        elif status == 'FAIL':
             results[test] = (RED, status)
+        else:
+            results[test] = (UNRUNNABLE, f'{status}; see log')
     return results
 
 
@@ -1493,24 +1497,36 @@ def main(argv):
             parser.error('give row ids or --open')
         bugs = load_rows(REPO_ROOT)
         ids = args.ids or [bug['id'] for bug in bugs if bug['status'] == 'open']
+        tree_before = tree_fingerprint(REPO_ROOT)
         ctx = _artifact_ctx('probe')
         try:
             rows = probe(bugs, ids, client=args.client, ctx=ctx)
         except Refused as error:
             print(f'ledger probe: {error}', file=sys.stderr)
             return 2
+        tree_after = tree_fingerprint(REPO_ROOT)
+        stable = tree_before == tree_after
+        if not stable:
+            for row in rows.values():
+                row['verdict'] = UNRUNNABLE
+                row['reason'] = 'tree changed during probe'
         for ident, row in rows.items():
             print(format_row(ident, row))
         counts = defaultdict(int)
         for row in rows.values():
             counts[row['verdict']] += 1
-        result = {'tree_head': _git(REPO_ROOT, 'rev-parse', 'HEAD')[1].strip(), 'client_run': args.client,
-                  'artifact_dir': str(ctx.artifact_dir), 'counts': dict(counts), 'rows': rows}
+        result = {'tree_head': tree_before['head'], 'tree_start': tree_before, 'tree_end': tree_after,
+                  'tree_stable': stable, 'client_run': args.client, 'artifact_dir': str(ctx.artifact_dir),
+                  'counts': dict(counts), 'rows': rows}
         (ctx.artifact_dir / 'probe.json').write_text(json.dumps(result, indent=2) + '\n')
         if args.out:
             args.out.parent.mkdir(parents=True, exist_ok=True)
             args.out.write_text(json.dumps(result, indent=2) + '\n')
         print(f"[ledger] {dict(counts)} receipt={ctx.artifact_dir / 'probe.json'}")
+        if not stable:
+            print('[ledger] probe tree changed during execution; results are not attributable to one tree',
+                  file=sys.stderr)
+            return 2
         return 0
     ctx = _artifact_ctx('promote')
     try:
