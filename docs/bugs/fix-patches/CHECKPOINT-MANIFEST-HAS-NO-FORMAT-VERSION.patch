@@ -1,0 +1,119 @@
+diff --git a/crates/mc-core/src/native_checkpoint.rs b/crates/mc-core/src/native_checkpoint.rs
+index d7324a6e7..7d688fc59 100644
+--- a/crates/mc-core/src/native_checkpoint.rs
++++ b/crates/mc-core/src/native_checkpoint.rs
+@@ -209,8 +209,16 @@ pub fn dimension_id(dimension: Dimension) -> u32 {
+     }
+ }
+ 
++/// The manifest format this build writes. `crates/mc-world/src/native/checkpoint.rs`
++/// carries the same constant for readers that open a store without mc-core.
++pub const MANIFEST_VERSION: u32 = 1;
++
++/// Required manifest image versions. `manifest` versions the manifest schema
++/// itself: it is the only gate against a binary opening a manifest it does not
++/// understand, so any incompatible manifest change bumps it. There is no
++/// converter; a manifest written under another version refuses startup.
+ pub fn domain_versions() -> BTreeMap<String, u32> {
+-    [
++    let mut versions: BTreeMap<String, u32> = [
+         "climate",
+         "gamerules",
+         "block_ticks",
+@@ -224,7 +232,9 @@ pub fn domain_versions() -> BTreeMap<String, u32> {
+     ]
+     .into_iter()
+     .map(|key| (key.into(), 1))
+-    .collect()
++    .collect();
++    versions.insert("manifest".into(), MANIFEST_VERSION);
++    versions
+ }
+ 
+ pub fn record(tick: u64, payload: Vec<u8>) -> NativeDomainRecord {
+diff --git a/crates/mc-world/src/native/checkpoint.rs b/crates/mc-world/src/native/checkpoint.rs
+index c71a26c0b..3d30c11fd 100644
+--- a/crates/mc-world/src/native/checkpoint.rs
++++ b/crates/mc-world/src/native/checkpoint.rs
+@@ -23,6 +23,9 @@ const DOMAINS: &[&str] = &[
+     "conversion_extras",
+ ];
+ const PLUGIN_DOMAINS: &[&str] = &["plugins", "plugin_startup"];
++/// The manifest format this build reads and writes; mirrors
++/// `mc_core::native_checkpoint::MANIFEST_VERSION`.
++pub(super) const MANIFEST_VERSION: u32 = 1;
+ const VERSIONS: &[u8] = b"chunk=1;dictionary=1;entity=1;tick=1;global=1;player=1";
+ const LIMIT: usize = 16 * 1024 * 1024;
+ 
+@@ -82,6 +85,25 @@ fn micros(started: std::time::Instant) -> u64 {
+ fn failure(domain: &str, detail: impl std::fmt::Display) -> NativeError {
+     NativeError::Source(format!("native {domain}: {detail}"))
+ }
++/// Refuse a manifest whose format this build does not read. Checked before any
++/// other row is decoded so an old world names its version, not a decode error.
++fn require_manifest_version(value: &Value) -> Result<(), NativeError> {
++    if value["domain_versions"]["manifest"].as_u64() != Some(u64::from(MANIFEST_VERSION)) {
++        return Err(failure("checkpoint", "unsupported manifest format version"));
++    }
++    Ok(())
++}
++/// Refuse a committed store whose manifest this build does not read, before
++/// decoding anything else. Offline maintenance opens a store without the
++/// reader path, so it needs this check on its own.
++pub(super) fn require_current_manifest(database: &redb::Database) -> Result<(), NativeError> {
++    let transaction = db(database.begin_read())?;
++    let global = db(transaction.open_table(GLOBAL))?;
++    let Some(record) = db(global.get("checkpoint"))? else {
++        return Ok(());
++    };
++    require_manifest_version(&json("checkpoint", &decode(record.value())?)?)
++}
+ fn json(domain: &str, record: &NativeDomainRecord) -> Result<Value, NativeError> {
+     let value: Value = serde_json::from_slice(&record.payload).map_err(|e| failure(domain, e))?;
+     if !value.is_object() {
+@@ -265,6 +287,7 @@ fn validate_globals(
+         .get("checkpoint")
+         .ok_or_else(|| failure("checkpoint", "missing"))?;
+     let checkpoint = json("checkpoint", checkpoint_record)?;
++    require_manifest_version(&checkpoint)?;
+     let versions = checkpoint["domain_versions"]
+         .as_object()
+         .ok_or_else(|| failure("checkpoint", "missing domain versions"))?;
+@@ -447,6 +470,7 @@ fn validate_globals(
+         ));
+     }
+     let names = [
++        "manifest",
+         "climate",
+         "gamerules",
+         "block_ticks",
+@@ -467,6 +491,7 @@ fn validate_globals(
+     Ok(checkpoint)
+ }
+ fn validate_manifest(value: &Value, tick: u64) -> Result<(), NativeError> {
++    require_manifest_version(value)?;
+     for key in [
+         "tick",
+         "dimensions",
+@@ -915,6 +940,7 @@ impl NativeStore {
+             }
+             if let Some(previous) = &previous {
+                 let previous = json("checkpoint", previous)?;
++                require_manifest_version(&previous)?;
+                 let old = previous["players"]
+                     .as_object()
+                     .ok_or_else(|| failure("checkpoint/players", "invalid previous map"))?;
+diff --git a/crates/mc-world/src/native/maintenance.rs b/crates/mc-world/src/native/maintenance.rs
+index ae26a87b1..522c1211e 100644
+--- a/crates/mc-world/src/native/maintenance.rs
++++ b/crates/mc-world/src/native/maintenance.rs
+@@ -215,6 +215,9 @@ impl NativeStore {
+     /// form. Every row is fully decoded first, so a corrupt row aborts the run
+     /// instead of being copied. Returns how many rows were rewritten.
+     pub fn repack_rows(&self) -> Result<u64, NativeError> {
++        // The manifest is the format gate: an old world refuses before any row
++        // is decoded or rewritten.
++        super::checkpoint::require_current_manifest(&self.database)?;
+         let mut rewritten = 0;
+         for table in [IMPORTED, METADATA] {
+             let mut after: Option<Vec<u8>> = None;

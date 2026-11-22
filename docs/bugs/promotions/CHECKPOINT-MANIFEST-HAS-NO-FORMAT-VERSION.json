@@ -1,0 +1,56 @@
+{
+  "id": "CHECKPOINT-MANIFEST-HAS-NO-FORMAT-VERSION",
+  "verdict": "promoted",
+  "fix_commit": "patch:1ba1572cba9c78958a91d24e3cde0b78af6a82e961271712d4ffceb9c00c9afa",
+  "fix_commit_full": "patch:1ba1572cba9c78958a91d24e3cde0b78af6a82e961271712d4ffceb9c00c9afa",
+  "promoted_at": "2026-11-22T09:01:32+00:00",
+  "tree_head": "86865085df3f868ff940a999e1aee6d43640ffe5",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "1ba1572cba9c78958a91d24e3cde0b78af6a82e961271712d4ffceb9c00c9afa",
+  "reversed_files": [
+    "crates/mc-core/src/native_checkpoint.rs",
+    "crates/mc-world/src/native/checkpoint.rs",
+    "crates/mc-world/src/native/maintenance.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:native_checkpoint::tests::manifest_format_version_round_trips_through_the_writer": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world:native::checkpoint_tests::native_checkpoint_round_trips_the_manifest_format_version": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world:native::checkpoint_tests::native_checkpoint_requires_the_manifest_format_version": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:native_checkpoint::tests::manifest_format_version_is_required_in_root_and_children": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:native_checkpoint::tests::manifest_format_version_round_trips_through_the_writer": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world:native::checkpoint_tests::native_checkpoint_round_trips_the_manifest_format_version": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world:native::checkpoint_tests::native_checkpoint_requires_the_manifest_format_version": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:native_checkpoint::tests::manifest_format_version_is_required_in_root_and_children": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D79ClockPromote/.analysis/validation/20261122T090018-ledger-promote-c8zqair3"
+}
