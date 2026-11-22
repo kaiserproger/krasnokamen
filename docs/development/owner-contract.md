@@ -52,12 +52,10 @@ releases and publication keep their rules.
 
 > "не забывайте ревью через Fable 5.2 важных критичных участков прогонять" (2026-11-14)
 
-The independent read-only reviewer for critical areas is the `architect-fable`
-agent (Claude Fable 5.2): persistence, protocol, custody and battle-core
-changes before Main commits them, and, for a change to the native client's
-threading model or entity tick, a design review before implementation and a code
-review before merging; the report goes next to the slice as
-`receipts/<slice>/fable-review.md`.
+The 2026-11-15 owner decision supersedes the single-model requirement in the
+historical quote above. See the [portable critical-review policy](review-committee-and-breaker.md#independent-reviewer)
+for reviewer selection; the review points and counts remain unchanged. Retain
+the review beside the slice with the reviewer's actual identity.
 
 Owner decisions on the agent-work retrospective (2026-11-07, chosen from
 `receipts/AgentRetro/` proposals; AGENTS.md restates them):
@@ -97,8 +95,10 @@ and A1–A12/A2b/A2c thresholds. The historical quotes above remain historical
 authority for other goals; this later goal-specific decision takes precedence:
 only reproducible safety failures, broken ordinary advertised paths and
 concrete frozen-acceptance dependencies automatically block this announcement.
-Other findings remain tracked backlog, not automatic new work or release
-requirements. The owner may explicitly add scope.
+Other findings remain in the visible work queue under the
+[bug queue and progress rule](agent-fleet.md#bug-queue-and-progress-reports);
+they do not automatically become release requirements. The owner may
+explicitly add scope.
 
 The owning [DoD table, admission and stop condition](../DEFINITION_OF_DONE.md#finite-announcement-acceptance)
 and [two-child operating mode](agent-fleet.md#announcement-stabilization-mode)

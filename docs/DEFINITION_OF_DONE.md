@@ -41,8 +41,9 @@ target date does not turn a failed criterion into a pass.
 safety failure (crash, data loss, duplication or access bypass), a broken
 ordinary advertised path, or a concrete dependency of a frozen row
 automatically blocks this announcement. Name the row and causal dependency.
-Everything else stays visible backlog, not an automatic implementation slice,
-QA campaign, audit or new release requirement. The owner may explicitly add
+Other findings stay in the visible work queue under the
+[bug queue and progress rule](development/agent-fleet.md#bug-queue-and-progress-reports);
+they are not automatically release blockers. The owner may explicitly add
 scope. Preserve negative evidence and deferred debt; never erase a failure by
 renaming it or narrowing its assertion.
 

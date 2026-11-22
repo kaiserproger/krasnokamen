@@ -6,6 +6,24 @@ allowed and what a result looks like; the
 records how fleets were run on the owner's machine and what went wrong.
 
 ## Size and roles
+### Bug queue and progress reports
+
+At goal start and before an owner progress report or release decision, Main
+reconciles open `docs/bugs/rows` with the single ordered work queue. Name
+material open bugs, release blockers and, for the next eligible repair or
+proof, its owner and concrete result or blocker. If no repair is active and an
+unblocked priority row exists, schedule it within the owner's current limits,
+or report the explicit higher-priority owner decision or frozen-client
+constraint that prevents it. Feature work must not silently suppress eligible
+repairs. This is not a full ledger audit on every turn, nor does every open bug
+automatically block release.
+
+Bind each period's progress to its start and end timestamps and trees. Report
+the actual fixed, reopened and new IDs separately, not just a net count;
+distinguish older fix code from new proof and private, local Main and published
+states. Keep the evidence and original acceptance gates: neither a private
+promotion nor a passing unit test replaces a required real-client proof.
+
 
 ### Announcement stabilization mode
 
@@ -35,11 +53,11 @@ unchanged. This mode overrides the general fleet defaults/history below, until
 the [finite acceptance and stop condition](../DEFINITION_OF_DONE.md#finite-announcement-acceptance)
 is reached or the owner changes it.
 
-Main uses the single ranked critical path in `receipts/Stage3/PLAN.md`:
-finish/integrate/accept a returned vertical slice or its named dependency
-before opening another front. Findings enter this announcement's blocking
-queue only through the DoD admission rule; other findings remain visible
-backlog. Do not start a helper, committee or broad QA campaign for backlog.
+Main uses the single ranked critical path in `receipts/Stage3/PLAN.md`.
+Announcement release blockers follow the DoD admission rule; other open bugs
+remain in the same visible queue and are handled under the
+[bug queue and progress rule](#bug-queue-and-progress-reports), subject to
+the owner's priorities and current limits.
 
 Checkpoint and park excess owners at safe immutable commit/patch boundaries;
 preserve ownership and partial/negative proof, and never kill an in-flight
@@ -83,11 +101,10 @@ as-is: this spending brake is not a restart or a claimed dollar-budget cap.
   is nearly exhausted rather than running on. Larger
   fleets (the 22-slice QA hunt of 2026-10-29) run only on explicit owner request.
 - **Batch related bugs.** Give one fixer a batch of related bugs (same module,
-  feature or repro) with one combined gate and proof per batch; route to the
-  existing owner of the area instead of spawning an agent per bug. Close agents
-  whose area is empty. Before assigning rows, run `ledger probe` on the base and
-  skip rows that are already green (5 of 6 blocker agents on 2026-11-03 found
-  their rows already fixed).
+  feature or repro), reuse compatible builds and keep each row's required proof;
+  route to the existing owner instead of spawning an agent per bug. Close agents
+  whose area is empty. Before assigning rows, reuse existing evidence and run
+  `ledger probe` where useful; a green check alone does not close an open row.
 - **Nested delegation.** A worker definition names the worker types it may
   spawn (`spawns:`), but a worker spawns only when its brief allows it. The
   spawner gives disjoint write sets and reviews every returned diff itself (see

@@ -40,7 +40,7 @@ stabilization, not an expanding `/goal`. Its
 [acceptance and stop condition](docs/DEFINITION_OF_DONE.md#finite-announcement-acceptance)
 and [operating mode](docs/development/agent-fleet.md#announcement-stabilization-mode)
 (four to five executing children in total; reviewers and breakers outside the cap)
-override the general queue and fleet defaults below.
+override the general fleet defaults below; the bug queue and reporting rule still applies.
 
 1. Deliver what was asked, end to end for the real case, as simply as possible:
    the 20% that gives 80%. No speculative abstractions, flags, hardening, rare
@@ -51,8 +51,8 @@ override the general queue and fleet defaults below.
 3. Finish the current task before a newer request unless the owner says to
    switch now. `Retry` or `продолжай` means revalidate the state, then continue.
 4. Report at meaningful checkpoints, not per command: at most three substantive
-   updates (non-obvious outcome, blocker, closeout). A progress report covers
-   only that interval's commits, capabilities, gates and time sinks.
+   updates (non-obvious outcome, blocker, closeout). For interval progress and
+   material remaining bugs, follow the [bug queue and progress rule](docs/development/agent-fleet.md#bug-queue-and-progress-reports).
 5. Check your own work. Independent read-only review happens at three points:
    a ledger promotion batch of five or more rows; a change to persistence,
    protocol, custody or the battle core before Main commits it (and the design
@@ -72,12 +72,13 @@ override the general queue and fleet defaults below.
    saves or plugins.
 8. Main checks the owner's open issues hourly and before a commit (workers do
    not): `gh issue list -R kaiserproger/krasnokamen --author kaiserproger --state open`.
-   During announcement stabilization, classify new findings under the
-   [finite queue admission rule](docs/DEFINITION_OF_DONE.md#finite-announcement-acceptance):
-   only its safety, ordinary advertised-path or frozen-criterion dependencies
-   enter the blocking queue; record everything else as visible backlog.
-   Outside that mode, issues are the queue outside a `/goal` and join its queue
-   inside one.
+   The [finite queue admission rule](docs/DEFINITION_OF_DONE.md#finite-announcement-acceptance)
+   decides which findings block that announcement, not which repairs may enter
+   the single work queue. Reconcile documented bugs under the
+   [bug queue and progress rule](docs/development/agent-fleet.md#bug-queue-and-progress-reports);
+   respect explicit owner priorities and frozen-client constraints.
+   Outside announcement stabilization, issues are the queue outside a `/goal`
+   and join its queue inside one.
 9. Preserve the complete ordered queue, including blocked and deferred items.
    Only an explicit owner change or a concrete recorded dependency may change
    order; blockers pause an owned item, not silently delete or demote it.
