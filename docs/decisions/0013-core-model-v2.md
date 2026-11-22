@@ -264,6 +264,17 @@ complete framing, first-start,
 lease and backup contract is in
 [persistence](../architecture/persistence.md).
 
+One stop order serves both explicit shutdown and a plain drop. `Core::shutdown`
+and `Drop for CoreInner` call the same `CoreInner::stop_owners`: signal the tick
+owner, join the tick (its final checkpoint and the journal `Shutdown`), join the
+journal (final WAL flush), and only then release the exclusive world lease.
+Taking the same `Option` handles makes both paths idempotent. With unpoisoned
+owner mutexes, a plain `drop(core)` does not detach a running owner or free a
+lease an owner may still write. Regression:
+`cargo:mc-core:core::core_drop_join_tests::plain_drop_holds_the_world_lease_until_the_publication_commits`
+holds a real native checkpoint publication and requires the lease to remain
+`WouldBlock` at the tick owner's terminal event.
+
 Staged battles are native dimension-local gameplay owners, not disposable AI
 caches: phase and battle-local clock, regiment/member identity and rank history,
 orders/targets, morale/rout/action/weapon timers, live holds and spectator

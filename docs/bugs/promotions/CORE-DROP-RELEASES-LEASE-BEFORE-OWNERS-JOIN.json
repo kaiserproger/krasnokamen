@@ -1,0 +1,30 @@
+{
+  "id": "CORE-DROP-RELEASES-LEASE-BEFORE-OWNERS-JOIN",
+  "verdict": "promoted",
+  "fix_commit": "patch:ac21dca494074f48dbc8ef64828f6745734d9989b4cbafbfd253601bd6758bb6",
+  "fix_commit_full": "patch:ac21dca494074f48dbc8ef64828f6745734d9989b4cbafbfd253601bd6758bb6",
+  "promoted_at": "2026-11-22T10:03:32+00:00",
+  "tree_head": "7c1a96e92a6de2680bc8efe45bffec6e6d6adf86",
+  "tree_dirty": true,
+  "tree_sha256": "2e1d33361a096526db2e70508bbe2a862b34a348dd96911bfb4423a82b50514c",
+  "control_tree": "head",
+  "fix_patch_sha256": "ac21dca494074f48dbc8ef64828f6745734d9989b4cbafbfd253601bd6758bb6",
+  "reversed_files": [
+    "crates/mc-core/src/core.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:core::core_drop_join_tests::plain_drop_holds_the_world_lease_until_the_publication_commits": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:core::core_drop_join_tests::plain_drop_holds_the_world_lease_until_the_publication_commits": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/Rc6ClockOracle/.analysis/validation/20261122T100211-ledger-promote-4ojxu66q"
+}

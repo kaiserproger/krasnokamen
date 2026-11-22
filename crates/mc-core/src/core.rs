@@ -416,8 +416,106 @@ pub struct Core {
     inner: Arc<CoreInner>,
 }
 
+/// Test-only: live owner threads. A test waits on it (a terminal event, not a
+/// poll) to observe that every owner has ended, e.g. after stopping a control
+/// run whose plain drop detached them.
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct OwnerWatch {
+    live: std::sync::Mutex<usize>,
+    ended: std::sync::Condvar,
+}
+
+#[cfg(test)]
+impl OwnerWatch {
+    fn new() -> Self {
+        Self {
+            live: std::sync::Mutex::new(0),
+            ended: std::sync::Condvar::new(),
+        }
+    }
+
+    fn enter(&self) {
+        *self
+            .live
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) += 1;
+    }
+
+    fn exit(&self) {
+        let mut live = self
+            .live
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *live = live.saturating_sub(1);
+        if *live == 0 {
+            self.ended.notify_all();
+        }
+    }
+
+    /// Blocks until every owner has ended; false on timeout.
+    pub(crate) fn wait_zero(&self, timeout: std::time::Duration) -> bool {
+        let deadline = std::time::Instant::now() + timeout;
+        let mut live = self
+            .live
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        while *live > 0 {
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
+            if left.is_zero() {
+                return false;
+            }
+            live = self
+                .ended
+                .wait_timeout(live, left)
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .0;
+        }
+        true
+    }
+}
+
+/// One live owner thread for the test-only watch.
+#[cfg(test)]
+struct OwnerAliveGuard(Arc<OwnerWatch>);
+
+#[cfg(test)]
+impl OwnerAliveGuard {
+    fn new(watch: Arc<OwnerWatch>) -> Self {
+        watch.enter();
+        Self(watch)
+    }
+}
+
+#[cfg(test)]
+impl Drop for OwnerAliveGuard {
+    fn drop(&mut self) {
+        self.0.exit();
+    }
+}
+
 type KnockbackPublication =
     Arc<parking_lot::RwLock<Arc<std::collections::BTreeMap<ConnectionId, (u64, u64)>>>>;
+
+#[cfg(test)]
+impl Core {
+    /// Test-only: the live-owner watch, for waiting on a terminal owner-end
+    /// event instead of polling a counter.
+    pub(crate) fn owners_probe(&self) -> Arc<OwnerWatch> {
+        Arc::clone(&self.inner.owners)
+    }
+
+    /// Test-only: a clone of the shutdown sender so a control run whose plain
+    /// drop detached the owners can still stop them afterwards (the tick's
+    /// shutdown branch treats a disconnected channel as "not a signal").
+    pub(crate) fn shutdown_sender_probe(&self) -> Option<std::sync::mpsc::Sender<()>> {
+        self.inner
+            .shutdown_tx
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().cloned())
+    }
+}
 
 #[derive(Debug)]
 struct CoreInner {
@@ -456,6 +554,9 @@ struct CoreInner {
     tick_handle: std::sync::Mutex<Option<std::thread::JoinHandle<()>>>,
     journal_handle: std::sync::Mutex<Option<std::thread::JoinHandle<()>>>,
     world_lease: std::sync::Mutex<Option<std::fs::File>>,
+    /// Test-only watch of live owner threads.
+    #[cfg(test)]
+    owners: Arc<OwnerWatch>,
     worker_count: usize,
     /// World spawn fixed at open (manifest or spawn finder).
     world_spawn: [i32; 3],
@@ -1092,6 +1193,11 @@ impl Core {
         let checkpoint_every = config.checkpoint_every_ticks.max(1);
         let journal_budget = Arc::new(JournalBudget::new(JOURNAL_QUEUE_BYTES));
         let journal_loop_budget = Arc::clone(&journal_budget);
+        // Test-only owner watch: each owner thread holds one guard for its life.
+        #[cfg(test)]
+        let owner_watch = Arc::new(OwnerWatch::new());
+        #[cfg(test)]
+        let journal_alive = Arc::clone(&owner_watch);
         // Seed the serialization mirror before the tick thread starts. Thereafter
         // only successfully appended post-images mutate it, in the work FIFO.
         let journal_plugins = tick_state.plugins.clone();
@@ -1099,6 +1205,8 @@ impl Core {
         let journal_handle = std::thread::Builder::new()
             .name("mc-core-journal".to_owned())
             .spawn(move || {
+                #[cfg(test)]
+                let _alive = OwnerAliveGuard::new(journal_alive);
                 journal_loop(
                     &journal_world_dir,
                     journal_store,
@@ -1170,9 +1278,13 @@ impl Core {
                 Arc::clone(&terrain[2]),
             ],
         };
+        #[cfg(test)]
+        let tick_alive = Arc::clone(&owner_watch);
         let tick_handle = std::thread::Builder::new()
             .name("mc-core-tick".to_owned())
             .spawn(move || {
+                #[cfg(test)]
+                let _alive = OwnerAliveGuard::new(tick_alive);
                 tick_loop(tick_state, channels);
             })
             .map_err(|err| CoreError::Storage(err.to_string()))?;
@@ -1210,6 +1322,8 @@ impl Core {
                 tick_handle: std::sync::Mutex::new(Some(tick)),
                 journal_handle: std::sync::Mutex::new(Some(journal)),
                 world_lease: std::sync::Mutex::new(Some(world_lease)),
+                #[cfg(test)]
+                owners: owner_watch,
                 worker_count,
                 world_spawn,
                 registry,
@@ -1666,9 +1780,22 @@ impl Core {
 
     /// Graceful shutdown: signals the tick thread, then joins tick and
     /// journal in order. Returns only after the final journal flush (and any
-    /// final checkpoint) is durable. Idempotent.
+    /// final checkpoint) is durable. Idempotent; a plain drop runs the same
+    /// order (see `CoreInner::stop_owners`).
     pub fn shutdown(&self) {
-        if let Ok(mut guard) = self.inner.shutdown_tx.lock()
+        self.inner.stop_owners();
+    }
+}
+
+impl CoreInner {
+    /// The one safe stop order, shared by [`Core::shutdown`] and [`Drop`]:
+    /// signal the owners, join the tick (its final checkpoint and the journal
+    /// `Shutdown`), then join the journal (final WAL flush), and only then
+    /// release the world lease. Releasing the lease before the join would let a
+    /// second core open a world an owner thread may still write. Idempotent:
+    /// both callers take the same `Option` handles.
+    fn stop_owners(&self) {
+        if let Ok(mut guard) = self.shutdown_tx.lock()
             && let Some(tx) = guard.take()
             && tx.send(()).is_err()
         {
@@ -1679,20 +1806,29 @@ impl Core {
         }
         // Join tick first (it sends the journal Shutdown after its final
         // checkpoint flush), then the journal (final flush on exit).
-        if let Ok(mut guard) = self.inner.tick_handle.lock()
+        if let Ok(mut guard) = self.tick_handle.lock()
             && let Some(handle) = guard.take()
         {
             handle.thread().unpark();
             stop::join(handle);
         }
-        if let Ok(mut guard) = self.inner.journal_handle.lock()
+        if let Ok(mut guard) = self.journal_handle.lock()
             && let Some(handle) = guard.take()
         {
             stop::join(handle);
         }
-        if let Ok(mut lease) = self.inner.world_lease.lock() {
+        if let Ok(mut lease) = self.world_lease.lock() {
             lease.take();
         }
+    }
+}
+
+impl Drop for CoreInner {
+    /// A plain `drop(core)` must not detach a running tick/journal owner or
+    /// release the world lease while it may still write the world
+    /// (CORE-DROP-RELEASES-LEASE-BEFORE-OWNERS-JOIN).
+    fn drop(&mut self) {
+        self.stop_owners();
     }
 }
 
@@ -1876,6 +2012,10 @@ mod core_outbox_tests;
 #[cfg(test)]
 #[path = "core_session_lock_tests.rs"]
 mod core_session_lock_tests;
+
+#[cfg(test)]
+#[path = "core/core_drop_join_tests.rs"]
+mod core_drop_join_tests;
 
 #[cfg(test)]
 #[path = "core_journal_backpressure_tests.rs"]
