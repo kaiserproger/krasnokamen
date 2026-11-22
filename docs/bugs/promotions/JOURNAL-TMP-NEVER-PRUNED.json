@@ -1,0 +1,30 @@
+{
+  "id": "JOURNAL-TMP-NEVER-PRUNED",
+  "verdict": "promoted",
+  "fix_commit": "patch:b3f902599c470e62000d197e64402dacb7ba4b7be122b9cce5e1a1e4bb7561c6",
+  "fix_commit_full": "patch:b3f902599c470e62000d197e64402dacb7ba4b7be122b9cce5e1a1e4bb7561c6",
+  "promoted_at": "2026-11-22T08:59:18+00:00",
+  "tree_head": "0c29b36607dce289c077c421ecce95c50b072dc6",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "b3f902599c470e62000d197e64402dacb7ba4b7be122b9cce5e1a1e4bb7561c6",
+  "reversed_files": [
+    "crates/mc-core/src/journal.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:journal_tests::open_removes_unpublished_batch_leftovers": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:journal_tests::open_removes_unpublished_batch_leftovers": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D79ClockPromote/.analysis/validation/20261122T085701-ledger-promote-t4_9z_7q"
+}
