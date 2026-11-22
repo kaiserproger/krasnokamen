@@ -1,8 +1,8 @@
 diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
 --- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
 +++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-@@ -1003,7 +1003,18 @@
-                 *count = count.saturating_sub(amount);
+@@ -1648,7 +1648,18 @@
+                 }
              }
              let specific = crate::settlements::construction_crafting::wood_specific(state, planned);
 -            let reserved = Default::default();
@@ -19,5 +19,5 @@ diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/
 +                continue;
 +            };
              let mut trial = stock_after.clone();
-             if crate::settlements::construction_crafting::ensure_units(
+             if let Some(inputs) = crate::settlements::construction_crafting::ensure_units(
                  state,
