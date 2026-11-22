@@ -1,0 +1,40 @@
+{
+  "id": "HARNESS-CLOCK-POSE-FALSE-ANIMATION",
+  "verdict": "promoted",
+  "fix_commit": "d3bc1c33a",
+  "fix_commit_full": "d3bc1c33a0cfe9e97ab3a3f42918672bc488a671",
+  "promoted_at": "2026-11-22T08:48:24+00:00",
+  "tree_head": "7c1a96e92a6de2680bc8efe45bffec6e6d6adf86",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "fix_commit",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/harness/backends/scene_shot.py"
+  ],
+  "kept_test_files": [
+    "tools/harness/test_scene_shot.py"
+  ],
+  "negative_control": {
+    "python:tools.harness.test_scene_shot:DroppedClockTests.test_only_clock_face_change_passes_not_hud_or_static_clock": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_scene_shot:DroppedClockTests.test_static_clock_bob_and_clipped_bezel_do_not_count_as_animation": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_scene_shot:DroppedClockTests.test_only_clock_face_change_passes_not_hud_or_static_clock": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_scene_shot:DroppedClockTests.test_static_clock_bob_and_clipped_bezel_do_not_count_as_animation": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D79ClockPromote/.analysis/validation/20261122T084815-ledger-promote-989ipecj"
+}
