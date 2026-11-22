@@ -362,11 +362,16 @@ For Cargo refs, only a nextest `FAIL` result is red; `TIMEOUT`, `ABORT`,
 assertion against the repro.
 
 `--out` writes the full per-ref result as JSON (also valid YAML). The receipt
-records the candidate fingerprint before and after the probe. If they differ,
-`tree_stable` is false, every row is `unrunnable` and the command exits 2:
-per-ref observations remain in the receipt but cannot be attributed to one tree.
-The fingerprint excludes `docs/bugs` and ignored files, and matching endpoints
-do not rule out a transient edit during the run.
+records the server candidate fingerprint before and after the probe. If they
+differ, `tree_stable` is false, every row is `unrunnable` and the command exits
+2: per-ref observations remain in the receipt but cannot be attributed to one
+server tree. The fingerprint excludes `docs/bugs` and ignored files, and
+matching endpoints do not rule out a transient edit during the run.
+`client:<crate>:<test>` refs run in the selected client checkout even without
+`--client`; the server fingerprint does not identify that checkout or detect
+changes to it. Record and verify the client tree separately when attributing
+those results. `client_run` records the `--client` option, not proof that a
+graphical client ran.
 Probe exits 0 after classification even when a row is red or unrunnable: inspect
 each row and its refs. A green check alone does not close a row; compare it with
 the original symptom and required client evidence. Probe never changes the
