@@ -167,19 +167,28 @@ the previous one's handoff.
 
 ### Model routing while Claude is out (owner D69)
 
-Owner, 2026-11-20 (Claude weekly limit 98% used, resets Monday 2026-11-23
-12:00; full text `receipts/Stage3/OWNER-DECISIONS-20261117-1000.md` D69):
+Owner D69, 2026-11-20, reported the Claude weekly limit at 98%. Owner D83,
+2026-11-22, reported Claude unavailable until Monday 23 November 11:00 and
+Mistral until 1 December (no reset time specified). Decisions:
+`receipts/Stage3/OWNER-DECISIONS-20261117-1000.md` D69, D83 and D84.
 
 - **Main** stays on Opus until the Claude limit, then falls back to Sol 6.2
   (host `retry.fallbackChains`: `anthropic/claude-opus-5-5` →
   `openai-codex/gpt-6.2-sol:xhigh`).
-- **Critical jobs**: executor Sol 6.2 (`worker-sol`); **both** DeepSeek and
-  Mistral review each one (`committee-deepseek` and `committee-chonk`).
+- **Critical jobs**: executor Sol 6.2 (`worker-sol`); DeepSeek and Mistral
+  normally review each one. Owner D84 replaces the unavailable Mistral seat
+  with independent actual Sol 6.2 (`openai-codex/gpt-6.2-sol`) for subsequent
+  reviews. Keep two separately conducted independent verdicts where required;
+  an author cannot review its own change. Sol 6.1 and Sol 6.2 can be distinct
+  reviewers when independent of the author, but both are OpenAI, not
+  vendor-diverse. If an independent second reviewer cannot be arranged for an
+  author, keep the review blocked. D83's already-completed Astra review of
+  CORE-DROP remains valid for its exact scope; do not rerun it to change models.
   Critical means the classes D47 sent to Opus (persistence, protocol, item
   custody) plus release-tag reviews (laptop reading, open to the owner's
-  correction).
+  correction). Original tests, negative controls, L2 and release gates remain.
 - **Main load** (about 95%): executor DeepSeek (`worker-deepseek`), reviewed by
-  Sol or Astra 6.2 (`committee-sol` or `committee-astra`).
+  an independent Sol.
 - **No new Anthropic agents** (Opus, Sonnet, Fable, including their
   `committee-*`, `worker-*` and `researcher-*` definitions): at the limit they
   fall back silently to Sol or Terra and break the reviewer-vendor rule. Work

@@ -90,20 +90,16 @@ field is a maximum batch filename/checkpoint tick, sampled after process exit,
 not a payload/contiguity check or proof that the mutation's tick was published.
 Later checkpoints can prune the working journal; the crash copy stays unchanged.
 
+For a cut meant to prove survival after publication, fence on the mutation's
+durable record before the kill. A mid-action cut instead proves consistent
+recovery within the [documented WAL-tail boundary](../../../docs/architecture/persistence.md);
+it does not require the survival of an unpublished input.
+
 ## Canonical invocation and evidence
 
-With the protocol worktree as cwd (all paths below are on the games disk):
-
-```sh
-KRASNOKAMEN_VALIDATION_ROOT=/run/media/kaiserroman/games/solaris-work/scenarios/runs/RunProto \
-/home/kaiserroman/solaris/.analysis/tools/mem-run.sh -m 6G \
-python3 -m tools.harness run protocol-matrix \
-  --server-bin /run/media/kaiserroman/games/solaris-work/targets/Hotfix/release/krasnokamen \
-  --plugins-dir /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins \
-  --vanilla-data /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla \
-  --matrix /run/media/kaiserroman/games/solaris-work/scenarios/matrix.yaml \
-  --matrix-id '<exact stable id from gen_matrix.py --show>'
-```
+Use the [matrix invocation](../../../docs/AGENT_TOOLING.md#bot-scenario-matrix)
+on the exact candidate. For a ledger row select its frozen matrix and stable
+`--matrix-id`; supply the matching `--plugins-dir` for a plugin-profile row.
 
 `--subject block_place.full_block` is an explicit supplemental adapter probe
 (default ordinary survival/overworld/non-op/one player), **not** a matrix row
@@ -113,9 +109,10 @@ likewise exercises a named primitive, never a matrix subject by substitution.
 `result.json` is the canonical receipt; `protocol-result.json`, server.log and
 wire JSONL provide detailed evidence even when an adapter raises. Append ledger
 lines only from finished receipts, with full server SHA, exact stable matrix ID,
-absolute run directory and real pass/fail/blocked status. Use the shared
-`scenarios/gen_matrix.py --record-file` validator/locked append, never rewrite
-ledger lines. Missing capabilities are blocked, not skipped/pass.
+absolute run directory and real pass/fail/blocked status. Append via
+[`matrix_specs/gen_matrix.py`](../matrix_specs/gen_matrix.py) `--record-file`,
+which validates and locks the ledger. Missing capabilities are blocked, not
+skipped/pass; a registered cell is not an executed one.
 Native matrix client startup that reports a missing content file is recorded as
 blocked, not as an executed scenario failure. Other client exits remain failures.
 An unoverridden native-matrix run uses the checked-in frozen matrix and writes
@@ -176,6 +173,18 @@ Contradictory explicit exclusions fail. Canonical protocol receipts include
 by `plugin_set_fingerprint(path)` and checked against the authoritative profile.
 The ledger requires that field for profile-suffixed IDs, including blocked
 attempts; package selection/fingerprinting precedes an unsupported adapter error.
+
+**Re-pin package bytes, not scenario IDs.** Use the tracked generator to
+compute `@live` (full set) and `@vanilla` (the set without the subject's
+excluded packages) fingerprints. Verify the old fingerprints against the
+previous manifest/entry bytes. Regenerate from an isolated checkout; a
+package-only change must leave `wave1_id_set_sha256` unchanged, with new
+matching `matrix.yaml` profile fingerprints and `MATRIX_FREEZE.json` YAML hash.
+If the generator refuses due to unrelated ID drift, investigate the added
+and removed IDs and their generator inputs. A command lost in a merge is a
+regression, not a reason to `--refreeze`; use it only for an explicitly
+approved ID-set change. Record old/new package hashes and executed row
+receipts, separating protocol, Java and native evidence.
 
 `server.reconfigure(overrides, plugins_dir=None)` applies explicit scalar core
 TOML section fixtures and restarts the same world. Adapters disconnect clients

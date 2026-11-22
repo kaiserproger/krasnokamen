@@ -39,8 +39,8 @@ Code, tests, config and runtime evidence beat every document: fix the document.
 stabilization, not an expanding `/goal`. Its
 [acceptance and stop condition](docs/DEFINITION_OF_DONE.md#finite-announcement-acceptance)
 and [operating mode](docs/development/agent-fleet.md#announcement-stabilization-mode)
-(four to five executing children in total; reviewers and breakers outside the cap)
-override the general fleet defaults below; the bug queue and reporting rule still applies.
+override the general fleet defaults below; the bug queue and reporting rule
+still applies.
 
 1. Deliver what was asked, end to end for the real case, as simply as possible:
    the 20% that gives 80%. No speculative abstractions, flags, hardening, rare
@@ -147,6 +147,8 @@ python3 -m tools.harness list
 | L1 | L0 plus `python3 -m tools.harness run fmt` and `python3 -m tools.harness run code-health` | finishing a slice |
 | L2 | `python3 -m tools.harness run correctness` (regressions, fmt, code-health, strict workspace Clippy, all nextest workspace/all-target tests) | before a code commit, at major phase close, for a release |
 
+- Main runs the [integrated L2 per compatible fix batch](docs/development/worktrees-and-integration.md#integrating-a-branch-into-main).
+  The batch does not replace individual proof or review requirements.
 - `python3 -m tools.harness run regressions` runs every registered bug check; L2
   already includes it, so run it alone only after an integration that skips L2.
   Markdown-only changes need `python3 tools/doclinks.py`, not Cargo or harness gates.

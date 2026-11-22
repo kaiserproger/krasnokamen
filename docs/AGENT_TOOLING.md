@@ -58,11 +58,12 @@ python3 -m tools.harness plan [--base REV] [--paths PATH...] [--json]
 Typed-option constraints (the run fails closed with exit 2 on violation; the
 source of truth is `tools/harness/__main__.py`):
 
-- `--server-bin` is only supported by `loader-live` (immutable candidate
-  executable). Other launch paths honor the read-only `KRASNOKAMEN_SERVER_BINARY`
-  environment candidate instead of building.
-- `--plugins-dir` requires `--client native`, `java-v2-p5-towns`, `loader-live`
-  or `graves`. The directory must already exist; it is used as-is.
+- `--server-bin` names an immutable candidate executable for `loader-live`,
+  `protocol-matrix`, `java-matrix`, `native-matrix` or `matrix-random`. Other
+  launch paths use `KRASNOKAMEN_SERVER_BINARY` for the candidate.
+- `--plugins-dir` is supported for `--client native`, `java-v2-p5-towns`,
+  `scene-shot`, `loader-live`, `graves` and the matrix profiles. The source
+  directory must already exist; matrix profiles stage their own package set.
 - `--windowed` requires `--client native` (`scene-shot` and `settlement-map-qa`
   also accept `--client java`).
 - `--client native` is enabled only for the profiles in the allow-list in
@@ -417,6 +418,9 @@ The frozen combinatorial specs and generator live in
 Keep mutable ledger JSONL, copied live plugins and run directories outside Git,
 by default in `/run/media/kaiserroman/games/solaris-work/scenarios/`.
 `KRASNOKAMEN_MATRIX_DATA` changes that root; `SCENARIO_LEDGER` changes the ledger.
+Run only against isolated worlds; never send matrix bots to the live test-server
+world. The [adapter contract](../tools/harness/matrix_domains/README.md) covers
+the per-row oracle, port ranges and [plugin profiles](../tools/harness/matrix_domains/README.md#readiness-json-state-and-plugin-lanes).
 Generation reads this checkout and sibling repositories selected by
 `KRASNOKAMEN_WORK_ROOT`. A changed frozen id set requires explicit `--refreeze`.
 
@@ -424,7 +428,10 @@ For a protocol adapter probe, use the pinned release binary and the current
 26.3 content cache; its version metadata selects the wire protocol:
 
 ```sh
-python3 -m tools.harness run protocol-matrix --server-bin "$KRASNOKAMEN_SERVER_BINARY" --vanilla-data /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla --subject block_place.full_block
+python3 -m tools.harness run protocol-matrix \
+  --server-bin "$KRASNOKAMEN_SERVER_BINARY" \
+  --vanilla-data /absolute/path/to/data/vanilla \
+  --subject block_place.full_block
 ```
 
 Select a frozen protocol row with `--matrix tools/harness/matrix_specs/matrix.yaml

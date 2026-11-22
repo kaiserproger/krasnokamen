@@ -1201,24 +1201,7 @@ Pillow, and follow the review rules below.
 
 ## Combinatorial scenario matrix with bots
 
-**Not runnable from `main`.** The matrix generator (`gen_matrix.py`), the
-`matrix.yaml` and append-only `ledger.jsonl` it produced, and the shared harness
-API (`tools/harness/matrix_api.py` with the `protocol-matrix`, `java-matrix` and
-`native-matrix` profiles) lived on branches and in the owner's `<work>/scenarios/`;
-none of them is in this repository, and `python3 -m tools.harness list` has no
-such profile. The supported replacement is the registered harness scenarios
-(`python3 -m tools.harness explain`) and [catalog load](catalog-load.md). Rules
-from that matrix that still bind any new gameplay row:
-
-- One runner: the canonical harness. No second runner or DSL.
-- An adapter's oracle returns non-empty checks; a missing verb raises a named
-  `MissingCapability` and never passes. A command's feedback is not a success
-  oracle; check world state. Input verbs are submission-only; wait for fresh
-  state. A forceload acknowledgement is not a loaded-chunk fence.
-- kill -9 durability: wait until the published journal batch covers the mutation
-  tick, then SIGKILL; the mutation must survive. A mid-action crash must recover
-  consistent state; losing up to the documented WAL tail is allowed.
-- Coverage classes: spec_only / stub / real_partial / complete / executed
-  (pass|fail). A registration is not coverage.
-- Disjoint port ranges per runner; plugin-sensitive rows record a plugin-set
-  fingerprint. No bots on the live test-server world.
+The registered `protocol-matrix`, `java-matrix` and `native-matrix` profiles
+share one adapter contract. See [matrix runner status](../AGENT_TOOLING.md#matrix-runner-status)
+for client limits and [matrix invocation](../AGENT_TOOLING.md#bot-scenario-matrix)
+for the run and evidence rules. A protocol bot pass is not graphical proof.

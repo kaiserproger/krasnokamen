@@ -38,9 +38,9 @@ failure diagnosis"; this page is the method and the causes seen so far.
 - `cargo test` does not rebuild the `krasnokamen` binary. Check
   `server-build.log` or the receipt's commands for `--bin krasnokamen -p mc-edge`
   and the binary's identity before trusting a run.
-- Pooled or shared target dirs can serve another tree's artifacts; see the
-  2026-11-04 entry in [lessons](lessons.md). Symptoms: "unresolved import" for a
-  symbol that exists, or new tests silently absent. Never `touch
+- [Pooled target dirs](heavy-commands-and-memory.md#how-toolsdevmem-runsh-works-current-since-2026-10-28)
+  can serve another tree's artifacts: suspect that if a known symbol gives an
+  `unresolved import` or new tests are silently absent. Never `touch
   crates/*/src/main.rs` to force rebuilds: it created empty bin targets (E0601)
   and an empty `crates/xtask/src/lib.rs` once.
 - A green gate counts only for the binary, plugin package and content it ran.
@@ -77,8 +77,7 @@ failure diagnosis"; this page is the method and the causes seen so far.
 - **Refusal-only receipts prove nothing about the feature.** Acceptance that
   asks for a working feature needs world evidence (block states before/after,
   item transfers), not reply strings or HP loss.
-- Plugin operation receipts are never pruned by count or age: eviction would
-  let a retried operation id execute twice.
+- For operation-id retries, see the [durable receipt contract](../plugins/OPERATIONS.md#native-server).
 
 ## Server/client protocol stalls (v2 history, still instructive)
 

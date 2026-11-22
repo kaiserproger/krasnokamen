@@ -152,10 +152,12 @@ process to 15 GiB RSS; an OOM killed all agents, while worktrees survived.
   not reserve space or limit growth of existing slots. Each running command
   holds its own slot (15-40 GB once built): on 2026-11-07 agents running
   several commands in parallel created 12 slots and filled the disk, so run one
-  heavy command at a time per agent. On a tree switch every tracked file of the
-  new tree is touched so its workspace crates rebuild (see the 2026-11-04 entry
-  in [lessons](lessons.md)). The tree is the git toplevel of the cwd when the
-  runner starts, so one runner command builds one tree: a script that `cd`s into
+  heavy command at a time per agent. The runner records the source tree in
+  `.krasnokamen-tree` and touches tracked files on a tree switch. Before
+  that fix (2026-11-04), Cargo's mtime-based freshness and relative dep-info
+  paths let an older worktree reuse a newer tree's binary, silently skipping
+  newly added tests. The tree is the git toplevel of the runner's starting cwd:
+  one runner command builds one tree. A script that `cd`s into
   a second worktree inside the same command reuses the first tree's slot without
   the switch, and Cargo (same unit hash for a workspace member in any checkout)
   runs the other tree's binary when that binary is newer than this tree's
@@ -313,8 +315,8 @@ cwd to the agent.
   cache shrinks as it fills: at 92% full writes took over a second each). Below
   the floor, `slot-gc` evicts idle slots in least-recently-used order (below).
   The disk filled to 100% several times: 12 parallel
-  target slots (2026-11-07), per-run plugin `.wasm` copies in scenario runs (7
-  of 11 GB on 2026-10-28), 650 MB of client content copied into every
+  target slots (2026-11-07), plugin `.wasm` copies of about 4 MB per scenario
+  run (7 of 11 GB on 2026-10-28), 650 MB of client content copied into every
   scene-shot receipt (now symlinked), nested `sdk/rust/target` in rsync'd
   worktrees, 66 GB of stale debug targets.
 - **Slot cleanup and rotation.** Below `KRASNOKAMEN_SLOT_MIN_FREE_GB` + 10 GiB free

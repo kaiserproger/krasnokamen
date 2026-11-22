@@ -101,7 +101,7 @@ they do not automatically become release requirements. The owner may
 explicitly add scope.
 
 The owning [DoD table, admission and stop condition](../DEFINITION_OF_DONE.md#finite-announcement-acceptance)
-and [two-child operating mode](agent-fleet.md#announcement-stabilization-mode)
+and [current operating mode](agent-fleet.md#announcement-stabilization-mode)
 are authoritative. General 15-plus-2 fleet defaults do not override this
 mode; no extra reviewer pool. Once its gates pass, park automated development
 and send the owner one tag/announcement decision packet, without new audits.

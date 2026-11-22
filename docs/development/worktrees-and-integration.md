@@ -116,10 +116,18 @@ no-commit slice:
 4. Use the canonical harness's complete failure list, not an extra ad-hoc workspace
    suite. Typical post-merge breakage includes unfulfilled `#[expect(clippy::...)]`,
    stale code-health anchors and inline tests in owner-guarded files.
-5. Main owns the integrated L2 under the runner; read `result.json` commands,
-   exits, counts and logs ([gate contract](../AGENT_TOOLING.md#evidence-boundaries)).
-   After a relevant fix rerun the failed scope, then the required combined gate;
-   do not repeat unchanged greens. Supervised jobs preserve the inner exit code
+5. **One shared L2 per compatible fix batch** (owner D85, 2026-11-22).
+   Main freezes the exact integrated tree and runs `correctness` through the
+   runner once on that batch, not once per row. Workers still run focused
+   checks. Keep each row's original repro, its own genuine negative control
+   (only that row's fix reversed), and any required real-client proof and
+   independent reviews. Reuse candidate builds, fixtures and evidence only
+   within their matching tree, inputs, environment and scope; one row's
+   reversal cannot stand in for another's.
+   Read the commands, exits, counts and logs in `result.json`
+   ([gate contract](../AGENT_TOOLING.md#evidence-boundaries)). After a relevant
+   fix rerun the failed scope, then the required combined gate; do not repeat
+   unchanged greens. Supervised jobs preserve the inner exit code
    (`...; rc=$?; ...; exit $rc`).
 6. Obtain the review required by AGENTS.md before Main's critical code commit.
    Check reviewer identity and exact base/candidate/diff coverage, including

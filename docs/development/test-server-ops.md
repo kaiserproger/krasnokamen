@@ -23,17 +23,21 @@ variables are described in
   JDK 25. Use `ssh -o LogLevel=ERROR "$KRASNOKAMEN_TEST_HOST"` to silence
   post-quantum key warnings. The agent `ssh://` file route does not work with
   this host; use plain `ssh`.
-- `/opt/solaris/` is owned by the system user `krasnokamen` (`HOME=/opt/solaris`):
-  `krasnokamen`, `server.toml`, `plugins/`, `world/`, `metrics/`, the metrics
-  collector. Unit: [`tools/dev/test-server/solaris.service`](../../tools/dev/test-server/solaris.service)
-  (`--no-console`, `MemoryMax=3G`, `Restart=on-failure`), plus a drop-in setting
-  `RUST_BACKTRACE=1`. A startup failure loops restarts: stop the unit before
-  debugging.
+- The checked-in sample [`solaris.service`](../../tools/dev/test-server/solaris.service)
+  uses `User=krasnokamen`, `Group=krasnokamen` and `/opt/solaris` as its default
+  server directory and `HOME`. The directory holds the binary, config, plugins,
+  world and metrics. The sample runs with `--no-console`, `MemoryMax=3G` and
+  `Restart=on-failure`. Verify the installed unit and overrides before relying
+  on those values. A startup failure can loop restarts; stop the verified unit
+  before debugging.
+  The deployment has used a `RUST_BACKTRACE=1` drop-in; check that it is
+  present if you need backtraces.
 - Content cache: `/opt/solaris/.local/share/krasnokamen/content/<version>`.
-  Import as the service user:
-  `runuser -u solaris -- env HOME=/opt/solaris ./krasnokamen content import
-  --config server.toml --version <ver> --download` (about 80 s); verify with
-  `content verify --config server.toml` (no `--version`).
+  Use the installed unit's service user and `HOME`, including any overrides;
+  the unit name is not the account name. For the checked-in sample:
+  `runuser -u krasnokamen -- env HOME=/opt/solaris ./krasnokamen content import
+  --config server.toml --version <ver> --download`. Verify with
+  `content verify --config server.toml` as the same account (no `--version`).
 - `server.toml`: `motd` names the RC (bump it with each deploy); view distance
   16, simulation distance 6; bind `0.0.0.0:25565`; `online_mode = false` by owner
   decision (the native client needs offline mode) with the `krasnokamen-auth` plugin
@@ -83,16 +87,26 @@ relaunch.
 
 ## Fresh-world reset
 
-Only with explicit owner approval, and only after a verified backup.
-[`tools/dev/test-server/deploy-reset.sh`](../../tools/dev/test-server/deploy-reset.sh)
-runs on the host with `set -euo pipefail`: stop, assert inactive, back up and
-`tar tzf` the backup, remove the world, swap binaries, start, wait for
-readiness. Also remove `metrics/.cursor`. A fresh world wipes every
-`krasnokamen-auth` account.
+**Do not run the checked-in reset helper.** The
+[`deploy-reset.sh`](../../tools/dev/test-server/deploy-reset.sh) inspected at
+`84116c517df0` stops and starts `solaris.service` but checks whether
+`krasnokamen.service` is active. If that other unit is missing or inactive,
+the check does not stop the script. It then creates and lists a tar archive
+and runs `rm -rf world` without verifying the unit it stopped is inactive.
+Listing the archive does not prove a quiescent, restorable backup.
 
-Release-to-release upgrades (new required content files, `WORLDGEN_REVISION`
-bumps) are in [releases](release-and-tags.md#core-release-cut) step 4; on this
-host run `world upgrade-worldgen` as the service user.
+The helper also defaults `KRASNOKAMEN_SERVER_USER` to `solaris` for `chown`,
+while the checked-in `solaris.service` runs as `User=krasnokamen` and
+`Group=krasnokamen`. This can fail or leave the wrong ownership after world
+deletion. It does **not** remove `metrics/.cursor`; the collector tracks the
+server instance in that cursor. These are source observations, not a claim
+about the unit installed on the VPS.
+
+A fresh-world reset wipes every `krasnokamen-auth` account. Do not proceed on
+owner approval alone: require a corrected helper, explicit approval for the
+exact reset, verified installed unit/account/world identity and a verified
+restorable backup. Release upgrade and `WORLDGEN_REVISION` guidance is in
+[releases](release-and-tags.md#core-release-cut); use the actual service user.
 
 ## Pitfalls
 
