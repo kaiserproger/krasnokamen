@@ -1195,3 +1195,71 @@ fn weather_gap_clear_countdown_survives_sleep() {
     assert_eq!(rig.state.weather, (Weather::Clear, 9_900));
     assert!(rig.state.sleepers.is_empty());
 }
+
+#[test]
+fn intact_bed_with_its_whole_exit_ring_sealed_uses_the_vanilla_above_fallback() {
+    // Vanilla 26.3 falls back above the bed when its stand-up search is empty.
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    rig.use_bed(1);
+    assert_eq!(rig.pose(rig.player), SLEEPING_POSE);
+    let foot_state = block(
+        &rig.state,
+        "minecraft:red_bed",
+        &[("facing", "east"), ("part", "foot")],
+    );
+    let head_state = block(
+        &rig.state,
+        "minecraft:red_bed",
+        &[("facing", "east"), ("part", "head")],
+    );
+    let stone = rig.state.registry.states.stone;
+    let halves = [
+        (rig.foot.x, rig.foot.y, rig.foot.z),
+        (rig.head.x, rig.head.y, rig.head.z),
+    ];
+    for anchor in [rig.head, rig.foot] {
+        for dx in -1..=1 {
+            for dz in -1..=1 {
+                if dx == 0 && dz == 0 {
+                    continue;
+                }
+                for dy in 0..=1 {
+                    let cell = (anchor.x + dx, anchor.y + dy, anchor.z + dz);
+                    if !halves.contains(&cell) {
+                        rig.state.world.set_block(cell.0, cell.1, cell.2, stone);
+                    }
+                }
+            }
+        }
+    }
+    for half in [rig.foot, rig.head] {
+        for dy in 1..=2 {
+            rig.state
+                .world
+                .set_block(half.x, half.y + dy, half.z, stone);
+        }
+    }
+    rig.state.world.fold_overlay();
+    assert_eq!(
+        rig.state.world.block_at(rig.foot.x, rig.foot.y, rig.foot.z),
+        Some(foot_state)
+    );
+    assert_eq!(
+        rig.state.world.block_at(rig.head.x, rig.head.y, rig.head.z),
+        Some(head_state)
+    );
+    let slot = rig.state.entities.slot_of(rig.player).expect("slot");
+    let [yaw, _, _] = rig.state.entities.rot(slot);
+    assert!(super::bed_exit(&rig.state, rig.head, yaw).is_none());
+    crate::sleep::wake(&mut rig.state, rig.player);
+    assert_eq!(rig.pose(rig.player), 0);
+    assert_eq!(
+        rig.state.entities.pos(slot),
+        [
+            f64::from(rig.head.x) + 0.5,
+            f64::from(rig.head.y) + 1.0 + 0.1,
+            f64::from(rig.head.z) + 0.5,
+        ]
+    );
+}

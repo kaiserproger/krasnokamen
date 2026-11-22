@@ -277,6 +277,18 @@ pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
                 if let Some(connection) = state.connections.entity_connection(entity) {
                     state.correct_position(connection, exit, yaw, pitch);
                 }
+            } else if is_bed(state, sleeper.bed) {
+                // Vanilla falls back above the bed when no stand-up position exists.
+                let above = [
+                    f64::from(sleeper.bed.x) + 0.5,
+                    f64::from(sleeper.bed.y) + 1.0 + 0.1,
+                    f64::from(sleeper.bed.z) + 0.5,
+                ];
+                state.entities.set_pos(slot, above);
+                state.entities.set_vel(slot, [0.0; 3]);
+                if let Some(connection) = state.connections.entity_connection(entity) {
+                    state.correct_position(connection, above, yaw, pitch);
+                }
             }
         }
         set_lying(state, entity, None);
