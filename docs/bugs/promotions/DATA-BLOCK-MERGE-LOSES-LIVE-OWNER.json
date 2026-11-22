@@ -1,0 +1,32 @@
+{
+  "id": "DATA-BLOCK-MERGE-LOSES-LIVE-OWNER",
+  "verdict": "promoted",
+  "fix_commit": "d42665ab0",
+  "fix_commit_full": "d42665ab0e7e26b5c0d344744cf6621d90d6fff7",
+  "promoted_at": "2026-11-22T09:04:23+00:00",
+  "tree_head": "38664621e62e097a00a8ebef7e43c2336a3078c1",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "fix_commit",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/command_data/block.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/command_data_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:command_data::tests::data_block_metadata_edit_preserves_live_brewing_owner": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_data::tests::data_block_metadata_edit_preserves_live_brewing_owner": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D79ClockPromote/.analysis/validation/20261122T090218-ledger-promote-p9z7ocru"
+}
