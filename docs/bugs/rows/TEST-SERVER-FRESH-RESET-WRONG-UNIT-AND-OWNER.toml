@@ -1,0 +1,10 @@
+[[bug]]
+id = "TEST-SERVER-FRESH-RESET-WRONG-UNIT-AND-OWNER"
+title = "Fresh-world reset checks the wrong service before deleting the world and defaults to the wrong binary owner"
+area = "harness"
+severity = "major"
+status = "open"
+source = "Static inspection of tools/dev/test-server/deploy-reset.sh:7-16 and solaris.service:7-8: the helper stops solaris but checks whether krasnokamen is active before deleting world; it verifies the archive listing but not the stopped solaris unit or surviving process, and defaults KRASNOKAMEN_SERVER_USER to solaris while the tracked unit runs as krasnokamen. The owner has prohibited executing this helper in any form, including mock or throwaway environments, until separate permission. The prepared repair remains isolated and has no behavioral proof."
+repro = "manual"
+regression = []
+failing_first = "reported"
