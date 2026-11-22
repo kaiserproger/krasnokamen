@@ -1,0 +1,30 @@
+{
+  "id": "CIVILIZATION-FUNDED-KIND-SITE-STARVATION",
+  "verdict": "promoted",
+  "fix_commit": "patch:081e849f57e8f4715ccbfcb0313ff741d4fe3d84071fb35aba9146dce2c9fca9",
+  "fix_commit_full": "patch:081e849f57e8f4715ccbfcb0313ff741d4fe3d84071fb35aba9146dce2c9fca9",
+  "promoted_at": "2026-11-22T09:07:02+00:00",
+  "tree_head": "38034fbabb1fd9f730294d1b5de7d15c85594f97",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "081e849f57e8f4715ccbfcb0313ff741d4fe3d84071fb35aba9146dce2c9fca9",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/construction.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::construction::site_tests::funded_mine_without_a_site_does_not_starve_a_legal_mason": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::construction::site_tests::funded_mine_without_a_site_does_not_starve_a_legal_mason": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D79ClockPromote/.analysis/validation/20261122T090602-ledger-promote-0jy5oqqa"
+}

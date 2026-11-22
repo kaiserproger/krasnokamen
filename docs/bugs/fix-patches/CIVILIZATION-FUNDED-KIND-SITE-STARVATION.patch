@@ -1,12 +1,12 @@
 diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
 --- a/crates/mc-core/src/settlements/construction.rs
 +++ b/crates/mc-core/src/settlements/construction.rs
-@@ -1556,7 +1556,7 @@
-             record,
-             funded
-                 .into_iter()
--                .take(1)
-+                .take(funded_count)
-                 .map(|blueprint| blueprint.expect("funded prefix")),
-             record.construction_cursor,
-             SITE_ATTEMPTS,
+@@ -1775,7 +1775,7 @@
+                     record,
+                     funded
+                         .into_iter()
+-                        .take(1)
++                        .take(funded_count)
+                         .map(|blueprint| blueprint.expect("funded prefix")),
+                     sweeps,
+                     house.cursor,
