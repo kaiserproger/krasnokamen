@@ -1,7 +1,7 @@
 # DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY — patch-mode fix identity (new fix)
 
 Fix: `docs/bugs/fix-patches/DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY.patch`
-(`fix_commit = "patch:6af67cbd37ca36b2a34ad7e360e2c29489b6f55ee143d1c5070028465d97126e"`).
+(`fix_commit = "patch:4b2427db26a3655cf61a61d70d0da199d367934cc6c193419d95588928724c90"`).
 Re-audit:
 `python3 -m tools.harness ledger promote DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY --fix-patch docs/bugs/fix-patches/DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY.patch --dry-run`
 
