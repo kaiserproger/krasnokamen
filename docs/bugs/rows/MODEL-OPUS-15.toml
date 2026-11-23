@@ -6,5 +6,6 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:170"
-regression = ["client:krasnokamen-client:entities::equipment::tests::player_back_uses_wings_asset_profile_priority_gliding_and_cape_exclusion"]
-repro_check = "candidate: in-tree code and a passing unit ref, no control; area=client, real-client check required"
+regression = ["harness:scene-shot:native-elytra", "client:krasnokamen-client:entities::equipment::tests::player_back_uses_wings_asset_profile_priority_gliding_and_cape_exclusion"]
+proving_assertions = { "harness:scene-shot:native-elytra" = "worn_elytra_drawn" }
+repro_check = "The elytra layer has been drawn since client:e8fe40c2 (pre-rename, not pinnable today). native-elytra is the first scene that observes it: on the current client the back ROI changes by 10682 px with a worn elytra against a bare chest (20261123T165555), while a restored control that re-breaks only the equipment layer turns worn_elytra_drawn red. candidate: area=client, real-client check required"
