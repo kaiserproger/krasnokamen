@@ -986,8 +986,7 @@ pub(super) fn journal_loop(
                                         break;
                                     }
                                     Err(std::sync::mpsc::TryRecvError::Empty) => {
-                                        if native_failed
-                                            .load(std::sync::atomic::Ordering::Acquire)
+                                        if native_failed.load(std::sync::atomic::Ordering::Acquire)
                                         {
                                             tracing::error!(
                                                 "native checkpoint writer died; world halting (fail closed)"

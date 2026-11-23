@@ -698,7 +698,8 @@ fn join_before(journal: std::thread::JoinHandle<()>, limit: std::time::Duration,
         journal.join().unwrap();
         let _ = finished.send(());
     });
-    done.recv_timeout(limit).unwrap_or_else(|_| panic!("{what}"));
+    done.recv_timeout(limit)
+        .unwrap_or_else(|_| panic!("{what}"));
 }
 
 /// The journal owner must not keep a sender of its own work queue alive: when
