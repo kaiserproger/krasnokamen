@@ -1,0 +1,30 @@
+{
+  "id": "DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY",
+  "verdict": "promoted",
+  "fix_commit": "patch:6af67cbd37ca36b2a34ad7e360e2c29489b6f55ee143d1c5070028465d97126e",
+  "fix_commit_full": "patch:6af67cbd37ca36b2a34ad7e360e2c29489b6f55ee143d1c5070028465d97126e",
+  "promoted_at": "2026-11-23T21:50:10+00:00",
+  "tree_head": "b5d9271a7e805fde9946c83e82d7efb0f482c9b7",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "6af67cbd37ca36b2a34ad7e360e2c29489b6f55ee143d1c5070028465d97126e",
+  "reversed_files": [
+    "crates/mc-core/src/tick/containers.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:chests::tests::integrity_reserved_refusal_with_a_cold_partner_closes_the_menu": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:chests::tests::integrity_reserved_refusal_with_a_cold_partner_closes_the_menu": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261123T214534-ledger-promote-7ck9ruav"
+}
