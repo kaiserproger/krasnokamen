@@ -68,10 +68,12 @@ fn suffocation_uses_the_vanilla_eye_box_not_the_foot_column_pin() {
         !sample(&mut state, entity, DamageKind::Suffocation),
         "a wall in the next cell is not contact for a centred body"
     );
-    // Near the +x edge the same box crosses into the wall's cell while the
-    // foot column's eye cell is still air: vanilla `Entity.isInWall` is the
-    // box, not the pin cell.
-    let at = [pos[0] + 0.4, pos[1], pos[2]];
+    // 0.3 past the centre the eye is 0.8 into the cell: the vanilla box
+    // (half-size 0.8 * half_width = 0.24) reaches 1.04 and crosses into the
+    // wall's cell while the foot column's eye cell is still air. This is the
+    // discriminating position: a half-size of 0.12 would reach only 0.92 and
+    // stay in the clear cell.
+    let at = [pos[0] + 0.3, pos[1], pos[2]];
     assert_eq!(at[0].floor(), pos[0].floor());
     state.entities.set_pos(slot, at);
     assert!(

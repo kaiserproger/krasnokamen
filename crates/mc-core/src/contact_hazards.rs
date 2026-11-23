@@ -167,8 +167,10 @@ fn eye_height(kind: crate::entities::EntityKind, pose: u8, height: f64) -> f64 {
         crate::entities::EntityKind::Mob { type_id }
         | crate::entities::EntityKind::Item { type_id }
         | crate::entities::EntityKind::ExperienceOrb { type_id } => {
-            mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id)
-                .map(mc_data::entity_types::canonical_dimensions)
+            mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(
+                crate::blueprint::wire_type_id(type_id),
+            )
+            .map(mc_data::entity_types::canonical_dimensions)
                 .filter(|dimensions| dimensions.height > 0.0)
                 .and_then(|dimensions| {
                     dimensions
@@ -181,13 +183,15 @@ fn eye_height(kind: crate::entities::EntityKind, pose: u8, height: f64) -> f64 {
 }
 
 /// Vanilla `Entity.isInWall`: `AABB.ofSize(eyePosition, width * 0.8, 1.0E-6,
-/// width * 0.8)` — the eye `eye` blocks above the feet, half-width
-/// `0.4 * width`, and a y span so thin that only the eye's own cell row is
-/// covered. A body standing near a cell boundary has its eye box in two cells
+/// width * 0.8)` — the eye `eye` blocks above the feet, half-size
+/// `0.4 * width` (i.e. `0.8 * half_width`), and a y span so thin that only the
+/// eye's own cell row is covered. A body standing near a cell boundary has its eye box in two cells
 /// on x and/or z; the pin cell at the foot column is not the whole test.
 #[inline]
 fn eye_box(pos: [f64; 3], shape: [f64; 2], eye: f64) -> ([i32; 3], [i32; 3]) {
-    let half = shape[0].min(2.0) * 0.4;
+    // `shape[0]` is the body's half width, so vanilla `width * 0.8 / 2` is
+    // `half_width * 0.8` (0.24 for a 0.6-wide player, not 0.12).
+    let half = shape[0].min(2.0) * 0.8;
     let eye_y = pos[1] + eye;
     (
         [

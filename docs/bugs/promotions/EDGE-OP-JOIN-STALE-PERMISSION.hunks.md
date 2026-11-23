@@ -29,15 +29,24 @@ body, the burst's op level and the post-burst registration are the pre-fix code.
 
 | Retained | Reason |
 |---|---|
-| `admit_native_session` signature (incl. `ip`) and the caller's `admit_native_session(…)` call | (b) the kept refs at `admin_tests.rs:302`, `:352`, `:536` call `admit_native_session` directly; a control that bypassed it would make the reds come from dead code (the rejected first version). |
-| `refresh_join_permission_tree` body | (b) the kept ref `join_burst_permission_change_refreshes_command_tree` calls it directly; keeping it green is required by the restore, and it is listed below as not evidence. |
-| `operator_updates` plumbing (`server.operator_updates`, the burst guard) | (b) the kept tests take that lock (`joining_session_and_deop_keep_native_permission_order`); the control simply does not use it on the admission path. |
+| `admit_native_session` signature (incl. `ip`) and the caller's `admit_native_session(…)` call at `connection.rs:393` | (b) the kept refs call `admit_native_session` directly (`admin_tests.rs:298`, `:335`, `:385`, `:514`, `:553` — `:58`/`:536` are definitions); a control that bypassed it would make the reds come from dead code (the rejected first version). |
+| `refresh_join_permission_tree` body | (b) the kept ref calls it directly (`admin_tests.rs:599`, `:613`); keeping it green is required by the restore, and it is listed below as not evidence. |
+| `server.operator_updates` field/plumbing | (b) the kept fence test takes that lock (`joining_session_and_deop_keep_native_permission_order`). The **burst guard itself is not retained**: the a/-side removes `let operator_guard = server.operator_updates.lock().await;` and its `drop` (hunk `@@ -484`), exactly the pre-fix code, which held no guard around registration. |
+
+## Kept caller behaviour on the a/-side
+
+The pre-fix admission path rejected a connection without a remote IP at `connection.rs:389-392`
+(`cannot admit player … remote IP unavailable`) and then admitted it through `join_session` **without
+registering** it; `admin.register` ran only after the join burst. The a/-side keeps that shape: the caller
+still builds `ip` (the retained `admit_native_session` signature needs it — rule (b)), the function's body
+ignores it (`let _ = ip;`) and does not register, and the post-burst `admin.register` returns. The kept refs
+call `admit_native_session` directly, so they are unaffected by the caller's IP handling.
 
 ## Control reds and which are evidence
 
 | ref | control | evidence? |
 |---|---|---|
-| `deop_between_join_submission_and_late_registration_keeps_native_level` | **red** at `admin_tests.rs:491` — `native permission level publication: connection 2 wants 0, published Some(4)` | **Yes — the row's symptom**: a real `deop` between Join submission and late registration never reaches the native Join, and the authoritative published level stays 4. The edge-level assert at `:489` is green; the red is the core publication. |
+| `deop_between_join_submission_and_late_registration_keeps_native_level` | **red** at `admin_tests.rs:491` — `native permission level publication: connection 2 wants 0, published Some(4)` | **Yes — the row's symptom**: a real `deop` between Join submission and late registration never reaches the native Join, and the authoritative published level stays 4. The edge-level assert at `:586` (`session_level(id) == 0`) is green; the red is the core publication. |
 | `deop_reaches_rejoining_native_session` | red at `admin_tests.rs:312` (`sessions_for_uuid(…).len()` 1 vs 2) | No — an edge-registry count: in the pre-fix order the second session is unregistered until the burst, which this test never reaches. Edge state is not evidence. |
 | `joining_session_and_deop_keep_native_permission_order` | red at `admin_tests.rs:401` (`Join must wait on operator fence`) | No — a precondition of the kept fence test; the pre-fix admission has no fence to wait on. |
 | `join_burst_permission_change_refreshes_command_tree` | green (calls `refresh_join_permission_tree` directly) | No — the function is kept as (b); it does not exercise admission ordering. |
@@ -45,3 +54,16 @@ body, the burst's op level and the post-burst registration are the pre-fix code.
 
 The restore is green on all five refs. The earlier row text's ":411 predicted, not observed" is superseded:
 the observed evidence red is `:491`.
+
+## Per-file map of the original `0504a280` commit
+
+| original file | current patch |
+|---|---|
+| `crates/mc-edge/src/server/connection.rs` (87 +/-): creates `admit_native_session` and `refresh_join_permission_tree`, replaces the direct `join_session` call, snapshots `burst_op_level`, takes the registration guard, calls the tree refresh | **this patch**: the admission fence (body = pre-fix level snapshot), the burst-level snapshot, the guard and the refresh call are reversed; the two function signatures and the caller's call are kept (b). |
+| `crates/mc-core/src/command_debug.rs`, `command_execution.rs` (7 +/- each) | (a) another row's behaviour — the command-thread/trace work; not this row's admission fence. |
+| `crates/mc-core/src/tick/entity_phase.rs` (8-), `dimensions_tests.rs`, `entity_phase_tests.rs`, `journal_touched_tests.rs`, `player_tests.rs`, `tick/statistics_tests.rs`, `crates/mc-edge/src/admin_tests.rs`, `computer_tests.rs` | test hunks (kept) and their call-site updates — not a production patch. |
+| `docs/bugs/ledger.toml` | documentation. |
+
+Note: the `operator_updates` lock around `op`/`deop` (`server.rs:1030`, `:1135`) is **not** part of
+`0504a280` (its stat has no `server.rs`); it belongs to the later op/deop batch and stays on both sides
+(reason (a) for `EDGE-QUEUED-OP-AFTER-DEOP`).

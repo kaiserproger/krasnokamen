@@ -19,12 +19,21 @@ pub(super) struct EntityDelta {
     pub(super) range: i32,
 }
 
+/// Test-only: how many spectator indexes were built (one per publish).
+#[cfg(test)]
+pub(super) static SPECTATOR_INDEX_BUILDS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
 #[derive(Default)]
 pub(crate) struct TickPlanIndex {
     pub(super) blocks: HashMap<(i32, i32), Vec<usize>>,
     pub(super) explosions: HashMap<(i32, i32), Vec<usize>>,
     /// Recipient impulses are independent of the 64-block visual index.
     pub(super) knockback: HashMap<EntityId, (usize, [f64; 3])>,
+    /// Roster entities whose game mode is spectator this publish: the answer
+    /// `broadcast_to` needs, built once instead of scanning the roster for
+    /// every visible player of every viewer.
+    pub(super) spectators: std::collections::HashSet<EntityId>,
     pub(super) events: HashMap<(i32, i32), Vec<usize>>,
     pub(super) entity_base: Option<u64>,
     /// Anti-xray: hideable ores a block change this tick just exposed, keyed by
@@ -88,6 +97,15 @@ impl TickPlanIndex {
 
     pub(crate) fn new(output: &TickOutput) -> Self {
         let mut index = Self::default();
+        index.spectators = output
+            .snapshot
+            .player_roster
+            .iter()
+            .filter(|player| player.game_mode == 3)
+            .map(|player| player.entity)
+            .collect();
+        #[cfg(test)]
+        SPECTATOR_INDEX_BUILDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         for (i, change) in output.changes.blocks.iter().enumerate() {
             let pos = (
                 change.position.x.div_euclid(16),

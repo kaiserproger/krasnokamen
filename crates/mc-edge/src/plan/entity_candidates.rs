@@ -17,6 +17,7 @@ pub(super) fn collect(
     view_distance: i32,
     scratch: &mut PlanScratch,
     spawn_credit: usize,
+    spectators: &std::collections::HashSet<EntityId>,
 ) {
     scratch.visible.clear();
     scratch.spawns.clear();
@@ -54,7 +55,7 @@ pub(super) fn collect(
                     scratch.tracking_ranges.insert(range);
                 }
                 if !super::entity_trackable(entity, &*viewer, view_distance)
-                    || !entity_interest::broadcast_to(snapshot, entity, viewer.entity_id)
+                    || !entity_interest::broadcast_to(snapshot, entity, viewer.entity_id, spectators)
                 {
                     continue;
                 }

@@ -54,7 +54,7 @@ fn fused_visible_matches_canonical_for_held_unheld_and_negative_chunks() {
     let out = output(vec![], rows, ChangeSet::default());
     let expected = canonical_visible(&out.snapshot, &viewer, view_distance);
     let mut scratch = PlanScratch::default();
-    collect(&out.snapshot, &mut viewer, view_distance, &mut scratch, 100);
+    collect(&out.snapshot, &mut viewer, view_distance, &mut scratch, 100, &spectators(&out));
     assert_eq!(scratch.visible, expected);
     assert!(scratch.visible.contains(&EntityId(10)));
     assert!(scratch.visible.contains(&EntityId(11)));
@@ -90,7 +90,7 @@ fn known_same_type_marks_seen_while_wrong_type_becomes_spawn_candidate() {
     );
     let mut scratch = PlanScratch::default();
     let before = viewer.plan_stamp;
-    collect(&out.snapshot, &mut viewer, 4, &mut scratch, 100);
+    collect(&out.snapshot, &mut viewer, 4, &mut scratch, 100, &spectators(&out));
     assert_eq!(viewer.plan_stamp, before + 1);
     assert_eq!(
         viewer
@@ -132,7 +132,7 @@ fn zero_spawn_credit_keeps_visible_but_leaves_spawns_empty() {
         ChangeSet::default(),
     );
     let mut scratch = PlanScratch::default();
-    collect(&out.snapshot, &mut viewer, 4, &mut scratch, 0);
+    collect(&out.snapshot, &mut viewer, 4, &mut scratch, 0, &spectators(&out));
     assert_eq!(scratch.visible, vec![EntityId(1), EntityId(10)]);
     assert!(scratch.spawns.is_empty());
     assert_eq!(scratch.spawns.capacity(), 0);
@@ -204,7 +204,12 @@ fn bosses_collect_only_wither_and_dragon_without_health_filter() {
         ChangeSet::default(),
     );
     let mut scratch = PlanScratch::default();
-    collect(&out.snapshot, &mut viewer, 4, &mut scratch, 100);
+    collect(&out.snapshot, &mut viewer, 4, &mut scratch, 100, &spectators(&out));
     // Default appearance health is 0.0: no health filter here, BossBaseline owns it.
     assert_eq!(scratch.bosses, vec![EntityId(10), EntityId(11)]);
+}
+
+/// The publish's spectator set, as the planner builds it.
+fn spectators(out: &TickOutput) -> std::collections::HashSet<EntityId> {
+    TickPlanIndex::new(out).spectators
 }

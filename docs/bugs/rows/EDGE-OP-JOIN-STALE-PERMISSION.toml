@@ -10,7 +10,9 @@ regression = ["cargo:mc-edge:server::admin_tests::joining_session_and_deop_keep_
 failing_first = "not recorded"
 # fix commit 0504a280 bundles unrelated API changes its tests need; the control reverses the admission order (level snapshot before registration, no operator fence), the burst permission snapshot and the join-tree refresh (docs/bugs/fix-patches/EDGE-OP-JOIN-STALE-PERMISSION.patch)
 # Window proof: deop_between_join_submission_and_late_registration_keeps_native_level parks the admission at the real boundary (Join submitted, session not yet registered) through the #[cfg(test)] AdmitRendezvous instrumentation in server/connection.rs, issues a real `deop`, and asserts the published native PermissionLevel is 0 (inverse: the Join's 4). Test-only instrumentation, identical on both patch sides, compiled out of release builds; the fixed order drops the operator fence before parking so the command cannot deadlock.
-# The stub refresh_join_permission_tree body on the control side is test-API adaptation, not a pre-image: the function did not exist before 0504a280.
+# The control keeps refresh_join_permission_tree with its real body (the kept ref calls it directly; the
+# kept caller calls admit_native_session, whose a/-side body is the pre-fix level snapshot — see
+# docs/bugs/promotions/EDGE-OP-JOIN-STALE-PERMISSION.hunks.md).
 # Stage2X SLICES.md:126 and receipts/XEdgeOps/control-A.log: deop_between_snapshot_and_registration_reaches_native_join stays green under reversal.
 fix_commit = "patch:7a30a926ec93da2eac398a6aafba067c0810796d57468ef82c7842c2f7786c60"
 promotion = "docs/bugs/promotions/EDGE-OP-JOIN-STALE-PERMISSION.json"
