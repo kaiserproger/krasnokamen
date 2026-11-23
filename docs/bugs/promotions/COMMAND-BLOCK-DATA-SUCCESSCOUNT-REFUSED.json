@@ -1,0 +1,33 @@
+{
+  "id": "COMMAND-BLOCK-DATA-SUCCESSCOUNT-REFUSED",
+  "verdict": "promoted",
+  "fix_commit": "7af558182",
+  "fix_commit_full": "7af55818293f354a7348da22f2a9668a72c578b5",
+  "promoted_at": "2026-11-23T16:07:54+00:00",
+  "tree_head": "7c88f533abf7c338ec0404733875decf3c98ef81",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/command_blocks.rs",
+    "crates/mc-core/src/command_context_deferred.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/command_data_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:command_blocks::tests::data_merge_admits_only_supported_fields_and_requires_operator": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_blocks::tests::data_merge_admits_only_supported_fields_and_requires_operator": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T160514-ledger-promote-6vg9w07e"
+}

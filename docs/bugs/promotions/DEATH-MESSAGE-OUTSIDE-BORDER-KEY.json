@@ -1,0 +1,35 @@
+{
+  "id": "DEATH-MESSAGE-OUTSIDE-BORDER-KEY",
+  "verdict": "promoted",
+  "fix_commit": "da9bca085da0c0c542cac42f95f38b373849bd99",
+  "fix_commit_full": "da9bca085da0c0c542cac42f95f38b373849bd99",
+  "promoted_at": "2026-11-23T16:19:35+00:00",
+  "tree_head": "7c88f533abf7c338ec0404733875decf3c98ef81",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/contact_hazards.rs",
+    "crates/mc-core/src/tick/death_message.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/contact_hazards_tests.rs",
+    "crates/mc-core/src/projectiles/payloads_tests.rs",
+    "crates/mc-core/src/tick/combat_parity_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:tick_tests::combat_parity_tests::parity_death_message_keys_match_the_damage_type_registry_and_language_file": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick_tests::combat_parity_tests::parity_death_message_keys_match_the_damage_type_registry_and_language_file": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T161620-ledger-promote-92b34yys"
+}

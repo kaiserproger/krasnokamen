@@ -1,0 +1,30 @@
+{
+  "id": "FROG-FROGLIGHT-ALWAYS-TEMPERATE",
+  "verdict": "promoted",
+  "fix_commit": "a7a0e3951",
+  "fix_commit_full": "a7a0e395150633a2924b9064a8567f9da2c0320e",
+  "promoted_at": "2026-11-23T16:13:58+00:00",
+  "tree_head": "7c88f533abf7c338ec0404733875decf3c98ef81",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/entity_loot.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:frog::tests::frog_variants_eat_magma_cube_and_drop_exact_froglight": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:frog::tests::frog_variants_eat_magma_cube_and_drop_exact_froglight": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T161107-ledger-promote-eq8qdnpe"
+}

@@ -1,0 +1,32 @@
+{
+  "id": "DATA-FACTION-NBT-HIDDEN",
+  "verdict": "promoted",
+  "fix_commit": "60ba27a64",
+  "fix_commit_full": "60ba27a64c645095f4bbc9345226d86a21a1af76",
+  "promoted_at": "2026-11-23T16:11:01+00:00",
+  "tree_head": "7c88f533abf7c338ec0404733875decf3c98ef81",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/command_data.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/command_summon_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:command_data::tests::data_mob_faction_is_public_only_while_affiliated": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_data::tests::data_mob_faction_is_public_only_while_affiliated": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T160754-ledger-promote-lyujcb2i"
+}
