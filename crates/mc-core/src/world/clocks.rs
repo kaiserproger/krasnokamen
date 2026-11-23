@@ -338,7 +338,10 @@ impl ChunkWorld {
         if self.clock_since.is_some_and(|since| from < since) {
             return None;
         }
-        Some(self.game_ticks_at(to).saturating_sub(self.game_ticks_at(from)))
+        Some(
+            self.game_ticks_at(to)
+                .saturating_sub(self.game_ticks_at(from)),
+        )
     }
 
     /// Game ticks the clock has run through `tick` (offset by the count before
