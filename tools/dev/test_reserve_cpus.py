@@ -209,17 +209,20 @@ class MemRunReservationTests(unittest.TestCase):
         self.assertIn('cover this whole pool', done.stderr)
         self.assertIn('keeps cpus=', done.stderr)
 
-    def test_a_failing_verdict_helper_is_named_and_the_scope_refused(self):
-        # ReviewD123Harness2 item 3(b): a crashed helper used to read as "none" and a real
-        # reservation was silently ignored. It must fail closed and show the helper's stderr.
+    def test_a_failing_verdict_helper_is_named_and_the_first_line_honoured(self):
+        # ReviewD123Harness2 3(b) / ReviewD123Harness1 6: a crashed helper used to read as "none" and
+        # a real reservation was silently ignored. It must fail closed: name the helper, show its
+        # stderr, and honour the file's first line (the CPU list) as a reservation.
         (self.root / 'reserved_cpus.py').write_text(
             "import sys\nprint('no module named reserved_cpus', file=sys.stderr)\nsys.exit(3)\n")
         self.state.mkdir()
         (self.state / 'reserved-cpus').write_text(f'0\n{os.getpid()} {starttime(os.getpid())}\n')
         done = self.run_true()
-        self.assertEqual(done.returncode, 75, done.stderr)
+        self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn('cannot judge', done.stderr)
+        self.assertIn('honouring its first line as a CPU list', done.stderr)
         self.assertIn('no module named reserved_cpus', done.stderr)
+        self.assertIn('reserved CPUs 0 are excluded', done.stderr)
         self.assertTrue((self.state / 'reserved-cpus').exists(), 'the reservation was left in place')
 
     def test_a_non_numeric_cancel_grace_is_named_before_the_scope_starts(self):

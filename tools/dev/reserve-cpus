@@ -13,8 +13,10 @@
 # reused), so a stale file cannot silently pin every later scope (#G4, CS341).
 # Clearing a corpse and creating a reservation are serialized on
 # `reserved-cpus.lock` (tools/dev/reserved_cpus.py): a reservation written while a
-# corpse is judged is never removed. Install order on a host: mem-run.sh first,
-# then this script; only the new pair is race-safe together.
+# corpse is judged is never removed. Install order on a host (ReviewD123Harness1 6):
+# `mem-run-guard.py` and `reserved_cpus.py` first, then `mem-run.sh`, then this
+# script — a newer wrapper refuses (exit 75) without its helper, and an older
+# wrapper does not know the owner line.
 set -euo pipefail
 dir=/tmp/solaris-mem-slots
 file=$dir/reserved-cpus

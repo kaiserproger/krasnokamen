@@ -71,6 +71,20 @@ def wait_scope_empty(cg: str, timeout: float = 60) -> None:
     raise AssertionError(f'the scope {cg} never emptied (cgroup.events did not report populated 0)')
 
 
+def wait_pid_exit(pid: int, timeout: float = 10) -> bool:
+    """True once `pid` is gone; waits on a pidfd, never on a sleep loop."""
+    try:
+        fd = os.pidfd_open(pid)
+    except ProcessLookupError:
+        return True
+    try:
+        poller = select.poll()
+        poller.register(fd, select.POLLIN)
+        return bool(poller.poll(int(timeout * 1000)))
+    finally:
+        os.close(fd)
+
+
 class CancelledScopeTests(unittest.TestCase):
     def sandbox(self):
         """A private mem-run.sh with its own state dir, slice and watchdog name."""
@@ -156,15 +170,8 @@ class CancelledScopeTests(unittest.TestCase):
             if pid == '-':
                 continue
             # The scope is empty; a task an init has not reaped yet is already dead and takes no CPU.
-            deadline = time.monotonic() + 10
-            while True:
-                try:
-                    os.kill(int(pid), 0)
-                except ProcessLookupError:
-                    break
-                if time.monotonic() >= deadline:
-                    self.fail(f'process {pid} survived in {cg} after the scope emptied')
-                time.sleep(0.05)
+            if not wait_pid_exit(int(pid), timeout=10):
+                self.fail(f'process {pid} survived in {cg} after the scope emptied')
 
     def test_a_term_honouring_child_ends_the_scope_before_the_escalation(self):
         # Companion check: it is green in the control too (the forwarding sweep also TERMs this

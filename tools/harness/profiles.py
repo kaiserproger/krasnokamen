@@ -136,13 +136,15 @@ def _judge_split_part(part: SplitPart, root: Path, log_path: Path, exit_code: in
 
 def _await_split_part(part: SplitPart, root: Path, log_path: Path,
                       proc: subprocess.Popen[Any], failures: list[str],
-                      timeout: float) -> dict[str, Any]:
+                      timeout: float, *, started_at: float | None = None) -> dict[str, Any]:
     """Wait for one child with that part's own full timeout, then judge its receipt.
 
-    The budget is measured from this part's start (`ctx.timeout_seconds`, 3600 s when unset), which
-    is also the per-leg timeout each child receives: a shared deadline would hand a later sequential
-    leg whatever the earlier one left and false-time-out a healthy run (review item 1)."""
-    deadline = time.monotonic() + timeout
+    The budget is measured from this part's *spawn* (`ctx.timeout_seconds`, 3600 s when unset),
+    which is also the per-leg timeout each child receives: a shared deadline would hand a later
+    sequential leg whatever the earlier one left and false-time-out a healthy run, and an
+    await-time deadline would give a queued concurrent part the time its earlier siblings spent
+    before it was even started (review item 1, second pass)."""
+    deadline = (started_at if started_at is not None else time.monotonic()) + timeout
     remaining = max(1.0, deadline - time.monotonic())
     try:
         exit_code = proc.wait(timeout=remaining)
@@ -185,15 +187,19 @@ def run_split(ctx: ProfileContext, profile: str, parts: list[SplitPart], *,
     if sequential:
         for part in parts:
             root, log_path, env = prepare(part)
+            spawned = time.monotonic()
             proc = _spawn_split(base_argv, env, log_path)
-            blocks.append(_await_split_part(part, root, log_path, proc, failures, per_part))
+            blocks.append(_await_split_part(part, root, log_path, proc, failures, per_part,
+                                            started_at=spawned))
     else:
         started = []
         for part in parts:
             root, log_path, env = prepare(part)
-            started.append((part, root, log_path, _spawn_split(base_argv, env, log_path)))
-        for part, root, log_path, proc in started:
-            blocks.append(_await_split_part(part, root, log_path, proc, failures, per_part))
+            spawned = time.monotonic()
+            started.append((part, root, log_path, _spawn_split(base_argv, env, log_path), spawned))
+        for part, root, log_path, proc, spawned in started:
+            blocks.append(_await_split_part(part, root, log_path, proc, failures, per_part,
+                                            started_at=spawned))
     if failures:
         raise RuntimeError("split part(s) failed: " + "; ".join(failures))
     return blocks

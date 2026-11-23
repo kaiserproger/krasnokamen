@@ -380,11 +380,11 @@ fi
 # owner and is honoured as-is (mixed-version compatibility).
 reserved=
 if [ -e "$dir/reserved-cpus" ]; then
-  # A failing helper must not silently drop a live reservation: fail closed, with its stderr.
+  # A failing helper must not silently drop a live reservation: fail closed. The file's first line is
+  # the CPU list by construction, so honour that much and say why (ReviewD123Harness1 6).
   verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>"$dir/reserved-cpus.err") || {
-    echo "mem-run: cannot judge $dir/reserved-cpus and will not ignore a possible CPU reservation: $(cat "$dir/reserved-cpus.err" 2>/dev/null)" >&2
-    rm -f "$dir/reserved-cpus.err"
-    exit 75
+    echo "mem-run: cannot judge $dir/reserved-cpus; honouring its first line as a CPU list: $(cat "$dir/reserved-cpus.err" 2>/dev/null)" >&2
+    verdict="keep $(head -n 1 "$dir/reserved-cpus")"
   }
   rm -f "$dir/reserved-cpus.err"
   case "$verdict" in

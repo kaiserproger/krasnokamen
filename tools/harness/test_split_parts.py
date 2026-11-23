@@ -152,6 +152,16 @@ class SplitPartsTests(unittest.TestCase):
         self.assertEqual([label for label, _ in waits], ["a", "b"])
         self.assertEqual([round(timeout) for _, timeout in waits], [1500, 1500])
 
+    def test_the_budget_is_measured_from_the_part_s_spawn_not_its_await(self):
+        # ReviewD123Harness1 10: a concurrent part awaited late used to get only what the clock left.
+        child = FakeChild(None)
+        with patch.object(profiles.time, "monotonic", return_value=1000.0), \
+                patch.object(profiles, "_judge_split_part", return_value={"label": "b"}):
+            profiles._await_split_part(profiles.SplitPart("b"), Path("/nonexistent"), Path("/nonexistent"),
+                                       child, [], 1500.0, started_at=0.0)
+        self.assertEqual([round(timeout) for timeout in child.waits], [500],
+                         "a part spawned at 0 with a 1500 s budget, awaited at 1000 s, has 500 s left")
+
     def test_the_screens_voice_split_driver_runs_its_legs_in_sequence(self):
         # HARNESS-SCREENS-VOICE-PARTS-OOM: the driver, not run_split, decides the gate's scope. Two
         # overlapping full legs exceeded one 12 GiB scope, so the driver passes sequential=True and

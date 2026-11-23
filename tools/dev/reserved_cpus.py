@@ -10,8 +10,9 @@ file under that lock: only the exact bytes that were judged stale are unlinked.
     python3 tools/dev/reserved_cpus.py verdict <state-dir>   # "none" | "keep <cpus>" | "stale <cpus>"
     python3 tools/dev/reserved_cpus.py clear <state-dir>     # remove the corpse we judged, if unchanged
 
-Install order on a host: mem-run.sh first, then reserve-cpus. An old mem-run ignores the
-owner line and honours any file it finds, so only the new pair is race-safe together.
+Install order on a host: `mem-run-guard.py` and this helper first, then `mem-run.sh`, then
+`reserve-cpus`. A wrapper refuses (exit 75) when this helper is missing, and an older wrapper
+ignores the owner line and honours any file it finds, so only the new three are race-safe together.
 """
 from __future__ import annotations
 
