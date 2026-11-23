@@ -216,6 +216,9 @@ pub struct Capabilities {
     pub hop_delay_scale: u64,
     /// `MagmaCube.jumpFromGround` size bonus, blocks per tick per size.
     pub hop_lift_per_size: f64,
+    /// Always aggressive (`Slime$SlimeMoveControl.tick` divides the delay by 3
+    /// when aggressive; `MagmaCube.canDealDamage` is `isEffectiveAi`).
+    pub hop_always_aggressive: bool,
     /// Avoids unrolled armadillos within six blocks (Spider.registerGoals).
     pub avoids_armadillos: bool,
     /// Instant health harms and instant damage heals (vanilla undead).
@@ -1411,7 +1414,12 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
         ),
         hops: matches!(name, "minecraft:slime" | "minecraft:magma_cube"),
         hop_delay_scale: if name == "minecraft:magma_cube" { 4 } else { 1 },
-        hop_lift_per_size: if name == "minecraft:magma_cube" { 0.1 } else { 0.0 },
+        hop_lift_per_size: if name == "minecraft:magma_cube" {
+            0.1
+        } else {
+            0.0
+        },
+        hop_always_aggressive: name == "minecraft:magma_cube",
         avoids_armadillos: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
         inverted_healing: ZOMBIE_FAMILY.contains(&name)
             || matches!(

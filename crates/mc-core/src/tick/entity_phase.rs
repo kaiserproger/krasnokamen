@@ -61,6 +61,7 @@ pub(super) struct ReadRow {
     pub(super) climbs_walls: bool,
     pub(super) head_follows_body: bool,
     pub(super) hops: bool,
+    pub(super) hop_aggressive: bool,
     pub(super) avoids_armadillos: bool,
     pub(super) aquatic_control: crate::species::AquaticControl,
     /// Resolved from the blueprint's goal set (data, not type names).
@@ -536,10 +537,13 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     zoglin_grid.batch(searches.filter(|row| row.hunts_living).map(query));
     laps.lap("target_grids");
     let cows_ref = &cow_cells;
+    // Only fed dolphins with a live route are copied, and only their own
+    // dimension's targets; the map is borrowed by the step, not shared by Arc.
+    let dolphin_targets = state.locate.dolphin_targets(state.dimension);
     // Work-stealing over the core's long-lived rayon workers (no threads
     // spawned per tick); `collect` keeps slot order.
     let ctx = StepCtx {
-        dolphin_targets: std::sync::Arc::new(state.locate.dolphin_targets(state.dimension)),
+        dolphin_targets: &dolphin_targets,
         rows: rows_ref,
         entities: &state.entities,
         battle: &state.hostile.battle,

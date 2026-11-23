@@ -832,7 +832,9 @@ fn admission_buffers_are_pooled_across_prepares() {
         state.spawn_mob(cow, [8.5 + f64::from(index % 8), 101.0, 8.5], 10.0);
     }
     state.entities.prepare_motion_hints(&state.registry);
-    let periods: Vec<u8> = (0..state.entities.len()).map(|index| u8::from(index % 4 != 0)).collect();
+    let periods: Vec<u8> = (0..state.entities.len())
+        .map(|index| u8::from(index % 4 != 0))
+        .collect();
     let env = PrepEnv {
         targets_empty: true,
         villagers_empty: true,
@@ -844,7 +846,13 @@ fn admission_buffers_are_pooled_across_prepares() {
     let first: Vec<_> = out
         .parts
         .iter()
-        .map(|part| (part.kept.as_ptr(), part.kept.capacity(), part.specials.as_ptr()))
+        .map(|part| {
+            (
+                part.kept.as_ptr(),
+                part.kept.capacity(),
+                part.specials.as_ptr(),
+            )
+        })
         .collect();
     assert!(!first.is_empty(), "the parallel pass pool must exist");
     assert!(first[0].1 > 0, "the pool kept its capacity");
@@ -856,7 +864,13 @@ fn admission_buffers_are_pooled_across_prepares() {
     let second: Vec<_> = out
         .parts
         .iter()
-        .map(|part| (part.kept.as_ptr(), part.kept.capacity(), part.specials.as_ptr()))
+        .map(|part| {
+            (
+                part.kept.as_ptr(),
+                part.kept.capacity(),
+                part.specials.as_ptr(),
+            )
+        })
         .collect();
     assert_eq!(
         first, second,
@@ -985,11 +999,12 @@ fn full_step_with_period(
     let row = read_row(&view, slot, flags, period, &RarePrep::of(state, slot)).0;
     let targets = [];
     let cow_cells = HashMap::default();
+    let dolphin_targets = std::collections::HashMap::default();
     let world = &state.world;
     let loaded = |x: i32, z: i32| world.has_chunk(x.div_euclid(16), z.div_euclid(16));
     let revision = |x, z| world.chunk_revision(x, z);
     let ctx = StepCtx {
-        dolphin_targets: Default::default(),
+        dolphin_targets: &dolphin_targets,
         rows: std::slice::from_ref(&row),
         entities: &state.entities,
         retained_targets: &state.hostile.targets,
@@ -1412,7 +1427,7 @@ fn far_idle_slime_does_not_rest_on_its_hop_tick() {
     let tick = (1..400)
         .find(|&tick| {
             !motion_thinks(tick, flags, period)
-                && crate::entity_motion::hop_due(id.0, tick, 1)
+                && crate::entity_motion::hop_due(id.0, tick, 1, false)
                 && crate::entity_motion::wander(
                     state.entities.body(slot).movement,
                     id.0,
@@ -1428,6 +1443,38 @@ fn far_idle_slime_does_not_rest_on_its_hop_tick() {
         state.entities.vel(slot)[1] > 0.0 || state.entities.pos(slot)[1] > before[1],
         "a non-decision hop tick must not be swallowed by early_entity_rest"
     );
+}
+
+#[test]
+fn far_slime_hop_tick_is_an_ai_decision_tick() {
+    // `think |= hop_tick`: without it a mid/far slime whose activation ring does
+    // not decide would hop only on decision phases and some never line up.
+    let (mut state, slot) = resting_mob("minecraft:slime");
+    let id = state.entities.body(slot).id;
+    state.entities.prepare_motion_hints(&state.registry);
+    let flags = state.entities.motion_flags(slot);
+    let period = MOB_FAR_PERIOD as u8;
+    let hop_tick = (1..400)
+        .find(|&tick| {
+            !motion_thinks(tick, flags, period)
+                && crate::entity_motion::hop_due(id.0, tick, 1, false)
+        })
+        .expect("a non-decision hop tick");
+    state.tick = hop_tick;
+    let view = PrepView::of(&state);
+    let (row, _) = read_row(&view, slot, flags, period, &RarePrep::of(&state, slot));
+    assert!(row.think, "a hop tick must be a decision tick");
+    assert!(row.hops);
+    let calm = (1..400)
+        .find(|&tick| {
+            !motion_thinks(tick, flags, period)
+                && !crate::entity_motion::hop_due(id.0, tick, 1, false)
+        })
+        .expect("a calm non-decision tick");
+    state.tick = calm;
+    let view = PrepView::of(&state);
+    let (row, _) = read_row(&view, slot, flags, period, &RarePrep::of(&state, slot));
+    assert!(!row.think, "a calm non-decision tick must stay calm");
 }
 
 #[test]

@@ -107,13 +107,17 @@ pub(in crate::tick) fn early_entity_rest(
         && !view.entities.row(slot).controls.no_ai
         && let Some(blueprint) = view.registry.blueprint(type_id)
         && blueprint.capabilities.hops
-        && crate::entity_motion::hop_due(
+    {
+        let aggressive = blueprint.capabilities.hop_always_aggressive
+            || view.hostile.targets.contains_key(&body.id);
+        if crate::entity_motion::hop_due(
             body.id.0,
             view.tick,
             blueprint.capabilities.hop_delay_scale.max(1),
-        )
-    {
-        return false;
+            aggressive,
+        ) {
+            return false;
+        }
     }
     if view.hostile.targets.contains_key(&body.id)
         || body
@@ -193,25 +197,9 @@ fn rest_proof_key(view: &PrepView, slot: EntitySlot, flags: u16) -> u64 {
 fn idle_rest_proved(view: &PrepView, slot: EntitySlot, flags: u16) -> bool {
     let index = slot.0 as usize;
     let body = &view.bodies[index];
-    let (hops, hop_scale) = match body.kind {
-        crate::entities::EntityKind::Mob { type_id } => {
-            match view.registry.blueprint(type_id) {
-                Some(blueprint) if blueprint.capabilities.hops => (
-                    !view.entities.row(slot).controls.no_ai,
-                    blueprint.capabilities.hop_delay_scale.max(1),
-                ),
-                _ => (false, 1),
-            }
-        }
-        _ => (false, 1),
-    };
-    // A hop tick is a decision tick: the rest memo must never swallow it.
-    if hops && crate::entity_motion::hop_due(body.id.0, view.tick, hop_scale) {
-        return false;
-    }
     let Some(proofs) = view
         .rest_proofs
-        .filter(|_| body.movement != crate::blueprint::MovementClass::Swimmer && !hops)
+        .filter(|_| body.movement != crate::blueprint::MovementClass::Swimmer)
     else {
         return idle_wander_motion_unchanged(view, slot);
     };
@@ -305,6 +293,7 @@ pub(in crate::tick) fn idle_wander_motion_unchanged(view: &PrepView, slot: Entit
             hops: false,
             hop_delay_scale: 1,
             hop_lift: 0.0,
+            hop_aggressive: false,
             climbs_walls: capabilities.climbs_walls,
             aquatic_control: capabilities.aquatic,
             air_supply: body.air_supply,

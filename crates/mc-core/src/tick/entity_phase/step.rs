@@ -25,8 +25,7 @@ pub(in crate::tick) struct StepCtx<'a> {
     pub(in crate::tick) players: crate::target_grid::TargetGrid<'a>,
     pub(in crate::tick) passive: passive_follow::Context<'a>,
     pub(in crate::tick) dolphin_toys: &'a [[f64; 3]],
-    pub(in crate::tick) dolphin_targets:
-        std::sync::Arc<std::collections::HashMap<EntityId, [f64; 3]>>,
+    pub(in crate::tick) dolphin_targets: &'a std::collections::HashMap<EntityId, [f64; 3]>,
     pub(in crate::tick) villagers: crate::target_grid::TargetGrid<'a>,
     pub(in crate::tick) golem_targets: crate::target_grid::TargetGrid<'a>,
     pub(in crate::tick) piglin_targets: crate::target_grid::TargetGrid<'a>,
@@ -519,6 +518,19 @@ pub(in crate::tick) fn step_entity(
         vel = drive;
     }
     let sampler = WorkerSampler { block_at, registry };
+    // Only a hopping body needs its blueprint's delay scale and jump bonus; the
+    // registry lookup and the cold row's slime size would otherwise be paid by
+    // every mob every tick.
+    let hop = row.hops.then(|| {
+        let scale = registry
+            .blueprint(row.type_id)
+            .map_or(1, |bp| bp.capabilities.hop_delay_scale.max(1));
+        let lift = registry.blueprint(row.type_id).map_or(0.0, |bp| {
+            f64::from(ctx.entities.row(row.slot).loot.slime_size.unwrap_or(1))
+                * bp.capabilities.hop_lift_per_size
+        });
+        (scale, lift)
+    });
     let motion = crate::entity_motion::step(
         crate::entity_motion::MotionInput {
             body: mc_physics::EntityBody {
@@ -542,13 +554,9 @@ pub(in crate::tick) fn step_entity(
             legacy_facing: row.battle,
             head_follows_body: row.head_follows_body,
             hops: row.hops && !row.standing,
-            hop_delay_scale: registry
-                .blueprint(row.type_id)
-                .map_or(1, |bp| bp.capabilities.hop_delay_scale.max(1)),
-            hop_lift: registry.blueprint(row.type_id).map_or(0.0, |bp| {
-                f64::from(ctx.entities.row(row.slot).loot.slime_size.unwrap_or(1))
-                    * bp.capabilities.hop_lift_per_size
-            }),
+            hop_delay_scale: hop.map_or(1, |(delay, _)| delay),
+            hop_lift: hop.map_or(0.0, |(_, lift)| lift),
+            hop_aggressive: row.hop_aggressive,
             climbs_walls: row.climbs_walls,
             aquatic_control: row.aquatic_control,
             air_supply: row.air_supply,

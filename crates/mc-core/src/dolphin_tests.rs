@@ -299,7 +299,16 @@ fn fed_dolphin_locates_the_structure_through_its_normal_goal_tick() {
     let (mut state, dolphin) = treasure_world(generator);
     let slot = state.entities.slot_of(dolphin).unwrap();
     let start = state.entities.pos(slot);
-    // A player-placed chest behind the dolphin is not a treasure target.
+    // Park the only player far from both leads so following cannot mask the
+    // target choice: the old approximation would swim at the chest on the
+    // opposite side, the vanilla goal at the wreck 22 blocks to +x.
+    let player = state.connections.entity_of(ConnectionId(1)).unwrap();
+    let player_slot = state.entities.slot_of(player).unwrap();
+    state
+        .entities
+        .set_pos(player_slot, [start[0] - 20.0, 200.0, start[2] + 20.0]);
+    // A player-placed chest 8 blocks on the side opposite the wreck is not a
+    // treasure target.
     let chest = state
         .registry
         .blocks
@@ -309,29 +318,40 @@ fn fed_dolphin_locates_the_structure_through_its_normal_goal_tick() {
         .0;
     state
         .world
-        .set_block(start[0] as i32 - 3, start[1] as i32, start[2] as i32, chest);
+        .set_block(start[0] as i32 - 8, start[1] as i32, start[2] as i32, chest);
     state.world.fold_overlay();
     feed_normally(&mut state, dolphin);
-    for _ in 0..1500 {
+    // The goal must resolve its lead to the DOLPHIN_LOCATED wreck and nothing
+    // else: the chest 8 blocks on -x is the old container approximation.
+    let mut chosen = None;
+    for _ in 0..300 {
         run_tick(&mut state, &[]);
-        if !got_fish(&state, slot) {
+        if let Some(lead) = crate::command_locate::dolphin_treasure(&state, dolphin) {
+            chosen = Some(lead);
             break;
         }
         std::thread::yield_now();
     }
+    match chosen {
+        Some(crate::command_locate::DolphinTreasure::Found { pos, .. }) => assert_eq!(
+            pos,
+            [30, 200, 8],
+            "the lead must be the shipwreck, never the chest"
+        ),
+        other => panic!("a DOLPHIN_LOCATED structure must answer the search: {other:?}"),
+    }
+    // Holding the fish, it swims toward the wreck (+x), away from the chest (-x).
+    let before = state.entities.pos(slot);
+    for _ in 0..60 {
+        run_tick(&mut state, &[]);
+        if !got_fish(&state, slot) {
+            break;
+        }
+    }
     let end = state.entities.pos(slot);
     assert!(
-        !got_fish(&state, slot),
-        "arrival clears GotFish: pos={end:?} treasure={:?} state={:?}",
-        crate::command_locate::dolphin_treasure(&state, dolphin),
-        state.entities.row(slot).entity_life.dolphin,
-    );
-    assert!(end[0] > start[0] + 1.0, "fed dolphin must swim: {end:?}");
-    let dx = 30.5 - end[0];
-    let dz = 8.5 - end[2];
-    assert!(
-        dx * dx + dz * dz < 16.0,
-        "the goal ends only within 4.0 of the shipwreck: {end:?}"
+        end[0] > before[0] + 0.5,
+        "the fed dolphin must swim toward the wreck: {end:?} from {before:?}"
     );
 }
 
@@ -458,7 +478,10 @@ fn a_fed_dolphin_low_on_air_keeps_gotfish_and_waits() {
     for _ in 0..12 {
         run_tick(&mut state, &[]);
     }
-    assert!(got_fish(&state, slot), "low air stops the goal, not GotFish");
+    assert!(
+        got_fish(&state, slot),
+        "low air stops the goal, not GotFish"
+    );
     assert_eq!(
         crate::command_locate::dolphin_treasure(&state, dolphin),
         None,
@@ -515,12 +538,18 @@ fn a_player_chest_without_a_located_structure_is_not_a_treasure_lead() {
     // searches DOLPHIN_LOCATED structures only; with none in range the goal
     // stops (`stuck`) and clears GotFish instead of steering at a container.
     let reg = registry();
-    let (mut state, dolphin) = treasure_world(Arc::new(EmptyWater { air: reg.states.air, water: reg.states.water }));
-    // Keep the only player behind the dolphin so any movement toward the chest
-    // would be the old container approximation, not player following.
+    let (mut state, dolphin) = treasure_world(Arc::new(EmptyWater {
+        air: reg.states.air,
+        water: reg.states.water,
+    }));
+    // A chest 10 blocks on +x (well past the old 4-block search) and the only
+    // player parked off the axis behind the dolphin: old code swims at the
+    // chest, vanilla stops with no DOLPHIN_LOCATED structure.
     let player = state.connections.entity_of(ConnectionId(1)).unwrap();
     let player_slot = state.entities.slot_of(player).unwrap();
-    state.entities.set_pos(player_slot, [8.5, 200.0, 8.5]);
+    state
+        .entities
+        .set_pos(player_slot, [8.5, 200.0, 8.5 + 20.0]);
     let slot = state.entities.slot_of(dolphin).unwrap();
     let start = state.entities.pos(slot);
     let chest = state
@@ -531,15 +560,28 @@ fn a_player_chest_without_a_located_structure_is_not_a_treasure_lead() {
         .default
         .0;
     state.world.set_block(
-        start[0] as i32 + 3,
+        start[0] as i32 + 10,
         start[1] as i32,
         start[2] as i32,
         chest,
     );
     state.world.fold_overlay();
     feed_normally(&mut state, dolphin);
+    let chest_at = [start[0] + 10.0, start[1], start[2]];
+    let mut closest = f64::INFINITY;
+    let mut ever_found = false;
     for _ in 0..300 {
         run_tick(&mut state, &[]);
+        if matches!(
+            crate::command_locate::dolphin_treasure(&state, dolphin),
+            Some(crate::command_locate::DolphinTreasure::Found { .. })
+        ) {
+            ever_found = true;
+        }
+        let at = state.entities.pos(slot);
+        let dx = at[0] - chest_at[0];
+        let dz = at[2] - chest_at[2];
+        closest = closest.min(dx * dx + dz * dz);
         if !got_fish(&state, slot) {
             break;
         }
@@ -550,8 +592,12 @@ fn a_player_chest_without_a_located_structure_is_not_a_treasure_lead() {
         "a missing structure stops the goal and clears GotFish"
     );
     assert!(
-        state.entities.pos(slot)[0] <= start[0] + 0.01,
-        "a player chest must not lead the dolphin toward it"
+        !ever_found,
+        "no DOLPHIN_LOCATED structure exists, so the chest must never become a lead"
+    );
+    assert!(
+        closest > 9.0,
+        "a player chest must not attract the dolphin: closest squared {closest}"
     );
 }
 
@@ -711,13 +757,7 @@ fn feed_normally(state: &mut TickState, dolphin: EntityId) {
     );
     state.players.get_mut(&actor).unwrap().inventory.slots[0] = cod;
     let mut intents = Vec::new();
-    assert!(interact(
-        state,
-        actor,
-        dolphin,
-        Hand::Main,
-        &mut intents
-    ));
+    assert!(interact(state, actor, dolphin, Hand::Main, &mut intents));
     assert_eq!(state.merge(&mut intents), 1);
     let slot = state.entities.slot_of(dolphin).unwrap();
     assert!(got_fish(state, slot), "merge feeding must set GotFish");

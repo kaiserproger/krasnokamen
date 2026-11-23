@@ -58,6 +58,9 @@ pub(crate) struct MotionInput {
     pub hop_delay_scale: u64,
     /// `MagmaCube.jumpFromGround` bonus: `getSize() * 0.1` blocks per tick.
     pub hop_lift: f64,
+    /// The body chases: `Slime$SlimeMoveControl.tick` divides its jump delay by
+    /// three (`javap -c` 26.1.2, `wt/D116BattleFacing/.../javap-slime-move-control.txt:136-150`).
+    pub hop_aggressive: bool,
     pub climbs_walls: bool,
     pub aquatic_control: AquaticControl,
     pub air_supply: i32,
@@ -488,7 +491,12 @@ pub(crate) fn step<S: BlockSampler>(
     body.velocity.z = input.drive[2] + impulse[1];
     if input.hops {
         if body.on_ground {
-            if hop_due(input.id, input.tick, input.hop_delay_scale) {
+            if hop_due(
+                input.id,
+                input.tick,
+                input.hop_delay_scale,
+                input.hop_aggressive,
+            ) {
                 // `LivingEntity.jumpFromGround`/`MagmaCube.jumpFromGround`: the
                 // tick that jumps keeps the wanted horizontal speed and stores
                 // `getJumpPower()` (+ magma's `size * 0.1`), which the vanilla
@@ -498,8 +506,8 @@ pub(crate) fn step<S: BlockSampler>(
                 // exactly the vanilla jump speed.
                 let gravity = mc_physics::GRAVITY_BLOCKS_PER_SECOND_SQUARED;
                 let tick = mc_physics::TICK_SECONDS;
-                let target = mc_physics::LIVING_JUMP_SPEED_BLOCKS_PER_SECOND
-                    + input.hop_lift / tick;
+                let target =
+                    mc_physics::LIVING_JUMP_SPEED_BLOCKS_PER_SECOND + input.hop_lift / tick;
                 body.velocity.y = target / config.vertical_air_drag + gravity * tick;
             } else {
                 // `SlimeMoveControl`: between hops there is no ground traction
@@ -704,12 +712,18 @@ fn recentred(before: [f32; 3], after: [f32; 3]) -> [f32; 3] {
 }
 
 /// Vanilla `Slime.getJumpDelay`: `random.nextInt(20) + 10`;
-/// `MagmaCube.getJumpDelay` multiplies that by four (javap -c, 26.3), and
-/// aggression does not change the delay — it only picks the jump direction.
-/// Deterministic from the body id and tick; the phase keeps bodies out of step.
-pub(crate) fn hop_due(id: i32, tick: u64, delay_scale: u64) -> bool {
+/// `MagmaCube.getJumpDelay` multiplies that by four, and
+/// `Slime$SlimeMoveControl.tick` divides the result by three while the body is
+/// aggressive (javap -c 26.1.2). The divisor therefore applies to the scaled
+/// delay, exactly like vanilla. This deterministic phase is an absolute clock,
+/// not vanilla's delay counted only while on the ground, so the observed period
+/// of a hopping body is the delay plus its flight time.
+pub(crate) fn hop_due(id: i32, tick: u64, delay_scale: u64, aggressive: bool) -> bool {
     let base = 10 + (unit(id, 0) * 20.0) as u64;
-    let period = base.saturating_mul(delay_scale.max(1));
+    let mut period = base.saturating_mul(delay_scale.max(1));
+    if aggressive {
+        period = (period / 3).max(1);
+    }
     let phase = (unit(id, 1) * period as f64) as u64;
     tick.wrapping_add(phase).is_multiple_of(period)
 }

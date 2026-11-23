@@ -64,8 +64,8 @@ pub(in crate::tick) fn prepare_rows(
         // reused tick to tick: one buffer set per chunk instead of three fresh
         // `Vec`s per chunk on every tick (about 2 k allocations per tick at
         // 1M slots). The concat order is still chunk order, i.e. slot order.
-        // Keep every buffer the scratch already owns (a smaller world must not
-        // free them) and clear them for this tick.
+        // `resize_with` keeps the pooled `AdmissionPart`s (and their inner
+        // capacity) across ticks; each is cleared for this tick.
         parts.resize_with(periods.len().div_ceil(PREP_CHUNK), AdmissionPart::default);
         for part in parts.iter_mut() {
             part.kept.clear();
@@ -419,11 +419,14 @@ pub(in crate::tick) fn read_row(
     // and some never line up at all. NoAI keeps the vanilla no-move-control
     // rule. `MagmaCube` multiplies the delay and lifts by its size.
     let hops = blueprint.is_some_and(|blueprint| blueprint.capabilities.hops);
-    let hop_delay_scale = blueprint
-        .map_or(1, |blueprint| blueprint.capabilities.hop_delay_scale.max(1));
+    let hop_delay_scale =
+        blueprint.map_or(1, |blueprint| blueprint.capabilities.hop_delay_scale.max(1));
+    let aggressive = blueprint
+        .is_some_and(|blueprint| blueprint.capabilities.hop_always_aggressive)
+        || view.hostile.targets.contains_key(&body.id);
     let hop_tick = hops
         && !row.controls.no_ai
-        && crate::entity_motion::hop_due(body.id.0, view.tick, hop_delay_scale);
+        && crate::entity_motion::hop_due(body.id.0, view.tick, hop_delay_scale, aggressive);
     let think = battle || motion_thinks(view.tick, flags, period) || hop_tick;
     let needs_rare = crate::enderman::needs_state(row)
         || crate::plugin_npcs::needs_state(row)
@@ -536,6 +539,7 @@ pub(in crate::tick) fn read_row(
         head_follows_body: blueprint
             .is_some_and(|blueprint| blueprint.capabilities.head_follows_body),
         hops: hops && !row.controls.no_ai,
+        hop_aggressive: aggressive,
         avoids_armadillos: blueprint
             .is_some_and(|blueprint| blueprint.capabilities.avoids_armadillos),
         aquatic_control: blueprint.map_or(crate::species::AquaticControl::Other, |blueprint| {

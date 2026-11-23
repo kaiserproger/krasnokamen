@@ -97,6 +97,7 @@ fn fall(state: &mut TickState, slot: EntitySlot) {
             hops: false,
             hop_delay_scale: 1,
             hop_lift: 0.0,
+            hop_aggressive: false,
             climbs_walls: false,
             aquatic_control,
             air_supply: body.air_supply,

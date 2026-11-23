@@ -299,6 +299,7 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
                 hops: false,
                 hop_delay_scale: 1,
                 hop_lift: 0.0,
+                hop_aggressive: false,
                 climbs_walls: false,
                 aquatic_control: crate::species::AquaticControl::Other,
                 air_supply: state.entities.body(slot).air_supply,
