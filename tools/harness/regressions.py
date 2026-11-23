@@ -18,7 +18,11 @@ from tools.dev.wtlib import PINS
 from .runtime import REPO_ROOT
 
 REQUIRED = {'id', 'title', 'area', 'repro', 'severity', 'status', 'source', 'regression'}
-OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_proof', 'proving_assertions'}
+OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_proof', 'proving_assertions',
+            # A fix whose every hunk is in test files: the corrected oracle IS the guard. The promotion
+            # runs two controls (docs/bugs/README.md): the pre-fix test hunks restored must go red on
+            # current code, and a committed defect-injection patch must turn the corrected test red.
+            'test_only_fix', 'control_b_patch'}
 PROMOTION_DIR = 'docs/bugs/promotions'
 
 
@@ -595,6 +599,20 @@ def run(ctx, *, cargo_junit: Path | None = None):
                 errors.append(f'{ident}: invalid ingress_proof')
         if 'failing_first' in bug and bug['failing_first'] not in ('not recorded', 'reported'):
             errors.append(f'{ident}: invalid failing_first')
+        test_only = bug.get('test_only_fix')
+        if 'test_only_fix' in bug and test_only is not True:
+            errors.append(f'{ident}: test_only_fix must be the boolean true, never text')
+        if test_only is True:
+            if not bug.get('repro_check'):
+                errors.append(f'{ident}: test_only_fix needs repro_check stating what the old oracle asserted '
+                              'and the independent evidence (data/spec/arithmetic) that the new one is right')
+            defect = bug.get('control_b_patch')
+            if not isinstance(defect, str) or not defect:
+                errors.append(f'{ident}: test_only_fix needs control_b_patch (a committed defect-injection patch)')
+            elif defect.startswith('/') or '..' in defect.split('/'):
+                errors.append(f'{ident}: control_b_patch must be a repo-relative path')
+        if 'control_b_patch' in bug and test_only is not True:
+            errors.append(f'{ident}: control_b_patch is only for a row with test_only_fix = true')
         refs = bug.get('regression')
         if not isinstance(refs, list) or any(not isinstance(ref, str) for ref in refs):
             errors.append(f'{ident}: regression must be a list of check refs')

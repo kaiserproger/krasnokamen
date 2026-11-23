@@ -569,6 +569,170 @@ regression = ["{ref}"]
 {extra}'''
 
 
+class TestOnlyFixTests(unittest.TestCase):
+    """A fix whose every hunk is a corrected test oracle (docs/bugs/README.md, `test_only_fix`).
+
+    The control runs twice: the pre-fix test hunks restored must go red on current code (A), and a
+    committed defect-injection patch must turn the corrected test red (B), so the guard's direction is
+    proven and not merely 'the old assertion was red'."""
+
+    OLD = 'class ExampleTests:\n    def test_guard(self):\n        assert value == "old"\n'
+    NEW = 'class ExampleTests:\n    def test_guard(self):\n        assert value == "ok"\n'
+
+    def git(self, root, *args):
+        return subprocess.run(['git', '-C', str(root), *args], check=True, capture_output=True, text=True,
+                              env={**os.environ, **GIT_ENV}).stdout.strip()
+
+    def scratch(self, production_hunk=False, covered=True, defect_text=None,
+                defect_path='docs/bugs/test-only/BUG-defect.patch', write_patch=True):
+        """Repo whose fix commit changes only the test oracle, plus a committed defect patch."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name) / 'repo'
+        for part in ('src', 'tools/harness', 'docs/bugs/test-only'):
+            (root / part).mkdir(parents=True)
+        self.git(root, 'init', '-q')
+        (root / 'src/engine.rs').write_text('value = ok\n')
+        (root / 'tools/harness/test_example.py').write_text(self.OLD)
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'base')
+        (root / 'tools/harness/test_example.py').write_text(self.NEW if covered else
+                                                            'class ExampleTests:\n    def test_other(self):\n        pass\n')
+        if production_hunk:
+            (root / 'src/engine.rs').write_text('value = ok # touched\n')
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'fix')
+        self.fix = self.git(root, 'rev-parse', 'HEAD')
+        # The defect the corrected oracle claims to catch: a production behavioural mutation.
+        (root / 'src/engine.rs').write_text('value = defect\n')
+        defect = subprocess.run(['git', '-C', str(root), 'diff', '--no-color'], check=True, capture_output=True,
+                                text=True, env={**os.environ, **GIT_ENV}).stdout
+        (root / 'src/engine.rs').write_text('value = ok\n')
+        if write_patch:
+            (root / defect_path).write_text(defect if defect_text is None else defect_text)
+        ledger.write_rows(root, f'''[[bug]]
+id = "BUG"
+title = "t"
+area = "harness"
+repro = "source"
+severity = "major"
+status = "open"
+source = "x"
+regression = ["python:tools.harness.test_example:ExampleTests.test_guard"]
+fix_commit = "{self.fix}"
+repro_check = "old oracle asserted value == old; vanilla 26.3 data says ok"
+test_only_fix = true
+control_b_patch = "{defect_path}"
+''')
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'ledger')
+        self.artifacts = Path(directory.name) / 'artifacts'
+        self.artifacts.mkdir()
+        return root
+
+    def runner(self, control_a_red=True, defect_red=True):
+        seen = []
+        def run(_ctx, refs, tree, _client):
+            test = (tree / 'tools/harness/test_example.py').read_text()
+            defect = 'defect' in (tree / 'src/engine.rs').read_text()
+            red = (defect and defect_red) or ('"old"' in test and control_a_red)
+            seen.append({'test': test, 'defect': defect, 'red': red})
+            return {ref: {'state': ledger.RED if red else ledger.GREEN, 'detail': ''} for ref in refs}
+        run.seen = seen
+        return run
+
+    def promote(self, root, runner):
+        return ledger.promote('BUG', root=root, ctx=profiles.ProfileContext(self.artifacts), runner=runner)
+
+    def test_promotion_runs_the_old_oracle_control_and_the_defect_injection(self):
+        root = self.scratch()
+        runner = self.runner()
+        receipt = self.promote(root, runner)
+        self.assertEqual(receipt['control'], 'test_hunks')
+        self.assertEqual(receipt['control_b']['patch'], 'docs/bugs/test-only/BUG-defect.patch')
+        self.assertEqual(len(receipt['control_b']['sha256']), 64)
+        self.assertEqual(receipt['control_b']['negative_control']['python:tools.harness.test_example:ExampleTests.test_guard']['state'], ledger.RED)
+        self.assertEqual(receipt['negative_control']['python:tools.harness.test_example:ExampleTests.test_guard']['state'], ledger.RED)
+        self.assertEqual(receipt['restored']['python:tools.harness.test_example:ExampleTests.test_guard']['state'], ledger.GREEN)
+        # A gone: the old oracle, B: the injected defect, restore: the corrected test on current code.
+        self.assertEqual([entry['red'] for entry in runner.seen], [True, True, False])
+        written = next(row for row in ledger.load_rows(root) if row['id'] == 'BUG')
+        self.assertEqual(written['status'], 'fixed')
+
+    def test_a_fix_commit_with_production_hunks_is_refused(self):
+        root = self.scratch(production_hunk=True)
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'src/engine.rs is production code'):
+            self.promote(root, runner)
+        self.assertEqual(runner.seen, [])
+
+    def test_an_old_oracle_that_is_green_on_current_code_is_refused(self):
+        root = self.scratch()
+        runner = self.runner(control_a_red=False)
+        with self.assertRaisesRegex(ledger.Refused, 'negative control.*did not go red'):
+            self.promote(root, runner)
+
+    def test_a_defect_control_that_stays_green_is_refused(self):
+        root = self.scratch()
+        runner = self.runner(defect_red=False)
+        with self.assertRaisesRegex(ledger.Refused, 'defect-injection control.*did not go red'):
+            self.promote(root, runner)
+        # Control A still ran and went red: the refusal is about B, not about A.
+        self.assertEqual([entry['red'] for entry in runner.seen], [True, False])
+
+    def test_a_missing_defect_patch_is_refused(self):
+        root = self.scratch(write_patch=False)
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'is not a file in the tree'):
+            self.promote(root, runner)
+        self.assertEqual(runner.seen, [])
+
+    def test_a_defect_patch_that_does_not_apply_is_refused(self):
+        root = self.scratch(defect_text='not a patch\n')
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'does not apply on the tree being promoted'):
+            self.promote(root, runner)
+
+    def test_refs_that_do_not_run_the_changed_test_file_are_refused(self):
+        root = self.scratch(covered=False)
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'refs run no test defined in'):
+            self.promote(root, runner)
+        self.assertEqual(runner.seen, [])
+
+    def test_the_row_flag_needs_its_evidence(self):
+        base = '''[[bug]]
+id = "B"
+title = "bug"
+area = "harness"
+repro = "source"
+severity = "major"
+status = "open"
+source = "report"
+regression = []
+repro_check = "old oracle wrote the wrong value"
+'''
+        cases = [
+            base + 'test_only_fix = "yes"\n',
+            base.replace('repro_check = "old oracle wrote the wrong value"\n', '') + 'test_only_fix = true\n',
+            base + 'test_only_fix = true\ncontrol_b_patch = "/tmp/absolute.patch"\n',
+            base + 'test_only_fix = true\n',
+            base + 'control_b_patch = "docs/bugs/test-only/defect.patch"\n',
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'docs/bugs/rows').mkdir(parents=True)
+            for text in cases:
+                with self.subTest(text=text):
+                    shutil.rmtree(root / 'docs/bugs/rows')
+                    (root / 'docs/bugs/rows').mkdir(parents=True)
+                    (root / 'docs/bugs/rows/B.toml').write_text(text)
+                    with patch.object(regressions, 'REPO_ROOT', root), \
+                         patch.object(regressions, 'BASE_FIXED', frozenset()):
+                        with self.assertRaises(ValueError):
+                            regressions.run(profiles.ProfileContext(root))
+
+
 class ClientRefTests(unittest.TestCase):
     """A client fix's test runs in the client checkout, so a client row can register a real ref."""
 

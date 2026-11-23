@@ -208,7 +208,8 @@ worker, runs the negative control.
    A missing mapping, timeout, launch error or crash cannot carry the control.
    The restore receipt covers only its reported refs; every other registered ref
    must run green on the candidate. A row whose only refs are unit tests cannot
-   use this form. The candidate is the
+   use this form.
+   The candidate is the
    exact tree: `HEAD` plus its uncommitted diff and untracked files
    (`docs/bugs/` aside), identified by a fingerprint; no commit is needed. The
    control and the restore worktrees reproduce it, verified by that fingerprint.
@@ -339,6 +340,28 @@ the lock never holds a token a running promote's stage needs. A promote that
 took the lock without a token deadlocked with wrapped promotes waiting for it
 (2026-11-12, the host stalled for an hour); the tool refuses to start in a
 worktree under `<work>/wt/` without a held token.
+
+### Test-only fixes (`test_only_fix`)
+
+Some rows are test-oracle defects: the product already matches vanilla and the guard is the corrected
+test. When **every** hunk of `fix_commit` is in a test file (no production hunk, and no inline
+`#[cfg(test)]` hunk in a production file), a row may set `test_only_fix = true` and name a committed
+defect-injection patch in `control_b_patch` (repo-relative, normally
+`docs/bugs/test-only/<ID>-defect.patch`). Promotion runs two controls and records both in
+`promote.json` (`control: "test_hunks"`, `control_b`):
+
+- **A, the old oracle**: reverse the fix's test-file hunks onto the candidate and require a registered
+  ref to go red. Only a real assertion failure counts; a removed test is unrunnable, never red.
+- **B, the defect injection**: apply `control_b_patch` — a minimal mutation of the production behaviour
+  the test claims to guard — to the restored candidate, require a registered ref red, then restore and
+  require every ref green. A control that stays green refuses promotion.
+
+The gate also refuses the flag when the fix commit changes any production file, when a changed test file
+holds no test one of the row's refs runs, when the defect patch is missing or does not apply, and when
+the row lacks `repro_check`. `repro_check` states what the old oracle asserted and the independent
+evidence (vanilla data/bytecode, spec, arithmetic) that the new one is right; the review of a test-only
+batch lists old versus new assertions and justifies every removed or loosened one. A row whose defect
+cannot be injected stays `fixed-unpromoted(test-only: oracle unproven)` — control A alone never promotes.
 
 ## Probing rows before assignment
 

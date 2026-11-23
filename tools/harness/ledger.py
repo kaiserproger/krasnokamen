@@ -753,6 +753,56 @@ def non_test_patch(root, commit):
     return _split_non_test(diff, lambda path: _git(root, 'show', f'{commit}:{path}')[1])
 
 
+def _split_test_hunks(diff):
+    """The fix commit's test-file hunks: (patch text, test files). Refused otherwise.
+
+    `test_only_fix` accepts a fix whose guard IS a corrected test oracle, so the control reverses the
+    test hunks instead of production hunks. It refuses any non-doc path that is not a test file: a fix
+    that also edits production code keeps the ordinary `non_test_patch` control."""
+    patch, files = [], []
+    for chunk in re.split(r'(?m)^(?=diff --git )', diff):
+        if not chunk:
+            continue
+        lines = chunk.splitlines(keepends=True)
+        match = re.match(r'diff --git a/(.+) b/(.+)$', lines[0].rstrip('\n'))
+        if match is None:
+            raise Refused(f'fix patch has an unparseable diff header: {lines[0].rstrip()!r}')
+        path = match.group(2)
+        if path.startswith('docs/') or path.endswith('.md'):
+            continue
+        if not _TEST_PATH.search(path):
+            raise Refused(f'{path} is production code: a test_only_fix fix commit may change only test files '
+                          '(use the ordinary non-test control for a real code fix)')
+        if not any(text.startswith('@@ ') for text in lines):
+            raise Refused(f'{path} changes without text hunks (binary or mode-only); cannot be a control')
+        patch.extend(lines)
+        files.append(path)
+    return ''.join(patch), files
+
+
+def _uncovered_test_files(candidate, test_files, refs):
+    """Changed test files that define no test a registered ref runs.
+
+    The flag must not attach unrelated refs: every test file the fix changed has to hold the exact
+    test function one of the row's refs executes (python `...:Class.method`, cargo `path::to::test`)."""
+    names = set()
+    for ref in refs:
+        try:
+            kind, _first, second = regressions._parse_ref(ref)
+        except ValueError:
+            continue
+        if kind == 'python':
+            names.add(second.rsplit('.', 1)[-1])
+        elif kind == 'cargo':
+            names.add(second.rsplit('::', 1)[-1])
+    missing = []
+    for path in test_files:
+        text = (candidate / path).read_text(errors='surrogateescape')
+        if not any(re.search(rf'\b(?:fn|def) {re.escape(name)}\b', text) for name in names):
+            missing.append(path)
+    return missing
+
+
 def _split_non_test(diff, source_of):
     """Split a diff into (patch text of its non-test hunks, reversed files, kept test files).
 
@@ -1356,6 +1406,9 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         raise Refused(f'{ident}: client-surface row needs a passed real-client receipt (--client-receipt <result.json>)')
     if client_receipt:
         receipt_info = check_client_receipt(root, client_receipt, graphical, tree_now)
+    test_only = row.get('test_only_fix') is True
+    if test_only and patch_mode:
+        raise Refused(f'{ident}: test_only_fix is only for a committed fix_commit, not {fix}')
     patch, fix_patch_text = None, None
     if patch_mode:
         if not fix_patch:
@@ -1364,16 +1417,34 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
     elif fix_patch:
         raise Refused(f'{ident}: --fix-patch is only for a fix_commit of the form patch:<sha256>')
     if not patch_mode:
-        patch, reversed_files, test_files = non_test_patch(root, full)
-        if not patch:
-            raise Refused(f'{ident}: fix commit {fix} has no non-test hunks to reverse')
+        if test_only:
+            _, diff = _git(root, 'diff', '--no-renames', '--no-color', f'{full}^1', full)
+            patch, reversed_files = _split_test_hunks(diff)
+            test_files = []
+            if not patch:
+                raise Refused(f'{ident}: fix commit {fix} changes no test file: test_only_fix needs a fix in test files')
+        else:
+            patch, reversed_files, test_files = non_test_patch(root, full)
+            if not patch:
+                raise Refused(f'{ident}: fix commit {fix} has no non-test hunks to reverse')
     reverse = ['apply', '-R', '--whitespace=nowarn', '-']
+    defect_control, defect = None, None
+    if test_only:
+        defect_path = root / row['control_b_patch']
+        if not defect_path.is_file():
+            raise Refused(f"{ident}: control_b_patch {row['control_b_patch']} is not a file in the tree")
+        defect = defect_path.read_bytes()
     with contextlib.ExitStack() as stack:
         stack.enter_context(_control_lock(root))
         # Restore always runs on the exact tree being promoted: its HEAD plus any uncommitted diff and
         # untracked files (verified against the fingerprint), never on fix_commit.
         candidate = stack.enter_context(_worktree(root, head, 'candidate'))
         _materialize(root, candidate, tree_now)
+        if test_only:
+            missing = _uncovered_test_files(candidate, reversed_files, refs)
+            if missing:
+                raise Refused(f"{ident}: test_only_fix refs run no test defined in {', '.join(missing)} "
+                              '(the changed test file must hold the exact test the row registers)')
         if patch_mode:
             # An uncommitted fix: the supplied patch, split like a commit; its identity is the hash of
             # its non-test hunks, and it must still apply in reverse on the exact candidate.
@@ -1399,6 +1470,19 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
             raise Refused(f"{ident}: negative control ({control_tree}) did not go red with the fix reversed: "
                           + '; '.join(f"{ref}={entry['state']}" + (f" ({entry['detail']})" if entry['detail'] else '') for ref, entry in control.items())
                           + ' (a check that stays green does not test the fix; one that cannot build or run without it cannot show an assertion failing)')
+        if test_only:
+            # Control B: restoring the old oracle only shows the old assertion was red, which a wrongly
+            # deleted assertion also gives. Re-introduce the defect the test claims to catch and require
+            # the corrected test to go red, so the guard's own direction is proven too.
+            _materialize(root, candidate, tree_now)
+            if _git(candidate, 'apply', '--check', '--whitespace=nowarn', '-', stdin=defect, check=False)[0]:
+                raise Refused(f"{ident}: control_b_patch {row['control_b_patch']} does not apply on the tree being promoted")
+            _git(candidate, 'apply', '--whitespace=nowarn', '-', stdin=defect)
+            defect_control = runner(ctx, refs, candidate, True)
+            if not any(entry['state'] == RED for entry in defect_control.values()):
+                raise Refused(f"{ident}: defect-injection control ({row['control_b_patch']}) did not go red: "
+                              + '; '.join(f"{ref}={entry['state']}" + (f" ({entry['detail']})" if entry['detail'] else '') for ref, entry in defect_control.items())
+                              + ' (the corrected test does not catch the behaviour it claims to guard)')
         _materialize(root, candidate, tree_now)
         # A ref the supplied receipt already passed on this HEAD is not rerun, unless it carried the red
         # control: its restore proves the red was the reversal, not the environment.
@@ -1412,6 +1496,10 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         'id': ident, 'verdict': 'promoted', 'fix_commit': fix, 'fix_commit_full': full,
         'promoted_at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
         'tree_head': head, 'tree_dirty': tree_now['dirty'], 'tree_sha256': tree_now['sha256'], 'control_tree': control_tree,
+        'control': 'test_hunks' if test_only else 'reversed_fix_hunks',
+        'control_b': ({'patch': row['control_b_patch'],
+                       'sha256': hashlib.sha256((root / row['control_b_patch']).read_bytes()).hexdigest(),
+                       'negative_control': defect_control} if test_only else None),
         'fix_patch_sha256': fix[len('patch:'):] if patch_mode else None,
         'reversed_files': reversed_files, 'kept_test_files': test_files,
         'negative_control': control, 'restored': restored, 'client_receipt': receipt_info,
