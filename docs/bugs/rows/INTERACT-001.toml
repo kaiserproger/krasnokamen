@@ -7,4 +7,4 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#INTERACT-001"
 regression = ["cargo:mc-core:interact_parity_tests::interact_parity_axes_preserve_properties_and_wear", "harness:entities:native-v2-ledger-axe"]
-fix_commit = "patch:95ada22797fa82828c6df5bd17626c6f99fa9cbafc3d23a2f8f1faf1085bb7f0"
+fix_commit = "patch:db1440f93672cc52aab0b039679e9f46201409758b3ebe0b0ead1f5599309634"

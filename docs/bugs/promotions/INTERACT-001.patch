@@ -1,0 +1,15 @@
+diff --git a/crates/mc-core/src/tick/input/interact.rs b/crates/mc-core/src/tick/input/interact.rs
+index 8567bd97d..a856be0b8 100644
+--- a/crates/mc-core/src/tick/input/interact.rs
++++ b/crates/mc-core/src/tick/input/interact.rs
+@@ -327,7 +327,9 @@ pub(in crate::tick) fn use_item_on(
+     if crate::vault::use_key(state, entity, *hand, *position, &held, changes) {
+         return;
+     }
+-    if crate::brushing::use_on(state, entity, *hand) {
++    if crate::vanilla_interact::axe(state, entity, *hand, *position)
++        || crate::brushing::use_on(state, entity, *hand)
++    {
+         return;
+     }
+     if crate::fire::use_on(

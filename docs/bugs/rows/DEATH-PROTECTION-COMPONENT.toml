@@ -7,5 +7,5 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-PROTECTION-COMPONENT"
 regression = ["cargo:mc-core:tick_tests::combat_parity_tests::death_protection_component_rescues_any_held_item_without_default_totem_effects", "harness:entities:native-v2-command-score-store"]
-fix_commit = "de780c882"
-repro_check = "Open. Same as TOTEM (shared old control); a stub is not accepted. Needs a real pre-image control on HEAD (owner decision requested)."
+fix_commit = "patch:6de54645be008b18f73184fd40fa1b2db5f13c8ac6748f8605468aeec2fd64ee"
+repro_check = "Open. Same withdrawn stub as TOTEM. The HEAD-equivalent patch reverses the rescue decision in commit_damage (real prior code); the component test fails at `{item} in slot {hand}` deaths assertion."

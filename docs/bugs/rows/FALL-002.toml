@@ -7,4 +7,4 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FALL-002"
 regression = ["cargo:mc-core:interact_parity_tests::interact_parity_brushing_completes_once", "harness:entities:native-v2-ledger-brush"]
-fix_commit = "patch:60881820e510c303c858d571fbf9255e78d357e5bf91a7c519431ec22d36b595"
+fix_commit = "patch:414ec86d1f67efd51c9430dbb72403a963ec78f772bc8281e5dec0f2deef0d85"
