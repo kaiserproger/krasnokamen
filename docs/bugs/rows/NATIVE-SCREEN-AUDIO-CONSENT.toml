@@ -8,4 +8,4 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#NATIVE-SCREEN-AUDIO-CONSENT"
 regression = ["harness:screens-voice-qa:owner_consent_names_app_audio", "harness:screens-voice-qa:owner_deny_sends_no_audio"]
 fix_commit = "client:a35187ca"
-repro_check = "candidate: the dialog title/body/choice strings live in src/computer/native/sharing.rs and the only registered check is the real-client screens-voice-qa gate (owner_consent_names_app_audio, owner_deny_sends_no_audio), which cannot run here - the profile had no real run in stage 2; stage 3"
+repro_check = "candidate: the dialog title/body/choice strings live in src/computer/native/sharing.rs and the only registered check is the real-client screens-voice-qa gate (owner_consent_names_app_audio, owner_deny_sends_no_audio), which cannot run here - the profile had no real run in stage 2; stage 3 BLOCKER 2026-11-23: screens-voice-qa cannot start on core f9a8d455 (staged basic-economy [services.runtime] refused, receipt 20261123T154550-screens-voice-qa-g2kwy5rz); blocked external: plugin ABI."

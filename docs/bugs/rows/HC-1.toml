@@ -8,4 +8,4 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-1"
 regression = ["harness:screens-voice-qa:native_voice_resets_on_non_voice_server", "client:krasnokamen-client:session::disconnect_forgets_the_previous_server_voice_negotiation"]
 fix_commit = "client:a35187ca"
-repro_check = "real-hunk control red (a35187ca's reset_voice() in disconnect reversed); real gate harness:screens-voice-qa:native_voice_resets_on_non_voice_server, whose profile had no stage-2 run; area=client, candidate"
+repro_check = "real-hunk control red (a35187ca's reset_voice() in disconnect reversed); real gate harness:screens-voice-qa:native_voice_resets_on_non_voice_server, whose profile had no stage-2 run; area=client, candidate BLOCKER 2026-11-23: screens-voice-qa cannot start on core f9a8d455 \u2014 the staged basic-economy package from ../solaris-default-plugins is refused ([services.runtime] unknown field, receipt 20261123T154550-screens-voice-qa-g2kwy5rz); needs a default-plugins checkout matching this core's plugin ABI."
