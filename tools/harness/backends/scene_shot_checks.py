@@ -291,7 +291,8 @@ def check_elytra(probe: ProbeSteps, artifact: Path) -> None:
             abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
         ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
     # The avatar's upper back at the fixed third-person camera. `back-none` is the same player
-    # with an empty chest slot, so only the worn layer differs; idle arm motion stays under 2000 px.
+    # with an empty chest slot, so only the worn layer differs; the same comparison against
+    # `back-plain` bounds the idle arm motion (`idle_back_motion_bounded`, under 2500 px).
     box = (556, 296, 724, 476)
     elytra = _changed(shots["back-elytra"][1], shots["back-none"][1], box)
     idle = _changed(shots["back-plain"][1], shots["back-none"][1], box)
