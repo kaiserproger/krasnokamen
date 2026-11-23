@@ -2305,7 +2305,12 @@ def _planner_status(
     status: dict[str, Any] = {}
     try:
         observed = _project_status(probe, capture)
-        status["projects"] = _project_progress(observed)
+        # The live Construction dialog clips its body to the client viewport: a settlement
+        # with four projects showed three and "Active projects: 4/8"
+        # (20261123T223724-civilization-seed-qa-wyc2jdia). This read is a diagnostic, so a
+        # body the client cut at the viewport edge is accepted; the stage checks that need
+        # every project use `_project_progress` without this flag.
+        status["projects"] = _project_progress(observed, clipped_ok=True)
         status["project_ui"] = observed.get("ui_nodes", [])
     except Exception as exc:
         status["projects_error"] = str(exc)[:300]
