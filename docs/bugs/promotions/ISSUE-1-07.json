@@ -1,0 +1,53 @@
+{
+  "id": "ISSUE-1-07",
+  "verdict": "promoted",
+  "fix_commit": "patch:0424e7aa22b5d6e3947f2be4ad4d6542733a825c0bc566b1be60fad7c6a0cc3e",
+  "fix_commit_full": "patch:0424e7aa22b5d6e3947f2be4ad4d6542733a825c0bc566b1be60fad7c6a0cc3e",
+  "promoted_at": "2026-11-23T23:46:46+00:00",
+  "tree_head": "5f89dc39d335dc746af7d7118881135f437cd820",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "0424e7aa22b5d6e3947f2be4ad4d6542733a825c0bc566b1be60fad7c6a0cc3e",
+  "reversed_files": [
+    "crates/mc-core/src/villager/brain.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "harness:village-qa:miner_deposit": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run village-qa --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T233610-ledger-promote-lrj4qis9/regressions-client-0.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T233610-ledger-promote-lrj4qis9/client-artifacts/20261123T233616-village-qa-i2q9n5r8/result.json"
+    },
+    "harness:village-qa:lumberjack": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run village-qa --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T233610-ledger-promote-lrj4qis9/regressions-client-0.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T233610-ledger-promote-lrj4qis9/client-artifacts/20261123T233616-village-qa-i2q9n5r8/result.json"
+    }
+  },
+  "restored": {
+    "harness:village-qa:miner_deposit": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T233610-ledger-promote-lrj4qis9/client-artifacts/20261123T234519-village-qa-gni5n9x6/result.json"
+    },
+    "harness:village-qa:lumberjack": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T233610-ledger-promote-lrj4qis9/client-artifacts/20261123T234519-village-qa-gni5n9x6/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T232952-village-qa-rr7nhfzv/result.json",
+    "tree_head": "5f89dc39d335dc746af7d7118881135f437cd820",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "f341d78ea71625186f51d4bab095c0cc04367341c901d66ff03a43a7b01c5694",
+    "covers": [
+      "harness:village-qa:miner_deposit",
+      "harness:village-qa:lumberjack"
+    ],
+    "profile": "village-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T233610-ledger-promote-lrj4qis9"
+}

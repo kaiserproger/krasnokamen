@@ -4,10 +4,11 @@ title = "Individual buildings and upgrades missing"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1 (build separate buildings: walls, production, military, fortification, and upgrade them); implemented by 177a1205 (2026-10-19: certified buildings by blocks, levels 1-3, `/settlement building certify|upgrade|list`, blueprints) and 18f71536 (Builder blueprint orders and upgrades, docs/settlements/construction.md#owner-build-requests). Fix patch docs/bugs/fix-patches/ISSUE-1-09.patch is the one statement that raises a certificate's level in settlements/buildings.rs `upgrade`; reversing it makes every upgrade reply `to level 1` and change nothing. The real-client scene certifies a wall, tower (fortification), barracks (military) and farmer workshop (production), expands the wall to its next level and gives the workshop a second composter, and checks `Upgraded building #<id> to level 2.` for both. Builder-built coverage gaps are the row ISSUE-1-09-BUILDERS-CANNOT-BUILD-GATES-OR-MOST-WORKSHOPS"
 regression = ["cargo:mc-core:settlements::buildings::tests::workshop_certifies_upgrades_and_caps_distinct_slots", "harness:scene-shot:native-settlement-buildings-upgrade"]
 failing_first = "not recorded"
 fix_commit = "patch:e193f9c8a608a391c69ddcfdf9d2d5ba89a0d6b243b017d61c2e58c62ec6a358"
 # Reopened 2026-11-13: qa-breaker verdict blocked (receipts/Issue1Breaker/REPORT.md: all-kinds, explicit
 # order and recovery coverage incomplete). Refs and fix_commit stand; re-promote after the breaker accepts.
+promotion = "docs/bugs/promotions/ISSUE-1-09.json"

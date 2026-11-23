@@ -1,0 +1,76 @@
+{
+  "id": "VILLAGER-RESIDENT-HOLDS-OPEN-AIR-BED",
+  "verdict": "promoted",
+  "fix_commit": "patch:bf632d422b416bf00f6468002765454fa756cc291fc3a31381133f6ea7b29d14",
+  "fix_commit_full": "patch:bf632d422b416bf00f6468002765454fa756cc291fc3a31381133f6ea7b29d14",
+  "promoted_at": "2026-11-23T21:46:48+00:00",
+  "tree_head": "caf5ce7c480a94c825b921a72949a4203233e6fd",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "bf632d422b416bf00f6468002765454fa756cc291fc3a31381133f6ea7b29d14",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/allocator.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::allocator::claim_tests::breeding_spare_bed_of_a_resident_is_never_an_open_air_bed": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:settlements::allocator::claim_tests::removing_the_roof_releases_a_residents_bed": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:settlements::allocator::claim_tests::open_air_claim_recorded_before_the_rule_is_released_on_load": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:settlements::allocator::claim_tests::bound_resident_leaves_an_open_air_bed_to_a_villager_that_sleeps_in_it": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::brain::tests::breeding_tests::open_air_only_settlement_gives_residents_no_home_rations_or_births": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-village-open-air-home": {
+      "state": "unrunnable",
+      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/caf5ce7c480a-server-x86_64-unknown-linux-gnu-incr/krasnokamen: [Errno 2] No such file or directory: '/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/ledger-builds/1acca8340f9fd0a118fb7948a39086125b85ca20c7a270ef387b3dbb8df39bbd.json'. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::allocator::claim_tests::breeding_spare_bed_of_a_resident_is_never_an_open_air_bed": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::allocator::claim_tests::removing_the_roof_releases_a_residents_bed": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::allocator::claim_tests::open_air_claim_recorded_before_the_rule_is_released_on_load": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::allocator::claim_tests::bound_resident_leaves_an_open_air_bed_to_a_villager_that_sleeps_in_it": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::breeding_tests::open_air_only_settlement_gives_residents_no_home_rations_or_births": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T212209-native-village-open-air-home-34fua6y2/result.json",
+    "tree_head": "caf5ce7c480a94c825b921a72949a4203233e6fd",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "1acca8340f9fd0a118fb7948a39086125b85ca20c7a270ef387b3dbb8df39bbd",
+    "covers": [
+      "harness:scene-shot:native-village-open-air-home"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T214203-ledger-promote-mvr8lk40"
+}

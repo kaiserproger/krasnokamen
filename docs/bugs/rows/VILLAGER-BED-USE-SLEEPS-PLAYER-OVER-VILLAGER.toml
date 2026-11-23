@@ -4,8 +4,9 @@ title = "Using a bed a villager sleeps in puts the player to bed on the same cli
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakIssue1x11 break-it pass on ISSUE-1-11, finding F3 (receipts/BreakIssue1x11/report.md, attack C2 2/2). Vanilla 26.x javap: BedBlock.useWithoutItem calls kickVillagerOutOfBed on an occupied bed and returns before Player.startSleepInBed; SleepInBed.COOLDOWN_AFTER_BEING_WOKEN = 100. Cause: sleep::use_bed checked only player sleepers. The bed block's occupied property is still not mirrored for any sleeper (Solaris derives occupancy from sleepers)."
 regression = ["cargo:mc-core:sleep::tests::using_a_bed_a_villager_sleeps_in_only_wakes_the_villager", "cargo:mc-core:sleep::tests::kicked_villager_lies_down_again_only_after_the_wake_cooldown", "harness:scene-shot:native-village-occupied-bed"]
 failing_first = "reported"
 fix_commit = "patch:2c325bc08a93459835f22e53c301cf342f429efe2c54f2af66a58fba352d5734"
+promotion = "docs/bugs/promotions/VILLAGER-BED-USE-SLEEPS-PLAYER-OVER-VILLAGER.json"
