@@ -1,0 +1,54 @@
+{
+  "id": "HARNESS-SCREENS-VOICE-PARTS-OOM",
+  "verdict": "promoted",
+  "fix_commit": "patch:2a7be2c9a7ae9d9f365f809088367a4d60b1d5db0ec121cfd21cf9d6c431bd08",
+  "fix_commit_full": "patch:2a7be2c9a7ae9d9f365f809088367a4d60b1d5db0ec121cfd21cf9d6c431bd08",
+  "promoted_at": "2026-11-23T18:43:44+00:00",
+  "tree_head": "f164f9191d7801e8c60e18e406e8cf49e1c4317c",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "2a7be2c9a7ae9d9f365f809088367a4d60b1d5db0ec121cfd21cf9d6c431bd08",
+  "reversed_files": [
+    "tools/harness/backends/screens_voice_qa.py",
+    "tools/harness/profiles.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_each_sequential_leg_gets_its_own_full_timeout": {
+      "state": "unrunnable",
+      "detail": "no executed test or unittest error; see log"
+    },
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_other_split_gates_keep_the_concurrent_start": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/harness/test_split_parts.py",
+        "line": 136,
+        "error": "AssertionError"
+      }
+    },
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_parts_run_one_at_a_time_so_two_full_legs_never_share_a_scope": {
+      "state": "unrunnable",
+      "detail": "no executed test or unittest error; see log"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_each_sequential_leg_gets_its_own_full_timeout": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_other_split_gates_keep_the_concurrent_start": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_parts_run_one_at_a_time_so_two_full_legs_never_share_a_scope": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T182723-ledger-promote-rc8psyxe"
+}
