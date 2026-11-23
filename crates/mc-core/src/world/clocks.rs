@@ -308,6 +308,102 @@ impl ChunkWorld {
         (start < end).then_some((start, end))
     }
 
+    /// Record this tick's held span once. `set_simulation_clock` published
+    /// `(held at tick, held at tick-1)`; a held tick advances the count by one.
+    /// Ticks are contiguous while a world is ticked; a gap (a parked child
+    /// dimension) records no span for the missing ticks.
+    fn record_clock_tick(&mut self, tick: u64) {
+        if self.clock_recorded.is_some_and(|last| tick <= last) {
+            return;
+        }
+        if self.clock_since.is_none() {
+            self.clock_since = Some(tick);
+            self.clock_held_base = self.sim_held_before_tick;
+        }
+        if self.sim_held_ticks > self.sim_held_before_tick {
+            match self.clock_spans.last_mut() {
+                Some(span) if span.1 == tick => span.1 = tick.saturating_add(1),
+                _ => self.clock_spans.push((tick, tick.saturating_add(1))),
+            }
+        }
+        self.clock_recorded = Some(tick);
+    }
+
+    /// Game ticks simulated in `(from, to]` from the recorded held spans, or
+    /// `None` when `from` predates the recorded history (a recovered or
+    /// re-anchored baseline; the caller then resets without projecting rather
+    /// than over-advancing through a hold).
+    #[must_use]
+    pub(crate) fn simulated_game_ticks(&self, from: u64, to: u64) -> Option<u64> {
+        if self.clock_since.is_some_and(|since| from < since) {
+            return None;
+        }
+        Some(self.game_ticks_at(to).saturating_sub(self.game_ticks_at(from)))
+    }
+
+    /// Game ticks the clock has run through `tick` (offset by the count before
+    /// [`Self::clock_since`]); differences across held spans are exact.
+    fn game_ticks_at(&self, tick: u64) -> u64 {
+        let mut held = self.clock_held_base;
+        for &(start, end) in &self.clock_spans {
+            if start > tick {
+                break;
+            }
+            // `held_ticks(tick)` counts a held tick at `tick` itself, so the
+            // overlap is over `[start, min(end, tick + 1))`.
+            held = held.saturating_add(end.min(tick.saturating_add(1)).saturating_sub(start));
+        }
+        tick.saturating_sub(held)
+    }
+
+    /// Visit `(first, last]` spans of running ticks inside `(from, to]`;
+    /// `first` is the boundary before the span and may be a held tick. Mirrors
+    /// `ReplayGameClock::running_intervals` for the live journal mirror.
+    pub(crate) fn for_each_running_interval(
+        &self,
+        from: u64,
+        to: u64,
+        mut visit: impl FnMut(u64, u64),
+    ) {
+        if to <= from {
+            return;
+        }
+        let mut start = from;
+        for &(held_start, held_end) in &self.clock_spans {
+            if held_start > to {
+                break;
+            }
+            if held_end <= from {
+                continue;
+            }
+            if held_start > start {
+                let last = held_start - 1;
+                if start < last {
+                    visit(start, last);
+                }
+            }
+            start = start.max(held_end.saturating_sub(1));
+        }
+        if start < to {
+            visit(start, to);
+        }
+    }
+
+    /// Last running tick at or before `tick` (`tick` itself when it is not
+    /// held). Mirrors `ReplayGameClock::last_running_at`.
+    #[must_use]
+    pub(crate) fn last_running_at(&self, tick: u64) -> u64 {
+        for &(held_start, held_end) in self.clock_spans.iter().rev() {
+            if held_end <= tick {
+                break;
+            }
+            if held_start <= tick {
+                return held_start.saturating_sub(1);
+            }
+        }
+        tick
+    }
+
     pub(crate) fn set_simulation_clock(&mut self, held_ticks: u64, held_before_tick: u64) {
         self.sim_held_ticks = held_ticks;
         self.sim_held_before_tick = held_before_tick;
@@ -372,6 +468,7 @@ impl ChunkWorld {
     /// [`Self::set_active_chunks`] stores then calls this same method.
     pub fn refresh_active_clock(&mut self, tick: u64) {
         self.sim_tick = tick;
+        self.record_clock_tick(tick);
         let held_ticks = self.sim_held_ticks;
         let held_before_tick = self.sim_held_before_tick;
         // Hot path: no per-tick allocation or sorting. Disjoint field borrows

@@ -95,6 +95,18 @@ pub struct ChunkWorld {
     sim_tick: u64,
     sim_held_ticks: u64,
     sim_held_before_tick: u64,
+    /// Native ticks whose game clock was held, as half-open `[start, end)`
+    /// spans, recorded by [`ChunkWorld::refresh_active_clock`]. The journal
+    /// mirror projects game time from them exactly as replay's
+    /// `ReplayGameClock` does, so a held interval never advances a comparison
+    /// image.
+    clock_spans: Vec<(u64, u64)>,
+    /// First native tick the spans cover; earlier anchors have no projection.
+    clock_since: Option<u64>,
+    /// Held-tick count before [`Self::clock_since`].
+    clock_held_base: u64,
+    /// Last tick whose span was recorded (refreshes are idempotent).
+    clock_recorded: Option<u64>,
     /// Parent-managed active membership (hysteresis set). `refresh_active_clock`
     /// reconciles it against residency; cached stationary ticks skip re-sends.
     active_set: HashSet<ChunkPos>,
@@ -498,6 +510,10 @@ impl ChunkWorld {
             sim_tick: 0,
             sim_held_ticks: 0,
             sim_held_before_tick: 0,
+            clock_spans: Vec::new(),
+            clock_since: None,
+            clock_held_base: 0,
+            clock_recorded: None,
             active_set: HashSet::default(),
             block_only: HashSet::default(),
             active_revision: 0,

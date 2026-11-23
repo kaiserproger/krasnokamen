@@ -1161,6 +1161,102 @@ fn activity_churn_journal_microbench() {
 }
 
 #[test]
+fn held_game_clock_emits_no_mirror_images_inside_the_hold() {
+    let mut state = fixture();
+    let chunk = crate::boundary::ChunkPos { x: 0, z: 0 };
+    state.tickets.insert("held-clock".into(), (chunk, 0));
+    state
+        .world
+        .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+    state.refresh_active_chunks(0);
+    let cow = spawn_idle_cow(&mut state, 8.5);
+    let slot = state.entities.slot_of(cow).unwrap();
+    // A breeding cooldown makes the row clock-sensitive, so its journal image
+    // is projected lazily from the world clock.
+    state.entities.row_mut(slot).breed_cooldown = 100;
+    let first = step(&mut state);
+    assert!(
+        image_ids(&first).contains(&cow.0),
+        "the first touch journals the live row"
+    );
+    // The first (running) tick already spent one countdown tick.
+    let held_value = state.entities.row(slot).breed_cooldown;
+    assert_eq!(held_value, 99);
+    state.tick_control.set_frozen(true);
+    for _ in 0..8 {
+        let entries = step(&mut state);
+        assert!(
+            image_ids(&entries).is_empty(),
+            "a held game clock must not churn a comparison image: {:?}",
+            image_ids(&entries)
+        );
+        assert_eq!(
+            state.entities.row(slot).breed_cooldown,
+            held_value,
+            "held ticks do not simulate gameplay clocks"
+        );
+    }
+    state.tick_control.set_frozen(false);
+    let resumed = step(&mut state);
+    assert_eq!(
+        state.entities.row(slot).breed_cooldown,
+        held_value - 1,
+        "releasing the clock resumes the countdown"
+    );
+    // The mirror advances with the live row, so the resume itself needs no
+    // image; `step` already proved the baseline equals the live projection.
+    assert!(
+        image_ids(&resumed).is_empty(),
+        "a resume that the mirror followed emits nothing: {:?}",
+        image_ids(&resumed)
+    );
+}
+
+#[test]
+fn held_game_clock_keeps_idle_villager_baselines_equal_to_live() {
+    let mut state = fixture();
+    let chunk = crate::boundary::ChunkPos { x: 0, z: 0 };
+    state.tickets.insert("held-villager".into(), (chunk, 0));
+    state
+        .world
+        .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+    state.refresh_active_chunks(0);
+    let villager = spawn_idle_villager(&mut state, 8.5);
+    let slot = state.entities.slot_of(villager).unwrap();
+    {
+        let row = state.entities.row_mut(slot);
+        let villager = row.villager.as_mut().unwrap();
+        // Wandering keeps the derived brain clock (and its age projection) on.
+        villager.wandering = true;
+        villager.age = 100;
+    }
+    let first = step(&mut state);
+    assert!(
+        image_ids(&first).contains(&villager.0),
+        "the first touch journals the live villager"
+    );
+    state.tick_control.set_frozen(true);
+    for _ in 0..6 {
+        let entries = step(&mut state);
+        assert!(
+            image_ids(&entries).is_empty(),
+            "a held game clock must not churn a villager image: {:?}",
+            image_ids(&entries)
+        );
+        let age = state.entities.row(slot).villager.as_deref().unwrap().age;
+        assert_eq!(age, 100, "held ticks do not age the villager");
+    }
+    state.tick_control.set_frozen(false);
+    let resumed = step(&mut state);
+    assert!(
+        image_ids(&resumed).is_empty(),
+        "an idle villager whose clocks stood still emits nothing on release"
+    );
+    let age = state.entities.row(slot).villager.as_deref().unwrap().age;
+    assert_eq!(age, 100, "the wandering villager has no running age clock");
+}
+
+#[test]
 fn chunk_clock_boundaries_rebase_only_their_own_entities() {
     let mut state = fixture();
     let body = crate::boundary::ChunkPos { x: 0, z: 0 };
