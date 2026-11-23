@@ -1336,9 +1336,9 @@ fn the_mirror_agrees_with_the_replay_game_clock_over_holds() {
     let initial: GameClockImage = clock_at(&state);
     let mut frames: Vec<(u64, u64, Vec<JournalEntry>)> = Vec::new();
     let mut last: Option<GameClockImage> = Some(initial);
-    let mut run = |state: &mut TickState,
-                   frames: &mut Vec<(u64, u64, Vec<JournalEntry>)>,
-                   last: &mut Option<GameClockImage>| {
+    let run = |state: &mut TickState,
+               frames: &mut Vec<(u64, u64, Vec<JournalEntry>)>,
+               last: &mut Option<GameClockImage>| {
         let (output, _, _) = crate::tick::run_tick(state, &[]);
         let image = clock_at(state);
         if *last != Some(image) {
