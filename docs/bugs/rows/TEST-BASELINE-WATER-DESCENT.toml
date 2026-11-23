@@ -4,7 +4,7 @@ title = "Baseline gate: fluids parity::physics_water_selects_nearest_descent fai
 area = "harness"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-BASELINE-WATER-DESCENT"
 regression = ["cargo:mc-core:fluids_tests::parity::physics_water_selects_nearest_descent"]
 fix_commit = "f945cba85234105543de42b37709cf31e8eb253a"
@@ -13,3 +13,4 @@ control_b_patch = "docs/bugs/test-only/TEST-BASELINE-WATER-DESCENT-defect.patch"
 control_b_sha256 = "16944d451310e0a4f80cde825d0a74758119be608577e0aef271315c90c6c3c2"
 control_a_files = ["crates/mc-core/src/fluid_parity_tests.rs"]
 repro_check = "Old oracle ran 5 harness ticks and then asserted the water had descended into the single adjacent lower hole. The out-of-band test placement stamps its deadline on the already-processed tick, so the first tick that can flow is the 6th run: the corrected oracle runs 6 and asserts the same behaviour (the cell below the source stays air, the east neighbour holds water_levels[1]). Nothing is loosened: same fixture, same two assertions. Evidence: the water delay of 5 ticks in fluids.rs. Control A: the 5-tick oracle restored fails on current code because the flow has not fired yet. Control B: the defect patch treats a neighbour with an open floor as impassable, so no water leaves the source and `at(pos, 1) == water_levels[1]` fails."
+promotion = "docs/bugs/promotions/TEST-BASELINE-WATER-DESCENT.json"
