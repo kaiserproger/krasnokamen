@@ -227,9 +227,11 @@ impl Sweeps {
     /// A retained sweep of a kind this pass did not advance (its funding was
     /// withdrawn) must not hold the slot for other work.
     pub(super) fn holding<'a>(&self, kinds: impl IntoIterator<Item = &'a str>) -> bool {
-        kinds
-            .into_iter()
-            .any(|kind| self.live.get(kind).is_some_and(|sweep| sweep.best.is_some()))
+        kinds.into_iter().any(|kind| {
+            self.live
+                .get(kind)
+                .is_some_and(|sweep| sweep.best.is_some())
+        })
     }
 
     /// Candidates this blueprint's live sweep has examined (test observer).
