@@ -1,0 +1,30 @@
+{
+  "id": "HARNESS-GAIT-ARTIFACT-REUSE",
+  "verdict": "promoted",
+  "fix_commit": "patch:be60979bde6dd9d4e200bf482ff93ee3d977e754594c9a25e69ec2fe19c899ff",
+  "fix_commit_full": "patch:be60979bde6dd9d4e200bf482ff93ee3d977e754594c9a25e69ec2fe19c899ff",
+  "promoted_at": "2026-11-23T12:28:29+00:00",
+  "tree_head": "bc9d4c9b437029dfbd9f33a474758b6c93074732",
+  "tree_dirty": true,
+  "tree_sha256": "47d31145da50a68ba5c896ff6f22c809b9efe89d9edcf111a66c82e21552da96",
+  "control_tree": "head",
+  "fix_patch_sha256": "be60979bde6dd9d4e200bf482ff93ee3d977e754594c9a25e69ec2fe19c899ff",
+  "reversed_files": [
+    "tools/harness/backends/scene_shot_execute.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.harness.test_scene_shot:WalkCaptureArtifactsTests.test_each_retry_owns_an_artifact_and_misses_are_bounded": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_scene_shot:WalkCaptureArtifactsTests.test_each_retry_owns_an_artifact_and_misses_are_bounded": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/solaris/.analysis/validation/20261123T122826-ledger-promote-i3ss8e8_"
+}

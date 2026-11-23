@@ -1,0 +1,23 @@
+diff --git a/tools/harness/backends/scene_shot_execute.py b/tools/harness/backends/scene_shot_execute.py
+index 513a3ac6e..0c9d48782 100644
+--- a/tools/harness/backends/scene_shot_execute.py
++++ b/tools/harness/backends/scene_shot_execute.py
+@@ -168,7 +168,7 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
+                 # The image is the last presented render, interpolated from the
+                 # previous tick: resample it instead of waiting a whole tick,
+                 # which under load can skip the requested phase entirely.
+-                image = capture(probe, artifact, value["name"])
++                image = capture(probe, artifact, f"{value['name']}-attempt-{len(attempts) + 1}")
+                 after = probe.call("minecraft_list_entities", args)
+                 frame_path = Path(image + ".gait.json") if client == "java" else Path(image).with_suffix(".json")
+                 frame_data = json.loads(frame_path.read_text())
+@@ -177,7 +177,8 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
+                 same_entity = [entity for entity in after.get("entities", [])
+                                if first.get("entity_uuid")
+                                and entity.get("entity_uuid") == first["entity_uuid"]]
+-                attempts.append({"before": before, "after": after, "frame": frame})
++                attempts.append({"before": before, "after": after, "frame": frame,
++                                 "image": image, "frame_path": str(frame_path)})
+                 if matching_walk(frame, value) is not None and len(same_entity) == 1:
+                     break
+                 rendered = [entity for entity in frame_entities

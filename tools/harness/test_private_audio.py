@@ -120,7 +120,12 @@ class SoundCaptureApiTest(unittest.TestCase):
             paths = []
             # Exactly the constructor calls used by the screen and voice legs.
             for sink in ("fabric_viewer_out", "svcspeakera_out", "svcspeakerb_out"):
-                capture = audio.SoundCapture(root, sink=sink, description=sink)
+                try:
+                    capture = audio.SoundCapture(root, sink=sink, description=sink)
+                except TypeError as error:
+                    if "unexpected keyword argument 'sink'" not in str(error):
+                        raise
+                    self.fail(f"named audio sink is unsupported: {error}")
                 self.addCleanup(record.call_args.kwargs["stderr"].close)
                 self.assertEqual(capture.sink, sink)
                 self.assertEqual(capture.path, root / f"{sink}.f32le")

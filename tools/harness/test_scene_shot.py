@@ -602,8 +602,11 @@ class WalkCaptureArtifactsTests(unittest.TestCase):
                         names.append(name)
                         image = artifact / f"{name}.png"
                         # The real MCP artifact store uses exclusive creation.
-                        with image.open("xb") as file:
-                            file.write(b"image")
+                        try:
+                            with image.open("xb") as file:
+                                file.write(b"image")
+                        except FileExistsError as error:
+                            self.fail(f"capture artifact reused: {image.name}: {error}")
                         frame = [{**entity, "walk_position": next(samples)}]
                         sidecar = Path(str(image) + ".gait.json") if client == "java" else image.with_suffix(".json")
                         sidecar.write_text(json.dumps(frame if client == "java" else {"gait_frame": frame}))

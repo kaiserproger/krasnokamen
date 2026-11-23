@@ -1,0 +1,30 @@
+{
+  "id": "HARNESS-SOUND-CAPTURE-API-DRIFT",
+  "verdict": "promoted",
+  "fix_commit": "patch:d82e8ccf431b4c6ccdb56b240199d6851229f921e5201ad5b67a87eb3399bbdf",
+  "fix_commit_full": "patch:d82e8ccf431b4c6ccdb56b240199d6851229f921e5201ad5b67a87eb3399bbdf",
+  "promoted_at": "2026-11-23T12:28:38+00:00",
+  "tree_head": "bc9d4c9b437029dfbd9f33a474758b6c93074732",
+  "tree_dirty": true,
+  "tree_sha256": "47d31145da50a68ba5c896ff6f22c809b9efe89d9edcf111a66c82e21552da96",
+  "control_tree": "head",
+  "fix_patch_sha256": "d82e8ccf431b4c6ccdb56b240199d6851229f921e5201ad5b67a87eb3399bbdf",
+  "reversed_files": [
+    "tools/harness/audio.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.harness.test_private_audio:SoundCaptureApiTest.test_backend_named_sinks_have_distinct_monitors_and_artifacts": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_private_audio:SoundCaptureApiTest.test_backend_named_sinks_have_distinct_monitors_and_artifacts": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/solaris/.analysis/validation/20261123T122835-ledger-promote-je9arhiz"
+}
