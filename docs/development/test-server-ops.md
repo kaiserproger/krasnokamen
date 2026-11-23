@@ -88,17 +88,16 @@ relaunch.
 ## Fresh-world reset
 
 **Do not run the checked-in reset helper.** The
-[`deploy-reset.sh`](../../tools/dev/test-server/deploy-reset.sh) inspected at
-`84116c517df0` stops and starts `solaris.service` but checks whether
-`krasnokamen.service` is active. If that other unit is missing or inactive,
-the check does not stop the script. It then creates and lists a tar archive
-and runs `rm -rf world` without verifying the unit it stopped is inactive.
-Listing the archive does not prove a quiescent, restorable backup.
+[`deploy-reset.sh`](../../tools/dev/test-server/deploy-reset.sh) on this branch stops and checks the
+`solaris` unit (the earlier version at `84116c517df0` checked `krasnokamen.service`, which is a
+different unit and could be missing while the server still ran), refuses when a `krasnokamen` process
+survives the stop, and reads the whole `tar tzf` listing before accepting it (a `grep -q` pipeline
+exits early and reads the archive partially). It still runs `rm -rf world`, so listing the archive
+does not prove a quiescent, restorable backup: keep it unrun without owner approval.
 
-The helper also defaults `KRASNOKAMEN_SERVER_USER` to `solaris` for `chown`,
-while the checked-in `solaris.service` runs as `User=krasnokamen` and
-`Group=krasnokamen`. This can fail or leave the wrong ownership after world
-deletion. It does **not** remove `metrics/.cursor`; the collector tracks the
+The helper defaults `KRASNOKAMEN_SERVER_USER` to `krasnokamen`, matching the checked-in
+`solaris.service` (`User=krasnokamen`, `Group=krasnokamen`); an override to `solaris` would leave the
+wrong ownership after world deletion. It does **not** remove `metrics/.cursor`; the collector tracks the
 server instance in that cursor. These are source observations, not a claim
 about the unit installed on the VPS.
 

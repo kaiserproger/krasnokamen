@@ -12,9 +12,16 @@ if systemctl is-active --quiet solaris; then echo "solaris still active after st
 # A stopped unit is not proof the process is gone: a surviving server would keep writing
 # the world we are about to delete.
 if pgrep -x krasnokamen >/dev/null; then echo "a krasnokamen process survived the stop; refusing to delete the world" >&2; exit 1; fi
-backup=${KRASNOKAMEN_BACKUP_DIR:-/root}/world-backup-$(date +%Y%m%d-%H%M).tgz
+# Seconds and pid: a minute-resolution name can collide, and `tar czf` over an existing archive
+# truncates it (a second reset inside one minute would silently replace the only backup).
+backup=${KRASNOKAMEN_BACKUP_DIR:-/root}/world-backup-$(date +%Y%m%d-%H%M%S)-$$.tgz
+if [ -e "$backup" ]; then echo "backup $backup already exists; refusing to overwrite" >&2; exit 1; fi
 tar czf "$backup" world
-tar tzf "$backup" | grep -q '^world/' || { echo "backup $backup does not contain world/" >&2; exit 1; }
+# Read the whole listing before judging it: `tar tzf ... | grep -q` lets grep exit early, tar then
+# dies of SIGPIPE under pipefail (a false refusal AFTER the service stop) and the full-stream read
+# that also catches a corrupt tail is gone.
+listing=$(tar tzf "$backup") || { echo "backup $backup cannot be listed (corrupt or truncated)" >&2; exit 1; }
+grep -q '^world/' <<<"$listing" || { echo "backup $backup does not contain world/" >&2; exit 1; }
 echo "backup ok: $backup $(du -h "$backup" | cut -f1)"
 rm -rf world
 mv krasnokamen krasnokamen.prev
