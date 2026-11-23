@@ -278,6 +278,27 @@ def check_elytra(probe: ProbeSteps, artifact: Path) -> None:
     ]
 
 
+def check_placed_head(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-PLACED-HEAD-PROFILE: an unresolved placed head keeps the default skin.
+
+    The same scene as `native-player-head`, judged only on the placed block: the worn
+    assertions belong to WORN-PLAYER-HEAD-ON-BACK and must not gate this row's restore."""
+    shots = _qa._load_shots(probe, artifact, ("head-empty", "head-block"))
+    empty_f, block_f = shots["head-empty"][0], shots["head-block"][0]
+    probe.check("placed_head_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(empty_f["camera_position"], block_f["camera_position"])
+    ) and abs(empty_f["yaw"] - block_f["yaw"]) < 0.01 and abs(empty_f["pitch"] - block_f["pitch"]) < 0.01)
+    head_box = (580, 520, 700, 655)
+    placed = _changed(shots["head-block"][1], shots["head-empty"][1], head_box)
+    magenta = lambda r, g, b: r > 60 and b > 60 and r > g * 2 and b > g * 2
+    hat = _count(shots["head-block"][1], head_box, magenta)
+    probe.report["placed_head_roi"] = list(head_box)
+    probe.report["placed_head_changed_pixels"] = placed
+    probe.report["placed_head_hat_layer_pixels"] = hat
+    probe.check("placed_head_renders", placed > 100)
+    probe.check("placed_head_hat_layer_pixels", hat > 100)
+
+
 def check_player_head(probe: ProbeSteps, artifact: Path) -> None:
     """Placed/worn offline heads and the contrasting authored hat layer."""
     shots = _qa._load_shots(probe, artifact, ("head-empty", "head-block", "head-worn", "head-none"))

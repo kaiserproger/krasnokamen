@@ -645,6 +645,15 @@ class ElytraTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "worn_elytra_drawn"):
                 scene_shot.check_elytra(self.Probe(), root)
 
+    def test_placed_head_scenario_needs_a_visible_default_skin(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            PlayerHeadTests().store_frames(root)
+            scene_shot.check_placed_head(PlayerHeadTests.Probe(), root)
+            PlayerHeadTests().store_frames(root, placed=False)
+            with self.assertRaisesRegex(AssertionError, "placed_head_renders"):
+                scene_shot.check_placed_head(PlayerHeadTests.Probe(), root)
+
 
 class WalkCaptureArtifactsTests(unittest.TestCase):
     def test_each_retry_owns_an_artifact_and_misses_are_bounded(self):

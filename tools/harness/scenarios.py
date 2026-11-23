@@ -678,6 +678,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="checks the received hotbar/durability observation and the framed shot",
         limits="one fixture and one camera per shot; the visual review of each frame stays with the operator",
     ),
+    "native-placed-head": _entry(
+        id="native-placed-head", summary="An unresolved placed player head keeps the default skin instead of drawing nothing",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-placed-head", requires=("xvfb",),
+        sources=("tools/harness/player_head_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client with the authored hat skin pack; an offline name setblock head in a fixed frame",
+        proves="the placed head changes its frame region and carries the authored hat layer, i.e. the default skin is drawn",
+        limits="one fixture and one camera; the listed-profile online skin path stays unit-covered",
+    ),
     "native-elytra": _entry(
         id="native-elytra", summary="A worn elytra draws its wings on the third-person avatar's back",
         owner="core:harness", evidence="graphical", profile="scene-shot",

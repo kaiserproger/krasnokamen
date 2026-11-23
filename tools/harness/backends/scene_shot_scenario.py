@@ -25,7 +25,7 @@ from .probe_steps import ProbeSteps
 from . import scene_shot as _qa
 from .scene_shot_checks import (
     check_263_entity_rigs, check_dynamic_context, check_elytra, check_entity_visuals, check_gait_spider,
-    check_item_bars, check_player_head, check_shade_override, check_shelf_clock,
+    check_item_bars, check_placed_head, check_player_head, check_shade_override, check_shelf_clock,
     player_head_skin_pack,
 )
 from .scene_shot_client import (
@@ -50,6 +50,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-item-bars": "item_bars_scene.json",
         "native-shade-override": "shade_override_scene.json",
         "native-player-head": "player_head_scene.json",
+        "native-placed-head": "player_head_scene.json",
         "native-dynamic-context": "dynamic_context_scene.json",
         "native-gait-spider": "gait_phase_scene.json",
         "native-death-tilt": "death_tilt_scene.json",
@@ -272,7 +273,7 @@ def run(
             os.environ["KRASNOKAMEN_CLIENT_SETTINGS"] = str(settings_path)
             if ctx.client != "java" and "language" in settings:
                 os.environ["KRASNOKAMEN_CLIENT_LANGUAGE"] = settings["language"]
-            if ctx.scenario_id == "native-player-head":
+            if ctx.scenario_id in ("native-player-head", "native-placed-head"):
                 pack = player_head_skin_pack(artifact)
                 os.environ["KRASNOKAMEN_CLIENT_RESOURCE_PACKS"] = os.pathsep.join(
                     [old_packs, str(pack)] if old_packs else [str(pack)])
@@ -335,6 +336,8 @@ def run(
                 check_shade_override(probe, artifact)
             elif ctx.scenario_id == "native-player-head":
                 check_player_head(probe, artifact)
+            elif ctx.scenario_id == "native-placed-head":
+                check_placed_head(probe, artifact)
             elif ctx.scenario_id == "native-dynamic-context":
                 check_dynamic_context(probe, artifact)
             elif ctx.scenario_id == "native-gait-spider":
