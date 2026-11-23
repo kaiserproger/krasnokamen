@@ -5,7 +5,7 @@ overlay`) — the `menu_source_cold` helper plus the `container_click` guard tha
 before any handler is selected (cursor custody kept). `b460f313cc` later extended the same check to
 `container_slot_state`/`container_button` and this lane rewrote the helper's doc comment. The whole commit
 no longer reverses on HEAD, so the row moves to a scoped patch: `fix_commit =
-"patch:d1852b4e407d89f8…"` names the HEAD equivalent of the click guard only, in
+"patch:0db22dafacbc9521…"` names the HEAD equivalent of the click guard only, in
 `docs/bugs/promotions/ENDER-CHEST-MENU-CLICK-THROUGH-COLD-OVERLAY.patch` (a diff from the pre-fix form to
 the candidate; `git apply -R` restores the pre-fix code). Re-audit:
 `python3 -m tools.harness ledger promote ENDER-CHEST-MENU-CLICK-THROUGH-COLD-OVERLAY --fix-patch docs/bugs/promotions/ENDER-CHEST-MENU-CLICK-THROUGH-COLD-OVERLAY.patch --dry-run`.
@@ -18,6 +18,17 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   `if crate::tick::containers::menu_source_cold(state, entity) { close_player_menu(...); return; }` block;
   HEAD `crates/mc-core/src/tick/input/inventory.rs:228-231`. Reversing it lets a click reach the handler
   with a cold menu coordinate (the row's symptom).
+- `tick/input/inventory.rs @@ -483,6 +483,10 @@ fn container_slot_state` and `@@ -502,6 +502,10 @@
+  fn container_button` — the same guard in the other two menu inputs (`b460f313cc`, HEAD
+  `crates/mc-core/src/tick/input/inventory.rs:489-492` and `:508-511`). **The owner of the three guard
+  hunks is this row** (ANVIL's patch is stations-only and does not carry them; a whole-commit reverse is
+  not possible). Reversing them lets a cold slot-state/button reach the crafter/station handlers.
+- `tick/input/inventory.rs @@ -483,6 +483,9 @@ fn container_slot_state` — the
+  `state.entities.slot_of(entity).is_none()` early return ahead of the cold guard. It is this row's
+  responsibility because the close path it protects is the menu-close path: with a despawned owner
+  (`state.connections` still mapping the connection) the reversed tree reaches
+  `crates/mc-core/src/tick/players.rs:179-183`'s `.expect("native menu owner")` and panics on the dropped
+  menu contents.
 
 ## Original non-test hunks (complete)
 

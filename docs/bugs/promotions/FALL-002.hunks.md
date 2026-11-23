@@ -14,10 +14,12 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
 ## Carried
 
 - `tick/input/interact.rs @@ -310,6 +322,11 @@` — the `|| crate::brushing::use_on(...)` term in
-  `use_item_on`; HEAD `crates/mc-core/src/tick/input/interact.rs:330-332` (a/-side: the prior
-  axe-only branch, real code).
+  `use_item_on`; HEAD `crates/mc-core/src/tick/input/interact.rs:330-332`. **a/-side line: (a)-split.**
+  The surviving `crate::vanilla_interact::axe(...)` half belongs to INTERACT-001's row; the same five-line
+  block installs both handlers, so a whole-block reverse would red the axe row instead. It never existed
+  alone in this branch's history and is not a kept-API constructor.
 - `tick/input/interact.rs @@ -586,6 +603,7 @@` — the same term in `use_item`; HEAD
-  `crates/mc-core/src/tick/input/interact.rs:625-627`.
+  `crates/mc-core/src/tick/input/interact.rs:625-627` (a pure deletion).
 
 ## Original non-test hunks (complete)
 
@@ -59,6 +61,9 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
 - `brushing.rs @@ -0,0 +1,132 @@` — (b) the kept tests assert the brush deposit at the block-entity
   level and `crate::brushing::run` is ticked from `tick.rs` (`-4482,6 +4496,7`); the module must stay for
   the control to compile. Reversing the two dispatch terms reproduces the row's symptom.
+- The same commit's four other `tick/input/interact.rs` hunks — `-60,7 +60,8`, `-78,6 +79,12`,
+  `-166,6 +173,8`, `-178,6 +187,9` — (a) the dragon-egg and spawn-protection routing of the same rebase,
+  carried by those rows/gates; they are not the brush dispatch.
 - Every other file — (a) the rebase's other rows (axe, dragon egg, painting, spawn protection, special
   storage, sponge, chest/lectern custody, edge/config plumbing).
 - `example.toml`/`docs/QUIRK_PARITY.md` — (b) docs/config text.
@@ -68,9 +73,9 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
 
 - `cargo:mc-core:interact_parity_tests::interact_parity_brushing_completes_once`
   (`crates/mc-core/src/interact_parity_tests.rs:360`) — with both terms gone the brush use never starts,
-  so the loop at `:414-470` observes no `BlockEntityData` reveal and the final
-  `assert_eq!(state.world.block_at(POS...), Some(block(&state, result, &[])))` (the source→result pair,
-  `suspicious_sand`→`sand`) fails.
+  so the first assertion that fails is `crates/mc-core/src/interact_parity_tests.rs:462`
+  (`saw_reveal` after the 200-tick loop: no `BlockEntityData` reveal arrives), and the block never
+  becomes `sand`.
 - Client ref `harness:entities:native-v2-ledger-brush` green receipt on the gate-wave tree:
   `.analysis/validation/20261123T192307-native-v2-ledger-brush-czmbmk7s/result.json`; a fresh receipt on
   this candidate is required for promotion (see HANDOFF-6).

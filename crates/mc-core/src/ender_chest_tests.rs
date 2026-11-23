@@ -194,6 +194,164 @@ fn ender_chest_rejects_corrupt_slots_and_preserves_unknown_fields() {
     }
 }
 
+/// Open the ender chest at `8 65 8` for connection 1 and evict its chunk, so the
+/// menu coordinate is cold while the overlay still answers `block_at`.
+fn cold_ender_menu(state: &mut TickState) -> u8 {
+    open_at(state, 1, 8);
+    let chunk = crate::boundary::ChunkPos { x: 0, z: 0 };
+    state.world.finish_inhabited_tick(state.tick + 1);
+    state
+        .world
+        .set_active_chunks(Default::default(), state.tick + 1);
+    state.world.capture_dirty(&Default::default());
+    state
+        .world
+        .mark_flushed(&[(chunk, state.world.storage_revision(chunk))]);
+    assert!(
+        state
+            .world
+            .evict_outside(&Default::default())
+            .contains(&chunk)
+    );
+    assert!(!state.world.has_chunk(0, 0));
+    state
+        .players
+        .values()
+        .find_map(|player| player.open.as_ref().map(|menu| menu.window))
+        .expect("the menu survives eviction")
+}
+
+#[test]
+fn ender_chest_slot_state_with_a_cold_menu_closes_and_keeps_cursor_custody() {
+    let (mut state, first, _second) = fixture();
+    let window = cold_ender_menu(&mut state);
+    let carried = ItemStack::new(
+        state
+            .registry
+            .items
+            .id_of(&Identifier::parse("minecraft:diamond").unwrap())
+            .unwrap(),
+        5,
+    );
+    state
+        .players
+        .get_mut(&first)
+        .unwrap()
+        .open
+        .as_mut()
+        .unwrap()
+        .carried = carried.clone();
+    let drains = run_tick(
+        &mut state,
+        &[PlayerInput::ContainerSlotState {
+            connection: ConnectionId(1),
+            window,
+            slot: 1,
+            enabled: false,
+        }],
+    )
+    .1;
+    assert!(
+        state.players[&first].open.is_none(),
+        "slot-state: a cold menu source closes the menu"
+    );
+    assert!(!state.open_containers.contains(&first));
+    assert!(
+        drains
+            .iter()
+            .flat_map(|(_, queue)| queue)
+            .any(|change| matches!(
+                change,
+                PlayerChange::MenuClosed { window: closed } if *closed == window
+            ))
+    );
+    assert!(
+        state.players[&first].inventory.slots.contains(&carried),
+        "the cursor item returns to the inventory"
+    );
+}
+
+#[test]
+fn ender_chest_button_with_a_cold_menu_closes_and_keeps_cursor_custody() {
+    let (mut state, first, _second) = fixture();
+    let window = cold_ender_menu(&mut state);
+    let carried = ItemStack::new(
+        state
+            .registry
+            .items
+            .id_of(&Identifier::parse("minecraft:diamond").unwrap())
+            .unwrap(),
+        5,
+    );
+    state
+        .players
+        .get_mut(&first)
+        .unwrap()
+        .open
+        .as_mut()
+        .unwrap()
+        .carried = carried.clone();
+    let drains = run_tick(
+        &mut state,
+        &[PlayerInput::ContainerButton {
+            connection: ConnectionId(1),
+            window,
+            button: 0,
+        }],
+    )
+    .1;
+    assert!(
+        state.players[&first].open.is_none(),
+        "button: a cold menu source closes the menu"
+    );
+    assert!(!state.open_containers.contains(&first));
+    assert!(
+        drains
+            .iter()
+            .flat_map(|(_, queue)| queue)
+            .any(|change| matches!(
+                change,
+                PlayerChange::MenuClosed { window: closed } if *closed == window
+            ))
+    );
+    assert!(
+        state.players[&first].inventory.slots.contains(&carried),
+        "the cursor item returns to the inventory"
+    );
+}
+
+#[test]
+fn ender_chest_slot_state_for_a_despawned_player_leaves_the_cold_menu_alone() {
+    let (mut state, first, _second) = fixture();
+    let window = cold_ender_menu(&mut state);
+    // The connection still maps to the player while its entity row is gone: the
+    // crafter slot-state path must not be reached (it would close the ghost menu
+    // through `slot_of(..).expect("native menu owner")`).
+    let slot = state.entities.slot_of(first).expect("joined player");
+    state.entities.remove(slot);
+    assert!(state.entities.slot_of(first).is_none());
+    let drains = run_tick(
+        &mut state,
+        &[PlayerInput::ContainerSlotState {
+            connection: ConnectionId(1),
+            window,
+            slot: 1,
+            enabled: false,
+        }],
+    )
+    .1;
+    assert!(
+        state.players[&first].open.is_some(),
+        "a ghost owner's slot-state input is ignored"
+    );
+    assert!(
+        !drains
+            .iter()
+            .flat_map(|(_, queue)| queue)
+            .any(|change| matches!(change, PlayerChange::MenuClosed { .. }))
+    );
+}
+
 #[test]
 fn ender_chest_click_with_a_cold_menu_coordinate_closes_and_keeps_cursor_custody() {
     let (mut state, first, _second) = fixture();

@@ -483,6 +483,9 @@ pub(in crate::tick) fn container_slot_state(
     (connection, window, slot, enabled): (&ConnectionId, &u8, &i32, &bool),
 ) {
     if let Some(entity) = state.connections.by_connection.get(connection).copied() {
+        if state.entities.slot_of(entity).is_none() {
+            return;
+        }
         if crate::tick::containers::menu_source_cold(state, entity) {
             crate::tick::close_player_menu(state, *connection);
             return;

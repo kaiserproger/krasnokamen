@@ -8,5 +8,5 @@ status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-NOTIFY"
 regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_death_notification_ignores_broadcast_rule", "harness:entities:native-v2-death-messages"]
 fix_commit = "patch:616679e6694db5ccffffe249b463d53949cc4b2857aee832b51deca82550db57"
-repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> the dying player's outbox has no PlayerChange::Died with show_death_messages=false"
+repro_check = "patch digest 616679e6 verified; negative control (promotion record): reversed -> the row test fails at `crates/mc-core/src/tick/damage_scoreboard_tests.rs:75-79` (the dying player's outbox has no PlayerChange::Died with show_death_messages=false). Real-client ref `harness:entities:native-v2-death-messages` green receipt on the candidate tree: `.analysis/validation/20261123T211907-native-v2-death-messages-9epvsbj2/result.json`."
 promotion = "docs/bugs/promotions/DEATH-NOTIFY.json"

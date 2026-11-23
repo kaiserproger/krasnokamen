@@ -14,9 +14,11 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
 ## Carried
 
 - `tick/input/interact.rs @@ -310,6 +322,11 @@` — the `crate::vanilla_interact::axe(...)` term in the
-  `use_item_on` chain; HEAD `crates/mc-core/src/tick/input/interact.rs:330-332`. Reversing it drops the
-  axe term (the a/-side is the prior `brushing::use_on`-only branch, real code, no stub) and
-  `use_on` on a log/copper block changes nothing.
+  `use_item_on` chain; HEAD `crates/mc-core/src/tick/input/interact.rs:330-332`. The whole five-line block
+  was added by `35308579c` (`-310,6 +322,11`), and the patch reverses only this row's disjunct.
+  **a/-side line: (a)-split.** The surviving `if crate::brushing::use_on(...) { return; }` half belongs to
+  FALL-002's row — the same hunk installs both handlers, so a whole-block reverse would red the brush row
+  instead; it never existed alone in this branch's history, and it is not a kept-API constructor.
 
 ## Original non-test hunks (complete)
 

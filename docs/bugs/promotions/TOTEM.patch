@@ -1,7 +1,16 @@
 diff --git a/crates/mc-core/src/tick/damage.rs b/crates/mc-core/src/tick/damage.rs
-index c2d2b9969..4c8d92fd0 100644
+index 41a5c7ce5..4c8d92fd0 100644
 --- a/crates/mc-core/src/tick/damage.rs
 +++ b/crates/mc-core/src/tick/damage.rs
+@@ -550,7 +550,7 @@ impl TickState {
+             custom_armor,
+         } = *piece;
+         let mut credit = None;
+-        let mut rescue: Option<totem::Rescue> = None;
++        let mut rescue = None;
+         if let Some(player) = self.players.get_mut(&id) {
+             let before = player.vitals.health;
+             let absorption_before = player.active_effects.absorption;
 @@ -658,7 +658,8 @@ impl TickState {
                  }
              }
