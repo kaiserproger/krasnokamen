@@ -1,0 +1,16 @@
+diff --git a/crates/mc-edge/src/lod.rs b/crates/mc-edge/src/lod.rs
+index 7534d80..5c2d808 100644
+--- a/crates/mc-edge/src/lod.rs
++++ b/crates/mc-edge/src/lod.rs
+@@ -185,10 +185,7 @@ fn enqueue_sampled(
+     sampled_at: u64,
+     frame: bytes::Bytes,
+ ) -> bool {
+-    // Pre-fix form: stamp the frame when it is enqueued. A reset that happened
+-    // while the tile was sampled therefore does not fence it.
+-    let _ = sampled_at;
+-    sender.try_send(frame).is_ok()
++    sender.try_send_at(sampled_at, frame).is_ok()
+ }
+ 
+ fn varint(out: &mut Vec<u8>, mut value: u32) {

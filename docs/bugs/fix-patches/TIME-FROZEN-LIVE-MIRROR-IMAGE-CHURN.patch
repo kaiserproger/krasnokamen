@@ -1,0 +1,92 @@
+diff --git a/crates/mc-core/src/world/clocks.rs b/crates/mc-core/src/world/clocks.rs
+index 30e69a0..4ead1e4 100644
+--- a/crates/mc-core/src/world/clocks.rs
++++ b/crates/mc-core/src/world/clocks.rs
+@@ -349,30 +349,78 @@ impl ChunkWorld {
+         self.clock_recorded = Some(tick);
+     }
+ 
+-    /// Pre-fix projection: the activity interval is treated as running time
+-    /// and the game clock is ignored, exactly what `journal_touched` did
+-    /// inline before the mirror existed.
++    /// Game ticks simulated in `(from, to]` from the recorded held spans, or
++    /// `None` when `from` predates the recorded history (a re-anchored
++    /// baseline; the caller then leaves the image unadvanced, which can only
++    /// cost one extra image, never a wrong one).
+     #[must_use]
+     pub(crate) fn simulated_game_ticks(&self, from: u64, to: u64) -> Option<u64> {
+-        Some(to.saturating_sub(from))
++        if self.clock_since.is_some_and(|since| from < since) {
++            return None;
++        }
++        Some(
++            self.game_ticks_at(to)
++                .saturating_sub(self.game_ticks_at(from)),
++        )
+     }
+ 
+-    /// Pre-fix projection span: one running interval over the whole activity
+-    /// interval.
++    /// Game ticks the clock has run through `tick` (offset by the count before
++    /// [`Self::clock_since`]); differences across held spans are exact.
++    fn game_ticks_at(&self, tick: u64) -> u64 {
++        let index = self.clock_spans.partition_point(|span| span.start <= tick);
++        let Some(span) = index.checked_sub(1).map(|index| &self.clock_spans[index]) else {
++            return tick.saturating_sub(self.clock_held_base);
++        };
++        // `held_ticks(tick)` counts a held tick at `tick` itself, so the
++        // partial span is `[span.start, min(span.end, tick + 1))`.
++        let within = span
++            .end
++            .min(tick.saturating_add(1))
++            .saturating_sub(span.start);
++        tick.saturating_sub(self.clock_held_base + span.held_before + within)
++    }
++
++    /// Visit `(first, last]` spans of running ticks inside `(from, to]`;
++    /// `first` is the boundary before the span and may be a held tick. Mirrors
++    /// `ReplayGameClock::running_intervals` for the live journal mirror.
+     pub(crate) fn for_each_running_interval(
+         &self,
+         from: u64,
+         to: u64,
+         mut visit: impl FnMut(u64, u64),
+     ) {
+-        if from < to {
+-            visit(from, to);
++        if to <= from {
++            return;
++        }
++        let mut start = from;
++        let first = self.clock_spans.partition_point(|span| span.end <= from);
++        for span in &self.clock_spans[first..] {
++            if span.start > to {
++                break;
++            }
++            if span.start > start {
++                let last = span.start - 1;
++                if start < last {
++                    visit(start, last);
++                }
++            }
++            start = start.max(span.end.saturating_sub(1));
++        }
++        if start < to {
++            visit(start, to);
+         }
+     }
+ 
+-    /// Pre-fix projection has no held boundaries to look back to.
++    /// Last running tick at or before `tick` (`tick` itself when it is not
++    /// held). Mirrors `ReplayGameClock::last_running_at`.
+     #[must_use]
+     pub(crate) fn last_running_at(&self, tick: u64) -> u64 {
++        let index = self.clock_spans.partition_point(|span| span.start <= tick);
++        if let Some(span) = index.checked_sub(1).map(|index| &self.clock_spans[index])
++            && tick < span.end
++        {
++            return span.start.saturating_sub(1);
++        }
+         tick
+     }
+ 

@@ -16,7 +16,7 @@ is another row's or owner's behaviour (a), API the kept tests call (b), or code
 a later commit rewrote with no HEAD equivalent (c); each exclusion is named
 below.
 
-Carried (20 of the commit's 23 non-test hunks):
+Carried (16 of the commit's 23 non-test hunks):
 
 | original | HEAD |
 |---|---|
@@ -46,12 +46,13 @@ capture start initialises the kept field as `refused: Vec::new()`
 (capture.rs:228-249 a/ side; the only a/ line that is not in the original
 pre-image), so `refused()` stays empty in the control.
 
-Not carried (4 hunks, all (c), dropped by this regeneration):
+Not carried (4 hunks, size-only, dropped by this regeneration):
 - core.rs -212,7, core/journal.rs -532,7 and core/tick_loop.rs -288,7/-587,7
-  `Box<ChunkCapture>`: the whole `SaveGenerated` journal/native work item was
-  removed by a later refactor (no `SaveGenerated` exists on HEAD; `take_generated`
-  lost its tick argument), so there is no HEAD equivalent to reverse and the
-  quarantine fix does not depend on its ownership shape.
+  `Box<ChunkCapture>`: these only box the capture to shrink the work item; a
+  later refactor removed the `SaveGenerated` journal/native work item (its
+  `take_generated` lost the tick argument), so the surrounding code no longer
+  exists and the ownership shape has no HEAD equivalent to reverse. The row's
+  custody behaviour does not depend on it, so dropping it is harmless.
 
 ## a/-side adaptation
 

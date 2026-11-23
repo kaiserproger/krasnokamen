@@ -45,15 +45,20 @@ later commit rewrote with no HEAD equivalent (c); each exclusion is named below.
 
 ## Exclusions
 
-- `import.rs` hunk "fn validate_legacy_player_slots" (original `:720-770`): (c)
-  `import.rs` was split into `import/players.rs` after the fix, so the function's
-  HEAD home is `import/players.rs:105-149` and no hunk in `import.rs` adds it.
-  Both call sites are carried as their HEAD equivalents above; in the control they
-  are reversed, so the function stays defined but uncalled (a `dead_code` warning,
-  not an error) and legacy slots are not validated — the pre-fix behaviour.
+- `import.rs` hunk "fn validate_legacy_player_slots" (original `:720-770`): the
+  HEAD equivalent exists but at another path — the later split moved the
+  function to `import/players.rs:105-149`, where it stays on both sides and is
+  not part of this identity. Only its two call sites are carried (above); in
+  the control they are reversed, so the function stays defined but uncalled (a
+  `dead_code`/unused-import warning, not an error) and legacy slots are not
+  validated — the pre-fix behaviour. The panel's requested label is: moved by a
+  later commit, not rewritten, so the hunk is not applicable to `import.rs`;
+  it is not an (a)/(b)/(c) exclusion of behaviour but a path relocation.
 - `import.rs` hunk at `:735` (`admit_player` decode error gains the player uuid):
-  (c) the same split moved `admit_player` to `import/players.rs`; the message
-  change has no `import.rs` equivalent and is not part of this row's pipeline guard.
+  same relocation — `admit_player` lives at `import/players.rs:166` on HEAD and
+  stays on both sides. The message change is diagnostic only and not this row's
+  pipeline guard; the original `:735` hunk has no `import.rs` pre-image to
+  reverse.
 
 ## a/-side adaptations
 
@@ -66,9 +71,13 @@ is the historical text of `1e13fffe5`, kept verbatim, and `stack_from_fields`
 The control goes red by assertion on `player_slot_import_tests` — e.g.
 `missing_inventory_slot_refuses_import_before_load_save` reaches
 `refused()`'s `expect_err("ambiguous custody must refuse import before load/save")`
-(`crates/mc-world-conversion/src/player_slot_import_tests.rs:63`) because the
+(`crates/mc-world-conversion/src/player_slot_import_tests.rs:57`) because the
 decode silently skips the stack and the import succeeds; the same list carries
 `duplicate_*_wal_opaque` and `missing_item_id_with_payload` refs that lose their
-guards with the `journal`/`native_checkpoint` hunks reversed. Measured receipts
+guards with the `journal`/`native_checkpoint` hunks reversed. The mc-world ref
+`native::checkpoint_tests::player_duplicate_custody::repeated_player_custody_names_refuse_raw_checkpoint_recovery`
+is green in the control: that duplicate-name guard lives in mc-world's own
+reader, outside this identity's hunks, so it is coverage here, not a
+discriminating red. Measured receipts
 are in `docs/bugs/promotions/IMPORT-INVENTORY-SLOT-AMBIGUOUS.json` after the
 promotion.
