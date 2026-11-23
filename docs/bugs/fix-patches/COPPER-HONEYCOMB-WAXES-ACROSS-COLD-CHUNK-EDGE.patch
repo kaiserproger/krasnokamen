@@ -1,0 +1,29 @@
+diff --git a/crates/mc-core/src/copper.rs b/crates/mc-core/src/copper.rs
+index eef45b8ea..4331b3ef3 100644
+--- a/crates/mc-core/src/copper.rs
++++ b/crates/mc-core/src/copper.rs
+@@ -220,6 +220,14 @@ pub(crate) fn use_on(state: &mut TickState, actor: EntityId, hand: Hand, pos: Bl
+     if player.spectator() {
+         return false;
+     }
++    // Waxing, scraping and the double-chest partner pass read and write the cell:
++    // a non-resident chunk must not contribute its cold overlay or debit an item.
++    if !state
++        .world
++        .has_chunk(pos.x.div_euclid(16), pos.z.div_euclid(16))
++    {
++        return false;
++    }
+     let index = if hand == Hand::Main {
+         usize::from(player.inventory.selected)
+     } else {
+@@ -298,6 +306,9 @@ pub(crate) fn use_on(state: &mut TickState, actor: EntityId, hand: Hand, pos: Bl
+             state.world.block_at(p.x, p.y, p.z)
+         }) {
+             if other != pos
++                && state
++                    .world
++                    .has_chunk(other.x.div_euclid(16), other.z.div_euclid(16))
+                 && let Some(old) = state.world.block_at(other.x, other.y, other.z)
+                 && let Some(next) = transform(&state.registry.blocks, old, new_age, new_wax)
+             {
