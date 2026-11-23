@@ -1,14 +1,14 @@
 {
   "id": "DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY",
   "verdict": "promoted",
-  "fix_commit": "patch:6af67cbd37ca36b2a34ad7e360e2c29489b6f55ee143d1c5070028465d97126e",
-  "fix_commit_full": "patch:6af67cbd37ca36b2a34ad7e360e2c29489b6f55ee143d1c5070028465d97126e",
-  "promoted_at": "2026-11-23T21:50:10+00:00",
-  "tree_head": "b5d9271a7e805fde9946c83e82d7efb0f482c9b7",
+  "fix_commit": "patch:4b2427db26a3655cf61a61d70d0da199d367934cc6c193419d95588928724c90",
+  "fix_commit_full": "patch:4b2427db26a3655cf61a61d70d0da199d367934cc6c193419d95588928724c90",
+  "promoted_at": "2026-11-23T21:57:03+00:00",
+  "tree_head": "c5bd7337d19b7d265dcd6ff7185a8ce7f7c87b6c",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
-  "fix_patch_sha256": "6af67cbd37ca36b2a34ad7e360e2c29489b6f55ee143d1c5070028465d97126e",
+  "fix_patch_sha256": "4b2427db26a3655cf61a61d70d0da199d367934cc6c193419d95588928724c90",
   "reversed_files": [
     "crates/mc-core/src/tick/containers.rs"
   ],
@@ -26,5 +26,5 @@
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261123T214534-ledger-promote-7ck9ruav"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261123T215432-ledger-promote-d4l_2gsd"
 }
