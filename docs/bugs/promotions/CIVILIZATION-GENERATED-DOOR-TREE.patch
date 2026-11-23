@@ -1,0 +1,38 @@
+diff --git a/crates/mc-worldgen/src/terrain/trees.rs b/crates/mc-worldgen/src/terrain/trees.rs
+index 27831e8cb..f631f9825 100644
+--- a/crates/mc-worldgen/src/terrain/trees.rs
++++ b/crates/mc-worldgen/src/terrain/trees.rs
+@@ -84,7 +84,15 @@ impl TerrainGenerator {
+         for y in base_y..=top_y {
+             let state = chunk.get_block(lx, y, lz);
+             let shallow_water = wet_site && y - base_y <= 1 && state == Some(self.water);
+-            if state != Some(self.air) && !shallow_water {
++            if (state != Some(self.air) && !shallow_water)
++                || village.is_some_and(|plans| {
++                    plans.entrance_headroom(BlockPos {
++                        x: plan.wx,
++                        y,
++                        z: plan.wz,
++                    })
++                })
++            {
+                 return false;
+             }
+         }
+@@ -204,7 +212,15 @@ impl TerrainGenerator {
+                     }
+                     let x = lx.wrapping_add_signed(dx);
+                     let z = lz.wrapping_add_signed(dz);
+-                    if chunk.get_block(x, y, z) == Some(self.air) {
++                    if chunk.get_block(x, y, z) == Some(self.air)
++                        && !village.is_some_and(|plans| {
++                            plans.entrance_headroom(BlockPos {
++                                x: plan.wx + i32::from(dx),
++                                y,
++                                z: plan.wz + i32::from(dz),
++                            })
++                        })
++                    {
+                         self.place_single(chunk, x, y, z, blocks.leaves, touched);
+                         leaves.push((x, y, z));
+                     }

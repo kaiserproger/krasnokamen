@@ -11,4 +11,4 @@ regression = [
   "cargo:mc-core:settlements::allocator::tests::claimed_village_with_storage_assigns_its_free_adult_to_forestry_before_workshops",
   "harness:civilization-seed-qa:second_building",
 ]
-fix_commit = "1c6f7b09"
+fix_commit = "patch:b17555791e307a2042da9449ea95357b55ddda0b40422bfa20c4af0e7f8c49e4"

@@ -1,0 +1,27 @@
+diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
+index 3cfbb8163..0d6244542 100644
+--- a/crates/mc-core/src/settlements/construction.rs
++++ b/crates/mc-core/src/settlements/construction.rs
+@@ -3143,9 +3143,6 @@ pub(crate) fn iron_demand(
+         );
+     }
+     let catalog = catalog(state, record);
+-    if access::projects(record).next().is_some() {
+-        return active;
+-    }
+     candidate_kinds(state, record, &images)
+         .filter_map(|kind| catalog.clone().find(|blueprint| blueprint.kind == kind))
+         .filter_map(|blueprint| blueprint.level(1))
+diff --git a/crates/mc-core/src/villager/smelting.rs b/crates/mc-core/src/villager/smelting.rs
+index eba0295d0..c5a4f3ee8 100644
+--- a/crates/mc-core/src/villager/smelting.rs
++++ b/crates/mc-core/src/villager/smelting.rs
+@@ -613,7 +613,7 @@ pub(super) fn work(
+     // smelts its construction iron; forestry and workshop staff only empty output.
+     let tender = matches!(
+         v.data.profession,
+-        VillagerProfession::None | VillagerProfession::Shepherd
++        VillagerProfession::None | VillagerProfession::Shepherd | VillagerProfession::Miner
+     );
+     if v.smelting.is_none()
+         && matches!(

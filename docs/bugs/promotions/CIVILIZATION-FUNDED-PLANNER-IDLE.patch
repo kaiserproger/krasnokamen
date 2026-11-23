@@ -1,0 +1,59 @@
+diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
+index ce83ff7e1..0d6244542 100644
+--- a/crates/mc-core/src/settlements/construction.rs
++++ b/crates/mc-core/src/settlements/construction.rs
+@@ -1739,13 +1739,10 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
+     if residents == 0 {
+         return false;
+     }
+-    // Do not repeatedly loan the worker supplying the priority bill to cheaper
+-    // buildings or streets. Unsupported needs still permit other funded work.
+-    if gatherer_demand(state, record, &images)
+-        .is_some_and(|profession| has_staffed_gatherer(state, id, profession))
+-    {
+-        return false;
+-    }
++    // Keep the priority material worker out of optional street work, not out
++    // of the entire planner: another resident can build a funded later kind.
++    let gathering = gatherer_demand(state, record, &images)
++        .is_some_and(|profession| has_staffed_gatherer(state, id, profession));
+     // Housing gets its own bounded scan. If it has no site, ordinary funded
+     // candidates still get their shared scan in this same planning pass. Both
+     // read and extend the same runtime-only sweep scratch.
+@@ -1874,6 +1871,9 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
+     if let Some(site) = meadow_site(state, record, residents, &images) {
+         return begin_cells(state, site.project, site.bounds, site.cells);
+     }
++    if gathering {
++        return false;
++    }
+     // The wall, its gates and the well come before street work: the streets
+     // reach every standing building in the radius and owe work without end,
+     // the fortification is a bounded list that the world itself shortens.
+diff --git a/crates/mc-core/src/settlements/construction_builders.rs b/crates/mc-core/src/settlements/construction_builders.rs
+index 2b28f8666..88adf7641 100644
+--- a/crates/mc-core/src/settlements/construction_builders.rs
++++ b/crates/mc-core/src/settlements/construction_builders.rs
+@@ -56,11 +56,19 @@ fn free_native_builder(state: &TickState, id: SettlementId, slot: EntitySlot) ->
+ /// The gatherer construction may not take a staffed worker from: the joint
+ /// bill's missing material, or, for autonomous work, the planner's own
+ /// gatherer demand while that gatherer is staffed.
+-fn protected_gatherer(state: &TickState, id: SettlementId, _ordered: bool) -> Option<Profession> {
+-    let _record = state.settlements.get(id)?;
++fn protected_gatherer(state: &TickState, id: SettlementId, ordered: bool) -> Option<Profession> {
++    let record = state.settlements.get(id)?;
+     let images = executor::source_images(state, id);
+     let bill = joint_active_bill(state, id)?;
+-    crate::settlements::construction_crafting::needed_gatherer(state, &bill, &images)
++    crate::settlements::construction_crafting::needed_gatherer(state, &bill, &images).or_else(
++        || {
++            if ordered {
++                return None;
++            }
++            gatherer_demand(state, record, &images)
++                .filter(|profession| has_staffed_gatherer(state, id, *profession))
++        },
++    )
+ }
+ 
+ /// The recruitment rule: the priority (lower first) of a resident that

@@ -7,6 +7,6 @@ severity = "major"
 status = "open"
 source = "Seed-24 original-identity continuation: simulation distance 4 leaves Mine (60,66,-154) inactive, so 118 native staffing attempts make no route call. Changing only the isolated fixture to the core-default distance 6 activates the mine; original resident 12939df5 receives a fully active 269-node native route and the real assignment. View distance remains 4. No allocator policy change is justified; the original fresh civilization gate remains 0/3."
 regression = ["harness:civilization-seed-qa:all", "python:tools.harness.test_village_autonomy_qa:VillageAutonomyQaTests.test_civilization_fixture_raises_only_the_simulation_distance"]
-fix_commit = "4e6874de"
+fix_commit = "patch:939c0dde974f31d77fedc01ab4482eabab007e1636aa7d0339a94eb01a4b2db5"
 repro_check = "negative control receipts/XHarnessGates/neg-civ-mine.log (simulation_distance replacement removed -> config stays 4); unit negative control checks only the `simulation_distance = 6` fixture line, not mine activity; the fresh real gate was 0/3, so the row is candidate evidence only - real-client gate pending (stage 3); candidate: no exact revert (the simulation_distance hunk conflicts); the control is fix-lines-only and a proxy - it checks the `simulation_distance = 6` config line, not mine activity, receipts/XHarnessGates/neg-civ-mine.log"
 failing_first = "reported"

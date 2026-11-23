@@ -1,0 +1,30 @@
+diff --git a/crates/mc-core/src/villager/lumber.rs b/crates/mc-core/src/villager/lumber.rs
+index ae837ce68..368dda64b 100644
+--- a/crates/mc-core/src/villager/lumber.rs
++++ b/crates/mc-core/src/villager/lumber.rs
+@@ -422,7 +422,7 @@ pub(super) fn work(
+     let working =
+         v.activity == Activity::Work && (2_000..9_000).contains(&state.day_time.rem_euclid(24_000));
+     if !working
+-        || mining::needs_deposit(v)
++        || mining::heavy_load(v)
+         || (state.tick.is_multiple_of(PERIOD)
+             && v.settlement.is_some_and(|id| {
+                 crate::settlements::construction::candidate_funded_by_delivery(
+diff --git a/crates/mc-core/src/villager/mining.rs b/crates/mc-core/src/villager/mining.rs
+index 4f5b9c4d4..6ce838890 100644
+--- a/crates/mc-core/src/villager/mining.rs
++++ b/crates/mc-core/src/villager/mining.rs
+@@ -112,10 +112,8 @@ pub(super) fn needs_deposit(v: &VillagerState) -> bool {
+         .any(|slot| slot.as_ref().is_some_and(|s| s.count >= 64))
+ }
+ 
+-/// A miner's load is mixed (dirt from the grass surface plus a little of every
+-/// stone never fills one stack), so a total as heavy as a stack also sends it
+-/// home; with the day clock stopped nothing else ever would.
+-fn heavy_load(v: &VillagerState) -> bool {
++/// Mixed stone or wood can fill a haul without filling any individual stack.
++pub(super) fn heavy_load(v: &VillagerState) -> bool {
+     needs_deposit(v) || v.inventory.iter().flatten().map(|s| s.count).sum::<i32>() >= 64
+ }
+ 
