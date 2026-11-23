@@ -1,0 +1,64 @@
+{
+  "id": "MODEL-OPUS-15",
+  "verdict": "promoted",
+  "fix_commit": "client:d361feadf7",
+  "fix_commit_full": "d361feadf74b3aaee1a9190b9a875064edc0737a",
+  "promoted_at": "2026-11-23T17:46:20+00:00",
+  "tree_head": "0c9f5186d7e93a5056ba1550cf1e6c563239e2b3",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T173632-native-elytra-tl5wa6o0/result.json",
+    "client_head": "b96f00e2f5c3f597dc0959d1a96f2ceb53ce5bd1",
+    "server_binary_sha256": "8ba874991d7bedb574f3ef74493324863f742322dce9b141ef4935738964410f",
+    "red": [
+      "harness:scene-shot:native-elytra"
+    ],
+    "states": {
+      "harness:scene-shot:native-elytra": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T173711-native-elytra-n2mc9r5k/result.json",
+    "client_head": "d361feadf74b3aaee1a9190b9a875064edc0737a",
+    "server_binary_sha256": "8ba874991d7bedb574f3ef74493324863f742322dce9b141ef4935738964410f",
+    "green": [
+      "harness:scene-shot:native-elytra"
+    ],
+    "states": {
+      "harness:scene-shot:native-elytra": "green"
+    },
+    "tree_head": "0c9f5186d7e93a5056ba1550cf1e6c563239e2b3",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T173711-native-elytra-n2mc9r5k/result.json",
+    "client_head": "d361feadf74b3aaee1a9190b9a875064edc0737a",
+    "server_binary_sha256": "8ba874991d7bedb574f3ef74493324863f742322dce9b141ef4935738964410f",
+    "green": [
+      "harness:scene-shot:native-elytra"
+    ],
+    "states": {
+      "harness:scene-shot:native-elytra": "green"
+    },
+    "tree_head": "0c9f5186d7e93a5056ba1550cf1e6c563239e2b3",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "e1e31270bbb384f3cded79a071ce7b138a341b19",
+    "paths": [
+      "src/entities/equipment.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::equipment::tests::wearables::player_back_uses_wings_asset_profile_priority_gliding_and_cape_exclusion": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T174619-ledger-promote-kphy6cgq"
+}
