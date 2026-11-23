@@ -6,7 +6,7 @@ repro = "client"
 severity = "minor"
 status = "open"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F5, 1/2, BREAK_DL_ATTACK=nether); the server log shows 'You logged in from another location' was sent."
-regression = ["client:krasnokamen-client:protocol::network::kick_reason_survives_a_failed_client_write"]
+regression = ["client:krasnokamen-client:protocol::network::tests::kick_reason_survives_a_failed_client_write"]
 failing_first = "reported"
 fix_commit = "client:bf55a58f"
 repro_check = "real-hunk control red ('play disconnect packet must be delivered'); real gate harness:entities:native-v2-duplicate-login (BREAK_DL_ATTACK=nether); area=client, candidate"
