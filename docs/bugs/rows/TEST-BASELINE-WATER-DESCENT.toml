@@ -7,6 +7,7 @@ severity = "minor"
 status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-BASELINE-WATER-DESCENT"
 regression = ["cargo:mc-core:fluids_tests::parity::physics_water_selects_nearest_descent"]
+proving_assertions = { "cargo:mc-core:fluids_tests::parity::physics_water_selects_nearest_descent" = "crates/mc-core/src/fluid_parity_tests.rs:85" }
 fix_commit = "f945cba85234105543de42b37709cf31e8eb253a"
 test_only_fix = true
 control_b_patch = "docs/bugs/test-only/TEST-BASELINE-WATER-DESCENT-defect.patch"
