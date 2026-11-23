@@ -586,8 +586,7 @@ fn classify_contact(
     if quiet {
         return Some(Verdict::Quiet);
     }
-    let (min, max, probes) =
-        computed.unwrap_or_else(|| contact_cells(pos, shape, foot_xz, eye));
+    let (min, max, probes) = computed.unwrap_or_else(|| contact_cells(pos, shape, foot_xz, eye));
     if !exactly_clear(pass, min, max, probes) {
         return Some(Verdict::Scan);
     }
@@ -956,7 +955,17 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
     let (quiet, computed) = scratch.negative[index]
         .as_mut()
         .filter(|stamp| !item && stamp.entity == entity)
-        .map(|stamp| quiet_proof(&state.world, &scratch.hazard, stamp, pos, shape, foot_xz, eye))
+        .map(|stamp| {
+            quiet_proof(
+                &state.world,
+                &scratch.hazard,
+                stamp,
+                pos,
+                shape,
+                foot_xz,
+                eye,
+            )
+        })
         .unwrap_or((false, None));
     if quiet {
         retained_burn(state, slot, false, false, intents);

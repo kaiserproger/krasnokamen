@@ -2,11 +2,13 @@
 
 [Control patch](../fix-patches/EDGE-QUEUED-OP-AFTER-DEOP.patch) for
 `878f1535bbde9838775b755060fe6e8ca6f69278`.
-`fix_commit = "patch:6ec10e90d8d8499a29c99abf09bca4fb653940b30418dcd6256084156cfd09f7"`
-unchanged: the independent review approved these bytes and the Main dry-run
-already observed the red and the restored green, so nothing here was re-derived or
-rerun. The patch reverse-applies on `17b4abddc370d1681fa3dceea13607118fc4933b`
-with `git apply -R --check` rc 0.
+`fix_commit = "patch:6ec10e90d8d8499a29c99abf09bca4fb653940b30418dcd6256084156cfd09f"`
+unchanged: the independent review approved these bytes. The patch reverse-applies
+on the candidate with `git apply -R --check` rc 0, and its control was re-run on
+the current tree when the row was promoted: real receipt
+`.analysis/validation/20261123T205732-ledger-promote-rgvrcer9` (`ledger-1-run.log`
+red at `admin_tests.rs:207-211`, `ledger-3-run.log` green). The earlier Main
+dry-run `o087__2e` observed the same red on an older tree.
 
 ## The fix
 
@@ -51,12 +53,11 @@ None. The patch removes the re-check block and adds nothing on the a-side.
   — `crates/mc-edge/src/admin_tests.rs:188`, assertion at `:207-211`
   ("demoted operator must not regain rights"). A full permit hold parks both
   commands; after release the deopped initiator's `op` must not restore level 4.
-  Observed red in `.analysis/validation/20261123T074112-ledger-promote-o087__2e`
-  (`ledger-1-run.log:247-248`) and green after restore in `ledger-3-run.log:238-242`
-  (Main dry-run receipt `MAIN-EDGE-QUEUED-DRY-RUN.md`); not rerun here.
-- Limit: that observed red/restore belongs to the previous candidate fingerprint
-  (`admin_tests.rs` has since changed); it is not a run on the current tree. The
-  bytes and ref are unchanged, so a fresh red/restore is a rerun of the same
-  control, not new evidence requirements.
+  Observed red on the current tree in
+  `.analysis/validation/20261123T205732-ledger-promote-rgvrcer9` (`ledger-1-run.log`):
+  `assertion failed: regain.as_mut().poll(cx).is_pending()` — the parked `op` is the
+  setup; the supervisor assertion is the demoted initiator's level, at
+  `admin_tests.rs:207-211`. Restored green in the same receipt's `ledger-3-run.log`.
+  (The earlier Main dry-run `o087__2e` observed the same red on an older tree.)
 - Scope: proves the registered capacity-wait scenario, not every selector
   resolution path.

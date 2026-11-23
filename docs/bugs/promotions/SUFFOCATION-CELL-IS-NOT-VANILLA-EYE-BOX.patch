@@ -1,5 +1,5 @@
 diff --git a/crates/mc-core/src/contact_hazards.rs b/crates/mc-core/src/contact_hazards.rs
-index f6915c6d3..5c588f1d3 100644
+index f6915c6d3..e16df1450 100644
 --- a/crates/mc-core/src/contact_hazards.rs
 +++ b/crates/mc-core/src/contact_hazards.rs
 @@ -45,7 +45,7 @@ pub(crate) fn take_work_counts() -> [usize; 5] {
@@ -167,7 +167,7 @@ index f6915c6d3..5c588f1d3 100644
  ) -> Option<Verdict> {
      let (entities, world, hazard) = (pass.entities, pass.world, pass.hazard);
      let row = &entities.bodies()[index];
-@@ -526,16 +576,18 @@ fn classify_contact(
+@@ -526,16 +576,17 @@ fn classify_contact(
      {
          return Some(Verdict::Scan);
      }
@@ -183,12 +183,11 @@ index f6915c6d3..5c588f1d3 100644
          return Some(Verdict::Quiet);
      }
 -    let (min, max, probes) = computed.unwrap_or_else(|| contact_cells(pos, shape, foot_xz));
-+    let (min, max, probes) =
-+        computed.unwrap_or_else(|| contact_cells(pos, shape, foot_xz, eye));
++    let (min, max, probes) = computed.unwrap_or_else(|| contact_cells(pos, shape, foot_xz, eye));
      if !exactly_clear(pass, min, max, probes) {
          return Some(Verdict::Scan);
      }
-@@ -821,6 +873,7 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
+@@ -821,6 +872,7 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
      let slot = crate::entities::EntitySlot(index as u32);
      let body = state.entities.body(slot);
      let kind = body.kind;
@@ -196,7 +195,7 @@ index f6915c6d3..5c588f1d3 100644
      let is_player = matches!(kind, crate::entities::EntityKind::Player { .. });
      let living = if is_player {
          true
-@@ -899,24 +952,24 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
+@@ -899,24 +951,34 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
          return;
      }
      let row = state.entities.row(slot);
@@ -205,7 +204,17 @@ index f6915c6d3..5c588f1d3 100644
          .as_mut()
          .filter(|stamp| !item && stamp.entity == entity)
 -        .map(|stamp| quiet_proof(&state.world, &scratch.hazard, stamp, pos, shape, foot_xz))
-+        .map(|stamp| quiet_proof(&state.world, &scratch.hazard, stamp, pos, shape, foot_xz, eye))
++        .map(|stamp| {
++            quiet_proof(
++                &state.world,
++                &scratch.hazard,
++                stamp,
++                pos,
++                shape,
++                foot_xz,
++                eye,
++            )
++        })
          .unwrap_or((false, None));
      if quiet {
          retained_burn(state, slot, false, false, intents);
@@ -228,7 +237,7 @@ index f6915c6d3..5c588f1d3 100644
          &mut scratch.suffocation,
          |seen| state.registry.light.suffocating(seen.0) == Some(true),
      );
-@@ -960,8 +1013,10 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
+@@ -960,8 +1022,10 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
              && body_max.2.div_euclid(16) == column.z
              && support[0].div_euclid(16) == column.x
              && support[2].div_euclid(16) == column.z
@@ -241,7 +250,7 @@ index f6915c6d3..5c588f1d3 100644
              .then(|| state.world.chunk(column))
              .flatten()
      } else {
-@@ -982,9 +1037,21 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
+@@ -982,9 +1046,21 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
              .and_then(|id| state.registry.hazard_flags.get(id as usize).copied())
              .unwrap_or(0)
      };
@@ -266,7 +275,7 @@ index f6915c6d3..5c588f1d3 100644
      let raw_magma_support =
          gated && flag_at(support[0], support[1], support[2]) & HAZARD_MAGMA != 0;
      let hot = gated && !sneaking && !frost_walker && raw_magma_support;
-@@ -1087,7 +1154,7 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
+@@ -1087,7 +1163,7 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
              shape,
              min: body_min,
              max: body_max,

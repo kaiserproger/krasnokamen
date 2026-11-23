@@ -1,14 +1,14 @@
 {
   "id": "EDGE-OP-JOIN-STALE-PERMISSION",
   "verdict": "promoted",
-  "fix_commit": "patch:bf716a13d456ed6bbe9a34b4cf8956a57835d384aa4d9c1524c1f2ee34cae489",
-  "fix_commit_full": "patch:bf716a13d456ed6bbe9a34b4cf8956a57835d384aa4d9c1524c1f2ee34cae489",
-  "promoted_at": "2026-11-23T20:52:22+00:00",
-  "tree_head": "816994b1186f7f17f55065a77251f592eaae96a5",
+  "fix_commit": "patch:7a30a926ec93da2eac398a6aafba067c0810796d57468ef82c7842c2f7786c60",
+  "fix_commit_full": "patch:7a30a926ec93da2eac398a6aafba067c0810796d57468ef82c7842c2f7786c60",
+  "promoted_at": "2026-11-23T23:01:29+00:00",
+  "tree_head": "505deb2f51ca6e00491d22fdb9cdee398bca447a",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
-  "fix_patch_sha256": "bf716a13d456ed6bbe9a34b4cf8956a57835d384aa4d9c1524c1f2ee34cae489",
+  "fix_patch_sha256": "7a30a926ec93da2eac398a6aafba067c0810796d57468ef82c7842c2f7786c60",
   "reversed_files": [
     "crates/mc-edge/src/server/connection.rs"
   ],
@@ -19,14 +19,14 @@
       "detail": ""
     },
     "cargo:mc-edge:server::admin_tests::deop_reaches_rejoining_native_session": {
-      "state": "green",
-      "detail": ""
-    },
-    "cargo:mc-edge:server::admin_tests::deop_between_join_submission_and_late_registration_keeps_native_level": {
       "state": "red",
       "detail": "FAIL"
     },
     "cargo:mc-edge:server::admin_tests::join_burst_permission_change_refreshes_command_tree": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::admin_tests::deop_between_join_submission_and_late_registration_keeps_native_level": {
       "state": "red",
       "detail": "FAIL"
     },
@@ -44,11 +44,11 @@
       "state": "green",
       "detail": ""
     },
-    "cargo:mc-edge:server::admin_tests::deop_between_join_submission_and_late_registration_keeps_native_level": {
+    "cargo:mc-edge:server::admin_tests::join_burst_permission_change_refreshes_command_tree": {
       "state": "green",
       "detail": ""
     },
-    "cargo:mc-edge:server::admin_tests::join_burst_permission_change_refreshes_command_tree": {
+    "cargo:mc-edge:server::admin_tests::deop_between_join_submission_and_late_registration_keeps_native_level": {
       "state": "green",
       "detail": ""
     },
@@ -58,5 +58,5 @@
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T205123-ledger-promote-cl6dpqvj"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T230036-ledger-promote-lo6825q0"
 }
