@@ -1,400 +1,231 @@
 # Heavy commands, memory and disk on the shared machine
 
-The rules (which commands go through the runner, which `-m` cap to use,
-the sccache wrapper, when `-p`/`-x` are allowed) live in
-[AGENTS.md](../../AGENTS.md) "Build and validation" and the harness's own
-cgroup bounds in [AGENT_TOOLING.md](../AGENT_TOOLING.md) "Resource bounds".
-This page explains how the runner works, how to diagnose it and what went
-wrong before.
-
-The runner's requirements and fresh-machine setup (systemd user scope, cgroup
-v2, `/tmp/solaris-mem-slots`, the last four CPUs for the `-p` lane, Landlock for the
-instrumentation guard) are in [`tools/dev/README.md`](../../tools/dev/README.md).
-Other scripts there: `scene-slot.sh` (graphical gate slots, see
-[real-client gates](real-client-gates.md#3-environment-block)),
-`instrumentation-guard.py`, `test-server/` ([test server operations](test-server-ops.md))
-and `winqa/` ([Windows QA](windows-and-macos-client-qa.md)).
+[AGENTS.md](../../AGENTS.md#build-and-validation) sets agent policy;
+this page owns runner behavior and diagnosis. Harness-only cgroups:
+[resource bounds](../AGENT_TOOLING.md#resource-bounds). Installation:
+[`tools/dev/README.md`](../../tools/dev/README.md) (systemd user scopes, cgroup v2,
+`/tmp/solaris-mem-slots`, Landlock for instrumentation). Related:
+[real-client environment](real-client-gates.md#3-environment-block),
+[test server](test-server-ops.md), [Windows QA](windows-and-macos-client-qa.md).
 
 ## The machine
 
-The owner host is a shared build machine, not necessarily the owner's terminal
-or laptop ([AGENTS.md](../../AGENTS.md)). Derive current CPU topology, host
-memory and parent/slice limits from the runner and cgroups, not an old hardware
-snapshot. The agent host contains its subagents outside the heavy-job slice.
-Historical laptop incident, 2026-10-02: about 20 agents plus builds drove that
-process to 15 GiB RSS; an OOM killed all agents, while worktrees survived.
+Derive CPU topology, RAM and effective parent/slice limits from the running
+host, not old laptop recipes. Agent hosts/language servers can live outside the
+heavy slice; include them in accounting. The 2026-10-02 laptop OOM killed the
+15 GiB agent process and all children, not their worktrees.
 
 ## How `tools/dev/mem-run.sh` works (current, since 2026-10-28)
 
-`tools/dev/mem-run.sh [-x] [-p] [-m SIZE] <command...>` (flags in this order):
+Wrap heavy Cargo, harness and Gradle commands in Main's absolute
+`<work>/solaris/tools/dev/mem-run.sh`, never a worktree's or sibling repo's copy.
+Use one heavy command per agent and one source tree per invocation:
+`mem-run.sh [-x] [-p] [-m SIZE] COMMAND ...` (that flag order).
+The one-token-per-agent rule and priority gate below remain laptop proposals
+of 2026-11-18, pending owner confirmation; see the
+[brief limits](agent-fleet.md#briefs). Pass actual build argv, not a build
+hidden inside `sh -c`/`bash -c`: classification is not a security boundary.
 
-- **No memory slots.** Commands enter their own transient systemd user scope;
-  compiles first wait for a build token, and measurement/scene locks can delay
-  execution. [`mem-run.sh`](../../tools/dev/mem-run.sh) derives the heavy slice's
-  `MemoryMax` from host RAM minus 16 GiB and, when set, the parent `MemoryHigh`
-  minus 8 GiB, taking the lower bound. It clears slice `MemoryHigh` and any CPU
-  quota not explicitly pinned by the owner. Default command cap is `-m 8G`;
-  requests above 12 GiB without `-x` are lowered to 12 GiB. These are runner defaults,
-  not a promise about every machine's effective parent budget.
-- **Build tokens** (owner, 2026-11-11): at most three compile commands run
-  host-wide; the fleet's concurrent-builder limit is enforced here, not by
-  convention. Compile is decided once from argv, after leading
-  `env`/`nice`/`ionice`/`timeout` words: `cargo` with any subcommand except
-  `fmt`, `fetch`, `tree`, `metadata`, `clean`, `update` and similar, `gradle`
-  and `gradlew`, `pin-release`, harness `run build|clippy|code-health|
-  correctness|test|regressions|regressions-client|java|standard-pack` and
-  harness `ledger probe|promote`. Running built binaries, gates and servers
-  takes no token and starts while all three are held. A build hidden inside
-  `sh -c` or `bash -c` is not classified: pass the actual build or harness
-  command as runner argv, not through a shell. This is an argv classifier,
-  not a security boundary; do not infer that a shell command holds a token.
-  A compile re-execs the runner under `tools/dev/slot-lock.py` (the scene-slot
-  helper), which blocks
-  on all three locks `/tmp/solaris-mem-slots/tokens/token-{1,2,3}.lock` at once
-  and takes whichever frees first: no polling, no CPU while waiting, and the
-  runner prints `mem-run: build tokens 1,2,3 are in use; waiting`. With
-  `KRASNOKAMEN_BUILD_LANE=background` in the runner's environment a compile may
-  take any token, but a freed token goes to a waiting normal-lane compile first
-  (laptop proposals 2026-11-18, pending the owner's confirmation: the priority
-  gate, and removing the token-3 reserve the owner set on 2026-11-12 so that the
-  battle video gets resources first): every normal-lane
-  waiter holds a shared lock on `tokens/priority.gate`, and a background waiter
-  that wins a token while the gate is held gives it back and queues again once
-  every waiting priority compile has won. Main exports the background lane for
-  every agent outside the priority slice and outside battle-video work (takes,
-  render, live-take pins), which keeps the normal lane and so still gets the next
-  freed token first. The lock
-  stays at fd 9 of the runner and its scope guardian, never the command, so
-  the token returns once the scope is empty: on any exit, kill or OOM. The
-  `mem-run: scope` line shows `token=<n>`, `token=<n>(reused)` or
-  `token=none`. **Nesting:** the runner exports `KRASNOKAMEN_BUILD_TOKEN` and
-  `KRASNOKAMEN_BUILD_TOKEN_PID` (its own pid); a compile whose ancestor process is
-  that runner reuses its token, so a harness run or pin-release that runs
-  `mem-run.sh ... cargo` again inside never waits for a second token (three
-  outer holders would deadlock). The token is taken before the `-x` lock, so
-  queued compiles never delay a `-x` window; a `-p` compile holds its token
-  while it queues for the perf lane. Holders, their command and tree, and the
-  waiters: `tools/dev/fleet-status`. Tests:
-  `python3 tools/dev/test_build_tokens.py`.
-- **Killed jobs:** an independent guardian kills the job's scope and holds its locks (slot locks and the build token) until the scope is empty.
-- **Lock order: scene slot, then `-x`** (2026-11-14). Gates hold a scene slot while they wait for
-  the `-x` lock (shared), so a `-x` window that then waits for a scene slot deadlocks every
-  build and gate (a window did so for about 50 minutes). Take the slot outside the window:
-  `scene-slot.sh mem-run.sh -x <command>`. Inside a window the runner exports
-  `KRASNOKAMEN_EXCLUSIVE_WINDOW`; `scene-slot.sh` then runs a command at once when an ancestor
-  already holds a slot (`KRASNOKAMEN_SCENE_SLOT_PID`) and otherwise refuses with exit 75. Call
-  `scene-slot.sh`, never `slot-lock.py` with the scene lock names directly. Tests:
-  `python3 tools/dev/test_scene_slot.py`.
-- **Release builds are pins** (owner, 2026-11-15). One release binary belongs to one
-  integrated commit: `cargo build|test|run --release` and `--profile release*` are
-  refused by the runner, before it takes a slot or a build token, unless
-  `tools/dev/pin-release` asks for it (it sets `KRASNOKAMEN_PIN_RELEASE`), the caller
-  is the harness/ledger tooling (real-client gates and ledger promote's own candidate
-  and control trees, which pin their own tree), or Main overrides one run with
-  `KRASNOKAMEN_RELEASE_BUILD_ALLOW=1`. The refusal names `tools/dev/pin-release`:
-  pin the commit once and pass the printed `KRASNOKAMEN_SERVER_BINARY` /
-  `KRASNOKAMEN_CLIENT_BINARY` / `KRASNOKAMEN_BOTS_BINARY` to the gate or measurement.
-  `pin-release` reuses the pin of the same tree and the same build parameters
-  (source inputs, repo, kind, target, incremental flag and the codegen environment
-  cargo records) instead of rebuilding, and gives a different tree — a ledger control,
-  a branch — its own pin, never the shared one. Debug builds, clippy and every
-  non-release command are unchanged. Tests:
-  `python3 tools/dev/test_mem_run_release_policy.py`.
-- **`-x` runs only inside a scheduled measurement window** (owner, 2026-11-15). A `-x`
-  window freezes build-only commands and waits for every running test and server, so it
-  is a measurement, not a convenience flag. The schedule is
-  `tools/dev/measurement-windows`: local recurring `HH:MM-HH:MM` and one-off
-  `YYYY-MM-DDTHH:MM/YYYY-MM-DDTHH:MM` intervals. One-offs may cross midnight
-  and expire; they do not open the same hours on other dates. The recurring
-  baseline is `01:00-02:30`, before the normally03:00 nightly fuzz (parked
-  during Stage3); dated allocations follow the existing announcement plan.
-  Outside every window the runner refuses with exit75 and names the next
-  dated start; an exhausted one-off schedule refuses too. Main may override
-  an explicitly authorized run with `KRASNOKAMEN_WINDOW_OVERRIDE=1`, never
-  silently to bypass a changed allocation. The check precedes scene-slot
-  and `-x` locks, so a refusal never holds anything. Tests:
-  `python3 tools/dev/test_measurement_window.py`.
-- **Scope properties.** `MemoryMax=<cap>`, `MemorySwapMax=1G`,
-  `CPUQuota=<physical cores x 100>%`, `CPUWeight=50`, `nice 19`. These are the
-  harness's own scope properties, so harness runs keep their canonical CPU
-  budget. Preemptible builds (below) get `CPUWeight=10`, so under contention
-  tests and servers win the CPU five to one and builds only slow down. A
-  command started through `scene-slot.sh` (it exports `KRASNOKAMEN_SCENE_SLOT`)
-  gets `CPUWeight=500`: with dozens of test scopes at 50, a gate's native
-  client fell to 6-8 TPS and missed its tick waits (2026-11-11). The runner exports `KRASNOKAMEN_HARNESS_CPU_SCOPE=1`; without it the
-  harness re-runs itself in its own scope outside the slice and escapes the cap.
-- **`tools/dev/heavy-watchdog.py`** (user unit `solaris-heavy-watchdog`,
-  started by the runner) is the only thing that pauses work. On real memory
-  shortage (slice PSI trigger or the slice hitting `MemoryMax`) it freezes the
-  youngest *preemptible* command with the cgroup v2 freezer (paused, not
-  killed). Preemptible is decided once from argv: plain `cargo
-  build/check/clippy/doc/fetch` and `cargo test/bench --no-run`, also behind a
-  leading `env NAME=value …` (pin-release, per-tree `CARGO_TARGET_DIR`). Tests, harness
-  runs, servers and clients are never frozen, so their timeouts stay honest;
-  the oldest running command is never frozen. Room is the smaller of
-  `MemAvailable` and the slice cap minus its unreclaimable memory (tmpfs, dirty
-  and writeback pages count; clean page cache that builds leave in the slice is
-  dropped by the kernel at the cap and does not), each minus a 4 GiB reserve. A
-  PSI or `MemoryMax` event freezes only while room is negative. When commands
-  exit it thaws frozen ones oldest first while their expected growth fits the
-  room. A watchdog restart while builds run keeps the shared jobserver as it is.
-  Tests: `python3 tools/dev/test_heavy_watchdog.py`.
-- **Expected peaks are measured.** Every successful command appends its scope's
-  `memory.peak` to `/tmp/solaris-mem-slots/peaks` under an argv signature
-  (paths and leading `env` words removed). The next run expects 1.25 x the
-  largest of its last five peaks (unknown: 4 GiB), never above its cap.
-- **Shared jobserver.** The watchdog owns a make-style jobserver FIFO
-  (`/tmp/solaris-mem-slots/jobserver`, one token per logical CPU) passed to
-  cargo via `CARGO_MAKEFLAGS`, so all builds together run about `nproc`
-  compilers instead of `nproc` each.
-- **Pooled target dirs.** A command that sets `CARGO_TARGET_DIR` keeps it.
-  Otherwise it gets a free shared dir `<work>/targets/slot-a..slot-z`
-  (`KRASNOKAMEN_SLOT_TARGETS` overrides the root): the slot its source tree used
-  last, else any existing free slot, else a new one if `df` reports at least
-  `KRASNOKAMEN_SLOT_MIN_FREE_GB` (default 250 GiB, the free-space floor below; rounded up) free. This check does
-  not reserve space or limit growth of existing slots. Each running command
-  holds its own slot (15-40 GB once built): on 2026-11-07 agents running
-  several commands in parallel created 12 slots and filled the disk, so run one
-  heavy command at a time per agent. The runner records the source tree in
-  `.krasnokamen-tree` and touches tracked files on a tree switch. Before
-  that fix (2026-11-04), Cargo's mtime-based freshness and relative dep-info
-  paths let an older worktree reuse a newer tree's binary, silently skipping
-  newly added tests. The tree is the git toplevel of the runner's starting cwd:
-  one runner command builds one tree. A script that `cd`s into
-  a second worktree inside the same command reuses the first tree's slot without
-  the switch, and Cargo (same unit hash for a workspace member in any checkout)
-  runs the other tree's binary when that binary is newer than this tree's
-  sources (a false test result, 2026-11-14). Run one runner command per tree, or
-  give each tree its own target directory under `<work>/targets/`.
-- **Incremental:** use the single [argv/build-policy description below](#oom-and-killed-commands);
-  normal-lane release pins are not automatically nonincremental. The historical
-  cold `mc-core --tests` comparison was 26m48s→19m07s, not a general speed guarantee.
-- **Lanes.** `-p` is the perf lane: one at a time (perf lock), pinned to the
-  last four CPUs with `CPUWeight=10000`, nice 0, never frozen; for A/B benches and
-  profiles, never for builds. Compare `-p` numbers only with `-p` numbers.
-  `-x` is a quiet measurement window: the watchdog freezes every preemptible
-  command, the runner waits for the rest to finish and holds new commands at
-  start until it ends. `-x` is about quiet, not memory. A command started inside
-  an already running scope (a ledger promote's server build and gates) is not
-  held and never frozen: the window waits for its ancestor, so holding it would
-  deadlock both.
-- **Exit75** is a refusal, not an executed gate: read the named cause (for example
-  no cgroup/watchdog, no scheduled `-x` grant or no usable target directory).
-  Build-token, scene-slot, exclusive-window and perf-lane admission have distinct
-  owners; waiting for one is not evidence of a dead process. Consume its
-  completion event; do not poll or bypass it with another lane.
-- The runner prints one `mem-run: scope ...` line (props, lane, target, expected
-  peak, signature). Copy it into receipts.
-- **One Cargo environment per tree.** Run Cargo only through the runner and keep
-  the same environment for every build on the shared host. A plain `cargo build`
-  after a runner build of the same tree rebuilt the workspace for 84 s (the runner
-  sets `CARGO_INCREMENTAL`), and any `CARGO_PROFILE_*` override is a separate
-  profile with its own artifacts. The dev/test profiles already use line-table
-  debuginfo, so no per-command debuginfo override is needed.
+| Mechanism | Contract |
+|---|---|
+| Memory | No memory slots. Per-command default 8G, non-`-x` requests capped at 12G; agent policy normally selects 6G/12G. Slice `MemoryMax` is the lower of host RAM−16 GiB and, if set, parent `MemoryHigh`−8 GiB. Slice `MemoryHigh` is cleared. Effective parent limits still apply. |
+| Scope | `MemorySwapMax=1G`, CPU quota = physical cores ×100%, `CPUWeight=50`, nice 19. Preemptible builds get weight 10; scene-slot commands 500. `KRASNOKAMEN_HARNESS_CPU_SCOPE=1` keeps harness children in this scope rather than escaping into another. |
+| Build tokens | Three host-wide tokens; compiles wait without polling via `slot-lock.py` on `tokens/token-{1,2,3}.lock`. Built binaries/gates/servers need none. `fleet-status` shows holders/waiters. |
+| Priority | `KRASNOKAMEN_BUILD_LANE=background` may take any token but yields to normal-lane waiters on `tokens/priority.gate`. Main's priority slice and battle takes/render/pins keep normal lane (proposal status above). D27 p.6 authorized the four-token trial; it ended on 2026-11-18 after 15-minute load stayed >20. D27 p.7 removed token-3 reserve; restore it only for a starved live-take window. |
+| Token lifetime | Runner fd 9 and independent scope guardian hold it, never the command. Release only when scope is empty, including kill/OOM. `KRASNOKAMEN_BUILD_TOKEN{,_PID}` permits ancestor-verified reuse by nested compiles, avoiding three-holder deadlock. Scope line says `<n>`, `<n>(reused)` or `none`. |
+| Jobserver | Watchdog owns `/tmp/solaris-mem-slots/jobserver`, a make-style FIFO with one token per logical CPU, passed by `CARGO_MAKEFLAGS`; concurrent Cargo builds share roughly `nproc` compilers. |
+| Peak estimate | Successful scope `memory.peak` goes to `/tmp/solaris-mem-slots/peaks`, keyed by argv without paths/leading env. Next estimate = 1.25× largest of last five, unknown 4 GiB, bounded by cap. |
+
+Compile classification strips leading env/nice/ionice/timeout wrappers:
+Cargo except noncompiling commands (`fmt`, `fetch`, `tree`, `metadata`, `clean`,
+`update`, etc.), gradle(w), pin-release, harness
+`run build|clippy|code-health|correctness|test|regressions|regressions-client|java|standard-pack`
+and `ledger probe|promote`. Nested wrappers recognized by the live script remain
+authoritative. Token is acquired before `-x`; queued compiles cannot block a
+quiet window. A `-p` compile would hold its token while queued: **do not build in `-p`**.
+
+**Locks and lanes**
+
+- Take scene slot **before** exclusive lock: `scene-slot.sh mem-run.sh -x COMMAND`.
+  The reverse order deadlocked the host for ~50 minutes (2026-11-14).
+  In `KRASNOKAMEN_EXCLUSIVE_WINDOW`, `scene-slot.sh` reuses an ancestor's
+  `KRASNOKAMEN_SCENE_SLOT_PID` or refuses exit 75; never acquire scene lock names
+  directly through `slot-lock.py`.
+- `-p`: serialized perf lock, last four CPUs, weight 10000, nice 0, never frozen;
+  compare only matching perf-lane runs.
+- `-x`: quiet measurement, not extra-memory convenience. Freeze preemptible
+  builds, wait for running tests/servers, hold new work until completion.
+  Descendants of already-running scopes continue, or the ancestor wait deadlocks.
+  Admission uses `tools/dev/measurement-windows`: recurring local intervals and
+  dated one-offs (may cross midnight; never recur after expiration).
+  Baseline recurring `01:00-02:30` precedes normally-03:00 nightly fuzz (parked
+  during Stage3); the current announcement plan owns dated allocations.
+  Outside a grant, refuse 75 and name next start, before acquiring locks.
+  Only Main's explicitly authorized `KRASNOKAMEN_WINDOW_OVERRIDE=1` overrides.
+- A guardian kills cancelled jobs' scopes and retains locks until empty.
+  Cancel the parent job, not just children.
+- Exit 75 is admission refusal (named cgroup/watchdog/window/target cause), not
+  an executed gate. Token, scene, exclusive and perf waits have different owners;
+  waiting is not death. Consume completion, never poll or bypass another lane.
+
+**Release and build identity**
+
+- Ad-hoc `cargo build|test|run --release`/`--profile release*` is refused before
+  token/slot admission. `pin-release`, harness/ledger candidate-control tooling,
+  or Main's explicit `KRASNOKAMEN_RELEASE_BUILD_ALLOW=1` may request it.
+  Reuse the immutable pin only for identical source/repo/kind/target/incremental/
+  codegen inputs. Each reverted control or branch gets its own pin. Gates consume
+  the printed `KRASNOKAMEN_SERVER_BINARY`, `CLIENT_BINARY` or `BOTS_BINARY`.
+- Keep one Cargo environment per tree. Runner incremental policy:
+  [below](#oom-and-killed-commands). `CARGO_PROFILE_*` overrides produce distinct
+  artifacts; dev/test already have line-table debuginfo. Plain Cargo after a
+  runner build changes inputs and can rebuild unnecessarily.
+- Explicit `CARGO_TARGET_DIR` is retained; otherwise select
+  `<work>/targets/slot-a..slot-z` (`KRASNOKAMEN_SLOT_TARGETS` override):
+  that tree's last free slot, another existing free slot, then a new one only
+  above `KRASNOKAMEN_SLOT_MIN_FREE_GB` (250 GiB default, rounded up).
+  This reserves no space and does not cap existing-slot growth.
+- `.krasnokamen-tree` records the starting cwd's Git toplevel; switching trees
+  touches tracked files to defeat Cargo mtime/relative-dep-info false freshness.
+  Never `cd` to a second worktree inside the command: it can run the first
+  tree's newer binary. Use separate runner invocations or distinct targets.
+  One heavy command per agent also prevents multiplying 15–40 GB slots.
+- Retain the `mem-run: scope` line (properties, lane, target, peak, signature).
+
+**Watchdog**
+
+`solaris-heavy-watchdog.service`, started by the runner, alone freezes builds.
+On PSI/MemoryMax pressure, freeze the youngest preemptible command only while
+available room is negative; never the oldest running command. Preemptible means
+plain cargo build/check/clippy/doc/fetch or test/bench `--no-run`, including
+leading env. Tests, harnesses, servers and clients are never pressure-frozen,
+so timeouts remain honest.
+
+Room = min(`MemAvailable`, slice cap−unreclaimable memory)−4 GiB; tmpfs/dirty/
+writeback count, reclaimable clean cache does not. On exit, thaw oldest-first
+while expected growth fits. Restart preserves the shared jobserver.
+Relevant regression sources: `tools/dev/test_build_tokens.py`,
+`test_scene_slot.py`, `test_mem_run_release_policy.py`,
+`test_measurement_window.py`, `test_heavy_watchdog.py`.
 
 ## Diagnosing "are they stuck?"
 
-Answer with counts from one pass over `/proc` and the cgroup tree; never poll.
+One bounded `/proc`/cgroup observation, never a polling loop:
 
-1. **Waiting before start.** `tools/dev/fleet-status` lists the build-token
-   and scene-slot holders and waiters. Otherwise: `bash` processes whose argv
-   contains `mem-run.sh` and that are not the inner `bash -c` wrapper. A child
-   `flock` means a lock wait; legitimate ones are `exclusive.lock` while a `-x`
-   window runs and the perf-lane lock for queued `-p` commands; a
-   `slot-lock.py` process is a compile waiting for a token. Never kill a
-   queued `-p` run.
-2. **Running and frozen.** Slice cgroup:
-   `systemctl --user show solaris-heavy.slice -p ControlGroup --value`. Per
-   `*.scope`: `cgroup.freeze` (1 = requested), `cgroup.events` (`frozen 1` =
-   confirmed), `memory.current`, comms in `cgroup.procs`. Reasons:
-   `journalctl --user -u solaris-heavy-watchdog -o cat -n 20`.
-3. **CPU cap.** Slice `cpu.max` is `max` unless the owner pinned a quota in
-   `/tmp/solaris-mem-slots/cpu-quota` (one line such as `600%`; the runner
-   applies it on every call and clears any other slice quota). Check
-   `nr_throttled` vs `nr_periods` in `cpu.stat`. Runtime drop-ins live under
-   `/run/user/<uid>/systemd/user.control/solaris-heavy.slice.d/`. An owner-pinned
-   cap is not permission to remove it; change it only under owner authorization.
-   Host `/proc/pressure/cpu` near 80% while `vmstat` shows >40% idle means a cap
-   or pinning, not load.
-4. **Pinning.** `Cpus_allowed_list` of cargo/rustc; widen live with
-   `os.sched_setaffinity` on every `/proc/<pid>/task/*`.
-5. **Memory.** `MemAvailable`, slice `memory.current`, `memory.events`, swap.
-6. **Cargo's own lock.** A cargo with `wchan=locks_lock_inode_wait` holds an fd
-   on `<target>/.cargo-build-lock`; match its inode in `/proc/locks` (the `->`
-   line is the waiter). Two commands share one `CARGO_TARGET_DIR`; it resolves
-   when the holder finishes and is not a runner queue.
-7. **Agent liveness.** An agent whose last call is a long wait is idle on a
-   build, not dead. See [agent fleet](agent-fleet.md).
+| State | Evidence |
+|---|---|
+| Before start | `fleet-status` token/scene holders/waiters; runner's child `flock` for exclusive/perf lock, `slot-lock.py` for build admission. Never kill a legitimately queued `-p` run. |
+| Frozen | `systemctl --user show solaris-heavy.slice -p ControlGroup --value`; scope `cgroup.freeze` requests freeze, `cgroup.events` `frozen 1` confirms. Read `memory.current`, `cgroup.procs`; reasons: `journalctl --user -u solaris-heavy-watchdog -o cat -n 20`. |
+| CPU throttled | Slice `cpu.max`, `cpu.stat` `nr_throttled/nr_periods`; owner quota comes from `/tmp/solaris-mem-slots/cpu-quota` (e.g. `600%`) and is reapplied each call. Other quotas are cleared. Runtime drop-ins: `/run/user/<uid>/systemd/user.control/solaris-heavy.slice.d/`. Never remove an owner cap without authorization. High CPU pressure with >40% idle suggests quota/pinning, not load. |
+| Pinned | Cargo/rustc `Cpus_allowed_list`; authorized live widening must cover every `/proc/<pid>/task/*` via `os.sched_setaffinity`. |
+| Memory | Host `MemAvailable`, slice `memory.current/events`, swap and parent limits. |
+| Cargo lock | `wchan=locks_lock_inode_wait`, fd for `<target>/.cargo-build-lock`, matching inode in `/proc/locks` (`->` waiter). Shared target contention, not runner admission; resolves when holder exits. |
+| Agent | A long wait is not death; [fleet liveness/recovery](agent-fleet.md#liveness-and-recovery). |
 
-Fixes: kill stuck waiters by PID only (never by name pattern), including their
-`flock` children, then tell the affected agents to rerun anything that exited
-before printing its `mem-run: scope` line. To fix a wrong freeze: stop the
-watchdog unit, write 0 to every frozen scope's `cgroup.freeze`, swap the fixed
-code, start the unit (agents' runner calls may restart it in between).
+For a diagnosed stuck waiter, cancel its parent job/owned PID tree including
+flock children, never by broad name. Report commands exiting before their
+scope line for rerun. Wrong-freeze repair: stop watchdog, thaw frozen scopes
+(`cgroup.freeze=0`), atomically replace fixed code, start watchdog; other runner
+calls may restart it during repair.
 
 ## OOM and killed commands
 
-- A signal or exit143/137 alone identifies neither OOM nor owner cancellation.
-  Correlate the exact child/scope with `memory.events`/`memory.peak` and the user
-  journal; kernel OOM records identify host-level victims. Keep unobserved causes
-  unknown and retain the failing receipt. Lower compile concurrency before raising
-  a proven-insufficient cap; rerun only the affected gate after that correction.
-- Host-level: `journalctl -k --since -3h | grep -E 'Killed process|oom-kill:'`
-  names the victim (`omp` = agent host; `rustc`/test binary = a scope).
-- Prove a cap really applies with a `RUSTC_WRAPPER` script that appends
-  `/proc/self/cgroup` to a file; a bash smoke test proves nothing.
-- Never set `MemoryHigh` on the slice: reclaim pressure is what systemd-oomd
-  kills on, and it picks the largest units (terminal, agent host).
-- sccache: the runner exports `RUSTC_WRAPPER=tools/dev/sccache.sh` and
-  `SCCACHE_CLIENT_SIDE=1` when the user unit `solaris-sccache.service` (app.slice,
-  `client_side_mode`: the daemon only fronts the cache, every compile runs in the
-  caller's scope) is active and `~/.cargo/bin/sccache` exists, else
-  `RUSTC_WRAPPER=` (uncached). Never stop, restart or reconfigure that unit, never
-  start an sccache inside a scope (it would stay populated by that scope), and
-  compare `sccache --show-stats` before and after instead of zeroing it. Measured
-  2026-11-11, one run: a cold debug `krasnokamen` in another tree against a warm
-  cache took 4542 -> 3316 G instructions (`perf stat`, -27%; 213/271 Rust hits plus
-  284 C hits), and populating an empty cache cost +6%. The same for a cold release
-  `krasnokamen`: 5482 -> 4707 G instructions (-14%), populating +1%. Each is one
-  measurement under those conditions, not a general speedup. Expected to help on cold or
-  private target dirs, after slot rotation and after toolchain changes; a warm slot
-  gains nothing. Plain
-  `RUSTC_WRAPPER=sccache` is wrong here: sccache hashes every `CARGO_*` variable
-  into Rust keys and the runner's per-slot `CARGO_TARGET_DIR` made every key
-  differ (0 hits across slots), it refuses `CARGO_INCREMENTAL=1` (which the runner
-  sets for debug builds), and a wrapper not named `sccache` leaves C/C++ build
-  scripts (aws-lc-sys, zstd-sys) uncached. `sccache.sh` unsets those two variables
-  (cargo passes their effect to rustc as arguments) and keeps the stem `sccache`.
-- Incremental (`CARGO_INCREMENTAL`) is set by the runner from the argv: 1 for
-  debug/test builds and for `--release` builds in the normal lane, 0 in `-p`/`-x`
-  lanes and for any `--profile` build. One re-pin measurement (2026-11-11) used
-  less CPU with incremental, but host load was not recorded for the full-build
-  runs, so only the direction is plausible, not the size. It needs about 2.4 GB
-  more per slot and uses more codegen units, so its binary can run slower: take
-  performance binaries from `pin-release --no-incremental`, never an ad-hoc
-  release build. Its manifest records the effective build environment.
-- Agent hosts and language servers may sit outside the heavy slice: include
-  parent/host accounting. Do not blanket-kill shared analysis servers, Gradle or
-  clients to reclaim RAM; stop only verified owned/authorized processes under the
-  [fleet recovery rules](agent-fleet.md#liveness-and-recovery).
-- Agent tool calls default to a 300 s deadline: run long commands with
-  `async: true` plus `timeout: 0`/`3600`, never by changing harness timeouts.
+- Exit 143/137 or a signal proves neither OOM nor owner cancellation. Correlate
+  exact child/scope with `memory.events`, `memory.peak`, user journal and kernel
+  records (`journalctl -k --since -3h | grep -E 'Killed process|oom-kill:'`).
+  Keep unknown causes unknown and retain failed receipts. Lower compile
+  concurrency before increasing a proven-insufficient cap; rerun only affected gate.
+- To prove compiler cgroup placement, an authorized diagnostic wrapper records
+  `/proc/self/cgroup` from the compiler, not a shell smoke test.
+  Never set slice `MemoryHigh`: reclaim pressure can make systemd-oomd kill the
+  largest unit (terminal/agent host).
+- Runner selects `tools/dev/sccache.sh` and `SCCACHE_CLIENT_SIDE=1` only while
+  `solaris-sccache.service` is active and `~/.cargo/bin/sccache` executable;
+  otherwise uncached `RUSTC_WRAPPER=`. The app.slice daemon fronts cache only:
+  compiles remain in caller scope. Never stop/restart/reconfigure it or start
+  sccache in a job scope. Compare stats without zeroing them.
+- Do not pass your own `RUSTC_WRAPPER=` or plain `sccache`. The wrapper removes
+  `CARGO_TARGET_DIR`/`CARGO_INCREMENTAL` from sccache's environment (their effects
+  already reach rustc argv), preventing per-slot key misses and incremental
+  refusal. Its `sccache` stem enables C/C++ cc-rs caching too.
+  One cold-target/warm-cache measurement (2026-11-11): debug 4542→3316 G
+  instructions (213/271 Rust hits, 284 C hits), release 5482→4707 G;
+  empty-cache population +6%/+1%. These are conditional samples, not guarantees;
+  already-warm target slots gain nothing.
+- Runner sets `CARGO_INCREMENTAL=1` for debug/test and normal-lane release,
+  `0` for `-p`/`-x` and any `--profile`. Incremental costs ~2.4 GB/slot and may
+  slow runtime through extra codegen units. Performance binaries must use
+  `pin-release --no-incremental` (manifest records effective environment).
+  Historical cold core-test build: 26m48s→19m07s; re-pin CPU direction was
+  favorable but full-build host load was unrecorded, so no speedup guarantee.
+- Do not blanket-kill shared LSP, Gradle, clients or agent hosts. Stop only
+  verified owned/authorized processes under fleet recovery rules.
+  Long tool jobs need an explicit async deadline (`timeout: 0`/`3600`), not
+  widened harness timeouts to evade a tool's 300 s default.
 
 ## Changing the runner or watchdog
 
-- Replace scripts atomically: write a copy, `bash -n`, then `mv` over the
-  original. Running bash callers read the file incrementally; an in-place `cp`
-  made waiters execute spliced text (`syntax error near '('`,
-  `ty: command not found`).
-- Test lock or admission changes on a copy with a private lock dir, FIFO gates
-  and `/proc/locks` waiter counts filtered by the lock files' inodes; cover
-  ordering, `-x` exclusivity and `kill -9` of a waiter mid-wait. Run old and
-  new to show FAIL then PASS.
-- Read scope files with `2>/dev/null || continue`: scopes vanish between glob
-  and read. Treat a scope as gone only when `cgroup.events` says
-  `populated 0` (empty `cgroup.procs` misses child cgroups).
+Replace scripts atomically (write copy, `bash -n`, rename), never edit a running
+shell script in place: incremental reads executed spliced text previously.
+Test lock/admission changes on a private copy/lock dir using FIFO gates and
+`/proc/locks` inode-filtered waits: ordering, exclusive behavior and killed
+waiters must fail on old and pass on new. Scopes can vanish between glob/read;
+ignore failed reads, but only `cgroup.events` `populated 0` proves empty
+(`cgroup.procs` omits child cgroups).
 
 ## When the owner says the machine is choking
 
-Owner-approved response (2026-10-24), adjusted for the current runner: renice
-running rustc/cargo/java/qemu to 19, start new heavy commands with a lower
-`KRASNOKAMEN_MEM_RUN_CPU_QUOTA` (e.g. `400`), and tell agents to use
-`-m 6G nice -n 19 cargo ... -j 2`, `--test-threads 2`,
-focused `-p` crates only. For a machine-wide cap, write the owner's quota to
-`/tmp/solaris-mem-slots/cpu-quota` (e.g. `600%`, replaced atomically); the runner
-clears any slice `CPUQuota` not set through that file (a forgotten one held every
-heavy command to 2 CPUs from 2026-10-26 to 2026-10-28).
-Find rustc processes outside the slice (`/proc/<pid>/cgroup`) and trace their
-cwd to the agent.
+Owner-approved 2026-10-24 response: renice rustc/cargo/java/qemu to 19; new
+commands use lower `KRASNOKAMEN_MEM_RUN_CPU_QUOTA` (e.g. `400`), `-m 6G`,
+`nice -n 19 cargo ... -j 2`, `--test-threads 2`, focused crates. A machine-wide
+owner quota goes atomically into `/tmp/solaris-mem-slots/cpu-quota` (`600%`,
+for example), not an untracked slice override the runner clears. Trace out-of-slice
+rustc cgroups/cwds to owners.
 
 ## Disk
 
-- Nothing new on the root disk (owner, 2026-10-23): worktrees in `<work>/wt/`,
-  target dirs in `<work>/targets/`, sccache on the games disk. `/tmp` is on the
-  root disk. `git worktree move` fails across devices; use rsync.
-- `/dev/shm` has a per-user quota: `df` free space is not usable headroom.
-- **Keep at least 250 GiB free on the games disk** (owner, 2026-11-13; raised
-  from 80-100 GB set 2026-11-07; it is a DRAM-less Samsung 980 whose fast write
-  cache shrinks as it fills: at 92% full writes took over a second each). Below
-  the floor, `slot-gc` evicts idle slots in least-recently-used order (below).
-  The disk filled to 100% several times: 12 parallel
-  target slots (2026-11-07), plugin `.wasm` copies of about 4 MB per scenario
-  run (7 of 11 GB on 2026-10-28), 650 MB of client content copied into every
-  scene-shot receipt (now symlinked), nested `sdk/rust/target` in rsync'd
-  worktrees, 66 GB of stale debug targets.
-- **Slot cleanup and rotation.** Below `KRASNOKAMEN_SLOT_MIN_FREE_GB` + 10 GiB free
-  (260 GiB by default), the runner (except `-x`/`-p`) invokes `slot-gc --delete`;
-  failures are logged and do not stop the command. Each pass removes attributable
-  dead artifacts and superseded finalized incremental sessions. If space remains
-  below the threshold, idle slots are rotated least recently used first: their
-  incremental dirs, then the rest except `tmp/` if needed. A slot is skipped
-  while its pool lock or its use lock is held (every runner command on the slot
-  holds the use lock, an explicit `CARGO_TARGET_DIR` included), or while a live
-  process has it as `CARGO_TARGET_DIR`; run cargo through the runner, because a
-  bare cargo started after that scan is not protected. Rotation can
-  discard live-tree caches; slots ignore the in-use registry. See
-  [`tools/dev/README.md`](../../tools/dev/README.md#slot-gc---delete--v-slot).
-- **Order when space is short** (owner, 2026-11-16). Free only reproducible
-  build output, in this order, and check `df` after each step. Standing owner
-  permission (2026-11-17): below the floor, build caches may be cleared whole,
-  all three steps, without asking.
-  1. Incremental caches of idle slots:
-     `tools/dev/slot-gc --delete --incremental-only --min-free-gb <target GiB>`
-     (dry run without `--delete` first). Busy slots are skipped as above.
-  2. Named `targets/<Agent>` dirs of merged or finished slices with zero users
-     (rule under *Target dirs* below). A named dir that also holds inputs (a
-     tool checkout, benchmark worlds, pack jars) loses only its cargo target.
-  3. Old build outputs of idle slots: full rotation
-     (`slot-gc --delete --min-free-gb <target GiB>`).
+Nothing new on root disk: worktrees `<work>/wt/`, targets `<work>/targets/`,
+sccache on games disk; `/tmp` is root disk. Cross-device worktree moves need
+rsync, not `git worktree move`. `/dev/shm` per-user quota can be below `df` free.
 
-  Run data is never on this list: crash copies, WAL archives, worlds and
-  client state of a run stay unless the owner explicitly approves deleting
-  them, and a failing run or negative control stays whole even then. Hashing
-  a WAL does not replace it. A `slot-gc` pass above floor + 10 GiB runs only the
-  safe classes, which delete nothing a live tree can still use, so it reports
-  0 GiB even with hundreds of GiB of idle incremental caches: use step 1.
+**Keep ≥250 GiB free** (owner 2026-11-13): DRAM-less Samsung 980 write cache
+shrinks near full. Below floor+10 GiB (default 260), ordinary runner calls invoke
+`slot-gc --delete`, report errors without failing the command; not in `-p`/`-x`.
+It removes attributable dead artifacts/superseded finalized incremental sessions,
+then rotates idle slots LRU (incremental first, other output except `tmp/` next).
+Pool/use locks and live `CARGO_TARGET_DIR` users protect slots, including explicit
+targets; bare Cargo racing the scan is not protected. Slots ignore in-use marks,
+so idle live-tree caches can be rotated
+([slot-gc details](../../tools/dev/README.md#slot-gc---delete--v-slot)).
 
-Cleanup while agents run:
+Below floor, standing owner approval (2026-11-17) allows **reproducible build
+caches only**, in this order; check `df` after each:
 
-- **Worktrees:** use `wt-done <Name>` (verified `final.patch`, then removal). It
-  refuses a worktree another owner marked in the in-use registry
-  (`tools/dev/in-use`; `wt-gc` shows the marks), so mark a client/loader checkout
-  or a receipt binary you run with `in-use add` and drop it with `in-use remove`.
-  By hand, only if its agent finished, it has no tracked changes (a stray `.pyc`
-  aside) and its HEAD is in a branch (`git branch --contains`). Check
-  handoffs/configs for absolute paths into it first (e.g. an ALSA pkg-config
-  shim, a `KRASNOKAMEN_LOADER_ROOT`). Move its `.analysis/` to
-  `<work>/receipts/<wt>-analysis` and publish outputs to
-  `<work>/release-artifacts/` (call them "built", never "published"), then
-  `git worktree remove --force` and `git worktree prune`.
-- **Target dirs:** candidates only with zero users across `/proc` (cwd, exe,
-  fds, `CARGO_TARGET_DIR=` in environ); re-check right before `rm`. Delete a
-  pooled `slot-<l>` only under its lock:
-  `flock -n /tmp/solaris-mem-slots/<l> rm -rf <work>/targets/slot-<l>`. Keep
-  dirs named in active tasks and dirs holding binaries other agents run.
-- **Receipts and scenarios** (owner, 2026-11-07, narrowed 2026-11-16): a
-  finished run keeps its reports, logs and `result.json` (text reports such as
-  `.md`, `.yaml`, `.json`, `.txt`, plus `.log` files, delivered `.patch` files
-  and screenshots). Only provably reproducible inputs may be deleted: copied
-  client data roots, binaries whose pin or build is kept elsewhere, jars and
-  `.wasm` copies. Crash copies, WAL archives, worlds, `journal/`, recorded
-  profiles (`perf.data`) and archives are run data: keep them unless the owner
-  explicitly approves, and never delete them from a failing run. Keep the full
-  run while its work is active or a named next task needs it.
-- Don't touch the owner's main checkouts and their `target/`, sccache, or other
-  projects' caches in `/tmp`.
+1. Idle incremental caches: dry-run, then
+   `slot-gc --delete --incremental-only --min-free-gb <target>`.
+2. Named finished/merged `targets/<Agent>` dirs with zero users; if they also
+   hold inputs/worlds/jars/tool checkouts, remove only Cargo output.
+3. Idle-slot full rotation: `slot-gc --delete --min-free-gb <target>`.
+
+Above floor+10, plain GC only removes safe dead classes; zero reclaimed does not
+mean no incremental caches exist. Use step 1 rather than deleting run data.
+
+| Object | Retention and removal |
+|---|---|
+| Worktree | `wt-done` verifies `final.patch` and archives evidence before removal; obey [archive/restoration rules](worktrees-and-integration.md#creating-a-worktree). Mark dependent checkouts/pins using `in-use add/remove`; `wt-gc` displays marks. Manual removal requires finished owner, no tracked changes except stray `.pyc`, HEAD retained in a branch (`git branch --contains`), and no handoff/config path dependencies. First preserve `.analysis/` at `<work>/receipts/<wt>-analysis` and built outputs at `<work>/release-artifacts/` (not “published”); only then `git worktree remove --force <absolute-worktree>` and `git worktree prune`. |
+| Target dir | Recheck zero users in `/proc` cwd/exe/fds/environ immediately before removal. Pooled deletion requires its lock (`flock -n /tmp/solaris-mem-slots/<l> rm -rf <work>/targets/slot-<l>`). Preserve active-task dirs and binaries other agents run. |
+| Receipts/scenarios | Active or next-task-needed runs stay whole. Finished runs retain reports (`md/yaml/json/txt`), logs, `result.json`, patches and screenshots. Only provably reproducible copied client roots/binaries/jars/wasm may go when their source/pin is retained. |
+| Run data | Crash copies, WAL, worlds, journal, client run state, `perf.data` and archives require explicit owner deletion approval; failing runs and negative controls stay whole even then. A WAL hash never replaces its bytes. |
+| Other | Never touch owner's main checkouts/targets, sccache, or other projects' `/tmp` caches. |
+
+Past disk fills came from parallel slots, copied wasm/client content and nested
+SDK targets. Avoid copying caches into worktrees/receipts; protect unique input
+and evidence, not reproducible bulk.
 
 ## Superseded runner designs (do not follow old skills)
 
-| Date | Design | Why it changed |
-|---|---|---|
-| 2026-10-02 | 2 flock slots, 12G slice, 6G per command, admission exit 75, `-x` = both slots | waiters stranded behind a long job; cancelled waiters leaked a slot |
-| 2026-10-03/04 | 3 slots x 5G in a 16G slice, CPUs 2/3 reserved for single-core perf windows | admission refused everything while one build ran |
-| 2026-10-16 | 25G slice, 3 slots x 8G, `-p` on CPUs 8-11, `-x` acceptance only with Main GO | 20+ agents waited 10+ minutes in admission; admission summed caps of every populated scope, not real usage |
-| 2026-10-28 | no slots or queue; watchdog freezer; shared jobserver; measured peaks | current |
-| 2026-11-04 | pooled target dirs with per-tree marker and touch on switch | current; fixes false greens |
-| 2026-11-11 | three build tokens for compile commands (`slot-lock.py`), reused by nested compiles | current; the 3-builder limit was convention only and the fleet still ran more |
-| 2026-11-18 | four build tokens (owner D27 trial); token-3 battle-video reserve stays removed | ended the same day: the 15-minute load stayed above 20 (21.3, 24.1, 23.9); back to three tokens, the reserve stays removed |
-
-Skills or prompts that mention slots, "3 x 5G", "-m 5G", exit 75 as a memory
-refusal, or CPU 2/3 windows are obsolete; AGENTS.md and this page win.
+The October fixed-memory-slot, 3×5G, CPU-2/3 and Main-GO recipes are retired.
+Current design is the watchdog/shared jobserver (2026-10-28), tree-marked pooled
+targets (11-04) and three nested-reusable compile tokens (11-11; D27's four-token
+trial ended 11-18). Exit 75 is a named admission refusal, not the old memory-slot
+rule. Follow this page and the live runner, not historical skills.

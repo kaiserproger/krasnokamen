@@ -2,10 +2,9 @@
 
 Coverage-guided fuzzing of the bytes a client can make the server decode. This crate has its
 own `[workspace]` and is not a member of the root workspace, so L2 and code-health never build
-it; the `fuzz` job in `.github/workflows/ci.yml` runs the targets on every push and pull
-request, and `.github/workflows/fuzz-nightly.yml` runs the same legs nightly
-(see [`docs/AGENT_TOOLING.md`](../docs/AGENT_TOOLING.md#decoder-fuzzing-fuzz)).
-Needs the nightly toolchain and `cargo install cargo-fuzz`.
+it. CI and nightly use the same six legs; their execution contract is below.
+Install `cargo-fuzz` (CI 0.13.2) and nightly (CI `nightly-2026-11-09`);
+the server and other gates retain their pinned 1.99 toolchain.
 
 Property for every target: malformed or truncated input yields a decode error, never a panic,
 abort, OOM or unbounded allocation.
@@ -24,33 +23,49 @@ abort, OOM or unbounded allocation.
 
 ## Build and run
 
-From `fuzz/`; wrap in `tools/dev/mem-run.sh` on the shared machine.
+Run from `fuzz/` using the pinned CI nightly for reproducibility:
 
 ```sh
-cargo +nightly run --release --example seed_corpus -- corpus   # structure-aware seeds from the real encoders
-cargo +nightly fuzz build                                      # every target except `edge_play`
-
-cargo +nightly fuzz run frame_stream     -- -max_total_time=720 -rss_limit_mb=2048 -timeout=20 -max_len=16384
-cargo +nightly fuzz run packets_pre_play -- -max_total_time=720 -rss_limit_mb=2048 -timeout=20 -max_len=16384
-cargo +nightly fuzz run packets_play     -- -max_total_time=720 -rss_limit_mb=2048 -timeout=20 -max_len=16384
-cargo +nightly fuzz run loader_wire      -- -max_total_time=720 -rss_limit_mb=2048 -timeout=20 -max_len=16384
-cargo +nightly fuzz run nbt              -- -max_total_time=720 -rss_limit_mb=2048 -timeout=20 -max_len=16384
-
-# edge_play drags in mc-core/wasmtime: rustc needs >10 GB there with coverage instrumentation at
-# opt-level 3, so build it with the dev profile (mc-protocol/mc-nbt/mc-data stay at opt-level 3).
-cargo +nightly fuzz run --dev --features edge edge_play -- -max_total_time=720 -rss_limit_mb=2048 -timeout=20 -max_len=16384
+cargo +nightly-2026-11-09 run --release --example seed_corpus -- corpus
+cargo +nightly-2026-11-09 fuzz run <target> -- \
+  -max_total_time=720 -rss_limit_mb=2048 -timeout=20 -max_len=16384 -print_final_stats=1
 ```
 
-`-malloc_limit_mb=32` additionally turns any single decode allocation over 32 MB into a finding.
+On CI's x86_64 Linux runner, add `--target x86_64-unknown-linux-gnu` because
+binstall's musl-built cargo-fuzz otherwise selects a target ASan rejects.
+Local `cargo install cargo-fuzz` uses the host target; do not force CI's triple
+on macOS or aarch64.
+`edge_play` adds `--dev --features edge`: optimized core/Wasmtime coverage
+compilation exceeds the CI runner's memory. `cargo fuzz build` builds the other
+targets. `-malloc_limit_mb=32` optionally makes a >32 MB single allocation a finding.
 
-On the owner host `tools/dev/mem-run.sh` refuses release builds (a release binary is a
-`tools/dev/pin-release` pin), so add `--dev` to each command there — including the seed example.
-The dev profile executes fewer inputs per second; the CI legs in `.github/workflows/ci.yml` and
-`fuzz-nightly.yml` use the release profile for the same reason.
+Owner host: Main's absolute `tools/dev/mem-run.sh -m 6G` wraps each heavy command;
+use `--dev` for fuzz and omit `--release` for the seed example under the
+owner-host release-build policy. The guard rejects ad-hoc release
+`cargo build|test|run`; it does not mechanically reject `cargo fuzz run` without
+`--dev`, so that policy still applies. Dev executes fewer inputs/second: local
+clean smoke is not the CI release window and never proves absence of decoder bugs.
+
+## CI and corpus
+
+`.github/workflows/ci.yml` is the canonical leg definition:
+push to main/tags/PR = 60 s per target, `fail-fast: false`; nightly
+(`fuzz-nightly.yml`, cron `17 3 * * *`) = 900 s, dispatch `seconds` overrides.
+Keep the workflows in step. `release-build` depends on fuzz.
+Cargo-fuzz supplies sanitizer/coverage RUSTFLAGS, not workspace `-D warnings`.
+Every leg uses the bounds above: crash/OOM/20-second input/hang fails the run;
+`fuzz-<target>-failure` retains artifacts and log for 14 days.
+
+Corpus cache keys are `fuzz-corpus-<target>-<sha>` with prefix restore: immutable
+cache entries accumulate and newest matching corpus is restored. Cold corpora
+are seeded by the real packet/NBT encoders through `seed_corpus`.
 
 ## Findings
 
-A crash lands in `fuzz/artifacts/<target>/`. Minimise with `cargo +nightly fuzz tmin <target>
-<artifact>`, then add a regression test in the owning crate (`crates/mc-protocol`, `crates/mc-nbt`,
-`crates/mc-edge`) that decodes the minimised bytes and expects an error, and fix the decoder.
-Corpus and artifacts are git-ignored.
+A crash lands in ignored `fuzz/artifacts/<target>/`. Replay with
+`cargo +nightly-2026-11-09 fuzz run <target> <artifact>`, minimize with
+`cargo +nightly-2026-11-09 fuzz tmin <target> <artifact>` (edge adds
+`--dev --features edge` to both; owner-host rules above still apply).
+Add the minimized bytes to an error-expecting regression in the owning
+protocol/NBT/Loader/edge crate, fix the decoder, and [file the bug](../docs/bugs/README.md);
+only `ledger promote` closes it. Parser fixes are separate from fuzz-tooling changes.

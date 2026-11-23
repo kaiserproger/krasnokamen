@@ -15,31 +15,25 @@ client prerequisites, graphical gates, the render oracle),
 
 ## Prerequisites
 
-- Repository root as cwd; `python3`, `cargo` (toolchain pinned by
-  `rust-toolchain.toml`) and, for `run test`/`correctness`, `cargo-nextest`
-  (CI installs 0.9.143).
-- Linux with a systemd user scope for the harness's resource bounds (see
-  [Resource bounds](#resource-bounds)); without one a run prints a warning and
-  continues unbounded.
-- Java profiles (`java`, `--client java`): Java 25
-  (`java -XshowSettings:properties -version` must report specification 25), an
-  executable `../solaris-loader/gradlew` (`KRASNOKAMEN_LOADER_ROOT` selects another
-  Loader checkout), a Minecraft client jar via `KRASNOKAMEN_CLIENT_JAR` (CI
-  downloads the version in the Loader's `gradle.properties` and verifies
-  Mojang's SHA-1), and Xvfb for every graphical profile. Wasm package coverage
-  comes from `standard-pack` over `../solaris-default-plugins`
-  (`KRASNOKAMEN_DEFAULT_PLUGINS_ROOT`), not from an in-core plugin copy.
-- Native client profiles (`--client native`): a built `krasnokamen-client` and a
-  prepared data root; see the prerequisites block in
-  [real-client gates](development/real-client-gates.md#prerequisites).
-- Real-client and scale profiles need a **release** `krasnokamen` as
-  `KRASNOKAMEN_SERVER_BINARY` (`cargo build --release --locked -p mc-edge --bin
-  krasnokamen`; on the owner host a path from `tools/dev/pin-release`).
-- Free loopback ports (default MCP `39095`, scenario servers such as
-  `25565`/`25567`, per-run bridge ports); a run that cannot bind fails closed.
-  Readiness on Linux uses inotify/pidfd event waits, Xvfb process management and
-  MCP state events, never sleeps.
-- Neither Mojang bytes nor `data/vanilla/*` nor `.analysis/*` enter Git.
+Run from repo root with Python 3, the pinned Rust toolchain and cargo-nextest
+(CI 0.9.143). [Contributor setup](../CONTRIBUTING.md#prerequisites) covers builds.
+Linux systemd user scopes provide [resource bounds](#resource-bounds);
+without one the harness warns and continues unbounded.
+
+- Java: specification **25**, executable sibling Loader `gradlew`, client jar
+  in `KRASNOKAMEN_CLIENT_JAR` (CI uses Loader `gradle.properties` and Mojang SHA-1),
+  Xvfb for graphical profiles. `KRASNOKAMEN_LOADER_ROOT` overrides the sibling;
+  `standard-pack` uses `KRASNOKAMEN_DEFAULT_PLUGINS_ROOT`, never an in-core copy.
+- Native: built client and prepared data root; exact
+  [client prerequisites](development/real-client-gates.md#prerequisites).
+- Real-client/scale: release server in `KRASNOKAMEN_SERVER_BINARY`, owner-host
+  `pin-release`, never pooled targets. Elsewhere build with
+  `cargo build --release --locked -p mc-edge --bin krasnokamen` and use the
+  [environment block](development/real-client-gates.md#3-environment-block).
+  Free loopback ports (MCP default 39095, scenario servers commonly 25565/25567
+  and per-run bridge ports). Bind failures fail closed; readiness uses
+  inotify/pidfd/log/MCP events, not sleeps.
+- Mojang bytes, `data/vanilla/*` and `.analysis/*` never enter Git.
 
 ## Harness entrypoint
 
@@ -55,69 +49,42 @@ python3 -m tools.harness mcp [--server-address host:port] [--exercise-input] [--
 python3 -m tools.harness plan [--base REV] [--paths PATH...] [--json]
 ```
 
-Typed-option constraints (the run fails closed with exit 2 on violation; the
-source of truth is `tools/harness/__main__.py`):
+Typed options are owned by `tools/harness/__main__.py`; violations fail exit 2:
 
-- `--server-bin` names an immutable candidate executable for `loader-live`,
-  `protocol-matrix`, `java-matrix`, `native-matrix` or `matrix-random`. Other
-  launch paths use `KRASNOKAMEN_SERVER_BINARY` for the candidate.
-- `--plugins-dir` is supported for `--client native`, `java-v2-p5-towns`,
-  `scene-shot`, `loader-live`, `graves` and the matrix profiles. The source
-  directory must already exist; matrix profiles stage their own package set.
-- `--windowed` requires `--client native` (`scene-shot` and `settlement-map-qa`
-  also accept `--client java`).
-- `--client native` is enabled only for the profiles in the allow-list in
-  `tools/harness/__main__.py`; any other profile fails before launching a client.
-  Most `list` descriptions say where native is supported.
-- `--release` only changes `build`; every other profile ignores it.
-- `--timeout-seconds N` sets the per-command deadline for stage commands and
-  overrides the scenario default where the backend honors it
-  (`core-client`/`inventory` 600 s, `loader-live` 600 s,
-  `playable` 1500 s, `replay` 180 s). Stage commands have no default deadline.
-  `loader-live` sets `profiles.PROFILES["loader-live"]["client_ready_timeout_seconds"]`
-  to `None`: a cold NeoForge `createMinecraftArtifacts` compiles roughly 7300 sources
-  before Minecraft can expose MCP. Gradle's launch task remains alive with the game,
-  so process completion is not a usable successful build/launch boundary. The
-  log/process-event-driven MCP readiness wait has no wall-clock build deadline;
-  it returns on the owned MCP listener and fails immediately on process exit.
-  Cancellation still tears down the client process group. Scenario waits are
-  unchanged; other Java client callers retain 180 s. The loader receipt records
-  the selected client-start allowance (`null` for event-only readiness).
-  `screens-voice-qa --client native --windowed` is admitted by the CLI and
-  dispatches its native/Fabric screen and voice legs (it is not Java-only).
+| Option | Boundary |
+|---|---|
+| `--server-bin` | Immutable executable for `loader-live`, `protocol-matrix`, `java-matrix`, `native-matrix` or `matrix-random`; other paths use `KRASNOKAMEN_SERVER_BINARY`. |
+| `--plugins-dir` | Existing directory for native, `java-v2-p5-towns`, `scene-shot`, `loader-live`, `graves`, matrix; matrix stages its own set. |
+| `--windowed` | Native only, except scene-shot/settlement-map-qa also accept Java. |
+| `--client native` | Only CLI allow-listed profiles; `list` describes support. `screens-voice-qa --client native --windowed` dispatches native/Fabric legs. |
+| `--release` | Changes `build` only; other profiles ignore it. |
+| `--timeout-seconds` | Per-stage command deadline, otherwise none; overrides backend scenario default where honored (core-client/inventory/loader-live 600 s, playable 1500, replay 180). |
 
-Receipt statuses are `passed` | `failed` | `timeout` | `prepared` | `interrupted`. Only real
-completion is `passed`. `--check`/`--prepare` (and other preparation-only modes)
-report `prepared` with exit 0, never a gameplay pass. Unknown profiles,
-unlaunchable or nonzero commands, and missing scenario evidence fail closed with
-a nonzero exit. Every timeout is failure, never success.
-Timed-out stage commands and runs interrupted by SIGINT, SIGTERM or SIGHUP
-terminate their stage descendants, including separate process groups. A timeout
-writes a `timeout` receipt; a signal writes an `interrupted` receipt naming it.
+**Loader event-only readiness:** `loader-live` sets
+`client_ready_timeout_seconds=None`. Cold NeoForge compiles ~7300 sources and
+Gradle's launch task remains alive with the game: neither a build timeout nor
+process completion proves successful launch. Wait for the owned MCP listener,
+fail on process exit; cancellation tears down the client group. Receipt allowance
+is `null`; scenario deadlines are unchanged, other Java callers retain 180 s.
 
-Real-client and functional-native runs check prerequisites before their
-profile launches: set `KRASNOKAMEN_SERVER_BINARY` to a pinned executable and, for
-native clients, `KRASNOKAMEN_CLIENT_BINARY` and the client data paths described in
-the real-client guide. Pooled `targets/slot-*` binary paths are refused. Scene
-JSON step contracts are checked before startup. Failed receipts include
-`details.failure` with available binary hashes, logs and child exit or signal;
-`phase: unknown` means the failing backend has not identified its phase.
+Statuses: `passed`, `failed`, `timeout`, `prepared`, `interrupted`.
+Only completed execution passes; preparation/check modes return `prepared`
+even with exit 0. Unknown/unlaunchable/nonzero commands, absent scenario evidence
+and all timeouts fail closed. Timeout or SIGINT/SIGTERM/SIGHUP tears down stage
+descendants including separate groups and records the timeout/signal.
 
-The shared Java client launcher sets both `HOME` and JVM `user.home` to `.home`
-inside that client's game directory. Forge's home-derived Minecraft assets
-therefore use that private directory; provision assets there when needed.
-Gradle's separately configured cache is not isolated by this setting.
-Before connecting, the launcher retries an explicit render-thread observation
-timeout only within the bootstrap deadline; it still requires the actual title
-screen and propagates other MCP errors.
-The default 512 MiB game heap is applied to the selected Gradle `runClientMcp`
-JavaExec task only (or directly to a prepared/plain Java command), never through
-an injected `JDK_JAVA_OPTIONS` inherited by Gradle/NeoForm compiler JVMs.
-An operator-supplied `JDK_JAVA_OPTIONS` remains unchanged.
-The vanilla-world roundtrip is a correctness driver and uses the normal memory
-runner lane; only measurement profiles may request `-x`.
-The screen/voice capture API accepts a named private sink and its description;
-each named capture records its own `<sink>.f32le` and monitors only that sink.
+Preflight rejects pooled `targets/slot-*` pins and invalid scene steps before
+launch; native also needs `KRASNOKAMEN_CLIENT_BINARY` and data paths.
+Failure evidence and schemas: [receipts](#receipts-and-failure-diagnosis).
+
+Shared Java launch isolates `HOME` and JVM `user.home` to `<game>/.home`
+(provision Forge assets there; Gradle cache is separate). It retries only explicit
+render-thread observation timeouts inside the bootstrap deadline, still requires
+the actual title screen and propagates other MCP errors. The 512 MiB game heap
+belongs only to runClientMcp JavaExec/prepared/plain Java, never an injected
+`JDK_JAVA_OPTIONS` affecting compiler JVMs; caller-supplied options remain intact.
+Vanilla-world roundtrip is normal-lane correctness, not `-x` measurement.
+Named private audio captures monitor only their named sink and retain `<sink>.f32le`.
 
 ## Matrix runner status
 
@@ -126,56 +93,34 @@ Adapter guidance: [matrix domains](../tools/harness/matrix_domains/README.md),
 [containers](../tools/harness/matrix_domains/containers.md), and
 [platform coverage](../tools/harness/matrix_domains/platform.md).
 
-The true-vanilla Java lane requires Loader's vanilla premain event transformer
-and a direct, non-symlink `KRASNOKAMEN_LEGACY_CONTENT_CACHE` for protocol 775.
-The real client reached Play in
-`/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T173128-java-matrix-hymtay_4/`;
-that run blocked later on missing player eye-height observation and is not a
-passing gameplay check.
-`matrix-random` is experimental. When at least two actor bots are available,
-its generated actions include conflicting quick-move clicks on the same chest
-slot. The isolated server's opt-in input log records each consumed input and
-tick; a missing or gapped log fails closed. Network scheduling is not
-deterministic merely because the action seed is fixed.
-Before actions, the isolated fixture removes pre-existing dropped items and
-waits until the observer sees no ground stock. Conservation counts every item
-type within the fixture's ground volume (x/z 24–44, y 79–90), excluding
-unrelated natural terrain drops elsewhere in loaded chunks.
+True-vanilla Java needs Loader's premain event transformer and a direct,
+non-symlink protocol-775 `KRASNOKAMEN_LEGACY_CONTENT_CACHE`. Historical Play
+entry at `<work>/wt/FuzzE2E/.analysis/validation/20261107T173128-java-matrix-hymtay_4/`
+later blocked on missing eye-height observation: **not gameplay acceptance**.
 
-Inventory comparisons use each owning client's received inventory, not an
-independent observer of other players' private inventories. Do not infer replay
-determinism or crash atomicity without corresponding real-server receipts.
-The restart action first tests a live carried stack, then crashes again after
-that transfer settles and its WAL fence is published. The second comparison
-retains each player's and chest's slot, item fields and component SNBT, plus
-the observed block states. The carried-stack recovery separately compares item
-custody, because the destination slot on disconnect is not predicted.
+Experimental `matrix-random` includes conflicting same-chest-slot quick moves
+with ≥2 bots. Its opt-in consumed-input/tick log must be complete; a fixed action
+seed does not make network scheduling deterministic. Fixture setup removes dropped
+stock and waits for observer-confirmed emptiness. Conservation covers all item
+types in x/z 24–44, y 79–90, not unrelated natural drops.
+Each player's own received inventory supplies private inventory evidence.
+Restart first tests carried-stack custody, then crashes after transfer/WAL fence;
+the second comparison retains per-player/chest slots, item fields/component SNBT
+and observed block states. Disconnect destination is not predicted.
+Neither replay determinism nor crash atomicity follows without real-server receipts.
 
-The owner-host campaign launcher is `tools/dev/scenario-nightly`. It requires a
-verified `pin-release` server and the imported vanilla data directory. For
-example, from this checkout run:
-
-```sh
-tools/dev/scenario-nightly --install --server-bin /absolute/pin/krasnokamen --vanilla-data /absolute/vanilla-data
-```
-
-The user timer runs at 03:00 local time. Disable it with
-`systemctl --user disable --now solaris-scenario.timer`. The launcher uses
-the owner-host memory runner at low priority, enforces a campaign time budget,
-and retains failure artifacts under the configured receipts directory (default
-`<work>/receipts/scenarios`). Campaign `result.json` records the pinned binary
-manifest, requested and attempted seeds, and any reductions. Every attempted
-seed retains its command, step and bot counts, server commit and binary SHA,
-harness tree fingerprint and result; full receipts are pruned for passes only.
-When the disk budget requires pruning older campaigns, their compact
-`result.json` seed records remain; older failure artifacts may be removed.
-The configured disk budget is checked between seeds, not enforced as a hard
-filesystem quota during a running seed; a single seed or reduction may exceed
-it before the campaign stops.
-On the owner host, each seed and reduction trial checks that the games disk has
-at least 100 GiB free before starting a world run; a campaign stops with
-`disk_floor` rather than starting another seed below that threshold.
-
+`tools/dev/scenario-nightly --install --server-bin /absolute/pin/krasnokamen
+--vanilla-data /absolute/vanilla-data` installs the owner-host 03:00 local user
+timer; disable with `systemctl --user disable --now solaris-scenario.timer`.
+It requires a verified pin/imported data, runs low-priority through mem-run with
+a campaign time budget, and defaults artifacts to `<work>/receipts/scenarios`.
+Campaign `result.json` retains manifest, requested/attempted seeds and reductions;
+each seed retains command, step/bot counts, server commit/hash, harness fingerprint
+and result. Full pass receipts may be pruned; older failure artifacts may be
+removed under its configured campaign retention, but compact seed records remain.
+Disk budget is checked **between** seeds (not a quota); a seed/reduction may exceed
+it. Owner-host admission checks ≥100 GiB before each seed/reduction world run,
+else stops `disk_floor`; this is not permission to ignore the host's 250 GiB policy.
 
 ## Profiles and scenarios
 
@@ -211,36 +156,21 @@ Reconnected players are compared while simulation remains frozen. A missing
 witnessed arrow without an identity-scoped removal proof remains unverified and makes the cut
 incomplete.
 
-Do not copy the catalog into prose; ask the harness:
+The catalog is not copied here:
 
-- `python3 -m tools.harness list` prints every profile with its family
-  (`rust`, `harness`, `loader`, `plugins`, `release`, `real-client`,
-  `functional-native`, `oracle`, `scale`, `fixture`, `terrain`, `debug`) and a
-  one-line scope.
-- `python3 -m tools.harness explain` lists scenario ids; `explain <id>` prints
-  one entry's profile, exact selector, required tests, declared prerequisites,
-  assertion sources, and what it proves and does not prove. `explain` starts no
-  server or client, downloads nothing, needs no credentials and writes no
-  artifact.
-- `run scenario <id>` dispatches to that existing profile plus its exact
-  selector through the one shared run path (same artifact directory, bounded
-  scope, receipt writer) with no free-form trailing arguments. Graphical entries
-  never fall back to TCP evidence.
+- `list`: all profiles, family and scope.
+- `explain [id]`: exact profile/selector, required tests, prerequisites,
+  assertion sources, proves/limits; read-only, no launch/download/credentials/artifacts.
+- `run scenario <id>`: shared execution/receipt path with catalog selector,
+  no free-form trailing args and no graphical→TCP fallback.
 
-A named run fails when the id is unknown, extra arguments are passed, a required
-test is absent from the log, the engine reports no counts, nothing was selected
-or executed, or a selected test failed. Its receipt carries
-`details.named_scenario`: the id, evidence kind, resolved profile and selector,
-required test paths, bound `scenario_id`/manifest/seed/fixture, prerequisites,
-assertion sources, proves/limits, participating repository revisions,
-per-command cwds, engine counts (`selected`/`executed`/`passed`/`failed`/
-`ignored`/`filtered_out`) and any missing tests.
-
-Discovery and execution are separate: listing a selector is not a passed test;
-registered Cargo refs require full exact non-ignored function names, not module
-literals ([registration contract](bugs/README.md)). An explicitly ignored local-input
-case needs its declared input and opt-in execution, and remains outside a normal
-suite pass when it did not run.
+Unknown IDs, missing required tests/counts, empty selection/execution or selected
+failures fail closed. `details.named_scenario` binds ID/evidence/profile/selector,
+manifest/seed/fixture, prerequisites, sources, proves/limits, repository revisions,
+command cwds, selected/executed/passed/failed/ignored/filtered counts and missing refs.
+Discovery is not execution: Cargo refs are exact non-ignored function names
+([registration](bugs/README.md)), not modules. Ignored local-input cases require
+declared input and explicit execution; a normal suite cannot claim them.
 
 ### Evidence boundaries
 
@@ -294,37 +224,21 @@ Each of these is a limit on what a green receipt means; never state more.
 
 ## Validation plan (`plan`)
 
-`python3 -m tools.harness plan [--base REV] [--paths PATH...] [--json]` prints the
-validation a change requires, before you start and again before you report.
-It reads the changed files (default: `git diff --name-only` against `--base`,
-default `HEAD`, plus untracked files, in the cwd tree; `--paths` replaces the
-diff, and `../solaris-client/...` names a sibling repository) and prints one
-deduplicated list. Each entry has the exact gate, `why` (the rule's doc path
-and section), `runs` (1, or 3 for a variable profile), whether a negative control
-is required, and whether an independent reviewer is required and of which kind
-(persistence, protocol, custody, ledger batch of five or more rows).
-Rules of several paths are unioned; the strictest run count wins.
+`python3 -m tools.harness plan [--base REV] [--paths PATH...] [--json]` is read-only
+and must run inside the judged tree before you start and again before you report.
+Default input: changed/untracked paths against HEAD (or `--base`); `--paths`
+replaces it and accepts sibling paths.
+It unions gates with exact command, cited policy `why`, strictest run count
+(variable profiles ≥3), negative-control and reviewer requirements.
 
-The rules are the `RULES` table in `tools/harness/plan.py`, one row per rule with its
-doc source; it restates AGENTS.md (levels L0/L1/L2, reviewers, gate hygiene),
-`docs/architecture/persistence.md`, `docs/development/protocol-changes.md`,
-[real-client gates](development/real-client-gates.md), the
-[bug ledger](bugs/README.md) and the sibling repositories' own docs. It adds no
-policy: change a row only when its cited document changes. A gate that maps to a
-real-client profile comes from `AREAS`, `BACKEND_PROFILES` and the scenario
-catalog; otherwise the entry reads `no mapped gate: choose from ...`. A profile is
-*variable* when it appears in `VARIABLE_PROFILES` (timing-, seed- or
-concurrency-dependent behaviour, [gate hygiene](QA_AGENT_PROTOCOL.md#gate-hygiene)).
-
-The path tables are minimal, not exhaustive. A changed file that no rule names, or
-that falls in two or more risk domains (persistence, protocol, custody, gate),
-is printed as `manual classification required: <files>`; so is any change whose
-domain its path does not show, which you must classify yourself. A new direct
-dependency, a toolchain change or a new required prerequisite prints `decision
-record required` (see [adding a feature](development/adding-a-feature.md),
-"New dependencies and components"); it does not introduce an additional
-independent-review checkpoint.
-Run it from inside the tree to be judged; `plan` is read-only.
+`tools/harness/plan.py` `RULES` restates policy, never creates it: change only with
+its cited AGENTS/persistence/protocol/real-client/ledger/sibling document.
+`AREAS`, `BACKEND_PROFILES` and scenario catalog supply mapped gates; unmapped ones
+say `no mapped gate`. `VARIABLE_PROFILES` follows
+[gate hygiene](QA_AGENT_PROTOCOL.md#gate-hygiene).
+Unknown paths and multiple/hidden risk domains require manual classification.
+New dependencies/toolchains/prerequisites require a decision record under
+[adding a feature](development/adding-a-feature.md), not a new review checkpoint.
 
 ## Test gate (nextest)
 
@@ -543,40 +457,22 @@ cut edges.
 
 ## Resource bounds
 
-`run` and `client` put the whole invocation into one bounded systemd user scope
-before doing any work; every child (Cargo, test binaries, harness
-server/client/Xvfb, private backends) inherits that one cgroup, so each bound is
-a total, not per-process.
+`run`/`client` scope the entire invocation and every child before work; limits
+are totals, not per-process:
 
-| Property | Default | Env |
+| Property | Default | Override |
 |---|---|---|
-| `CPUQuota` (+`CPUWeight=50`) | every physical core | `KRASNOKAMEN_HARNESS_CPU_QUOTA` |
-| `MemoryHigh` | `off` (no throttle) | `KRASNOKAMEN_HARNESS_MEMORY_HIGH` |
-| `MemoryMax` | `12G` for `test`/`correctness`, the real-Java-client profiles (`java-battle-functional`, `java`, `loader-live`, `scene-shot`) and `battle-crash-recovery`; `4G` for other profiles and clients. `run scenario <id>` takes its catalog profile's cap | `KRASNOKAMEN_HARNESS_MEMORY_MAX` |
-| `MemorySwapMax` | `1G` | `KRASNOKAMEN_HARNESS_MEMORY_SWAP_MAX` |
+| CPUQuota, CPUWeight | physical cores ×100%, weight 50 | `KRASNOKAMEN_HARNESS_CPU_QUOTA` (`off` disables) |
+| MemoryHigh | off | `KRASNOKAMEN_HARNESS_MEMORY_HIGH` |
+| MemoryMax | 12G for test/correctness, java-battle-functional/java/loader-live/scene-shot/battle-crash-recovery; 4G otherwise; named scenario inherits profile | `KRASNOKAMEN_HARNESS_MEMORY_MAX` |
+| MemorySwapMax | 1G | `KRASNOKAMEN_HARNESS_MEMORY_SWAP_MAX` |
 
-```sh
-python3 -m tools.harness run correctness              # the defaults above
-KRASNOKAMEN_HARNESS_CPU_QUOTA=150% python3 -m tools.harness run test
-python3 -m tools.harness run test -p mc-core --lib inventory  # focused Rust loop
-KRASNOKAMEN_HARNESS_MEMORY_MAX=12G python3 -m tools.harness client   # heavier client runs
-
-A real Java client plus its Xvfb plus the release server does not fit 4G: the
-`java-battle-functional` scope was OOM-killed on 2/2 canonical runs
-(`receipts/JavaGateBreaker`), so those profiles now take the test-wide 12G
-cap instead of needing the variable set by hand. `MEMORY_HEAVY_PROFILES` in
-`tools/harness/__main__.py` is the list; a light profile still gets 4G.
-KRASNOKAMEN_HARNESS_CPU_QUOTA=off  python3 -m tools.harness run test  # unbounded, opt-out
-```
-
-`run`/`client` refuse admission when `MemAvailable` is below the selected
-`MemoryMax` + 1 GiB, naming the knob to change; that refusal is not acceptance
-evidence. On the shared agent host heavy commands additionally run under
-`tools/dev/mem-run.sh` (it exports `KRASNOKAMEN_HARNESS_CPU_SCOPE=1` so the harness
-does not open a second scope); the runner, its lanes and the Cargo
-rules are in [heavy commands](development/heavy-commands-and-memory.md). A run
-without a user systemd scope prints a warning and continues unbounded; the
-receipt records the profile's own result either way.
+`MEMORY_HEAVY_PROFILES` in `__main__.py` owns the list: server+Java+Xvfb exceeded
+4G on 2/2 `receipts/JavaGateBreaker` runs. Admission refuses if MemAvailable is
+below MemoryMax+1 GiB; refusal is not acceptance. Without a user systemd scope,
+warn and continue unbounded, still recording the profile result.
+Owner-host invocations additionally use Main's [mem-run](development/heavy-commands-and-memory.md);
+its `KRASNOKAMEN_HARNESS_CPU_SCOPE=1` prevents a second escaping cgroup.
 
 ## Receipts and failure diagnosis
 
@@ -739,70 +635,15 @@ subprocesses so readiness events and per-run captured logs stay available
 
 ## Decoder fuzzing (`fuzz`)
 
-`fuzz/` is its own workspace (`krasnokamen-fuzz`, `cargo-fuzz`) with six targets
-covering the bytes a client can make the server decode; [`fuzz/README.md`](../fuzz/README.md)
-owns the target table and each target's property. Because it is outside the root
-workspace, `run test`/`correctness` and `code-health` never build it. The `fuzz`
-job in `ci.yml` runs it on every push and pull request, and
-`.github/workflows/fuzz-nightly.yml` runs the same legs nightly.
-
-| Trigger | Per target | Notes |
-| --- | --- | --- |
-| push to `main`, tags, pull request | 60 s | `ci.yml` job `fuzz`, one matrix leg per target, `fail-fast: false` |
-| nightly `17 3 * * *` | 15 min | `fuzz-nightly.yml`, from the corpus the short runs built |
-| `workflow_dispatch` of `fuzz-nightly.yml` | input `seconds` | default 900 s, for a one-off longer hunt |
-
-`release-build` needs `fuzz`, so a decoder crash on the tagged commit blocks the
-release build. The nightly workflow duplicates the leg's steps on purpose: it is
-the same command with a longer budget, and `ci.yml` is the canonical copy.
-
-- The fuzz job alone uses the pinned nightly toolchain (`nightly-2026-11-09`,
-  `cargo-fuzz` 0.13.2); the server, L2 and every other CI job stay on the pinned
-  1.99 toolchain. `cargo-fuzz` supplies its own `RUSTFLAGS` (sanitizer +
-  coverage), so the workspace `-D warnings` is not part of the fuzz build.
-- Every run uses `-rss_limit_mb=2048 -timeout=20 -max_len=16384`. A crash, an
-  out-of-memory, a 20-second input or a hang fails that leg and the run, and the
-  artifact directory plus the fuzzer log are uploaded as
-  `fuzz-<target>-failure` (14 days).
-- The corpus is cached per target (`fuzz-corpus-<target>-<sha>`, restored by
-  prefix). `actions/cache` is immutable, so each run writes a new key and the
-  next run restores the newest one. A cold corpus is first seeded by
-  `cargo run --release --example seed_corpus -- corpus`, the structure-aware
-  seeds encoded by the real packet/NBT encoders.
-- `edge_play` is the only leg built with `--dev --features edge`: mc-core plus
-  wasmtime overruns the runner's memory at opt-level 3 under coverage
-  instrumentation.
-
-Reproduce and fix a CI crash:
-
-```sh
-cd fuzz
-# Replay the exact input under libFuzzer, then minimise it.
-cargo +nightly-2026-11-09 fuzz run <target> artifacts/<target>/<crash-file>
-cargo +nightly-2026-11-09 fuzz tmin <target> artifacts/<target>/<crash-file>
-# edge_play adds --dev --features edge to both commands.
-```
-
-Then add the minimised bytes as a regression test in the owning crate
-(`crates/mc-protocol`, `crates/mc-nbt`, `crates/mc-loader`, `crates/mc-edge`)
-that expects an error, and file the row per the [bug ledger](bugs/README.md);
-promotion stays with `ledger promote`. Do not fold a parser fix into a
-fuzzing-tooling change.
-
-On the owner host every heavy command runs through
-`tools/dev/mem-run.sh -m 6G` and release builds are refused outside
-`tools/dev/pin-release`, so local legs use `--dev` (including the seed example):
-
-```sh
-cd fuzz
-/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G \
-  cargo +nightly-2026-11-09 fuzz run --dev nbt -- \
-  -max_total_time=60 -rss_limit_mb=2048 -timeout=20 -max_len=16384 -print_final_stats=1
-```
-
-A dev-profile leg executes fewer inputs per second than the CI release leg, so a
-clean local run is not a substitute for the CI result: it proves the target
-builds and finds nothing in that window, not that CI's window is covered.
+The independent `fuzz/` workspace is outside L2/code-health. Its six decoder
+targets, CI budgets/toolchain, corpus retention, reproduction and owner-host
+commands have one home: [decoder fuzzing](../fuzz/README.md).
+CI's `ci.yml` `fuzz` job is canonical: six legs, 60 s per target on push/PR;
+`fuzz-nightly.yml` runs those same legs for 900 s at `17 3 * * *` or the dispatched
+`seconds` value. Keep both workflows' flags in step. `release-build` depends on
+fuzz. Local dev-profile smoke is not CI release-window coverage.
+Minimize findings, add owning-crate regressions and file ledger rows; never
+bundle parser fixes into fuzz-tooling changes.
 
 ## Code and client tools
 

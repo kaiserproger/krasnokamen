@@ -1,96 +1,67 @@
 # Performance windows and profiling
 
-Binding rules: [AGENTS.md](../../AGENTS.md) (measurement lanes serialize
-themselves, no GO; a frozen tree named in the brief; compare only matching lanes; narrow optimisation
-hacks document bottleneck, fence, effect and removal path) and the
-[definition of done](../DEFINITION_OF_DONE.md) "Performance And Multithreading
-DoD" section. Published workloads and their
-commands are in [PROFILES.md](../performance/PROFILES.md) and
-[BENCHMARKS.md](../performance/BENCHMARKS.md). This page is the working method.
+[AGENTS](../../AGENTS.md) and [performance DoD](../DEFINITION_OF_DONE.md) bind
+acceptance. [PROFILES](../performance/PROFILES.md) and
+[BENCHMARKS](../performance/BENCHMARKS.md) own published workloads/commands.
+This page owns measurement method, not a second catalog.
 
 ## Window protocol
 
-1. The measuring agent prepares **one** binary with all instrumentation it needs
-   and smoke-tests the profiler capture outside the window on a short unmeasured
-   run: absolute output path, exit 0, samples > 0. Cargo integration tests run
-   with the crate as cwd; a relative perf output path made perf exit 255.
-2. Run the measurement in `mem-run.sh -x`: it freezes preemptible builds and
-   waits for running tests and servers before starting (see
-   [heavy commands](heavy-commands-and-memory.md)); `-x` commands run one at a
-   time. No GO or announcement is needed. A rustc on the bot CPUs once
-   contaminated a MIX replay; that is why measurements never run outside `-x`.
-   `-x` itself opens only inside a scheduled window (owner, 2026-11-15:
-   `tools/dev/measurement-windows`, recurring `01:00-02:30` plus explicit
-   dated START/END allocations). The existing announcement plan owns
-   cell/owner assignment; expired grants do not repeat on other nights.
-   Outside a grant the runner refuses and names the next dated window.
-   Only Main may explicitly authorize an override; schedule reassignments
-   update the existing allowlist/plan before the next cell, never mid-cell.
-3. Run the canonical scene **unshortened**.
-4. Report gate status, p50/p95/p99, stage breakdown, CPU time per tick and the
-   profile path in the result.
+1. Freeze the brief's exact tree; prepare one instrumented binary and smoke the
+   profiler **outside** measurement: absolute output path, exit 0, samples >0.
+   Cargo integration tests use crate cwd; relative perf output previously failed 255.
+2. Run canonical workload **unshortened** through Main's absolute `mem-run.sh -x`.
+   It freezes builds, drains tests/servers and serializes measurement; no GO.
+   [Runner lock/lane rules](heavy-commands-and-memory.md#how-toolsdevmem-runsh-works-current-since-2026-10-28)
+   apply, including scene-before-exclusive ordering.
+3. `tools/dev/measurement-windows` and the existing announcement plan own
+   allocations (recurring 01:00–02:30 plus dated grants). Expired grants do not
+   recur. Outside grant = refusal, not permission to bypass it. Only Main may
+   explicitly authorize override; reassign before next cell, never mid-cell.
+4. Report gate status, p50/p95/p99, stage breakdown, CPU time/tick and raw profile path.
 
-In-process single-agent micro-benches pinned to the perf lane (`mem-run.sh -p`,
-the last four CPUs) may run without a window if `uptime` is recorded; their numbers are
-comparable only with other `-p` numbers from the same session.
+Single-agent in-process micro-benches may use `-p` outside a quiet window:
+last four CPUs, record `uptime`, compare only same-session `-p` runs. They are
+not capacity claims. A rustc on bot CPUs contaminated a MIX replay; full load
+measurements therefore require `-x`.
 
 ## Comparing builds
 
-- A/B alternates in one session: A B A B (or B A B A) under identical
-  conditions (CPU quota, nice, build profile, concurrent load). Name any
-  difference before comparing with an older baseline.
-- A profiled run carries extra load and is diagnostic only; compare clean runs
-  and state how many clean repeats exist. If the A-vs-A spread is comparable to
-  the A-B gap, the verdict is undetermined, not a regression.
-- Shared-host load alone cannot certify comparability. Record contention,
-  throttling and A-vs-A spread; a contaminated run is diagnostic only, including
-  its ratios. Use the scheduled quiet lane for capacity claims.
-- Compare against the previous round's exact frozen binary, never a
-  reconstruction.
-- Claim gains only from the real workload, never from a micro-bench: they
-  disagreed by 3x, and a micro-bench win (views page batching) regressed the
-  full bench by 21-36% and was reverted. Count real calls with a temporary
-  counter before scaling a micro result.
-- Changing the workload (tracking range, view distance) is not a speedup.
-  Compare frontier points only with equal useful activity.
-- Keep simulation/AI/physics and activation settings, actual actor routes,
-  server mode, CPU quota, physical-core/SMT placement and client placement equal.
-  Log every load client's successful login and movement of active cohorts;
-  intentionally idle actors need not move. Label remote/internet clients
-  separately from local clients. These are workload conditions, not extra
-  interchangeable points on a capacity curve
-  ([benchmark contract](../performance/BENCHMARKS.md)).
-- Report resident, active, actually admitted/ticked and rendered populations
-  separately, with the sampling interval/frequency. Received entities are not
-  submitted crowd bodies; zero submitted crowd bodies cannot accept crowd FPS.
-  A missing required scene/group makes its aggregate undefined, not reweighted.
-  Preserve failed primary scenes when adding diagnostic closer/repacked fixtures;
-  [client evidence classes](real-client-gates.md#evidence-classes) still apply.
-- Name an algorithm only from the owning implementation, not a missing spelling
-  or an architectural intention. For example,
-  [`villager/brain/motion.rs`](../../crates/mc-core/src/villager/brain/motion.rs)
-  reuses a valid progressing `navigation_path` and calls `allocator::find_path_ctx`
-  when replanning: evidence of cached A* routing there, not a flow-field result
-  or proof about every other path. Likewise a serial merge owner is not by
-  itself a measured bottleneck or evidence of a parallel scaling win.
-- An optimisation with no measurable change in the stage it targets is
-  reverted.
-- Report CPU time per tick (per-thread `/proc/self/task/*/stat`), not only wall
-  time. In the old load scenarios server and bots shared one Tokio runtime, so
-  only the tick thread's CPU was attributable; clean server-only CPU needs bots
-  in a separate process.
-- An unpinned server with 23 threads under a 6-core quota was CFS-throttled in
-  856 of 929 periods (2026-10-10); pinned, 0. Check `cpu.stat` throttling before
-  reading tick tails.
+- Alternate A B A B (or reverse) in one session with equal build/nice/quota,
+  physical/SMT placement, client placement and contention. Baseline is the
+  previous round's exact frozen binary, never reconstruction. Name differences.
+- Profiled/contaminated runs (ratios included) are diagnostic only. Compare clean
+  repeats and record throttling, contention and A-vs-A spread. If that spread
+  approaches A-B, result is **undetermined**. Shared-host load alone proves no comparability.
+- Equal useful workload: tracking/view distance, simulation/AI/physics/activation,
+  mode and actual actor routes. Log successful login and active-cohort movement;
+  intentional idle actors need not move. Remote clients are distinct from local,
+  not interchangeable capacity points ([benchmark contract](../performance/BENCHMARKS.md)).
+- Separate resident, active, admitted/ticked and rendered populations with sample
+  interval/frequency. Received entities are not submitted crowd bodies; zero
+  submitted bodies cannot prove crowd FPS. Missing required scene/group leaves
+  aggregate undefined, never reweighted. Preserve failed primary scenes when adding
+  diagnostic closer/repacked fixtures; [evidence classes](real-client-gates.md#evidence-classes) apply.
+- Claim gains from the real workload, not micro extrapolation: they disagreed by
+  3×; page-batching's micro win regressed full bench 21–36% and was reverted.
+  Count real calls before scaling micro results. Revert an optimization with no
+  measurable effect in its target stage.
+- Name algorithms from implementation, not absent spellings or aspirations:
+  [villager motion](../../crates/mc-core/src/villager/brain/motion.rs) reuses
+  progressing paths then calls `find_path_ctx` (cached A*, not a flow-field
+  result). Serial ownership alone proves neither bottleneck nor scaling win.
+- Attribute CPU per tick via `/proc/self/task/*/stat`, not wall time alone.
+  Separate server/bot processes for server CPU (old shared Tokio runs only
+  attributed tick-thread CPU). Check `cpu.stat` before interpreting tails:
+  23 unpinned threads under six-core quota throttled 856/929 periods, versus
+  zero pinned (2026-10-10).
 
 ## Always-profile server load windows
 
-`server-load-profile` runs an explicit existing battle, coreperf or catalog
-workload and **always** records `perf` CPU-clock call stacks, irrespective of
-its tick cost. Use an immutable, non-incremental frame-pointer release pin.
-On the owner host run the whole command through `mem-run.sh -x`; profiler
-smoke belongs outside that window. The wrapper forwards console input and
-shutdown to the real server; bots and the battle recorder are not sampled.
+`server-load-profile` wraps an existing battle/coreperf/catalog workload and
+always captures server CPU-clock stacks. Use an immutable nonincremental
+frame-pointer release pin, whole command under `-x`; bots/recorder are not
+sampled. Wrapper forwards console/shutdown to the real server.
 
 ```sh
 python3 -m tools.harness run server-load-profile -- \
@@ -103,191 +74,138 @@ python3 -m tools.harness run server-load-profile -- \
   --server-wrapper '{wrapper}' --out '{out}/workload'
 ```
 
-The harness expands `{wrapper}` to the maintained profiler wrapper and `{out}`
-to its artifact directory. `--kind battle` accepts the battle runner with
-`--take --server-wrapper '{wrapper}' --run-dir '{out}/workload'`;
-`--kind catalog` accepts one scenario and one client rung, using
-`--server-wrapper '{wrapper}' --out '{out}/workload'`. Other arguments remain
-those of the original workload: do not shorten a canonical window to pass.
+Harness expands `{wrapper}` and `{out}`. Battle uses `--take --server-wrapper
+'{wrapper}' --run-dir '{out}/workload'`; catalog uses one scenario/client rung,
+`--server-wrapper '{wrapper}' --out '{out}/workload'`. Other workload args and
+canonical duration stay unchanged.
 
-`profile-result.json` retains every window's tick range, mean and p95 active
-iteration milliseconds, explicit p95 budget, sampled server CPU milliseconds
-per completed source tick, ranked self and inclusive functions, and separate
-hash/comparison, allocation and map-lookup stack flags. Inclusive functions
-and flagged categories overlap: never sum them. Kernel samples without
-symbols stay `[unknown]`, not reassigned to their first user caller.
-`neighbours.txt` records first/mid/last process snapshots inside the invocation;
-an idle waiting runner or frozen build is not evidence of CPU interference.
-Capture logs, binary manifests and raw tick telemetry remain the provenance.
+`profile-result.json` records tick range, mean/p95 active iteration ms, p95
+budget, sampled server CPU ms/completed source tick, ranked self/inclusive
+functions and hash/comparison/allocation/map-lookup flags. Inclusive functions
+and categories **overlap: never sum**. Unsymbolized kernel frames remain
+`[unknown]`. `neighbours.txt` captures first/middle/last process snapshots;
+idle waiters/frozen builds are not CPU interference. Keep logs, manifests and
+raw tick telemetry as provenance.
 
-A failed command, prepared/smoke-only receipt, incomplete battle, missing middle
-snapshot, missing/discontinuous tick stream, failed profiler or absent call
-stacks fails closed. A full capture over the budget is `budget_exceeded`, not a
-measurement pass.
-Complete source windows from a failed workload still retain ranked functions
-with `diagnostic_only: true`; the process and report remain failed regardless
-of their timing budget. An incomplete readiness/setup attempt is not a measured
-window and cannot pass. Parser/budget negative controls:
-`python3 -m unittest tools.harness.test_server_load_profile`. A real-window
-negative control re-analyzes the same capture with a budget below its p95.
-Profile first; only then run N/2N/4N on a measured hot spot under identical
-conditions. Report growth exponents and CPU as well as wall time, not a
-capacity claim from the profiled run.
-
+Failed/prepared/smoke command, incomplete battle, missing middle snapshot,
+missing/discontinuous ticks, failed profiler or absent stacks fails closed.
+Over-budget complete capture is `budget_exceeded`. Complete windows from failed
+workloads retain rankings as `diagnostic_only: true` but stay failed;
+incomplete setup is no measurement. Parser/budget controls:
+`python3 -m unittest tools.harness.test_server_load_profile`; real-window
+control re-analyzes the same capture below its p95 budget. Profile first,
+then N/2N/4N on the measured hotspot under equal conditions; report growth
+exponents and CPU/wall, not profiled capacity.
 
 ## Profiling recipes
 
-- **Frame-pointer release build** for attribution: the runner refuses an ad-hoc
-  `cargo build --release` (owner, 2026-11-15: one release binary per integrated
-  commit, from `tools/dev/pin-release`), so pin the tree with the instrumentation
-  environment instead: `CARGO_TARGET_DIR=<work>/targets/fp
-  RUSTFLAGS="-C force-frame-pointers=yes" CARGO_PROFILE_RELEASE_DEBUG=line-tables-only
-  <work>/solaris/tools/dev/pin-release <tree> --no-incremental` (the
-  environment is part of the pin's fingerprint, so this build gets its own pin;
-  `--bots` pins `player-scale-bots` the same way). The pin prints the
-  `KRASNOKAMEN_SERVER_BINARY` line and its `manifest.json` records the binary's
-  SHA-256; record that hash.
-- **perf:** `perf report -i perf.data --no-children --comm mc-core-tick --sort sym
-  --stdio -g none --no-inline` for self time, `--children` for inclusive.
-  Inlined frames mislead attribution (a 100-row collect once looked like 9 ms);
-  confirm with `--no-inline` and `--symbol-filter=<sym> -g caller` before blaming
-  a function. 1% of samples is about tick_ms x tick-thread share / 100.
-  `perf --call-graph dwarf` on builds without frame pointers leaves Rust caller
-  frames `[unknown]`.
-- **Attaching:** `samply record -p <pid> -d <secs> -s -o /abs/profile.json.gz`
-  or `samply import perf.data` (Firefox Profiler format). Attaching to your own
-  processes needs `kernel.perf_event_paranoid=1` (the owner sets it; ask). gdb
-  and perf attach were blocked on some days (`ptrace_scope=1`,
-  `perf_event_paranoid=4`).
-- **Profiling a harness-run server:** pass a wrapper script as `--server-bin`
-  that runs `perf record -F 999 --call-graph dwarf,16384 -o <dir>/perf-$$.data
-  -- <frozen-bin> "$@"` only when the arguments contain ` --config `, and plain
-  `exec <frozen-bin> "$@"` otherwise (export and converter calls use the same
-  binary). Never poll for the PID to attach. DWARF captures are about 2 GB per
-  minute: read with `perf report -g none --no-children --sort comm,sym`, then
-  delete.
-- **Phase timers:** `MC_CORE_PHASE_LOG=1` prints per-phase and per-section
-  milliseconds in `server.log`. If the dashboard phases add up to much less than
-  the tick total, the time is in untimed sections (spawning, inputs, chunk
-  ensure/evict, commit, checkpoint capture).
-  Per-callee lap lines (`tick/phase_laps.rs`, no clock when the variable is
-  unset) precede each Overworld `phase ms:` line: `  input|chunks|entity
-  systems|block|commit detail ms: <callee>=<ms> ...` (each lap is the time since
-  the previous lap, so a phase's laps sum to it), `  entity phase detail ms:`
-  and `  prepare rows detail ms:` (preparation and writeback inside the entity
-  phase). The step scope itself is one parallel lap (`step_scope`): split it
-  with perf, not laps.
-  `post detail us:` separates pickup, hostile work and projectile substeps;
-  `battle detail us:` includes the battle counters and phase clocks, then
-  `stepped_battle_rows` (battle rows whose step ran) against `battle_slots`
-  (every battle slot, including rested, inactive and dying ones: the difference
-  bounds the rested rows from above, it does not count rests) and the facing
-  probe counters of `battle/probe.rs` (standing rows, target switches,
-  start-of-motion and windup facing errors).
-- **Worldgen:** prefer the test-only stage clocks in
-  `crates/mc-worldgen/src/terrain/profile_tests.rs` over call graphs; to split a
-  stage add an `end(new_index)` call and widen the totals. Use `--exact`
-  (otherwise `vanilla_stages` also matches the other modes). Reference
-  2026-10-29 (laptop GPU, `-p` lane): alone 7.80-8.98, shared solids 6.42-7.00,
-  GPU density 4.08-4.68 ms/chunk; run-to-run variance 2-5%. Feeding neighbour
-  solids to the ore halo halves ore cost; GPU batches of one chunk cost about
-  5 ms of fixed overhead, so batch by spatial tiles. Offline `world pregenerate`
-  under `-p` is pregeneration throughput, never live serving; live comparisons go
-  through a canonical harness profile.
+- **Pin:** `CARGO_TARGET_DIR=<work>/targets/fp RUSTFLAGS="-C force-frame-pointers=yes"
+  CARGO_PROFILE_RELEASE_DEBUG=line-tables-only <work>/solaris/tools/dev/pin-release
+  <tree> --no-incremental`. Instrumentation is part of fingerprint; `--bots`
+  selects bots. Retain printed binary SHA and manifest; no ad-hoc release build.
+- **Attribution:** `perf report -i perf.data --no-children --comm mc-core-tick
+  --sort sym --stdio -g none --no-inline`; `--children` is inclusive.
+  Confirm apparent hotspots with `--no-inline --symbol-filter=<sym> -g caller`
+  (inline attribution once made a 100-row collect look like 9 ms).
+  1% ≈ tick_ms × tick-thread share /100. DWARF without frame pointers can leave
+  Rust callers unknown.
+- **Attach:** `samply record -p <pid> -d <secs> -s -o /abs/profile.json.gz`
+  or `samply import perf.data`. Owner must authorize kernel settings;
+  own-process attach needs `perf_event_paranoid=1`; ptrace_scope=1/paranoid=4
+  previously blocked gdb/perf. Never change security settings silently.
+- **Harness wrapper:** for arguments containing ` --config `, run
+  `perf record -F 999 --call-graph dwarf,16384 -o <dir>/perf-$$.data --
+  <frozen-bin> "$@"`; other calls exec the binary normally (export/converters
+  share it). Never poll to attach. DWARF can use ~2 GB/minute; inspect with
+  `perf report -g none --no-children --sort comm,sym` and retain under
+  [run-data rules](heavy-commands-and-memory.md#disk), not an automatic delete.
+- **Phase timers:** `MC_CORE_PHASE_LOG=1` in server.log. Dashboard phase sums
+  below total indicate untimed spawning/input/chunk/commit/capture work.
+  `tick/phase_laps.rs` has no clock overhead when unset. Overworld logs:
+  `input|chunks|entity systems|block|commit detail ms`, `entity phase detail ms`,
+  `prepare rows detail ms`; laps sum to their phase. `step_scope` is parallel:
+  split with perf, not laps. `post detail us` separates pickup/hostile/projectiles;
+  `battle detail us` includes clocks and probe counters (standing, target switches,
+  motion/windup facing errors). `battle_slots−stepped_battle_rows` bounds rests,
+  not counts them: inactive/dying rows are included.
+- **Worldgen:** test-only `terrain/profile_tests.rs` stage clocks; split with a
+  new `end(index)` and widened totals. Use `--exact` to avoid matching other modes.
+  Laptop GPU/-p sample 2026-10-29: alone 7.80–8.98, shared solids 6.42–7.00,
+  GPU density 4.08–4.68 ms/chunk (2–5% variance). Neighbor solids halve ore-halo
+  cost; one-chunk GPU batches cost ~5 ms fixed overhead, prefer spatial tiles.
+  Offline pregeneration throughput is not live serving; live needs canonical profile.
 
 ## Optimisation rounds (native-100 pattern, 2026-10)
 
-1. Agents land slices with disjoint file ownership in their own target dirs on
-   the games disk (not `/tmp`).
-2. Main broadcasts `FREEZE rN` to active agents; agents with uncompiled edits
-   restore their last compiled state first. Agents never self-release: only
-   Main's `BUILD DONE rN`.
-3. Joint gate on the combined tree (strict clippy for touched crates, focused
-   tests), check free disk, build the frame-pointer binaries, record the SHA.
-4. Run the canonical workload with the fixture cache (prepared world reused;
-   saves about 20 minutes) under `-x`, with perf recording.
-5. Read the result windows: TPS = ticks over the full window length, not the
-   first-to-last capture span; the 10 TPS acceptance is completed ticks per
-   window, not p50 under 100 ms (the tick distribution has a heavy tail). An
-   `INFRA_BLOCKED` result (for example ENOSPC) is invalid; a gameplay-oracle
-   failure at low TPS can be the bot dropping actions while the server lags
-   (check the bots report's dropped-action reasons) rather than a server bug.
-6. Assign the next round per measured hotspot.
+Land disjoint slices in own games-disk targets, then use
+[one acceptance freeze/pin](worktrees-and-integration.md#freezing-one-acceptance-identity).
+Main's `FREEZE rN`/`BUILD DONE rN` controls release; no worker self-release.
+Pending/uncompiled work stays isolated, not discarded. Combined tree needs
+strict touched-crate Clippy/focused tests, disk check and frame-pointer pin/hash.
+Run full cached-fixture workload under `-x` with perf (prepared-world reuse
+historically saved ~20 min); next round follows measured hotspots.
 
-Durable lessons from those rounds: quiescence caches must keep live timers
-(burning, fire damage, portal cooldowns) and cache only geometric absence;
-per-tick fields must be projected from a tick anchor instead of journaled
-(see [lessons](lessons.md)); the 2026-10-18 transparent huge pages trial gave
-no measurable gain and was rejected. A quiescence cache is worth little while
-the serial owner still visits every row: the contact pass (2026-11-12)
-classifies on the pool, banks the proof for moved mobs from section palettes,
-and hands the serial owner only rows with a live burn clock, a cauldron under
-the feet or a real hazard
-(`contact detail ms:` under `MC_CORE_PHASE_LOG` splits pool and serial time).
-A section-palette gate only says some state in the 16-high section matches (a pen roof,
-a wall): the pool therefore reads the exact eye, body and support cells itself, so a mob
-crossing a cell in a roofed section no longer reaches the serial scan (5,300 rows a tick
-at native-100 before, the 100 players after); the portal classifier banks palette-clear
-proofs the same way, the due-trader scan reads the three villager-kind type lists
-instead of 100,000 cold rows, and the despawn candidates are selected in the age sweep
-(`EntityStore::advance_admitted_ages` takes a probe) instead of a second sweep. The
-`native100_input_phase_micro` ignored test (`tick_tests::contact_hazards_tests`) is the
-roofed 100-player/104k-mob workload for these callees: build with `cargo test --release
---no-run`, run the executable under `mem-run.sh -p` with `MC_CORE_PHASE_LOG=1`.
+TPS = completed ticks/full window, not first-to-last capture span. Historical
+10 TPS threshold was not “p50 <100 ms”: tails matter. INFRA_BLOCKED (e.g. ENOSPC)
+is invalid; at low TPS inspect bot dropped-action reasons before calling an oracle
+failure a server bug.
 
-The commit lap that was `merchant_mounts_allay` is now four laps (`merchant`, `mounts`,
-`allay`, `equipment_pickup`): in the micro with 3,000 mature ground items the whole
-lap was the mob equipment collector selection (1.2 to 1.5 ms), which now scans the hot
-`MOTION_ITEM_COLLECTOR` flag column instead of
-walking the type lists and reading cold rows. The adult chicken egg clock runs on the
-pool (`EntityStore::advance_egg_clocks`, selected by `MOTION_EGG`), and the serial
-entity writeback no longer reads a zombie's cold row and appearance to learn that its
-arms flag is unchanged (the decision is made on the pool, the writes stay serial). The
-`native100_like_entity_phase_micro` test (`entity_prephase_tests`) takes `N100_ITEMS`
-for a population of mature ground items, which the equipment collector needs to run at
-all. Item entities with `PickupDelay` 32767 or `Age` -32768 never tick those clocks
-(vanilla `INFINITE_PICKUP_DELAY`, `INFINITE_LIFETIME`; the unsigned age clock holds
--32768 as `ITEM_AGE_NEVER`, mapped at the Anvil boundary).
+Durable optimization boundaries:
+
+- Quiescence caches prove geometric absence, never suppress live burn/fire/
+  portal timers. [Tick-anchor projection](lessons.md) replaces journaled
+  per-tick counters. Transparent huge pages had no measurable gain (2026-10-18).
+- Contact work classifies on pool; serial owner receives only live burn,
+  feet-cauldron or real-hazard rows. Section palettes are coarse, so pool checks
+  exact eye/body/support cells. In roofed native-100, serial contact admission
+  fell from ~5300 rows/tick to the 100 players (2026-11-12). Portal uses the same
+  palette-clear proof; trader scan uses three villager-kind lists; despawn
+  candidates come from `advance_admitted_ages`, not a second cold sweep.
+- `native100_input_phase_micro` (`tick_tests::contact_hazards_tests`) is the
+  ignored roofed 100-player/104k-mob test. Outside measurement, build with
+  `<work>/solaris/tools/dev/pin-release <absolute-tree> --core-tests --no-incremental`;
+  run the printed release test executable under `-p` with phase logs. The tool
+  uses the ordinary build lane and a 12G cap; do not use ad-hoc `cargo test --release`.
+- Commit laps split `merchant_mounts_allay` into merchant/mounts/allay/
+  equipment_pickup. 3000 mature items exposed collector selection at 1.2–1.5 ms;
+  it now scans `MOTION_ITEM_COLLECTOR`, not cold type rows. Egg clocks run on
+  pool via `advance_egg_clocks`/`MOTION_EGG`; zombie unchanged-arms decisions
+  move to pool, writes remain serial. `N100_ITEMS` enables the collector in
+  `native100_like_entity_phase_micro` (`entity_prephase_tests`).
+- Item `PickupDelay=32767`/`Age=-32768` never tick those clocks; unsigned age
+  stores `ITEM_AGE_NEVER`, converted at Anvil boundary.
 
 ## Load harness and the frozen old core
 
-- `tools/coreperf/compare.py` takes `--mobs`. Cohorts are identified by a
-  fixture custom-name marker. The old core kicks setup bots above its ingress
-  budget: pace preparation identically for both. `--prepare-only` durability
-  gates every comparison; if it fails, stop.
-- 100k-mob runs need about 8 GB of cgroup peak including page cache though the
-  server's RSS is about 2.3 GiB.
-- Treat any non-PASS or missing receipt as failure; existing receipts are
-  skipped by the runner. Non-smoke MIX recipes enforce minimum window lengths
-  (MIX-18: steady and burst at least 33 s); `--readiness-seconds` applies per
-  region.
-- Tar a worktree's `.analysis/` before removing it, or its receipts are lost.
+`tools/coreperf/compare.py --mobs` marks cohorts by fixture custom names.
+Pace preparation equally: old-core ingress kicks excessive setup bots.
+`--prepare-only` durability must pass first. 100k mobs need ~8 GB cgroup peak
+including cache despite ~2.3 GiB server RSS. Non-PASS/missing receipts fail;
+runner skips existing receipts. Non-smoke MIX enforces minimum durations
+(MIX-18 steady/burst ≥33 s); readiness timeout is per region. Preserve worktree
+`.analysis/` with the [verified archive procedure](worktrees-and-integration.md#creating-a-worktree)
+before removal.
 
 ## In-process native-100-like tick micro
 
-The ignored `mc-core` test `native100_like_entity_phase_micro` is an internal
-in-process tick workload, not the real-protocol native-100 capacity gate.
-`N100_MOBS` (default `104000`, divisible by eight) and `N100_VILLAGERS`
-(default `64`) select its populations; it always joins 100 in-process players and
-measures 60 real ticks. For the 100k-mob/20k-villager PGO comparison set
-`N100_MOBS=100000 N100_VILLAGERS=20000` for both training and every candidate.
-Build the release test executable in the ordinary build lane, then run it with
-`--ignored --nocapture native100_like_entity_phase_micro` in an
-`-x -p` window. Each `NATIVE100` sample reports total milliseconds and existing
-test-only villager brain/roster microseconds; the seven `villager_phase_us`
-entries are refresh, admission, evaluation, social, acquisition, full and
-skipped. These counters overlap and must not be summed as disjoint phases. The
-flat scene has no authored village buildings or workstations, so its villager
-timings do not establish inhabited-settlement workload coverage.
+Ignored `mc-core::native100_like_entity_phase_micro` is an internal tick test,
+not real-protocol capacity. `N100_MOBS=104000` (multiple of eight),
+`N100_VILLAGERS=64` defaults; 100 in-process players, 60 real ticks.
+100k/20k PGO training **and every candidate** use `N100_MOBS=100000
+N100_VILLAGERS=20000`. Outside measurement, build with Main's absolute
+`<work>/solaris/tools/dev/pin-release <absolute-tree> --core-tests --no-incremental`
+in the ordinary build lane; run its printed executable with
+`--ignored --nocapture native100_like_entity_phase_micro` in `-x -p`.
+NATIVE100 samples contain total ms and test-only villager brain/roster µs;
+seven `villager_phase_us` counters (refresh/admission/evaluation/social/
+acquisition/full/skipped) overlap, never sum. Flat scene lacks buildings/
+workstations: no inhabited-settlement coverage claim.
 
 ## Related tools
 
-- Saved-block comparison with stock vanilla and the single-thread generation A/B:
-  [`tools/worldgen_diff/README.md`](../../tools/worldgen_diff/README.md), results in
-  [worldgen evidence](../evidence/worldgen-diff/README.md).
-- Player-capacity ladder and weak-hardware/scaling/VPS matrices:
-  [BENCHMARKS](../performance/BENCHMARKS.md).
-- Dropped-item cost (tens of thousands of item entities): the `items-heavy` profile (and `native-100`
-  on a kelp-polluted fixture cache), the `items ...` / `edge items:` phase-log lines and
-  `tools/coreperf/items_table.py` are described in
-  [PROFILES](../performance/PROFILES.md#many-items-benchmarks).
+- [Worldgen comparison](../../tools/worldgen_diff/README.md) and
+  [retained evidence](../evidence/worldgen-diff/README.md).
+- [Player-capacity/weak-hardware/scaling/VPS matrices](../performance/BENCHMARKS.md).
+- [Items-heavy profiles](../performance/PROFILES.md#many-items-benchmarks):
+  polluted fixture native-100, `items ...`/`edge items:` logs and
+  `tools/coreperf/items_table.py`.
