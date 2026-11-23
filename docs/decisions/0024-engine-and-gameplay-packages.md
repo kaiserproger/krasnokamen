@@ -996,98 +996,94 @@ settlement record leaves the engine.
 
 ## Decided with the reviews
 
-These were owner questions in the first draft; both reviewers voted the same
-way and they follow from D62, D66 and ADR 0013, so they are decisions here:
+Both reviewers agreed these follow from D62, D66 and ADR 0013; they are
+decisions, not open questions:
 
-1. **Execution line:** per-entity, per-hit, per-cell and custody execution
-   stays native; packages give rules, data and decisions (§1.1).
-2. **Realms stays a separate package** over the settlements service, as owner
-   D62 chose (`OWNER_DECISIONS.md:371-372`); routing between packages is built
-   only at step 5 (§2.8).
-3. **Order:** service cut → computer → realms → economy → settlements onto WIT
-   → armies and battles; realms preparation may run in parallel with the
-   computer after the owner's D62 GO (§4).
+1. Native execution, package rules/data/decisions:
+   [§1.1](#11-mechanism-in-the-engine-game-rules-in-the-package).
+2. Realms remains a separate package (D62, `OWNER_DECISIONS.md:371-372`);
+   package routing starts only at step 5: [§2.8](#28-services-provided-by-a-package).
+3. The [§4 migration order](#4-migration-order) is binding; realms preparation
+   may parallel the computer step only after the owner's D62 GO.
 
 ## Answered by the owner (D66 answers, 2026-11-19)
 
-1. **"Small slowdown."** Decided, in this order, on the full paired delta of
-   MSPT p50 and p95 over three reproducible pairs: a new loss of required
-   events fails; TPS falling below 20 where B holds 20 goes to the owner; noise
-   too wide to separate a 5% slowdown is inconclusive and blocks the merge;
-   inside the noise is neutral (a confirmed speedup passes); a reproducible
-   worsening under 5% on both is small and lands with its numbers, 5% or more
-   on either is large and goes to the owner first; any other pattern is
-   inconclusive (Main's gap closure, §3.4 item 6). The plugin-free overhead
-   control is a separate, stricter gate: no worsening at all (§3.4).
-2. **Settlement records into package rows: converter or reset?** Decided: keep
-   the format where possible; otherwise a one-off offline converter of
-   checkpoint plus WAL into a new directory with custody and high-water checks;
-   a reset only for a world the owner has explicitly marked disposable, never
-   automatically (§1.3).
+1. **"Small slowdown."** The complete ordered verdict and separate, stricter
+   plugin-free overhead gate are in [§3.4](#34-ab-rule-for-every-move).
+   Q1 accepted that order; item 6 is Main's conservative gap closure, not a
+   relaxed threshold. Report every move's exact numbers.
+2. **Settlement records into package rows: converter or reset?** Q4 accepted
+   the [§1.3 format rule](#13-records-commit-and-recovery): preserve the format
+   where possible; otherwise convert checkpoint plus WAL offline into a new
+   directory with custody/high-water checks. Reset only a world the owner
+   explicitly declared disposable, never automatically.
 
 ## Review resolution
 
-Reviews of 779ef6888: `receipts/EngineADR/REVIEW-sol.md` (S1–S7) and
-`receipts/EngineADR/REVIEW-astra.md` (A1–A7); M1 is Main's battle-rules note;
-D65-r2 is finding ADR-0024-6 of the D65 re-review
-`receipts/CoreUnload/REVIEW-sol-r2.md`. All HIGH and MEDIUM findings:
+This is the finding-to-contract index, not another copy of the contract.
+The operative sections above retain the final resolutions; later rounds
+qualify earlier wording. Review acceptance does not claim implementation.
 
-| Finding | Severity | Section | Resolution |
-|---|---|---|---|
-| S1 batch admission is not atomic execution; "at the next merge" is wrong | high | §2.2 | Imports return a correlation id; one bounded per-callback buffer; whole batch reserved at return and dropped on trap or refusal; `plugin::pump` before the dimension tick re-validates; atomicity only inside one composite operation |
-| S2 a shared WAL frame is not a transaction; a request id is not idempotence | high | §1.3, §4.1 | Queue → apply → one WAL frame → append ACK → result, ACK not a directory fsync; typed native operations with durable receipts for economy and settlements; D45 only for independent state; gate through the real host path with refusal, lost answer, reopen, retry |
-| S3 4 KiB KV and the 16 MiB envelope are different limits | high | §1.3 | No wider string KV; separate native rows with touched-only WAL images; 16 MiB is a ceiling; bounds from real records checked before custody; WIT carries owned values and ids; membership in the entity image, transit and reservations native |
-| S4 an opaque payload is not fail closed | high | §1.3 | Per record kind: owner, schema version and a declared-data validator used by live and offline recovery and WAL verification without a gameplay callback; refuse before serving and before fold; KV string checks and startup identity are not schema validation |
-| S5 no global sequence; coalescing changes refusal and visibility | high | §2.3, §3.3 | Per-recipient FIFO; the first cut keeps call count, order, routing, single-batch refusal and the shared timer budget; no regrouping; later aggregation only with native seal order; apply tick may differ; deadlines from persisted game time, not the freeze-advancing WAL tick |
-| S6 economy after C1 alone could break the byte-exact D65 cut | high | §1.3, §4 | No `SettlementRecord` field leaves before C3; the corrected D65 gates listed in step 0; format changes only in a separate D66 cutover with one writer |
-| S7 versions and routing ambiguous | medium | §2.6, §2.8 | Exact manifest/import/host match in the first cut; persisted DTOs unchanged; provider switch at step 5; asynchronous route with the original actor, bounded answer, no delegated rights; custody success only after the append ACK |
-| A1 order cannot be kept while calling each service once | high | §2.3 | Same as S5; refusal notice reaches packages without `commands`; nothing of a failed callback is published |
-| A2 `[services]` does not define rights, subscriptions, phases | high | §2.5 | Declarations table with their checks (events and handlers, commands and permissions, one provider, payload channels, spawn allow-list, hooks, Loader rights); phases; full `krasnokamen-towns` manifest and component world |
-| A3 a new required export breaks old guests | high | §2.6 | Three versions distinguished; incompatible 0.x refused; a new required export is breaking; optional imports never required by old binaries; one bundle with exporters and transitive users; acceptance tests |
-| A4 the storage fence could be lost; joint admission is not joint commit | high | §1.3, §2.7, §2.8 | Guards stay on the native request (checked at apply, part of the resubmission comparison); economy and tribute actions are named typed operations with receipts and lost-answer recovery; one provider, original actor, correlation, answer after the owner's decision; a message is not a WAL transaction |
-| A5 perf gates prove neither boundary cost nor A3 | high | §3.2, §3.4, §4.1 | Empty-engine `native-100`/`explore-20` as overhead control; paired B/A with the same post-audit pack, world and command stream and non-zero callbacks, requests and effects; A3 only via `horizon-100-roam`; realms feature cost apart from ABI cost |
-| A6 a mean does not bound the peak; requests do not bound work | high | §3.1, §3.2, §3.3, §4.1 | Separate counts (callbacks, imports, bytes, members, native checks, fan-out); ≥ 313 requests for 20,000 fighters, 256 is outstanding not throughput; regiment id + revision or bounded portions; native due queue instead of 1,000 timers; bench with 0/1/32 imports, interleaving, peak due, time to effect; byte budget counted before staging |
-| A7 dependency graph incomplete | medium | §1.2, §2.7, §4 | Computer moves UX only; realms after D65 owned state, D63 map v2 and a captive state; corrected C1 before settlements; provider at step 5; `spawn-entity` kept for sky-creeper |
-| A-history: line 6, not 5; reasons 2, 4, 5 are from the October study | — | §5.1, §5.2 | Fixed and stated |
-| M1 battle executors hold game rules (`formation.rs:11-44`, `combat.rs:40-80`) | — | §1.1, §1.2, §4 | Mechanism vs rules table; tactics, fatigue, lethality and casualty policy move to the battles package as data and decisions, measured A/B; the same split stated for allocation, worker actions, construction, transit and economy |
-| D65-r2 ADR-0024-6 step 4 could start after C1 | high | §1.3, §4 | Step 4 depends on an accepted C3 under the D65 gates of `DESIGN.md` (S0 byte oracle §2.9, C1 per-image decode before fold §2.8, offline `recover_offline` → `encode_checkpoint`/export proof §2.9, S6 sequential cut §2.4, S7 generic reserve check §2.5, release gate §4); format changes only in a separate D66 cutover with one writer (`DESIGN.md:23-27`), so both plans allow the same order |
+First round, base `779ef6888`: `receipts/EngineADR/REVIEW-sol.md` (S1–S7),
+`REVIEW-astra.md` (A1–A7) in that directory. M1 is Main's battle-rules note;
+D65-r2 is ADR-0024-6 in `receipts/CoreUnload/REVIEW-sol-r2.md`.
+All HIGH/MEDIUM findings and the historical notes:
 
-Second round, reviews of 6fce5d95e: `receipts/EngineADR/REVIEW-sol-r2.md`
-(S3, S4, S6 resolved; S1, S2, S5, S7 reopened; three new) and
-`receipts/EngineADR/REVIEW-astra-r2.md` (A3, A5, A6, history resolved; A1, A2,
-A4, A7 reopened; three new). Every open item and new finding:
+| Finding | Severity | Retained resolution |
+|---|---|---|
+| S1 admission ≠ atomic execution; pump phase | high | [§2.2](#22-request-path-admission-execution-result): bounded buffer, batch admission, native validation and explicit-operation atomicity |
+| S2 WAL frame ≠ transaction; correlation ≠ idempotence | high | [§1.3](#13-records-commit-and-recovery), §4.1: append ACK, distinct transaction/receipt contracts and real-host recovery gates |
+| S3 4 KiB KV ≠ 16 MiB envelope | high | §1.3: bounded native rows, owned WIT values, native membership/transit/reservations |
+| S4 opaque payload is not fail-closed schema validation | high | §1.3: declared owner/version/validator, every image checked before fold and serving |
+| S5 global sequence/coalescing would change visibility/refusal | high | [§2.3](#23-delivery-order), §3.3: final per-lane order, timer/refusal boundaries, persisted game-time deadlines |
+| S6 C1 alone would break the byte-exact D65 cut | high | §1.3, [§4](#4-migration-order): accepted C3 gates, then separate one-writer D66 cutover |
+| S7 versions and provider routing ambiguous | medium | [§2.6](#26-versions-and-breaking-changes), [§2.8](#28-services-provided-by-a-package): exact versions, unchanged DTOs, step-5 provider, attested parties/rights and ACK |
+| A1 one call per service would reorder delivery | high | §2.3: unchanged callbacks; rejection notice without commands import; batch-drop scope corrected in later rounds |
+| A2 services table is not rights/subscriptions/phases | high | [§2.5](#25-manifest-rights-and-the-component-world): separate declarations/checks, phase table and full towns example |
+| A3 required export breaks existing guests | high | §2.6: three versions, 0.x/1.x break rules, affected/transitive bundle and controls |
+| A4 storage fences and joint admission ≠ joint commit | high | §1.3, [§2.7](#27-what-the-cut-deletes), §2.8: apply/resubmission guards, typed receipt operations, routed authority |
+| A5 perf gate proved neither boundary nor A3 | high | [§3.2](#32-against-a3-peaks-not-means), [§3.4](#34-ab-rule-for-every-move), [§4.1](#41-first-move-the-service-cut): empty-engine and nonzero-traffic controls, roam-only A3, separate realms feature cost |
+| A6 mean ≠ peak; request count ≠ work | high | [§3.1](#31-cost-model-of-the-boundary)–§3.3, §4.1: fan-out, outstanding limits, handles/pages/due queue and full boundary bench |
+| A7 incomplete dependencies | medium | §1.2, §2.7, §4: computer UX-only, realms prerequisites, D65 gates/provider switch, sky-creeper consumer |
+| A-history line 6, not 5; October study provenance | — | [§5.1](#51-history), [§5.2](#52-the-reasons): corrected citation; reasons 2/4/5 are not measured September Lua failures |
+| M1 battle executors contain game rules | — | [§1.1](#11-mechanism-in-the-engine-game-rules-in-the-package), §1.2, §4: mechanism/rules split across domains; measured tactics/fatigue/lethality/casualty data |
+| D65-r2 ADR-0024-6 step 4 could start after C1 | high | §1.3, §4 step 0: all D65 C3 acceptance gates and separate D66 format cutover (`DESIGN.md:23-27`) |
 
-| Finding | Severity | Section | Resolution |
-|---|---|---|---|
-| S1-r2 "nothing of the callback is published" is wider than the guarantee | medium | §2.2, §2.4 | The batch-drop guarantee covers the request buffer and the timers staged in that callback only; synchronous host-local imports take effect at once (a permission publication replaces the table) and are outside it |
-| S2-r2 / A4-r2 one lost-answer gate for two contracts; "replay" wording | high | §1.3, §2.7, §4.1 | Inventory-storage transaction (no receipt, no blind retry): inventory and KV consistent after reopen, and a resubmission with the already spent CAS version debits nothing twice; domain operation (durable operation id): the stored outcome returned on resubmission, a different payload refused; the guard comparison is called resubmission, not WAL replay; no new receipt in the API-only cut |
-| S5-r2 / A1-r2 FIFO across lanes; timer refusal differs | medium | §2.3 | FIFO per lane with today's arbitration between lanes; ordinary transient refusal sends `command-batch-rejected`, timer-delivery refusal keeps the schedule, delivers later and sends no notice; determinism stated for identical per-tick input |
-| A1-r2 `server.started` callback in the example | medium | §2.5 | Removed: no contract event carries it, and towns loads from `init` |
-| S7-r2 provider routing does not say who may change whose records | high | §2.8 | Originating consumer (package and actor) and provider (record owner) distinguished; the native operation checks the consumer actor's rights and the provider's right over its own records; the receipt is bound to both parties and the operation id; no identity substitution, no provider rights passed to the consumer |
-| Sol-new-1 / A7-r2 step 3 pays tribute before the mechanism exists | high | §1.2, §4 | Step 3 records treaty terms, amount and schedule only, with no payment; the payment that settles the obligation is one typed native operation with a receipt at step 4, where the obligation becomes a native row; never a transfer plus a separate KV write |
-| Sol-new-2 / A2-r2 `configure` "with no runtime import linked" is impossible; `death_graves` missing | medium | §2.5 | One component, two stores, one linker; Wasmtime links all imports before the first call, so phases are enforced at call time; enqueue only in `init` and ordinary handlers, refused in the startup store (initialization included) and in hooks; host-local calls listed per phase; `death_graves` restored as its own deployment right |
-| Sol-new-3 / A3-r2 step 1 cannot load an unchanged old component | medium | §2.6, §4.1 | Step 1 rebuilds every kept guest and uses the old 0.9.0 monolith as the negative control; the unchanged-component check runs only between two versions of the split API |
-| Astra-new-1 battle rules not bound to the saved battle | high | §1.1, §1.2, §4 | An active battle keeps one immutable validated parameter set saved with its image and restored on reopen; a different deployed set refuses before the tick; periods and denominators validated at admission; derived lethality coefficients computed once; gate: A11 SIGKILL continuation with the same rules and refusal with changed ones |
-| Astra-new-2 correlation and result promise wider than the API | medium | §2.2 | Enqueue-local correlation id distinguished from ids owners return; zone answers are keyed by zone, menus are fire-and-forget; append-ACK applies to commit results; no new callback per import |
-| Astra-new-3 the 5% rule allowed two verdicts | medium | §3.4, owner question 1 | Threshold on the full paired delta; neutral, small, large and inconclusive defined; the plugin-free overhead control is a separate, stricter gate that must be neutral |
-| A6-r2 "one tick's queue" | — | §3.2 | Now "the 256-command outstanding capacity", a bound on commands waiting at once |
-| D65 status: rev. 2 not accepted | — | §4 step 0 | The open items of `receipts/CoreUnload/REVIEW-sol-r2.md` stay part of the C3 gate and are not counted as done |
+Second round, base `6fce5d95e`: `receipts/EngineADR/REVIEW-sol-r2.md`
+(S3/S4/S6 resolved; S1/S2/S5/S7 reopened; three new) and
+`REVIEW-astra-r2.md` there (A3/A5/A6/history resolved; A1/A2/A4/A7 reopened;
+three new). Every open item and new finding:
 
-Third round, reviews of 6dade3c21: `receipts/EngineADR/REVIEW-sol-r3.md`
-(S2, S5, S7 and the three second-round new findings resolved; S1 open; three
-new) and `receipts/EngineADR/REVIEW-astra-r3.md` (A1, A2, A4, A7, battle rules
-and correlation resolved; threshold open; one new). Every open item, new
-finding and note:
+| Finding | Severity | Retained resolution |
+|---|---|---|
+| S1-r2 “nothing published” exceeded the guarantee | medium | §2.2/§2.4: drop only buffered requests/staged timers; immediate host-local effects remain |
+| S2-r2 / A4-r2 two lost-answer contracts; “replay” ambiguity | high | §1.3/§2.7/§4.1: no-receipt CAS transaction vs durable-id operation; no blind retry or new receipt; guard compares resubmission, not WAL replay |
+| S5-r2 / A1-r2 cross-lane FIFO and timer refusal | medium | §2.3: existing arbitration, ordinary rejection notice vs retained timer schedule/retry/no notice; identical-per-tick-input determinism |
+| A1-r2 nonexistent `server.started` example | medium | §2.5: towns loads in `init`; no such contract event |
+| S7-r2 provider routing lacked record authority | high | §2.8: distinct consumer actor/provider rights, receipt parties, no identity substitution or rights delegation |
+| Sol-new-1 / A7-r2 premature tribute payment | high | §1.2/§4: step 3 treaty terms only; step 4 native obligation/payment/receipt, never transfer plus KV |
+| Sol-new-2 / A2-r2 impossible unlinked startup imports; missing `death_graves` | medium | §2.5: two stores/one linker, call-time phase enforcement, separate death-custody declaration |
+| Sol-new-3 / A3-r2 impossible unchanged old guest in first cut | medium | §2.6/§4.1: rebuild kept guests; old 0.9 negative control; unchanged-component positive only on later split-API changes |
+| Astra-new-1 battle parameters detached from saved state | high | §1.1/§1.2/§4: immutable admitted/persisted set, once-only derivation, pre-tick mismatch refusal, A11 continuation/control |
+| Astra-new-2 correlation overstated result guarantees | medium | §2.2: enqueue-local vs owner result ids; zone-keyed answers, fire-and-forget menus, commit ACK, no extra callback |
+| Astra-new-3 ambiguous 5% verdict | medium | §3.4, owner answer 1: full paired delta and ordered verdict; separate stricter overhead control |
+| A6-r2 “one tick's queue” | — | §3.2: 256 commands outstanding, not per-tick throughput |
+| D65 rev. 2 not accepted | — | §4 step 0: open `receipts/CoreUnload/REVIEW-sol-r2.md` findings remain C3 gates, not done |
 
-| Finding | Severity | Section | Resolution |
-|---|---|---|---|
-| R3-1 the actor is not attested on the provider → native call | high | §2.8 | The existing host attestation (`route_authority.rs:1042-1059,1368-1382`, `command_admission.rs:247-257`) extends to the routed context: the host records consumer package, actor and correlation under a host-issued route handle, and attaches consumer, actor and registered provider at admission; native never takes them from guest-returned fields; handles are runtime-only; the receipt binds the player UUID (not the session), both packages and the operation id, so resubmission after reopen matches; a new mutation still needs the actor's current rights |
-| S1-r3 timer refusal still promised "nothing of that pushed tick" | medium | §2.3 | Limited to the request batch and the staged timer schedule; synchronous host-local imports the timer callback made stay applied, as in §2.2 |
-| R3-2 tribute payment did not depend on step 3 | medium | §4 | Step 4's tribute payment and arrears also depend on step 3; the rest of economy does not wait for it |
-| R3-3 phase table missed runtime initialization and shutdown; startup KDF rule presented as current | medium | §2.5 | Rows for runtime-store initialization and `shutdown` with enqueue refused and their host-local calls named; host-local calls keep today's rule (only hooks refuse them), so the KDF stays allowed in the startup store: no tightening |
-| A2-r3 note: keep the single-owner check for `death_graves` | — | §2.5 | A second declaring package refuses the deployment before start (`plugin.rs:593-612`) |
-| Threshold-r3 one receipt could be both neutral and large; a speedup failed the overhead control | medium | §3.4, owner question 1 | Precedence: lost required event fails; losing held 20 TPS goes to the owner; noise too wide to separate a 5% slowdown is inconclusive and blocks the merge; inside the noise is neutral; reproducible worsening is judged on the full paired delta (under 5% small, 5% or more large); the overhead control allows no worsening, a confirmed speedup passes |
-| S2-r3 note: stale-CAS control after reopen | — | §1.3, §4.1 | Runs from a new live session of the same player with the old KV version |
-| Astra-new-r3 treaty owner differs from D65 | medium | §1.2, §4 | Consistent with `DESIGN.md` §2.7 (rev. 4): treaty terms, ransoms and chronicle are owned by realms; settlement records hold the native war state, steward and outcome with a treaty reference; from step 4 the tribute obligation is one native row with one owner, changed only with its payment |
+Third round, base `6dade3c21`: `receipts/EngineADR/REVIEW-sol-r3.md`
+(S2/S5/S7 and three round-2 new findings resolved; S1 open; three new) and
+`REVIEW-astra-r3.md` there (A1/A2/A4/A7/battle/correlation resolved;
+threshold open; one new). Every open item, new finding and note:
+
+| Finding | Severity | Retained resolution |
+|---|---|---|
+| R3-1 actor not attested provider → native | high | §2.8: host-issued runtime handle, host-attached consumer/actor/provider, stable player UUID and parties in receipt, fresh route after reopen, current rights for new mutations |
+| S1-r3 timer refusal still overstated “nothing” | medium | §2.3: drop request batch/staged schedule only; host-local effects remain |
+| R3-2 tribute lacked step-3 dependency | medium | §4: tribute payment/arrears require treaty step 3; other economy does not |
+| R3-3 omitted runtime initialization/shutdown; startup KDF misrepresented | medium | §2.5: full phase table; enqueue refused outside init/handlers; existing host-local rules, no startup KDF tightening |
+| A2-r3 `death_graves` single owner | — | §2.5: second declaring package refuses deployment before start (`plugin.rs:593-612`) |
+| Threshold-r3 overlapping verdicts; rejected overhead speedup | medium | §3.4, owner answer 1: ordered full-delta verdict, neutral/speedup allowed, no worsening in overhead control |
+| S2-r3 stale-CAS test after reopen | — | §1.3/§4.1: new live session of same player with spent KV version |
+| Astra-new-r3 treaty owner inconsistent with D65 | medium | §1.2/§4: `DESIGN.md` §2.7 rev. 4; realms owns terms/ransoms/chronicle, settlement owns native war/steward/outcome with treaty reference, step-4 native obligation changes only with payment |
 
 [Architecture overview](../ARCHITECTURE.md) · [Decisions index](README.md)
