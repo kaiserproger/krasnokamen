@@ -72,6 +72,58 @@ fn town(residents: usize, stocked: bool) -> (TickState, SettlementId, crate::ent
     (state, id, builder)
 }
 
+/// SETTLEMENT-WALL-STRETCH-WITHOUT-STAND: a stretch whose still-owed columns
+/// have no builder stand beside them is not planned at all, instead of being
+/// admitted and cancelled again on every rotation.
+#[test]
+fn a_wall_stretch_without_a_builder_stand_is_not_planned() {
+    let (mut state, id, _) = town(10, true);
+    let water = crate::settlements::allocator::tests::block(&state, "minecraft:water", &[]);
+    let span = crate::settlements::layout::perimeter_spans(ANCHOR)
+        .into_iter()
+        .find(|span| span.kind == PERIMETER)
+        .expect("the plan owes wall stretches");
+    let x_fixed = span.min[0] == span.max[0];
+    let side = if x_fixed {
+        (span.min[0] - ANCHOR[0]).signum()
+    } else {
+        (span.min[1] - ANCHOR[2]).signum()
+    };
+    // Both inward columns of every column of the stretch become open water, so
+    // the builder has nowhere to stand for this piece of the wall.
+    for x in span.min[0]..=span.max[0] {
+        for z in span.min[1]..=span.max[1] {
+            for step in 1..=2 {
+                let (wx, wz) = if x_fixed {
+                    (x - side * step, z)
+                } else {
+                    (x, z - side * step)
+                };
+                state.world.set_block(wx, GROUND, wz, water);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let record = state.settlements.get(id).unwrap();
+    let planned: Vec<_> = crate::settlements::layout::fortification(&state, record)
+        .map(|(kind, work)| (kind, work.bounds.min, work.bounds.max))
+        .collect();
+    let overlaps = |min: [i32; 3], max: [i32; 3]| {
+        min[0] <= span.max[0]
+            && max[0] >= span.min[0]
+            && min[2] <= span.max[1]
+            && max[2] >= span.min[1]
+    };
+    assert!(
+        !planned.iter().any(|&(_, min, max)| overlaps(min, max)),
+        "the standless stretch is not admitted: {planned:?}"
+    );
+    assert!(
+        planned.iter().any(|&(kind, _, _)| kind == PERIMETER),
+        "the other wall stretches remain planned"
+    );
+}
+
 /// A finished street or fortification project releases its Builder; the
 /// planning tick hires one again before the next project, as `tick` does.
 fn finish(state: &mut TickState, id: SettlementId, builder: crate::entities::EntitySlot) {

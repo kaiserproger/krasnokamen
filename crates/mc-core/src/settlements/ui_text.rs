@@ -794,6 +794,9 @@ pub(crate) fn blueprint(lang: Lang, id: &str) -> &'static str {
         "spanish_plaza" => ("Spanish plaza", "Испанская площадь"),
         "spanish_fortress" => ("Spanish fortress", "Испанская крепость"),
         "spanish_wall" => ("Spanish wall", "Испанская стена"),
+        "perimeter" => ("Wall section", "Секция стены"),
+        "perimeter_gate" => ("Gate", "Ворота"),
+        "well" => ("Well", "Колодец"),
         "road" => ("Road", "Дорога"),
         "lamp" => ("Street lamp", "Фонарь"),
         "meadow" => ("Meadow clearing", "Расчистка луга"),
@@ -982,6 +985,21 @@ mod tests {
         assert_eq!(Lang::of(Some("de_de")), Lang::En);
         assert_eq!(Lang::of(Some("")), Lang::En);
         assert_eq!(Lang::of(None), Lang::En);
+    }
+
+    #[test]
+    fn every_layout_infrastructure_project_has_a_display_name() {
+        use crate::settlements::layout::{GATE, LAMP, MEADOW, PERIMETER, ROAD, WELL};
+        for id in [ROAD, LAMP, MEADOW, PERIMETER, GATE, WELL] {
+            assert_ne!(blueprint(Lang::En, id), "Unknown blueprint", "{id}");
+            assert_ne!(blueprint(Lang::Ru, id), "Неизвестный чертёж", "{id}");
+        }
+        assert_eq!(blueprint(Lang::En, PERIMETER), "Wall section");
+        assert_eq!(blueprint(Lang::Ru, PERIMETER), "Секция стены");
+        assert_eq!(blueprint(Lang::En, GATE), "Gate");
+        assert_eq!(blueprint(Lang::Ru, GATE), "Ворота");
+        assert_eq!(blueprint(Lang::En, WELL), "Well");
+        assert_eq!(blueprint(Lang::Ru, WELL), "Колодец");
     }
 
     #[test]

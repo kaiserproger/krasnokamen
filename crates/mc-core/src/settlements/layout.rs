@@ -1265,19 +1265,25 @@ fn stand_column(anchor: [i32; 3], x: i32, z: i32) -> [i32; 2] {
 #[must_use]
 pub(crate) fn stand(state: &TickState, project: &Project, next: [i32; 3]) -> Option<[i32; 3]> {
     let record = state.settlements.get(project.settlement)?;
-    let anchor = record.anchor;
-    let columns = match project.blueprint.as_str() {
-        LAMP => vec![stand_column(anchor, next[0], next[2])],
-        PERIMETER | GATE => (1..=2)
-            .map(|step| inward(anchor, next[0], next[2], step))
-            .collect(),
-        WELL => vec![[anchor[0] + (next[0] - anchor[0]).signum(), next[2]]],
-        _ => vec![[next[0], next[2]]],
-    };
-    columns.into_iter().find_map(|[x, z]| {
-        let y = construction::surface_y(state, anchor[1], x, z)?;
-        Some([x, y + 1, z])
-    })
+    stand_columns(record.anchor, project.blueprint.as_str(), next[0], next[2])
+        .into_iter()
+        .find_map(|[x, z]| {
+            let y = construction::surface_y(state, record.anchor[1], x, z)?;
+            Some([x, y + 1, z])
+        })
+}
+
+/// Columns a builder may stand on to place `(x, z)` of a `blueprint` project,
+/// in preference order: the road beside a lamp post's column, inside the wall
+/// beside a wall or gate column, the road beside the well's rim, or the column
+/// itself.
+fn stand_columns(anchor: [i32; 3], blueprint: &str, x: i32, z: i32) -> Vec<[i32; 2]> {
+    match blueprint {
+        LAMP => vec![stand_column(anchor, x, z)],
+        PERIMETER | GATE => (1..=2).map(|step| inward(anchor, x, z, step)).collect(),
+        WELL => vec![[anchor[0] + (x - anchor[0]).signum(), z]],
+        _ => vec![[x, z]],
+    }
 }
 
 /// Wall columns are cobblestone, this many blocks tall.
@@ -1525,6 +1531,17 @@ fn span_work(state: &TickState, record: &SettlementRecord, span: Span) -> Option
             };
             cells.extend(column_cells(state, record, [x, z], cobble, &profile)?);
         }
+    }
+    // A column with no builder stand beside it would prepare and then stall the
+    // whole stretch until the next cancellation admits it again, so a stretch
+    // that owes work on such a column is not planned at all.
+    let owed: HashSet<[i32; 2]> = cells.iter().map(|cell| [cell.at[0], cell.at[2]]).collect();
+    if owed.iter().any(|&[x, z]| {
+        stand_columns(anchor, span.kind, x, z)
+            .into_iter()
+            .all(|[sx, sz]| construction::surface_y(state, anchor[1], sx, sz).is_none())
+    }) {
+        return None;
     }
     Some(work_of(cells))
 }
