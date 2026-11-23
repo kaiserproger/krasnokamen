@@ -1195,6 +1195,18 @@ impl ChunkWorld {
     }
 
     /// Only the tick merge owner's catch-up transaction bypasses 001-f.
+    /// Whether a block write to `(x, z)` targets a chunk whose storage
+    /// admission already failed (quarantined). The setter silently refuses
+    /// such a write, so journaling the tick's write list entry would lose the
+    /// block and its owner once the storage is repaired.
+    #[must_use]
+    pub(crate) fn write_refused(&self, x: i32, z: i32) -> bool {
+        self.failed.contains_key(&ChunkPos {
+            x: x.div_euclid(16),
+            z: z.div_euclid(16),
+        })
+    }
+
     pub(crate) fn set_block_catch_up(&mut self, x: i32, y: i32, z: i32, state: u32) {
         let previous = self.block_at(x, y, z);
         if previous == Some(state) {

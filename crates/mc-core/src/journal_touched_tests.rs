@@ -1388,6 +1388,37 @@ fn the_mirror_agrees_with_the_replay_game_clock_over_holds() {
 }
 
 #[test]
+fn a_block_write_into_a_refused_chunk_refuses_the_journal_batch() {
+    let mut state = fixture();
+    let chunk = crate::boundary::ChunkPos { x: 0, z: 0 };
+    state.tickets.insert("refused-write".into(), (chunk, 0));
+    state
+        .world
+        .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+    state.refresh_active_chunks(0);
+    let (mut output, _, _) = crate::tick::run_tick(&mut state, &[]);
+    journal_entries_for_tick(&mut state, &output).unwrap();
+    state
+        .world
+        .reject_resident(chunk, "invalid retained metadata".into());
+    // The setter refused the write silently; the tick's accepted write list
+    // still names the quarantined chunk, and journaling it would let replay
+    // apply a block without its owner after the storage is repaired.
+    let mut changes = crate::boundary::ChangeSet::default();
+    changes.blocks.push(crate::boundary::BlockChange {
+        position: mc_world::BlockPos { x: 3, y: 64, z: 3 },
+        state: 1,
+    });
+    output.changes = Arc::new(changes);
+    let error = journal_entries_for_tick(&mut state, &output)
+        .expect_err("a refused chunk write must not be journaled");
+    assert!(
+        error.to_string().contains("refused chunk"),
+        "the halt reason names the refused write: {error}"
+    );
+}
+
+#[test]
 fn chunk_clock_boundaries_rebase_only_their_own_entities() {
     let mut state = fixture();
     let body = crate::boundary::ChunkPos { x: 0, z: 0 };
