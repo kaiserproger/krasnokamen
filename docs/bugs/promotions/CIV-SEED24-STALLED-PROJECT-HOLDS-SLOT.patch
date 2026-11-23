@@ -1,0 +1,30 @@
+diff --git a/crates/mc-core/src/settlements/construction_builders.rs b/crates/mc-core/src/settlements/construction_builders.rs
+index 02656ed56..88adf7641 100644
+--- a/crates/mc-core/src/settlements/construction_builders.rs
++++ b/crates/mc-core/src/settlements/construction_builders.rs
+@@ -199,6 +199,7 @@ fn bind_first_unbound(state: &mut TickState, id: SettlementId, slot: EntitySlot)
+ /// still stands is not tried again until it lapses, as for the gate.
+ pub(super) fn assign_builder(state: &mut TickState, id: SettlementId) -> bool {
+     drain_carry_duties(state, id);
++    release_stalled_builder(state, id);
+     if release_trapped_builder(state, id) {
+         return false;
+     }
+@@ -241,7 +242,16 @@ pub(super) fn assign_builder(state: &mut TickState, id: SettlementId) -> bool {
+         let Some(priority) = recruit_priority(state, id, slot, may_borrow, protected) else {
+             continue;
+         };
+-        candidates.push((priority, slot));
++        let shunned = state
++            .settlements
++            .builder_watch
++            .get(&(id, target.clone()))
++            .is_some_and(|watch| {
++                watch.shunned.iter().any(|&(uuid, until)| {
++                    uuid == state.entities.row(slot).uuid && state.tick < until
++                })
++            });
++        candidates.push((priority + if shunned { 10 } else { 0 }, slot));
+     }
+     // Stable: residents of equal priority keep their index order.
+     candidates.sort_by_key(|&(priority, _)| priority);
