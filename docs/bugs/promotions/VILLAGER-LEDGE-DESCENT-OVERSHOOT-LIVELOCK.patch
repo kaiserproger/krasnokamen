@@ -1,0 +1,13 @@
+diff --git a/crates/mc-core/src/villager/brain/motion.rs b/crates/mc-core/src/villager/brain/motion.rs
+--- a/crates/mc-core/src/villager/brain/motion.rs
++++ b/crates/mc-core/src/villager/brain/motion.rs
+@@ -704,6 +704,9 @@
+         let dz = next[2] - pos[2];
+         let length = mth::length2(dx, dz);
+         if length > 1e-6 {
++            // A lower waypoint remains committed until its vertical arrival.
++            // Stop at its horizontal centre instead of stepping across it.
++            let speed = speed.min(length / dt);
+             horizontal = [dx / length * speed, dz / length * speed];
+         }
+         if next[1] > pos[1] + mc_physics::STEP_HEIGHT && state.entities.ground(slot) {

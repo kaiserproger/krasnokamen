@@ -15,5 +15,5 @@ regression = [
   "harness:civilization-seed-qa:births",
 ]
 failing_first = "reported"
-fix_commit = "patch:5f50f42f18f1a2f1a25b548f65759cf1d06484459099cd71e40c0eceb09db8a1"
-repro_check = "round-final: receipt patch docs/bugs/fix-patches/ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME.patch (patch:5f50f42f18f1a2f1), reverse-ok; replaces the earlier patch:80e8f461; control: four refs red (control-autolayout.log)"
+fix_commit = "patch:cae7712f8d8e8973313b36e3e3b3d6f84f06d19df8e1de1c5453a8b62abee746"
+repro_check = "HEAD re-break control: docs/bugs/promotions/ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME.patch (patch:cae7712f) restores the dirt field border and the farmland dirt cost, removes the meadow_site admission and the spare-bed courtship guard; it reverses on b67e1b0612 (`git apply -R --check`). Reds at the row's own assertions: construction_site_tests.rs:1210 (Some(\"road\") instead of Some(\"meadow\"), 20261123T201419-test-5h5f7z3b) and blueprints_tests.rs:186 (the farm bills dirt, 20261123T202002-test-ze6ddyre). fed_residents_with_no_spare_bed_keep_their_bread stayed green on the control (20261123T201802-test-e6ofktkf) and is not evidence; the births red is the integrated sweep's. hunks.md maps the eight included hunks and the three (c) rewrites."

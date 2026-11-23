@@ -1,0 +1,38 @@
+{
+  "id": "STORAGE-L3-SEALED-CORNER-CHEST",
+  "verdict": "promoted",
+  "fix_commit": "patch:cc57c08cd8ee096658ff998a85cb5dadfd3ee6e9d53e72c2fcfe38f430fed1d3",
+  "fix_commit_full": "patch:cc57c08cd8ee096658ff998a85cb5dadfd3ee6e9d53e72c2fcfe38f430fed1d3",
+  "promoted_at": "2026-11-23T14:52:12+00:00",
+  "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "cc57c08cd8ee096658ff998a85cb5dadfd3ee6e9d53e72c2fcfe38f430fed1d3",
+  "reversed_files": [
+    "crates/mc-core/assets/blueprints/storage.json"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:villager::building_autonomy_tests::adopted_village_with_resident_shears_produces_stock_and_builds": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::blueprints::tests::every_storage_container_is_reachable_from_the_entrance": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:villager::building_autonomy_tests::adopted_village_with_resident_shears_produces_stock_and_builds": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::blueprints::tests::every_storage_container_is_reachable_from_the_entrance": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T144812-ledger-promote-86o3joh8"
+}

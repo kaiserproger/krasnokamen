@@ -12,4 +12,4 @@ regression = [
   "cargo:mc-core:villager::smelting_tests::employed_miner_smelts_construction_iron_through_native_ticks",
   "harness:civilization-seed-qa:new_house",
 ]
-fix_commit = "4a457567"
+fix_commit = "patch:113c2e042ed5a6f8f35ea038c69f31447b3f19e68a625d24cd65b20743080c79"

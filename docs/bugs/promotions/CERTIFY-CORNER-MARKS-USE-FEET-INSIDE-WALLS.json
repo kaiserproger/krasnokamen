@@ -1,0 +1,30 @@
+{
+  "id": "CERTIFY-CORNER-MARKS-USE-FEET-INSIDE-WALLS",
+  "verdict": "promoted",
+  "fix_commit": "patch:6a242fec0b5af8dad07ac5e9ad33363e38d26e7b34e65ef4d3df9489d162b9e0",
+  "fix_commit_full": "patch:6a242fec0b5af8dad07ac5e9ad33363e38d26e7b34e65ef4d3df9489d162b9e0",
+  "promoted_at": "2026-11-23T14:47:11+00:00",
+  "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "6a242fec0b5af8dad07ac5e9ad33363e38d26e7b34e65ef4d3df9489d162b9e0",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/building_discovery.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::ui::tests::standing_inside_a_finished_house_certifies_its_floor_wall_and_roof_bounds": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::ui::tests::standing_inside_a_finished_house_certifies_its_floor_wall_and_roof_bounds": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T144549-ledger-promote-55c_pibi"
+}

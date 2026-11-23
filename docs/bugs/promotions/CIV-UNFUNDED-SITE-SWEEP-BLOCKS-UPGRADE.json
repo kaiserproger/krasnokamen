@@ -1,0 +1,55 @@
+{
+  "id": "CIV-UNFUNDED-SITE-SWEEP-BLOCKS-UPGRADE",
+  "verdict": "promoted",
+  "fix_commit": "patch:8b45c6627bb5593d544183417675b38ceb4b9f554903f961288eac1ffb997583",
+  "fix_commit_full": "patch:8b45c6627bb5593d544183417675b38ceb4b9f554903f961288eac1ffb997583",
+  "promoted_at": "2026-11-23T17:06:19+00:00",
+  "tree_head": "81343f08487613a66c5053e2e4049897debde347",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "8b45c6627bb5593d544183417675b38ceb4b9f554903f961288eac1ffb997583",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/construction.rs",
+    "crates/mc-core/src/settlements/construction_site_refusals.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::construction::growth_tests::a_refused_materialization_keeps_the_earlier_hold": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:settlements::construction::growth_tests::an_ordinary_revisit_of_the_priority_house_owns_the_hold": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:settlements::construction::growth_tests::a_funded_sweep_that_still_holds_a_candidate_keeps_the_slot": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::construction::growth_tests::a_stale_unfunded_sweep_does_not_hold_the_slot_for_a_funded_upgrade": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::construction::growth_tests::a_refused_materialization_keeps_the_earlier_hold": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::construction::growth_tests::an_ordinary_revisit_of_the_priority_house_owns_the_hold": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::construction::growth_tests::a_funded_sweep_that_still_holds_a_candidate_keeps_the_slot": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::construction::growth_tests::a_stale_unfunded_sweep_does_not_hold_the_slot_for_a_funded_upgrade": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T170043-ledger-promote-17i5_fhh"
+}

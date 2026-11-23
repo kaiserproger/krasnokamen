@@ -1,0 +1,21 @@
+diff --git a/crates/mc-core/src/settlements/blueprints.rs b/crates/mc-core/src/settlements/blueprints.rs
+index 0c623a9db..d7bb814b7 100644
+--- a/crates/mc-core/src/settlements/blueprints.rs
++++ b/crates/mc-core/src/settlements/blueprints.rs
+@@ -32,7 +32,7 @@ pub type ItemId = u32;
+ /// at most the street plan's `LOT_DEPTH` (11).
+ pub const MAX_SIZE: [u8; 3] = [13, 11, 11];
+ 
+-const SOURCES: [&str; 25] = [
++const SOURCES: [&str; 26] = [
+     include_str!("../../assets/blueprints/house.json"),
+     include_str!("../../assets/blueprints/storage.json"),
+     include_str!("../../assets/blueprints/farm.json"),
+@@ -41,6 +41,7 @@ const SOURCES: [&str; 25] = [
+     include_str!("../../assets/blueprints/lumber_camp.json"),
+     include_str!("../../assets/blueprints/mine.json"),
+     include_str!("../../assets/blueprints/barracks.json"),
++    include_str!("../../assets/blueprints/wall.json"),
+     include_str!("../../assets/blueprints/watch_tower.json"),
+     include_str!("../../assets/blueprints/gate.json"),
+     include_str!("../../assets/blueprints/armorer.json"),

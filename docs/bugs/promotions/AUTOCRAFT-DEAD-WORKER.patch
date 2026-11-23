@@ -1,5 +1,5 @@
 diff --git a/crates/mc-core/src/settlements/production.rs b/crates/mc-core/src/settlements/production.rs
-index 0e1e31781..421f386fe 100644
+index d092b8a7f..8d0f5530e 100644
 --- a/crates/mc-core/src/settlements/production.rs
 +++ b/crates/mc-core/src/settlements/production.rs
 @@ -26,6 +26,8 @@ use crate::tick::TickState;
@@ -11,7 +11,7 @@ index 0e1e31781..421f386fe 100644
  /// Largest autocraft chain one order may admit.
  pub(super) const MAX_ORDER_STEPS: usize = 32;
  
-@@ -1238,8 +1240,12 @@ pub(crate) fn execute(
+@@ -1301,8 +1303,12 @@ pub(crate) fn execute(
              Ok(true)
          }
          Request::Resume { job } => {
@@ -24,37 +24,39 @@ index 0e1e31781..421f386fe 100644
 +            {
 +                return Err(failure);
              }
-             let tick = world.tick;
+             let tick = world.tick_control.game_ticks(world.tick);
              let Some(entry) = state.jobs.get_mut(&job) else {
-@@ -1394,6 +1400,7 @@ fn tick_job(
- pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut State) -> bool {
-     let tick_now = world.tick;
+@@ -1473,6 +1479,7 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut
+     let tick_now = world.tick_control.game_ticks(world.tick);
+     let consumed = offscreen::consume(world, settlement, &mut state.consumption);
      let mut finished = Vec::new();
 +    let mut gone = Vec::new();
      let changed = state.cursor.run(
          &mut state.jobs,
          |job| {
-@@ -1403,8 +1410,11 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut
-                 && job.next_due <= tick_now
+@@ -1482,10 +1489,13 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut
+                 && offscreen::ready(job, tick_now)
          },
          |_, job| {
 -            if worker_slot(world, settlement, job.worker).is_err() {
--                return park(job, "missing worker", tick_now.saturating_add(RETRY_TICKS)).into();
 +            if let Err(failure) = worker_slot(world, settlement, job.worker) {
 +                if matches!(failure, Failure::NotFound) && !gone.contains(&job.worker) {
 +                    gone.push(job.worker);
 +                }
-+                return park(job, MISSING_WORKER, tick_now.saturating_add(RETRY_TICKS)).into();
-             }
-             let produced_before = job.done;
-             match tick_job(world, settlement, job) {
-@@ -1438,7 +1448,69 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut
+                 let advanced = offscreen::advance(job, tick_now) != 0;
+                 let deferred = std::mem::take(&mut job.deferred) != 0;
+-                return (park(job, "missing worker", tick_now.saturating_add(RETRY_TICKS))
++                return (park(job, MISSING_WORKER, tick_now.saturating_add(RETRY_TICKS))
+                     || advanced
+                     || deferred)
+                     .into();
+@@ -1514,7 +1524,69 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut
          }
      }
      state.completed = state.completed.saturating_add(finished.len() as u64);
--    changed || !finished.is_empty()
+-    changed || consumed || !finished.is_empty()
 +    let retaken = retake(world, settlement, state, &gone);
-+    changed || retaken || !finished.is_empty()
++    changed || consumed || retaken || !finished.is_empty()
 +}
 +
 +/// A worker that died or no longer exists can never finish its jobs. Every
@@ -110,7 +112,7 @@ index 0e1e31781..421f386fe 100644
 +            job.fetch_at = None;
 +            if job.paused.as_deref() == Some(MISSING_WORKER) {
 +                job.paused = None;
-+                job.next_due = world.tick;
++                job.retry_at = 0;
 +            }
 +            changed = true;
 +        }
@@ -118,4 +120,4 @@ index 0e1e31781..421f386fe 100644
 +    changed
  }
  
- /// Any nonterminal, noncancelled, ungated job needing tick. Auto-paused jobs
+ /// Every settlement has daily food demand, even without a production job.

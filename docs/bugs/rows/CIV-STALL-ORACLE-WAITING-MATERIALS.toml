@@ -9,4 +9,4 @@ source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T233938-civi
 repro_check = "negative control receipts/XHarnessGates/neg-civ-stall.log (backend hunks reversed -> bounded observation limit reached); candidate: exact revert (git apply -R of 7ed4d504, clean) reds the ref with `bounded observation limit reached`, the row symptom; repro=client, real-client gate pending"
 failing_first = "reported"
 regression = ["harness:civilization-seed-qa:all", "python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_waiting_project_materials_do_not_hide_a_stalled_active_project", "python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_waiting_projects_count_as_progress_without_an_active_project"]
-fix_commit = "7ed4d504"
+fix_commit = "patch:2376e539be37f932a488d5809095410de40b951f29e7ed3f36b7e97b24d14ac2"

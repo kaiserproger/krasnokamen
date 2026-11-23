@@ -4,7 +4,10 @@ title = "A perimeter wall stretch planned on a lakeshore house roof has no Build
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "SlotStall native probe on a copy of SpainCulture growth-03ef2e297a72-laptop-2 at ab2d945c9 (receipts/SlotStall/README.md, logs/after-growth03ef-l2.log PROBE_COLUMN lines): the next wall cell [91,69,-25] stands on acacia_stairs at y=68 of a house roof; layout::stand's inward columns (91,-24) and (91,-23) are open water up to y=62, below the surface band 63..79 of anchor y 71, so stand is None, villager::building::work gives the Builder no target (navigation=None) and the stretch stays Prepared work=0/24 while the Builders carry 24 cobblestone. With SETTLEMENT-ROAD-STALL-HOLDS-SLOT-TRIAL4's fix the stretch is cancelled after one failed rotation, and with no pending order the planner admits the same stretch 20 ticks later. A similar worksite_unreached stall hits fast-ab/pin's stretch at origin [102,72,35] on cell [107,77,35] (logs/before-fastab-pin.log)."
-regression = []
+regression = ["cargo:mc-core:settlements::construction::fortification_tests::a_wall_stretch_without_a_builder_stand_is_not_planned"]
 failing_first = "not recorded"
+fix_commit = "patch:f630747ddc130aadca7dd1f483db925ac2eb8783a896b7c40feb110d13179abd"
+repro_check = "Patch docs/bugs/promotions/SETTLEMENT-WALL-STRETCH-WITHOUT-STAND.patch (patch:f630747d, map in .hunks.md) reverses on the candidate; control red .analysis/validation/20261123T155043-test-dgamgavb, restore green .analysis/validation/20261123T155254-test-5f9868o8. layout::span_work now refuses a stretch that owes work on a column with no builder stand beside it, checked per column inside its loop; stand_columns is the single stand table. Residual scope: only the stand==None drop is fixed and proved; the row's same-field worksite_unreached fast-ab [107,77,35] case is not reproduced and stays unproven."
+promotion = "docs/bugs/promotions/SETTLEMENT-WALL-STRETCH-WITHOUT-STAND.json"

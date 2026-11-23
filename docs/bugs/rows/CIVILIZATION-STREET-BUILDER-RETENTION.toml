@@ -8,3 +8,5 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/20261104T081120-civilization-seed-qa-f7kvk6_m/result.json"
 failing_first = "reported"
 regression = ["cargo:mc-core:settlements::construction::site_tests::street_work_releases_its_builder_after_completion", "cargo:mc-core:settlements::construction::site_tests::waiting_house_wool_demand_survives_an_active_street_project"]
+fix_commit = "patch:8c7807a9008fb24d469e709dadbdf5e4f83d9b8bfc1851d7a6138097f37a24f6"
+repro_check = "HEAD re-break promotions/CIVILIZATION-STREET-BUILDER-RETENTION.patch reverses on the committed tree (git apply -R --check); the fix releases a completed road/lamp builder, HEAD-adapted to the restructured finish_project (skip release for non-furnace infra). Other construction.rs hunks of 898af4725 are other rows (omitted, reason a). Real-client receipt is the integrated sweep."

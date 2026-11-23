@@ -1,0 +1,35 @@
+diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
+--- a/crates/mc-core/src/settlements/construction.rs
++++ b/crates/mc-core/src/settlements/construction.rs
+@@ -803,16 +803,24 @@
+     let mut images = executor::source_images(state, id);
+     let active_bill = joint_active_bill(state, id).filter(|bill| !bill.is_empty());
++    let funded = |images: &[super::inventory::Image]| {
++        if access::projects(record).next().is_some() {
++            active_bill
++                .as_ref()
++                .is_some_and(|bill| super::construction_crafting::can_fund(state, bill, images))
++        } else {
++            funded_candidate(state, record, images)
++        }
++    };
++    // The partial load must close a shortfall, not interrupt harvesting every
++    // time an already-funded candidate is still waiting for a legal site.
++    if funded(&images) {
++        return false;
++    }
+     let Some(chest) = images.first_mut() else {
+         return false;
+     };
+     // This is a read-only funding probe; only the regular inventory authority
+     // can transfer the actual carry to the real container.
+     chest.slots.extend(carry.iter().flatten().cloned());
+-    if access::projects(record).next().is_some() {
+-        active_bill
+-            .as_ref()
+-            .is_some_and(|bill| super::construction_crafting::can_fund(state, bill, &images))
+-    } else {
+-        funded_candidate(state, record, &images)
+-    }
++    funded(&images)
+ }

@@ -223,9 +223,15 @@ impl Sweeps {
             .retain(|id, sweep| !sweep_stale(id, sweep, blueprint, frontages, topology));
     }
 
-    /// Some unfinished sweep already holds a legal candidate.
-    pub(super) fn waiting(&self) -> bool {
-        self.live.values().any(|sweep| sweep.best.is_some())
+    /// Some unfinished sweep of these kinds already holds a legal candidate.
+    /// A retained sweep of a kind this pass did not advance (its funding was
+    /// withdrawn) must not hold the slot for other work.
+    pub(super) fn holding<'a>(&self, kinds: impl IntoIterator<Item = &'a str>) -> bool {
+        kinds.into_iter().any(|kind| {
+            self.live
+                .get(kind)
+                .is_some_and(|sweep| sweep.best.is_some())
+        })
     }
 
     /// Candidates this blueprint's live sweep has examined (test observer).
@@ -481,6 +487,8 @@ pub(super) fn advance(
         Some(&floors[usize::from(rotation) % 4]),
     ) {
         Ok(cost) if cost == stored => Advance::Cheapest(origin, rotation),
+        // The world moved under the stored candidate: it is gone (the sweep was
+        // removed above), so this restart holds nothing.
         Ok(_) | Err(_) => Advance::Incomplete(0),
     }
 }

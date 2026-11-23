@@ -1,0 +1,39 @@
+{
+  "id": "VILLAGER-LAND-STROLL-WET-WELL",
+  "verdict": "promoted",
+  "fix_commit": "patch:7570e3e6bff1b416b89184b32253a9bb8b8fb4e8709d7193dd89601e409cfa3a",
+  "fix_commit_full": "patch:7570e3e6bff1b416b89184b32253a9bb8b8fb4e8709d7193dd89601e409cfa3a",
+  "promoted_at": "2026-11-23T15:10:53+00:00",
+  "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "7570e3e6bff1b416b89184b32253a9bb8b8fb4e8709d7193dd89601e409cfa3a",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/allocator.rs",
+    "crates/mc-core/src/villager/brain.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::work_route_avoids_roofed_well_and_reaches_the_opposite_rim": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::short_stroll_rejects_a_roofed_well_but_keeps_a_dry_neighbor": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::work_route_avoids_roofed_well_and_reaches_the_opposite_rim": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::short_stroll_rejects_a_roofed_well_but_keeps_a_dry_neighbor": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T150909-ledger-promote-0_rwarpw"
+}

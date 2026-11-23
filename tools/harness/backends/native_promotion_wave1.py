@@ -428,10 +428,22 @@ def _goat_ram(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                                            "after": (r := _same_row(steps, sid)) and r["health"]}
 
 
+def _game_time(steps: ProbeSteps) -> int:
+    """The client's observed simulation clock; the `/time query gametime` reply is a
+    translatable component the native chat does not carry, so the chat cannot supply it."""
+    clock = steps.observe().get("time")
+    value = clock.get("game_time") if isinstance(clock, dict) else None
+    if not isinstance(value, int) or value < 200:
+        raise RuntimeError(f"the client observes no usable game_time: {clock!r}")
+    return value
+
+
 def _golem_gossip(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = origin
     steps.fixture("gamerule spawn_mobs false")
-    steps.fixture("time set day")
+    # `Activity::Meet` is the 9_000..=10_999 slice of the day clock (brain.rs); `time set day`
+    # froze the clock at 1_000, where every adult works and no quorum exists.
+    steps.fixture("time set 9500")
     steps.fixture("gamerule advance_time false")
     _set(steps, _point(origin, dx=0, dy=0, dz=4), "minecraft:bell")
     villagers = []
@@ -441,18 +453,29 @@ def _golem_gossip(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         villagers.append(_wanderer_at(steps, "minecraft:villager", px, pz,
                                       exclude=tuple(v["entity_uuid"] for v in villagers)))
     _echo(steps, "gossip_villagers_ordered")
-    steps.fixture("time query gametime")
-    state = _chat_has(steps, "gametime_read", "time is")
-    tick = int(re.search(r"time is (\d+)", next(l for l in state["recent_chat"] if "time is" in l)).group(1))
-    for row in villagers:
-        uuid_ = row["entity_uuid"]
-        steps.fixture(f'data merge entity {uuid_} {{Brain:{{memories:{{"minecraft:last_slept":'
-                      f'{{value:{tick - 100}L}}}}}},"krasnokamen:VillagerRuntime":'
-                      f'{{last_gossip:{tick - 1}L,activity:"meet"}}}}')
+
+    def author() -> None:
+        """Both memories the summon reads, dated from the clock the client observes."""
+        tick = _game_time(steps)
+        for row in villagers:
+            uuid_ = row["entity_uuid"]
+            steps.fixture(f'data merge entity {uuid_} {{Brain:{{memories:{{"minecraft:last_slept":'
+                          f'{{value:{tick - 100}L}}}}}},"krasnokamen:VillagerRuntime":'
+                          f'{{last_gossip:{tick - 1}L,activity:"meet"}}}}')
 
     def summoned(_state: dict) -> bool:
         return any(row["entity_type"] == "minecraft:iron_golem" for row in _rows(steps, 32))
-    steps.wait(summoned, "five_sleeping_villagers_summoned_golem", timeout_seconds=360)
+
+    # `last_gossip` is valid for 1_200 ticks (social.rs) and the day clock stays at 9_500, so the
+    # authored memories are re-dated every 100 ticks instead of relying on one 60-second window.
+    appeared = False
+    for _ in range(24):
+        author()
+        if summoned(steps.observe()):
+            appeared = True
+            break
+        steps.call("minecraft_wait_ticks", {"ticks": 100})
+    steps.check("five_sleeping_villagers_summoned_golem", appeared)
     _capture(steps, "gossip-golem-summoned")
 
 

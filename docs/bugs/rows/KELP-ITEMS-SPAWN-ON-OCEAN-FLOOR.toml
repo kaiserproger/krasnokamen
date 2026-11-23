@@ -11,5 +11,5 @@ regression = [
   "cargo:mc-core:fluids_tests::kelp_growing_in_still_water_drops_no_items",
 ]
 failing_first = "reported"
-fix_commit = "af58aeb92"
+fix_commit = "patch:e6fee19a268eeee6a24d95c816b746f6b4209fa70c4e305b8bf85ba368289420"
 repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/nc-interact-kelp.log: reversing the real fluid fix fails both kelp refs; a real-client gate remains required for the original report."

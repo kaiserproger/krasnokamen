@@ -1,0 +1,16 @@
+diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
+index 97b516749..3a1f8564c 100644
+--- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
++++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
+@@ -944,6 +944,11 @@ pub(super) fn debit(
+             if state.registry.tree_logs.get(block as usize) == Some(&true) {
+                 return Err(Failure::Blocked);
+             }
++            loot.extend(
++                crate::settlements::forestry::plant_drops(state, cell.at, block)?
++                    .into_iter()
++                    .map(|stack| (cell.at, stack)),
++            );
+             loot.extend(
+                 crate::settlements::construction::relayout::crop_drops(state, block)
+                     .into_iter()

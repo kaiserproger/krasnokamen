@@ -1,6 +1,6 @@
 # Certificate wall-ring control
 
-Row: `CERTIFY-CORNER-MARKS-USE-FEET-INSIDE-WALLS` remains **open**.
+Row: `CERTIFY-CORNER-MARKS-USE-FEET-INSIDE-WALLS` is **fixed** (promoted on `wt/D123Civ`).
 
 ## Production-only patch
 

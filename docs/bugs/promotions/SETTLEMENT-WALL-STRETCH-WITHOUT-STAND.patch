@@ -1,0 +1,74 @@
+diff --git a/crates/mc-core/src/settlements/layout.rs b/crates/mc-core/src/settlements/layout.rs
+index fab20b096..f51806775 100644
+--- a/crates/mc-core/src/settlements/layout.rs
++++ b/crates/mc-core/src/settlements/layout.rs
+@@ -1265,19 +1265,25 @@ fn stand_column(anchor: [i32; 3], x: i32, z: i32) -> [i32; 2] {
+ #[must_use]
+ pub(crate) fn stand(state: &TickState, project: &Project, next: [i32; 3]) -> Option<[i32; 3]> {
+     let record = state.settlements.get(project.settlement)?;
+-    let anchor = record.anchor;
+-    let columns = match project.blueprint.as_str() {
+-        LAMP => vec![stand_column(anchor, next[0], next[2])],
+-        PERIMETER | GATE => (1..=2)
+-            .map(|step| inward(anchor, next[0], next[2], step))
+-            .collect(),
+-        WELL => vec![[anchor[0] + (next[0] - anchor[0]).signum(), next[2]]],
+-        _ => vec![[next[0], next[2]]],
+-    };
+-    columns.into_iter().find_map(|[x, z]| {
+-        let y = construction::surface_y(state, anchor[1], x, z)?;
+-        Some([x, y + 1, z])
+-    })
++    stand_columns(record.anchor, project.blueprint.as_str(), next[0], next[2])
++        .into_iter()
++        .find_map(|[x, z]| {
++            let y = construction::surface_y(state, record.anchor[1], x, z)?;
++            Some([x, y + 1, z])
++        })
++}
++
++/// Columns a builder may stand on to place `(x, z)` of a `blueprint` project,
++/// in preference order: the road beside a lamp post's column, inside the wall
++/// beside a wall or gate column, the road beside the well's rim, or the column
++/// itself.
++fn stand_columns(anchor: [i32; 3], blueprint: &str, x: i32, z: i32) -> Vec<[i32; 2]> {
++    match blueprint {
++        LAMP => vec![stand_column(anchor, x, z)],
++        PERIMETER | GATE => (1..=2).map(|step| inward(anchor, x, z, step)).collect(),
++        WELL => vec![[anchor[0] + (x - anchor[0]).signum(), z]],
++        _ => vec![[x, z]],
++    }
+ }
+ 
+ /// Wall columns are cobblestone, this many blocks tall.
+@@ -1492,7 +1498,8 @@ fn column_cells(
+ }
+ 
+ /// The cells one wall stretch or gatehouse still owes: `Some(None)` when it
+-/// stands, `None` when part of it is not loaded.
++/// stands, `None` when part of it is not loaded or when a column it still owes
++/// has no builder stand beside it (such a stretch is not planned at all).
+ fn span_work(state: &TickState, record: &SettlementRecord, span: Span) -> Option<Option<Work>> {
+     let anchor = record.anchor;
+     let cobble = state.registry.states.cobblestone;
+@@ -1523,7 +1530,19 @@ fn span_work(state: &TickState, record: &SettlementRecord, span: Span) -> Option
+             } else {
+                 vec![cobble; GATE_HEIGHT]
+             };
+-            cells.extend(column_cells(state, record, [x, z], cobble, &profile)?);
++            let owed = column_cells(state, record, [x, z], cobble, &profile)?;
++            // A column with no builder stand beside it would prepare and then
++            // stall the whole stretch until the next cancellation admits it
++            // again, so a stretch that owes work on such a column is not
++            // planned at all.
++            if !owed.is_empty()
++                && stand_columns(anchor, span.kind, x, z)
++                    .into_iter()
++                    .all(|[sx, sz]| construction::surface_y(state, anchor[1], sx, sz).is_none())
++            {
++                return None;
++            }
++            cells.extend(owed);
+         }
+     }
+     Some(work_of(cells))

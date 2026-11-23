@@ -1,0 +1,56 @@
+diff --git a/crates/mc-core/src/villager/shepherd.rs b/crates/mc-core/src/villager/shepherd.rs
+index b57b6ec2e..92665f8fd 100644
+--- a/crates/mc-core/src/villager/shepherd.rs
++++ b/crates/mc-core/src/villager/shepherd.rs
+@@ -1,5 +1,5 @@
+ //! Settlement residents shear adult sheep with a real tool and carry wool to storage.
+-//! Unemployed adults and optional shepherds share the same bounded sheep search.
++//! Eligible adults share the same bounded sheep search after their own job.
+ //! Shears are taken from settlement storage or crafted from two iron ingots.
+ use super::mining;
+ use super::{Activity, VillagerProfession, VillagerState};
+@@ -154,14 +154,18 @@ fn acquire_tool(
+         let Ok(before) = inventory::load(state, &endpoint) else {
+             continue;
+         };
++        let Ok(free) = inventory::unreserved_stock(state, &before) else {
++            continue;
++        };
+         let selected = [shears, iron].into_iter().find_map(|item| {
++            let available = free.get(&item).copied().unwrap_or(0);
+             before
+                 .slots
+                 .iter()
+-                .position(|stack| stack.item_id == item && stack.count > 0)
+-                .map(|index| (item, index))
++                .position(|stack| stack.item_id == item && stack.count > 0 && available > 0)
++                .map(|index| (item, index, available))
+         });
+-        let Some((item, index)) = selected else {
++        let Some((item, index, available)) = selected else {
+             continue;
+         };
+         let pos = BlockPos {
+@@ -177,7 +181,8 @@ fn acquire_tool(
+             1
+         } else {
+             (2 - iron_count).min(before.slots[index].count)
+-        };
++        }
++        .min(available.min(i32::MAX as u64) as i32);
+         let Some(empty) = carried.iter_mut().find(|stack| stack.is_none()) else {
+             return deposit(state, slot, v);
+         };
+@@ -217,12 +222,6 @@ pub(super) fn work(
+     v: &mut VillagerState,
+     _changes: &mut ChangeSet,
+ ) -> Option<Option<BlockPos>> {
+-    if !matches!(
+-        v.data.profession,
+-        VillagerProfession::Shepherd | VillagerProfession::None
+-    ) {
+-        return None;
+-    }
+     if !eligible(state, slot, v) || v.sleeping || v.activity == Activity::Panic {
+         return None;
+     }

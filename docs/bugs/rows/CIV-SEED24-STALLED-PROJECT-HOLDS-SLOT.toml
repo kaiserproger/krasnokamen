@@ -12,4 +12,5 @@ regression = [
   "cargo:mc-core:settlements::construction::site_tests::builder_that_cannot_advance_the_project_is_replaced_and_chosen_last",
   "harness:civilization-seed-qa:new_house",
 ]
-fix_commit = "671b5c41"
+fix_commit = "patch:c289957a9d229a911fcad4fcec00a9182ccb2eaef03023927f5d06a4190e3ba5"
+repro_check = "HEAD re-break control: docs/bugs/promotions/CIV-SEED24-STALLED-PROJECT-HOLDS-SLOT.patch (patch:c289957a) reverses on b67e1b0612 (`git apply -R --check`); the reversed tree is red at the row's own assertion, crates/mc-core/src/settlements/construction_site_tests.rs:440, in .analysis/validation/20261123T194330-test-sqb657tz (0 passed, 1 failed: the stale builder keeps the slot after 3000 shift ticks). hunks.md maps the two behaviour hunks and the (b) field/type omissions; the real-client red is the integrated sweep's control."

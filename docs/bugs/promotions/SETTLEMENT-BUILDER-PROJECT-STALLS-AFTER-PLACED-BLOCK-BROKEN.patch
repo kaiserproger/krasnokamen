@@ -1,0 +1,119 @@
+diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
+index c4843f176..3a1f8564c 100644
+--- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
++++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
+@@ -331,7 +331,8 @@ pub(crate) fn recover(
+     let record = structure(&ledger, &owner(settlement), handle)?;
+     let paused = record.snapshot.state == ScriptStructureState::Paused
+         && record.snapshot.pause_reason.as_deref() == Some("footprint_changed");
+-    if !paused {
++    let committed = record.snapshot.state == ScriptStructureState::Committed;
++    if !paused && !committed {
+         return Ok(false);
+     }
+     let retry = (paused
+@@ -383,6 +384,51 @@ pub(crate) fn recover(
+         return Ok(true);
+     }
+     let target = world(state, &record.snapshot.dimension)?;
++    let mut repair = Vec::new();
++    let mut seen = BTreeSet::new();
++    for (index, stage) in record.snapshot.stages.iter().enumerate().rev() {
++        if !matches!(stage.stage.as_str(), "liquid" | "fill" | "build") {
++            continue;
++        }
++        let current = record.snapshot.current_stage_index as usize;
++        let completed = if current > index {
++            record.cells[index].len()
++        } else if current == index {
++            record.snapshot.completed_work_units as usize
++        } else {
++            0
++        };
++        for cell in record.cells[index].iter().take(completed).rev() {
++            if !seen.insert(cell.at) || free_soil_work(target, cell) {
++                continue;
++            }
++            let now = target
++                .world
++                .block_at(cell.at[0], cell.at[1], cell.at[2])
++                .ok_or(Failure::Unloaded)?;
++            let actual = target
++                .registry
++                .blocks
++                .by_id(mc_world::BlockStateId(now))
++                .ok_or(Failure::InvalidRequest)?;
++            let expected = target
++                .registry
++                .blocks
++                .by_id(mc_world::BlockStateId(cell.state))
++                .ok_or(Failure::InvalidRequest)?;
++            // Only an emptied cell is re-placed, as in `reopen_emptied`: a
++            // solid foreign block in a placed cell keeps its place.
++            if actual.block.raw_id != expected.block.raw_id
++                && crate::settlements::construction::clearable(target, now)
++            {
++                repair.push(cell.clone());
++            }
++        }
++    }
++    repair.reverse();
++    if committed && repair.is_empty() {
++        return Ok(false);
++    }
+     if let Some(proof) = &record.liquid {
+         crate::settlements::construction::preparation::liquid::revalidate(
+             target,
+@@ -411,6 +457,24 @@ pub(crate) fn recover(
+             record.snapshot.completed_work_units = 0;
+         }
+     }
++    if !repair.is_empty() {
++        let mut counts = BTreeMap::new();
++        for cell in &repair {
++            if let Some(resource) = &cell.resource {
++                *counts.entry(resource.clone()).or_insert(0) += u64::from(cell.quantity);
++            }
++        }
++        record.snapshot.stages.push(ScriptStructureStagePlan::new(
++            "repair".into(),
++            repair.len() as u32,
++            repair.len() as u64,
++            materials(&counts),
++        ));
++        record
++            .portions
++            .extend(portions::certify(state, std::slice::from_ref(&repair))?);
++        record.cells.push(repair);
++    }
+     record.snapshot.resource_plan_hash =
+         inventories::resource_plan_hash(&resource_plan(&record.snapshot.stages));
+     record.snapshot.remaining = remaining(&record);
+diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
+index fa1addf02..0d6244542 100644
+--- a/crates/mc-core/src/settlements/construction.rs
++++ b/crates/mc-core/src/settlements/construction.rs
+@@ -2837,6 +2837,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+     else {
+         return false;
+     };
++    // Certification is not a substitute for matching the placed blueprint:
++    // the executor may have reached its last cell after a player broke one.
++    if executor::recover(state, id, &project.structure) != Ok(false) {
++        return false;
++    }
+     if !executor::status(state, id, &project.structure)
+         .is_ok_and(|snapshot| snapshot.state == ScriptStructureState::Committed)
+     {
+@@ -2858,6 +2863,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+         record.revision = record.revision.saturating_add(1);
+         return true;
+     }
++    // A placed cell that a foreign edit emptied is queued for re-placement and
++    // the project stays open; the hole would otherwise block the certificate.
++    if executor::reopen_emptied(state, id, &project.structure) != Ok(false) {
++        return false;
++    }
+     let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {
+         return false;
+     };

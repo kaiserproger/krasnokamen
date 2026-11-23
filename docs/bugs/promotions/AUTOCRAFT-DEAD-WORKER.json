@@ -1,0 +1,38 @@
+{
+  "id": "AUTOCRAFT-DEAD-WORKER",
+  "verdict": "promoted",
+  "fix_commit": "patch:d1a7ea797bb7d013ad233a911d526ea9ba59ae91298361ee702411c8a39bb773",
+  "fix_commit_full": "patch:d1a7ea797bb7d013ad233a911d526ea9ba59ae91298361ee702411c8a39bb773",
+  "promoted_at": "2026-11-23T17:12:02+00:00",
+  "tree_head": "0dd4549c65ff1d43c2657363f51212ecd72d0d15",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "d1a7ea797bb7d013ad233a911d526ea9ba59ae91298361ee702411c8a39bb773",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/production.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::autocraft::tests::an_order_whose_worker_dies_passes_to_a_free_resident_and_finishes": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:settlements::autocraft::tests::resuming_a_held_order_of_a_dead_worker_hands_it_to_a_free_resident": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::autocraft::tests::an_order_whose_worker_dies_passes_to_a_free_resident_and_finishes": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::autocraft::tests::resuming_a_held_order_of_a_dead_worker_hands_it_to_a_free_resident": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T170855-ledger-promote-1v24x84k"
+}

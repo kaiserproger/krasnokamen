@@ -1,0 +1,48 @@
+diff --git a/crates/mc-core/src/settlements/allocator.rs b/crates/mc-core/src/settlements/allocator.rs
+--- a/crates/mc-core/src/settlements/allocator.rs
++++ b/crates/mc-core/src/settlements/allocator.rs
+@@ -1113,6 +1113,20 @@
+                 {
+                     continue;
+                 }
++                // Vanilla WATER has malus 8.0 (our cardinal step costs 10).
++                // Being standable is not a preference: without this cost a
++                // work route cuts through a roofed well's water bed, from
++                // which its swimming body cannot clear the rim and low roof.
++                let water_cost = if ctx
++                    .world
++                    .block_at(next.x, end[1].floor() as i32, next.z)
++                    .is_some_and(|id| {
++                        ctx.registry.materials.classify(id) == mc_physics::BlockMaterial::Water
++                    }) {
++                    80
++                } else {
++                    0
++                };
+-                let cost = node.cost + 10 + dy.unsigned_abs() * 4;
++                let cost = node.cost + 10 + dy.unsigned_abs() * 4 + water_cost;
+                 if let Some(&old) = cache.visited.get(&next) {
+                     if cache.nodes[old].cost <= cost {
+diff --git a/crates/mc-core/src/villager/brain.rs b/crates/mc-core/src/villager/brain.rs
+--- a/crates/mc-core/src/villager/brain.rs
++++ b/crates/mc-core/src/villager/brain.rs
+@@ -688,8 +688,19 @@
+                             &(state).registry,
+                             next,
+                             width,
+                             height,
+                             true,
+                         )?;
++                        // LandRandomPos rejects water. A short land stroll
++                        // must not inherit the work router's wading/floating
++                        // permission and descend into a roofed village well.
++                        let foot = state
++                            .world
++                            .block_at(next.x, end[1].floor() as i32, next.z)?;
++                        if state.registry.materials.classify(foot)
++                            == mc_physics::BlockMaterial::Water
++                        {
++                            return None;
++                        }
+                         clear_step(state, begin, end, width, height).then_some(next)
+                     });

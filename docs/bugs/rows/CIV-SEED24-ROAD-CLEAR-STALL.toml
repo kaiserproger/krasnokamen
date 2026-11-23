@@ -11,4 +11,4 @@ regression = [
   "cargo:mc-core:villager::building_preparation_tests::clearing_stand_is_never_the_top_of_a_fence_post",
   "harness:civilization-seed-qa:new_house",
 ]
-fix_commit = "2b8219d1"
+fix_commit = "patch:a3360a2db04ed9c2ef5d9219901abf926e00ab85dcecdd6398d2230a19f90fd1"

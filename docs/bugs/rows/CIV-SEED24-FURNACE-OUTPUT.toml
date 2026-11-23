@@ -13,4 +13,4 @@ regression = [
   "cargo:mc-core:villager::smelting_tests::guards::nitwit_does_not_collect_owned_furnace_output",
   "harness:civilization-seed-qa:iron_smelted",
 ]
-fix_commit = "1c6f7b09"
+fix_commit = "patch:8cd11a6fb971a2fbe4eb9713b44ae01eb1bb40f6050abd32163406ad2783bc80"

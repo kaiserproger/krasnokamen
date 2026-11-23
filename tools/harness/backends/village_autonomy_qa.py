@@ -695,9 +695,13 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
         _shutil.copytree(_src, _dst)
     (artifact / "plugins").mkdir(parents=True, exist_ok=True)
     # The second player uses teleport; the owner-order fixture also teleports
-    # its primary player. Claims still use the ordinary player command.
-    if not civilization:
-        prepare_operator_fixture(ctx, [SECOND_USERNAME, *([USERNAME] if owner_order else [])])
+    # its primary player, and the civilization fixture certifies its founding
+    # chest's storage with explicit bounds, an operator-only administration
+    # capability (`settlement building certify storage <bounds>`). Claims still
+    # use the ordinary player command, and `spawn_protection = 0` above keeps the
+    # op entry from enabling vanilla spawn protection.
+    prepare_operator_fixture(ctx, [SECOND_USERNAME,
+                                   *([USERNAME] if owner_order or civilization else [])])
     evidence = ctx.client_evidence
     with binary.open("rb") as server_executable:
         server_hash = hashlib.file_digest(server_executable, "sha256").hexdigest()
@@ -2301,7 +2305,12 @@ def _planner_status(
     status: dict[str, Any] = {}
     try:
         observed = _project_status(probe, capture)
-        status["projects"] = _project_progress(observed)
+        # The live Construction dialog clips its body to the client viewport: a settlement
+        # with four projects showed three and "Active projects: 4/8"
+        # (20261123T223724-civilization-seed-qa-wyc2jdia). This read is a diagnostic, so a
+        # body the client cut at the viewport edge is accepted; the stage checks that need
+        # every project use `_project_progress` without this flag.
+        status["projects"] = _project_progress(observed, clipped_ok=True)
         status["project_ui"] = observed.get("ui_nodes", [])
     except Exception as exc:
         status["projects_error"] = str(exc)[:300]

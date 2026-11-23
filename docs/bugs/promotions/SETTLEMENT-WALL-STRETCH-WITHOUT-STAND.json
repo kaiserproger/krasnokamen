@@ -1,0 +1,30 @@
+{
+  "id": "SETTLEMENT-WALL-STRETCH-WITHOUT-STAND",
+  "verdict": "promoted",
+  "fix_commit": "patch:f630747ddc130aadca7dd1f483db925ac2eb8783a896b7c40feb110d13179abd",
+  "fix_commit_full": "patch:f630747ddc130aadca7dd1f483db925ac2eb8783a896b7c40feb110d13179abd",
+  "promoted_at": "2026-11-23T17:15:53+00:00",
+  "tree_head": "a6f4ca9d6df61b0c745279f15bbb3a54e98954ae",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "f630747ddc130aadca7dd1f483db925ac2eb8783a896b7c40feb110d13179abd",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/layout.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::construction::fortification_tests::a_wall_stretch_without_a_builder_stand_is_not_planned": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::construction::fortification_tests::a_wall_stretch_without_a_builder_stand_is_not_planned": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T171341-ledger-promote-kz4pv_bj"
+}

@@ -1,0 +1,15 @@
+diff --git a/tools/harness/backends/civilization_seed_qa.py b/tools/harness/backends/civilization_seed_qa.py
+index 85c1c7e34..5453853ae 100644
+--- a/tools/harness/backends/civilization_seed_qa.py
++++ b/tools/harness/backends/civilization_seed_qa.py
+@@ -868,7 +868,9 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server:
+                     target = tuple(bed[axis] + 0.5 for axis in ("x", "y", "z"))
+                     detail["milestones"]["new_house"] = {
+                         "sprint_ticks": advanced, "building": building, "project": project, "bed": bed,
+-                        "screenshot": capture_target(probe, artifact, f"civilization-house-{advanced:06d}", target),
++                        "screenshot": capture_house(
++                            probe, artifact, f"civilization-house-{advanced:06d}",
++                            target, evidence.get("blocks", [])),
+                     }
+             elif "second_building" not in detail["milestones"]:
+                 target = building_aim_point(building, evidence.get("solid", []))

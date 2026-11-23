@@ -332,28 +332,27 @@ pub(super) fn pick(
         super::menus::building_from(state, connection, ctx, BuildingId(raw));
         return;
     }
-    if streets.is_empty()
-        && ids.is_empty()
-        && sites.lines().count() == 1
-        && crate::settlements::construction::project_for_structure(record, sites).is_some()
-    {
-        super::menus::project(state, connection, ctx);
+    if streets.is_empty() && ids.is_empty() && sites.lines().count() == 1 {
+        super::selected_project_screen(state, connection, ctx, Some(sites));
         return;
     }
     let mut choices = Vec::new();
     for site in sites.lines() {
         if let Some(project) = crate::settlements::construction::project_for_structure(record, site)
         {
-            choices.push(button(
-                format!(
-                    "{} L{} · {}",
-                    blueprint_label(ctx, &project.blueprint),
-                    project.level,
-                    corner_text(project.origin)
-                ),
-                "project_status",
-                ctx.id,
-            ));
+            choices.push(
+                button(
+                    format!(
+                        "{} L{} · {}",
+                        blueprint_label(ctx, &project.blueprint),
+                        project.level,
+                        corner_text(project.origin)
+                    ),
+                    "project_selected",
+                    ctx.id,
+                )
+                .with("structure", Tag::String(site.to_owned())),
+            );
         } else {
             choices.push(view_button(
                 ctx,

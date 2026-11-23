@@ -1,0 +1,138 @@
+diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
+index 8543bf976..0d6244542 100644
+--- a/crates/mc-core/src/settlements/construction.rs
++++ b/crates/mc-core/src/settlements/construction.rs
+@@ -1497,9 +1497,15 @@ struct SitePass {
+     report: site_refusals::Report,
+     /// At least one kind's whole sweep still has candidates to examine.
+     running: bool,
+-    /// Some unfinished sweep already holds a legal candidate, so its cheapest
+-    /// lot is worth holding the slot for. An empty sweep never blocks other work.
++    /// A kind this pass advanced ran unfinished and already holds a legal
++    /// candidate: its cheapest lot is worth the slot. Another kind's sweep,
++    /// even a now-unfunded one, never blocks other work.
+     waiting: bool,
++    /// This pass really ran the catalog House's sweep (`advance` was called for
++    /// a House kind, whatever it returned). The same catalog House can be
++    /// fetched by the priority scan (physical beds) and then by the ordinary
++    /// funded scan (certificate levels); the later visit owns its final state.
++    house_advanced: bool,
+ }
+ 
+ /// Search the funded kinds in priority order over one shared street walk.
+@@ -1533,11 +1539,14 @@ fn site_project<'a>(
+             report,
+             running: false,
+             waiting: false,
++            house_advanced: false,
+         };
+     }
+     let mut cursor = start % count;
+     let share = attempts / kinds.len().max(1) as u32;
+     let mut running = false;
++    let mut advanced: Vec<&'a str> = Vec::with_capacity(kinds.len());
++    let mut house_advanced = false;
+     let mut survey = site_refusals::Survey::default();
+     for blueprint in kinds {
+         let Some(level) = blueprint.level(1) else {
+@@ -1563,6 +1572,12 @@ fn site_project<'a>(
+             );
+         }
+         let mut budget = share;
++        // Any outcome below means this pass really walked the kind's sweep; the
++        // flag is about the visit, not about what the walk found.
++        if blueprint.kind == BuildingKind::House {
++            house_advanced = true;
++        }
++        advanced.push(blueprint.id.as_str());
+         match site_refusals::advance(
+             state,
+             record,
+@@ -1598,12 +1613,15 @@ fn site_project<'a>(
+                     images,
+                     &mut report,
+                 );
++                // A refused materialization is not an admission: an earlier
++                // kind's unfinished sweep that holds a lot keeps the slot.
+                 return SitePass {
+                     site,
+                     cursor: 0,
+                     report,
+-                    running: false,
+-                    waiting: false,
++                    running,
++                    waiting: sweeps.holding(advanced.iter().copied()),
++                    house_advanced,
+                 };
+             }
+         }
+@@ -1613,7 +1631,9 @@ fn site_project<'a>(
+         cursor,
+         report,
+         running,
+-        waiting: sweeps.waiting(),
++        // Only the kinds this pass advanced own the hold.
++        waiting: sweeps.holding(advanced.iter().copied()),
++        house_advanced,
+     }
+ }
+ 
+@@ -1737,6 +1757,7 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
+                 report: site_refusals::Report::default(),
+                 running: false,
+                 waiting: false,
++                house_advanced: false,
+             },
+             |house| {
+                 site_project(
+@@ -1783,7 +1804,17 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
+                     &images,
+                 );
+                 running |= pass.running;
+-                waiting |= pass.waiting;
++                // The priority scan (physical beds) and the ordinary scan
++                // (certificate levels) can fetch the same catalog House in one
++                // pass. When the ordinary pass really walked that sweep again,
++                // its final state owns the House's hold: a completed sweep whose
++                // recheck moved the world carries no hold, and the stale
++                // priority hold must not survive it.
++                if pass.house_advanced {
++                    waiting = pass.waiting;
++                } else {
++                    waiting |= pass.waiting;
++                }
+                 funded_site = Some(pass);
+             }
+         }
+diff --git a/crates/mc-core/src/settlements/construction_site_refusals.rs b/crates/mc-core/src/settlements/construction_site_refusals.rs
+index cda40274a..ff6e8a399 100644
+--- a/crates/mc-core/src/settlements/construction_site_refusals.rs
++++ b/crates/mc-core/src/settlements/construction_site_refusals.rs
+@@ -223,9 +223,15 @@ impl Sweeps {
+             .retain(|id, sweep| !sweep_stale(id, sweep, blueprint, frontages, topology));
+     }
+ 
+-    /// Some unfinished sweep already holds a legal candidate.
+-    pub(super) fn waiting(&self) -> bool {
+-        self.live.values().any(|sweep| sweep.best.is_some())
++    /// Some unfinished sweep of these kinds already holds a legal candidate.
++    /// A retained sweep of a kind this pass did not advance (its funding was
++    /// withdrawn) must not hold the slot for other work.
++    pub(super) fn holding<'a>(&self, kinds: impl IntoIterator<Item = &'a str>) -> bool {
++        kinds.into_iter().any(|kind| {
++            self.live
++                .get(kind)
++                .is_some_and(|sweep| sweep.best.is_some())
++        })
+     }
+ 
+     /// Candidates this blueprint's live sweep has examined (test observer).
+@@ -481,6 +487,8 @@ pub(super) fn advance(
+         Some(&floors[usize::from(rotation) % 4]),
+     ) {
+         Ok(cost) if cost == stored => Advance::Cheapest(origin, rotation),
++        // The world moved under the stored candidate: it is gone (the sweep was
++        // removed above), so this restart holds nothing.
+         Ok(_) | Err(_) => Advance::Incomplete(0),
+     }
+ }

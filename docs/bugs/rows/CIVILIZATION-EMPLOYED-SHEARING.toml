@@ -7,3 +7,5 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/result.yaml"
 regression = ["cargo:mc-core:villager::shepherd_tests::working_miner_crafts_shears_and_delivers_wool_during_house_demand"]
+fix_commit = "patch:d6b25ed9e231460baccce5949057e5483dc14517b04c66e2c9e34eb851384efb"
+repro_check = "HEAD re-break control: docs/bugs/promotions/CIVILIZATION-EMPLOYED-SHEARING.patch (patch:d6b25ed9) reverses on b67e1b0612 (`git apply -R --check`); the reversed tree is red at the row's own assertion, crates/mc-core/src/villager/shepherd_tests.rs:355 (`wool_of == 0x10`, left 0: the employed miner never shears), .analysis/validation/20261123T194851-test-o6na7egf. hunks.md maps the four included hunks and the (a)/(b) omissions (find_sheep belongs to CIVILIZATION-INACTIVE-SHEEP-TARGET; the return type and shepherd_at are pinned by kept tests); the real-client red is the integrated sweep's shepherd_shears control."

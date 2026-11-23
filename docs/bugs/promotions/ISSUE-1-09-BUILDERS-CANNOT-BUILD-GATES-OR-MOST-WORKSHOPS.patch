@@ -1,0 +1,34 @@
+diff --git a/crates/mc-core/src/settlements/blueprints.rs b/crates/mc-core/src/settlements/blueprints.rs
+index 1f331eb0e..d7bb814b7 100644
+--- a/crates/mc-core/src/settlements/blueprints.rs
++++ b/crates/mc-core/src/settlements/blueprints.rs
+@@ -32,7 +32,7 @@ pub type ItemId = u32;
+ /// at most the street plan's `LOT_DEPTH` (11).
+ pub const MAX_SIZE: [u8; 3] = [13, 11, 11];
+ 
+-const SOURCES: [&str; 13] = [
++const SOURCES: [&str; 26] = [
+     include_str!("../../assets/blueprints/house.json"),
+     include_str!("../../assets/blueprints/storage.json"),
+     include_str!("../../assets/blueprints/farm.json"),
+@@ -40,7 +40,20 @@ const SOURCES: [&str; 13] = [
+     include_str!("../../assets/blueprints/shepherd.json"),
+     include_str!("../../assets/blueprints/lumber_camp.json"),
+     include_str!("../../assets/blueprints/mine.json"),
++    include_str!("../../assets/blueprints/barracks.json"),
+     include_str!("../../assets/blueprints/wall.json"),
++    include_str!("../../assets/blueprints/watch_tower.json"),
++    include_str!("../../assets/blueprints/gate.json"),
++    include_str!("../../assets/blueprints/armorer.json"),
++    include_str!("../../assets/blueprints/butcher.json"),
++    include_str!("../../assets/blueprints/cartographer.json"),
++    include_str!("../../assets/blueprints/cleric.json"),
++    include_str!("../../assets/blueprints/fisherman.json"),
++    include_str!("../../assets/blueprints/fletcher.json"),
++    include_str!("../../assets/blueprints/leatherworker.json"),
++    include_str!("../../assets/blueprints/librarian.json"),
++    include_str!("../../assets/blueprints/toolsmith.json"),
++    include_str!("../../assets/blueprints/weaponsmith.json"),
+     include_str!("../../assets/blueprints/spanish_house.json"),
+     include_str!("../../assets/blueprints/spanish_church.json"),
+     include_str!("../../assets/blueprints/spanish_plaza.json"),

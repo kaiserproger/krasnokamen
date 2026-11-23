@@ -1,0 +1,32 @@
+{
+  "id": "BED-OBSTRUCTED-ENTRY",
+  "verdict": "promoted",
+  "fix_commit": "6a4a2250c8a9e3cb06077c0e510a321d8d1cc0cf",
+  "fix_commit_full": "6a4a2250c8a9e3cb06077c0e510a321d8d1cc0cf",
+  "promoted_at": "2026-11-23T14:40:15+00:00",
+  "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/sleep.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/sleep_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:sleep::tests::intact_bed_with_its_whole_exit_ring_sealed_uses_the_vanilla_above_fallback": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:sleep::tests::intact_bed_with_its_whole_exit_ring_sealed_uses_the_vanilla_above_fallback": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T143732-ledger-promote-o7zmjn_y"
+}

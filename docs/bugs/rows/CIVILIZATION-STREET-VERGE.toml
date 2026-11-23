@@ -7,3 +7,5 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/result.yaml"
 regression = ["cargo:mc-core:settlements::construction::site_tests::funded_workshops_reach_lots_past_a_road_obstruction_via_the_verge"]
+fix_commit = "patch:9c2f9605dd3e676fa9dcadc816f395ca8516c32c76670432e69d9d85c5675d7b"
+repro_check = "HEAD re-break promotions/CIVILIZATION-STREET-VERGE.patch (layout.rs only, from 898af4725) reverses on the committed tree (git apply -R --check); the slice other production files are other rows (omitted, reason a: construction.rs = STREET-BUILDER-RETENTION, shepherd/brain = EMPLOYED-SHEARING, construction_availability = INACTIVE-SHEEP-TARGET). Real-client receipt is the integrated sweep."

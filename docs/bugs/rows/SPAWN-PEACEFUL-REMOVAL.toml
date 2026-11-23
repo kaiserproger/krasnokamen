@@ -8,3 +8,4 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-PEACEFUL-REMOVAL"
 regression = ["cargo:mc-core:natural_spawn_tests::fix_mobs_peaceful_command_removes_hostiles_with_spawning_disabled", "harness:entities:native-v2-peaceful-removal"]
 repro_check = "candidate: e2e05b33e's monster_spawner.rs hunks conflict in three large blocks, the despawn path predates it and was restructured by 2dfebd7ab, so no real-hunk control; module 43/43 green, only a synthetic mutation was red and is not counted; real-client gate pending (stage 3)"
+fix_commit = "e2e05b33e"
