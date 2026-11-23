@@ -4,10 +4,11 @@ title = "A placed head whose profile is not a listed player with a published ski
 area = "client"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "split from MODEL-PLACED-HEAD-PROFILE 2026-11-24 (review): the half with an observed real-client control"
 regression = ["harness:scene-shot:native-placed-head", "client:krasnokamen-client:entities::render_blocks::village_tests::static_skulls_render_and_unresolved_player_heads_keep_the_default_skin"]
 proving_assertions = { "harness:scene-shot:native-placed-head" = "placed_head_renders" }
 failing_first = "reported"
 fix_commit = "client:8347908e"
 repro_check = "CONTROL 2026-11-23: with 8347908e's parent 9a645aa9 pinned, native-placed-head FAILS at placed_head_renders (20261123T175512-native-placed-head-2yu3ib2m) - the unresolved-profile head is not drawn at all; the fixed pin 8347908e renders it (20261123T175548-native-placed-head-zjchpvac). Superseded evidence line: 20261123T165737 was the shared native-player-head scene, not this row's control."
+promotion = "docs/bugs/promotions/MODEL-PLACED-HEAD-UNRESOLVED.json"

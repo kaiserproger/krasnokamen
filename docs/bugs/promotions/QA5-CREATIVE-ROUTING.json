@@ -1,0 +1,69 @@
+{
+  "id": "QA5-CREATIVE-ROUTING",
+  "verdict": "promoted",
+  "fix_commit": "client:13f1f28b",
+  "fix_commit_full": "13f1f28b8720eaf1a619fe35545b9210e05c1db8",
+  "promoted_at": "2026-11-23T20:10:07+00:00",
+  "tree_head": "e9a5cf9e315a7adf379abb427d4bb85918514af7",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T200000-native-v2-input-menus-vjo72qcj/result.json",
+    "client_head": "f4bd26d46cbf7fdfbd72ec5457004514d54297e9",
+    "server_binary_sha256": "8ba874991d7bedb574f3ef74493324863f742322dce9b141ef4935738964410f",
+    "red": [
+      "harness:entities:native-v2-input-menus"
+    ],
+    "states": {
+      "harness:entities:native-v2-input-menus": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T200103-native-v2-input-menus-zpzf6uv2/result.json",
+    "client_head": "13f1f28b8720eaf1a619fe35545b9210e05c1db8",
+    "server_binary_sha256": "8ba874991d7bedb574f3ef74493324863f742322dce9b141ef4935738964410f",
+    "green": [
+      "harness:entities:native-v2-input-menus"
+    ],
+    "states": {
+      "harness:entities:native-v2-input-menus": "green"
+    },
+    "tree_head": "e9a5cf9e315a7adf379abb427d4bb85918514af7",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T200103-native-v2-input-menus-zpzf6uv2/result.json",
+    "client_head": "13f1f28b8720eaf1a619fe35545b9210e05c1db8",
+    "server_binary_sha256": "8ba874991d7bedb574f3ef74493324863f742322dce9b141ef4935738964410f",
+    "green": [
+      "harness:entities:native-v2-input-menus"
+    ],
+    "states": {
+      "harness:entities:native-v2-input-menus": "green"
+    },
+    "tree_head": "e9a5cf9e315a7adf379abb427d4bb85918514af7",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "34dcfb799f16cb7c309682165f0734a6b87b3a7e",
+    "paths": [
+      "src/entities.rs",
+      "src/entities/physical.rs",
+      "src/inventory.rs",
+      "src/inventory/actions.rs",
+      "src/inventory/creative.rs",
+      "src/minecraft/entities.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:inventory::tests::creative_player_menu_moves_and_drops_use_set_slot_without_ui_side_state": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T200910-ledger-promote-knqeq8iq"
+}
