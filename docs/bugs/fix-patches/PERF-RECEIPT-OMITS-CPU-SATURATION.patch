@@ -1,105 +1,31 @@
+diff --git a/crates/mc-edge/src/host_telemetry.rs b/crates/mc-edge/src/host_telemetry.rs
+index 4eb533eba..5520d837a 100644
+--- a/crates/mc-edge/src/host_telemetry.rs
++++ b/crates/mc-edge/src/host_telemetry.rs
+@@ -90,8 +90,12 @@ impl HostSampler {
+             cgroup_memory_current_bytes: cgroup_file("memory.current")
+                 .and_then(|text| text.trim().parse().ok()),
+             cgroup_cpu_usage_usec: cpu_stat.as_deref().and_then(cpu_stat_usage),
+-            cgroup_cpu_nr_throttled: None,
+-            cgroup_cpu_throttled_usec: None,
++            cgroup_cpu_nr_throttled: cpu_stat
++                .as_deref()
++                .and_then(|text| cpu_stat_field(text, "nr_throttled")),
++            cgroup_cpu_throttled_usec: cpu_stat
++                .as_deref()
++                .and_then(|text| cpu_stat_field(text, "throttled_usec")),
+             cgroup_memory_pressure: cgroup_file("memory.pressure")
+                 .as_deref()
+                 .and_then(parse_pressure),
 diff --git a/tools/coreperf/profiles.py b/tools/coreperf/profiles.py
-index 3873c4d99..d7c9a2d8f 100644
+index b8fb35866..97e4fc5fd 100644
 --- a/tools/coreperf/profiles.py
 +++ b/tools/coreperf/profiles.py
-@@ -1236,10 +1236,100 @@ def schedule(args: argparse.Namespace, recipe: dict[str, Any] | None = None) ->
-     return plan
- 
- 
-+def cpu_scaling(root: Path = Path("/sys/devices/system/cpu")) -> dict[str, Any]:
-+    """Per-CPU clock policy and current frequency, so two runs on the same pin can be compared.
-+
-+    A receipt that records only lscpu cannot tell a 3 GHz run from a 4.6 GHz one: this host runs
-+    `powersave` and swings 3-4 GHz inside a window (PERF-RECEIPT-OMITS-CPU-GOVERNOR-AND-FREQUENCY).
-+    Every value is a read-only sysfs read; a missing file is omitted, never guessed."""
-+    fields = ("scaling_governor", "energy_performance_preference", "scaling_min_freq",
-+              "scaling_max_freq", "cpuinfo_cur_freq")
-+    policies: dict[str, dict[str, str]] = {}
-+    for cpu in sorted(root.glob("cpu[0-9]*")):
-+        values = {}
-+        for field in fields:
-+            try:
-+                values[field] = (cpu / "cpufreq" / field).read_text().strip()
-+            except OSError:
-+                continue
-+        if values:
-+            policies[cpu.name] = values
-+    distinct = {field: sorted({values[field] for values in policies.values() if field in values})
-+                for field in fields}
-+    return {"policies": policies, "distinct": distinct}
-+
-+
-+def _cgroup_dir(root: Path = Path("/sys/fs/cgroup"), procs: Path = Path("/proc/self/cgroup")) -> Path | None:
-+    """This process's cgroup v2 directory from the `0::<path>` line, or None."""
-+    try:
-+        relative = procs.read_text().strip().split("::", 1)[1].lstrip("/")
-+    except (OSError, IndexError):
-+        return None
-+    return root / relative if relative else root
-+
-+
-+def cgroup_cpu_stat(root: Path = Path("/sys/fs/cgroup"), procs: Path = Path("/proc/self/cgroup")) -> dict[str, int]:
-+    """Cumulative `cpu.stat` counters of this process's cgroup: usage and the throttle fields.
-+
-+    `nr_periods`/`nr_throttled`/`throttled_usec` are what separate 'expensive code' from 'not
-+    enough CPU' under the mem-run CPUQuota (PERF-RECEIPT-OMITS-CPU-SATURATION)."""
-+    directory = _cgroup_dir(root, procs)
-+    if directory is None:
-+        return {}
-+    try:
-+        text = (directory / "cpu.stat").read_text()
-+    except OSError:
-+        return {}
-+    wanted = ("usage_usec", "nr_periods", "nr_throttled", "throttled_usec")
-+    values: dict[str, int] = {}
-+    for line in text.splitlines():
-+        key, _, value = line.partition(" ")
-+        if key in wanted and value.strip().isdigit():
-+            values[key] = int(value.strip())
-+    return values
-+
-+
-+def memory_pressure(root: Path = Path("/sys/fs/cgroup"), procs: Path = Path("/proc/self/cgroup"),
-+                    host: Path = Path("/proc/pressure/memory")) -> dict[str, Any]:
-+    """PSI for memory: the host `/proc/pressure/memory` and this cgroup's `memory.pressure`.
-+
-+    Some/full `avg10` (hundredths of a percent, integer) and cumulative `total` microseconds are
-+    the saturation signal beside VmHWM/memory.current (PERF-RECEIPT-OMITS-MEMORY-PRESSURE)."""
-+    def parse(text: str) -> dict[str, dict[str, int]]:
-+        out: dict[str, dict[str, int]] = {}
-+        for line in text.splitlines():
-+            kind, _, rest = line.partition(" ")
-+            fields: dict[str, int] = {}
-+            for part in rest.split():
-+                key, _, value = part.partition("=")
-+                try:
-+                    fields[key] = int(round(float(value) * 100)) if key.startswith("avg") else int(value)
-+                except ValueError:
-+                    continue
-+            if fields:
-+                out[kind] = fields
-+        return out
-+    result: dict[str, Any] = {"host": {}, "cgroup": {}}
-+    try:
-+        result["host"] = parse(host.read_text())
-+    except OSError:
-+        pass
-+    directory = _cgroup_dir(root, procs)
-+    if directory is not None:
-+        try:
-+            result["cgroup"] = parse((directory / "memory.pressure").read_text())
-+        except OSError:
-+            pass
-+    return result
-+
-+
- def host_receipt(out: Path) -> dict[str, Any]:
-     def capture(command: list[str]) -> str:
+@@ -1333,6 +1333,7 @@ def host_receipt(out: Path, *, cpu_root: Path = Path("/sys/devices/system/cpu"),
          return subprocess.check_output(command, text=True).strip()
      return {"cpu": json.loads(capture(["lscpu", "--json"])),
-+            "cpu_scaling": cpu_scaling(),
-+            "cgroup_cpu": cgroup_cpu_stat(),
-+            "memory_pressure": memory_pressure(),
+             "cpu_scaling": cpu_scaling(cpu_root),
++            "cgroup_cpu": cgroup_cpu_stat(cgroup_root, procs),
+             "memory_pressure": memory_pressure(cgroup_root, procs, host_pressure),
              "memory": Path("/proc/meminfo").read_text(), "os": platform.freedesktop_os_release(),
              "kernel": platform.uname()._asdict(),
-             "disks": json.loads(capture(["lsblk", "--json", "-o", "NAME,MODEL,SIZE,ROTA,FSTYPE,MOUNTPOINTS"])),

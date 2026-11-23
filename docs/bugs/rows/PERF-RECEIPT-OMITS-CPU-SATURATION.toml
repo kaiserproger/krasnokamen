@@ -6,6 +6,6 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "receipts/Books/REPORT-R1.md gap G-1 and section F3 (Gregg 2.5.9 USE: check saturation, 6.3.10; perf). HostSample (crates/mc-edge/src/host_telemetry.rs) carries cgroup_cpu_usage_usec, cpu_total_ticks, cpu_steal_ticks and RSS; cpu.stat is parsed for usage_usec only, while the Perf1M box runs CPUQuota=800 % with tick, journal, native writer, rayon and tokio threads in 4 logical CPUs (receipts/Perf1M/RECEIPT-8192.md), and docs/development/heavy-commands-and-memory.md already tells the analyst to check nr_throttled. Verified open on main 5bdc02911 (no nr_throttled or throttled_usec in host_telemetry.rs or tools/coreperf). Fix direction: add nr_throttled and throttled_usec deltas to HostSample and to the profiles.py receipt; then read the 8k and 16k phase tables as on-CPU ms plus waiting ms. Additive fields only."
-regression = ["python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_receipt_records_cgroup_cpu_throttling", "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_cgroup_cpu_stat_carries_the_throttle_counters"]
+regression = ["python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_receipt_records_cgroup_cpu_throttling", "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_cgroup_cpu_stat_carries_the_throttle_counters", "cargo:mc-edge:host_telemetry_tests::sampler_reads_the_throttle_counters_from_the_cgroup_fixture"]
 failing_first = "not recorded"
-fix_commit = "patch:6c31ed0fc0bd94363c11f17e16d3650cb460340dc9799b88247122fbfb75405c"
+fix_commit = "patch:c3dd61d2d25f47ceda52550f6c596b560bb6527d0772723a7111dfec9df19a4e"
