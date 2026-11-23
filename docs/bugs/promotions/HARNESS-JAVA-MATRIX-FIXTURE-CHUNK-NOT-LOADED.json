@@ -1,0 +1,48 @@
+{
+  "id": "HARNESS-JAVA-MATRIX-FIXTURE-CHUNK-NOT-LOADED",
+  "verdict": "promoted",
+  "fix_commit": "e02693db1",
+  "fix_commit_full": "e02693db13ec4f013447c400bf085032fe81bc7f",
+  "promoted_at": "2026-11-23T12:23:31+00:00",
+  "tree_head": "6535b475e75cecf009b7f504195f010642c3ba4e",
+  "tree_dirty": true,
+  "tree_sha256": "c36e9a1cba9bef4571647880d83a77a3ea9d8f002f2c029b6e104e6c6a1ae6d1",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/harness/java_matrix_client.py"
+  ],
+  "kept_test_files": [
+    "tools/harness/test_java_matrix_client.py"
+  ],
+  "negative_control": {
+    "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_fixture_observer_restores_actor_when_chunk_publication_fails": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_loaded_area_waits_for_each_actual_client_chunk": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_remote_armadillo_fixture_loads_before_arena_teleport": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_fixture_observer_restores_actor_when_chunk_publication_fails": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_loaded_area_waits_for_each_actual_client_chunk": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_remote_armadillo_fixture_loads_before_arena_teleport": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/solaris/.analysis/validation/20261123T122326-ledger-promote-31wrspc2"
+}

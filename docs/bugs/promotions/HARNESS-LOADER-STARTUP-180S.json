@@ -1,0 +1,58 @@
+{
+  "id": "HARNESS-LOADER-STARTUP-180S",
+  "verdict": "promoted",
+  "fix_commit": "1081c210e",
+  "fix_commit_full": "1081c210e4e5fc6fe5be7a308bd4cc79d16bf464",
+  "promoted_at": "2026-11-23T12:24:17+00:00",
+  "tree_head": "dc8569b0ac1152499cd463cdc6fabdaf79b72f88",
+  "tree_dirty": true,
+  "tree_sha256": "47d31145da50a68ba5c896ff6f22c809b9efe89d9edcf111a66c82e21552da96",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/harness/loader.py",
+    "tools/harness/profiles.py",
+    "tools/harness/runtime.py"
+  ],
+  "kept_test_files": [
+    "tools/harness/test_loader_v2.py"
+  ],
+  "negative_control": {
+    "python:tools.harness.test_loader_v2:LoaderV2Tests.test_cancelling_cold_start_stops_unreturned_client_process": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_loader_v2:LoaderV2Tests.test_cold_build_wait_fails_on_process_exit": {
+      "state": "unrunnable",
+      "detail": "no executed test or unittest error; see log"
+    },
+    "python:tools.harness.test_loader_v2:LoaderV2Tests.test_cold_build_wait_has_no_clock_deadline_and_requires_owned_listener": {
+      "state": "unrunnable",
+      "detail": "no executed test or unittest error; see log"
+    },
+    "python:tools.harness.test_loader_v2:LoaderV2Tests.test_loader_start_waits_for_mcp_with_the_profile_cold_build_allowance": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_loader_v2:LoaderV2Tests.test_cancelling_cold_start_stops_unreturned_client_process": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_loader_v2:LoaderV2Tests.test_cold_build_wait_fails_on_process_exit": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_loader_v2:LoaderV2Tests.test_cold_build_wait_has_no_clock_deadline_and_requires_owned_listener": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_loader_v2:LoaderV2Tests.test_loader_start_waits_for_mcp_with_the_profile_cold_build_allowance": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/solaris/.analysis/validation/20261123T122414-ledger-promote-m4v67oni"
+}
