@@ -207,6 +207,15 @@ pub struct Capabilities {
     /// `clientTick`, `Phantom$PhantomBodyRotationControl`,
     /// `HappyGhast$HappyGhastBodyRotationControl`, 26.1.2 javap).
     pub head_follows_body: bool,
+    /// Locomotion is vanilla `Slime$SlimeMoveControl`: no ground traction
+    /// between hops, a jump every 10..29 ticks with `LivingEntity.jumpFromGround`
+    /// power, head glued to the body. `MagmaCube.getJumpDelay` multiplies the
+    /// delay by four and adds `size * 0.1` blocks/tick to the jump (26.3 javap -c).
+    pub hops: bool,
+    /// `MagmaCube.getJumpDelay` multiplier (1 for a slime, 4 for a magma cube).
+    pub hop_delay_scale: u64,
+    /// `MagmaCube.jumpFromGround` size bonus, blocks per tick per size.
+    pub hop_lift_per_size: f64,
     /// Avoids unrolled armadillos within six blocks (Spider.registerGoals).
     pub avoids_armadillos: bool,
     /// Instant health harms and instant damage heals (vanilla undead).
@@ -1394,8 +1403,15 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
         climbs_walls: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
         head_follows_body: matches!(
             name,
-            "minecraft:shulker" | "minecraft:phantom" | "minecraft:happy_ghast"
+            "minecraft:shulker"
+                | "minecraft:phantom"
+                | "minecraft:happy_ghast"
+                | "minecraft:slime"
+                | "minecraft:magma_cube"
         ),
+        hops: matches!(name, "minecraft:slime" | "minecraft:magma_cube"),
+        hop_delay_scale: if name == "minecraft:magma_cube" { 4 } else { 1 },
+        hop_lift_per_size: if name == "minecraft:magma_cube" { 0.1 } else { 0.0 },
         avoids_armadillos: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
         inverted_healing: ZOMBIE_FAMILY.contains(&name)
             || matches!(

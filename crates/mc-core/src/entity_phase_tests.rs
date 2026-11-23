@@ -946,6 +946,7 @@ fn full_step_with_period(
     let loaded = |x: i32, z: i32| world.has_chunk(x.div_euclid(16), z.div_euclid(16));
     let revision = |x, z| world.chunk_revision(x, z);
     let ctx = StepCtx {
+        dolphin_targets: Default::default(),
         rows: std::slice::from_ref(&row),
         entities: &state.entities,
         retained_targets: &state.hostile.targets,
@@ -1355,6 +1356,34 @@ fn idle_wander_decision_rest_matches_full_step_for_two_episodes() {
             "{species}: {rested_decisions} decision rests"
         );
     }
+}
+
+#[test]
+fn far_idle_slime_does_not_rest_on_its_hop_tick() {
+    let (mut state, slot) = resting_mob("minecraft:slime");
+    let id = state.entities.body(slot).id;
+    state.entities.prepare_motion_hints(&state.registry);
+    let flags = state.entities.motion_flags(slot);
+    let period = MOB_FAR_PERIOD as u8;
+    let tick = (1..400)
+        .find(|&tick| {
+            !motion_thinks(tick, flags, period)
+                && crate::entity_motion::hop_due(id.0, tick, 1)
+                && crate::entity_motion::wander(
+                    state.entities.body(slot).movement,
+                    id.0,
+                    tick,
+                    state.entities.row(slot).speed,
+                ) == [0.0; 3]
+        })
+        .expect("a non-decision hop tick");
+    state.tick = tick;
+    let before = state.entities.pos(slot);
+    let _ = run_entity_phase(&mut state, true);
+    assert!(
+        state.entities.vel(slot)[1] > 0.0 || state.entities.pos(slot)[1] > before[1],
+        "a non-decision hop tick must not be swallowed by early_entity_rest"
+    );
 }
 
 #[test]

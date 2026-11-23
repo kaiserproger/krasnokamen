@@ -205,6 +205,7 @@ fn dolphin_follows_surfaces_and_plays_without_item_duplication() {
         pos,
         4800,
         1.2,
+        None,
         std::iter::once([8.5, 200.0, 8.5]),
         std::iter::empty(),
         &block_at,
@@ -217,6 +218,7 @@ fn dolphin_follows_surfaces_and_plays_without_item_duplication() {
             pos,
             100,
             1.2,
+            None,
             std::iter::empty(),
             std::iter::empty(),
             &block_at,
@@ -279,20 +281,25 @@ fn dolphin_corrupt_gotfish_fails_closed_with_exact_field() {
 }
 
 #[test]
-fn fed_dolphin_swims_toward_treasure_chest() {
-    // DOLPHIN-TREASURE through the dolphin run path: a fed dolphin
-    // (GotFish) swims toward a nearby treasure chest.
-    let (mut state, _actor, dolphin) = fixture();
+fn fed_dolphin_locates_the_structure_through_its_normal_goal_tick() {
+    // Normal path: feeding sets GotFish, the AI tick requests DOLPHIN_LOCATED,
+    // the drained site drives the swim, and arrival clears GotFish.
+    let reg = registry();
+    let site = mc_world::BlockPos {
+        x: 30,
+        y: 200,
+        z: 8,
+    };
+    let generator = Arc::new(Structured {
+        air: reg.states.air,
+        water: reg.states.water,
+        chunk: (1, 0),
+        site,
+    });
+    let (mut state, dolphin) = treasure_world(generator);
     let slot = state.entities.slot_of(dolphin).unwrap();
     let start = state.entities.pos(slot);
-    state
-        .entities
-        .row_mut(slot)
-        .entity_life
-        .dolphin
-        .get_or_insert_with(crate::dolphin::DolphinState::default)
-        .got_fish = true;
-    // Treasure chest 10 blocks east, same depth.
+    // A player-placed chest behind the dolphin is not a treasure target.
     let chest = state
         .registry
         .blocks
@@ -300,35 +307,54 @@ fn fed_dolphin_swims_toward_treasure_chest() {
         .unwrap()
         .default
         .0;
-    let cx = (start[0] as i32) + 10;
     state
         .world
-        .set_block(cx, start[1] as i32, start[2] as i32, chest);
+        .set_block(start[0] as i32 - 3, start[1] as i32, start[2] as i32, chest);
     state.world.fold_overlay();
-    for _ in 0..30 {
-        state.tick += 10;
-        run(&mut state);
+    feed_normally(&mut state, dolphin);
+    for _ in 0..1500 {
+        run_tick(&mut state, &[]);
+        if !got_fish(&state, slot) {
+            break;
+        }
+        std::thread::yield_now();
     }
-    let end = state.entities.pos(state.entities.slot_of(dolphin).unwrap());
+    let end = state.entities.pos(slot);
     assert!(
-        end[0] > start[0] + 1.0,
-        "fed dolphin must swim toward the chest, moved {}",
-        end[0] - start[0]
+        !got_fish(&state, slot),
+        "arrival clears GotFish: pos={end:?} treasure={:?} state={:?}",
+        crate::command_locate::dolphin_treasure(&state, dolphin),
+        state.entities.row(slot).entity_life.dolphin,
+    );
+    assert!(end[0] > start[0] + 1.0, "fed dolphin must swim: {end:?}");
+    let dx = 30.5 - end[0];
+    let dz = 8.5 - end[2];
+    assert!(
+        dx * dx + dz * dz < 16.0,
+        "the goal ends only within 4.0 of the shipwreck: {end:?}"
     );
 }
 
 #[test]
-fn treasure_swimming_does_not_cross_a_solid_wall() {
-    let (mut state, _, dolphin) = fixture();
+fn a_blocked_route_gets_stuck_without_crossing_the_wall() {
+    let reg = registry();
+    let site = mc_world::BlockPos {
+        x: 30,
+        y: 200,
+        z: 8,
+    };
+    let (mut state, dolphin) = treasure_world(Arc::new(Structured {
+        air: reg.states.air,
+        water: reg.states.water,
+        chunk: (1, 0),
+        site,
+    }));
+    // Keep both the start chunk and the wall chunk active with the player
+    // between them; an inactive chunk cancels the held goal by design.
+    let player = state.connections.entity_of(ConnectionId(1)).unwrap();
+    let player_slot = state.entities.slot_of(player).unwrap();
+    state.entities.set_pos(player_slot, [12.5, 200.0, 8.5]);
     let slot = state.entities.slot_of(dolphin).unwrap();
-    state
-        .entities
-        .row_mut(slot)
-        .entity_life
-        .dolphin
-        .as_mut()
-        .unwrap()
-        .got_fish = true;
     let block = |name| {
         state
             .registry
@@ -339,25 +365,164 @@ fn treasure_swimming_does_not_cross_a_solid_wall() {
             .0
     };
     let stone = block("minecraft:stone");
-    let chest = block("minecraft:chest");
-    for y in 199..=202 {
-        for z in 7..=10 {
+    for y in 198..=203 {
+        for z in 3..=13 {
             state.world.set_block(13, y, z, stone);
         }
     }
-    state.world.set_block(15, 200, 8, chest);
     state.world.fold_overlay();
-    treasure_search(&mut state);
+    let start = state.entities.pos(slot);
+    feed_normally(&mut state, dolphin);
+    for _ in 0..600 {
+        run_tick(&mut state, &[]);
+        if !got_fish(&state, slot) {
+            break;
+        }
+        std::thread::yield_now();
+    }
     assert!(
         state.entities.pos(slot)[0] < 13.0,
         "dolphin crossed the wall"
     );
+    // The production fixture keeps the far chunk inactive, so exercise the
+    // bounded stuck planner directly: repeated no-progress passes must report
+    // stuck instead of steering at the wall forever.
+    let at = state.entities.pos(slot);
+    let mut stuck = false;
+    for _ in 0..8 {
+        stuck |= plan_treasure(&mut state, slot, at, [30, 200, 8], 999);
+    }
+    assert!(stuck, "three blocked waypoints are vanilla's stuck path");
+    assert!(state.entities.pos(slot)[0] < start[0] + 5.0);
 }
 
 #[test]
-fn treasure_palette_scan_matches_dense_scan_with_overlay_and_ties() {
-    let (mut state, _, dolphin) = fixture();
-    let at = state.entities.pos(state.entities.slot_of(dolphin).unwrap());
+fn treasure_navigation_is_cancelled_on_a_world_change() {
+    let reg = registry();
+    let (mut state, dolphin) = treasure_world(Arc::new(Structured {
+        air: reg.states.air,
+        water: reg.states.water,
+        chunk: (1, 0),
+        site: mc_world::BlockPos {
+            x: 30,
+            y: 200,
+            z: 8,
+        },
+    }));
+    feed_normally(&mut state, dolphin);
+    for _ in 0..400 {
+        run_tick(&mut state, &[]);
+        if crate::command_locate::dolphin_navigation(&state, dolphin)
+            .is_some_and(|nav| nav.target.is_some())
+        {
+            break;
+        }
+        std::thread::yield_now();
+    }
+    let old_run = crate::command_locate::dolphin_navigation(&state, dolphin)
+        .expect("navigation before transfer")
+        .run;
+    assert!(
+        crate::command_locate::dolphin_navigation(&state, dolphin)
+            .is_some_and(|nav| nav.target.is_some()),
+        "the fed dolphin must hold a water waypoint before transfer"
+    );
+    state.dimension = crate::dimensions::Dimension::Nether;
+    for _ in 0..12 {
+        run_tick(&mut state, &[]);
+    }
+    assert!(
+        crate::command_locate::dolphin_navigation(&state, dolphin)
+            .is_none_or(|nav| nav.run != old_run),
+        "the old-world waypoint/run must not survive the transfer"
+    );
+}
+
+#[test]
+fn a_fed_dolphin_low_on_air_keeps_gotfish_and_waits() {
+    let reg = registry();
+    let (mut state, dolphin) = treasure_world(Arc::new(Structured {
+        air: reg.states.air,
+        water: reg.states.water,
+        chunk: (1, 0),
+        site: mc_world::BlockPos {
+            x: 30,
+            y: 200,
+            z: 8,
+        },
+    }));
+    let slot = state.entities.slot_of(dolphin).unwrap();
+    let start = state.entities.pos(slot);
+    feed_normally(&mut state, dolphin);
+    state.entities.body_mut(slot).air_supply = 99;
+    for _ in 0..12 {
+        run_tick(&mut state, &[]);
+    }
+    assert!(got_fish(&state, slot), "low air stops the goal, not GotFish");
+    assert_eq!(
+        crate::command_locate::dolphin_treasure(&state, dolphin),
+        None,
+        "the stopped goal keeps no lead while surfacing"
+    );
+    let now = state.entities.pos(slot);
+    assert_eq!(
+        [now[0], now[2]],
+        [start[0], start[2]],
+        "surfacing may bob vertically but not follow a treasure"
+    );
+}
+
+#[test]
+fn a_no_ai_fed_dolphin_does_not_admit_the_goal() {
+    let reg = registry();
+    let (mut state, dolphin) = treasure_world(Arc::new(Structured {
+        air: reg.states.air,
+        water: reg.states.water,
+        chunk: (1, 0),
+        site: mc_world::BlockPos {
+            x: 30,
+            y: 200,
+            z: 8,
+        },
+    }));
+    // A second ordinary wet dolphin makes the Grace pass run; NoAI must still
+    // keep the fed dolphin out of treasure navigation.
+    let type_id = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:dolphin").unwrap())
+        .unwrap();
+    state.spawn_mob(type_id, [5.5, 200.0, 8.5], 10.0);
+    let slot = state.entities.slot_of(dolphin).unwrap();
+    let start = state.entities.pos(slot);
+    state.entities.row_mut(slot).controls.no_ai = true;
+    feed_normally(&mut state, dolphin);
+    for _ in 0..20 {
+        run_tick(&mut state, &[]);
+    }
+    assert_eq!(
+        crate::command_locate::dolphin_treasure(&state, dolphin),
+        None,
+        "NoAI admits no goal request"
+    );
+    assert_eq!(state.entities.pos(slot), start, "NoAI body must not move");
+    assert!(got_fish(&state, slot), "NoAI keeps the fed state");
+}
+
+#[test]
+fn a_player_chest_without_a_located_structure_is_not_a_treasure_lead() {
+    // The old approximation led a fed dolphin to any chest/barrel. Vanilla
+    // searches DOLPHIN_LOCATED structures only; with none in range the goal
+    // stops (`stuck`) and clears GotFish instead of steering at a container.
+    let reg = registry();
+    let (mut state, dolphin) = treasure_world(Arc::new(EmptyWater { air: reg.states.air, water: reg.states.water }));
+    // Keep the only player behind the dolphin so any movement toward the chest
+    // would be the old container approximation, not player following.
+    let player = state.connections.entity_of(ConnectionId(1)).unwrap();
+    let player_slot = state.entities.slot_of(player).unwrap();
+    state.entities.set_pos(player_slot, [8.5, 200.0, 8.5]);
+    let slot = state.entities.slot_of(dolphin).unwrap();
+    let start = state.entities.pos(slot);
     let chest = state
         .registry
         .blocks
@@ -365,81 +530,205 @@ fn treasure_palette_scan_matches_dense_scan_with_overlay_and_ties() {
         .unwrap()
         .default
         .0;
-    state.world.set_block(8, 200, 8, chest);
+    state.world.set_block(
+        start[0] as i32 + 3,
+        start[1] as i32,
+        start[2] as i32,
+        chest,
+    );
     state.world.fold_overlay();
-    state.world.set_block(14, 200, 8, chest);
-    state.world.set_block(-17, 200, 8, chest);
-    let (cx, cy, cz) = (floor_i32(at[0]), floor_i32(at[1]), floor_i32(at[2]));
-    let mut expected = None;
-    for x in cx - 48..=cx + 48 {
-        for y in cy - 24..=cy + 24 {
-            for z in cz - 48..=cz + 48 {
-                if state
-                    .world
-                    .block_at(x, y, z)
-                    .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
-                    .is_some_and(|b| {
-                        matches!(b.block.id.path(), "chest" | "trapped_chest" | "barrel")
-                    })
-                {
-                    let target = [x as f64 + 0.5, y as f64 + 0.5, z as f64 + 0.5];
-                    let d2 = target
-                        .into_iter()
-                        .zip(at)
-                        .map(|(a, b)| (a - b).powi(2))
-                        .sum::<f64>();
-                    if expected.is_none_or(|(_, distance)| d2 < distance) {
-                        expected = Some((target, d2));
-                    }
-                }
-            }
+    feed_normally(&mut state, dolphin);
+    for _ in 0..300 {
+        run_tick(&mut state, &[]);
+        if !got_fish(&state, slot) {
+            break;
         }
+        std::thread::yield_now();
     }
-    let mut cache = crate::world::SectionMatchCache::default();
-    cache.reset(&state.world);
-    assert_eq!(nearest_treasure(&state, at, &mut cache), expected);
-    assert_eq!(expected.unwrap().0, [8.5, 200.5, 8.5]);
+    assert!(
+        !got_fish(&state, slot),
+        "a missing structure stops the goal and clears GotFish"
+    );
+    assert!(
+        state.entities.pos(slot)[0] <= start[0] + 0.01,
+        "a player chest must not lead the dolphin toward it"
+    );
 }
 
-#[test]
-#[ignore = "measurement workload; run in the exclusive lane"]
-fn measure_dolphin_treasure_scan() {
-    use std::hint::black_box;
-    use std::time::Instant;
-    let (state, _, dolphin) = fixture();
-    let at = state.entities.pos(state.entities.slot_of(dolphin).unwrap());
-    let (cx, cy, cz) = (floor_i32(at[0]), floor_i32(at[1]), floor_i32(at[2]));
-    let start = Instant::now();
-    for _ in 0..64 {
-        let mut found = 0;
-        for x in cx - 48..=cx + 48 {
-            for y in cy - 24..=cy + 24 {
-                for z in cz - 48..=cz + 48 {
-                    if state
-                        .world
-                        .block_at(x, y, z)
-                        .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
-                        .is_some_and(|b| {
-                            matches!(b.block.id.path(), "chest" | "trapped_chest" | "barrel")
-                        })
-                    {
-                        found += 1;
-                    }
-                }
+fn registry() -> Arc<CoreRegistry> {
+    static REG: LazyLock<Arc<CoreRegistry>> =
+        LazyLock::new(|| Arc::new(CoreRegistry::load(None).unwrap()));
+    Arc::clone(&REG)
+}
+
+/// A generator planning one `minecraft:shipwreck` (a
+/// `#minecraft:dolphin_located` member) at `chunk`, with the site at `site`.
+struct Structured {
+    air: u32,
+    water: u32,
+    chunk: (i32, i32),
+    site: mc_world::BlockPos,
+}
+
+struct EmptyWater {
+    air: u32,
+    water: u32,
+}
+
+impl mc_world::ChunkGenerator for EmptyWater {
+    fn generate(&self, pos: mc_world::ChunkPos) -> mc_world::Chunk {
+        water_chunk(pos, self.air, self.water)
+    }
+}
+
+fn water_chunk(pos: mc_world::ChunkPos, air: u32, water: u32) -> mc_world::Chunk {
+    let mut chunk = mc_world::Chunk::empty(
+        pos,
+        mc_world::BlockStateId(air),
+        mc_data::Identifier::parse("minecraft:plains").unwrap(),
+    );
+    for x in 0..16 {
+        for y in 198..=203 {
+            for z in 0..16 {
+                chunk.set_block(x, y, z, mc_world::BlockStateId(water));
             }
         }
-        black_box(found);
     }
-    let dense = start.elapsed();
-    let mut cache = crate::world::SectionMatchCache::default();
-    cache.reset(&state.world);
-    let start = Instant::now();
-    for _ in 0..64 {
-        black_box(nearest_treasure(&state, at, &mut cache));
+    chunk
+}
+
+impl mc_world::ChunkGenerator for Structured {
+    fn generate(&self, pos: mc_world::ChunkPos) -> mc_world::Chunk {
+        let mut chunk = water_chunk(pos, self.air, self.water);
+        if (pos.x, pos.z) == self.chunk {
+            mc_world::structure_starts::insert(
+                &mut chunk,
+                &mc_world::chunk::GeneratedStructureSite {
+                    structure: mc_data::Identifier::parse("minecraft:shipwreck").unwrap(),
+                    start_chunk: self.chunk,
+                    position: self.site,
+                },
+                self.site,
+                self.site,
+            );
+        }
+        chunk
     }
-    eprintln!(
-        "seekers=64 resident_chunks={} target=none dense={dense:?} gated={:?}",
-        state.world.resident_positions().len(),
-        start.elapsed()
+
+    fn structure_candidates_in_ring(
+        &self,
+        targets: &[mc_data::Identifier],
+        centre: (i32, i32),
+        ring: u32,
+    ) -> Vec<mc_world::ChunkPos> {
+        let wreck = mc_data::Identifier::parse("minecraft:shipwreck").unwrap();
+        (targets.contains(&wreck)
+            && (self.chunk.0 - centre.0)
+                .unsigned_abs()
+                .max((self.chunk.1 - centre.1).unsigned_abs())
+                == ring)
+            .then_some(mc_world::ChunkPos {
+                x: self.chunk.0,
+                z: self.chunk.1,
+            })
+            .into_iter()
+            .collect()
+    }
+
+    fn structure_sites_at(
+        &self,
+        targets: &[mc_data::Identifier],
+        pos: mc_world::ChunkPos,
+    ) -> Vec<mc_world::chunk::GeneratedStructureSite> {
+        let wreck = mc_data::Identifier::parse("minecraft:shipwreck").unwrap();
+        (pos.x == self.chunk.0 && pos.z == self.chunk.1 && targets.contains(&wreck))
+            .then_some(mc_world::chunk::GeneratedStructureSite {
+                structure: wreck,
+                start_chunk: self.chunk,
+                position: self.site,
+            })
+            .into_iter()
+            .collect()
+    }
+}
+
+fn treasure_world(generator: Arc<dyn mc_world::ChunkGenerator>) -> (TickState, EntityId) {
+    let registry = registry();
+    let mut world = ChunkWorld::new(
+        42,
+        generator,
+        &registry,
+        mc_world::BlockStateId(registry.states.air),
+        [8, 200, 8],
+        mc_world::OVERWORLD_GEOMETRY,
     );
+    world.ensure_blocking(&[(ChunkPos { x: 0, z: 0 }, 0)].into_iter().collect());
+    let mut state = TickState::new(registry, world, 0, 512);
+    state
+        .world
+        .set_active_chunks([(ChunkPos { x: 0, z: 0 })].into_iter().collect(), 0);
+    let water = state
+        .registry
+        .blocks
+        .block(&mc_data::Identifier::parse("minecraft:water").unwrap())
+        .unwrap()
+        .default
+        .0;
+    let _ = water;
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(1),
+            uuid: uuid::Uuid::new_v4(),
+            name: "treasure-swimmer".into(),
+            permission_level: 0,
+        }],
+    );
+    let player = state.connections.entity_of(ConnectionId(1)).unwrap();
+    let player_slot = state.entities.slot_of(player).unwrap();
+    state.entities.set_pos(player_slot, [30.5, 200.0, 8.5]);
+    let type_id = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:dolphin").unwrap())
+        .unwrap();
+    let dolphin = state.spawn_mob(type_id, [11.5, 200.0, 8.5], 10.0);
+    let slot = state.entities.slot_of(dolphin).unwrap();
+    state.entities.body_mut(slot).air_supply = 4800;
+    (state, dolphin)
+}
+
+fn feed_normally(state: &mut TickState, dolphin: EntityId) {
+    // Normal consumer path: player interaction intent through the merge.
+    let actor = state.connections.entity_of(ConnectionId(1)).unwrap();
+    let cod = mc_data::ItemStack::new(
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:cod").unwrap())
+            .unwrap(),
+        1,
+    );
+    state.players.get_mut(&actor).unwrap().inventory.slots[0] = cod;
+    let mut intents = Vec::new();
+    assert!(interact(
+        state,
+        actor,
+        dolphin,
+        Hand::Main,
+        &mut intents
+    ));
+    assert_eq!(state.merge(&mut intents), 1);
+    let slot = state.entities.slot_of(dolphin).unwrap();
+    assert!(got_fish(state, slot), "merge feeding must set GotFish");
+}
+
+fn got_fish(state: &TickState, slot: crate::entities::EntitySlot) -> bool {
+    state
+        .entities
+        .row(slot)
+        .entity_life
+        .dolphin
+        .as_ref()
+        .is_some_and(|d| d.got_fish)
 }

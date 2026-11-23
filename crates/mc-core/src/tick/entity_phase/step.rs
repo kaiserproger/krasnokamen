@@ -25,6 +25,8 @@ pub(in crate::tick) struct StepCtx<'a> {
     pub(in crate::tick) players: crate::target_grid::TargetGrid<'a>,
     pub(in crate::tick) passive: passive_follow::Context<'a>,
     pub(in crate::tick) dolphin_toys: &'a [[f64; 3]],
+    pub(in crate::tick) dolphin_targets:
+        std::sync::Arc<std::collections::HashMap<EntityId, [f64; 3]>>,
     pub(in crate::tick) villagers: crate::target_grid::TargetGrid<'a>,
     pub(in crate::tick) golem_targets: crate::target_grid::TargetGrid<'a>,
     pub(in crate::tick) piglin_targets: crate::target_grid::TargetGrid<'a>,
@@ -501,6 +503,7 @@ pub(in crate::tick) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, V
             row.pos,
             row.air_supply,
             row.speed,
+            ctx.dolphin_targets.get(&row.id).copied(),
             players.iter().map(|(_, pos)| *pos),
             ctx.dolphin_toys.iter().copied(),
             block_at,
@@ -532,6 +535,14 @@ pub(in crate::tick) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, V
             battle_facing: row.battle && !row.standing,
             legacy_facing: row.battle,
             head_follows_body: row.head_follows_body,
+            hops: row.hops && !row.standing,
+            hop_delay_scale: registry
+                .blueprint(row.type_id)
+                .map_or(1, |bp| bp.capabilities.hop_delay_scale.max(1)),
+            hop_lift: registry.blueprint(row.type_id).map_or(0.0, |bp| {
+                f64::from(ctx.entities.row(row.slot).loot.slime_size.unwrap_or(1))
+                    * bp.capabilities.hop_lift_per_size
+            }),
             climbs_walls: row.climbs_walls,
             aquatic_control: row.aquatic_control,
             air_supply: row.air_supply,

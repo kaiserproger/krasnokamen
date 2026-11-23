@@ -60,6 +60,7 @@ pub(super) struct ReadRow {
     /// Blueprint locomotion capabilities read by the motion step.
     pub(super) climbs_walls: bool,
     pub(super) head_follows_body: bool,
+    pub(super) hops: bool,
     pub(super) avoids_armadillos: bool,
     pub(super) aquatic_control: crate::species::AquaticControl,
     /// Resolved from the blueprint's goal set (data, not type names).
@@ -531,6 +532,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     // Work-stealing over the core's long-lived rayon workers (no threads
     // spawned per tick); `collect` keeps slot order.
     let ctx = StepCtx {
+        dolphin_targets: std::sync::Arc::new(state.locate.dolphin_targets(state.dimension)),
         rows: rows_ref,
         entities: &state.entities,
         battle: &state.hostile.battle,

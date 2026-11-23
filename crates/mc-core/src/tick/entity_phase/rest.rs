@@ -101,6 +101,20 @@ pub(in crate::tick) fn early_entity_rest(
         return false;
     }
     let body = &view.bodies[slot.0 as usize];
+    // A hop tick is a decision tick even in rings that would otherwise rest:
+    // refuse before the ring/footprint shortcut, not only before the memo.
+    if let crate::entities::EntityKind::Mob { type_id } = body.kind
+        && !view.entities.row(slot).controls.no_ai
+        && let Some(blueprint) = view.registry.blueprint(type_id)
+        && blueprint.capabilities.hops
+        && crate::entity_motion::hop_due(
+            body.id.0,
+            view.tick,
+            blueprint.capabilities.hop_delay_scale.max(1),
+        )
+    {
+        return false;
+    }
     if view.hostile.targets.contains_key(&body.id)
         || body
             .hurt_at
@@ -179,9 +193,25 @@ fn rest_proof_key(view: &PrepView, slot: EntitySlot, flags: u16) -> u64 {
 fn idle_rest_proved(view: &PrepView, slot: EntitySlot, flags: u16) -> bool {
     let index = slot.0 as usize;
     let body = &view.bodies[index];
+    let (hops, hop_scale) = match body.kind {
+        crate::entities::EntityKind::Mob { type_id } => {
+            match view.registry.blueprint(type_id) {
+                Some(blueprint) if blueprint.capabilities.hops => (
+                    !view.entities.row(slot).controls.no_ai,
+                    blueprint.capabilities.hop_delay_scale.max(1),
+                ),
+                _ => (false, 1),
+            }
+        }
+        _ => (false, 1),
+    };
+    // A hop tick is a decision tick: the rest memo must never swallow it.
+    if hops && crate::entity_motion::hop_due(body.id.0, view.tick, hop_scale) {
+        return false;
+    }
     let Some(proofs) = view
         .rest_proofs
-        .filter(|_| body.movement != crate::blueprint::MovementClass::Swimmer)
+        .filter(|_| body.movement != crate::blueprint::MovementClass::Swimmer && !hops)
     else {
         return idle_wander_motion_unchanged(view, slot);
     };
@@ -272,6 +302,9 @@ pub(in crate::tick) fn idle_wander_motion_unchanged(view: &PrepView, slot: Entit
             battle_facing: false,
             legacy_facing: false,
             head_follows_body: capabilities.head_follows_body,
+            hops: false,
+            hop_delay_scale: 1,
+            hop_lift: 0.0,
             climbs_walls: capabilities.climbs_walls,
             aquatic_control: capabilities.aquatic,
             air_supply: body.air_supply,

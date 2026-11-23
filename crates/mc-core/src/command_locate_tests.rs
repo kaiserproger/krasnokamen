@@ -795,16 +795,243 @@ fn map_structure_search_obeys_radius_and_persisted_destinations() {
 }
 
 #[test]
+fn dolphin_located_tag_is_ocean_ruins_and_shipwrecks_only() {
+    let tag = id("minecraft:dolphin_located");
+    let members = super::resolve_structure_tag(&tag).expect("tag resolves");
+    for expected in [
+        "minecraft:ocean_ruin_cold",
+        "minecraft:ocean_ruin_warm",
+        "minecraft:shipwreck",
+        "minecraft:shipwreck_beached",
+    ] {
+        assert!(
+            members.contains(&id(expected)),
+            "dolphin_located must contain {expected}"
+        );
+    }
+    for rejected in ["minecraft:monument", "minecraft:ocean_monument"] {
+        assert!(
+            !members.contains(&id(rejected)),
+            "vanilla dolphin_located excludes {rejected}"
+        );
+    }
+}
+
+#[test]
+fn dolphin_requests_reserve_command_queue_capacity_before_the_snapshot() {
+    let (mut state, connection) = locate_fixture();
+    let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
+    let (_done_tx, done_rx) = std::sync::mpsc::channel();
+    state.locate.jobs = Some(jobs_tx);
+    state.locate.done = Some(done_rx);
+    let dolphin = crate::boundary::EntityId(4242);
+    state.locate.queued = super::MAX_QUEUED_JOBS - super::COMMAND_QUEUE_RESERVE;
+    assert!(!super::request_dolphin_treasure(
+        &mut state,
+        dolphin,
+        [8.5, 200.0, 8.5]
+    ));
+    assert!(state.locate.dolphin.get(&dolphin).is_none());
+    assert_eq!(
+        state.locate.queued,
+        super::MAX_QUEUED_JOBS - super::COMMAND_QUEUE_RESERVE,
+        "a refused entity request must not build or queue a snapshot"
+    );
+    // The reserved capacity is still available to an interactive command.
+    assert!(
+        super::submit(
+            &mut state,
+            super::LocateOwner::Connection(connection),
+            super::LocateKind::Structure,
+            (0, 64, 0),
+            vec![id("minecraft:shipwreck")],
+            super::LocateCompletion::Command("shipwreck".into()),
+            super::StructureSearchOptions {
+                radius_rings: 2,
+                skip_referenced: false,
+                referenced: Default::default(),
+            },
+        )
+        .is_some()
+    );
+    assert_eq!(state.locate.queued, super::MAX_QUEUED_JOBS - 1);
+}
+
+#[test]
+fn a_late_completion_does_not_replace_a_newer_dolphin_run() {
+    let (mut state, _) = locate_fixture();
+    let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    state.locate.jobs = Some(jobs_tx);
+    state.locate.done = Some(done_rx);
+    let type_id = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:dolphin").unwrap())
+        .unwrap();
+    let dolphin = state.spawn_mob(type_id, [8.5, 80.0, 8.5], 10.0);
+    let slot = state.entities.slot_of(dolphin).unwrap();
+    state.entities.row_mut(slot).entity_life.dolphin =
+        Some(crate::dolphin::DolphinState { got_fish: true });
+    let dimension = state.dimension;
+    state.locate.next_job = 3;
+    state.locate.queued = 1;
+    state.locate.entity_in_flight.insert(dolphin, 1);
+    state.locate.dolphin.insert(
+        dolphin,
+        super::DolphinTreasure::Pending { run: 2, dimension },
+    );
+    state.locate.pending.insert(
+        1,
+        super::PendingLocate {
+            owner: super::LocateOwner::Entity(dolphin),
+            kind: super::LocateKind::Structure,
+            origin: (0, 64, 0),
+            dimension,
+            completion: super::LocateCompletion::Dolphin(dolphin),
+        },
+    );
+    done_tx
+        .send(super::LocateDone {
+            id: 1,
+            kind: super::LocateKind::Structure,
+            origin: (0, 64, 0),
+            hit: Some(super::LocateHit {
+                pos: (5, 60, 5),
+                found_id: id("minecraft:shipwreck"),
+                distance: 1,
+            }),
+            error: None,
+            elapsed_ms: 0,
+        })
+        .unwrap();
+    super::drain(&mut state);
+    assert_eq!(
+        state.locate.dolphin.get(&dolphin),
+        Some(&super::DolphinTreasure::Pending { run: 2, dimension }),
+        "run 1 must not satisfy run 2"
+    );
+    assert_eq!(state.locate.queued, 0);
+    assert!(state.locate.entity_in_flight.is_empty());
+}
+
+#[test]
+fn worker_loss_does_not_consume_a_map_loot_callback() {
+    let (mut state, _) = locate_fixture();
+    let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    state.locate.jobs = Some(jobs_tx);
+    state.locate.done = Some(done_rx);
+    let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = Arc::clone(&called);
+    state.locate.queued = 1;
+    state.locate.pending.insert(
+        1,
+        super::PendingLocate {
+            owner: super::LocateOwner::Connection(ConnectionId(1)),
+            kind: super::LocateKind::Structure,
+            origin: (0, 64, 0),
+            dimension: state.dimension,
+            completion: super::LocateCompletion::Callback(Box::new(move |_, _| {
+                flag.store(true, std::sync::atomic::Ordering::SeqCst);
+            })),
+        },
+    );
+    drop(done_tx);
+    super::drain(&mut state);
+    assert!(
+        !called.load(std::sync::atomic::Ordering::SeqCst),
+        "worker loss must leave the unopened loot callback unconsumed"
+    );
+    assert!(state.locate.pending.is_empty());
+    assert!(state.locate.jobs.is_none() && state.locate.done.is_none());
+}
+
+#[test]
+fn a_lost_worker_terminates_dolphin_and_command_jobs() {
+    let (mut state, connection) = locate_fixture();
+    let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    state.locate.jobs = Some(jobs_tx);
+    state.locate.done = Some(done_rx);
+    let dolphin = crate::boundary::EntityId(88);
+    let dimension = state.dimension;
+    state.locate.next_job = 3;
+    state.locate.queued = 2;
+    state.locate.entity_in_flight.insert(dolphin, 1);
+    state.locate.in_flight.insert(connection, 1);
+    state.locate.dolphin.insert(
+        dolphin,
+        super::DolphinTreasure::Pending { run: 1, dimension },
+    );
+    state.locate.pending.insert(
+        1,
+        super::PendingLocate {
+            owner: super::LocateOwner::Entity(dolphin),
+            kind: super::LocateKind::Structure,
+            origin: (0, 64, 0),
+            dimension,
+            completion: super::LocateCompletion::Dolphin(dolphin),
+        },
+    );
+    state.locate.pending.insert(
+        2,
+        super::PendingLocate {
+            owner: super::LocateOwner::Connection(connection),
+            kind: super::LocateKind::Structure,
+            origin: (0, 64, 0),
+            dimension,
+            completion: super::LocateCompletion::Command("shipwreck".into()),
+        },
+    );
+    drop(done_tx);
+    super::drain(&mut state);
+    assert!(
+        matches!(
+            state.locate.dolphin.get(&dolphin),
+            Some(super::DolphinTreasure::Failed { run: 1, dimension: failed_dimension, retry_at })
+                if *failed_dimension == dimension && *retry_at > state.tick
+        ),
+        "worker loss is Failed, not Missing: {:?}",
+        state.locate.dolphin.get(&dolphin)
+    );
+    assert!(state.outbox.get(&connection).is_some_and(|events| events.iter().any(
+        |event| matches!(event, PlayerChange::Chat { message } if message.contains("unavailable"))
+    )));
+    assert_eq!(state.locate.queued, 0);
+}
+
+#[test]
 fn structure_lookup_callback_runs_on_drain_even_after_requester_disconnects() {
     let (mut state, _) = locate_fixture();
     let connection = ConnectionId(999);
     let (tx, rx) = std::sync::mpsc::channel();
     state.locate.done = Some(rx);
     state.locate.in_flight.insert(connection, 1);
+    state.locate.queued = 1;
+    let run = state.locate.next_job;
+    state.locate.next_job = run + 1;
     let observed = Arc::new(parking_lot::Mutex::new(None));
     let output = Arc::clone(&observed);
+    state.locate.pending.insert(
+        run,
+        super::PendingLocate {
+            owner: super::LocateOwner::Connection(connection),
+            kind: super::LocateKind::Structure,
+            origin: (0, 64, 0),
+            dimension: state.dimension,
+            completion: super::LocateCompletion::Callback(Box::new(move |state, result| {
+                assert_eq!(
+                    state.locate.busy(super::LocateOwner::Connection(connection)),
+                    0,
+                    "release before callback can resubmit"
+                );
+                *output.lock() = Some(result);
+            })),
+        },
+    );
     tx.send(super::LocateDone {
-        connection,
+        id: run,
         kind: super::LocateKind::Structure,
         origin: (0, 64, 0),
         hit: Some(super::LocateHit {
@@ -812,15 +1039,8 @@ fn structure_lookup_callback_runs_on_drain_even_after_requester_disconnects() {
             found_id: id("minecraft:buried_treasure"),
             distance: 175,
         }),
+        error: None,
         elapsed_ms: 0,
-        completion: super::LocateCompletion::Callback(Box::new(move |state, result| {
-            assert_eq!(
-                state.locate.busy(connection),
-                0,
-                "release before callback can resubmit"
-            );
-            *output.lock() = Some(result);
-        })),
     })
     .ok()
     .unwrap();
@@ -835,6 +1055,8 @@ fn structure_lookup_callback_runs_on_drain_even_after_requester_disconnects() {
         }))
     );
     assert!(state.outbox.is_empty());
+    assert_eq!(state.locate.queued, 0);
+    assert!(state.locate.pending.is_empty());
 }
 
 #[test]

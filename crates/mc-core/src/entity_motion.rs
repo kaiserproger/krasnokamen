@@ -50,6 +50,14 @@ pub(crate) struct MotionInput {
     /// The mob's own body controller keeps the head on the body
     /// ([`Capabilities::head_follows_body`]); no head lag applies.
     pub head_follows_body: bool,
+    /// Vanilla slime/magma-cube locomotion (`Slime$SlimeMoveControl`): hop
+    /// every 10..29 ticks (`MagmaCube.getJumpDelay` multiplies that by four)
+    /// and no ground traction between.
+    pub hops: bool,
+    /// `MagmaCube.getJumpDelay` multiplier: 1 for a slime, 4 for a magma cube.
+    pub hop_delay_scale: u64,
+    /// `MagmaCube.jumpFromGround` bonus: `getSize() * 0.1` blocks per tick.
+    pub hop_lift: f64,
     pub climbs_walls: bool,
     pub aquatic_control: AquaticControl,
     pub air_supply: i32,
@@ -475,8 +483,45 @@ pub(crate) fn step<S: BlockSampler>(
     if input.climbs_walls {
         config.jump_speed = 0.0;
     }
+    let carried = body.velocity;
     body.velocity.x = input.drive[0] + impulse[0];
     body.velocity.z = input.drive[2] + impulse[1];
+    if input.hops {
+        if body.on_ground {
+            if hop_due(input.id, input.tick, input.hop_delay_scale) {
+                // `LivingEntity.jumpFromGround`/`MagmaCube.jumpFromGround`: the
+                // tick that jumps keeps the wanted horizontal speed and stores
+                // `getJumpPower()` (+ magma's `size * 0.1`), which the vanilla
+                // travel moves *before* its gravity and 0.98 drag. This kernel
+                // subtracts gravity and drags before the move, so the stored
+                // velocity is chosen to make that first integrated tick rise by
+                // exactly the vanilla jump speed.
+                let gravity = mc_physics::GRAVITY_BLOCKS_PER_SECOND_SQUARED;
+                let tick = mc_physics::TICK_SECONDS;
+                let target = mc_physics::LIVING_JUMP_SPEED_BLOCKS_PER_SECOND
+                    + input.hop_lift / tick;
+                body.velocity.y = target / config.vertical_air_drag + gravity * tick;
+            } else {
+                // `SlimeMoveControl`: between hops there is no ground traction
+                // (xxa/zza zero, speed zero), so no walking. A knockback lift
+                // is external velocity and stays, exactly like walkers.
+                body.velocity.x = impulse[0];
+                body.velocity.z = impulse[1];
+            }
+        } else {
+            // The stored velocity already carries the decaying combat impulse;
+            // adding it again would catapult a hit slime. Vanilla still steers
+            // in the air, so a wall-hit hop can recover toward the drive.
+            body.velocity.x = carried.x;
+            body.velocity.z = carried.z;
+            let speed = (input.drive[0] * input.drive[0] + input.drive[2] * input.drive[2]).sqrt();
+            if speed > 1.0e-9 {
+                let accel = 0.4;
+                body.velocity.x += (input.drive[0] - carried.x).clamp(-accel, accel);
+                body.velocity.z += (input.drive[2] - carried.z).clamp(-accel, accel);
+            }
+        }
+    }
     // The direction this tick's AI wants to travel: vanilla `MoveControl` turns
     // toward the wanted position, which a combat impulse never moves. It is the
     // drive alone, so no movement-class branch can leak an impulse into it.
@@ -656,6 +701,17 @@ fn recentred(before: [f32; 3], after: [f32; 3]) -> [f32; 3] {
     } else {
         [after[0], after[1], follow_head(before[2], after[0])]
     }
+}
+
+/// Vanilla `Slime.getJumpDelay`: `random.nextInt(20) + 10`;
+/// `MagmaCube.getJumpDelay` multiplies that by four (javap -c, 26.3), and
+/// aggression does not change the delay — it only picks the jump direction.
+/// Deterministic from the body id and tick; the phase keeps bodies out of step.
+pub(crate) fn hop_due(id: i32, tick: u64, delay_scale: u64) -> bool {
+    let base = 10 + (unit(id, 0) * 20.0) as u64;
+    let period = base.saturating_mul(delay_scale.max(1));
+    let phase = (unit(id, 1) * period as f64) as u64;
+    tick.wrapping_add(phase).is_multiple_of(period)
 }
 
 /// Battle-only facing rule. A battle body without a look target keeps its

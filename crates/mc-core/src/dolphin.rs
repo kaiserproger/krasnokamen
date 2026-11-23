@@ -1,7 +1,7 @@
 //! Air-breathing swimming companions, Grace and exact-stack fish feeding.
 use crate::boundary::{EntityId, Hand};
 use crate::effects::{ActiveEffect, EffectId};
-use crate::entities::{EntityKind, EntitySlot};
+use crate::entities::EntitySlot;
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::tick::TickState;
 use mc_nbt::Tag;
@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 pub struct DolphinState {
     pub got_fish: bool,
 }
-
 pub(crate) fn is_dolphin(type_id: u32) -> bool {
     mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id)
         .is_some_and(|c| c.name == "minecraft:dolphin")
@@ -37,12 +36,14 @@ pub(crate) fn breathe(air: i32, eye_in_water: bool) -> (i32, bool) {
     }
 }
 
-/// A low-air dolphin surfaces before following; otherwise follow a wet player
-/// (the Grace pass separately requires swimming), or approach a floating toy.
+/// A low-air dolphin surfaces before anything else; a fed dolphin follows its
+/// treasure water waypoint through the normal entity step, then a wet player
+/// (the Grace pass separately requires swimming), or a floating toy.
 pub(crate) fn drive(
     pos: [f64; 3],
     air: i32,
     speed: f32,
+    treasure: Option<[f64; 3]>,
     players: impl Iterator<Item = [f64; 3]>,
     toys: impl Iterator<Item = [f64; 3]>,
     block_at: &dyn Fn(i32, i32, i32) -> Option<u32>,
@@ -61,6 +62,17 @@ pub(crate) fn drive(
             .map(|(a, b)| (a - b).powi(2))
             .sum::<f64>()
     };
+    if let Some(target) = treasure {
+        if distance(target) < 2.25 {
+            return Some([0.0; 3]);
+        }
+        return Some(crate::entity_motion::steer(
+            crate::blueprint::MovementClass::Swimmer,
+            pos,
+            target,
+            f64::from(speed) * 2.0,
+        ));
+    }
     let target = players
         .filter(|p| water(*p) && distance(*p) < 100.0)
         .min_by(|a, b| distance(*a).total_cmp(&distance(*b)))
@@ -97,6 +109,7 @@ pub(crate) fn run(state: &mut TickState) {
         .filter(|pos| crate::conduit::water(state, *pos))
         .collect();
     if dolphins.is_empty() {
+        treasure_search(state);
         return;
     }
     for index in 0..state.entities.len() {
@@ -192,178 +205,243 @@ pub(crate) fn run(state: &mut TickState) {
     }
 }
 
-fn nearest_treasure(
-    state: &TickState,
-    at: [f64; 3],
-    cache: &mut crate::world::SectionMatchCache,
-) -> Option<([f64; 3], f64)> {
-    let (cx, cy, cz) = (floor_i32(at[0]), floor_i32(at[1]), floor_i32(at[2]));
-    let min = [cx - 48, cy - 24, cz - 48];
-    let max = [cx + 48, cy + 24, cz + 48];
-    let is_treasure = |id: mc_world::BlockStateId| {
-        state
-            .registry
-            .blocks
-            .by_id(id)
-            .is_some_and(|b| matches!(b.block.id.path(), "chest" | "trapped_chest" | "barrel"))
-    };
-    let mut best: Option<([i32; 3], f64)> = None;
-    for ((x, y, z), id) in state.world.overlay_entries() {
-        let p = [x, y, z];
-        if (0..3).all(|i| (min[i]..=max[i]).contains(&p[i]))
-            && is_treasure(mc_world::BlockStateId(id))
-        {
-            let d2 = p
-                .into_iter()
-                .zip(at)
-                .map(|(v, a)| (f64::from(v) + 0.5 - a).powi(2))
-                .sum::<f64>();
-            if best.is_none_or(|(old, distance)| d2 < distance || (d2 == distance && p < old)) {
-                best = Some((p, d2));
-            }
-        }
-    }
-    for sx in min[0].div_euclid(16)..=max[0].div_euclid(16) {
-        for sy in min[1].div_euclid(16)..=max[1].div_euclid(16) {
-            for sz in min[2].div_euclid(16)..=max[2].div_euclid(16) {
-                if !state.world.has_chunk(sx, sz) {
-                    continue;
-                }
-                let lo = [
-                    min[0].max(sx * 16),
-                    min[1].max(sy * 16),
-                    min[2].max(sz * 16),
-                ];
-                let hi = [
-                    max[0].min(sx * 16 + 15),
-                    max[1].min(sy * 16 + 15),
-                    max[2].min(sz * 16 + 15),
-                ];
-                if !state.world.may_hold_matching_state_cached(
-                    (lo[0], lo[1], lo[2]),
-                    (hi[0], hi[1], hi[2]),
-                    cache,
-                    is_treasure,
-                ) {
-                    continue;
-                }
-                for x in lo[0]..=hi[0] {
-                    for y in lo[1]..=hi[1] {
-                        for z in lo[2]..=hi[2] {
-                            if !state
-                                .world
-                                .block_at(x, y, z)
-                                .is_some_and(|id| is_treasure(mc_world::BlockStateId(id)))
-                            {
-                                continue;
-                            }
-                            let p = [x, y, z];
-                            let d2 = p
-                                .into_iter()
-                                .zip(at)
-                                .map(|(v, a)| (f64::from(v) + 0.5 - a).powi(2))
-                                .sum::<f64>();
-                            if best.is_none_or(|(old, distance)| {
-                                d2 < distance || (d2 == distance && p < old)
-                            }) {
-                                best = Some((p, d2));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    best.map(|(p, d2)| (p.map(|v| f64::from(v) + 0.5), d2))
-}
 
-/// DOLPHIN-TREASURE (DolphinSwimToTreasureGoal, 26.1.2): a fed dolphin
-/// with air >= 100 locates the nearest DOLPHIN_LOCATED structure
-/// (ocean_ruin/shipwreck via findNearestMapStructure radius 50) and swims
-/// there; arriving within 4.0 (closerToCenterThan) clears GotFish.
-/// Engine approximation: the async structure lookup is requester-bound, so
-/// the nearest treasure container within 48 blocks stands in for the
-/// structure position. Gate (air >= 100) and arrival radius (4.0) match
-/// bytecode.
+/// DOLPHIN-TREASURE (`Dolphin$DolphinSwimToTreasureGoal`, 26.1.2): a fed
+/// dolphin with air >= 100 locates the nearest `#minecraft:dolphin_located`
+/// structure (`findNearestMapStructure(tag, blockPosition, 50, false)`:
+/// ocean ruin or shipwreck, never a player's chest or barrel) and swims there;
+/// arriving within 4.0 clears GotFish. No located structure is vanilla's
+/// `stuck` path: the goal stops and `stop` clears GotFish. The structure search
+/// runs on the existing async locate worker; this tick only reads the drained
+/// result and steers.
 pub(crate) fn treasure_search(state: &mut TickState) {
-    // Collect seekers first (immutable borrow), then steer (mutable).
-    let mut seekers: Vec<EntitySlot> = Vec::new();
+    use crate::command_locate::{
+        DolphinTreasure, clear_dolphin_treasure, dolphin_navigation, dolphin_treasure,
+        dolphin_treasure_entities, request_dolphin_treasure, set_dolphin_navigation,
+    };
+
+    // A retained lead belongs to the world, entity and goal run that asked for
+    // it. NoAI/inactive goals are cancelled too: they must not keep steering.
+    for dolphin in dolphin_treasure_entities(state) {
+        let Some(treasure) = dolphin_treasure(state, dolphin) else {
+            continue;
+        };
+        let dimension = match treasure {
+            DolphinTreasure::Pending { dimension, .. }
+            | DolphinTreasure::Found { dimension, .. }
+            | DolphinTreasure::Missing { dimension, .. }
+            | DolphinTreasure::Failed { dimension, .. } => dimension,
+        };
+        let slot = state.entities.slot_of(dolphin);
+        let valid = slot.is_some_and(|slot| {
+            let body = state.entities.body(slot);
+            body.alive
+                && is_dolphin(crate::mounts::type_id(body).unwrap_or(u32::MAX))
+                && state
+                    .entities
+                    .row(slot)
+                    .entity_life
+                    .dolphin
+                    .as_ref()
+                    .is_some_and(|d| d.got_fish)
+        });
+        let admitted = slot.is_some_and(|slot| {
+            let at = state.entities.pos(slot);
+            !state.entities.row(slot).controls.no_ai
+                && state.world.is_active(
+                    floor_i32(at[0]).div_euclid(16),
+                    floor_i32(at[2]).div_euclid(16),
+                )
+        });
+        if !valid || !admitted || dimension != state.dimension {
+            clear_dolphin_treasure(state, dolphin);
+        }
+    }
+
+    // Attempted work, not successes, consumes this pass's budget.
+    let mut attempts = 0usize;
     for index in 0..state.entities.len() as u32 {
         let slot = EntitySlot(index);
         let body = state.entities.body(slot);
-        let EntityKind::Mob { type_id } = body.kind else {
-            continue;
-        };
-        if !body.alive
-            || body.air_supply < 100
-            || !is_dolphin(type_id)
-            || !state
-                .entities
-                .row(slot)
-                .entity_life
-                .dolphin
-                .as_ref()
-                .is_some_and(|d| d.got_fish)
-        {
+        if !body.alive || !is_dolphin(crate::mounts::type_id(body).unwrap_or(u32::MAX)) {
             continue;
         }
-        seekers.push(slot);
-    }
-    if seekers.is_empty() {
-        return;
-    }
-    let mut cache = crate::world::SectionMatchCache::default();
-    cache.reset(&state.world);
-    for slot in seekers {
+        let got_fish = state
+            .entities
+            .row(slot)
+            .entity_life
+            .dolphin
+            .as_ref()
+            .is_some_and(|d| d.got_fish);
+        if !got_fish || state.entities.row(slot).controls.no_ai {
+            continue;
+        }
         let at = state.entities.pos(slot);
-        if !crate::conduit::water(state, at) {
+        let (cx, cz) = (floor_i32(at[0]).div_euclid(16), floor_i32(at[2]).div_euclid(16));
+        if !state.world.is_active(cx, cz) || !crate::conduit::water(state, at) {
             continue;
         }
-        let Some((target, d2)) = nearest_treasure(state, at, &mut cache) else {
+        let dolphin = body.id;
+        if body.air_supply < 100 {
+            // `canUse`/`canContinueToUse` stop the goal while surfacing; stop
+            // only clears GotFish on arrival or stuck, so the fish stays.
+            clear_dolphin_treasure(state, dolphin);
             continue;
-        };
-        if d2 < 16.0 {
-            // Treasure found: clear GotFish (vanilla stops leading here).
-            if let Some(d) = state.entities.row_mut(slot).entity_life.dolphin.as_mut() {
-                d.got_fish = false;
+        }
+        let Some(treasure) = dolphin_treasure(state, dolphin) else {
+            if attempts < 1 {
+                attempts += 1;
+                let _ = request_dolphin_treasure(state, dolphin, at);
             }
             continue;
-        }
-        // Swim toward the treasure (vanilla speed ~0.5 blocks/tick pace,
-        // applied per 10-tick run: 5-block steps).
-        let dist = d2.sqrt();
-        let step = (5.0 / dist).min(1.0);
-        let desired = mc_physics::Vec3::new(
-            (target[0] - at[0]) * step,
-            (target[1] - at[1]) * step,
-            (target[2] - at[2]) * step,
-        );
-        let body = state.entities.body(slot);
-        let sampler = crate::tick::TickSampler {
-            world: &state.world,
-            registry: &state.registry,
         };
-        if let Some(moved) = mc_physics::resolve_collision_displacement(
-            &sampler,
-            mc_physics::Vec3::new(at[0], at[1], at[2]),
-            mc_physics::Aabb {
-                half_width: body.half_width,
-                height: body.height,
-            },
-            desired,
-            false,
-            0.0,
-        ) {
-            state.entities.set_pos(
-                slot,
-                [
-                    at[0] + moved.delta.x,
-                    at[1] + moved.delta.y,
-                    at[2] + moved.delta.z,
-                ],
-            );
+        match treasure {
+            DolphinTreasure::Pending { .. } => {}
+            DolphinTreasure::Missing { .. } => {
+                // Vanilla `stuck`: `stop` clears GotFish.
+                stop_treasure(state, slot, dolphin);
+            }
+            DolphinTreasure::Failed { retry_at, .. } => {
+                if state.tick >= retry_at {
+                    // Keep GotFish, allow a later fresh search.
+                    clear_dolphin_treasure(state, dolphin);
+                }
+            }
+            DolphinTreasure::Found {
+                run,
+                dimension,
+                pos,
+            } => {
+                if dimension != state.dimension {
+                    clear_dolphin_treasure(state, dolphin);
+                    continue;
+                }
+                let dx = f64::from(pos[0]) + 0.5 - at[0];
+                let dz = f64::from(pos[2]) + 0.5 - at[2];
+                if dx * dx + dz * dz < 16.0 {
+                    stop_treasure(state, slot, dolphin);
+                    continue;
+                }
+                // At 100..139 air `drive` surfaces: a pause is not a stuck
+                // waypoint, so do not age the route this pass.
+                if body.air_supply < 140 {
+                    continue;
+                }
+                if plan_treasure(state, slot, at, pos, run) {
+                    stop_treasure(state, slot, dolphin);
+                }
+            }
         }
     }
+}
+
+fn stop_treasure(state: &mut TickState, slot: EntitySlot, dolphin: EntityId) {
+    if let Some(d) = state.entities.row_mut(slot).entity_life.dolphin.as_mut() {
+        d.got_fish = false;
+    }
+    crate::command_locate::clear_dolphin_treasure(state, dolphin);
+}
+
+/// Plan the next water waypoint in runtime-only navigation state; true means
+/// vanilla `stuck` (three failed/blocked waypoints) and the caller clears the
+/// fish. No entity-row field changes, so this cannot mark a WAL row.
+fn plan_treasure(
+    state: &mut TickState,
+    slot: EntitySlot,
+    at: [f64; 3],
+    treasure: [i32; 3],
+    run: u64,
+) -> bool {
+    use crate::command_locate::{
+        DolphinNav, dolphin_navigation, set_dolphin_navigation,
+    };
+    let dolphin = state.entities.body(slot).id;
+    let mut nav = dolphin_navigation(state, dolphin).unwrap_or(DolphinNav {
+        target: None,
+        run,
+        tries: 0,
+        last: None,
+        dimension: state.dimension,
+    });
+    if nav.run != run || nav.dimension != state.dimension {
+        nav = DolphinNav {
+            target: None,
+            run,
+            tries: 0,
+            last: None,
+            dimension: state.dimension,
+        };
+    }
+    let moved = nav.last.is_some_and(|last| {
+        let dx = at[0] - last[0];
+        let dz = at[2] - last[2];
+        dx * dx + dz * dz > 0.0025
+    });
+    if nav.last.is_some() {
+        if moved {
+            nav.tries = 0;
+        } else if nav.target.is_some() {
+            nav.tries = nav.tries.saturating_add(1);
+            nav.target = None;
+        }
+    }
+    nav.last = Some(at);
+    let reached = nav.target.is_none_or(|target| {
+        let dx = target[0] - at[0];
+        let dy = target[1] - at[1];
+        let dz = target[2] - at[2];
+        dx * dx + dy * dy + dz * dz < 2.25
+    });
+    if reached {
+        let candidates = water_waypoints(state, at, treasure);
+        if candidates.is_empty() {
+            nav.tries = nav.tries.saturating_add(1);
+            nav.target = None;
+        } else {
+            nav.target = Some(candidates[(nav.tries as usize) % candidates.len()]);
+        }
+    }
+    let stuck = nav.tries >= 3;
+    if stuck {
+        nav.target = None;
+    }
+    set_dolphin_navigation(state, dolphin, nav);
+    stuck
+}
+
+/// Bounded deterministic water waypoints toward the treasure; the caller walks
+/// them in order so a blocked first choice does not freeze the route.
+fn water_waypoints(state: &TickState, at: [f64; 3], treasure: [i32; 3]) -> Vec<[f64; 3]> {
+    let target = [
+        f64::from(treasure[0]) + 0.5,
+        f64::from(treasure[1]) + 0.5,
+        f64::from(treasure[2]) + 0.5,
+    ];
+    let dx = target[0] - at[0];
+    let dz = target[2] - at[2];
+    let len = (dx * dx + dz * dz).sqrt();
+    if len < 1.0e-6 {
+        return Vec::new();
+    }
+    let (ux, uz) = (dx / len, dz / len);
+    let (px, pz) = (-uz, ux);
+    let dy = (target[1] - at[1]).clamp(-4.0, 4.0);
+    let mut out = Vec::new();
+    for advance in [len.min(12.0), len.min(6.0), len.min(3.0)] {
+        for lateral in [0.0, 4.0, -4.0, 8.0, -8.0] {
+            let candidate = [
+                at[0] + ux * advance + px * lateral,
+                at[1] + dy,
+                at[2] + uz * advance + pz * lateral,
+            ];
+            if crate::conduit::water(state, candidate)
+                && crate::conduit::water(state, [candidate[0], candidate[1] + 0.6, candidate[2]])
+            {
+                out.push(candidate);
+            }
+        }
+    }
+    out
 }
 
 #[derive(Debug, Clone, PartialEq)]

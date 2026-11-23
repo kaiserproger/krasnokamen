@@ -13,13 +13,14 @@
 //! already in flight (or a full queue of eight) gets a plain busy refusal;
 //! queued searches are never reordered or dropped.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, SyncSender, TrySendError};
 
 use crate::boundary::{ConnectionId, EntityId, PlayerChange};
 use crate::command_args::CommandError;
 use crate::command_feedback::{text, translated};
+use crate::dimensions::Dimension;
 use crate::tick::TickState;
 use mc_data::Identifier;
 use mc_nbt::{ListTag, Tag};
@@ -34,6 +35,9 @@ const POI_SEARCH_RADIUS: i32 = 256;
 /// In-flight searches per player, and total queued jobs.
 const MAX_JOBS_PER_PLAYER: usize = 2;
 const MAX_QUEUED_JOBS: usize = 8;
+/// Capacity kept for interactive `/locate` commands; entity-owned searches
+/// never fill the whole queue.
+const COMMAND_QUEUE_RESERVE: usize = 2;
 /// Every structure id vanilla 26.1.2 knows
 /// (`data/minecraft/worldgen/structure/*.json`): anything else is `invalid`,
 /// anything here but not generated is `not_found`.
@@ -120,8 +124,6 @@ const STRUCTURE_TAGS: &[(&str, &[&str])] = &[
             "minecraft:ocean_ruin_warm",
             "minecraft:shipwreck",
             "minecraft:shipwreck_beached",
-            "minecraft:monument",
-            "minecraft:ocean_monument",
         ],
     ),
     ("minecraft:eye_of_ender_located", &["minecraft:stronghold"]),
@@ -648,12 +650,96 @@ pub struct LocateState {
     jobs: Option<SyncSender<LocateJob>>,
     done: Option<Receiver<LocateDone>>,
     in_flight: HashMap<ConnectionId, usize>,
+    /// Entity-owned searches (a fed dolphin's treasure lookup).
+    entity_in_flight: HashMap<EntityId, usize>,
+    /// Accepted jobs not yet drained, keyed by run id. Their completions live
+    /// here once, so a terminal outcome can be produced even without a worker.
+    pending: HashMap<u64, PendingLocate>,
+    /// Accepted jobs waiting or running (queue occupancy).
+    queued: usize,
+    /// Monotonic run id; a stale completion can never satisfy a newer run.
+    next_job: u64,
+    /// The last drained treasure lookup of each fed dolphin.
+    dolphin: HashMap<EntityId, DolphinTreasure>,
+    /// Runtime-only dolphin navigation (never persisted in the entity row).
+    dolphin_nav: HashMap<EntityId, DolphinNav>,
+}
+
+/// Runtime-only treasure navigation; kept outside `DolphinState` so a waypoint
+/// change cannot mark the entity row for the WAL.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct DolphinNav {
+    pub target: Option<[f64; 3]>,
+    pub run: u64,
+    pub tries: u8,
+    pub last: Option<[f64; 3]>,
+    pub dimension: Dimension,
 }
 
 impl LocateState {
-    /// In-flight search count for one connection.
-    fn busy(&self, connection: ConnectionId) -> usize {
-        self.in_flight.get(&connection).copied().unwrap_or(0)
+    pub(crate) fn navigation(&self, dolphin: EntityId) -> Option<DolphinNav> {
+        self.dolphin_nav.get(&dolphin).copied()
+    }
+
+    /// Targets valid in one dimension, copied for the parallel prepare pass.
+    pub(crate) fn dolphin_targets(
+        &self,
+        dimension: crate::dimensions::Dimension,
+    ) -> HashMap<EntityId, [f64; 3]> {
+        self.dolphin_nav
+            .iter()
+            .filter(|(_, nav)| nav.dimension == dimension)
+            .filter_map(|(id, nav)| nav.target.map(|target| (*id, target)))
+            .collect()
+    }
+
+    /// In-flight search count for one owner.
+    fn busy(&self, owner: LocateOwner) -> usize {
+        match owner {
+            LocateOwner::Connection(connection) => {
+                self.in_flight.get(&connection).copied().unwrap_or(0)
+            }
+            LocateOwner::Entity(entity) => {
+                self.entity_in_flight.get(&entity).copied().unwrap_or(0)
+            }
+        }
+    }
+
+    fn begin(&mut self, owner: LocateOwner) {
+        let slot = match owner {
+            LocateOwner::Connection(connection) => self.in_flight.entry(connection).or_default(),
+            LocateOwner::Entity(entity) => self.entity_in_flight.entry(entity).or_default(),
+        };
+        *slot += 1;
+    }
+
+    fn finish(&mut self, owner: LocateOwner) {
+        let remove = match owner {
+            LocateOwner::Connection(connection) => {
+                let Some(count) = self.in_flight.get_mut(&connection) else {
+                    return;
+                };
+                *count = count.saturating_sub(1);
+                *count == 0
+            }
+            LocateOwner::Entity(entity) => {
+                let Some(count) = self.entity_in_flight.get_mut(&entity) else {
+                    return;
+                };
+                *count = count.saturating_sub(1);
+                *count == 0
+            }
+        };
+        if remove {
+            match owner {
+                LocateOwner::Connection(connection) => {
+                    self.in_flight.remove(&connection);
+                }
+                LocateOwner::Entity(entity) => {
+                    self.entity_in_flight.remove(&entity);
+                }
+            }
+        }
     }
 
     /// The worker's job queue, spawning the owner on first use. A thread that
@@ -673,15 +759,23 @@ impl LocateState {
     }
 }
 
+/// One accepted search whose completion is still owed to an owner.
+struct PendingLocate {
+    owner: LocateOwner,
+    kind: LocateKind,
+    origin: (i32, i32, i32),
+    dimension: Dimension,
+    completion: LocateCompletion,
+}
+
 /// One async search with owned inputs and a pinned metadata source.
 struct LocateJob {
-    connection: ConnectionId,
+    id: u64,
     kind: LocateKind,
     origin: (i32, i32, i32),
     generator: Arc<dyn ChunkGenerator>,
     targets: Vec<Identifier>,
     snapshot: Option<StructureSnapshot>,
-    completion: LocateCompletion,
     options: StructureSearchOptions,
     min_y: i32,
     max_y: i32,
@@ -695,17 +789,20 @@ enum LocateKind {
 
 /// A finished worker search, delivered to the tick thread.
 struct LocateDone {
-    completion: LocateCompletion,
-    connection: ConnectionId,
+    id: u64,
     kind: LocateKind,
     origin: (i32, i32, i32),
     hit: Option<LocateHit>,
+    /// A metadata/read refusal is not "no structure": dolphin goals keep their
+    /// fish and retry, commands answer unavailable instead of not_found.
+    error: Option<String>,
     elapsed_ms: u128,
 }
 
 fn locate_worker(jobs: Receiver<LocateJob>, done: Sender<LocateDone>) {
     for job in jobs {
         let start = std::time::Instant::now();
+        let mut error = None;
         let hit = match job.kind {
             LocateKind::Structure => {
                 match job.snapshot.expect("structure snapshot").search(
@@ -715,8 +812,9 @@ fn locate_worker(jobs: Receiver<LocateJob>, done: Sender<LocateDone>) {
                     &job.options,
                 ) {
                     Ok(hit) => hit,
-                    Err(error) => {
-                        tracing::error!(%error, "Cannot read authoritative structure starts");
+                    Err(failure) => {
+                        tracing::error!(%failure, "Cannot read authoritative structure starts");
+                        error = Some(failure);
                         None
                     }
                 }
@@ -734,12 +832,12 @@ fn locate_worker(jobs: Receiver<LocateJob>, done: Sender<LocateDone>) {
         };
         let elapsed_ms = start.elapsed().as_millis();
         let result = LocateDone {
-            connection: job.connection,
+            id: job.id,
             kind: job.kind,
             origin: job.origin,
             hit,
+            error,
             elapsed_ms,
-            completion: job.completion,
         };
         if done.send(result).is_err() {
             return;
@@ -787,13 +885,15 @@ fn execute_structure(
         };
     if submit(
         state,
-        connection,
+        LocateOwner::Connection(connection),
         LocateKind::Structure,
         origin,
         targets,
         LocateCompletion::Command(display),
         StructureSearchOptions::default(),
-    ) {
+    )
+    .is_some()
+    {
         feedback(
             state,
             connection,
@@ -818,13 +918,15 @@ fn execute_biome(
     };
     if submit(
         state,
-        connection,
+        LocateOwner::Connection(connection),
         LocateKind::Biome,
         origin,
         targets,
         LocateCompletion::Command(display),
         StructureSearchOptions::default(),
-    ) {
+    )
+    .is_some()
+    {
         feedback(
             state,
             connection,
@@ -1040,6 +1142,39 @@ fn resolve_poi_target(target: &ResourceOrTag) -> Result<(Vec<Identifier>, String
     }
 }
 
+/// Who waits for an async locate result. Players own `/locate` and eye
+/// completions; a fed dolphin owns its `DOLPHIN_LOCATED` treasure lookup so the
+/// tick only reads the drained result and never searches chunks inline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LocateOwner {
+    Connection(ConnectionId),
+    Entity(EntityId),
+}
+
+/// One fed dolphin's treasure lookup (`DolphinSwimToTreasureGoal.start/tick`).
+/// Every entry names its run, so a late completion cannot satisfy a newer goal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DolphinTreasure {
+    /// Search queued on the locate worker.
+    Pending { run: u64, dimension: Dimension },
+    /// Nearest `#minecraft:dolphin_located` structure site, block coords.
+    Found {
+        run: u64,
+        dimension: Dimension,
+        pos: [i32; 3],
+    },
+    /// No structure in vanilla's 50-chunk radius: the goal stops and clears
+    /// GotFish (`Dolphin#stuck`, `DolphinSwimToTreasureGoal.stop`).
+    Missing { run: u64, dimension: Dimension },
+    /// The worker could not read authoritative starts. This is not "no
+    /// structure": GotFish is kept, and a later tick retries after `retry_at`.
+    Failed {
+        run: u64,
+        dimension: Dimension,
+        retry_at: u64,
+    },
+}
+
 type StructureLookupReply = Box<dyn FnOnce(&mut TickState, Option<mc_world::BlockPos>) + Send>;
 
 /// Deferred loot/trade lookup. Completion runs on the native tick, including
@@ -1058,6 +1193,7 @@ enum LocateCompletion {
     Command(String),
     Eye(crate::projectiles::eye::EyeUse),
     Callback(StructureLookupReply),
+    Dolphin(EntityId),
 }
 
 struct StructureSearchOptions {
@@ -1088,7 +1224,7 @@ pub(crate) fn submit_structure_lookup(
     };
     submit(
         state,
-        request.connection,
+        LocateOwner::Connection(request.connection),
         LocateKind::Structure,
         request.origin,
         targets,
@@ -1099,6 +1235,7 @@ pub(crate) fn submit_structure_lookup(
             referenced: request.referenced.into_iter().collect(),
         },
     )
+    .is_some()
 }
 
 pub(crate) fn submit_eye(state: &mut TickState, request: crate::projectiles::eye::EyeUse) -> bool {
@@ -1109,49 +1246,94 @@ pub(crate) fn submit_eye(state: &mut TickState, request: crate::projectiles::eye
     );
     submit(
         state,
-        request.connection,
+        LocateOwner::Connection(request.connection),
         LocateKind::Structure,
         origin,
         vec![Identifier::parse("minecraft:stronghold").expect("static structure id")],
         LocateCompletion::Eye(request),
         StructureSearchOptions::default(),
     )
+    .is_some()
 }
 
-/// Queue a worker search; refuses (with a plain busy message) when the player
-/// or the queue is full.
+/// Queue a worker search; refuses when the owner or the shared queue is full.
+/// Only a `/locate` command answers a player; entity-owned searches stay quiet.
 fn submit(
     state: &mut TickState,
-    connection: ConnectionId,
+    owner: LocateOwner,
     kind: LocateKind,
     origin: (i32, i32, i32),
     targets: Vec<Identifier>,
     completion: LocateCompletion,
     options: StructureSearchOptions,
-) -> bool {
+) -> Option<u64> {
     let quiet = !matches!(completion, LocateCompletion::Command(_));
-    if state.locate.busy(connection) >= MAX_JOBS_PER_PLAYER {
-        if quiet {
-            return false;
+    let limit = match owner {
+        LocateOwner::Connection(_) => MAX_JOBS_PER_PLAYER,
+        LocateOwner::Entity(_) => 1,
+    };
+    if state.locate.busy(owner) >= limit {
+        if !quiet
+            && let LocateOwner::Connection(connection) = owner
+        {
+            state.push_player(
+                connection,
+                PlayerChange::Chat {
+                    message: "A locate search is already running; try again in a moment".into(),
+                },
+            );
         }
-        state.push_player(
-            connection,
-            PlayerChange::Chat {
-                message: "A locate search is already running; try again in a moment".into(),
-            },
-        );
-        return false;
+        return None;
     }
+    // Dolphin searches reserve interactive capacity and never fill the queue
+    // before the metadata snapshot is built. Eye/map/locate callers keep the
+    // whole queue as before.
+    let dolphin = matches!(&completion, LocateCompletion::Dolphin(_));
+    let capacity = if dolphin {
+        MAX_QUEUED_JOBS - COMMAND_QUEUE_RESERVE
+    } else {
+        MAX_QUEUED_JOBS
+    };
+    if state.locate.queued >= capacity {
+        if !quiet
+            && let LocateOwner::Connection(connection) = owner
+        {
+            state.push_player(
+                connection,
+                PlayerChange::Chat {
+                    message: "Too many locate searches are running; try again in a moment"
+                        .into(),
+                },
+            );
+        }
+        return None;
+    }
+    // Readiness before the expensive resident-chunk metadata snapshot.
+    if let Err(error) = state.locate.worker() {
+        tracing::error!(%error, "locate worker thread could not start");
+        if !quiet
+            && let LocateOwner::Connection(connection) = owner
+        {
+            state.push_player(
+                connection,
+                PlayerChange::Chat {
+                    message: "Locate is unavailable right now".into(),
+                },
+            );
+        }
+        return None;
+    }
+    let id = state.locate.next_job;
+    state.locate.next_job = id.wrapping_add(1);
     let geometry = state.world.geometry();
     let job = LocateJob {
-        connection,
+        id,
         kind,
         origin,
         generator: state.world.generator(),
         targets,
         snapshot: (kind == LocateKind::Structure)
             .then(|| StructureSnapshot::capture(state, &options)),
-        completion,
         options,
         min_y: geometry.min_y(),
         max_y: geometry.max_y() - 1,
@@ -1161,140 +1343,393 @@ fn submit(
         Err(error) => {
             // A thread that cannot start is a command failure, not a tick panic.
             tracing::error!(%error, "locate worker thread could not start");
-            if quiet {
-                return false;
+            if !quiet
+                && let LocateOwner::Connection(connection) = owner
+            {
+                state.push_player(
+                    connection,
+                    PlayerChange::Chat {
+                        message: "Locate is unavailable right now".into(),
+                    },
+                );
             }
-            state.push_player(
-                connection,
-                PlayerChange::Chat {
-                    message: "Locate is unavailable right now".into(),
-                },
-            );
-            return false;
+            return None;
         }
     };
     match worker.try_send(job) {
         Ok(()) => {
-            *state.locate.in_flight.entry(connection).or_default() += 1;
-            true
+            state.locate.queued += 1;
+            state.locate.begin(owner);
+            state.locate.pending.insert(
+                id,
+                PendingLocate {
+                    owner,
+                    kind,
+                    origin,
+                    dimension: state.dimension,
+                    completion,
+                },
+            );
+            Some(id)
         }
         Err(TrySendError::Full(_)) => {
-            if quiet {
-                return false;
+            if !quiet
+                && let LocateOwner::Connection(connection) = owner
+            {
+                state.push_player(
+                    connection,
+                    PlayerChange::Chat {
+                        message: "Too many locate searches are running; try again in a moment"
+                            .into(),
+                    },
+                );
             }
-            state.push_player(
-                connection,
-                PlayerChange::Chat {
-                    message: "Too many locate searches are running; try again in a moment".into(),
-                },
-            );
-            false
+            None
         }
         Err(TrySendError::Disconnected(_)) => {
-            if quiet {
-                return false;
+            if !quiet
+                && let LocateOwner::Connection(connection) = owner
+            {
+                state.push_player(
+                    connection,
+                    PlayerChange::Chat {
+                        message: "Locate is unavailable right now".into(),
+                    },
+                );
             }
-            state.push_player(
-                connection,
-                PlayerChange::Chat {
-                    message: "Locate is unavailable right now".into(),
-                },
-            );
-            false
+            None
         }
     }
 }
 
-/// Drain finished worker searches into player feedback. Skips connections
-/// that left; always releases their in-flight slot.
+/// Drain finished worker searches into player feedback and dolphin treasure
+/// state. Every accepted job has a terminal outcome, including channel loss.
 pub(crate) fn drain(state: &mut TickState) {
-    let ready: Vec<LocateDone> = state
-        .locate
-        .done
-        .as_ref()
-        .map(|done| done.try_iter().collect())
-        .unwrap_or_default();
-    if ready.is_empty() {
-        // Also retire empty in-flight entries so a quiet map stays small.
-        state.locate.in_flight.retain(|_, count| *count > 0);
+    let mut ready: Vec<LocateDone> = Vec::new();
+    let mut disconnected = false;
+    if let Some(done) = state.locate.done.as_ref() {
+        loop {
+            match done.try_recv() {
+                Ok(result) => ready.push(result),
+                Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    disconnected = true;
+                    break;
+                }
+            }
+        }
+    }
+    for done in ready {
+        deliver(state, done);
+    }
+    if disconnected {
+        fail_worker(state);
+    }
+    // Retire empty in-flight entries so a quiet map stays small.
+    state.locate.in_flight.retain(|_, count| *count > 0);
+    state.locate.entity_in_flight.retain(|_, count| *count > 0);
+}
+
+fn deliver(state: &mut TickState, done: LocateDone) {
+    let Some(pending) = state.locate.pending.remove(&done.id) else {
+        // A duplicate/stale completion; its slot was already released.
+        return;
+    };
+    state.locate.queued = state.locate.queued.saturating_sub(1);
+    release(state, pending.owner);
+    if pending.dimension != state.dimension {
+        terminal_wrong_dimension(state, done.id, pending);
         return;
     }
-    // Console (connection 0) has no entity but always receives output.
-    let live: HashSet<ConnectionId> = state.connections.all_connections().collect();
-    let mut finished: Vec<LocateDone> = Vec::with_capacity(ready.len());
-    let mut pending: VecDeque<LocateDone> = ready.into();
-    while let Some(done) = pending.pop_front() {
-        if matches!(done.completion, LocateCompletion::Callback(_))
-            || live.contains(&done.connection)
-            || done.connection == crate::command_console::CONNECTION
-        {
-            finished.push(done);
-        } else {
-            release(state, done.connection);
+    match pending.completion {
+        LocateCompletion::Eye(request) => {
+            if let Some(hit) = done.hit {
+                crate::projectiles::eye::complete(state, request, hit.pos);
+            }
         }
-    }
-    for done in finished {
-        release(state, done.connection);
-        let display = match done.completion {
-            LocateCompletion::Eye(request) => {
-                if let Some(hit) = done.hit {
-                    crate::projectiles::eye::complete(state, request, hit.pos);
+        LocateCompletion::Callback(reply) => {
+            // A metadata/read failure is not "no destination": invoking the
+            // callback with None consumes an unopened loot table and loses its
+            // map. Drop the continuation and leave the container untouched.
+            if done.error.is_some() {
+                tracing::warn!("locate callback refused: metadata unreadable; container left unopened");
+                return;
+            }
+            let hit = done.hit.map(|hit| mc_world::BlockPos {
+                x: hit.pos.0,
+                y: hit.pos.1,
+                z: hit.pos.2,
+            });
+            reply(state, hit);
+        }
+        LocateCompletion::Dolphin(dolphin) => {
+            let run = done.id;
+            let matches = state.locate.dolphin.get(&dolphin).is_some_and(|treasure| {
+                matches!(
+                    treasure,
+                    DolphinTreasure::Pending { run: pending_run, dimension }
+                        if *pending_run == run && *dimension == pending.dimension
+                )
+            });
+            let live_fish = state.entities.slot_of(dolphin).is_some_and(|slot| {
+                state
+                    .entities
+                    .row(slot)
+                    .entity_life
+                    .dolphin
+                    .as_ref()
+                    .is_some_and(|d| d.got_fish)
+            });
+            if !matches || !live_fish {
+                return;
+            }
+            let treasure = if done.error.is_some() {
+                // A read refusal is not "no structure": keep GotFish and retry.
+                DolphinTreasure::Failed {
+                    run,
+                    dimension: pending.dimension,
+                    retry_at: state.tick.saturating_add(200),
                 }
-                continue;
-            }
-            LocateCompletion::Callback(reply) => {
-                reply(
-                    state,
-                    done.hit.map(|hit| mc_world::BlockPos {
-                        x: hit.pos.0,
-                        y: hit.pos.1,
-                        z: hit.pos.2,
-                    }),
-                );
-                continue;
-            }
-            LocateCompletion::Command(display) => display,
-        };
-        match done.hit {
-            Some(hit) => {
-                let found_name = match done.kind {
-                    LocateKind::Structure => structure_display(&display, &hit.found_id),
-                    LocateKind::Biome => biome_display(&display, &hit.found_id),
-                };
-                let key = match done.kind {
-                    LocateKind::Structure => "commands.locate.structure.success",
-                    LocateKind::Biome => "commands.locate.biome.success",
-                };
-                show_result(
-                    state,
-                    done.connection,
-                    key,
-                    &found_name,
-                    done.origin,
-                    hit.pos,
-                    matches!(done.kind, LocateKind::Biome),
-                );
-                let elapsed_ms = done.elapsed_ms;
-                tracing::info!("Locating element {found_name} took {elapsed_ms} ms");
-            }
-            None => {
-                let key = match done.kind {
-                    LocateKind::Structure => "commands.locate.structure.not_found",
-                    LocateKind::Biome => "commands.locate.biome.not_found",
-                };
-                failure(state, done.connection, key, vec![text(&display)]);
-            }
+            } else {
+                done.hit.map_or(
+                    DolphinTreasure::Missing {
+                        run,
+                        dimension: pending.dimension,
+                    },
+                    |hit| DolphinTreasure::Found {
+                        run,
+                        dimension: pending.dimension,
+                        pos: [hit.pos.0, hit.pos.1, hit.pos.2],
+                    },
+                )
+            };
+            state.locate.dolphin.insert(dolphin, treasure);
+        }
+        LocateCompletion::Command(display) => {
+            command_result(state, pending.owner, pending.kind, pending.origin, display, done);
         }
     }
 }
 
-fn release(state: &mut TickState, connection: ConnectionId) {
-    if let Some(count) = state.locate.in_flight.get_mut(&connection) {
-        *count = count.saturating_sub(1);
-        if *count == 0 {
-            state.locate.in_flight.remove(&connection);
+fn command_result(
+    state: &mut TickState,
+    owner: LocateOwner,
+    kind: LocateKind,
+    origin: (i32, i32, i32),
+    display: String,
+    done: LocateDone,
+) {
+    let LocateOwner::Connection(connection) = owner else {
+        return;
+    };
+    // Console (connection 0) has no entity but always receives output.
+    let live = connection == crate::command_console::CONNECTION
+        || state.connections.all_connections().any(|c| c == connection);
+    if !live {
+        return;
+    }
+    if done.error.is_some() {
+        tracing::warn!(connection = connection.0, "locate search failed to read metadata");
+        state.push_player(
+            connection,
+            PlayerChange::Chat {
+                message: "Locate is unavailable right now".into(),
+            },
+        );
+        return;
+    }
+    match done.hit {
+        Some(hit) => {
+            let found_name = match kind {
+                LocateKind::Structure => structure_display(&display, &hit.found_id),
+                LocateKind::Biome => biome_display(&display, &hit.found_id),
+            };
+            let key = match kind {
+                LocateKind::Structure => "commands.locate.structure.success",
+                LocateKind::Biome => "commands.locate.biome.success",
+            };
+            show_result(
+                state,
+                connection,
+                key,
+                &found_name,
+                origin,
+                hit.pos,
+                matches!(kind, LocateKind::Biome),
+            );
+            let elapsed_ms = done.elapsed_ms;
+            tracing::info!("Locating element {found_name} took {elapsed_ms} ms");
+        }
+        None => {
+            let key = match kind {
+                LocateKind::Structure => "commands.locate.structure.not_found",
+                LocateKind::Biome => "commands.locate.biome.not_found",
+            };
+            failure(state, connection, key, vec![text(&display)]);
         }
     }
+}
+
+/// The owner changed dimension while its search ran: finish the owed job but
+/// never apply a stale lead to a new goal.
+fn terminal_wrong_dimension(state: &mut TickState, run: u64, pending: PendingLocate) {
+    match pending.completion {
+        LocateCompletion::Command(_) => {
+            if let LocateOwner::Connection(connection) = pending.owner
+                && (connection == crate::command_console::CONNECTION
+                    || state.connections.all_connections().any(|c| c == connection))
+            {
+                state.push_player(
+                    connection,
+                    PlayerChange::Chat {
+                        message: "Locate is unavailable right now".into(),
+                    },
+                );
+            }
+        }
+        LocateCompletion::Callback(_) => {
+            // Cross-world: preserve an unopened container instead of consuming it.
+        }
+        LocateCompletion::Dolphin(dolphin) => {
+            state.locate.dolphin.remove(&dolphin);
+            state.locate.dolphin_nav.remove(&dolphin);
+        }
+        LocateCompletion::Eye(_) => {}
+    }
+}
+
+/// The worker thread or its channels are gone: every accepted but undelivered
+/// job gets a terminal refusal, and the next submit spawns a fresh worker.
+fn fail_worker(state: &mut TickState) {
+    let pending = std::mem::take(&mut state.locate.pending);
+    state.locate.queued = 0;
+    // Reset channels before continuations: a callback may submit a new search.
+    state.locate.jobs = None;
+    state.locate.done = None;
+    for (run, pending) in pending {
+        release(state, pending.owner);
+        match pending.completion {
+            LocateCompletion::Command(_) => {
+                if let LocateOwner::Connection(connection) = pending.owner
+                    && (connection == crate::command_console::CONNECTION
+                        || state.connections.all_connections().any(|c| c == connection))
+                {
+                    state.push_player(
+                        connection,
+                        PlayerChange::Chat {
+                            message: "Locate is unavailable right now".into(),
+                        },
+                    );
+                }
+            }
+            LocateCompletion::Callback(_) => {
+                // Infrastructure loss must not consume unopened loot.
+                tracing::warn!("locate worker lost: map/loot callback left unopened");
+            }
+            LocateCompletion::Dolphin(dolphin) => {
+                let matches = state.locate.dolphin.get(&dolphin).is_some_and(|treasure| {
+                    matches!(
+                        treasure,
+                        DolphinTreasure::Pending { run: pending_run, dimension }
+                            if *pending_run == run && *dimension == pending.dimension
+                    )
+                });
+                if matches {
+                    state.locate.dolphin.insert(
+                        dolphin,
+                        DolphinTreasure::Failed {
+                            run,
+                            dimension: pending.dimension,
+                            retry_at: state.tick.saturating_add(200),
+                        },
+                    );
+                }
+            }
+            LocateCompletion::Eye(_) => {}
+        }
+    }
+}
+
+fn release(state: &mut TickState, owner: LocateOwner) {
+    state.locate.finish(owner);
+}
+
+/// Queue the vanilla `DOLPHIN_LOCATED` lookup for a fed dolphin
+/// (`Dolphin$DolphinSwimToTreasureGoal.start`: `findNearestMapStructure(tag,
+/// blockPosition, 50, false)`; 50 is the chunk search radius, the same ring
+/// unit `/locate` uses). Runs on the existing locate worker, so the tick never
+/// blocks on chunk generation; [`drain`] delivers the site to the tick thread.
+pub(crate) fn request_dolphin_treasure(
+    state: &mut TickState,
+    dolphin: EntityId,
+    origin: [f64; 3],
+) -> bool {
+    if state.locate.dolphin.contains_key(&dolphin) {
+        return false;
+    }
+    let Ok(tag) = Identifier::parse("minecraft:dolphin_located") else {
+        return false;
+    };
+    let Some(targets) = resolve_structure_tag(&tag) else {
+        return false;
+    };
+    let origin = (
+        origin[0].floor() as i32,
+        origin[1].floor() as i32,
+        origin[2].floor() as i32,
+    );
+    let Some(run) = submit(
+        state,
+        LocateOwner::Entity(dolphin),
+        LocateKind::Structure,
+        origin,
+        targets,
+        LocateCompletion::Dolphin(dolphin),
+        StructureSearchOptions {
+            radius_rings: 50,
+            skip_referenced: false,
+            referenced: HashSet::new(),
+        },
+    ) else {
+        return false;
+    };
+    state.locate.dolphin.insert(
+        dolphin,
+        DolphinTreasure::Pending {
+            run,
+            dimension: state.dimension,
+        },
+    );
+    true
+}
+
+/// Every dolphin with a retained lookup, for stale-goal cleanup.
+pub(crate) fn dolphin_treasure_entities(state: &TickState) -> Vec<EntityId> {
+    state.locate.dolphin.keys().copied().collect()
+}
+
+/// The drained treasure lookup of one dolphin, if a search was requested.
+pub(crate) fn dolphin_treasure(state: &TickState, dolphin: EntityId) -> Option<DolphinTreasure> {
+    state.locate.dolphin.get(&dolphin).copied()
+}
+
+/// Forget one dolphin's treasure lookup (goal stopped, arrived or died).
+pub(crate) fn clear_dolphin_treasure(state: &mut TickState, dolphin: EntityId) {
+    state.locate.dolphin.remove(&dolphin);
+    state.locate.dolphin_nav.remove(&dolphin);
+}
+
+/// Runtime-only navigation for one dolphin (never an entity row field).
+pub(crate) fn dolphin_navigation(state: &TickState, dolphin: EntityId) -> Option<DolphinNav> {
+    state.locate.dolphin_nav.get(&dolphin).copied()
+}
+
+pub(crate) fn set_dolphin_navigation(state: &mut TickState, dolphin: EntityId, nav: DolphinNav) {
+    state.locate.dolphin_nav.insert(dolphin, nav);
+}
+
+pub(crate) fn clear_dolphin_navigation(state: &mut TickState, dolphin: EntityId) {
+    state.locate.dolphin_nav.remove(&dolphin);
 }
 
 /// Vanilla `showLocateResult` display name: `#tag (resolved)` for tags.
