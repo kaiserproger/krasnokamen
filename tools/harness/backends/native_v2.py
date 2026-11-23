@@ -1192,6 +1192,7 @@ RUNNERS = {
     "native-v2-p4-damage": _p4,
     "native-v2-p4-identities": _p4,
     "native-v2-p4-death-protection": _p4,
+    "native-v2-p4-totem": _p4,
     "native-v2-team-deaths": _team_deaths,
     "native-v2-p4-hopper": _p4,
     "native-v2-p4-statistics": _p4,

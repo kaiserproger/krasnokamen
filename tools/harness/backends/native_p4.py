@@ -356,6 +356,56 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _damage_environment(steps, origin, steps.observe()["player"]["entity_id"])
 
 
+def _totem(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    """A real client's default totem rescue and the same lethal hit without one."""
+    steps.fixture("gamerule natural_health_regeneration false")
+    steps.fixture("gamemode survival @s")
+    steps.fixture("clear @s")
+    steps.fixture("effect clear @s")
+    _give(steps, "minecraft:totem_of_undying")
+    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    steps.call("minecraft_wait_ticks", {"ticks": 25})
+    steps.fixture("damage @s 100 minecraft:generic")
+    saved = steps.wait(lambda state: state["player"]["health"] == 1,
+                       "totem_rescue_at_one_health_received")
+    steps.check("default_totem_survives_at_one_health",
+                saved["player"]["health"] == 1 and saved["in_play"] is True)
+    _inventory(steps, "minecraft:totem_of_undying", 0)
+    steps.check("default_totem_consumed_by_the_rescue", True)
+    steps.fixture("data get entity @s active_effects")
+    snapshot = steps.wait(
+        lambda state: any("has the following entity data:" in line
+                          and "minecraft:regeneration" in line
+                          for line in state.get("recent_chat", [])),
+        "totem_rescue_effects_received",
+    )
+    effects = next(line for line in snapshot["recent_chat"]
+                   if "has the following entity data:" in line and "minecraft:regeneration" in line)
+    steps.check("default_totem_applies_regeneration_absorption_and_fire_resistance",
+                all(name in effects for name in ("minecraft:regeneration",
+                                                 "minecraft:absorption",
+                                                 "minecraft:fire_resistance")))
+    steps.report["totem_rescue"] = {"health": saved["player"]["health"], "effects": effects}
+    _capture(steps, "p4-totem-rescue")
+    # Let the rescue effects lapse, then the identical hit must kill: no rescue
+    # without a held totem.
+    steps.call("minecraft_wait_ticks", {"ticks": 220})
+    steps.fixture("effect clear @s")
+    steps.fixture("damage @s 100 minecraft:generic")
+    steps.wait(lambda state: state["player"]["health"] == 0 and state["screen"]["open"],
+               "totem_absent_death_received")
+    steps.check("no_totem_lethal_damage_kills_the_player", True)
+    _capture(steps, "p4-totem-death")
+    steps.call("minecraft_respawn", {"timeout_seconds": steps.remaining()})
+    alive = steps.wait(lambda state: state["player"]["health"] is not None
+                       and state["player"]["health"] > 0 and not state["screen"]["open"],
+                       "totem_absent_respawn_received", wait_for_play=True)
+    steps.check("no_totem_respawn_returns_a_live_player", alive["in_play"] is True)
+    steps.report["limits"] = [
+        "default totem rescue only: one generic lethal hit, then the same hit with no totem; "
+        "not every death type, offhand-only or inventory search"]
+
+
 def _death_protection(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     player_id = steps.observe()["player"]["entity_id"]
     steps.fixture("gamerule natural_health_regeneration false")
@@ -796,7 +846,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int], surface: str) -> None:
     try:
         {"nameplates": _nameplates, "advancements": _advancements, "damage": _damage,
          "identities": _damage_identities, "death-protection": _death_protection,
-         "hopper": _hopper, "statistics": _stats}[surface](steps, origin)
+         "totem": _totem, "hopper": _hopper, "statistics": _stats}[surface](steps, origin)
     except Exception:
         try:
             steps.report["failure_observation"] = steps.call("minecraft_observe")
