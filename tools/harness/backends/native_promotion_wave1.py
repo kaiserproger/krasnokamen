@@ -443,7 +443,14 @@ def _golem_gossip(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _echo(steps, "gossip_villagers_ordered")
     steps.fixture("time query gametime")
     state = _chat_has(steps, "gametime_read", "time is")
-    tick = int(re.search(r"time is (\d+)", next(l for l in state["recent_chat"] if "time is" in l)).group(1))
+    # `gamerule advance_time false` already replied "Gamerule advance_time is now set to: false",
+    # which contains "time is" but no tick; read the reply that carries the tick number.
+    gametime = next((match for line in state["recent_chat"]
+                     if (match := re.search(r"time is (\d+)", line)) is not None), None)
+    if gametime is None:
+        raise RuntimeError("time query gametime reply is not in the recent chat: "
+                           + repr(state["recent_chat"][-5:]))
+    tick = int(gametime.group(1))
     for row in villagers:
         uuid_ = row["entity_uuid"]
         steps.fixture(f'data merge entity {uuid_} {{Brain:{{memories:{{"minecraft:last_slept":'
