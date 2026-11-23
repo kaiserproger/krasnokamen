@@ -1,172 +1,111 @@
 # Worktrees, patches and integration
 
-[AGENTS.md](../../AGENTS.md) "Git, local state and sibling repositories" sets
-the rules: worktrees under `<work>/wt/`, Main's standing commit/push
-authorization does not extend to workers, and the owner's dirty files stay intact.
-This page is the procedure.
+[AGENTS](../../AGENTS.md) owns Git authorization: Main's standing commit/push
+permission does not extend to workers; preserve owner dirt. `<work>` and
+[historical provenance](README.md) are defined by the development index.
 
 ## Creating a worktree
 
 ```sh
 <work>/solaris/tools/dev/wt-new <Name> <base-commit> [--repo core|client|loader|plugins]
-<work>/solaris/tools/dev/wt-done <Name>   # verified final.patch, then removal
+<work>/solaris/tools/dev/wt-done <Name>   # only when authorized; run outside it
 ```
 
-`wt-new` creates the branch `wt/<Name>`, the hard-link `data/vanilla`,
-`<work>/receipts/<Name>/` and a private Gradle/XDG home; `wt-done` archives
-everything not in the base as one verified patch, copies `.analysis` evidence
-(`result.json`, logs, reports, screenshots) into the receipts and refuses while
-other ignored files remain, all before it removes anything; `wt-gc` lists stale
-worktrees. Details: [tools/dev](../../tools/dev/README.md).
+The [tool contract](../../tools/dev/README.md#worktree-and-release-pin-tools-owner-host)
+owns creation, archival, refusal conditions and pin mechanics:
 
-Before removal, the [existing archive procedure](../../tools/dev/README.md#worktree-and-release-pin-tools-owner-host)
-needs an inventory of retained untracked content, file modes and symlink targets,
-plus a verified restoration. `git apply --check` proves applicability, not that
-those bytes/metadata can be restored. Missing inventory after deletion is not a
-recoverability claim. Archive payloads and ignored Mojang material stay outside
-Git objects, including temporary indexes/commits that are never pushed; use the
-allowlisted evidence archive, not `git add -A` as an archival mechanism.
-Release binaries for gates come from `tools/dev/pin-release`, never from a
-pooled target dir.
+| Tool / boundary | Required practice |
+|---|---|
+| `wt-new` | Branch `wt/<Name>`, receipts `<work>/receipts/<Name>/`, private Gradle/XDG home and `.wt-env`; core caches are hard-linked. Load the environment explicitly |
+| Cache | `data/vanilla` is a real directory, not a sidecar symlink; include `data/minecraft/advancement/` (full local jar extraction via `tools/extract-vanilla-data.sh`). Hard links share bytes: replace files, never edit in place |
+| `wt-done` | Archives everything outside base into a verified patch and allowlisted `.analysis` evidence before removal; unknown ignored files cause refusal. **Before removal**, inventory retained untracked bytes, modes and symlink targets and verify restoration. `git apply --check` proves applicability, not recoverability. Missing inventory after deletion is not a recoverability claim |
+| Archive isolation | Keep payloads/ignored Mojang data outside Git objects, including temporary indexes/commits; no `git add -A` archival shortcut |
+| `wt-gc` | Read-only stale-worktree inventory, not deletion authority |
+| Build output | Runner pool under `<work>/targets/`; gates use `pin-release`, never pooled output. Give running consumers a frozen binary and SHA when shared binary/config changes |
 
-- **Absolute paths in every edit/write tool call.** Agent file tools resolve
-  relative paths against the session root (the main checkout), not the
-  worktree; `cd` in bash does not change that. A child agent corrupted the main
-  checkout this way on 2026-10-16. Put the rule in every worktree brief and have
-  parents forward it to children. Audit a suspect agent by searching its
-  transcript for successful edits/writes with relative `crates/...` paths.
-- **`data/vanilla` must be a real directory**, not a symlink: the registry
-  refuses symlinked sidecar dirs (`wt-new` hard-links it). It must contain
-  `data/minecraft/advancement/`; extract a full set with
-  `tools/extract-vanilla-data.sh` from the local server jar.
-- **Sibling checkouts resolve from the main checkout.** In a worktree the
-  harness (`tools/harness/runtime.py` `sibling_root`, and the shell runners
-  `regression.sh` and `prepare-real-client-scenario.sh`) finds `krasnokamen-loader`,
-  `krasnokamen-client` and `krasnokamen-default-plugins` beside the main checkout, via
-  `git rev-parse --git-common-dir`. No `KRASNOKAMEN_*_ROOT` export is needed; set
-  `KRASNOKAMEN_LOADER_ROOT`, `KRASNOKAMEN_CLIENT_ROOT` or `KRASNOKAMEN_DEFAULT_PLUGINS_ROOT`
-  only to select another checkout.
-- Heavy outputs go under `<work>/targets/`; the runner's pooled target dirs
-  handle this (see [heavy commands](heavy-commands-and-memory.md)).
-- When the main checkout's binary or config changes under running agents,
-  give them a frozen copy of the binary plus its SHA-256 instead.
+**Every file-tool edit/write uses an absolute worktree path.** Shell `cd` does
+not retarget file tools. Put this rule in every worktree brief; parents forward
+it to children. Investigate suspected Main clobber by finding successful
+relative `crates/...` edits in the transcript (2026-10-16 incident).
+
+Harness sibling discovery (`tools/harness/runtime.py::sibling_root`,
+`regression.sh`, `prepare-real-client-scenario.sh`) resolves beside the main
+checkout using `git rev-parse --git-common-dir`, not beside `wt/<Name>`.
+Use `KRASNOKAMEN_LOADER_ROOT`, `KRASNOKAMEN_CLIENT_ROOT` or
+`KRASNOKAMEN_DEFAULT_PLUGINS_ROOT` only to select a different checkout.
 
 ## When nothing may be committed
 
-Older runs worked on an uncommitted main tree. The patterns still apply to any
-no-commit slice:
-
-- **Seed from a dirty tree:** create the isolated worktree with `wt-new`, then
-  copy only the audited source-file allowlist and propagate its deletions.
-  Record the dirty baseline and diff before handing it off. Stage explicit
-  source paths if a staged baseline is needed; never sweep archives, ignored
-  content or tool state into an ordinary or temporary Git index.
-  `wt-new` handles the ignored vanilla cache separately. Exclude alternate
-  target dirs and `.analysis/`; nested `sdk/rust/target` and `.analysis`
-  copies filled the disk twice.
-- **Deliver patches with `git diff` only**, never hand-concatenated. A file
-  without a trailing newline glues the next `diff --git` header onto its last
-  line. Before applying: `grep -c '^diff --git' P` equals the claimed file count,
-  then `git apply --check P`, keep a copy in the receipts, apply,
-  `cargo fmt --all`. After applying, grep the tree for a stray `diff --git a/`.
-- **Layered patches** from one agent are a strict chain (patch N applies on
-  main + 1..N-1). Never "drop duplicates" by hand; a later patch applied over
-  an earlier one silently removed its hunks once.
-- **Main moved after the patch base:** merge per file with
-  `git merge-file -L main -L base -L <slice> <main-file> <base-file> <wt-file>`
-  (base from `git -C <wt> show :<path>`). Struct-literal field lists and
-  appended tests are usually additive; exhaustive matches, destructures and
-  tuple-shape changes need hand-combined code. `git apply` fails on files that
-  are untracked in main ("does not exist in index").
-- A slice running for hours while main moves rebases itself into a freshly
-  seeded worktree before the final merge; run `cargo fmt --all` in the old
-  tree first so formatting churn does not become conflicts.
-- Shared-contract changes by one slice are not pushed onto siblings; Main
-  migrates the new call sites at merge.
+| Situation | Procedure |
+|---|---|
+| Seed from dirty Main | `wt-new`, then copy only audited source allowlist **and deletions**; record dirty baseline/diff. If staging a baseline, stage explicit source paths only. Never include archives, ignored content, tool state, alternate targets or `.analysis` (including nested SDK copies); `wt-new` handles vanilla separately |
+| Deliver | Generate with `git diff`, never concatenate (missing trailing newline can glue the next `diff --git`). Confirm header count equals claimed files, `git apply --check`, preserve patch in receipts, apply, then `cargo fmt --all`; detect stray `diff --git a/` text afterwards |
+| Layered patches | Strict chain: N applies to Main + 1..N−1. Never hand-drop “duplicates”: this previously removed earlier hunks |
+| Main moved | Three-way per file: `git merge-file -L main -L base -L <slice> <main-file> <base-file> <wt-file>` (base from `git -C <wt> show :<path>` when that index still holds the seeded baseline). Field lists/appended tests may be additive; exhaustive matches, destructures and tuples need semantic merging. `git apply` fails on an untracked Main file: “does not exist in index” |
+| Long-lived slice | Rebase into a freshly seeded worktree before final merge; run `cargo fmt --all` in the old tree first, not during another worker's edits |
+| Shared contract | Main migrates new call sites at integration; never push a slice's contract onto sibling workers |
 
 ## Keeping the shared tree compilable
 
-- Build/check profiles use the tree they run in; real-client profiles consume the
-  pinned server selected by their declaration, not an implicit shared-tree build
-  ([harness entrypoint](../AGENT_TOOLING.md#harness-entrypoint)). Keep a worker's
-  unfinished edits isolated and hand off a compiling immutable checkpoint or an
-  explicitly unverified patch; no placeholders or claimed compile success.
-- When the shared tree is red, use `KRASNOKAMEN_SERVER_BINARY=<frozen>` and its
-  matching client environment only for that recorded pin's scope; an old green
-  binary does not prove the moving source compiles.
-- Group a broken build's errors by file and map files to owners via mtimes and
-  agent transcripts. Restore a clobbered uncommitted file only from a copy
-  whose checksum matched before the incident in at least two untouched
-  worktrees, never from HEAD or the offender's scratch copies. Back up affected
-  files before merging a patch and dry-run it with `patch --dry-run -p1 -F0`.
+- Build/check uses its own tree; real-client profiles use their declared pin
+  ([harness entrypoint](../AGENT_TOOLING.md#harness-entrypoint)). Keep unfinished
+  work isolated; deliver a compiling immutable checkpoint or an explicitly
+  unverified patch, never placeholders or invented compile success.
+- On a red shared tree, `KRASNOKAMEN_SERVER_BINARY=<frozen>` and matching client
+  environment prove **only that pin**, not the moving source.
+- Attribute errors by file, mtimes and transcripts. Recover a clobbered dirty
+  file only from a copy whose checksum matched before the incident in at least
+  two untouched worktrees—not HEAD or the offender's scratch. Back up affected
+  files; dry-run patching with `patch --dry-run -p1 -F0`.
 
 ## Integrating a branch into `main`
 
-1. List the merge sequence with `git log --oneline --first-parent <base>..<tip>`.
-2. Bisect failures by merge in a scratch worktree (`git checkout --detach
-   <merge>`, cherry-pick later compile fixes with `-n`) and run only the
-   failing tests. Run the same subset on the current `main` tip: failures
-   already there are not from this integration.
-3. Classify every failure as **stale fixture** (behaviour became correct,
-   fix the test) or **real regression** (fix the code), with evidence per test.
-   In one night run 14 of 15 failures were stale fixtures. Typical stale
-   fixtures after vanilla-correctness work: reach distances, sign faces,
-   border lerp targets, plugin API version constants, advancement condition
-   shapes, raid chunk tickets.
-4. Use the canonical harness's complete failure list, not an extra ad-hoc workspace
-   suite. Typical post-merge breakage includes unfulfilled `#[expect(clippy::...)]`,
-   stale code-health anchors and inline tests in owner-guarded files.
-5. **One shared L2 per compatible fix batch** (owner D85, 2026-11-22).
-   Main freezes the exact integrated tree and runs `correctness` through the
-   runner once on that batch, not once per row. Workers still run focused
-   checks. Keep each row's original repro, its own genuine negative control
-   (only that row's fix reversed), and any required real-client proof and
-   independent reviews. Reuse candidate builds, fixtures and evidence only
-   within their matching tree, inputs, environment and scope; one row's
-   reversal cannot stand in for another's.
-   Read the commands, exits, counts and logs in `result.json`
-   ([gate contract](../AGENT_TOOLING.md#evidence-boundaries)). After a relevant
-   fix rerun the failed scope, then the required combined gate; do not repeat
-   unchanged greens. Supervised jobs preserve the inner exit code
-   (`...; rc=$?; ...; exit $rc`).
-6. Obtain the review required by AGENTS.md before Main's critical code commit.
-   Check reviewer identity and exact base/candidate/diff coverage, including
-   integration deltas; old, limited or peer-tree reviews keep their original scope.
-   Missing required coverage blocks commit approval, not reachable tests or
-   clearly labelled uncommitted validation pins.
-7. Fast-forward `main` without touching the owner's dirty tree: back up
-   `git diff` and untracked files under `<work>/backups/`, find the overlap
-   between dirty files and the branch's changed files, set aside only the
-   overlapping files, `git merge --ff-only <branch>`, restore them, check for
-   conflict markers. Main's standing commit/push authorization comes from
-   `AGENTS.md`; workers may commit on their own branch, never Main or a push.
-   Tags and releases still need explicit owner authorization.
+1. List first-parent merges with `git log --oneline --first-parent <base>..<tip>`.
+   Bisect in scratch (`git checkout --detach <merge>`, later compile fixes via
+   `cherry-pick -n`); run only failing tests and compare the same subset on Main.
+   Baseline failures are not integration regressions.
+2. Classify every failure, with evidence: stale fixture (fix test) or real
+   regression (fix code). Historical 14/15 stale failures are not a presumption:
+   reach/sign/border/advancement/raid/API fixtures can drift. Use canonical
+   harness failure lists, not another ad-hoc suite; include Clippy expectations,
+   code-health anchors and owner-guarded inline tests.
+3. **One shared L2 per compatible batch** (owner D85, 2026-11-22): freeze the
+   integrated tree; Main runs `correctness` through the runner once. Each row
+   still needs focused checks, original repro, its own fix-only reversal and
+   required real-client/review evidence. Reuse only matching tree, inputs,
+   environment and scope; one row's reversal never proves another.
+4. Inspect commands/exits/counts/logs in `result.json`
+   ([evidence contract](../AGENT_TOOLING.md#evidence-boundaries)). After a relevant
+   fix rerun failed scope then required combined gate, not unchanged greens.
+   Supervisors preserve inner status (`...; rc=$?; ...; exit $rc`).
+5. Before Main's critical commit obtain required independent review of exact
+   identity/base/candidate/diff **including integration deltas**. Old, limited or
+   peer-tree reviews keep their scope. Missing coverage blocks commit approval, not
+   reachable tests or labelled uncommitted validation pins.
+6. Fast-forward without losing owner dirt: back up diff and untracked bytes
+   under `<work>/backups/`, identify overlap, set aside **only** overlapping
+   files, `git merge --ff-only <branch>`, restore and inspect conflict markers.
+   Workers commit only on their own branch when permitted, never Main or push;
+   tags/releases require explicit owner authorization.
 
 ## Freezing one acceptance identity
 
-For any gate set that must describe one build (release, perf round, QA wave):
-
-1. Announce the freeze; no new patches. Unproven work goes to the next round.
-   Pending edits go to the agents' own `pending.patch`; sibling repos are not
-   frozen unless stated.
-2. Pin the server with `tools/dev/pin-release <tree>` (`--client` for the
-   native client). It records HEAD plus the hash of the uncommitted diff
-   (untracked files included), builds once in a pooled slot, refuses to pin if
-   the tree changed during the build, and publishes the binary and
-   `manifest.json` to an immutable `<work>/pins/<id>/`. Build the plugin pack
-   separately when WIT changed (`../solaris-default-plugins/tools/build_standard_pack.py`).
-3. Announce the pin path, binary SHA-256 and manifest. Every gate and receipt
-   cites them. Never relabel a preflight package as final.
-
-The identity is the `krasnokamen` binary from `mc-edge`. Older freeze or snapshot
-recipes in external skills or notes that build or copy `mc-server` describe the
-retired v1 binary ([ADR 0014](../decisions/0014-v1-core-retirement.md)); they
-cannot produce a current acceptance identity. The release procedure is in
-[releases](release-and-tags.md).
+1. Announce freeze for release/perf/QA; no new patches. Unproven work goes to
+   next round, pending edits to each owner's `pending.patch`. Siblings freeze
+   only if explicitly included.
+2. Call Main's `tools/dev/pin-release <tree>` (`--client` for native client).
+   It records HEAD, dirty/untracked hash and build inputs, refuses to pin if the
+   tree changed during the build, and publishes a read-only binary plus manifest
+   in `<work>/pins/<id>/`.
+   The [pin contract](../../tools/dev/README.md#worktree-and-release-pin-tools-owner-host)
+   owns reuse, target, incremental and environment rules. WIT changes also require
+   `../solaris-default-plugins/tools/build_standard_pack.py`.
+3. Announce path/SHA/manifest; all gates cite them. Never relabel preflight as
+   final. Server identity is `mc-edge`'s `krasnokamen`, never retired `mc-server`
+   ([ADR 0014](../decisions/0014-v1-core-retirement.md)); use the [release procedure](release-and-tags.md).
 
 ## Background jobs
 
-- Cancel a looping job through its parent (`proc://<job>/kill`), not by killing
-  child runner processes; a surviving `for` loop starts the next item.
-- Long builds and gates run as named services or async jobs with an explicit
-  deadline; consume the completion once, never poll.
+Cancel looping jobs through the parent (`proc://<job>/kill`), not child runners.
+Use named services/async jobs with explicit deadlines; consume completion once,
+never poll. [Resource policy](heavy-commands-and-memory.md) owns admission.

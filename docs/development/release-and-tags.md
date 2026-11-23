@@ -1,193 +1,129 @@
 # Releases and tags
 
-Authorization rules are in [AGENTS.md](../../AGENTS.md): Main has standing
-authorization for small commits and pushes to `main`; workers stay on their own
-worktree branches and do not push. Tags, releases and other publication need
-explicit owner authorization. The two release reviewers and the advisor's role are in
-[review committee and breaker](review-committee-and-breaker.md#release-reviewers-owner-2026-11-07).
-The breaker passes before the tag and before the announcement are in the
-[break-it QA protocol](../QA_AGENT_PROTOCOL.md) "Release-candidate breaker
-pass". This page is the release procedure for the four repositories:
-`kaiserproger/krasnokamen` (core), `krasnokamen-client`, `krasnokamen-loader` and
-`krasnokamen-default-plugins`.
+[AGENTS](../../AGENTS.md) grants Main small commits/pushes to `main`; workers
+stay on their own worktree branches and do not push.
+Tags/releases/other publication need explicit owner authorization. Before every
+tag: [two independent reviewers](review-committee-and-breaker.md#release-reviewers-owner-2026-11-07)
+even with green gates; before tag **and announcement**:
+[release-candidate breaker pass](../QA_AGENT_PROTOCOL.md). No advisor approval token.
+
+Repositories: `kaiserproger/krasnokamen`, `krasnokamen-client`,
+`krasnokamen-loader`, `krasnokamen-default-plugins`.
+`run …` below means `python3 -m tools.harness run …` under the
+[owner-host runner](heavy-commands-and-memory.md).
+[Historical wording](README.md) retains original examples.
 
 ## Core release cut
 
-1. **Final tree gates.** `run correctness` once after the last code change
-   (rerun only a failed test after a fix), plus `run harness-check`,
-   `run installer`, `run build --release` and `run java` (the Loader's Gradle
-   tests). `core-client` is chat-only; cover plugins, economy and Loader with
-   `standard-pack` (also `--real-client`), real-client purchase/refund QA, and
-   `loader-live` on every advertised platform against the frozen server with a
-   no-Loader refusal check. Rerun any previously blocked owner scenario exactly
-   (same profile, actor and refusal type); never substitute a similar one.
-2. **Clean-checkout proof.** A detached worktree of the release commit with no
-   `data/vanilla`: `cargo check --locked --workspace --all-targets` in its own
-   target dir; then simulate CI by extracting vanilla data from the local
-   server jar (`tools/extract-vanilla-data.sh`) and running `run test`.
-   Vanilla data loads at runtime from the content cache: no compile-time
-   `include_str!` of `data/vanilla`, and every production or bench registry load
-   passes a `vanilla_data_dir` (`CoreRegistry::load(None)` is test-only).
-   **macOS:** there is no local Mac. Push the candidate commit to
-   `rc-check/<tag>` and delete the branch afterwards;
-   `.github/workflows/rc-check-macos.yml` runs the `mc-core`, `mc-world`,
-   `mc-world-conversion` and `mc-world-tools` lib tests (nextest `ci` profile,
-   which excludes a fixed list of tests that were
-   slow in one old run) on `macos-15` with the 26.3 content cache. Pass = a
-   green run whose log prints the candidate SHA; save the log under
-   `.analysis/releases/<tag>/`, then `git push origin --delete rc-check/<tag>`.
-   This covers core tests only; the notes must not claim a macOS client or
-   package run.
-3. **Siblings first.** Rebuild every shipped `plugin.wasm` against the current
-   WIT. Commit and push `krasnokamen-default-plugins` and `krasnokamen-loader` before
-   core, then update `KRASNOKAMEN_PLUGINS_REVISION` / `KRASNOKAMEN_LOADER_REVISION` in
-   `.github/workflows/ci.yml`. At every RC bring each sibling's local `main` up
-   to the line that ships (owner, 2026-11-07: the client's local `main` had
-   fallen 150 commits behind `pauline/client-next`), and run `tools/dev/wt-gc`
-   to list dirty or unmerged worktrees older than a week.
-4. **Upgrade traps.** Diff between the previous tag and this one:
-   `REQUIRED_FILES` / `REQUIRED_REGISTRY_PAYLOAD_DIR` in
-   `crates/mc-edge/src/content_cache.rs` (an old cache then fails at startup
-   with "no vanilla content cache found": re-import) and `WORLDGEN_REVISION` in
-   `crates/mc-worldgen/src/lib.rs` (startup fails with "identity mismatch: world
-   was generated with worldgen revision N": run `krasnokamen world
-   upgrade-worldgen --config <cfg>` on the stopped server; existing chunks stay
-   as generated). Put both steps in the release notes; singleplayer worlds
-   need the same upgrade. A content-cache change also means a new singleplayer
-   content bundle (below). Persisted ids are a third trap: the Krasnokamen
-   rename (`b24f0ce3`) changed the native store tag and every persisted id, so
-   the first release after RC5 refuses RC5 server and singleplayer worlds
-   ("this world was written by a Solaris build from before the Krasnokamen
-   rename"). The notes must give the conversion: stop the RC5 server, run RC5's
-   `world export-anvil` (binary `solaris` in the release archive), then
-   `krasnokamen world import-anvil` into a directory that does not exist yet;
-   conversion loses plugin state, settlements and the block log (see
-   [Native worlds and Anvil interchange](../OPERATING.md#native-worlds-and-anvil-interchange)),
-   keeps pre-rename `solaris:*` entity data unread (`IMPORT-ANVIL-PRE-RENAME-KEYS-IGNORED`),
-   and RC5's export does not work on Windows (`WINDOWS-BACKUP-CONVERSION`).
-5. **Release notes.** `docs/releases/<tag>.md`: CI copies it into every server
-   archive as `CHANGELOG.md` and uses it as the GitHub release body. Include
-   upgrade notes, the first-start `content import ... --download` step and the
-   validation boundary. Before writing QA results into the notes, check each
-   run's attributes in its own receipt, not the agent's summary (an RC4 Windows
-   soak summary implied fresh profiles; only two of three runs had them). Keep
-   a cause "likely" unless the mechanism was instrumented. Before the release
-   review, write `.analysis/releases/<tag>/claims.md`: every claim of the notes
-   with its receipt path and run count. State counts ("3 of 3 runs"), never
-   "always"; a claim about another version ("RC4 behaves the same") needs the
-   same scenario run on that version; an advertised platform without a run is
-   named as not run. (RC5: three of four review rejections were such claims.)
-6. **Receipt.** `.analysis/releases/<tag>/receipt.yaml`: every gate with its
-   receipt path, scope notes and `not_run` items.
-7. **Commit, tag, push** (authorized only). Stage nothing local-only
-   (`.analysis/`, `data/vanilla/`, `versions/`, `libraries/`, `perf.data`, stray
-   `target/`). One Conventional Commit as the owner identity in AGENTS.md;
-   check `git merge-base --is-ancestor origin/main HEAD`; `git tag -a <tag>`;
-   push main and the tag, each command alone with its own exit status. The
-   release job marks `v0.*` tags and any tag containing `-` (such as `-rc.N`)
-   as prereleases. Watch with
-   `gh run watch <run-id> --exit-status` (async, timeout >= 3600).
-8. **Release reviewers** before tagging, even when gates are green: release
-   contents and core state as a whole
-   ([procedure](review-committee-and-breaker.md#release-reviewers-owner-2026-11-07)).
+| Stage | Required proof / action |
+|---|---|
+| Final tree | `run correctness` once after last code change (rerun only a failed test after a fix). Also `run harness-check`, `installer`, `build --release`, `java` (Loader Gradle tests) |
+| Actual clients | `core-client` is chat-only: plugins/economy/Loader need `standard-pack` (also `--real-client`), actual purchase/refund QA, `loader-live` on every advertised platform against frozen server, plus no-Loader refusal. Previously blocked owner case must rerun exact profile/actor/refusal, not a substitute |
+| Clean checkout | Detached release commit, no `data/vanilla`, private target: `cargo check --locked --workspace --all-targets`; then local jar extraction with `tools/extract-vanilla-data.sh` and `run test` to simulate CI. Production/bench registries pass `vanilla_data_dir`; `CoreRegistry::load(None)` is test-only, no compile-time `include_str!` of vanilla data |
+| macOS core | No local Mac: authorized push of candidate to `rc-check/<tag>`, `.github/workflows/rc-check-macos.yml` on `macos-15`, 26.3 cache, nextest `ci` profile (fixed slow-test exclusions), lib tests for `mc-core`, `mc-world`, `mc-world-conversion`, `mc-world-tools`. Pass requires green log printing candidate SHA; save under `.analysis/releases/<tag>/`, then `git push origin --delete rc-check/<tag>`. Not client/package proof |
+| Siblings first | Rebuild shipped `plugin.wasm` against current WIT. Commit/push plugins and Loader before core; update `KRASNOKAMEN_PLUGINS_REVISION` / `KRASNOKAMEN_LOADER_REVISION` in core `.github/workflows/ci.yml`. Every RC brings each local sibling `main` to shipped line and runs read-only `tools/dev/wt-gc` (week-old dirty/unmerged trees); owner 2026-11-07 after client main lagged 150 commits |
+| Receipt | `.analysis/releases/<tag>/receipt.yaml`: every gate's receipt, scope and `not_run`. Reviews saved beside it |
+
+**Upgrade traps: diff previous tag → candidate and document each applicable step.**
+
+| Change | Operator action / limitation |
+|---|---|
+| `REQUIRED_FILES` / `REQUIRED_REGISTRY_PAYLOAD_DIR`, `crates/mc-edge/src/content_cache.rs` | Old cache may fail “no vanilla content cache found”: re-import and republish/re-pin singleplayer content (below) |
+| `WORLDGEN_REVISION`, `crates/mc-worldgen/src/lib.rs` | “identity mismatch: world was generated with worldgen revision N”: stop server, `krasnokamen world upgrade-worldgen --config <cfg>`. Existing chunks retain generation. Singleplayer also needs upgrade |
+| Rename `b24f0ce3` changed store tag/persisted IDs | First post-RC5 release refuses RC5 server and singleplayer worlds (“this world was written by a Solaris build from before the Krasnokamen rename”). Stop RC5, use its archived `solaris world export-anvil`, then `krasnokamen world import-anvil` into a **nonexistent** directory. Loses plugin state/settlements/block log; pre-rename `solaris:*` entity data remains unread (`IMPORT-ANVIL-PRE-RENAME-KEYS-IGNORED`); RC5 export unavailable on Windows (`WINDOWS-BACKUP-CONVERSION`). See [interchange](../OPERATING.md#native-worlds-and-anvil-interchange) |
+
+**Release text:** `docs/releases/<tag>.md` becomes archive `CHANGELOG.md` and
+GitHub body. Include upgrades, first-start `content import ... --download` and
+validation boundaries. Before review write `.analysis/releases/<tag>/claims.md`:
+every note claim → receipt path and run count. Read **each actual receipt**, not
+agent summary (RC4 Windows: only 2/3 runs used fresh profiles). Say “3 of 3”, not
+“always”; uninstrumented causes stay “likely”; another version's equivalence
+needs that same scenario there; unrun platforms say not run (three of four RC5
+review rejections were claim errors).
+
+**Authorized publication, only after reviews:** no local-only `.analysis/`,
+`data/vanilla/`, `versions/`, `libraries/`, `perf.data` or stray targets in staging.
+One Conventional Commit with owner identity from AGENTS;
+`git merge-base --is-ancestor origin/main HEAD`; annotated `git tag -a <tag>`;
+push main and tag as separate commands with separate statuses. CI prereleases
+`v0.*` and tags containing `-` (including `-rc.N`). Watch asynchronously:
+`gh run watch <run-id> --exit-status`, timeout ≥3600 s.
 
 ## A pushed tag whose CI failed
 
-1. Diagnose: `gh run view <run> --json jobs` plus the failed job log (save under
-   `.analysis/releases/<tag>/`); `gh release view <tag>` (not found when publish
-   was skipped).
-2. Fix as one small commit on top of the tagged commit, only what CI needs.
-   Repin the client's `KRASNOKAMEN_REVISION` in its `release.yml` if the core
-   commit changes.
-3. Draft every step (R1 push core main, R2 retag, R3 push client main, R4
-   client tag) with exact command, from/to, fast-forward proof and the current
-   `git ls-remote origin refs/tags/<tag>` object.
-4. Retag with lease: `git tag -f -a <tag> <sha> -m '<same message>'` then
-   `git push --force-with-lease=refs/tags/<tag>:<old object> origin
-   refs/tags/<tag>`. Never force-push without a lease; never revert published
-   refs on your own initiative.
-5. `gh run watch` can exit 1 while the last binary job still runs: re-check
-   `gh run view --json status`. Pass = the publish job succeeded and
-   `gh release view <tag>` lists assets. A client branch push runs no CI
-   (release workflow triggers on tags, PRs and dispatch); verify with
-   `ls-remote`.
-6. After each step append exit codes, run id, conclusion and URLs to the draft,
-   then present the next step. Deployment is a separate approval.
-
-The owner preferred a new tag (for example the next `-rc`) over moving a tag
-that was already pushed and announced. Cancel a broken tag's running CI
-(`gh run cancel`) before it uploads assets.
+1. Save `gh run view <run> --json jobs` and failed log under
+   `.analysis/releases/<tag>/`; inspect `gh release view <tag>` (absent if
+   publication skipped).
+2. Small CI-required fix atop tagged commit; core SHA change also repins client
+   `KRASNOKAMEN_REVISION` in `release.yml`.
+3. Draft exact R1 core-main push, R2 retag, R3 client-main push, R4 client tag:
+   command, from/to, fast-forward proof, current
+   `git ls-remote origin refs/tags/<tag>` object. Owner prefers a **new tag**
+   over moving an announced one; no self-authorized rollback of published refs.
+4. If retag authorized: `git tag -f -a <tag> <sha> -m '<same message>'`, then
+   `git push --force-with-lease=refs/tags/<tag>:<old object> origin refs/tags/<tag>`.
+   Never force without lease. Cancel broken tag's running CI (`gh run cancel`)
+   before asset upload.
+5. Watch may exit 1 while a binary job still runs: inspect
+   `gh run view --json status`. Success means publish job succeeded **and**
+   `gh release view <tag>` lists assets. Client branch push triggers no release
+   CI (tags/PRs/dispatch do); verify branch via `ls-remote`.
+6. Append each command's exit, run ID, conclusion and URLs to draft before
+   presenting next step. Deployment remains separate approval.
 
 ## Client release and the singleplayer content bundle
 
-The client's singleplayer starts a local `krasnokamen`. On first Play the
-launcher downloads the pinned content bundle into
-`<data root>/servers/content/<ver>` and uses it as `vanilla_data_dir`. The
-launcher trusts the bundle by pin and `version.json`, so a bundle the new server
-rejects breaks singleplayer on every fresh install while server tests and
-multiplayer gates stay green (RC2, 2026-10-31: the bundle lacked
-`assets/minecraft/lang/en_us.json`).
+Launcher downloads pinned bundle on first Play into
+`<data root>/servers/content/<ver>` for local `krasnokamen`'s `vanilla_data_dir`.
+Pin + `version.json` trust is not server acceptance: RC2 (2026-10-31) omitted
+`assets/minecraft/lang/en_us.json`, breaking fresh singleplayer despite green
+server/multiplayer tests.
 
-1. **Detect** before tagging client or core: diff `REQUIRED_FILES` between the
-   core tags, download the pinned bundle and run
-   `<new krasnokamen> content verify --cache <extracted>/content`
-   (`--config` needs a full config; `--cache` is the direct form).
-2. **Republish:** start from a complete freshly imported cache; make sure the
-   client's content publish script covers every top-level directory the server
-   requires; seed the output manifest from the **live** manifest so facts and
-   older bundles stay listed; the script runs `content verify` and prints the
-   pins. Upload to the static host's `/srv/static/` (see
-   [test-server operations](test-server-ops.md)): copy bundle and file list,
-   back up the manifest as `krasnokamen-content.json.pre-r<N>`, write the new one to
-   a `.tmp`, `chmod a+r`, `mv` into place, and verify by downloading again.
-3. **Pin** `CONTENT_NAME`/`CONTENT_SHA256` in the launcher (`launcher/src/pins.rs`)
-   and bump the client's `version` (`Cargo.toml`, `launcher/Cargo.toml`, both
-   lock entries). Bump `KRASNOKAMEN_REVISION`/`KRASNOKAMEN_PLUGINS_REVISION` in the
-   client's `release.yml` to the pushed core/plugin commits.
-4. **Prove singleplayer through the packaged client UI**, once on the local
-   package before tagging and once on the downloaded release tarball
-   (`gh release download ...`, `sha256sum -c`): package dir with
-   `krasnokamen-client`, `krasnokamen-launcher`, `krasnokamen` and `plugins/` (the release
-   plugin set); a data root whose `servers/content` is empty so the launcher
-   really downloads; `XDG_DATA_HOME` set. Title, Singleplayer, Create New World
-   twice (creating does not start it), Play Selected World,
-   `minecraft_wait_for_play` in the overworld, screenshot, disconnect back to
-   Title. Assert the language file exists in the installed bundle and
-   `installed.json` lists the new bundle and SHA.
-5. No client release or demo with known bugs (owner, 2026-10-24): a failing
-   minimum gate keeps the GitHub release a draft. Tag the client only after a
-   live chest/inventory smoke; if QA finds a crash, cancel the run and delete
-   the unpublished tag. Name the matching client tag in the core notes.
+1. Before **client or core** tag, diff `REQUIRED_FILES`, download pinned bundle,
+   run `<new krasnokamen> content verify --cache <extracted>/content`;
+   `--config` instead needs full config.
+2. Build from complete fresh import; publish script covers all required
+   top-level dirs, verifies content and prints pins. Seed from **live manifest**
+   to retain facts/older bundles. At static host `/srv/static/`
+   ([operations](test-server-ops.md)): copy bundle + file list, back up manifest
+   as `krasnokamen-content.json.pre-r<N>`, write `.tmp`, `chmod a+r`, atomic `mv`,
+   download again and verify.
+3. Update `CONTENT_NAME`/`CONTENT_SHA256` in `launcher/src/pins.rs`; bump client
+   version in both Cargo manifests and both lock entries; release workflow pins
+   `KRASNOKAMEN_REVISION`/`KRASNOKAMEN_PLUGINS_REVISION` to pushed commits.
+4. **Packaged UI proof twice:** local package before tag, then downloaded release
+   (`gh release download ...`, `sha256sum -c`). Package includes client, launcher,
+   server and released `plugins/`; set `XDG_DATA_HOME`, start with empty
+   `servers/content` to force download. Title → Singleplayer → Create New World
+   twice (creation does not start) → Play Selected World → overworld
+   `minecraft_wait_for_play` → screenshot → disconnect to Title. Verify installed
+   language file and `installed.json` new name/SHA.
+5. Owner 2026-10-24: no client release/demo with known bugs. Failed minimum gate
+   leaves release draft; live chest/inventory smoke precedes tag. QA crash:
+   cancel run and delete **unpublished** tag. Core notes name matching client tag.
 
 ## Loader release
 
-Repository `../solaris-loader` (Gradle, Java 25), in a worktree under `<work>/wt/`.
+`../solaris-loader`, Java 25/Gradle, isolated `<work>/wt/`:
 
-1. Bump the version everywhere: `build.gradle.kts` (`allprojects { version }`),
-   `fabric.mod.json`, Forge `mods.toml`, NeoForge `neoforge.mods.toml`,
-   `LOADER_VERSION` in the loader-core runtime settings, the README download
-   table and the plugin API version it names.
-2. Build and test under the runner:
-   `./gradlew --no-daemon --no-configuration-cache clean :loader-core:test
-   :loader-fabric:test :loader-neoforge:test :loader-forge:test` plus the three
-   `:jar` tasks. Report passed and skipped separately from the XML results.
-3. Real-client gate on all three platforms from the core repo:
-   `run scenario loader-v2-settlements-smoke --platform fabric|neoforge|forge
-   --server-bin <release krasnokamen> --plugins-dir <empty dir>` with
-   `KRASNOKAMEN_LOADER_ROOT=<loader worktree>` and `KRASNOKAMEN_CLIENT_JAR=<client jar
-   for the version>` (without it the Java agent fails to compile). Use
-   `run scenario <id>`: the plain profile rejects `--server-bin`. Forge can time
-   out downloading Mojang assets; one retry is a network retry. Look at a
-   screenshot.
-4. Version-bump traps: mixin crashes appear in `client.log` as
-   `InvalidInjectionException`; check every `@Inject` target with `javap -p`
-   against the new client jar. NeoForge sends serverbound payloads only on
-   channels declared via `minecraft:register`, otherwise
+1. Version everywhere: `build.gradle.kts` allprojects, `fabric.mod.json`,
+   Forge `mods.toml`, NeoForge `neoforge.mods.toml`, runtime `LOADER_VERSION`,
+   README downloads and its plugin API version.
+2. Through runner:
+   `./gradlew --no-daemon --no-configuration-cache clean :loader-core:test :loader-fabric:test :loader-neoforge:test :loader-forge:test`
+   plus three platform `:jar` tasks. XML results report passed/skipped separately.
+3. Core `run scenario loader-v2-settlements-smoke --platform fabric|neoforge|forge
+   --server-bin <release krasnokamen> --plugins-dir <empty dir>`, each platform;
+   `KRASNOKAMEN_LOADER_ROOT=<worktree>`, `KRASNOKAMEN_CLIENT_JAR=<version jar>`
+   (required to compile Java agent). Plain profile rejects `--server-bin`.
+   Forge asset-download timeout may get **one network retry**; inspect screenshot.
+4. Check every mixin `@Inject` target with `javap -p` against the new client jar;
+   `InvalidInjectionException` appears in `client.log`. NeoForge serverbound
+   payloads require `minecraft:register` declaration or
    `Payload krasnokamen:loader/hello may not be sent to the server!`.
-5. Publish (authorized only): fast-forward main, annotated tag `v<ver>`, stage
-   the three jars, `sha256sum ... > SHA256SUMS`, `gh release create v<ver> -R
-   kaiserproger/krasnokamen-loader --verify-tag --prerelease --notes-file NOTES.md
-   <jars> SHA256SUMS`, then download again and `sha256sum -c`. Notes name the
-   platform baselines and the minimum server version per adapter, say the Loader
-   is required only when the server marks a client bundle required, and claim
-   only what the gates covered (Gradle adapters, not every launcher).
+5. Authorized publish: fast-forward main, annotated `v<ver>`, stage three jars,
+   `sha256sum ... > SHA256SUMS`;
+   `gh release create v<ver> -R kaiserproger/krasnokamen-loader --verify-tag --prerelease --notes-file NOTES.md <jars> SHA256SUMS`;
+   download again, `sha256sum -c`. Notes name platform baselines/minimum server
+   per adapter, Loader required only when server marks bundle required, and
+   actual gate scope (Gradle adapters, not every launcher).

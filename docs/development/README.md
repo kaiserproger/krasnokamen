@@ -1,17 +1,16 @@
 # Development playbooks
 
-How Krasnokamen is developed on the owner's machine: procedures, pitfalls and
-lessons that used to live only in agent skills, prompts and local memory.
-Rules come first from [AGENTS.md](../../AGENTS.md) (with the verbatim
-[owner contract](owner-contract.md)), the
-[Agent Constitution](../AGENT_CONSTITUTION.md),
-[AGENT_TOOLING.md](../AGENT_TOOLING.md), the
-[break-it QA protocol](../QA_AGENT_PROTOCOL.md) and the
-[definition of done](../DEFINITION_OF_DONE.md); these pages do not restate
-them, they explain how to follow them. When a page here disagrees with those
-documents, those documents win. When an older skill, prompt or note outside
-the repository disagrees with these pages, these pages win: each records the
-newest rule and says what it replaced.
+Procedures for contributors and the owner host. Authority follows
+[AGENTS' precedence order](../../AGENTS.md#which-rule-wins).
+These playbooks explain the [verbatim owner contract](owner-contract.md),
+[Constitution](../AGENT_CONSTITUTION.md), [tooling](../AGENT_TOOLING.md),
+[QA protocol](../QA_AGENT_PROTOCOL.md) and [DoD](../DEFINITION_OF_DONE.md);
+those documents win on disagreement. External skills/prompts/notes do not
+override these pages. Code and observed runtime beat stale prose.
+
+Pre-D119 wording and historical examples remain in Git:
+`git show 3a4c0ca007da95b84fdc0bdc0752a8d443d53d61:docs/development/<page>.md`.
+This preserves provenance, not a claim that old local receipts still exist.
 
 ## When to read what
 
@@ -40,8 +39,8 @@ newest rule and says what it replaced.
 
 - `<work>` is the owner host's work root,
   `/run/media/kaiserroman/games/solaris-work` (AGENTS.md), holding the sibling
-  checkouts (`krasnokamen`, `krasnokamen-client`, `krasnokamen-loader`,
-  `krasnokamen-default-plugins`), agent worktrees `wt/`, build outputs `targets/`
+  checkouts (`solaris`, `solaris-client`, `solaris-loader`,
+  `solaris-default-plugins`; host paths retain these names), agent worktrees `wt/`, build outputs `targets/`
   and agent receipts `receipts/`. Pages written for the owner host say so;
   elsewhere use your own paths.
 - Developer scripts are tracked under `tools/dev/` (the runner `mem-run.sh`, its

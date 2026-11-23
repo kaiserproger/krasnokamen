@@ -1,187 +1,112 @@
 # Adding a vanilla gameplay feature
 
-This is a navigation path for a gameplay change, not proof of parity. Start
-with [the architecture](../ARCHITECTURE.md), the relevant native owner and
-[Definition of Done](../DEFINITION_OF_DONE.md). Confirm the intended behaviour
-and vanilla facts from the appropriate local oracle before implementing it.
-Do not infer packet IDs or field layouts from memory.
+Start with [architecture](../ARCHITECTURE.md), the native owner and
+[DoD](../DEFINITION_OF_DONE.md). Establish intended vanilla behavior from the
+appropriate local oracle; never infer packet IDs/layouts from memory.
+This route is not parity evidence; [historical wording](README.md) remains in Git.
 
 ## Open transitions
 
-[STATUS](../STATUS.md#open-transitions) lists every transition in flight whose
-target the owner has decided: what replaces what, the evidence, and when the
-old side is deleted. Before changing an area, look for its row. This covers
-every area of the repository, the harness and tools included, not only
-gameplay.
+[STATUS](../STATUS.md#open-transitions) owns decided transitions: replacement,
+evidence and deletion boundary. Check the touched area's row—including tools
+and harness—before editing.
 
-- Fixes and changes required on a currently supported surface are always
-  allowed, including on the old side of a transition (26.1.2 support, for
-  example, is a standing contract, not a transition).
-- What the row stops is building new features or new mechanisms on the old
-  side of a decided transition: a change in that area moves it forward, or
-  at least adds no new caller, case or copy of the old mechanism.
-- No new transition starts in an area that already has one open. Finish it,
-  drop it, or get the owner's decision first.
-- A change that opens a transition adds its row to STATUS in the same change.
-- Finishing a transition deletes the old side in the same change (code, config,
-  tests, docs) and deletes its row.
+- Fixes and changes required on supported surfaces are always allowed, even on
+  an old side; 26.1.2 support is a standing contract, not a transition.
+- No new feature/mechanism on the old side: advance the transition or add no
+  old caller/case/copy. Do not open another transition there until finishing,
+  dropping or obtaining the owner's decision.
+- Opening a transition adds its STATUS row in the same change; finishing
+  deletes old code/config/tests/docs and the row together.
 
 ### Mechanisms, not code
 
-The rules above are about *mechanisms*: parallel infrastructure or authority
-for one responsibility (pinning, server launch, persistence paths, observers,
-config). Unify those. Duplicated *code* at call sites is fine, and preferred
-to the wrong abstraction ([Metz](https://sandimetz.com/blog/2016/1/20/the-wrong-abstraction)).
-A parameter that carries a fact of the shared semantics (environment state, a
-game rule, input data, as in `Vitals::tick(eye_in_water, can_drown, ...)`) is
-fine. If a new caller needs a mode, flag or boolean that makes the shared
-function do something different for that caller, or a caller-specific branch,
-the abstraction is wrong: inline the shared code into its callers and delete
-the part each caller does not use. The fastest way forward is back, and how
-much the shared code cost or how complex it has grown is no reason to keep it.
-Never do that to gameplay authority: a rule implemented in two places is
-worse, so split the function by behaviour instead.
+Unify parallel **authority/infrastructure** (pinning, launch, storage, observers,
+config), not all repeated call-site code. Repetition beats a
+[wrong abstraction](https://sandimetz.com/blog/2016/1/20/the-wrong-abstraction).
+Shared semantic facts are legitimate parameters (`Vitals::tick(eye_in_water,
+can_drown, ...)`); caller-specific flags/modes/branches are not. Inline such
+shared code into callers and remove unused parts, regardless of sunk cost.
+**Never duplicate gameplay authority**: split that function by behavior instead.
 
 ## New features are modules
 
-Owner rule, 2026-11-16 (`receipts/Stage3/OWNER-RULE-MODULAR-NEW-FEATURES-20261116.md`):
-every new feature is built as its own module now. Existing code moves along the
-cycle-cut plan of [ADR 0021](../decisions/0021-build-time-and-crate-split.md)
-with byte-exact moves; before the 21 November announcement only once the current
-release tasks are closed, otherwise after (owner, 2026-11-17). Fixes to existing
-code stay where the code is.
+Owner 2026-11-16 (`receipts/Stage3/OWNER-RULE-MODULAR-NEW-FEATURES-20261116.md`):
+new features are modules now; fixes stay with their owner. Existing-code
+cycle-cut moves follow [ADR 0021](../decisions/0021-build-time-and-crate-split.md)
+byte-exactly: before the 21 November announcement only after current release
+tasks close, otherwise afterwards (owner 2026-11-17).
 
-- **Place it.** One module (a file, or a directory with `mod.rs` when it grows)
-  under the host that owns the domain, for example
-  `crates/mc-core/src/settlements/migration.rs`. A feature that needs no
-  `mc-core` internals is its own crate below the core.
-- **Own it.** Its state types, its systems (the functions the tick calls) and
-  its tests (sibling `*_tests.rs`) are inside it. Persisted state goes through
-  the host's existing persistence path; the codec for the feature's rows lives
-  in the feature module.
-- **Narrow interface.** Other code calls a few named functions or a small trait
-  the module exports. The module may use existing core types (`TickState`,
-  entities, settlement records) but adds no ad-hoc `pub(crate)` reach-ins into
-  unrelated modules.
-- **One registration point.** The host module wires it in at one place (its
-  module declaration plus one tick call or one state field), owned by the host.
-  No scattered edits through `tick.rs`, `registry.rs` or other shared files.
-  This keeps the change reviewable and avoids merge conflicts between parallel
-  lanes; it does not break a dependency cycle: host → feature → `TickState` →
-  host is still one cycle.
-- **Cycle size.** Most top-level `mc-core` modules form one strongly connected
-  component. The code-health ratchet
-  ([ADR 0021](../decisions/0021-build-time-and-crate-split.md#cycle-ratchet-implemented-2026-11-07),
-  `crates/xtask/src/code_health/ratchet.rs`) counts the top-level modules in the
-  largest one and fails above its ceiling; it does not enforce individual edges
-  or cycles among submodules. A new feature is either a submodule of its domain
-  host (as `settlements::migration` above), or a new top-level module that
-  nothing in the cycle refers to. A submodule adds no top-level node itself, but
-  its references can pull other top-level modules into the cycle; check that the
-  largest-cycle count does not grow. A new top-level module joins the cycle if
-  the graph detects paths in both directions; the ratchet fails if that puts the
-  count above its ceiling. It cannot see references resolved only through type
-  inference or method resolution.
+| Boundary | Requirement |
+|---|---|
+| Placement | Coherent module under domain host, e.g. `crates/mc-core/src/settlements/migration.rs`; directory + `mod.rs` when needed. Without core-internal dependencies, use a separate crate below core |
+| Ownership | State, tick systems, sibling `*_tests.rs` and feature-row codec inside; persist via host's existing path |
+| Interface | Few named functions/small trait; may use existing `TickState`, entities, settlement records; no ad-hoc `pub(crate)` reach-ins |
+| Registration | One host-owned point (module declaration plus one tick call/state field), not scattered edits in `tick.rs`/`registry.rs`. This limits conflicts; host→feature→TickState→host is still a cycle |
+| Cycle ratchet | `crates/xtask/src/code_health/ratchet.rs` counts top-level modules in the largest SCC, not individual edges or submodule cycles; rejects above ceiling. Most core top-level modules share one SCC. Use a domain submodule or top-level module that nothing in the SCC refers to. A new node joins only when paths exist in both directions; submodule references can still pull other top-level nodes in. Inferred/type-method-resolved references are invisible to the checker |
 
-Checklist for the change and its review: module path and host named; state,
-systems and tests inside; exported interface listed; exactly one registration
-point; `python3 -m tools.harness run code-health` largest-cycle module count not
-higher.
+Review checklist: name module+host, internal state/systems/tests, exported
+interface and single registration point; `python3 -m tools.harness run code-health`
+largest-cycle count must not increase
+([ratchet](../decisions/0021-build-time-and-crate-split.md#cycle-ratchet-implemented-2026-11-07)).
 
 ## New dependencies and components
 
-A new external crate, toolchain or component (nightly Rust, `cargo-component`),
-language or runtime (each layer already has one: Rust for the product, Python
-stdlib for the harness and `tools/dev` with bash only for thin wrappers, Java
-only for client mods and vanilla oracles), persistent format, daemon or
-service, or new required
-prerequisite binary spends one of very few innovation tokens
-([McKinley](https://mcfunley.com/choose-boring-technology)). Before adding one,
-write a short decision record (a new ADR or a section of the owning one) that
-answers:
-
-1. How would we solve this with what we already have?
-2. What exactly makes the current stack prohibitively hard or expensive?
-3. What existing thing does it replace, and what is the commitment and plan to
-   migrate? A replacement is a row in
-   [open transitions](../STATUS.md#open-transitions).
+Existing layers: Rust product; Python stdlib harness/dev tools (Bash thin
+wrappers); Java only mods/oracles. An external crate, toolchain/component
+(nightly, `cargo-component`), language/runtime, persistent format, daemon/service
+or required executable spends one of very few [innovation tokens](https://mcfunley.com/choose-boring-technology).
+Before adding one, an ADR/owning-ADR section must answer:
+1. How can existing tools solve it?
+2. What makes that prohibitively hard/expensive?
+3. What does it replace, with what migration commitment?
+   Replacements also need a [transition row](../STATUS.md#open-transitions).
 
 ## Trace the actual path
 
-For a client-triggered block placement, trace this example end to end:
+Example: client block placement. Unprefixed paths here are relative to
+`crates/mc-core/src/`; paths starting `crates/` are repository-relative.
 
-1. `crates/mc-protocol/src/packets/` defines the wire packets.
-   `crates/mc-edge/src/decode.rs` decodes `ServerboundUseItemOn` into
-   `PlayerInput::UseItemOn`; the edge associates the authenticated connection.
-   If the packet or its encoding changes, check protocol and edge decoding,
-   including the supported-window chain in `crates/mc-edge/src/translation/`.
-2. `crates/mc-core/src/boundary.rs` defines inputs and results. `tick.rs`
-   dispatches into `tick/input/interact.rs` and its `use_item_on` handler.
-   Inspect the handler's other branches before changing a shared action.
-   Other inputs route through `tick/input/{session,movement,combat,inventory,social}.rs`.
-3. Placement planning in `tick/build.rs` and `placement.rs` builds the native
-   decision. `intent.rs` defines `Intent`, `IntentKind` and `Footprint`.
-   Include every precondition, block, item debit and dependent effect in the
-   appropriate atomic decision; check live reach, session and custody.
-4. `tick/merge.rs` sorts and applies intents against accumulated state. A
-   stale footprint must not partially consume resources or apply effects.
-   Plugin build hooks and approval fences, where applicable, must remain intact.
-5. The tick change set feeds native journal construction in `core/journal.rs`
-   and `journal_touched.rs`. Durable changes require the appropriate absolute
-   post-image or tombstone and checkpoint coverage; test restart when storage
-   changes. [Persistence](../architecture/persistence.md) explains the ACK
-   versus fsync distinction and the checkpoint-only motion exception.
-6. `crates/mc-edge/src/plan.rs` and `plan/player_changes.rs` project native
-   changes into client packets. Check correction as well as success: client
-   prediction is not authority, and socket delivery is not durable commit.
+| Stage | Owner and required boundary |
+|---|---|
+| Wire | `crates/mc-protocol/src/packets/`; `crates/mc-edge/src/decode.rs`: `ServerboundUseItemOn` → `PlayerInput::UseItemOn`, authenticated connection association. Encoding changes cover both decoder and supported-window `crates/mc-edge/src/translation/` |
+| Dispatch | `boundary.rs` inputs/results; `tick.rs` → `tick/input/interact.rs::use_item_on`. Inspect other branches of shared actions; other routes: `tick/input/{session,movement,combat,inventory,social}.rs` |
+| Plan | `tick/build.rs`, `placement.rs`; `intent.rs` owns `Intent`, `IntentKind`, `Footprint`. Atomic decision includes preconditions, blocks, debits and dependent effects; validate live reach/session/custody |
+| Merge | `tick/merge.rs` orders/applies against accumulated state; stale footprint cannot partially debit/apply. Preserve plugin build hooks and approval fences |
+| Durability | `core/journal.rs`, `journal_touched.rs`: proper absolute post-image/tombstone and checkpoint coverage; durable changes need restart tests. [Persistence](../architecture/persistence.md) owns ACK versus fsync and checkpoint-only motion |
+| Projection | `crates/mc-edge/src/plan.rs`, `crates/mc-edge/src/plan/player_changes.rs`: success **and correction**. Prediction is not authority; socket delivery is not durable commit |
 
-This chain is an example, not a universal pipeline. Scheduled work need not
-start with a client packet; some input handlers mutate tick-owned state directly,
-and transient state need not create a WAL post-image. Trace the actual owner,
-commit and recovery boundary instead of forcing each change into an `Intent`.
-See [mutation routes](../architecture/mutations.md).
+This is not a universal Intent pipeline: scheduled work may have no packet,
+handlers may directly mutate tick-owned state, transient state need not create
+WAL images. Trace real owner/commit/recovery boundaries
+([mutation routes](../architecture/mutations.md)).
 
 ## Data and commands
 
-`crates/mc-core/src/registry.rs` loads `CoreRegistry`; content and vanilla
-registries are supplied by `mc-data` and the imported content cache. Inspect
-the relevant existing table and loader before adding new data; don't embed
-Mojang content in Git. If startup contributions are needed, inspect
-`crates/mc-core/src/plugin_startup.rs` and existing native contributions,
-for example `settlements/startup.rs`.
-
-For a command, trace `crates/mc-core/src/commands.rs` and
-`command_execution.rs` to the focused native executor. Update the client
-command tree in `crates/mc-edge/src/command_tree.rs` and its subtrees and
-suggestions where appropriate; keep advertised permissions and executable
-paths consistent. Plugin-declared commands have their own admission contract
-in [PLUGINS.md](../PLUGINS.md). An edge tree is presentation, not permission
-to bypass native validation.
+- `crates/mc-core/src/registry.rs` loads `CoreRegistry` from `mc-data`/imported cache.
+  Inspect existing table/loader first; no Mojang content in Git. Native startup
+  contributions: `crates/mc-core/src/plugin_startup.rs`, e.g.
+  `crates/mc-core/src/settlements/startup.rs`.
+- Trace `crates/mc-core/src/{commands,command_execution}.rs` to the focused executor;
+  update `crates/mc-edge/src/command_tree.rs`, subtrees and suggestions as applicable.
+  Advertised permissions and executable paths must agree. Plugin commands use
+  [their admission contract](../PLUGINS.md); edge presentation never bypasses
+  native validation.
 
 ## Regression and acceptance
 
-1. Write a focused regression against the existing real tick path and the
-   intended behaviour. It must go red when only the fix hunks are reverted
-   (negative control); record whether you also saw it fail first. A compile
-   failure or a test that only asserts a helper's own output is not a
-   behavioural reproduction.
-2. Put substantial tests in a focused sibling `*_tests.rs`, following the
-   owning module's existing test registration. For an input action, exercise
-   the actual `PlayerInput` through the tick, and assert resulting state and
-   outgoing corrections. Cover rejected/stale inputs and custody when relevant.
-3. Add restart/recovery coverage for durable changes and protocol/decode tests
-   when those boundaries change. State clearly which tests do not exercise a
-   real client. Run the relevant focused tests and the
-   [L0–L2 levels](../../CONTRIBUTING.md#validation); on the shared owner host
-   wrap heavy commands in the [resource runner](heavy-commands-and-memory.md).
-4. For player-visible changes, run the exact scenario with an actual client
-   under the [real-client gate playbook](real-client-gates.md). A new or changed
-   gate requires a negative control that fails when the feature is absent or
-   broken. Prepared-only, TCP, unit and server-side observation are not a
-   graphical client pass. A previously failed owner scenario remains blocked
-   until the same or stricter real-client scenario passes.
-5. Report the exact commands, evidence and gaps, including oracle, persistence
-   and client scope. Label the result `draft`, `stabilization` or `release-ready`
-   under the [DoD evidence matrix](../DEFINITION_OF_DONE.md); default to
-   `draft` when evidence is missing. Never claim broader parity than the gate
-   actually observed.
+1. Focused behavioral regression through real tick/`PlayerInput`, resulting state
+   **and corrections**, with rejection/staleness/custody where relevant. Fix-only
+   reversal must fail; record observed fail-first, not a gate. Compilation failure
+   or a helper asserting itself is not behavioral reproduction.
+2. Substantial tests go in sibling `*_tests.rs` via existing registration.
+   Durable changes need restart/recovery; wire boundaries need decode/codec tests.
+   Name tests' non-client scope; use [L0–L2](../../CONTRIBUTING.md#validation)
+   under the [owner-host runner](heavy-commands-and-memory.md).
+3. Player-visible changes need the exact [actual-client scenario](real-client-gates.md).
+   New/changed gates need feature-absent/broken negative controls. Prepared-only,
+   TCP, unit and server observation are not graphical acceptance; failed owner
+   cases stay blocked until the same or stricter client scenario passes.
+4. Report commands, evidence and remaining oracle/storage/client gaps. Use DoD
+   `draft` (default if evidence missing), `stabilization`, `release-ready`;
+   claim no more than observed.
