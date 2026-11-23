@@ -1025,6 +1025,14 @@ class TestOnlyEvidenceTests(unittest.TestCase):
             ('mc-edge', 'shared'): ('crates/mc-edge/src/tests.rs', 10),
             ('mc-core', 'shared'): ('crates/mc-core/src/other.rs', 20)})
 
+    def test_hunk_ranges_use_the_pre_image_and_keep_their_context(self):
+        # The applied reversal's - side is the candidate's numbering; context lines count, because a
+        # corrected test may fail on an unchanged neighbour of the hunk (FALLING-TORCH: 346 vs 348).
+        diff = ('diff --git a/x.rs b/x.rs\n--- a/x.rs\n+++ b/x.rs\n'
+                '@@ -10,4 +10,5 @@ fn f() {\n ctx\n-old\n+new\n ctx\n')
+        self.assertEqual(ledger._hunk_old_ranges(diff), {'x.rs': [(10, 13)]})
+        self.assertEqual(ledger._hunk_old_ranges(''), {})
+
     def test_a_setup_unwrap_panic_is_not_an_assertion(self):
         # `#[track_caller]` puts `.unwrap()` at the test's own line; M1/M2 must not count it.
         text = ('        FAIL [   0.123s] mc-edge tests::setup\n'

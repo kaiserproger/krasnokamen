@@ -1014,7 +1014,9 @@ def _hunk_old_ranges(diff):
     A defect-injection control must turn red at the *corrected assertion*. Taking the numbers from
     the recorded patch is wrong: git applies it at an offset once the file has grown, so the ranges
     are read from the diff the reversal actually produced in the control worktree
-    (ReviewD123Harness1, BIOME: the recorded header said 1657, the applied hunk sat at 1978)."""
+    (ReviewD123Harness1, BIOME: the recorded header said 1657, the applied hunk sat at 1978). The
+    diff keeps its context lines: a corrected test may fail on an unchanged neighbour of the hunk
+    (FALLING-TORCH reds at falling_tests.rs:346, its first changed line is 348)."""
     ranges, path = {}, None
     for line in diff.splitlines():
         if line.startswith('diff --git '):
@@ -1748,7 +1750,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
             # the corrected test to go red, so the guard's own direction is proven too.
             # The reversed hunks' line numbers in the candidate come from the reversal just applied,
             # read before the tree is reset for control B (git applies at an offset once a file grows).
-            _, applied = _git(control_dir, 'diff', '-U0', '--no-renames', '--no-color')
+            _, applied = _git(control_dir, 'diff', '--no-renames', '--no-color')
             ranges = _hunk_old_ranges(applied)
             _materialize(root, candidate, tree_now)
             if _git(candidate, 'apply', '--check', '--whitespace=nowarn', '-', stdin=defect, check=False)[0]:
