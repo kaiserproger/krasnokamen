@@ -1497,9 +1497,17 @@ struct SitePass {
     report: site_refusals::Report,
     /// At least one kind's whole sweep still has candidates to examine.
     running: bool,
-    /// Some unfinished sweep already holds a legal candidate, so its cheapest
-    /// lot is worth holding the slot for. An empty sweep never blocks other work.
+    /// A kind whose own sweep ran unfinished in this pass already holds a legal
+    /// candidate, so its cheapest lot is worth holding the slot for. Scoped to
+    /// that same kind: an empty sweep, an invalidated candidate, or a stale
+    /// sweep of another kind (even a now-unfunded one that this pass never
+    /// advanced) never blocks other work.
     waiting: bool,
+    /// This pass really ran the catalog House's sweep (`advance` was called for
+    /// a House kind, whatever it returned). The same catalog House can be
+    /// fetched by the priority scan (physical beds) and then by the ordinary
+    /// funded scan (certificate levels); the later visit owns its final state.
+    house_advanced: bool,
 }
 
 /// Search the funded kinds in priority order over one shared street walk.
@@ -1533,11 +1541,14 @@ fn site_project<'a>(
             report,
             running: false,
             waiting: false,
+            house_advanced: false,
         };
     }
     let mut cursor = start % count;
     let share = attempts / kinds.len().max(1) as u32;
     let mut running = false;
+    let mut waiting = false;
+    let mut house_advanced = false;
     let mut survey = site_refusals::Survey::default();
     for blueprint in kinds {
         let Some(level) = blueprint.level(1) else {
@@ -1563,6 +1574,11 @@ fn site_project<'a>(
             );
         }
         let mut budget = share;
+        // Any outcome below means this pass really walked the kind's sweep; the
+        // flag is about the visit, not about what the walk found.
+        if blueprint.kind == BuildingKind::House {
+            house_advanced = true;
+        }
         match site_refusals::advance(
             state,
             record,
@@ -1575,9 +1591,13 @@ fn site_project<'a>(
             &mut budget,
             &mut report,
         ) {
-            site_refusals::Advance::Incomplete(next) => {
+            site_refusals::Advance::Incomplete { next, holding } => {
                 cursor = next;
                 running = true;
+                // Only this same kind's sweep owns the hold: it advanced
+                // unfinished in this pass and already holds a legal candidate,
+                // so its cheapest lot is decided after the last frontage.
+                waiting |= holding;
             }
             site_refusals::Advance::Empty => {
                 cursor = 0;
@@ -1598,12 +1618,17 @@ fn site_project<'a>(
                     images,
                     &mut report,
                 );
+                // A refused materialization is not an admission: an earlier
+                // kind's unfinished sweep that holds a lot still holds the
+                // slot. A materialized site takes precedence in the planning
+                // pass.
                 return SitePass {
                     site,
                     cursor: 0,
                     report,
-                    running: false,
-                    waiting: false,
+                    running,
+                    waiting,
+                    house_advanced,
                 };
             }
         }
@@ -1613,7 +1638,8 @@ fn site_project<'a>(
         cursor,
         report,
         running,
-        waiting: sweeps.waiting(),
+        waiting,
+        house_advanced,
     }
 }
 
@@ -1737,6 +1763,7 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
                 report: site_refusals::Report::default(),
                 running: false,
                 waiting: false,
+                house_advanced: false,
             },
             |house| {
                 site_project(
@@ -1783,7 +1810,17 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
                     &images,
                 );
                 running |= pass.running;
-                waiting |= pass.waiting;
+                // The priority scan (physical beds) and the ordinary scan
+                // (certificate levels) can fetch the same catalog House in one
+                // pass. When the ordinary pass really walked that sweep again,
+                // its final state owns the House's hold: a completed sweep whose
+                // recheck moved the world carries no hold, and the stale
+                // priority hold must not survive it.
+                if pass.house_advanced {
+                    waiting = pass.waiting;
+                } else {
+                    waiting |= pass.waiting;
+                }
                 funded_site = Some(pass);
             }
         }

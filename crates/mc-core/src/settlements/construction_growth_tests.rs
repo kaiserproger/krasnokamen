@@ -1441,3 +1441,446 @@ fn an_empty_unfinished_sweep_does_not_hold_the_slot() {
     assert!(!project.ordered, "the autonomous planner admitted it");
     assert_eq!(state.block_entities[&(1, 201, 1)].slots, stock);
 }
+
+/// The fixture the sweep-hold pair shares: a standing funded House L1 on open
+/// ground long enough to seed a real incomplete Farm sweep that already holds a
+/// legal candidate, then every other lot column solid so the funded House
+/// search runs wide and finds no best. House L1 and L2 stay paid; the Farm is
+/// funded only while the seed is produced.
+fn sweep_hold_fixture() -> (TickState, SettlementId, BuildingId, site_refusals::Sweeps) {
+    let (mut state, id, builder) = fixture();
+    // A plan wider than one pass's share of candidates.
+    terrain_tests::wide_plan(&mut state);
+    terrain_tests::restore_stock(&mut state);
+    fund(&mut state, "spanish_house", 1);
+    start(&mut state, id, "spanish_house", 1, None);
+    complete(&mut state, id, builder);
+    let house = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    // One bed for two residents: the planner wants another House L1 site,
+    // which it searches wide below, while the standing house's L2 upgrade
+    // stays admissible.
+    let resident = crate::settlements::allocator::tests::villager(&mut state, [1.5, 201.0, 3.5]);
+    let entity = state.entities.body(resident).id;
+    crate::settlements::bind(&mut state, id, entity).unwrap();
+    // The planner itself produces the stale scratch on the open ground: one
+    // examined candidate is enough for the Farm sweep to hold its own best
+    // while the whole sweep stays unfinished.
+    stock_buildings(&mut state, &[("spanish_house", 1), ("farm", 1)]);
+    let seeded = {
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(&state, id);
+        let farm = blueprints::get(&state.registry, "farm").unwrap();
+        let frontages = u32::try_from(
+            layout::Network::for_construction(&state, record)
+                .frontage()
+                .len(),
+        )
+        .unwrap();
+        let mut found = None;
+        for start in 0..frontages.min(256) {
+            let mut sweeps = site_refusals::Sweeps::default();
+            let pass = site_project(
+                &state,
+                record,
+                std::iter::once(farm),
+                &mut sweeps,
+                start,
+                1,
+                &images,
+            );
+            if pass.site.is_none() && pass.running && pass.waiting {
+                found = Some(sweeps);
+                break;
+            }
+        }
+        found.expect("the open ground gives an unfinished Farm sweep holding a candidate")
+    };
+    // Keep the standing house's own footprint and dry Builder approaches; every
+    // other lot column is solid through the terrain window, so the funded
+    // House search walks every frontage and finds no best.
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    for x in -48..64 {
+        for z in -48..64 {
+            if layout::cell(anchor, x, z) == layout::Cell::Lot
+                && !((0..17).contains(&x) && (0..14).contains(&z))
+            {
+                for y in 201..=250 {
+                    state.world.set_block(x, y, z, state.registry.states.stone);
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+    // House L1 and L2 paid; the Farm is not funded in the plan run.
+    stock_buildings(&mut state, &[("spanish_house", 1), ("spanish_house", 2)]);
+    (state, id, house, seeded)
+}
+
+/// The hold belongs to the kind whose own sweep is still running: a stale
+/// sweep of another, now-unfunded kind that holds a candidate must not starve a
+/// funded House upgrade. The pair differs only in that scratch, and both start
+/// the same L2.
+#[test]
+fn a_stale_unfunded_sweep_does_not_hold_the_slot_for_a_funded_upgrade() {
+    let (mut plain, plain_id, plain_house, _unused) = sweep_hold_fixture();
+    let (mut stale, stale_id, stale_house, seeded) = sweep_hold_fixture();
+    assert!(upgrade_available(&plain, plain_id, plain_house));
+    assert!(upgrade_available(&stale, stale_id, stale_house));
+    // The only difference: the live sweep of a kind this pass never advances.
+    stale.settlements.site_sweep.insert(stale_id, seeded);
+    let plain_started = plan_pass(&mut plain, plain_id, &mut site_turn::SiteBudget::default());
+    let stale_started = plan_pass(&mut stale, stale_id, &mut site_turn::SiteBudget::default());
+    assert_eq!(
+        stale_started, plain_started,
+        "the stale scratch of an unfunded kind changed the planner's decision"
+    );
+    assert!(plain_started, "the funded House upgrade starts");
+    for (state, id, house) in [
+        (&plain, plain_id, plain_house),
+        (&stale, stale_id, stale_house),
+    ] {
+        let project = state
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .expect("the funded House upgrade starts in both runs");
+        assert_eq!(project.blueprint, "spanish_house");
+        assert_eq!(project.level, 2);
+        assert_eq!(project.building, Some(house));
+        assert!(!project.ordered, "the autonomous planner admitted it");
+    }
+}
+
+/// A funded kind whose own sweep ran unfinished this pass and already holds a
+/// legal candidate owns the hold: the slot waits for its cheapest lot.
+#[test]
+fn a_funded_sweep_that_still_holds_a_candidate_keeps_the_slot() {
+    let (mut state, id, _house, seeded) = sweep_hold_fixture();
+    state.settlements.site_sweep.insert(id, seeded);
+    // Fund the Farm again: the stale sweep now belongs to a funded kind.
+    stock_buildings(
+        &mut state,
+        &[("spanish_house", 1), ("spanish_house", 2), ("farm", 1)],
+    );
+    assert!(
+        !plan_pass(&mut state, id, &mut site_turn::SiteBudget::default()),
+        "the funded sweep's own candidate holds the slot"
+    );
+    assert!(state.settlements.get(id).unwrap().projects.is_empty());
+}
+
+/// The priority scan (physical beds) and the ordinary funded scan (certificate
+/// levels) fetch the same catalog House in one planning pass. A long real
+/// planner pass leaves that House sweep unfinished while already holding its
+/// ranked lot; an ordinary pass then finishes the sweep and its recheck finds
+/// the world moved. The ordinary visit owns the final state, so the hold dies
+/// and the funded House L2 upgrade starts.
+fn priority_house_boundary() -> (TickState, SettlementId, BuildingId, site_refusals::Sweeps) {
+    let (mut state, id, builder) = fixture();
+    terrain_tests::wide_plan(&mut state);
+    terrain_tests::restore_stock(&mut state);
+    fund(&mut state, "spanish_house", 1);
+    start(&mut state, id, "spanish_house", 1, None);
+    complete(&mut state, id, builder);
+    let house = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    // One physical bed against two residents and one certificate level: the
+    // priority scan and the ordinary funded scan both fetch this catalog House.
+    let resident = crate::settlements::allocator::tests::villager(&mut state, [1.5, 201.0, 3.5]);
+    let entity = state.entities.body(resident).id;
+    crate::settlements::bind(&mut state, id, entity).unwrap();
+    // The POI scan gates the priority pass; drive its canonical bounded refresh
+    // so it holds a real bed inventory rather than an uninitialized cache.
+    let mut cache = std::mem::take(&mut state.villager_pois);
+    cache.refresh_poi_revisions(&state);
+    state.villager_pois = cache;
+    for _ in 0..64 {
+        if state.villager_pois.pending_chunks.is_empty() {
+            break;
+        }
+        let mut cache = std::mem::take(&mut state.villager_pois);
+        cache.refresh(&state);
+        state.villager_pois = cache;
+    }
+    stock_buildings(&mut state, &[("spanish_house", 1), ("spanish_house", 2)]);
+    // A real planner pass ranks the cheapest legal lot and stops a hundred
+    // candidates short of the street's end: the priority grant (64) keeps it
+    // unfinished and holding, the ordinary grant (64) finishes it.
+    let frontages = u32::try_from(
+        layout::Network::for_construction(&state, state.settlements.get(id).unwrap())
+            .frontage()
+            .len(),
+    )
+    .unwrap();
+    assert!(frontages > 128, "the boundary needs two full site grants");
+    let seeded = {
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(&state, id);
+        let house_blueprint = catalog(&state, record)
+            .find(|blueprint| blueprint.kind == BuildingKind::House)
+            .unwrap();
+        let mut sweeps = site_refusals::Sweeps::default();
+        let pass = site_project(
+            &state,
+            record,
+            std::iter::once(house_blueprint),
+            &mut sweeps,
+            0,
+            frontages - 100,
+            &images,
+        );
+        assert!(
+            pass.site.is_none() && pass.running && pass.waiting,
+            "the long pass leaves the House sweep unfinished while holding its ranked lot"
+        );
+        sweeps
+    };
+    // Keep the standing house's own footprint and dry Builder approaches; every
+    // other lot column is solid, so the ranked lot cannot survive the recheck
+    // and the candidates left to both grants refuse.
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    for x in -48..64 {
+        for z in -48..64 {
+            if layout::cell(anchor, x, z) == layout::Cell::Lot
+                && !((0..17).contains(&x) && (0..14).contains(&z))
+            {
+                for y in 201..=250 {
+                    state.world.set_block(x, y, z, state.registry.states.stone);
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+    (state, id, house, seeded)
+}
+
+#[test]
+fn an_ordinary_revisit_of_the_priority_house_owns_the_hold() {
+    let (mut plain, plain_id, plain_house, _unused) = priority_house_boundary();
+    let (mut stale, stale_id, stale_house, seeded) = priority_house_boundary();
+    for (state, id) in [(&plain, plain_id), (&stale, stale_id)] {
+        let images = executor::source_images(state, id);
+        assert!(
+            priority_house(state, state.settlements.get(id).unwrap(), &images).is_some(),
+            "the priority scan reaches the same catalog House"
+        );
+    }
+    assert!(upgrade_available(&plain, plain_id, plain_house));
+    assert!(upgrade_available(&stale, stale_id, stale_house));
+    stale.settlements.site_sweep.insert(stale_id, seeded);
+    let plain_started = plan_pass(&mut plain, plain_id, &mut site_turn::SiteBudget::default());
+    let stale_started = plan_pass(&mut stale, stale_id, &mut site_turn::SiteBudget::default());
+    assert_eq!(
+        stale_started, plain_started,
+        "the ordinary pass's finished, moved sweep must not leave the priority hold standing"
+    );
+    assert!(plain_started, "the funded House upgrade starts");
+    for (state, id, house) in [
+        (&plain, plain_id, plain_house),
+        (&stale, stale_id, stale_house),
+    ] {
+        let project = state
+            .settlements
+            .get(id)
+            .unwrap()
+            .projects
+            .first()
+            .expect("the funded House upgrade starts in both runs");
+        assert_eq!(project.blueprint, "spanish_house");
+        assert_eq!(project.level, 2);
+        assert_eq!(project.building, Some(house));
+        assert!(!project.ordered, "the autonomous planner admitted it");
+    }
+}
+
+/// The terrace fixture: a one-step avenue that climbs past the bell's elevation
+/// band and a flat, fully supported terrace whose village corridor has no
+/// bell-band support. A natural tree on the winning lot then makes the
+/// preparation refuse, while `check` still accepts the lot.
+fn terrace_fixture() -> (TickState, SettlementId, BuildingId, site_refusals::Sweeps) {
+    let (mut state, id, builder) = fixture();
+    terrain_tests::wide_plan(&mut state);
+    terrain_tests::restore_stock(&mut state);
+    fund(&mut state, "spanish_house", 1);
+    start(&mut state, id, "spanish_house", 1, None);
+    complete(&mut state, id, builder);
+    let house = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    // Two residents, one certificate level: the House is a funded kind, and a
+    // second resident keeps the L2 upgrade admissible.
+    let resident = crate::settlements::allocator::tests::villager(&mut state, [1.5, 201.0, 3.5]);
+    let entity = state.entities.body(resident).id;
+    crate::settlements::bind(&mut state, id, entity).unwrap();
+    stock_buildings(
+        &mut state,
+        &[("spanish_house", 1), ("spanish_house", 2), ("farm", 1)],
+    );
+    let stone = state.registry.states.stone;
+    let air = state.registry.states.air;
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    // Seal every other lot, keeping the standing footprint and the stock
+    // chest's column clear.
+    for x in -48..64 {
+        for z in -48..64 {
+            if layout::cell(anchor, x, z) == layout::Cell::Lot
+                && !((0..17).contains(&x) && (0..14).contains(&z))
+            {
+                for y in 201..=250 {
+                    state.world.set_block(x, y, z, stone);
+                }
+            }
+        }
+    }
+    // The avenue climbs one block per column to y = 216, past the bell's band.
+    for x in 9..=24 {
+        for z in 7..=9 {
+            for y in 201..=200 + (x - 8) {
+                state.world.set_block(x, y, z, stone);
+            }
+        }
+    }
+    // A flat, fully supported terrace next to the avenue's top: flat ground
+    // needs no ramp, so `check` accepts the lot; the village corridor's own
+    // bell-band discovery still finds no support at this height.
+    for x in 24..=46 {
+        for z in 4..=22 {
+            for y in 201..=216 {
+                state.world.set_block(x, y, z, stone);
+            }
+            for y in 217..=250 {
+                state.world.set_block(x, y, z, air);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let farm = blueprints::get(&state.registry, "farm").unwrap();
+    // The planner itself says where the Farm's only legal lot is; a natural
+    // tree inside that footprint, away from its door line, is what turns the
+    // corridor's empty preparation into a refusal.
+    let winner = {
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(&state, id);
+        let mut sweeps = site_refusals::Sweeps::default();
+        site_project(
+            &state,
+            record,
+            std::iter::once(farm),
+            &mut sweeps,
+            0,
+            u32::MAX,
+            &images,
+        )
+        .site
+        .map(|site| site.project.origin)
+    }
+    .expect("the terrace gives the funded Farm one legal lot");
+    let [ox, oy, oz] = winner;
+    let log =
+        crate::settlements::allocator::tests::block(&state, "minecraft:oak_log", &[("axis", "y")]);
+    let leaves = crate::settlements::allocator::tests::block(
+        &state,
+        "minecraft:oak_leaves",
+        &[("persistent", "false")],
+    );
+    for y in oy + 1..=oy + 4 {
+        state.world.set_block(ox + 2, y, oz + 2, log);
+    }
+    for x in ox + 1..=ox + 3 {
+        for z in oz + 1..=oz + 3 {
+            state.world.set_block(x, oy + 5, z, leaves);
+        }
+    }
+    state.world.fold_overlay();
+    // Real passes seed both live sweeps: the House keeps an unfinished sweep
+    // that already holds its ranked lot, and the Farm stops a few candidates
+    // short of the end of the street so this pass completes it.
+    let frontages = u32::try_from(
+        layout::Network::for_construction(&state, state.settlements.get(id).unwrap())
+            .frontage()
+            .len(),
+    )
+    .unwrap();
+    assert!(
+        frontages > 208,
+        "the terrace needs a street longer than two site grants: {frontages} frontages"
+    );
+    let house_blueprint = catalog(&state, state.settlements.get(id).unwrap())
+        .find(|blueprint| blueprint.kind == BuildingKind::House)
+        .unwrap();
+    let mut sweeps = site_refusals::Sweeps::default();
+    let house_seed = {
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(&state, id);
+        site_project(
+            &state,
+            record,
+            std::iter::once(house_blueprint),
+            &mut sweeps,
+            0,
+            frontages - 200,
+            &images,
+        )
+    };
+    assert!(
+        house_seed.site.is_none() && house_seed.running && house_seed.waiting,
+        "the House sweep stays unfinished while holding its ranked lot"
+    );
+    let farm_seed = {
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(&state, id);
+        site_project(
+            &state,
+            record,
+            std::iter::once(farm),
+            &mut sweeps,
+            0,
+            frontages - 8,
+            &images,
+        )
+    };
+    assert!(
+        farm_seed.site.is_none() && farm_seed.running && farm_seed.waiting,
+        "the Farm sweep stops just short of completing with its ranked lot"
+    );
+    (state, id, house, sweeps)
+}
+
+/// A funded later kind can win its sweep and still fail materialization (the
+/// terrace lot's village corridor has no bell-band support and a natural tree
+/// stands on it). That refusal must not release the earlier House sweep's own
+/// hold in the same pass, so the funded L2 upgrade still waits.
+#[test]
+fn a_refused_materialization_keeps_the_earlier_hold() {
+    let (mut state, id, house, seeded) = terrace_fixture();
+    assert!(upgrade_available(&state, id, house));
+    state.settlements.site_sweep.insert(id, seeded);
+    assert!(
+        !plan_pass(&mut state, id, &mut site_turn::SiteBudget::default()),
+        "the funded sweep's refusal is not an admission"
+    );
+    assert!(
+        state.settlements.get(id).unwrap().projects.is_empty(),
+        "the House sweep's own hold survives the later kind's refused materialization"
+    );
+}
