@@ -253,6 +253,31 @@ def check_gait_spider(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("spider_unobstructed", obstruction <= 100)
 
 
+def check_elytra(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-15: a worn elytra draws its wings on the third-person avatar's back."""
+    shots = _qa._load_shots(probe, artifact, ("back-plain", "back-elytra", "back-none", "back-chestplate"))
+    ref = shots["back-plain"][0]
+    for name in ("back-elytra", "back-none", "back-chestplate"):
+        frame = shots[name][0]
+        probe.check(f"{name}_camera_unchanged", all(
+            abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+        ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    # The avatar's upper back at the fixed third-person camera. `back-none` is the same player
+    # with an empty chest slot, so only the worn layer differs; idle arm motion stays under 2000 px.
+    box = (556, 296, 724, 476)
+    elytra = _changed(shots["back-elytra"][1], shots["back-none"][1], box)
+    idle = _changed(shots["back-plain"][1], shots["back-none"][1], box)
+    chestplate = _changed(shots["back-chestplate"][1], shots["back-none"][1], box)
+    probe.report["elytra_back_roi"] = list(box)
+    probe.report["elytra_changed_pixels"] = {"elytra": elytra, "idle": idle, "chestplate": chestplate}
+    probe.check("chestplate_back_roi", chestplate > 4000)
+    probe.check("worn_elytra_drawn", elytra > 4000)
+    probe.check("idle_back_motion_bounded", idle < 2500)
+    probe.report["visual_review_required"] = [
+        "Inspect back-plain/back-elytra/back-chestplate; pixel change proves a layer was drawn, not vanilla wing shape."
+    ]
+
+
 def check_player_head(probe: ProbeSteps, artifact: Path) -> None:
     """Placed/worn offline heads and the contrasting authored hat layer."""
     shots = _qa._load_shots(probe, artifact, ("head-empty", "head-block", "head-worn", "head-none"))

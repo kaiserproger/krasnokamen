@@ -678,6 +678,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="checks the received hotbar/durability observation and the framed shot",
         limits="one fixture and one camera per shot; the visual review of each frame stays with the operator",
     ),
+    "native-elytra": _entry(
+        id="native-elytra", summary="A worn elytra draws its wings on the third-person avatar's back",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-elytra", requires=("xvfb",),
+        sources=("tools/harness/elytra_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, one player in third person with an elytra, a netherite chestplate and a bare chest",
+        proves="the elytra frame changes the avatar's upper back against the bare frame while the bare frame stays unchanged",
+        limits="one fixture and one camera; proves a back layer was drawn, not the vanilla wing shape",
+    ),
     "native-shade-override": _entry(
         id="native-shade-override", summary="A block shade override reproduces the 26.3 tint",
         owner="core:harness", evidence="graphical", profile="scene-shot",

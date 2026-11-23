@@ -609,6 +609,43 @@ class PlayerHeadTests(unittest.TestCase):
             self.assertTrue(all("HarnessHat" in command for command in heads))
 
 
+class ElytraTests(unittest.TestCase):
+    class Probe:
+        def __init__(self):
+            self.report = {}
+        def check(self, name, value):
+            if not value:
+                raise AssertionError(name)
+
+    def store_frames(self, root, *, wings=True):
+        from PIL import Image, ImageDraw
+
+        shots = root / "screenshots"
+        shots.mkdir(exist_ok=True)
+        frame = {"gpu_completion": True, "camera_position": [1000.5, 161.62, 1005.5], "yaw": 0, "pitch": 0}
+        for name in ("back-plain", "back-elytra", "back-none", "back-chestplate"):
+            image = Image.new("RGB", scene_shot.WINDOW, (70, 70, 70))
+            draw = ImageDraw.Draw(image)
+            if name == "back-elytra" and wings:
+                draw.rectangle((600, 330, 680, 430), fill=(200, 200, 210))
+            if name == "back-chestplate":
+                draw.rectangle((610, 340, 670, 420), fill=(90, 90, 100))
+            image.save(shots / f"{name}.png")
+            (shots / f"{name}.json").write_text(json.dumps(frame))
+
+    def test_worn_elytra_layer_is_required_on_the_back_roi(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.store_frames(root)
+            probe = self.Probe()
+            scene_shot.check_elytra(probe, root)
+            self.assertGreater(probe.report["elytra_changed_pixels"]["elytra"], 4000)
+            self.assertEqual(probe.report["elytra_changed_pixels"]["idle"], 0)
+            self.store_frames(root, wings=False)
+            with self.assertRaisesRegex(AssertionError, "worn_elytra_drawn"):
+                scene_shot.check_elytra(self.Probe(), root)
+
+
 class WalkCaptureArtifactsTests(unittest.TestCase):
     def test_each_retry_owns_an_artifact_and_misses_are_bounded(self):
         spec = {"name": "walk", "entity_type": "minecraft:zombie", "phase": 1.5,

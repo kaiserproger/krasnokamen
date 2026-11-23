@@ -24,7 +24,7 @@ from .gameplay import prepare_operator_fixture
 from .probe_steps import ProbeSteps
 from . import scene_shot as _qa
 from .scene_shot_checks import (
-    check_263_entity_rigs, check_dynamic_context, check_entity_visuals, check_gait_spider,
+    check_263_entity_rigs, check_dynamic_context, check_elytra, check_entity_visuals, check_gait_spider,
     check_item_bars, check_player_head, check_shade_override, check_shelf_clock,
     player_head_skin_pack,
 )
@@ -46,6 +46,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-263-entity-rigs": "entity_263_rigs_scene.json",
         "native-shelf-clock": "shelf_clock_scene.json",
         "native-entity-visuals": "entity_visuals_scene.json",
+        "native-elytra": "elytra_scene.json",
         "native-item-bars": "item_bars_scene.json",
         "native-shade-override": "shade_override_scene.json",
         "native-player-head": "player_head_scene.json",
@@ -324,6 +325,8 @@ def run(
                 check_263_entity_rigs(probe, artifact)
             elif ctx.scenario_id == "native-shelf-clock":
                 check_shelf_clock(probe, artifact)
+            elif ctx.scenario_id == "native-elytra":
+                check_elytra(probe, artifact)
             elif ctx.scenario_id == "native-entity-visuals":
                 check_entity_visuals(probe, artifact)
             elif ctx.scenario_id == "native-item-bars":
