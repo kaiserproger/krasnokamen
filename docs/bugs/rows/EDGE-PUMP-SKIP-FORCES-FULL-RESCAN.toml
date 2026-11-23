@@ -1,0 +1,10 @@
+[[bug]]
+id = "EDGE-PUMP-SKIP-FORCES-FULL-RESCAN"
+title = "When the tick pump falls behind, repeated full entity rescans stall viewer updates and admission"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Perf1M R3k-6 leg c: tick 73449 at 26 viewers rose from 3 to 26 full rescans; in the sustained regime 944 of the next 948 publishes rescanned for every viewer, with median tick delta 7. At the bounded stop only 65/248 had been admitted. In mc-edge, losing a contiguous delivered entity base can force a full per-viewer scan. The recorded timing is diagnostic, not a matched comparison. The isolated candidate 2d4f3a620abe is not integrated; do not close on its focused tests alone."
+repro = "source"
+regression = []
+failing_first = "reported"

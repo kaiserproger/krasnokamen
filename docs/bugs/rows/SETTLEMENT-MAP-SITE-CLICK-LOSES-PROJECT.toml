@@ -1,0 +1,10 @@
+[[bug]]
+id = "SETTLEMENT-MAP-SITE-CLICK-LOSES-PROJECT"
+title = "Settlement map routes different live construction markers to the same project view"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "D63 DV5: in b4d49f18d804 and current Main, map markers and active project icons route to an aggregate view. On isolated candidate b4d49f18d804-02f507b4, real native ru clicks opened distinct Storage (1/139, 0%) and House (4/249, 1%) cards and returned to the exact map; checkpoint readback agreed. On separate b4d49f18d804-23cb7ab2 with only the selected-card fix reverted, the same test clicked the Storage marker and got both projects in one aggregate dialog, failing the selected-card assertion. Same-pin one-site control failed the two-site assertion. Integrated client and breaker evidence are still pending."
+repro = "client"
+regression = []
+failing_first = "not recorded"

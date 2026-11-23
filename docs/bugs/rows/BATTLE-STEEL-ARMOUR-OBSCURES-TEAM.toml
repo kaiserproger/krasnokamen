@@ -1,0 +1,10 @@
+[[bug]]
+id = "BATTLE-STEEL-ARMOUR-OBSCURES-TEAM"
+title = "Steel armour makes friendly and enemy battle soldiers indistinguishable"
+area = "client"
+severity = "blocker"
+status = "open"
+source = "Owner-played A1 GO-17c-A live Horizon take: the player avatar is visibly red, but neighbouring steel-armoured soldiers of opposing sides blend together in both views. Verify recognizable team accents on the actual red and blue soldiers' armour from the front and rear in the ordinary live battle view, not just on the player avatar or a replay overlay."
+repro = "manual"
+regression = []
+failing_first = "reported"

@@ -1,0 +1,10 @@
+[[bug]]
+id = "SETTLEMENT-LAYOUT-PROJECT-SHOWS-UNKNOWN-BLUEPRINT"
+title = "Settlement construction status shows a built-in layout project as Unknown blueprint"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "D54 retained-world r2 native client result 2315cd2fbc5612e0b23b5557adfb99c3eee6522cb628309a96ea3169b0ef702f, probe event 3092. The Status panel shows Unknown blueprint L1 · Prepared, 0/24 at [91,69,-25]; the stopped audit identifies its active built-in perimeter project."
+repro = "client"
+regression = []
+failing_first = "reported"
