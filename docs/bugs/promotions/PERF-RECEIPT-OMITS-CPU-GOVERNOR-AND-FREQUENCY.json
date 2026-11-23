@@ -1,0 +1,45 @@
+{
+  "id": "PERF-RECEIPT-OMITS-CPU-GOVERNOR-AND-FREQUENCY",
+  "verdict": "promoted",
+  "fix_commit": "patch:a84b5471d975aac297e40566d1db61a8fc40689941d945b79692fad933c8d02c",
+  "fix_commit_full": "patch:a84b5471d975aac297e40566d1db61a8fc40689941d945b79692fad933c8d02c",
+  "promoted_at": "2026-11-23T16:24:45+00:00",
+  "tree_head": "3e8c0c4754142e71df122f976e2ef966acf3b984",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "a84b5471d975aac297e40566d1db61a8fc40689941d945b79692fad933c8d02c",
+  "reversed_files": [
+    "tools/coreperf/profiles.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_cpu_scaling_records_governor_epp_limits_and_frequency_per_cpu": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_receipt_records_the_cpu_clock_state": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/coreperf/test_profiles.py",
+        "line": 1051,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_cpu_scaling_records_governor_epp_limits_and_frequency_per_cpu": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_receipt_records_the_cpu_clock_state": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T162231-ledger-promote-n9k3ap0l"
+}
