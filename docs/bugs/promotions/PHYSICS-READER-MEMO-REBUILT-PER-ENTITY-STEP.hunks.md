@@ -18,7 +18,7 @@ under the reversed `execute`. No other non-test hunk exists in the commit for th
 Proving ref: `cargo:mc-core:tick::system_graph::tests::entity_step_reuses_one_physics_reader_per_lane` —
 1024 admitted rows must construct fewer than 256 readers; the reversed `execute` constructs one per row.
 Also registered and green on both sides:
-`cargo:mc-core:world_tests::physics_reader_matches_direct_reads_across_columns_and_overlay` (the reader's
+`cargo:mc-core:world::world_tests::physics_reader_matches_direct_reads_across_columns_and_overlay` (the reader's
 reads stay exact; it does not discriminate the fix on its own).
 
 `step_entity`'s borrowed row and third parameter are `ENTITY-READ-ROW-248-BYTES-COPIED-PER-ENTITY-TICK`'s

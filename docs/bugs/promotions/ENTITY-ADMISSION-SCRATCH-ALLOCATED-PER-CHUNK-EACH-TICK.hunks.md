@@ -15,10 +15,10 @@ behaviour other than allocating.
 
 Original non-test exclusions, reason (b) — API the kept ref calls: `tick/entity_phase.rs`
 `EntityPhaseScratch.parts` and `tick/entity_phase/prepare.rs`'s `AdmissionPart` type (both added by the same
-commit). `entity_phase_tests::admission_buffers_are_pooled_across_prepares` reads `out.parts`, so reversing
+commit). `tick::entity_phase::entity_phase_tests::admission_buffers_are_pooled_across_prepares` reads `out.parts`, so reversing
 the field or the type stops the control from compiling; they stay.
 
-Proving ref: `cargo:mc-core:entity_phase_tests::admission_buffers_are_pooled_across_prepares` — two
+Proving ref: `cargo:mc-core:tick::entity_phase::entity_phase_tests::admission_buffers_are_pooled_across_prepares` — two
 prepares of an unchanged 64-row population must report the same `kept` data pointers and capacities; the
 reversed prepare allocates a new set and the pointers differ.
 

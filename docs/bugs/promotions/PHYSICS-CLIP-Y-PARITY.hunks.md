@@ -16,7 +16,7 @@ Original non-test exclusions, reason (a) — another row's behaviour: every othe
 kept tests from compiling. Test hunks (`physics_tests.rs`, `entity_phase_tests.rs`,
 `system_graph_tests.rs`, `battle/steering_tests.rs`) stay in the candidate and are not part of the patch.
 
-Proving ref: `cargo:mc-physics:physics_tests::clip_y_snaps_a_body_resting_within_the_contact_tolerance_of_a_face`
+Proving ref: `cargo:mc-physics:tests::clip_y_snaps_a_body_resting_within_the_contact_tolerance_of_a_face` (`lib.rs` mounts the file as `mod tests`)
 (`crates/mc-physics/src/physics_tests.rs`) — a body one ULP inside a floor and a ceiling must be snapped back
 out to the face; the pre-fix `clip_y` skips that face and the assertion fails.
 

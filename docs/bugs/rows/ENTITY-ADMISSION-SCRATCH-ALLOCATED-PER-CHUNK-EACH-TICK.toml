@@ -6,6 +6,6 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "receipts/Books/REPORT-R2.md finding R2-9 (Bakhvalov 8.2 dynamic allocation, 13.4; Drepper 6.4.2; perf). crates/mc-core/src/tick/entity_phase.rs prepare_rows (around :771-800 in the report's tree, let parts: Vec<Admission> at line 800 on main 5bdc02911) allocates kept, specials and resting per chunk and drops them on the tick thread; EntityPhaseScratch (entity_phase.rs:99-108) already exists for reuse and unzip_into_vecs avoids per-chunk row vectors. Verified open on main 5bdc02911. Fix: pool the per-chunk Admission vecs in EntityPhaseScratch sized to the chunk count and reused tick to tick; fence: the concat order must stay slot order (entity_phase.rs:803-810). Measure page-faults and the phase wall time before and after."
-regression = ["cargo:mc-core:entity_phase_tests::admission_buffers_are_pooled_across_prepares"]
+regression = ["cargo:mc-core:tick::entity_phase::entity_phase_tests::admission_buffers_are_pooled_across_prepares"]
 failing_first = "not recorded"
 fix_commit = "patch:835007acecb930cc524689db7a634fdfcc582a1ddedd0cdd6d61261258e57a37"
