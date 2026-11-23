@@ -4,7 +4,13 @@ title = "Baseline gate: plants_tests::native_random_sampler fails on clean base 
 area = "harness"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-BASELINE-RANDOM-SAMPLER"
 regression = ["cargo:mc-core:farming_tests::plants_tests::native_random_sampler_reaches_extra_plants_and_support_cascade", "cargo:mc-core:farming_tests::plants_tests::native_random_sampler_grows_chorus_flowers"]
 fix_commit = "f945cba85234105543de42b37709cf31e8eb253a"
+test_only_fix = true
+control_b_patch = "docs/bugs/test-only/TEST-BASELINE-RANDOM-SAMPLER-defect.patch"
+control_b_sha256 = "b3409bb0d7c54a5bd5f96063fcec742e17c3eedd75b4f18205229533d5dd25da"
+control_a_files = ["crates/mc-core/src/plants_tests.rs"]
+repro_check = "Old oracle (pre-f945cba85) ran exactly 20 ticks and asserted the nether wart reached age 3 on that tick. Vanilla nether wart advances one age per received random tick gated nextInt(10) == 0 (pinned 26.1.2 NetherWartBlock bytecode), so a single fixed tick is an RNG artefact, not the behaviour; the corrected oracle runs one tick at a time up to 200 at random_tick_speed=FAST and asserts maturity, then digs the soul sand and asserts the wart is removed. Evidence: the pinned bytecode gate and plants.rs random_growth -> plant_rules_26_1_2 crop_growth_gate_passes (nether_wart one-in-ten). Control A: the old exact-tick oracle restored fails on current code. Control B: the defect patch makes the nether-wart gate return false so `assert!(grown, \"accelerated wart matures\")` fails; the chorus test in the same file stays green and is not proving."
+promotion = "docs/bugs/promotions/TEST-BASELINE-RANDOM-SAMPLER.json"

@@ -1,0 +1,37 @@
+{
+  "id": "HARNESS-ROUNDTRIP-FORCES-X",
+  "verdict": "promoted",
+  "fix_commit": "patch:54d1444c9d7a0ffdb5869a44ee2c433329d15be38f35e4d0cc58bd8fa58c6d2a",
+  "fix_commit_full": "patch:54d1444c9d7a0ffdb5869a44ee2c433329d15be38f35e4d0cc58bd8fa58c6d2a",
+  "promoted_at": "2026-11-23T19:54:49+00:00",
+  "tree_head": "ff0923fd77976c3f4af4ac63fb83f42597e5ffd4",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "54d1444c9d7a0ffdb5869a44ee2c433329d15be38f35e4d0cc58bd8fa58c6d2a",
+  "reversed_files": [
+    "tools/harness/vanilla_world_roundtrip.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.harness.test_vanilla_world_roundtrip:RoundtripLaneTests.test_commands_use_normal_lane_of_the_canonical_runner": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/harness/test_vanilla_world_roundtrip.py",
+        "line": 44,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_vanilla_world_roundtrip:RoundtripLaneTests.test_commands_use_normal_lane_of_the_canonical_runner": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T195329-ledger-promote-vbp6sk0r"
+}

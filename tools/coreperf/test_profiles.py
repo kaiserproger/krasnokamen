@@ -1011,5 +1011,153 @@ class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIn("holds 19 item entities on the platform", result["error"])
 
 
+class HostReceiptFieldsTests(unittest.TestCase):
+    """The receipt must carry the host state that changes a run's meaning, not just lscpu.
+
+    The three `receipt_records_*` tests are the registered refs: they call the production
+    `host_receipt` on a temporary sysfs/cgroup tree and assert the values it records, so a
+    reversal that drops the wiring fails them at that assertion (a helper-only unit test would
+    merely stop importing, and a shape-only test would pass without any read)."""
+
+    def receipt(self, directory, **roots):
+        with patch.object(profiles.subprocess, 'check_output', return_value='{}'):
+            return profiles.host_receipt(Path(directory), **roots)
+
+    def cgroup_tree(self, directory, files):
+        root = Path(directory)
+        cgroup = root / 'krasnokamen-mem-run-test.scope'
+        cgroup.mkdir()
+        for name, text in files.items():
+            (cgroup / name).write_text(text)
+        procs = root / 'cgroup'
+        procs.write_text(f'0::/{cgroup.name}\n')
+        return root, procs
+
+    def sysfs(self, root: Path, cpus: dict[str, dict[str, str]]) -> None:
+        for name, fields in cpus.items():
+            (root / name / 'cpufreq').mkdir(parents=True)
+            for field, value in fields.items():
+                (root / name / 'cpufreq' / field).write_text(value + '\n')
+
+    def test_receipt_records_the_cpu_clock_state(self):
+        # PERF-RECEIPT-OMITS-CPU-GOVERNOR-AND-FREQUENCY: the receipt carries the real sysfs read.
+        policy = {'scaling_governor': 'powersave', 'energy_performance_preference': 'balance_power',
+                  'scaling_min_freq': '800000', 'scaling_max_freq': '5390000'}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.sysfs(root, {'cpu0': {**policy, 'cpuinfo_cur_freq': '3100000'},
+                              'cpu1': {**policy, 'cpuinfo_cur_freq': '4600000'}})
+            receipt = self.receipt(directory, cpu_root=root)
+        self.assertIn('cpu_scaling', receipt)
+        self.assertEqual(receipt['cpu_scaling']['policies']['cpu0']['scaling_governor'], 'powersave')
+        self.assertEqual(receipt['cpu_scaling']['policies']['cpu1']['energy_performance_preference'],
+                         'balance_power')
+        self.assertEqual(receipt['cpu_scaling']['distinct']['cpuinfo_cur_freq'], ['3100000', '4600000'])
+
+    def test_receipt_records_cgroup_cpu_throttling(self):
+        # PERF-RECEIPT-OMITS-CPU-SATURATION: nr_throttled/throttled_usec beside usage_usec.
+        with tempfile.TemporaryDirectory() as directory:
+            root, procs = self.cgroup_tree(directory, {'cpu.stat': (
+                'usage_usec 123456\nuser_usec 100\nsystem_usec 50\nnr_periods 900\n'
+                'nr_throttled 17\nthrottled_usec 4242\n')})
+            receipt = self.receipt(directory, cgroup_root=root, procs=procs)
+        self.assertIn('cgroup_cpu', receipt)
+        self.assertEqual(receipt['cgroup_cpu'],
+                         {'usage_usec': 123456, 'nr_periods': 900, 'nr_throttled': 17,
+                          'throttled_usec': 4242})
+
+    def test_receipt_records_memory_pressure(self):
+        # PERF-RECEIPT-OMITS-MEMORY-PRESSURE: host and cgroup PSI for memory.
+        with tempfile.TemporaryDirectory() as directory:
+            root, procs = self.cgroup_tree(directory, {'memory.pressure': (
+                'some avg10=0.45 avg60=0.10 avg300=0.02 total=987654\n'
+                'full avg10=0.00 avg60=0.00 avg300=0.00 total=12345\n')})
+            host = root / 'pressure.memory'
+            host.write_text('some avg10=1.20 avg60=0.30 avg300=0.05 total=42\n'
+                            'full avg10=0.10 avg60=0.01 avg300=0.00 total=7\n')
+            receipt = self.receipt(directory, cgroup_root=root, procs=procs, host_pressure=host)
+        self.assertIn('memory_pressure', receipt)
+        self.assertEqual(receipt['memory_pressure']['cgroup']['some']['avg10'], 45)
+        self.assertEqual(receipt['memory_pressure']['cgroup']['some']['total'], 987654)
+        self.assertEqual(receipt['memory_pressure']['cgroup']['full']['total'], 12345)
+        self.assertEqual(receipt['memory_pressure']['host']['some']['avg10'], 120)
+        self.assertEqual(receipt['memory_pressure']['host']['full']['total'], 7)
+
+    def test_cpu_scaling_records_governor_epp_limits_and_frequency_per_cpu(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.sysfs(root, {
+                'cpu0': {'scaling_governor': 'powersave', 'energy_performance_preference': 'balance_power',
+                         'scaling_min_freq': '800000', 'scaling_max_freq': '5390000', 'cpuinfo_cur_freq': '3100000'},
+                'cpu1': {'scaling_governor': 'powersave', 'energy_performance_preference': 'balance_power',
+                         'scaling_min_freq': '800000', 'scaling_max_freq': '5390000', 'cpuinfo_cur_freq': '4600000'},
+            })
+            (root / 'cpuidle').mkdir()  # a non-cpu entry is not a policy
+            result = profiles.cpu_scaling(root)
+        self.assertEqual(result['policies']['cpu0']['cpuinfo_cur_freq'], '3100000')
+        self.assertEqual(result['policies']['cpu1']['cpuinfo_cur_freq'], '4600000')
+        self.assertEqual(result['distinct']['scaling_governor'], ['powersave'])
+        self.assertEqual(result['distinct']['cpuinfo_cur_freq'], ['3100000', '4600000'])
+        self.assertNotIn('cpuidle', result['policies'])
+
+    def test_cpu_scaling_without_cpufreq_reports_nothing_instead_of_a_guess(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'cpu0').mkdir()
+            self.assertEqual(profiles.cpu_scaling(root), {'policies': {}, 'distinct': {
+                field: [] for field in ('scaling_governor', 'energy_performance_preference',
+                                        'scaling_min_freq', 'scaling_max_freq', 'cpuinfo_cur_freq')}})
+
+    def test_cgroup_cpu_stat_carries_the_throttle_counters(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cgroup = root / 'krasnokamen-mem-run-test.scope'
+            cgroup.mkdir()
+            (cgroup / 'cpu.stat').write_text(
+                'usage_usec 123456\nuser_usec 100\nsystem_usec 50\nnr_periods 900\n'
+                'nr_throttled 17\nthrottled_usec 4242\n')
+            procs = root / 'cgroup'
+            procs.write_text(f'0::/{cgroup.name}\n')
+            values = profiles.cgroup_cpu_stat(root, procs)
+        self.assertEqual(values, {'usage_usec': 123456, 'nr_periods': 900,
+                                  'nr_throttled': 17, 'throttled_usec': 4242})
+
+    def test_cgroup_cpu_stat_without_a_stat_file_is_empty_not_zero(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            procs = root / 'cgroup'
+            procs.write_text('0::/missing.scope\n')
+            self.assertEqual(profiles.cgroup_cpu_stat(root, procs), {})
+
+    def test_memory_pressure_reads_psi_for_this_cgroup_and_the_host(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cgroup = root / 'krasnokamen-mem-run-test.scope'
+            cgroup.mkdir()
+            (cgroup / 'memory.pressure').write_text(
+                'some avg10=0.45 avg60=0.10 avg300=0.02 total=987654\n'
+                'full avg10=0.00 avg60=0.00 avg300=0.00 total=12345\n')
+            procs = root / 'cgroup'
+            procs.write_text(f'0::/{cgroup.name}\n')
+            host_pressure = root / 'pressure'
+            host_pressure.write_text('some avg10=1.20 avg60=0.30 avg300=0.05 total=42\n'
+                                     'full avg10=0.10 avg60=0.01 avg300=0.00 total=7\n')
+            result = profiles.memory_pressure(root, procs, host_pressure)
+        self.assertEqual(result['host']['some']['avg10'], 120)
+        self.assertEqual(result['host']['some']['total'], 42)
+        self.assertEqual(result['host']['full']['total'], 7)
+        self.assertEqual(result['cgroup']['some']['avg10'], 45)
+        self.assertEqual(result['cgroup']['some']['total'], 987654)
+        self.assertEqual(result['cgroup']['full']['total'], 12345)
+
+    def test_memory_pressure_without_pressure_files_is_empty(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            procs = root / 'cgroup'
+            procs.write_text('0::/missing.scope\n')
+            self.assertEqual(profiles.memory_pressure(root, procs, root / 'absent-pressure'),
+                             {'host': {}, 'cgroup': {}})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,19 @@
+diff --git a/crates/mc-core/src/fluids.rs b/crates/mc-core/src/fluids.rs
+index 084dbc942..7db446218 100644
+--- a/crates/mc-core/src/fluids.rs
++++ b/crates/mc-core/src/fluids.rs
+@@ -615,7 +615,13 @@ fn spread(
+     };
+     let costs = SIDES.map(|step| {
+         let side = offset(pos, step);
+-        if passage(state, pos, side) && spread_into(state, side, fluid).is_some() {
++        // DEFECT INJECTION (docs/bugs/test-only/TEST-BASELINE-WATER-DESCENT-defect.patch):
++        // a neighbour with an open floor is treated as impassable, so water never reaches
++        // the nearest descent.
++        if passage(state, pos, side)
++            && spread_into(state, side, fluid).is_some()
++            && !passage(state, side, offset(side, [0, -1, 0]))
++        {
+             slope_distance(state, side, pos, fluid, 0, limit)
+         } else {
+             u8::MAX

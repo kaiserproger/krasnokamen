@@ -18,8 +18,44 @@ from tools.dev.wtlib import PINS
 from .runtime import REPO_ROOT
 
 REQUIRED = {'id', 'title', 'area', 'repro', 'severity', 'status', 'source', 'regression'}
-OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_proof', 'proving_assertions'}
+OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_proof', 'proving_assertions',
+            # A fix whose every hunk is in test files: the corrected oracle IS the guard. The promotion
+            # runs two controls (docs/bugs/README.md): the pre-fix test hunks restored must go red on
+            # current code, and a committed defect-injection patch must turn the corrected test red.
+            'test_only_fix', 'control_b_patch', 'control_b_sha256', 'control_a_files'}
 PROMOTION_DIR = 'docs/bugs/promotions'
+
+
+def _patch_file(ident):
+    """The committed patch a re-audit passes: fix-patches/ or promotions/, whichever exists."""
+    for rel in (f'docs/bugs/fix-patches/{ident}.patch', f'docs/bugs/promotions/{ident}.patch'):
+        path = REPO_ROOT / rel
+        if path.is_file():
+            return path
+    return None
+
+
+def _patch_reverses(path):
+    """(reverses on HEAD, first error line) for a patch-mode row's committed patch."""
+    import subprocess
+    check = subprocess.run(['git', '-C', str(REPO_ROOT), 'apply', '-R', '--check', '--whitespace=nowarn',
+                            str(path)], capture_output=True, text=True)
+    return check.returncode == 0, (check.stderr.strip().splitlines()[0] if check.stderr.strip() else 'apply --check failed')
+
+
+def _stale_rows(bugs):
+    """[(id, reason)] of patch-mode rows whose committed patch is missing or does not reverse."""
+    stale = []
+    for bug in bugs:
+        fix = bug.get('fix_commit')
+        if not isinstance(fix, str) or not fix.startswith('patch:') or bug['id'] in BASE_FIXED:
+            continue
+        patch = _patch_file(bug['id'])
+        if patch is None:
+            stale.append((bug['id'], 'no committed patch'))
+        elif not _patch_reverses(patch)[0]:
+            stale.append((bug['id'], 'does not reverse'))
+    return sorted(stale)
 
 
 def _promotion_errors(ident, bug):
@@ -27,6 +63,26 @@ def _promotion_errors(ident, bug):
     promotion, fix_commit = bug.get('promotion'), bug.get('fix_commit')
     if 'fix_commit' in bug and (not isinstance(fix_commit, str) or not re.fullmatch(r'(?:client:)?[0-9a-f]{7,40}|patch:[0-9a-f]{64}', fix_commit)):
         return [f'{ident}: fix_commit must be a lowercase hex commit id, client:<commit> or patch:<sha256>']
+    # A patch-mode row whose committed patch is missing or no longer reverses is a REPORT, never an
+    # L2 error: ordinary edits of historical fixes must not turn the gate red (Main B1). Strictness
+    # lives at promote/--dry-run, which require and reverse the patch. run() prints the backlog.
+    # A patch whose bytes are not the ones fix_commit names is a different inconsistency: fatal.
+    if isinstance(fix_commit, str) and fix_commit.startswith('patch:') and ident not in BASE_FIXED:
+        # The digest is the one `ledger promote` records: the *non-test* hunks of the committed file
+        # (a curated --fix-patch may carry a test hunk too). Hashing the raw file would reject rows
+        # promote accepts (Main X1).
+        from . import ledger as ledger_tool
+        patch = _patch_file(ident)
+        if patch is not None:
+            try:
+                hunks, _, _ = ledger_tool._split_non_test(
+                    patch.read_text(errors='surrogateescape'),
+                    lambda path: (REPO_ROOT / path).read_text(errors='surrogateescape'))
+            except Exception:
+                return []  # an unparseable patch is reported by the staleness list, not re-judged here
+            import hashlib
+            if hashlib.sha256(hunks.encode(errors='surrogateescape')).hexdigest() != fix_commit[len('patch:'):]:
+                return [f'{ident}: committed patch non-test hunks differ from fix_commit ({patch.name})']
     if promotion is None:
         if bug.get('status') == 'fixed' and ident not in BASE_FIXED:
             return [f'{ident}: fixed without a promotion receipt; only `python3 -m tools.harness ledger promote` may set fixed']
@@ -41,6 +97,24 @@ def _promotion_errors(ident, bug):
         return [f'{ident}: promotion receipt {promotion} is missing or not JSON']
     if not isinstance(receipt, dict) or receipt.get('id') != ident or receipt.get('verdict') != 'promoted' or not fix_commit or receipt.get('fix_commit') != fix_commit:
         return [f'{ident}: promotion receipt does not match the row id and fix_commit']
+    # A receipt without `control` is the ordinary reversed-fix-hunk promotion; only a test-only row
+    # may carry `test_hunks`, and its control must be the defect patch the row recorded.
+    control = receipt.get('control', 'reversed_fix_hunks')
+    if bug.get('test_only_fix') is True:
+        if control != 'test_hunks':
+            return [f'{ident}: a test_only_fix receipt must record control = test_hunks, not {control!r}']
+        recorded = (receipt.get('control_b') or {}).get('sha256')
+        if not recorded or recorded != bug.get('control_b_sha256'):
+            return [f'{ident}: promotion receipt control_b.sha256 does not match the row control_b_sha256']
+    elif control == 'test_hunks':
+        return [f'{ident}: control = test_hunks on a row without test_only_fix']
+    # 9e: a narrowed row's receipt must show the narrowing it claims: the files control A reversed
+    # are the files the row named, not the whole commit.
+    narrowed = bug.get('control_a_files')
+    if narrowed is not None:
+        reversed_files = receipt.get('reversed_files')
+        if not isinstance(reversed_files, list) or sorted(reversed_files) != sorted(narrowed):
+            return [f'{ident}: control_a_files {sorted(narrowed)} but the receipt reversed {reversed_files}']
     return []
 
 
@@ -595,6 +669,46 @@ def run(ctx, *, cargo_junit: Path | None = None):
                 errors.append(f'{ident}: invalid ingress_proof')
         if 'failing_first' in bug and bug['failing_first'] not in ('not recorded', 'reported'):
             errors.append(f'{ident}: invalid failing_first')
+        test_only = bug.get('test_only_fix')
+        if 'test_only_fix' in bug and test_only is not True:
+            errors.append(f'{ident}: test_only_fix must be the boolean true, never text')
+        if test_only is True:
+            if not bug.get('repro_check'):
+                errors.append(f'{ident}: test_only_fix needs repro_check stating what the old oracle asserted '
+                              'and the independent evidence (data/spec/arithmetic) that the new one is right')
+            if isinstance(bug.get('fix_commit'), str) and bug['fix_commit'].startswith('client:'):
+                errors.append(f'{ident}: test_only_fix is for a committed core fix; a client:<sha> fix has '
+                              'real-client receipts, never a reversed test oracle')
+            defect = bug.get('control_b_patch')
+            if not isinstance(defect, str) or not defect:
+                errors.append(f'{ident}: test_only_fix needs control_b_patch (a committed defect-injection patch)')
+            elif defect.startswith('/') or '..' in defect.split('/'):
+                errors.append(f'{ident}: control_b_patch must be a repo-relative path')
+            else:
+                # The patch is proof only as the committed bytes: the recorded hash is of the
+                # committed file, so an uncommitted edit cannot become the promotion's control.
+                recorded = bug.get('control_b_sha256')
+                if not isinstance(recorded, str) or not re.fullmatch(r'[0-9a-f]{64}', recorded):
+                    errors.append(f'{ident}: test_only_fix needs control_b_sha256, the sha256 of the '
+                                  f'committed {defect}')
+                else:
+                    try:
+                        actual = hashlib.sha256((REPO_ROOT / defect).read_bytes()).hexdigest()
+                    except OSError:
+                        errors.append(f'{ident}: control_b_patch {defect} is missing (commit it with the row)')
+                    else:
+                        if actual != recorded:
+                            errors.append(f'{ident}: control_b_sha256 does not match the committed {defect}')
+        if 'control_b_patch' in bug and test_only is not True:
+            errors.append(f'{ident}: control_b_patch is only for a row with test_only_fix = true')
+        if 'control_a_files' in bug:
+            narrowed = bug['control_a_files']
+            if test_only is not True:
+                errors.append(f'{ident}: control_a_files is only for a row with test_only_fix = true')
+            elif (not isinstance(narrowed, list) or not narrowed
+                  or any(not isinstance(path, str) or not path or path.startswith('/') or '..' in path.split('/')
+                         or not re.search(r'\.(?:rs|py)$', path) for path in narrowed)):
+                errors.append(f'{ident}: control_a_files must be a non-empty list of repo-relative .rs/.py paths')
         refs = bug.get('regression')
         if not isinstance(refs, list) or any(not isinstance(ref, str) for ref in refs):
             errors.append(f'{ident}: regression must be a list of check refs')
@@ -625,6 +739,16 @@ def run(ctx, *, cargo_junit: Path | None = None):
             errors.append(f'{ident}: a command repro needs a cargo check through the same command path')
     statuses = {b['id']: b.get('status') for b in bugs if isinstance(b, dict) and isinstance(b.get('id'), str)}
     errors.extend(f'{ident}: reopened row is still in BASE_FIXED; remove it from ledger_base_fixed.py' for ident in sorted(BASE_FIXED) if statuses.get(ident) == 'open')
+    stale = _stale_rows([bug for bug in bugs if isinstance(bug, dict) and isinstance(bug.get('id'), str)])
+    if stale:
+        # Report only: L2 must not fail because a historical fix's hunks were later rewritten.
+        missing = sum(1 for _, reason in stale if reason == 'no committed patch')
+        print(f'[regressions] stale patch-mode receipts: {len(stale)}, {missing} without patch', flush=True)
+        try:
+            (ctx.artifact_dir / 'stale-patch-mode.txt').write_text(
+                ''.join(f'{ident}\t{reason}\n' for ident, reason in stale))
+        except OSError:
+            pass
     fixed = sum(isinstance(b, dict) and b.get('status') == 'fixed' for b in bugs)
     print(f'[regressions] open={len(bugs)-fixed} fixed={fixed}', flush=True)
     if errors:
@@ -637,7 +761,8 @@ def run(ctx, *, cargo_junit: Path | None = None):
         if refs:
             results = execute(ctx, set(refs), REPO_ROOT)
             for test, ids in refs.items():
-                state, detail = results.get(test, (ledger_tool.UNRUNNABLE, 'no result'))
+                entry = results.get(test, (ledger_tool.UNRUNNABLE, 'no result'))
+                state, detail = entry[0], entry[1]
                 if state != ledger_tool.GREEN:
                     failures.append(f"{', '.join(sorted(ids))}: {test}: {state}: {detail}")
     if cargo and cargo_junit is not None:

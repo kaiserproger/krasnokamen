@@ -1,0 +1,13 @@
+diff --git a/tools/dev/perf-window.sh b/tools/dev/perf-window.sh
+index 4bb3cda48..6f7f8807c 100755
+--- a/tools/dev/perf-window.sh
++++ b/tools/dev/perf-window.sh
+@@ -47,7 +47,7 @@ command -v perf >/dev/null || { echo "perf-window: perf not found" >&2; exit 2;
+ # advertises: `perf stat -e l2_misses.all -- true` refuses it as unknown, while
+ # `l2_cache_req_stat.ls_rd_blk_c` is `data cache request miss in L2` (perf list). The LLC number is
+ # `ls_dmnd_fills_from_sys.all`; the two L2 counters are context for it, never a substitute.
+-events=(cache-references cache-misses cycles instructions)
++events=(ls_dmnd_fills_from_sys.all l2_request_g1.all l2_cache_req_stat.ls_rd_blk_c cycles instructions)
+ mmap_pages=${PERF_WINDOW_MMAP_PAGES:-16}
+ mkdir -p "$out"
+ 

@@ -1,0 +1,59 @@
+{
+  "id": "PERF-RECEIPT-OMITS-CPU-SATURATION",
+  "verdict": "promoted",
+  "fix_commit": "patch:c3dd61d2d25f47ceda52550f6c596b560bb6527d0772723a7111dfec9df19a4e",
+  "fix_commit_full": "patch:c3dd61d2d25f47ceda52550f6c596b560bb6527d0772723a7111dfec9df19a4e",
+  "promoted_at": "2026-11-23T18:02:43+00:00",
+  "tree_head": "05836a269e24f53778bf480af4fb2ec9a695348e",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "c3dd61d2d25f47ceda52550f6c596b560bb6527d0772723a7111dfec9df19a4e",
+  "reversed_files": [
+    "crates/mc-edge/src/host_telemetry.rs",
+    "tools/coreperf/profiles.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:host_telemetry::host_telemetry_tests::sampler_reads_the_throttle_counters_from_the_cgroup_fixture": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/host_telemetry_tests.rs",
+        "line": 137,
+        "error": "panic"
+      }
+    },
+    "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_cgroup_cpu_stat_carries_the_throttle_counters": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_receipt_records_cgroup_cpu_throttling": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/coreperf/test_profiles.py",
+        "line": 1064,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:host_telemetry::host_telemetry_tests::sampler_reads_the_throttle_counters_from_the_cgroup_fixture": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_cgroup_cpu_stat_carries_the_throttle_counters": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_receipt_records_cgroup_cpu_throttling": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T175519-ledger-promote-8l977xd3"
+}

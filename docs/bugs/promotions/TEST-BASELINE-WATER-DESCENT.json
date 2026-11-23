@@ -1,0 +1,56 @@
+{
+  "id": "TEST-BASELINE-WATER-DESCENT",
+  "verdict": "promoted",
+  "fix_commit": "f945cba85234105543de42b37709cf31e8eb253a",
+  "fix_commit_full": "f945cba85234105543de42b37709cf31e8eb253a",
+  "promoted_at": "2026-11-23T21:22:16+00:00",
+  "tree_head": "90bf7598a4e76b13fee3b563c5cde1b819a59b37",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "test_hunks",
+  "control_b": {
+    "patch": "docs/bugs/test-only/TEST-BASELINE-WATER-DESCENT-defect.patch",
+    "sha256": "16944d451310e0a4f80cde825d0a74758119be608577e0aef271315c90c6c3c2",
+    "proving": [
+      "cargo:mc-core:fluids_tests::parity::physics_water_selects_nearest_descent"
+    ],
+    "negative_control": {
+      "cargo:mc-core:fluids_tests::parity::physics_water_selects_nearest_descent": {
+        "state": "red",
+        "detail": "FAIL",
+        "assertion": {
+          "file": "crates/mc-core/src/fluid_parity_tests.rs",
+          "line": 85,
+          "error": "panic",
+          "class": "assertion"
+        }
+      }
+    }
+  },
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/fluid_parity_tests.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:fluids_tests::parity::physics_water_selects_nearest_descent": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/fluid_parity_tests.rs",
+        "line": 82,
+        "error": "panic",
+        "class": "assertion"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-core:fluids_tests::parity::physics_water_selects_nearest_descent": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T211557-ledger-promote-dx096grh"
+}

@@ -127,7 +127,10 @@ def _split_run(ctx: ProfileContext, timeout: float) -> dict[str, Any]:
     if len(legs) != ctx.parts:
         raise ValueError(f"--parts {ctx.parts} must equal the number of legs to run "
                          f"({len(legs)}: {', '.join(legs)}); a leg is one client session")
-    blocks = run_split(ctx, "screens-voice-qa", [SplitPart(leg, {LEG_ENV: leg}) for leg in legs])
+    # The two legs are complete server+client+Xvfb lifetimes; overlapping them exceeded one
+    # 12 GiB mem-run scope (HARNESS-SCREENS-VOICE-PARTS-OOM), so this gate runs them in sequence.
+    blocks = run_split(ctx, "screens-voice-qa", [SplitPart(leg, {LEG_ENV: leg}) for leg in legs],
+                       sequential=True)
     return merge_leg_parts(blocks, legs)
 
 

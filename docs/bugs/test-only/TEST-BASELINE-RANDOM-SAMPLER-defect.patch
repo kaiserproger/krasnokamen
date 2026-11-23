@@ -1,0 +1,15 @@
+diff --git a/crates/mc-world/src/plant_rules_26_1_2.rs b/crates/mc-world/src/plant_rules_26_1_2.rs
+index 565b97d8d..a50af60f3 100644
+--- a/crates/mc-world/src/plant_rules_26_1_2.rs
++++ b/crates/mc-world/src/plant_rules_26_1_2.rs
+@@ -598,7 +598,9 @@ pub fn crop_growth_gate_passes(
+         return false;
+     }
+     match current.block.id.path() {
+-        "nether_wart" => return random_seed.is_multiple_of(10),
++        // DEFECT INJECTION (docs/bugs/test-only/TEST-BASELINE-RANDOM-SAMPLER-defect.patch):
++        // nether wart never passes its one-in-ten random-tick gate.
++        "nether_wart" => return false,
+         "cocoa" => return random_seed.is_multiple_of(5),
+         "sweet_berry_bush" => {
+             return random_seed.is_multiple_of(5)

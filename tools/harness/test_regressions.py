@@ -569,6 +569,715 @@ regression = ["{ref}"]
 {extra}'''
 
 
+class TestOnlyFixTests(unittest.TestCase):
+    """A fix whose every hunk is a corrected test oracle (docs/bugs/README.md, `test_only_fix`).
+
+    The control runs twice: the pre-fix test hunks restored must go red on current code (A), and a
+    committed defect-injection patch must turn the corrected test red (B), so the guard's direction is
+    proven and not merely 'the old assertion was red'. Both reds must be assertion failures inside
+    the changed test file, and the same test must flip in both."""
+
+    OLD = 'class ExampleTests:\n    def test_guard(self):\n        assert value == "old"\n'
+    NEW = 'class ExampleTests:\n    def test_guard(self):\n        assert value == "ok"\n'
+    OTHER = 'class OtherTests:\n    def test_other(self):\n        assert True\n'
+    OTHER_NEW = 'class OtherTests:\n    def test_other(self):\n        assert True  # corrected\n'
+    REF = 'python:tools.harness.test_example:ExampleTests.test_guard'
+    REF_OTHER = 'python:tools.harness.test_other:OtherTests.test_other'
+
+    def git(self, root, *args):
+        return subprocess.run(['git', '-C', str(root), *args], check=True, capture_output=True, text=True,
+                              env={**os.environ, **GIT_ENV}).stdout.strip()
+
+    def defect_diff(self, root, write):
+        """Make `write`'s change, return its diff, then put the tree back."""
+        write()
+        diff = subprocess.run(['git', '-C', str(root), 'diff', '--no-color'], check=True, capture_output=True,
+                              text=True, env={**os.environ, **GIT_ENV}).stdout
+        self.git(root, 'checkout', '--', '.')
+        return diff
+
+    def scratch(self, production_hunk=False, covered=True, defect_text=None,
+                defect_path='docs/bugs/test-only/BUG-defect.patch', write_patch=True,
+                defect=None, later_edit=False, sha_override=None, two_files=False,
+                refs=None, control_a_files=None):
+        """Repo whose fix commit changes only the test oracle, plus a committed defect patch.
+
+        `defect` is a callable(root) -> diff for a case's own mutation (a test-file hunk, docs, a
+        build file); `later_edit` commits another edit to the test file after the fix, so the fix's
+        test hunks no longer reverse onto the candidate (control A cannot run at head)."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name) / 'repo'
+        for part in ('src', 'tools/harness', 'docs/bugs/test-only', 'docs/playable', 'docs/real-client-regression'):
+            (root / part).mkdir(parents=True)
+        self.git(root, 'init', '-q')
+        (root / 'src/engine.rs').write_text('value = ok\n')
+        # Tracked harness inputs and build files: a case may try to inject its defect there.
+        (root / 'Cargo.toml').write_text('[package]\nname = "example"\n')
+        (root / 'docs/playable/real-client-playable-loop.json').write_text('{"steps": []}\n')
+        (root / 'docs/bugs/README.md').write_text('# bugs\n')
+        (root / 'tools/harness/test_example.py').write_text(self.OLD)
+        (root / 'tools/harness/test_other.py').write_text(self.OTHER)
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'base')
+        if covered:
+            (root / 'tools/harness/test_example.py').write_text(self.NEW)
+            if two_files:
+                (root / 'tools/harness/test_other.py').write_text(self.OTHER_NEW)
+        else:
+            # The fix corrects a test in another file than the row's ref names.
+            (root / 'tools/harness/test_other.py').write_text(self.OTHER_NEW)
+        if production_hunk:
+            (root / 'src/engine.rs').write_text('value = ok # touched\n')
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'fix')
+        self.fix = self.git(root, 'rev-parse', 'HEAD')
+        if later_edit:
+            (root / 'tools/harness/test_example.py').write_text(self.NEW + '\n# later\n')
+            self.git(root, 'add', '-A')
+            self.git(root, 'commit', '-qm', 'later edit of the same test file')
+        # The defect the corrected oracle claims to catch: a production behavioural mutation.
+        default = self.defect_diff(root, lambda: (root / 'src/engine.rs').write_text('value = defect\n'))
+        text = defect(root) if defect is not None else default
+        if write_patch:
+            (root / defect_path).write_text(defect_text if defect_text is not None else text)
+        defect_sha = hashlib.sha256((root / defect_path).read_bytes()).hexdigest() if write_patch else None
+        self.git(root, 'add', '-A') if write_patch else None
+        self.git(root, 'commit', '-qm', 'defect patch') if write_patch else None
+        ledger.write_rows(root, f'''[[bug]]
+id = "BUG"
+title = "t"
+area = "harness"
+repro = "source"
+severity = "major"
+status = "open"
+source = "x"
+regression = {json.dumps(refs or [self.REF, self.REF_OTHER])}
+fix_commit = "{self.fix}"
+repro_check = "old oracle asserted value == old; vanilla 26.3 data says ok"
+test_only_fix = true
+control_b_patch = "{defect_path}"
+{("control_a_files = " + json.dumps(control_a_files)) if control_a_files else ""}
+{"" if sha_override else f'control_b_sha256 = "{defect_sha}"' if defect_sha else ""}
+''')
+        if sha_override:
+            ledger.edit(root, 'BUG', [f'control_b_sha256 = "{sha_override}"'])
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'ledger')
+        self.artifacts = Path(directory.name) / 'artifacts'
+        self.artifacts.mkdir()
+        return root
+
+    def runner(self, control_a_red=True, defect_red=True, a_assertion=None, b_assertion=None,
+               b_red_refs=(REF,), b_state=ledger.RED, b_line=3):
+        """The four steps in order: A (old oracle restored), B (defect injected), restore."""
+        seen = []
+
+        def entry(tree, red, assertion_file=None, line=3):
+            if not red:
+                return {'state': ledger.GREEN, 'detail': ''}
+            return {'state': ledger.RED, 'detail': 'test assertion failed',
+                    'assertion': {'file': assertion_file or str(tree / 'tools/harness/test_example.py'),
+                                  'line': line, 'error': 'AssertionError'}}
+
+        def run(_ctx, refs, tree, _client):
+            test = (tree / 'tools/harness/test_example.py').read_text()
+            other = (tree / 'tools/harness/test_other.py').read_text()
+            defect = 'defect' in (tree / 'src/engine.rs').read_text()
+            seen.append({'test': test, 'other': other, 'defect': defect, 'red': defect or '"old"' in test})
+            old_oracle = '"old"' in test
+            out = {}
+            for ref in refs:
+                if not defect:
+                    out[ref] = entry(tree, old_oracle and control_a_red, a_assertion)
+                elif b_state != ledger.RED:
+                    out[ref] = {'state': b_state, 'detail': 'build error'}
+                else:
+                    red = defect_red and ref in b_red_refs
+                    out[ref] = entry(tree, red, b_assertion, b_line)
+            return out
+
+        run.seen = seen
+        return run
+
+    def promote(self, root, runner, **options):
+        return ledger.promote('BUG', root=root, ctx=profiles.ProfileContext(self.artifacts),
+                              runner=runner, **options)
+
+    def test_promotion_runs_the_old_oracle_control_and_the_defect_injection(self):
+        root = self.scratch()
+        runner = self.runner()
+        receipt = self.promote(root, runner)
+        self.assertEqual(receipt['control'], 'test_hunks')
+        self.assertEqual(receipt['control_tree'], 'head')
+        self.assertEqual(receipt['control_b']['patch'], 'docs/bugs/test-only/BUG-defect.patch')
+        self.assertEqual(len(receipt['control_b']['sha256']), 64)
+        self.assertEqual(receipt['control_b']['proving'], [self.REF])
+        self.assertEqual(receipt['control_b']['negative_control'][self.REF]['state'], ledger.RED)
+        self.assertEqual(receipt['negative_control'][self.REF]['state'], ledger.RED)
+        self.assertEqual(receipt['restored'][self.REF]['state'], ledger.GREEN)
+        # A gone: the old oracle, B: the injected defect, restore: the corrected test on current code.
+        self.assertEqual([entry['red'] for entry in runner.seen], [True, True, False])
+        # B ran on the CORRECTED test: the defect injection changes production code, never the test.
+        self.assertEqual(runner.seen[1]['test'], self.NEW)
+        self.assertTrue(runner.seen[1]['defect'])
+        written = next(row for row in ledger.load_rows(root) if row['id'] == 'BUG')
+        self.assertEqual(written['status'], 'fixed')
+
+    def test_a_fix_commit_with_production_hunks_is_refused(self):
+        root = self.scratch(production_hunk=True)
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'src/engine.rs is production code'):
+            self.promote(root, runner)
+        self.assertEqual(runner.seen, [])
+
+    def test_patch_mode_and_the_flag_are_refused(self):
+        root = self.scratch()
+        ledger.edit(root, 'BUG', [f'fix_commit = "patch:{"0" * 64}"'])
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'patch-mode fix')
+        with self.assertRaisesRegex(ledger.Refused, 'test_only_fix is only for a committed fix_commit'):
+            self.promote(root, self.runner(), fix_patch='docs/bugs/test-only/BUG-defect.patch')
+
+    def test_an_old_oracle_that_is_green_on_current_code_is_refused(self):
+        root = self.scratch()
+        runner = self.runner(control_a_red=False)
+        with self.assertRaisesRegex(ledger.Refused, 'did not go red at an assertion'):
+            self.promote(root, runner)
+
+    def test_a_defect_red_outside_the_reversed_hunk_is_refused(self):
+        # ReviewD123Harness1 (BIOME): a red at another assert in the same file proves nothing about
+        # the corrected assertion, so control B's line must lie inside a hunk the fix reversed.
+        root = self.scratch()
+        runner = self.runner(b_line=40)
+        with self.assertRaisesRegex(ledger.Refused, 'inside a hunk the fix reversed'):
+            self.promote(root, runner)
+        self.assertEqual([entry['red'] for entry in runner.seen], [True, True],
+                         'control A ran, then B was judged out of range')
+
+    def test_a_defect_control_that_stays_green_is_refused(self):
+        root = self.scratch()
+        runner = self.runner(defect_red=False)
+        with self.assertRaisesRegex(ledger.Refused, 'defect-injection control.*did not go red at an assertion'):
+            self.promote(root, runner)
+        # Control A still ran and went red at its assertion: the refusal is about B, not about A.
+        self.assertEqual(len(runner.seen), 2)
+        self.assertTrue(runner.seen[0]['red'], 'control A ran with the old oracle')
+        self.assertTrue(runner.seen[1]['defect'], 'control B ran with the defect injected')
+
+    def test_a_missing_defect_patch_is_refused(self):
+        root = self.scratch(write_patch=False)
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'is not committed at HEAD'):
+            self.promote(root, runner)
+        self.assertEqual(runner.seen, [])
+
+    def test_an_uncommitted_defect_patch_is_refused(self):
+        root = self.scratch()
+        (root / 'docs/bugs/test-only/BUG-defect.patch').write_text('uncommitted change\n')
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'worktree copy .* differs from HEAD'):
+            self.promote(root, runner)
+        self.assertEqual(runner.seen, [])
+
+    def test_a_recorded_hash_mismatch_is_refused(self):
+        root = self.scratch(sha_override='0' * 64)
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'control_b_sha256 is'):
+            self.promote(root, runner)
+        self.assertEqual(runner.seen, [])
+
+    def test_a_defect_patch_that_does_not_apply_is_refused(self):
+        text = ('diff --git a/src/engine.rs b/src/engine.rs\n--- a/src/engine.rs\n+++ b/src/engine.rs\n'
+                '@@ -1,1 +1,1 @@\n-value = not this tree\n+value = defect\n')
+        root = self.scratch(defect_text=text)
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'does not apply on the tree being promoted'):
+            self.promote(root, runner)
+
+    def test_refs_that_do_not_run_the_changed_test_file_are_refused(self):
+        root = self.scratch(covered=False)
+        # The fix corrected tools/harness/test_other.py; the row names only the other file's test.
+        ledger.edit(root, 'BUG', [f'regression = ["{self.REF}"]'])
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'row names one file')
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'no ref whose test is defined in tools/harness/test_other.py'):
+            self.promote(root, runner)
+        self.assertEqual(runner.seen, [])
+
+    def test_a_defect_that_edits_the_test_file_is_refused(self):
+        def defect(root):
+            return self.defect_diff(root, lambda: (root / 'tools/harness/test_example.py').write_text(
+                self.NEW + '\n# injected\n'))
+        root = self.scratch(defect=defect)
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'changes test files'):
+            self.promote(root, runner)
+        self.assertEqual(runner.seen, [])
+
+    def test_a_defect_under_docs_bugs_is_left_out_and_refused(self):
+        def defect(root):
+            return self.defect_diff(root, lambda: (root / 'docs/bugs/README.md').write_text('# injected\n'))
+        root = self.scratch(defect=defect)
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'leaves part of itself out'):
+            self.promote(root, runner)
+
+    def test_a_defect_that_edits_a_harness_input_under_docs_is_refused(self):
+        def defect(root):
+            return self.defect_diff(root, lambda: (root / 'docs/playable/real-client-playable-loop.json').write_text('{}\n'))
+        root = self.scratch(defect=defect)
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'harness input under docs/'):
+            self.promote(root, runner)
+
+    def test_a_defect_that_edits_build_configuration_is_refused(self):
+        def defect(root):
+            return self.defect_diff(root, lambda: (root / 'Cargo.toml').write_text('[package]\nname = "defect"\n'))
+        root = self.scratch(defect=defect)
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'changes build configuration'):
+            self.promote(root, runner)
+
+    def test_a_red_panic_outside_the_changed_test_file_is_not_control_a(self):
+        root = self.scratch()
+        runner = self.runner(a_assertion=lambda tree: str(tree / 'src/engine.rs'))
+        with self.assertRaisesRegex(ledger.Refused, 'did not go red at an assertion.*not control A'):
+            self.promote(root, runner)
+
+    def test_a_defect_red_on_an_unrelated_ref_is_not_proving(self):
+        root = self.scratch()
+        runner = self.runner(b_red_refs={self.REF_OTHER})
+        with self.assertRaisesRegex(ledger.Refused, 'is not defined in .*: a bare name from another file'):
+            self.promote(root, runner)
+
+    def test_a_defect_red_on_no_changed_test_does_not_overlap_control_a(self):
+        root = self.scratch()
+        runner = self.runner(b_red_refs=set())
+        with self.assertRaisesRegex(ledger.Refused, 'did not go red at an assertion'):
+            self.promote(root, runner)
+
+    def test_a_defect_that_breaks_the_build_is_unrunnable_not_red(self):
+        root = self.scratch()
+        runner = self.runner(b_state=ledger.UNRUNNABLE)
+        with self.assertRaisesRegex(ledger.Refused, 'did not go red at an assertion'):
+            self.promote(root, runner)
+
+    def test_a_fix_that_cannot_reverse_at_head_refuses_a_fix_commit_control(self):
+        root = self.scratch(later_edit=True)
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'control A cannot run against current code'):
+            self.promote(root, runner)
+        self.assertEqual(runner.seen, [])
+
+    def test_control_a_files_narrows_the_reversal_to_the_row_s_own_file(self):
+        root = self.scratch(two_files=True, refs=[self.REF],
+                            control_a_files=['tools/harness/test_example.py'])
+        runner = self.runner()
+        receipt = self.promote(root, runner)
+        self.assertEqual(receipt['reversed_files'], ['tools/harness/test_example.py'])
+        # Control A restored only the row's file: the other corrected oracle stayed corrected.
+        self.assertIn('"old"', runner.seen[0]['test'])
+        self.assertEqual(runner.seen[0]['other'], self.OTHER_NEW)
+        self.assertEqual(receipt['control_b']['proving'], [self.REF])
+
+    def test_control_a_files_naming_an_unchanged_file_is_refused(self):
+        root = self.scratch(control_a_files=['tools/harness/test_absent.py'])
+        with self.assertRaisesRegex(ledger.Refused, 'which the fix commit does not change'):
+            self.promote(root, self.runner())
+
+    def test_a_production_file_in_the_fix_commit_is_refused_even_with_control_a_files(self):
+        # The narrowing chooses what control A reverses; it must never hide a production file from
+        # the "a test_only_fix commit changes only test files" refusal (ReviewD123Harness2 item 1).
+        root = self.scratch(production_hunk=True, control_a_files=['tools/harness/test_example.py'])
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'src/engine.rs is production code'):
+            self.promote(root, runner)
+        self.assertEqual(runner.seen, [])
+
+    def test_the_row_flag_needs_its_evidence(self):
+        base = '''[[bug]]
+id = "B"
+title = "bug"
+area = "harness"
+repro = "source"
+severity = "major"
+status = "open"
+source = "report"
+regression = []
+repro_check = "old oracle wrote the wrong value"
+'''
+        cases = [
+            base + 'test_only_fix = "yes"\n',
+            base.replace('repro_check = "old oracle wrote the wrong value"\n', '') + 'test_only_fix = true\n',
+            base + 'test_only_fix = true\ncontrol_b_patch = "/tmp/absolute.patch"\n',
+            base + 'test_only_fix = true\n',
+            base + 'control_b_patch = "docs/bugs/test-only/defect.patch"\n',
+            base + 'test_only_fix = true\ncontrol_b_patch = "docs/bugs/test-only/defect.patch"\n',
+            base + 'test_only_fix = true\ncontrol_b_patch = "docs/bugs/test-only/defect.patch"\n'
+                   'control_b_sha256 = "not-a-hash"\n',
+            base + 'test_only_fix = true\ncontrol_b_patch = "docs/bugs/test-only/defect.patch"\n'
+                   'control_b_sha256 = "' + '0' * 64 + '"\n',
+            base + 'test_only_fix = true\ncontrol_b_patch = "docs/bugs/test-only/defect.patch"\n'
+                   'control_b_sha256 = "' + '0' * 64 + '"\nfix_commit = "client:' + '0' * 40 + '"\n',
+            base + 'control_a_files = ["crates/mc-core/src/plants_tests.rs"]\n',
+            base + 'test_only_fix = true\ncontrol_a_files = []\n',
+            base + 'test_only_fix = true\ncontrol_a_files = ["/etc/passwd.rs"]\n',
+            base + 'test_only_fix = true\ncontrol_a_files = ["docs/bugs/x.rs"]\n',
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'docs/bugs/rows').mkdir(parents=True)
+            for text in cases:
+                with self.subTest(text=text):
+                    shutil.rmtree(root / 'docs/bugs/rows')
+                    (root / 'docs/bugs/rows').mkdir(parents=True)
+                    (root / 'docs/bugs/rows/B.toml').write_text(text)
+                    with patch.object(regressions, 'REPO_ROOT', root), \
+                         patch.object(regressions, 'BASE_FIXED', frozenset()):
+                        with self.assertRaises(ValueError):
+                            regressions.run(profiles.ProfileContext(root))
+
+    def promotion_root(self, test_only, control='test_hunks', control_b_sha=None, fix='a' * 40):
+        """A repo with one row and its promotion receipt, for `_promotion_errors` alone."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        (root / 'docs/bugs/rows').mkdir(parents=True)
+        (root / 'docs/bugs/promotions').mkdir(parents=True)
+        fields = ['test_only_fix = true'] if test_only else []
+        if control_b_sha:
+            fields += [f'control_b_sha256 = "{control_b_sha}"',
+                       'control_b_patch = "docs/bugs/test-only/X-defect.patch"']
+        (root / 'docs/bugs/rows/X.toml').write_text(f'''[[bug]]
+id = "X"
+title = "t"
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "x"
+regression = ["python:tools.harness.test_example:ExampleTests.test_guard"]
+fix_commit = "{fix}"
+{chr(10).join(fields)}
+promotion = "docs/bugs/promotions/X.json"
+''')
+        (root / 'docs/bugs/promotions/X.json').write_text(json.dumps({
+            'id': 'X', 'verdict': 'promoted', 'fix_commit': fix, 'control': control,
+            'control_b': {'sha256': control_b_sha} if control_b_sha else None}))
+        return root
+
+    def test_a_narrowed_row_needs_its_receipt_to_reverse_the_named_files(self):
+        root = self.promotion_root(test_only=True, control='test_hunks', control_b_sha='0' * 64)
+        row_path = root / 'docs/bugs/rows/X.toml'
+        row_path.write_text(row_path.read_text() + 'control_a_files = ["tools/harness/test_example.py"]\n')
+        receipt_path = root / 'docs/bugs/promotions/X.json'
+        receipt = json.loads(receipt_path.read_text())
+        receipt['reversed_files'] = ['tools/harness/test_other.py']
+        receipt_path.write_text(json.dumps(receipt))
+        with patch.object(regressions, 'REPO_ROOT', root):
+            row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
+            errors = regressions._promotion_errors('X', row)
+        self.assertTrue(any('control_a_files' in error for error in errors), errors)
+        receipt['reversed_files'] = ['tools/harness/test_example.py']
+        receipt_path.write_text(json.dumps(receipt))
+        with patch.object(regressions, 'REPO_ROOT', root):
+            row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
+            self.assertEqual(regressions._promotion_errors('X', row), [])
+
+    def test_a_receipt_may_not_claim_a_test_only_control_without_the_flag(self):
+        root = self.promotion_root(test_only=False, control='test_hunks')
+        with patch.object(regressions, 'REPO_ROOT', root):
+            row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
+            errors = regressions._promotion_errors('X', row)
+        self.assertTrue(any('without test_only_fix' in error for error in errors), errors)
+
+    def test_a_test_only_receipt_needs_its_control_and_defect_hash(self):
+        root = self.promotion_root(test_only=True, control='reversed_fix_hunks')
+        with patch.object(regressions, 'REPO_ROOT', root):
+            row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
+            self.assertTrue(any('must record control = test_hunks' in error
+                                for error in regressions._promotion_errors('X', row)))
+        root = self.promotion_root(test_only=True, control='test_hunks', control_b_sha='0' * 64)
+        with patch.object(regressions, 'REPO_ROOT', root):
+            row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
+            self.assertEqual(regressions._promotion_errors('X', row), [])
+
+
+class StalePatchTests(unittest.TestCase):
+    """A patch-mode receipt whose patch no longer reverses is a report in L2, strict at promote.
+
+    ReviewD123Harness3 N1 / Main X1/B1: an ordinary edit of a historical fix must never turn L2 red, so
+    `_promotion_errors` is silent about a missing or stale patch (run() reports the backlog) but fatal
+    when the committed patch's non-test hunks differ from the row's digest. `ledger promote`/`--dry-run`
+    refuses when the patch does not reverse."""
+
+    def root(self, with_patch=True):
+        import tempfile, hashlib
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        (root / 'docs/bugs/rows').mkdir(parents=True)
+        (root / 'docs/bugs/fix-patches').mkdir(parents=True)
+        text = 'diff --git a/nope.rs b/nope.rs\n--- a/nope.rs\n+++ b/nope.rs\n@@ -1 +1 @@\n-a\n+b\n'
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        (root / 'docs/bugs/rows/X.toml').write_text(f'''[[bug]]
+id = "X"
+title = "t"
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "x"
+regression = []
+fix_commit = "patch:{digest}"
+promotion = "docs/bugs/promotions/X.json"
+''')
+        (root / 'docs/bugs/promotions').mkdir(parents=True)
+        (root / 'docs/bugs/promotions/X.json').write_text(
+            '{"id": "X", "verdict": "promoted", "fix_commit": "patch:%s", "control": "reversed_fix_hunks"}'
+            % digest)
+        if with_patch:
+            (root / 'docs/bugs/fix-patches/X.patch').write_text(text)
+        return root
+
+    def test_a_missing_patch_file_is_reported_not_fatal(self):
+        # Main B1: seven historical rows carry only promotions/<ID>.json; they must not turn L2 red.
+        root = self.root(with_patch=False)
+        with patch.object(regressions, 'REPO_ROOT', root):
+            row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
+            errors = regressions._promotion_errors('X', row)
+            stale = regressions._stale_rows([row])
+        self.assertEqual(errors, [])
+        self.assertEqual(stale, [('X', 'no committed patch')])
+
+    def test_the_digest_is_the_non_test_hunks_like_promote(self):
+        # X1: a curated --fix-patch may carry a test hunk; promote hashes only its non-test hunks, so
+        # regressions must compute the same digest or it fails rows promote accepted.
+        import hashlib
+        root = self.root()
+        rows = root / 'docs/bugs/rows/X.toml'
+        text = ('diff --git a/src/engine.rs b/src/engine.rs\n--- a/src/engine.rs\n+++ b/src/engine.rs\n'
+                '@@ -1 +1 @@\n-a\n+b\n'
+                'diff --git a/tests/new_case.rs b/tests/new_case.rs\n--- a/tests/new_case.rs\n+++ b/tests/new_case.rs\n'
+                '@@ -1 +1 @@\n-a\n+b\n')
+        (root / 'docs/bugs/fix-patches/X.patch').write_text(text)
+        hunks = ('diff --git a/src/engine.rs b/src/engine.rs\n--- a/src/engine.rs\n+++ b/src/engine.rs\n'
+                 '@@ -1 +1 @@\n-a\n+b\n')
+        digest = hashlib.sha256(hunks.encode()).hexdigest()
+        old = rows.read_text().split('fix_commit = "')[1].split('"')[0]
+        body = rows.read_text().replace(old, 'patch:' + digest)
+        rows.write_text(body)
+        receipt = json.loads((root / 'docs/bugs/promotions/X.json').read_text())
+        receipt['fix_commit'] = 'patch:' + digest
+        (root / 'docs/bugs/promotions/X.json').write_text(json.dumps(receipt))
+        with patch.object(regressions, 'REPO_ROOT', root):
+            row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
+            errors = regressions._promotion_errors('X', row)
+        self.assertEqual(errors, [], 'a test hunk in the file must not change the digest')
+
+    def test_a_stale_patch_is_a_report_not_an_error(self):
+        root = self.root()
+        with patch.object(regressions, 'REPO_ROOT', root):
+            row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
+            errors = regressions._promotion_errors('X', row)
+            stale = regressions._stale_rows([row])
+        self.assertEqual(errors, [], 'staleness must not fail the L2 gate')
+        self.assertEqual(stale, [('X', 'does not reverse')], 'it is still reported as the backlog')
+
+class FixturePanicTests(unittest.TestCase):
+    """A control red must be an assertion, not a fixture that panicked before the test body ran.
+
+    ReviewD123Harness (Mechanics rows TOTEM, DEATH-PROTECTION-COMPONENT, SPECIAL-001 were promoted on
+    a `Registry("invalid map color registry")` panic at tick_tests.rs:91). The rule has three classes:
+    (a) a confirmed fixture/setup panic refuses; (b) an assert macro, including one in a shared helper
+    inside a `*_tests.rs` file, is a red; (c) any other panic must be named by the row as its proving
+    assertion file:line, or it refuses."""
+
+    def tree(self):
+        import tempfile
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        (root / 'crates/mc-core/src').mkdir(parents=True)
+        (root / 'crates/mc-core/src/tick_tests.rs').write_text(
+            'fn registry() -> Registry {\n'
+            '    load().expect("registry loads")\n'
+            '}\n'
+            '\n'
+            '#[test]\n'
+            'fn tick() {\n'
+            '    let registry = registry();\n'
+            '    assert_eq!(1, 1);\n'
+            '}\n')
+        (root / 'crates/mc-core/src/core_journal_backpressure_tests.rs').write_text(
+            '// helper asserted by tests at 295/319/345\n' * 20 +
+            'fn pressure_is_within_budget(state: &State) {\n'
+            '    assert!(state.queued <= 32, "backpressure");\n'
+            '}\n')
+        return root
+
+    def test_a_fixture_panic_is_classified_fixture(self):
+        root = self.tree()
+        self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/tick_tests.rs', 2),
+                                             'registry loads'), 'fixture')
+        self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/tick_tests.rs', 2),
+                                             'Registry("invalid map color registry")'), 'fixture')
+        self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/tick_tests.rs', 8),
+                                             'called `Option::unwrap()` on a `None` value'), 'fixture')
+
+    def test_an_assert_macro_outside_test_paths_is_not_an_assertion(self):
+        # ReviewD123Harness3 N3b: production code and test-support modules outside _TEST_PATH panic
+        # through assert! too; that is class (c), not evidence about the oracle.
+        root = self.tree()
+        (root / 'crates/mc-core/src/test_support.rs').write_text(
+            'fn fixture() {\n    assert!(true);\n}\n')
+        self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/test_support.rs', 2),
+                                             'assertion failed'), 'unknown')
+
+    def test_a_cargo_red_without_a_panic_line_needs_the_row_to_name_it(self):
+        # N3a: a `-> Result<()>` test fails through `?` with no panic line; that is not an assertion.
+        entry = {'state': ledger.RED, 'detail': 'FAIL'}
+        refused = ledger._classify_control('B', {'cargo:mc-core:x::t': entry}, {}, Path('/nonexistent'))
+        self.assertEqual(refused['cargo:mc-core:x::t']['state'], ledger.UNPROVEN_PANIC)
+        named = {'proving_assertions': {'cargo:mc-core:x::t': 'crates/mc-core/src/x_tests.rs:1'}}
+        self.assertEqual(ledger._classify_control('B', {'cargo:mc-core:x::t': entry}, named,
+                                                  Path('/nonexistent'))['cargo:mc-core:x::t']['state'], ledger.RED)
+
+    def test_an_assert_macro_is_a_red_even_in_a_shared_helper(self):
+        root = self.tree()
+        self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/tick_tests.rs', 8),
+                                             'assertion failed'), 'assertion')
+        self.assertEqual(
+            ledger._panic_class(root, ('crates/mc-core/src/core_journal_backpressure_tests.rs', 22),
+                                'assertion failed: backpressure'), 'assertion')
+
+    def test_an_unknown_helper_panic_needs_the_row_to_name_it(self):
+        root = self.tree()
+        location = ('crates/mc-core/src/core_journal_backpressure_tests.rs', 21)
+        self.assertEqual(ledger._panic_class(root, location, 'some helper failure'), 'unknown')
+        entry = {'state': ledger.RED, 'detail': 'FAIL',
+                 'assertion': {'file': location[0], 'line': location[1], 'error': 'panic', 'class': 'unknown'}}
+        unproven = ledger._classify_control('B', {'r': entry}, {}, root)['r']
+        self.assertEqual(unproven['state'], ledger.UNPROVEN_PANIC)
+        named = {'proving_assertions': {'r': f'{location[0]}:{location[1]}'}}
+        self.assertEqual(ledger._classify_control('B', {'r': entry}, named, root)['r']['state'], ledger.RED)
+
+    def test_a_fixture_panic_entry_refuses_at_the_promote_boundary(self):
+        root = self.tree()
+        entry = {'state': ledger.RED, 'detail': 'FAIL',
+                 'assertion': {'file': 'crates/mc-core/src/tick_tests.rs', 'line': 2, 'error': 'panic',
+                               'class': 'fixture'}}
+        self.assertEqual(ledger._classify_control('B', {'r': entry}, {}, root)['r']['state'],
+                         ledger.FIXTURE_FAILURE)
+
+class TestOnlyEvidenceTests(unittest.TestCase):
+    """The evidence a test-only promotion parses out of a run."""
+
+    def test_cargo_panics_are_keyed_by_test_and_file(self):
+        text = ('        FAIL [   0.123s] mc-edge host_telemetry_tests::bad\n'
+                "thread 'host_telemetry_tests::bad' panicked at crates/mc-edge/src/host_telemetry_tests.rs:120:5:\n"
+                'assertion `left == right` failed\n')
+        # Keyed by (crate, name): a bare name collides across modules (ReviewD123Harness1 9a).
+        self.assertEqual(ledger._panic_locations(text),
+                         {('mc-edge', 'bad'): ('crates/mc-edge/src/host_telemetry_tests.rs', 120,
+                                               'assertion `left == right` failed')})
+        two_modules = ('        FAIL [   0.123s] mc-edge tests::shared\n'
+                       "thread 'tests::shared' panicked at crates/mc-edge/src/tests.rs:10:1:\n"
+                       'assertion failed\n'
+                       '        FAIL [   0.123s] mc-core other::shared\n'
+                       "thread 'other::shared' panicked at crates/mc-core/src/other.rs:20:1:\n"
+                       'assertion failed\n')
+        self.assertEqual(ledger._panic_locations(two_modules), {
+            ('mc-edge', 'shared'): ('crates/mc-edge/src/tests.rs', 10, 'assertion failed'),
+            ('mc-core', 'shared'): ('crates/mc-core/src/other.rs', 20, 'assertion failed')})
+
+    def test_changed_lines_exclude_context_and_operators_span_calls(self):
+        # ReviewD123Harness3 N8: only lines the reversal actually changed count (11 here), while an
+        # operator starting at the red line may span a changed line further down.
+        diff = ('diff --git a/x.rs b/x.rs\n--- a/x.rs\n+++ b/x.rs\n'
+                '@@ -10,3 +10,3 @@ fn f() {\n ctx\n-old\n+new\n ctx\n')
+        self.assertEqual(ledger._changed_old_lines(diff), {'x.rs': {11}})
+        self.assertEqual(ledger._changed_old_lines(''), {})
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'x.rs').write_text('fn f() {\n    assert!(matches!(\n        a, 1 | 2\n    ));\n}\n')
+            self.assertEqual(ledger._operator_span(root, 'x.rs', 2), (2, 4))
+
+    def test_a_setup_unwrap_panic_is_not_an_assertion(self):
+        # `#[track_caller]` puts `.unwrap()` at the test's own line; the class is what refuses it.
+        text = ('        FAIL [   0.123s] mc-edge tests::setup\n'
+                "thread 'tests::setup' panicked at crates/mc-edge/src/tests.rs:44:9:\n"
+                'called `Option::unwrap()` on a `None` value\n')
+        locations = ledger._panic_locations(text)
+        self.assertEqual(list(locations), [('mc-edge', 'setup')])
+        self.assertEqual(ledger._panic_class(Path('/nonexistent'), locations[('mc-edge', 'setup')][:2],
+                                             locations[('mc-edge', 'setup')][2]), 'fixture')
+
+    def test_a_python_assertion_ignores_a_mentions_elsewhere(self):
+        # Only the failing block's own exception counts (ReviewD123Harness1 9c).
+        text = ('FAIL: test_guard (tools.harness.test_example.ExampleTests.test_guard)\n'
+                'Traceback (most recent call last):\n'
+                '  File "/repo/tools/harness/test_example.py", line 3, in test_guard\n'
+                'RuntimeError: AssertionError mentioned in a message\n')
+        self.assertIsNone(ledger._python_assertion(text))
+        text = ('Traceback (most recent call last):\n'
+                '  File "/repo/tools/harness/test_example.py", line 7, in test_a\n'
+                'KeyError: 1\n'
+                'Traceback (most recent call last):\n'
+                '  File "/repo/tools/harness/test_example.py", line 12, in test_b\n'
+                'AssertionError: 1 != 2\n')
+        self.assertEqual(ledger._python_assertion(text),
+                         {'file': '/repo/tools/harness/test_example.py', 'line': 12, 'error': 'AssertionError'})
+
+    def test_a_python_assertion_uses_the_innermost_frame(self):
+        text = ('FAIL: test_guard (tools.harness.test_example.ExampleTests.test_guard)\n'
+                'Traceback (most recent call last):\n'
+                '  File "/repo/tools/harness/test_example.py", line 3, in test_guard\n'
+                'AssertionError: 1 != 2\n')
+        self.assertEqual(ledger._python_assertion(text),
+                         {'file': '/repo/tools/harness/test_example.py', 'line': 3, 'error': 'AssertionError'})
+        self.assertIsNone(ledger._python_assertion('RuntimeError: boom\n'))
+
+    def test_a_ref_maps_to_its_own_changed_file_through_mod_declarations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for path, text in {
+                'crates/mc-core/src/lib.rs': '#[cfg(test)]\nmod farming_tests;\n#[cfg(test)]\nmod fluids_tests;\n',
+                'crates/mc-core/src/farming_tests.rs': '#[path = "plants_tests.rs"]\nmod plants_tests;\n',
+                'crates/mc-core/src/plants_tests.rs': 'fn test() {}\n',
+                'crates/mc-core/src/fluids_tests.rs': '#[path = "fluid_parity_tests.rs"]\nmod parity;\n',
+                'crates/mc-core/src/fluid_parity_tests.rs': 'fn test() {}\n',
+                'crates/mc-edge/src/lib.rs': 'mod host_telemetry;\n',
+                'crates/mc-edge/src/host_telemetry.rs':
+                    '#[cfg(test)]\n#[path = "host_telemetry_tests.rs"]\nmod host_telemetry_tests;\n',
+                'crates/mc-edge/src/host_telemetry_tests.rs': 'fn test() {}\n',
+            }.items():
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_text(text)
+            plants = ['crates/mc-core/src/plants_tests.rs']
+            self.assertEqual(ledger._ref_test_file(
+                root, 'cargo:mc-core:farming_tests::plants_tests::native_random_sampler_grows_chorus_flowers',
+                plants), 'crates/mc-core/src/plants_tests.rs')
+            self.assertIsNone(ledger._ref_test_file(root, 'cargo:mc-core:fluids_tests::parity::x', plants))
+            self.assertEqual(ledger._ref_test_file(
+                root, 'cargo:mc-core:fluids_tests::parity::physics_water_selects_nearest_descent',
+                ['crates/mc-core/src/fluid_parity_tests.rs']), 'crates/mc-core/src/fluid_parity_tests.rs')
+            self.assertEqual(ledger._ref_test_file(
+                root, 'cargo:mc-edge:host_telemetry::host_telemetry_tests::'
+                      'sampler_reads_the_throttle_counters_from_the_cgroup_fixture',
+                ['crates/mc-edge/src/host_telemetry_tests.rs']), 'crates/mc-edge/src/host_telemetry_tests.rs')
+            self.assertIsNone(ledger._ref_test_file(
+                root, 'cargo:mc-core:falling::tests::x', plants))
+            self.assertEqual(ledger._ref_test_file(
+                root, 'python:tools.other.test_x:ExampleTests.test_guard', ['tools/other/test_x.py']),
+                'tools/other/test_x.py')
+            self.assertIsNone(ledger._ref_test_file(
+                root, 'python:tools.harness.test_other:ExampleTests.test_guard', plants))
+
+
 class ClientRefTests(unittest.TestCase):
     """A client fix's test runs in the client checkout, so a client row can register a real ref."""
 
@@ -713,7 +1422,10 @@ class LedgerToolTests(unittest.TestCase):
             seen.append(((tree / 'src/engine.rs').read_text(), (tree / 'tests/new_case.rs').exists()))
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
             state = ledger.RED if buggy and red_when_buggy else ledger.GREEN
-            return {ref: {'state': state, 'detail': ''} for ref in refs}
+            # A red names its assertion like a real runner does; a bare FAIL on a cargo ref is class (c).
+            assertion = {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}
+            return {ref: ({'state': state, 'detail': '', 'assertion': assertion} if state == ledger.RED
+                          else {'state': state, 'detail': ''}) for ref in refs}
         run.seen = seen
         return run
 
@@ -1044,7 +1756,7 @@ class LedgerToolTests(unittest.TestCase):
         def runner(ctx, refs, tree, client):
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
             seen.append(((tree / 'src/util.rs').read_text(), (tree / 'src/new.rs').read_text(), buggy))
-            return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
+            return {ref: ({'state': state, 'detail': '', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}} if state == ledger.RED else {'state': state, 'detail': ''}) for ref in refs for state in [ledger.RED if buggy else ledger.GREEN]}
         receipt = self.promote(root, runner)
         # Control and restore both run on HEAD + the uncommitted diff + the untracked file.
         self.assertEqual(seen, [('u2\n', 'n1\n', True), ('u2\n', 'n1\n', False)])
@@ -1069,7 +1781,7 @@ class LedgerToolTests(unittest.TestCase):
     def test_restored_check_that_is_not_green_is_refused(self):
         root = self.scratch()
         def always_red(ctx, refs, tree, client):
-            return {ref: {'state': ledger.RED, 'detail': 'boom'} for ref in refs}
+            return {ref: {'state': ledger.RED, 'detail': 'boom', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}} for ref in refs}
         with self.assertRaisesRegex(ledger.Refused, 'not green on the tree being promoted'):
             self.promote(root, always_red)
 
@@ -1203,7 +1915,7 @@ class LedgerToolTests(unittest.TestCase):
         ctx = profiles.ProfileContext(self.artifacts)
         def runner(ctx, refs, tree, client):
             out = ledger.run_refs(ctx, [ref for ref in refs if ref.startswith('harness:') or ref == 'nonsense'], tree, client)
-            out['cargo:mc-core:mod::t'] = {'state': ledger.RED, 'detail': 'FAIL'}
+            out['cargo:mc-core:mod::t'] = {'state': ledger.RED, 'detail': 'FAIL', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}}
             return out
         rows = ledger.probe(bugs, ['BUG', 'EMPTY', 'BAD'], client=False, ctx=ctx, runner=runner)
         self.assertEqual(rows['BUG']['verdict'], ledger.NEEDS_CLIENT)
@@ -1266,10 +1978,10 @@ class LedgerToolTests(unittest.TestCase):
         with patch.object(profiles, '_run_command', run_command), patch.object(regressions, 'MEM_RUN', Path('/nonexistent/mem-run.sh')):
             results = ledger._run_cargo(ctx, tests, Path('.'))
         self.assertEqual(results[('mc-core', 'a::ok')][0], ledger.GREEN)
-        self.assertEqual(results[('mc-core', 'a::bad')], (ledger.RED, 'FAIL'))
-        self.assertEqual(results[('mc-core', 'a::timeout')], (ledger.UNRUNNABLE, 'TIMEOUT; see log'))
-        self.assertEqual(results[('mc-core', 'a::abort')], (ledger.UNRUNNABLE, 'ABORT; see log'))
-        self.assertEqual(results[('mc-core', 'a::tmpass')], (ledger.UNRUNNABLE, 'TMPASS; see log'))
+        self.assertEqual(results[('mc-core', 'a::bad')][:2], (ledger.RED, 'FAIL'))
+        self.assertEqual(results[('mc-core', 'a::timeout')][:2], (ledger.UNRUNNABLE, 'TIMEOUT; see log'))
+        self.assertEqual(results[('mc-core', 'a::abort')][:2], (ledger.UNRUNNABLE, 'ABORT; see log'))
+        self.assertEqual(results[('mc-core', 'a::tmpass')][:2], (ledger.UNRUNNABLE, 'TMPASS; see log'))
         self.assertEqual(results[('mc-core', 'a::ignored')][0], ledger.UNRUNNABLE)
         self.assertEqual(results[('mc-core', 'a::missing')][0], ledger.UNRUNNABLE)
 
@@ -1309,7 +2021,7 @@ class LedgerToolTests(unittest.TestCase):
             seen.append((tree / 'data/vanilla/res.json').exists() and not (tree / 'data').is_symlink() and not (tree / 'data/vanilla').is_symlink())
             (tree / 'data/vanilla/res.json').write_text('{"scribbled": true}')
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
-            return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
+            return {ref: ({'state': state, 'detail': '', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}} if state == ledger.RED else {'state': state, 'detail': ''}) for ref in refs for state in [ledger.RED if buggy else ledger.GREEN]}
         self.promote(root, runner, dry_run=True)
         self.assertEqual(seen, [True, True])
         self.assertEqual((root / 'data/vanilla/res.json').read_text(), '{}')
@@ -1332,7 +2044,7 @@ class LedgerToolTests(unittest.TestCase):
                         and (data / 'vanilla-26.1.2/res.json').is_file()
                         and not (data / 'vanilla-26.1.2').is_symlink())
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
-            return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
+            return {ref: ({'state': state, 'detail': '', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}} if state == ledger.RED else {'state': state, 'detail': ''}) for ref in refs for state in [ledger.RED if buggy else ledger.GREEN]}
         self.promote(root, runner, dry_run=True)
         self.assertEqual(seen, [True, True])
 
@@ -1525,7 +2237,7 @@ class LedgerToolTests(unittest.TestCase):
         def runner(ctx, refs, tree, client):
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
             seen.append(((tree / 'src/engine.rs').read_text(), (tree / 'src/util.rs').read_text(), (tree / 'tests/extra.rs').exists()))
-            return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
+            return {ref: ({'state': state, 'detail': '', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}} if state == ledger.RED else {'state': state, 'detail': ''}) for ref in refs for state in [ledger.RED if buggy else ledger.GREEN]}
         receipt = self.promote(root, runner, fix_patch=fix_file)
         self.assertEqual(seen, [('value = buggy\n', 'u2\n', True), ('value = fixed again\n', 'u2\n', True)])
         self.assertEqual((receipt['control_tree'], receipt['reversed_files'], receipt['kept_test_files']),
@@ -1533,6 +2245,9 @@ class LedgerToolTests(unittest.TestCase):
         self.assertEqual(receipt['fix_patch_sha256'], recorded[len('patch:'):])
         self.assertTrue(receipt['tree_dirty'])
         self.assertIn('status = "fixed"', ledger_file.read_text())
+        # A patch-mode row must carry its committed patch (fatal otherwise); a re-audit reverses it.
+        (root / 'docs/bugs/fix-patches').mkdir(parents=True, exist_ok=True)
+        (root / 'docs/bugs/fix-patches/BUG.patch').write_text(fix_file.read_text())
         bug = tomllib.loads(ledger_file.read_text())['bug'][0]
         with patch.object(regressions, 'REPO_ROOT', root):
             self.assertEqual(regressions._promotion_errors('BUG', bug), [])
@@ -1567,7 +2282,7 @@ class LedgerToolTests(unittest.TestCase):
         def runner(ctx, refs, tree, client):
             trees.append(tree)
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
-            return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
+            return {ref: ({'state': state, 'detail': '', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}} if state == ledger.RED else {'state': state, 'detail': ''}) for ref in refs for state in [ledger.RED if buggy else ledger.GREEN]}
         with patch.dict(os.environ, {'KRASNOKAMEN_BUILD_TOKEN': '1'}):  # under wt/ a promote needs a held token
             self.promote(root, runner, dry_run=True)
             self.promote(root, runner, dry_run=True)

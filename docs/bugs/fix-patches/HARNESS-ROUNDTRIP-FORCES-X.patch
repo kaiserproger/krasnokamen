@@ -1,0 +1,13 @@
+diff --git a/tools/harness/vanilla_world_roundtrip.py b/tools/harness/vanilla_world_roundtrip.py
+index 6f95b0868..ed13397b2 100755
+--- a/tools/harness/vanilla_world_roundtrip.py
++++ b/tools/harness/vanilla_world_roundtrip.py
+@@ -128,7 +128,7 @@ def main():
+         world = home / "world"
+         # The owner host's canonical runner; elsewhere commands run directly.
+         def limited(memory):
++            return [str(MEM_RUN), "-m", memory] if MEM_RUN.exists() else []
+-            return [str(MEM_RUN), "-m", memory, "-x"] if MEM_RUN.exists() else []
+ 
+         def v2(phase, native, anvil):
+             command = [*limited("8G"), "env", "CARGO_BUILD_JOBS=6",

@@ -1,0 +1,59 @@
+{
+  "id": "PERF-RECEIPT-OMITS-MEMORY-PRESSURE",
+  "verdict": "promoted",
+  "fix_commit": "patch:e28edbd9218f02c853a7a467fa07acabf5459109f0468229ad670e722f6d7124",
+  "fix_commit_full": "patch:e28edbd9218f02c853a7a467fa07acabf5459109f0468229ad670e722f6d7124",
+  "promoted_at": "2026-11-23T18:14:25+00:00",
+  "tree_head": "a53259f182637c5f6d281aa4793d84e996c9ea15",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "e28edbd9218f02c853a7a467fa07acabf5459109f0468229ad670e722f6d7124",
+  "reversed_files": [
+    "crates/mc-edge/src/host_telemetry.rs",
+    "tools/coreperf/profiles.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:host_telemetry::host_telemetry_tests::sampler_reads_memory_pressure_from_the_cgroup_fixture": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/host_telemetry_tests.rs",
+        "line": 158,
+        "error": "panic"
+      }
+    },
+    "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_memory_pressure_reads_psi_for_this_cgroup_and_the_host": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_receipt_records_memory_pressure": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/coreperf/test_profiles.py",
+        "line": 1079,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:host_telemetry::host_telemetry_tests::sampler_reads_memory_pressure_from_the_cgroup_fixture": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_memory_pressure_reads_psi_for_this_cgroup_and_the_host": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_receipt_records_memory_pressure": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T180646-ledger-promote-cymi75c5"
+}

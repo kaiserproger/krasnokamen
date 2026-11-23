@@ -1,0 +1,27 @@
+diff --git a/crates/mc-edge/src/host_telemetry.rs b/crates/mc-edge/src/host_telemetry.rs
+index 25dfcb5a5..5520d837a 100644
+--- a/crates/mc-edge/src/host_telemetry.rs
++++ b/crates/mc-edge/src/host_telemetry.rs
+@@ -96,7 +96,9 @@ impl HostSampler {
+             cgroup_cpu_throttled_usec: cpu_stat
+                 .as_deref()
+                 .and_then(|text| cpu_stat_field(text, "throttled_usec")),
+-            cgroup_memory_pressure: None,
++            cgroup_memory_pressure: cgroup_file("memory.pressure")
++                .as_deref()
++                .and_then(parse_pressure),
+             cpu_total_ticks: cpu.map(|(total, _)| total),
+             cpu_steal_ticks: cpu.map(|(_, steal)| steal),
+             process_rss_bytes: resident_memory_bytes(),
+diff --git a/tools/coreperf/profiles.py b/tools/coreperf/profiles.py
+index 5307567fb..97e4fc5fd 100644
+--- a/tools/coreperf/profiles.py
++++ b/tools/coreperf/profiles.py
+@@ -1334,6 +1334,7 @@ def host_receipt(out: Path, *, cpu_root: Path = Path("/sys/devices/system/cpu"),
+     return {"cpu": json.loads(capture(["lscpu", "--json"])),
+             "cpu_scaling": cpu_scaling(cpu_root),
+             "cgroup_cpu": cgroup_cpu_stat(cgroup_root, procs),
++            "memory_pressure": memory_pressure(cgroup_root, procs, host_pressure),
+             "memory": Path("/proc/meminfo").read_text(), "os": platform.freedesktop_os_release(),
+             "kernel": platform.uname()._asdict(),
+             "disks": json.loads(capture(["lsblk", "--json", "-o", "NAME,MODEL,SIZE,ROTA,FSTYPE,MOUNTPOINTS"])),

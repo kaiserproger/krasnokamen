@@ -1,0 +1,19 @@
+diff --git a/crates/mc-worldgen/src/nether/landscape.rs b/crates/mc-worldgen/src/nether/landscape.rs
+index b35fa7023..a4e55582c 100644
+--- a/crates/mc-worldgen/src/nether/landscape.rs
++++ b/crates/mc-worldgen/src/nether/landscape.rs
+@@ -242,7 +242,13 @@ impl NetherGenerator {
+             }
+         }
+         for section in &mut chunk.biomes {
+-            *section = BiomeSection::from_indirect(self.biomes.to_vec(), indices.clone());
++            // DEFECT INJECTION (docs/bugs/test-only/TEST-DIMENSION-BIOME-defect.patch): the Nether's
++            // biome palette becomes a non-Nether one, so a Nether position reports an Overworld biome
++            // and the row's dimension-biome assert must fail at its own line.
++            let mut palette = self.biomes.to_vec();
++            let plains = Identifier::parse("minecraft:plains").expect("static biome");
++            palette.iter_mut().for_each(|biome| *biome = plains.clone());
++            *section = BiomeSection::from_indirect(palette, indices.clone());
+         }
+     }
+ 

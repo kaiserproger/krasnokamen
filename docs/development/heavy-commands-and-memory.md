@@ -63,7 +63,13 @@ quiet window. A `-p` compile would hold its token while queued: **do not build i
   Outside a grant, refuse 75 and name next start, before acquiring locks.
   Only Main's explicitly authorized `KRASNOKAMEN_WINDOW_OVERRIDE=1` overrides.
 - A guardian kills cancelled jobs' scopes and retains locks until empty.
-  Cancel the parent job, not just children.
+  Cancel the parent job, not just children. On a wrapper signal the scope gets
+  `TERM` directly first, then every `cgroup.procs` member; the guardian
+  escalates to `cgroup.kill` (`SIGKILL` to the whole scope, the wrapper
+  included) after `KRASNOKAMEN_MEMRUN_CANCEL_GRACE` seconds, default 15 — a
+  harness still writing `result.json` at that deadline is cut with its scope.
+  If the guardian fifo is unwritable the runner says so on stderr and the
+  `TERM` pass still applies.
 - Exit 75 is admission refusal (named cgroup/watchdog/window/target cause), not
   an executed gate. Token, scene, exclusive and perf waits have different owners;
   waiting is not death. Consume completion, never poll or bypass another lane.
@@ -172,6 +178,22 @@ Test lock/admission changes on a private copy/lock dir using FIFO gates and
 waiters must fail on old and pass on new. Scopes can vanish between glob/read;
 ignore failed reads, but only `cgroup.events` `populated 0` proves empty
 (`cgroup.procs` omits child cgroups).
+
+**Install order when the wrapper's guardian arguments change** (since 2026-11-23): the two are one
+protocol, so install the parts a new wrapper *needs* before the wrapper itself, each by atomic mv:
+
+1. `mem-run-guard.py` — the argument list is positional; a wrapper that passes five arguments to a
+   four-argument guard makes every launch exit 75 before the scope exists.
+2. `reserved_cpus.py` — a wrapper that cannot judge the reservation file names the helper, keeps its
+   stderr, honours the file's first line as a CPU list and refuses (exit 75) only when that line is
+   not a CPU list, so the helper must already be beside it.
+3. `mem-run.sh` next. It is the only file that decides which of the others it calls, so a rollback is
+   `mv` the old wrapper back first.
+4. `reserve-cpus` last: it writes the owner line the new wrapper understands; an older wrapper
+   ignores that line but still honours the file.
+
+Never install the wrapper first "because it is the entry point": every command on the host would fail
+until the guard copy lands, and mixed versions on the shared host share one lock and registration dir.
 
 ## When the owner says the machine is choking
 

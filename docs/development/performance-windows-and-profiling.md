@@ -99,6 +99,23 @@ exponents and CPU/wall, not profiled capacity.
 
 ## Profiling recipes
 
+- **Maintained window:** `tools/dev/perf-window.sh <pid> [seconds] [outdir]` is the
+  script a capture uses (do not re-invent it in `receipts/`). It runs three
+  sequential windows of `seconds` each: `perf stat -M PipelineL1 --per-thread`
+  (top-down verdict), `perf stat -x,` over the explicit AMD events
+  `ls_dmnd_fills_from_sys.all`, `l2_request_g1.all`, `l2_cache_req_stat.ls_rd_blk_c`,
+  `cycles`, `instructions`, then `perf record -g --call-graph fp --per-thread`
+  with inclusive callers (`perf report -g "graph,0.5,caller,0.5"`), `self.txt` and
+  `script.txt` for flame graphs. `cache-references`/`cache-misses` alias to L2 on
+  AMD64: never quote them as a last-level number. `l2_misses.all` is not an event
+  of the owner host's PMU (`perf stat -e l2_misses.all` refuses it); the L2 miss
+  counter there is `l2_cache_req_stat.ls_rd_blk_c`. The call graph needs the
+  frame-pointer pin above; the script refuses a capture without caller frames.
+  In `-x,` output the enabled/running percentage is field 6 with `--per-thread`
+  (field 5 without), so a multiplexed counter is visible instead of quoted as exact.
+  Per-thread record buffers come from `RLIMIT_MEMLOCK` (8 MiB in a user session),
+  so the script caps them at `PERF_WINDOW_MMAP_PAGES` (default 16); raise both if a
+  capture reports lost samples.
 - **Pin:** `CARGO_TARGET_DIR=<work>/targets/fp RUSTFLAGS="-C force-frame-pointers=yes"
   CARGO_PROFILE_RELEASE_DEBUG=line-tables-only <work>/solaris/tools/dev/pin-release
   <tree> --no-incremental`. Instrumentation is part of fingerprint; `--bots`

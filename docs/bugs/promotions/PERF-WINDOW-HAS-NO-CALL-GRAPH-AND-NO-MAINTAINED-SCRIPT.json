@@ -1,0 +1,45 @@
+{
+  "id": "PERF-WINDOW-HAS-NO-CALL-GRAPH-AND-NO-MAINTAINED-SCRIPT",
+  "verdict": "promoted",
+  "fix_commit": "patch:8357c04c41b86359bf919086585438d884314539d34005f5d886d6cefe90e4b7",
+  "fix_commit_full": "patch:8357c04c41b86359bf919086585438d884314539d34005f5d886d6cefe90e4b7",
+  "promoted_at": "2026-11-23T16:27:39+00:00",
+  "tree_head": "6ec9b779da87645382c4e64d4e23d4438aa073a3",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "8357c04c41b86359bf919086585438d884314539d34005f5d886d6cefe90e4b7",
+  "reversed_files": [
+    "tools/dev/perf-window.sh"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.dev.test_perf_window:PerfWindowRecipeTests.test_the_capture_is_a_frame_pointer_call_graph_with_per_thread_attribution": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_perf_window.py",
+        "line": 73,
+        "error": "AssertionError"
+      }
+    },
+    "python:tools.dev.test_perf_window:PerfWindowRecipeTests.test_the_script_is_executable_and_refuses_an_unusable_invocation": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "python:tools.dev.test_perf_window:PerfWindowRecipeTests.test_the_capture_is_a_frame_pointer_call_graph_with_per_thread_attribution": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_perf_window:PerfWindowRecipeTests.test_the_script_is_executable_and_refuses_an_unusable_invocation": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T162735-ledger-promote-fsxj1jjb"
+}

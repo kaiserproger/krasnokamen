@@ -340,6 +340,83 @@ took the lock without a token deadlocked with wrapped promotes waiting for it
 (2026-11-12, the host stalled for an hour); the tool refuses to start in a
 worktree under `<work>/wt/` without a held token.
 
+### Test-only fixes (`test_only_fix`)
+
+Some rows are test-oracle defects: the product already matches vanilla and the guard is the corrected
+test. When **every** hunk of `fix_commit` is in a test file (no production hunk, and no inline
+`#[cfg(test)]` hunk in a production file), a row may set `test_only_fix = true` and name a committed
+defect-injection patch in `control_b_patch` (repo-relative, normally
+`docs/bugs/test-only/<ID>-defect.patch`). Promotion runs two controls and records both in
+`promote.json` (`control: "test_hunks"`, `control_b`):
+
+- **A, the old oracle**: reverse the fix's test-file hunks onto the candidate and require a registered
+  ref to go red. Only a real assertion failure counts; a removed test is unrunnable, never red.
+- **B, the defect injection**: apply `control_b_patch` — a minimal mutation of the production behaviour
+  the test claims to guard — to the restored candidate, require a registered ref red, then restore and
+  require every ref green. A control that stays green refuses promotion.
+
+The gate also refuses the flag when the fix commit changes any production file, when a changed test file
+holds no test one of the row's refs runs, when the defect patch is missing or does not apply, and when
+the row lacks `repro_check`. Stricter still:
+
+- **The defect patch is the committed one.** It is read with `git show HEAD:<control_b_patch>`, its
+  worktree copy must be identical (an uncommitted edit refuses), and the row records
+  `control_b_sha256`, which `regressions.run` checks against the committed bytes and
+  `_promotion_errors` checks against `control_b.sha256` in the receipt.
+- **It mutates production behaviour only.** Split like a fix patch, it may not touch a test file, an
+  inline `#[cfg(test)]` module, a `docs/` path other than `docs/bugs/`, a `*.md`, or build
+  configuration (`Cargo.toml`, `build.rs`, `.cargo/`, `.config/`); a hunk it would leave out refuses.
+- **Red means an observed assertion failure in a changed test file.** Cargo's `panicked at <path>` must
+  name a reversed test file; a python innermost traceback frame must be a changed test file and an
+  `AssertionError`. A production-code panic or a build failure is unrunnable, never red.
+- **The same test must flip both ways.** `control_b.proving` is the non-empty intersection of control
+  A's red refs and control B's red refs, and each proving ref's test must be defined in a reversed
+  file (python by module path, cargo by `crates/<crate>/` plus module path). Coverage is by that exact
+  mapping, never by a bare function name.
+- **Control A always runs on current code** (`control_tree: head`): a test-only fix whose test hunks do
+  not reverse onto the candidate refuses instead of falling back to a `fix_commit` worktree. A
+  `client:<sha>` fix can never be `test_only_fix`.
+- **A row may narrow control A to its own file.** One commit often corrects several oracles; a row
+  names them in `control_a_files` and control A reverses only those hunks, with every listed file
+  required to be a test file of the fix commit and to hold a ref's test. Without the field control A
+  reverses every changed test file (and every one needs a ref).
+- A corrected test in a test file the fix deleted or renamed has no control A and refuses. `repro_check` states what the old oracle asserted and the independent
+evidence (vanilla data/bytecode, spec, arithmetic) that the new one is right; the review of a test-only
+batch lists old versus new assertions and justifies every removed or loosened one. A row whose defect
+cannot be injected stays `fixed-unpromoted(test-only: oracle unproven)` — control A alone never promotes.
+
+### How a red is classified (control A and B, every row)
+
+Panics are captured with their message and source line, keyed by `(crate, test)`, and sorted into
+three classes before `valid_red`/`valid_b` are computed:
+
+- **(a) `fixture-failure` — refused.** A confirmed fixture/setup panic: a registry or world-builder
+  message (`registry loads`, `invalid map color registry`, `test_registry(`, `fixture_store(`) or a
+  `#[track_caller]` `Option/Result::unwrap`/`expect` panic. The registered test body never ran, so the
+  red says nothing about the fix.
+- **(b) assertion — accepted.** The panicking source line is an `assert!`/`assert_eq!`/`assert_ne!`/
+  `debug_assert!`/`panic!(`. A shared helper inside a `*_tests.rs` file counts (for example
+  `core_journal_backpressure_tests.rs`), because the row's own test calls it.
+- **(c) `unproven-panic` — refused unless named.** Any other panic (a helper without an assert macro,
+  a `-> Result<()>` test failing through `?` with no panic line at all): the row must name it as
+  `proving_assertions = { "<ref>" = "path:line" }` and the recorded location must equal that value.
+  A red without any panic location on a cargo ref is class (c) too.
+
+A test-only row's control B must additionally red **inside a hunk the fix reversed**: the gate reads
+the diff the reversal actually applied (git offsets the hunk once the file has grown) and requires
+the red line, together with the operator starting there, to overlap a changed line; a red elsewhere in
+the same file is another assertion and refuses with the range printed. `control_a_files` narrows what
+control A reverses and never what the gate checks: every non-doc path of a test-only fix commit must
+be a test file, and `_promotion_errors` refuses a receipt whose `reversed_files` differ from the row's
+`control_a_files`.
+
+A stale patch-mode receipt (missing committed patch or a patch a later commit rewrote) is a REPORT: `regressions` prints "stale patch-mode receipts: N, M without patch" and writes the list; only `ledger promote`/`--dry-run` is strict about it. A committed patch whose bytes differ from the row's `fix_commit` digest is an error.
+
+Patch-mode rows (`fix_commit = "patch:<sha256>"`) are re-audited by reversing their committed
+`docs/bugs/fix-patches/<ID>.patch` on the tree being promoted; that reversal is what `ledger promote` and
+a `--dry-run` do, and a patch that no longer reverses is refused there. `regressions` (L2) only reports
+the backlog, as stated above.
+
 ## Probing rows before assignment
 
 `python3 -m tools.harness ledger probe <ID...>|--open [--client] [--out PATH]`

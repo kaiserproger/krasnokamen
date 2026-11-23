@@ -8,6 +8,7 @@ import shutil
 import signal
 import socket
 import sys
+import time
 
 if sys.argv[1] == '--send-locks':
     fds = array.array('i')
@@ -24,7 +25,7 @@ if sys.argv[1] == '--send-locks':
             raise RuntimeError('guardian did not accept locks')
     sys.exit(0)
 
-control, cgroup, wrapper, caller = sys.argv[1:]
+control, cgroup, wrapper, caller, *rest = sys.argv[1:]
 selector = selectors.DefaultSelector()
 fifo = os.open(control + '/events', os.O_RDWR | os.O_NONBLOCK)
 listener = socket.socket(socket.AF_UNIX)
@@ -33,6 +34,16 @@ listener.listen(1)
 selector.register(listener, selectors.EVENT_READ)
 held_locks = []
 selector.register(fifo, selectors.EVENT_READ)
+# A cancellation the wrapper forwards (TERM/INT/HUP) starts this escalation: TERM alone cannot
+# stop a descendant that ignores it, and the wrapper would wait forever (#G5, CS341). The grace is
+# an argument from mem-run.sh (`KRASNOKAMEN_MEMRUN_CANCEL_GRACE`, default 15 s): a wrapper killed
+# at the deadline takes its command with it, so a harness that is still writing result.json at the
+# escalation is cut, exactly as a TERM-ignoring descendant would be.
+try:
+    CANCEL_GRACE_SECONDS = float(rest[0]) if rest else 15.0
+except ValueError:
+    sys.exit(f'mem-run-guard: grace must be seconds, got {rest[0]!r}')
+escalate_at = None
 try:
     wrapper_fd = os.pidfd_open(int(wrapper))
     selector.register(wrapper_fd, selectors.EVENT_READ)
@@ -42,7 +53,10 @@ try:
     ready_fd = os.open(control + '/ready', os.O_RDWR | os.O_NONBLOCK)
     os.write(ready_fd, b'ready\n')
     while True:
-        events = selector.select()
+        # A cancelled scope is killed after the grace period, whether or not anything else happens.
+        wait = None if escalate_at is None else max(0.0, escalate_at - time.monotonic())
+        events = selector.select(wait)
+        escalated = escalate_at is not None and time.monotonic() >= escalate_at
         # Completion wins over wrapper exit, but not over the caller dying.
         caller_dead = caller_fd != wrapper_fd and any(key.fd == caller_fd for key, _ in events)
         if any(key.fileobj == listener for key, _ in events):
@@ -59,11 +73,14 @@ try:
             listener.close()
         done = False
         if any(key.fd == fifo for key, _ in events):
-            done = b'done\n' in os.read(fifo, 4096) and not caller_dead
+            message = os.read(fifo, 4096)
+            if b'cancel' in message:
+                escalate_at = time.monotonic() + CANCEL_GRACE_SECONDS
+            done = b'done\n' in message and not caller_dead
         if done:
             # Hold the slot locks until the wrapper exits and the scope empties.
             select.select([wrapper_fd, caller_fd], [], [])
-        if done or any(key.fd in (wrapper_fd, caller_fd) for key, _ in events):
+        if done or escalated or any(key.fd in (wrapper_fd, caller_fd) for key, _ in events):
             # Prevent a surviving launcher from creating the scope after our check.
             try:
                 signal.pidfd_send_signal(wrapper_fd, signal.SIGKILL)

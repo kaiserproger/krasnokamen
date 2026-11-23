@@ -1,0 +1,37 @@
+{
+  "id": "PERF-WINDOW-READS-AMD-L2-ALIAS-AS-LAST-LEVEL-MISS-RATE",
+  "verdict": "promoted",
+  "fix_commit": "patch:4c591801cc62517529505ebcdac13e394c12b54aee756c53a4a2190fd1f27309",
+  "fix_commit_full": "patch:4c591801cc62517529505ebcdac13e394c12b54aee756c53a4a2190fd1f27309",
+  "promoted_at": "2026-11-23T16:25:40+00:00",
+  "tree_head": "1dc8793435c840dd9a77b23ce438464256f7ff9e",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "4c591801cc62517529505ebcdac13e394c12b54aee756c53a4a2190fd1f27309",
+  "reversed_files": [
+    "tools/dev/perf-window.sh"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.dev.test_perf_window:PerfWindowRecipeTests.test_the_counter_set_is_the_amd_last_level_events_not_the_l2_aliases": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_perf_window.py",
+        "line": 64,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "python:tools.dev.test_perf_window:PerfWindowRecipeTests.test_the_counter_set_is_the_amd_last_level_events_not_the_l2_aliases": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T162536-ledger-promote-jhzhg6f0"
+}

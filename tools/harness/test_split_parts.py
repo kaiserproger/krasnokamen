@@ -93,6 +93,100 @@ class SplitPartsTests(unittest.TestCase):
                          [os.sys.executable, "-m", "tools.harness", "run", "buildings-qa"])
         self.assertTrue((root / "parts").is_dir())
 
+    def spawn_recording(self, events, receipts, waits=None):
+        def spawn(_argv, env, log_path):
+            label = env[profiles.SPLIT_PART_ENV]
+            events.append(f"spawn:{label}")
+            root = Path(env["KRASNOKAMEN_VALIDATION_ROOT"])
+            artifact = root / ("20260101T000000-" + label)
+            artifact.mkdir(parents=True, exist_ok=True)
+            (artifact / "result.json").write_text(json.dumps(receipts[label]))
+            log_path.write_bytes(b"child log\n")
+            def wait(timeout=None):
+                events.append(f"wait:{label}")
+                if waits is not None:
+                    waits.append((label, timeout))
+                return 0
+            return SimpleNamespace(wait=wait)
+        return spawn
+
+    def test_parts_run_one_at_a_time_so_two_full_legs_never_share_a_scope(self):
+        """Negative control for HARNESS-SCREENS-VOICE-PARTS-OOM: overlap means OOM, not a verdict."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        events: list[str] = []
+        receipts = {"a": passed(), "b": passed()}
+        with patch.object(profiles, "_spawn_split", self.spawn_recording(events, receipts)):
+            blocks = profiles.run_split(context(directory.name), "screens-voice-qa",
+                                        [profiles.SplitPart("a"), profiles.SplitPart("b")],
+                                        sequential=True)
+        # Concurrent code would start both legs first: spawn:a, spawn:b, wait:a, wait:b.
+        self.assertEqual(events, ["spawn:a", "wait:a", "spawn:b", "wait:b"])
+        self.assertEqual([block["status"] for block in blocks], ["passed", "passed"])
+
+    def test_other_split_gates_keep_the_concurrent_start(self):
+        """buildings-qa and civilization-seed-qa parts fit together; only screens is sequential."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        events: list[str] = []
+        receipts = {"a": passed(), "b": passed()}
+        with patch.object(profiles, "_spawn_split", self.spawn_recording(events, receipts)):
+            profiles.run_split(context(directory.name), "buildings-qa",
+                               [profiles.SplitPart("a"), profiles.SplitPart("b")])
+        self.assertEqual(events, ["spawn:a", "spawn:b", "wait:a", "wait:b"])
+
+    def test_each_sequential_leg_gets_its_own_full_timeout(self):
+        """A slow earlier leg must not shorten the next one's budget (shared deadline = false timeout)."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        events: list[str] = []
+        waits: list[tuple[str, float | None]] = []
+        receipts = {"a": passed(), "b": passed()}
+        # wall clock: part a starts at 0 and ends 1500 s later; part b then starts at 1500.
+        ticks = iter([0.0, 0.0, 1500.0, 1500.0])
+        with patch.object(profiles, "_spawn_split", self.spawn_recording(events, receipts, waits)), \
+                patch.object(profiles.time, "monotonic", side_effect=lambda: next(ticks, 3000.0)):
+            profiles.run_split(context(directory.name, timeout_seconds=1500.0),
+                               "screens-voice-qa",
+                               [profiles.SplitPart("a"), profiles.SplitPart("b")], sequential=True)
+        self.assertEqual([label for label, _ in waits], ["a", "b"])
+        self.assertEqual([round(timeout) for _, timeout in waits], [1500, 1500])
+
+    def test_the_budget_is_measured_from_the_part_s_spawn_not_its_await(self):
+        # ReviewD123Harness1 10: a concurrent part awaited late used to get only what the clock left.
+        child = FakeChild(None)
+        with patch.object(profiles.time, "monotonic", return_value=1000.0), \
+                patch.object(profiles, "_judge_split_part", return_value={"label": "b"}):
+            profiles._await_split_part(profiles.SplitPart("b"), Path("/nonexistent"), Path("/nonexistent"),
+                                       child, [], 1500.0, started_at=0.0)
+        self.assertEqual([round(timeout) for timeout in child.waits], [500],
+                         "a part spawned at 0 with a 1500 s budget, awaited at 1000 s, has 500 s left")
+
+    def test_the_screens_voice_split_driver_runs_its_legs_in_sequence(self):
+        # HARNESS-SCREENS-VOICE-PARTS-OOM: the driver, not run_split, decides the gate's scope. Two
+        # overlapping full legs exceeded one 12 GiB scope, so the driver passes sequential=True and
+        # the order is spawn:a, wait:a, spawn:b. Deleting the kwarg leaves every run_split test green
+        # (they pass it themselves), which is why this seam is tested here.
+        from tools.harness.backends import screens_voice_qa as driver
+        calls = []
+
+        def fake(ctx, profile, parts, *, sequential=False):
+            for part in parts:
+                calls.append("spawn:" + part.label)
+                if sequential:
+                    calls.append("wait:" + part.label)
+            return [{"label": part.label} for part in parts]
+
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(driver, "run_split", fake), \
+                patch.object(driver, "merge_leg_parts", lambda blocks, legs: {"parts": blocks}), \
+                patch.dict(os.environ, {"KRASNOKAMEN_PW_ROOT": ""}):
+            legs = driver.split_legs()
+            driver._split_run(SimpleNamespace(parts=len(legs), artifact_dir=Path(directory)), 30.0)
+        expected = [item for leg in legs for item in (f"spawn:{leg}", f"wait:{leg}")]
+        self.assertEqual(calls, expected,
+                         "each leg must start only after the previous leg's receipt was read")
+
     def test_the_cli_refuses_parts_for_a_profile_without_independent_parts(self):
         from tools.harness import __main__ as cli
         with patch("sys.stderr", new_callable=io.StringIO) as error, \

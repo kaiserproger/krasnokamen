@@ -1,10 +1,12 @@
 [[bug]]
 id = "PERF-WINDOW-HAS-NO-CALL-GRAPH-AND-NO-MAINTAINED-SCRIPT"
-title = "The box profiling recipe runs perf record without -g and lives only in receipts/Perf1M/perf-window.sh, with no maintained script under tools/, so captures give self time only and cannot say which caller causes the cache fills."
+title = "The box profiling recipe runs perf record without -g (and lived only in receipts/Perf1M/perf-window.sh, not under tools/), so captures give self time only and cannot say which caller causes the cache fills; the control reverses the `-g --call-graph fp` flag, the maintained script is the fix commit's new file."
 area = "harness"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "receipts/Books/REPORT-R1.md gap G-9 and section F7 (Gregg 6.5.4 profiling, 6.7.3 flame graphs, 12.3.3 profile the benchmark target and its software; tooling). receipts/Perf1M/perf-window.sh records perf record -p <pid> -F 999 without -g and reports --sort dso,symbol; docs/development/performance-windows-and-profiling.md requires the frame-pointer pin plus -g for inclusive attribution; nothing under tools/ reproduces the counter set, so a different counter set makes the next number incomparable. Verified open on main 5bdc02911 (no perf-window script in tools/dev). Fix: add -g / --call-graph fp against a pin-release built with RUSTFLAGS=-C force-frame-pointers=yes, add --per-thread, and promote the script to tools/dev/perf-window.sh with the counter set and a self-test; kernel frames stay unknown until kernel.kptr_restrict=0 (owner action, see receipts/Perf1M/BOOKS-IDEAS.md I-3)."
-regression = []
+regression = ["python:tools.dev.test_perf_window:PerfWindowRecipeTests.test_the_capture_is_a_frame_pointer_call_graph_with_per_thread_attribution", "python:tools.dev.test_perf_window:PerfWindowRecipeTests.test_the_script_is_executable_and_refuses_an_unusable_invocation"]
 failing_first = "not recorded"
+fix_commit = "patch:8357c04c41b86359bf919086585438d884314539d34005f5d886d6cefe90e4b7"
+promotion = "docs/bugs/promotions/PERF-WINDOW-HAS-NO-CALL-GRAPH-AND-NO-MAINTAINED-SCRIPT.json"

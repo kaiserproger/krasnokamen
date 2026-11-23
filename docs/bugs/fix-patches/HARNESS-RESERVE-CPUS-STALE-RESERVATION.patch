@@ -1,0 +1,120 @@
+diff --git a/tools/dev/mem-run.sh b/tools/dev/mem-run.sh
+--- a/tools/dev/mem-run.sh
++++ b/tools/dev/mem-run.sh
+@@ -384,7 +384,45 @@
+ # silently pin every later scope away from those CPUs (or drop the restriction when the
+ # stale list covers a whole pool) — #G4, CS341. A one-line file from an older writer has no
+ # owner and is honoured as-is (mixed-version compatibility).
+-reserved=$(cat "$dir/reserved-cpus" 2>/dev/null || true)
++reserved=
++if [ -e "$dir/reserved-cpus" ]; then
++  # A failing helper must not silently drop a live reservation: name it, keep its stderr in a
++  # variable (a shared .err file races between wrappers), validate the first line as a CPU list and
++  # honour that much (ReviewD123Harness1 6, 4 N12).
++  err=
++  errlog=$(mktemp "${TMPDIR:-/tmp}/mem-run-reserved.XXXXXX")
++  if ! verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>"$errlog"); then
++    err=$(cat "$errlog")
++    rm -f "$errlog"
++    first=$(head -n 1 "$dir/reserved-cpus")
++    if ! printf '%s' "$first" | grep -Eqx '[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*'; then
++      echo "mem-run: cannot judge $dir/reserved-cpus ($err) and its first line is not a CPU list; refusing this scope" >&2
++      exit 75
++    fi
++    echo "mem-run: cannot judge $dir/reserved-cpus; honouring its first line '$first' as a CPU list: $err" >&2
++    verdict="keep $first"
++  else
++    err=$(cat "$errlog")
++    rm -f "$errlog"
++    [ -n "$err" ] && echo "mem-run: reserved-cpus verdict said: $err" >&2
++  fi
++  case "$verdict" in
++    keep\ *) reserved=${verdict#keep } ;;
++    stale\ *)
++      echo "mem-run: ignoring stale CPU reservation '${verdict#stale }' (its owner is gone or its pid was reused); clearing $dir/reserved-cpus" >&2
++      python3 "$here/reserved_cpus.py" clear "$dir" >&2 || true
++      # Clearing re-reads under the lock, so it never removes a reservation written meanwhile:
++      # if one is there now, it is live and this scope honours it.
++      verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>/dev/null || echo none)
++      [ "${verdict%% *}" = keep ] && reserved=${verdict#keep }
++      ;;
++    none) : ;;
++    *)
++      echo "mem-run: reserved-cpus verdict '$verdict' is not none/keep/stale; refusing this scope" >&2
++      exit 75
++      ;;
++  esac
++fi
+ if [ -n "$reserved" ] && [ "${KRASNOKAMEN_RESERVED_CPUS:-}" != use ] && [ "$exclusive" = 0 ]; then
+   declare -A held=()
+   for part in ${reserved//,/ }; do for ((c = ${part%-*}; c <= ${part#*-}; c++)); do held[$c]=1; done; done
+diff --git a/tools/dev/reserve-cpus b/tools/dev/reserve-cpus
+index edddd0b5d..d9a1da0b9 100755
+--- a/tools/dev/reserve-cpus
++++ b/tools/dev/reserve-cpus
+@@ -13,8 +13,11 @@
+ # reused), so a stale file cannot silently pin every later scope (#G4, CS341).
+ # Clearing a corpse and creating a reservation are serialized on
+ # `reserved-cpus.lock` (tools/dev/reserved_cpus.py): a reservation written while a
+-# corpse is judged is never removed. Install order on a host: mem-run.sh first,
+-# then this script; only the new pair is race-safe together.
++# corpse is judged is never removed. Install order on a host (ReviewD123Harness1 6):
++# `mem-run-guard.py` and `reserved_cpus.py` first, then `mem-run.sh`, then this
++# script — a newer wrapper names a missing helper, honours the file's first line as
++# a CPU list and refuses only when that line is not one, and an older wrapper does
++# not know the owner line.
+ set -euo pipefail
+ dir=/tmp/solaris-mem-slots
+ file=$dir/reserved-cpus
+@@ -44,14 +47,13 @@ if ! (
+   echo "reserve-cpus: CPUs already reserved: $(cat "$file" 2>/dev/null)" >&2
+   exit 75
+ fi
+-starttime=$version
+ release() {
+   local content expected
+   (
+     exec {lf}<>"$dir/reserved-cpus.lock"
+     flock "$lf"
+     content=$(cat "$file" 2>/dev/null || true)
+-    expected=$(printf '%s\n%s %s' "$cpus" "$$" "$starttime")
++    expected=$(printf '%s\n%s %s' "$cpus" "$$" "$version")
+     # Only our own file: a reservation that replaced it is not ours to remove.
+     if [ "$content" = "$expected" ]; then rm -f -- "$file"; fi
+   )
+diff --git a/tools/dev/reserved_cpus.py b/tools/dev/reserved_cpus.py
+index 79e96f8af..568004533 100755
+--- a/tools/dev/reserved_cpus.py
++++ b/tools/dev/reserved_cpus.py
+@@ -10,8 +10,10 @@ file under that lock: only the exact bytes that were judged stale are unlinked.
+     python3 tools/dev/reserved_cpus.py verdict <state-dir>   # "none" | "keep <cpus>" | "stale <cpus>"
+     python3 tools/dev/reserved_cpus.py clear <state-dir>     # remove the corpse we judged, if unchanged
+ 
+-Install order on a host: mem-run.sh first, then reserve-cpus. An old mem-run ignores the
+-owner line and honours any file it finds, so only the new pair is race-safe together.
++Install order on a host: `mem-run-guard.py` and this helper first, then `mem-run.sh`, then
++`reserve-cpus`. A wrapper that cannot run this helper names it, honours the reservation file's
++first line as a CPU list and refuses (exit 75) only when that line is not one; an older wrapper
++ignores the owner line and honours any file it finds, so only the new three are race-safe together.
+ """
+ from __future__ import annotations
+ 
+@@ -35,12 +37,16 @@ def parse(text: str) -> tuple[str | None, str | None]:
+ 
+ 
+ def owner_alive(owner: str | None) -> bool | None:
+-    """True/False for a live/dead owner; None when the line cannot be judged (an older writer)."""
++    """True/False for a live/dead owner; None only when there is no owner line (an older writer).
++
++    A present line that cannot be parsed claims a live owner and cannot be checked, so it is treated
++    as stale: keeping it would pin the CPUs for as long as the file survives, and clear() unlinks only
++    the exact bytes judged, so a live writer is never raced."""
+     if owner is None:
+         return None
+     parts = owner.split()
+     if len(parts) != 2 or not parts[0].isdigit():
+-        return None
++        return False
+     pid, start = parts
+     try:
+         text = Path(f'/proc/{pid}/stat').read_text()

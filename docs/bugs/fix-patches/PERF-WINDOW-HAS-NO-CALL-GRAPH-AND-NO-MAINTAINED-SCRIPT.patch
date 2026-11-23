@@ -1,0 +1,13 @@
+diff --git a/tools/dev/perf-window.sh b/tools/dev/perf-window.sh
+index bd8aff330..6f7f8807c 100755
+--- a/tools/dev/perf-window.sh
++++ b/tools/dev/perf-window.sh
+@@ -69,7 +69,7 @@ perf stat -x, -e "$(IFS=,; echo "${events[*]}")" --per-thread -p "$pid" -- sleep
+   echo "perf-window: perf stat over the explicit counters failed; see $out/stat.csv" >&2
+   exit 2
+ }
+-perf record -p "$pid" -F 999 --per-thread -m "$mmap_pages" \
++perf record -p "$pid" -F 999 -g --call-graph fp --per-thread -m "$mmap_pages" \
+   -e "$(IFS=,; echo "${events[*]}")" -o "$out/perf.data" -- sleep "$seconds" > "$out/record.log" 2>&1 || {
+   echo "perf-window: perf record failed; see $out/record.log" >&2
+   exit 2

@@ -108,62 +108,98 @@ def _spawn_split(argv: list[str], env: dict[str, str],
                                 stderr=subprocess.STDOUT, start_new_session=True)
 
 
-def run_split(ctx: ProfileContext, profile: str, parts: list[SplitPart]) -> list[dict[str, Any]]:
+def _judge_split_part(part: SplitPart, root: Path, log_path: Path, exit_code: int | None,
+                      failures: list[str]) -> dict[str, Any]:
+    """One part's receipt: exactly one passed result.json, or a named failure."""
+    receipts = sorted(root.glob("*/result.json"))
+    block: dict[str, Any] = {"label": part.label, "log": str(log_path), "artifact": None,
+                             "status": "missing", "exit": exit_code, "error": None, "details": {}}
+    if not receipts:
+        failures.append(f"{part.label}: no result.json under {root}")
+    elif len(receipts) > 1:
+        failures.append(f"{part.label}: {len(receipts)} result.json under {root}")
+    else:
+        block["artifact"] = str(receipts[0].parent)
+        try:
+            receipt = json.loads(receipts[0].read_text())
+        except (OSError, ValueError) as error:
+            failures.append(f"{part.label}: unreadable result.json: {error}")
+        else:
+            block.update(status=receipt.get("status"), error=receipt.get("error"),
+                         details=receipt.get("details") or {})
+            if receipt.get("status") != "passed":
+                failures.append(f"{part.label}: {receipt.get('status')}: {receipt.get('error')}")
+            elif exit_code != 0:
+                failures.append(f"{part.label}: exit {exit_code}")
+    return block
+
+
+def _await_split_part(part: SplitPart, root: Path, log_path: Path,
+                      proc: subprocess.Popen[Any], failures: list[str],
+                      timeout: float, *, started_at: float | None = None) -> dict[str, Any]:
+    """Wait for one child with that part's own full timeout, then judge its receipt.
+
+    The budget is measured from this part's *spawn* (`ctx.timeout_seconds`, 3600 s when unset),
+    which is also the per-leg timeout each child receives: a shared deadline would hand a later
+    sequential leg whatever the earlier one left and false-time-out a healthy run, and an
+    await-time deadline would give a queued concurrent part the time its earlier siblings spent
+    before it was even started (review item 1, second pass)."""
+    deadline = (started_at if started_at is not None else time.monotonic()) + timeout
+    remaining = max(1.0, deadline - time.monotonic())
+    try:
+        exit_code = proc.wait(timeout=remaining)
+    except subprocess.TimeoutExpired:
+        stop_process(proc)
+        exit_code = None
+        failures.append(f"{part.label}: timed out after {remaining:.0f}s of its {timeout:.0f}s budget")
+    return _judge_split_part(part, root, log_path, exit_code, failures)
+
+
+def run_split(ctx: ProfileContext, profile: str, parts: list[SplitPart], *,
+              sequential: bool = False) -> list[dict[str, Any]]:
     """Run every part as its own `tools.harness run <profile>` child, then judge them.
 
-    All children start before any is awaited, so the parts run concurrently, each
-    with its own artifact root (therefore its own server, client and Xvfb
-    display). The combined verdict is the whole point: a part that fails, exits
-    nonzero, writes no receipt or writes more than one fails the split gate.
-    """
+    `sequential` starts the next part only after the previous receipt is read;
+    screens-voice-qa sets it because two overlapping full legs (server, client and Xvfb
+    display each) exceeded one 12 GiB mem-run scope and were OOM-killed before any verdict
+    (HARNESS-SCREENS-VOICE-PARTS-OOM). Other split gates keep the concurrent start, which
+    their parts fit. Every part gets its own full `ctx.timeout_seconds` budget from its own
+    start. The combined verdict is the whole point: a part that fails, exits nonzero, writes
+    no receipt or writes more than one fails the split gate."""
     if not parts:
         raise ValueError("a split gate needs at least one part")
     parts_root = ctx.artifact_dir / "parts"
     parts_root.mkdir(parents=True, exist_ok=True)
     base_argv = [sys.executable, "-m", "tools.harness", "run", profile, *profile_argv(ctx)]
-    children = []
-    for part in parts:
+    per_part = ctx.timeout_seconds or 3600.0
+    blocks: list[dict[str, Any]] = []
+    failures: list[str] = []
+
+    def prepare(part: SplitPart) -> tuple[Path, Path, dict[str, str]]:
         root = parts_root / part.label
         root.mkdir(parents=True, exist_ok=True)
         env = dict(os.environ)
         env.update(part.env)
         env[SPLIT_PART_ENV] = part.label
         env["KRASNOKAMEN_VALIDATION_ROOT"] = str(root)
-        log_path = parts_root / (part.label + ".log")
-        children.append((part, root, log_path, _spawn_split(base_argv, env, log_path)))
-    deadline = time.monotonic() + (ctx.timeout_seconds or 3600.0)
-    blocks: list[dict[str, Any]] = []
-    failures: list[str] = []
-    for part, root, log_path, proc in children:
-        remaining = max(1.0, deadline - time.monotonic())
-        try:
-            exit_code = proc.wait(timeout=remaining)
-        except subprocess.TimeoutExpired:
-            stop_process(proc)
-            exit_code = None
-            failures.append(f"{part.label}: timed out with {remaining:.0f}s left")
-        receipts = sorted(root.glob("*/result.json"))
-        block: dict[str, Any] = {"label": part.label, "log": str(log_path), "artifact": None,
-                                 "status": "missing", "exit": exit_code, "error": None,
-                                 "details": {}}
-        if not receipts:
-            failures.append(f"{part.label}: no result.json under {root}")
-        elif len(receipts) > 1:
-            failures.append(f"{part.label}: {len(receipts)} result.json under {root}")
-        else:
-            block["artifact"] = str(receipts[0].parent)
-            try:
-                receipt = json.loads(receipts[0].read_text())
-            except (OSError, ValueError) as error:
-                failures.append(f"{part.label}: unreadable result.json: {error}")
-            else:
-                block.update(status=receipt.get("status"), error=receipt.get("error"),
-                             details=receipt.get("details") or {})
-                if receipt.get("status") != "passed":
-                    failures.append(f"{part.label}: {receipt.get('status')}: {receipt.get('error')}")
-                elif exit_code != 0:
-                    failures.append(f"{part.label}: exit {exit_code}")
-        blocks.append(block)
+        return root, parts_root / (part.label + ".log"), env
+
+    if sequential:
+        for part in parts:
+            root, log_path, env = prepare(part)
+            spawned = time.monotonic()
+            proc = _spawn_split(base_argv, env, log_path)
+            blocks.append(_await_split_part(part, root, log_path, proc, failures, per_part,
+                                            started_at=spawned))
+    else:
+        started = []
+        for part in parts:
+            root, log_path, env = prepare(part)
+            spawned = time.monotonic()
+            started.append((part, root, log_path, _spawn_split(base_argv, env, log_path), spawned))
+        for part, root, log_path, proc, spawned in started:
+            blocks.append(_await_split_part(part, root, log_path, proc, failures, per_part,
+                                            started_at=spawned))
     if failures:
         raise RuntimeError("split part(s) failed: " + "; ".join(failures))
     return blocks

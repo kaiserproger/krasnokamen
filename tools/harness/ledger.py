@@ -275,6 +275,108 @@ def _exec(ctx, argv, tag, tree, env):
 
 
 _RESULT_LINE = re.compile(r'^\s+([A-Z][A-Z ]*?)\s+\[\s*[\d.]+s\]\s+(?:\(\s*\d+/\d+\)\s+)?(\S+)\s+(\S+)\s*$', re.MULTILINE)
+_PANIC_LINE = re.compile(r"panicked at ([^\s:]+):(\d+)")
+# A test body's `.unwrap()` panics through #[track_caller] at the test's own line, but it is a setup
+# failure, not an assertion: no control kind may accept it as evidence.
+_SETUP_PANIC = re.compile(r'^called `(?:Option|Result)::(unwrap|expect|unwrap_err|expect_err)')
+# Confirmed fixture-setup failures the harness's own tests produced: a shared registry or world
+# builder panics before the registered test body runs (ReviewD123Harness, Mechanics rows: the control
+# was red, but at `Registry("invalid map color registry")` from a fixture, not at an assertion).
+_FIXTURE_PANICS = (
+    re.compile(r'registry loads', re.IGNORECASE),
+    re.compile(r'invalid map color registry', re.IGNORECASE),
+    re.compile(r'\btest_registry\('),
+    re.compile(r'\bfixture_store\('),
+)
+_ASSERT_LINE = re.compile(r'\b(?:assert(?:_eq|_ne)?!|debug_assert(?:_eq|_ne)?!|panic!\s*\()')
+_ASSERT_MESSAGE = re.compile(r'^(assertion|assert\b|explicit panic|panicked at)', re.IGNORECASE)
+_UNWRAP_LINE = re.compile(r'\.(?:unwrap|expect)\s*\(')
+
+FIXTURE_FAILURE = 'fixture-failure'
+UNPROVEN_PANIC = 'unproven-panic'
+
+
+def _panic_locations(text):
+    """{(crate, test name): (file, line, message)} of the panics nextest captured.
+
+    A negative control is red only at an assertion: `panicked at <path>:<line>` is where the panic
+    happened, and the message plus that source line is what later decides whether it was an
+    assertion or a fixture. The key pairs the panic with the result line it follows (its binary's
+    crate and the test name), so two modules with a test of the same name do not overwrite each
+    other."""
+    locations = {}
+    current = None
+    for line in text.splitlines():
+        result = _RESULT_LINE.match(line)
+        if result:
+            current = (result.group(2).split('::', 1)[0], result.group(3))
+            continue
+        match = _PANIC_LINE.search(line)
+        if match is None:
+            continue
+        rest = text[text.find(line) + len(line):].splitlines()
+        message = rest[1].strip() if len(rest) > 1 else ''
+        thread = re.search(r"thread '([^']+)' panicked", line)
+        if thread and '::' in thread.group(1):
+            name = thread.group(1).rsplit('::', 1)[-1]
+            crate = thread.group(1).split('::', 1)[0] if current is None else current[0]
+        elif current is not None:
+            name, crate = current[1], current[0]
+            name = name.rsplit('::', 1)[-1]
+        else:
+            continue
+        locations[(crate, name)] = (match.group(1), int(match.group(2)), message)
+    return locations
+
+
+def _panic_class(tree, location, message):
+    """'assertion' | 'fixture' for a panic a cargo test emitted, from its message and source line.
+
+    (a) a confirmed fixture/setup panic (registry or world builder, a `#[track_caller]`
+    unwrap/expect) is `fixture`: the registered test body never ran its assertion.
+    (b) a panic whose source line is an assert macro (or an explicit `panic!`) is `assertion`; a
+    shared helper inside a `*_tests.rs` file counts, so a helper assert is not rejected.
+    (c) anything else is `unknown` and the promotion must name its file:line as the proving
+    assertion (ReviewD123Harness, fixture-panic rule)."""
+    file, line = location
+    if any(pattern.search(message or '') for pattern in _FIXTURE_PANICS) or _SETUP_PANIC.match(message or ''):
+        return 'fixture'
+    if not _TEST_PATH.search(file):
+        # An assert macro in production code (even in a test-support module outside _TEST_PATH) is not
+        # evidence about the oracle: class (c) (ReviewD123Harness3 N3b).
+        return 'unknown'
+    try:
+        lines = (Path(tree) / file).read_text(errors='surrogateescape').splitlines()
+    except OSError:
+        return 'unknown'
+    if not 1 <= line <= len(lines):
+        return 'unknown'
+    source = lines[line - 1]
+    # A line that is an unwrap/expect (with #[track_caller] the test's own line) is only an assertion
+    # when the panic message says so (an `assert_eq!` inside `expect(...)`); otherwise it is class (c).
+    if _UNWRAP_LINE.search(source) and not _ASSERT_MESSAGE.match(message or ''):
+        return 'unknown'
+    if _ASSERT_LINE.search(source) and (_ASSERT_MESSAGE.search(message or '') or _UNWRAP_LINE.search(source)):
+        return 'assertion'
+    return 'unknown'
+
+
+def _python_assertion(text):
+    """The innermost traceback frame of a failing unittest, when its own exception is AssertionError."""
+    blocks = text.split('Traceback (most recent call last):')
+    if len(blocks) < 2:
+        return None
+    block = blocks[-1]
+    # The exception line closes the block: `AssertionError: ...` (or `module.Error: ...`). A text that
+    # mentions AssertionError elsewhere (a captured log, another test's output) is not this failure.
+    exception = re.search(r'^([A-Za-z_][\w.]*(?:Error|Exception|Failure))(: .*)?$', block, re.MULTILINE)
+    if exception is None or exception.group(1).rsplit('.', 1)[-1] != 'AssertionError':
+        return None
+    frames = re.findall(r'^\s*File "([^"]+)", line (\d+)', block, re.MULTILINE)
+    if not frames:
+        return None
+    file, line = frames[-1]
+    return {'file': file, 'line': int(line), 'error': 'AssertionError'}
 
 
 def _run_cargo(ctx, tests, tree):
@@ -287,11 +389,11 @@ def _run_cargo(ctx, tests, tree):
         listing = regressions._nextest_listing(text)
     except ValueError:
         reason = 'nextest list produced no listing (build error?); see log' if not ok else 'nextest list produced no listing'
-        return {test: (UNRUNNABLE, reason) for test in tests}
+        return {test: (UNRUNNABLE, reason, None) for test in tests}
     found = {(suite['package-name'], name) for suite in listing['rust-suites'].values()
              for name, result in suite.get('testcases', {}).items()
              if result.get('filter-match', {}).get('status') == 'matches' and not result.get('ignored', False)}
-    results = {test: (UNRUNNABLE, 'unknown or ignored test') for test in tests - found}
+    results = {test: (UNRUNNABLE, 'unknown or ignored test', None) for test in tests - found}
     runnable = tests & found
     if not runnable:
         return results
@@ -304,16 +406,22 @@ def _run_cargo(ctx, tests, tree):
         if status == 'SLOW':
             continue  # nextest's slow summary follows the terminal PASS/FAIL
         seen[(binary.split('::', 1)[0], name)] = status
+    panics = _panic_locations(text)
     for test in runnable:
         status = seen.get(test)
         if status is None:
-            results[test] = (UNRUNNABLE, 'no result line (build error or run aborted); see log' if not ok else 'no result line')
+            results[test] = (UNRUNNABLE, 'no result line (build error or run aborted); see log' if not ok else 'no result line', None)
         elif status in ('PASS', 'LEAK PASS'):
-            results[test] = (GREEN, '')
+            results[test] = (GREEN, '', None)
         elif status == 'FAIL':
-            results[test] = (RED, status)
+            location = panics.get((test[0], test[1].rsplit('::', 1)[-1]))
+            assertion = None
+            if location:
+                assertion = {'file': location[0], 'line': location[1], 'error': 'panic',
+                             'class': _panic_class(tree, location[:2], location[2])}
+            results[test] = (RED, status, assertion)
         else:
-            results[test] = (UNRUNNABLE, f'{status}; see log')
+            results[test] = (UNRUNNABLE, f'{status}; see log', None)
     return results
 
 
@@ -398,13 +506,13 @@ def _run_python(ctx, tests, tree):
         count = int(summary.group(1)) if summary else 0
         skipped_count = int(skipped.group(1)) if skipped else 0
         if not summary or count <= skipped_count or re.search(r'(?m)^ERROR:', text):
-            results[(module, test)] = (UNRUNNABLE, 'no executed test or unittest error; see log')
+            results[(module, test)] = (UNRUNNABLE, 'no executed test or unittest error; see log', None)
         elif ok and re.search(r'(?m)^OK(?: \(|$)', text):
-            results[(module, test)] = (GREEN, '')
+            results[(module, test)] = (GREEN, '', None)
         elif not ok and re.search(r'(?m)^FAIL:', text):
-            results[(module, test)] = (RED, 'test assertion failed')
+            results[(module, test)] = (RED, 'test assertion failed', _python_assertion(text))
         else:
-            results[(module, test)] = (UNRUNNABLE, 'no conclusive unittest result; see log')
+            results[(module, test)] = (UNRUNNABLE, 'no conclusive unittest result; see log', None)
     return results
 
 
@@ -600,14 +708,16 @@ def run_refs(ctx, refs, tree, client):
             out[ref] = {'state': NEEDS_CLIENT, 'detail': 'graphical ref; pass --client to run it'}
     with _one_off_build_env(tree):
         if cargo:
-            for (crate, name), (state, detail) in _run_cargo(ctx, cargo, tree).items():
-                out[f'cargo:{crate}:{name}'] = {'state': state, 'detail': detail}
+            for (crate, name), (state, detail, assertion) in _run_cargo(ctx, cargo, tree).items():
+                out[f'cargo:{crate}:{name}'] = {'state': state, 'detail': detail,
+                                               **({'assertion': assertion} if assertion else {})}
         if harness:
             for ref, (state, detail, receipt) in _run_harness(ctx, harness, tree).items():
                 out[ref] = {'state': state, 'detail': detail, **({'receipt': receipt} if receipt else {})}
         if python:
-            for (module, test), (state, detail) in _run_python(ctx, python, tree).items():
-                out[f'python:{module}:{test}'] = {'state': state, 'detail': detail}
+            for (module, test), (state, detail, assertion) in _run_python(ctx, python, tree).items():
+                out[f'python:{module}:{test}'] = {'state': state, 'detail': detail,
+                                                  **({'assertion': assertion} if assertion else {})}
         if client_tests:
             for (crate, name), (state, detail) in _run_client(ctx, client_tests, tree).items():
                 out[f'client:{crate}:{name}'] = {'state': state, 'detail': detail}
@@ -662,6 +772,17 @@ def format_row(ident, row):
 # ---------------------------------------------------------------------- promote
 
 _TEST_PATH = re.compile(r'(^|/)(tests?|testdata|fixtures?)/|(^|/)[^/]*_tests?(\.rs|\.py|/)|(^|/)tests?\.rs$|(^|/)test_[^/]*\.py$')
+# A control reverses code. Row metadata and prose are skipped; any other docs/ path is a harness
+# input (docs/playable/real-client-playable-loop.json, docs/real-client-regression/manifests/*.json
+# and their kin) and must never be silently left out of a patch or reversed inside a control.
+def _skipped_doc(path):
+    if path.startswith('docs/bugs/') or path.endswith('.md'):
+        return True
+    if path.startswith('docs/'):
+        raise Refused(f'{path} is a harness input under docs/; a promotion control cannot skip or reverse it')
+    return False
+
+
 _CFG_TEST_MOD = re.compile(r'^[ \t]*#\[cfg\(test\)\][ \t]*\n(?:[ \t]*#\[[^\n]*\][ \t]*\n)*[ \t]*(?:pub(?:\([^)]*\))? )?mod \w+\s*\{', re.MULTILINE)
 _HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
 _RUST_RAW_STRING = re.compile(r'(?:br|rb|r)(#*)"')
@@ -753,6 +874,142 @@ def non_test_patch(root, commit):
     return _split_non_test(diff, lambda path: _git(root, 'show', f'{commit}:{path}')[1])
 
 
+def _split_test_hunks(diff, only=None):
+    """The fix commit's test-file hunks: (patch text, test files). Refused otherwise.
+
+    `only` narrows *what control A reverses* to the listed test files (a row field `control_a_files`):
+    one commit often corrects several oracles, and a row's control must reverse its own file, not
+    another row's. It never narrows the refusal: every non-doc path of the commit is still judged.
+
+    `test_only_fix` accepts a fix whose guard IS a corrected test oracle, so the control reverses the
+    test hunks instead of production hunks. It refuses any non-doc path that is not a test file: a fix
+    that also edits production code keeps the ordinary `non_test_patch` control."""
+    patch, files = [], []
+    for chunk in re.split(r'(?m)^(?=diff --git )', diff):
+        if not chunk:
+            continue
+        lines = chunk.splitlines(keepends=True)
+        match = re.match(r'diff --git a/(.+) b/(.+)$', lines[0].rstrip('\n'))
+        if match is None:
+            raise Refused(f'fix patch has an unparseable diff header: {lines[0].rstrip()!r}')
+        path = match.group(2)
+        if _skipped_doc(path):
+            continue
+        # Every non-doc path is judged, whether or not `only` reverses it: `control_a_files` chooses
+        # what control A undoes, it never licenses a production file in the fix commit.
+        if not _TEST_PATH.search(path):
+            raise Refused(f'{path} is production code: a test_only_fix fix commit may change only test files '
+                          '(use the ordinary non-test control for a real code fix)')
+        if only is not None and path not in only:
+            continue
+        if any(text.startswith('+++ /dev/null') or text.startswith('--- /dev/null') for text in lines):
+            raise Refused(f'{path} is deleted or renamed by the fix commit: a test_only_fix control restores the '
+                          'corrected test in place, so a removed test file has no control A')
+        if not any(text.startswith('@@ ') for text in lines):
+            raise Refused(f'{path} changes without text hunks (binary or mode-only); cannot be a control')
+        patch.extend(lines)
+        files.append(path)
+    if only is not None:
+        missing = sorted(set(only) - set(files))
+        if missing:
+            raise Refused(f"control_a_files names {', '.join(missing)}, which the fix commit does not change "
+                          'as a test file')
+        if not files:
+            raise Refused(f"control_a_files {sorted(only)} names no file of the fix commit's test hunks")
+    return ''.join(patch), files
+
+
+_MOD_DECL = re.compile(r'^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+([A-Za-z0-9_]+)\s*;')
+_PATH_ATTR = re.compile(r'^\s*#\[path\s*=\s*"([^"]+)"\]\s*$')
+
+
+def _declared_module_file(source: Path, name: str):
+    """The file `mod <name>;` in `source` names, honouring a preceding `#[path = "..."]`."""
+    try:
+        lines = source.read_text(errors='surrogateescape').splitlines()
+    except OSError:
+        return None
+    for index, line in enumerate(lines):
+        match = _MOD_DECL.match(line)
+        if match is None or match.group(1) != name:
+            continue
+        for back in range(index - 1, max(index - 5, -1), -1):
+            path_attr = _PATH_ATTR.match(lines[back])
+            if path_attr:
+                return source.parent / path_attr.group(1)
+            # Walk only over blank lines, attributes and comments: a blank line above the mod
+            # declaration is common and must not stop the walk, a statement must.
+            if lines[back].strip() and not lines[back].lstrip().startswith(('#[', '///', '//')):
+                break
+        # A module declared in a non-mod.rs file lives under <stem>/<name>.rs, never beside it
+        # (ReviewD123Harness1 9d: the sibling lookup could bind to an unrelated x.rs).
+        if source.name not in ('mod.rs', 'lib.rs', 'main.rs'):
+            candidate = source.parent / source.stem / f'{name}.rs'
+            if candidate.is_file():
+                return candidate
+        candidate = source.parent / f'{name}.rs'
+        if candidate.is_file():
+            return candidate
+        candidate = source.parent / name / 'mod.rs'
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _cargo_module_file(root: Path, crate: str, module: list[str]):
+    """The crate source file a module path (`a::b`) names, or None.
+
+    The test file of a `cargo:<crate>:<module::path::test>` ref is not its name spelled with
+    slashes: `falling::tests` is `falling_tests.rs` through `#[path = "..."] mod tests;`, and
+    `fluids_tests::parity` is `fluid_parity_tests.rs`. Following the mod declarations is the only
+    exact mapping, and it must pin the file, never a bare test-function name."""
+    base = Path('crates') / crate / 'src'
+    source = None
+    for entry in ('lib.rs', 'main.rs'):
+        if (root / base / entry).is_file():
+            source = base / entry
+            break
+    if source is None:
+        return None
+    for name in module:
+        source = _declared_module_file(root / source, name)
+        if source is None:
+            return None
+        source = source.relative_to(root)
+    return source.as_posix()
+
+
+def _ref_test_file(root: Path, ref: str, test_files):
+    """The changed test file a registered ref's test body is defined in, or None."""
+    try:
+        kind, first, second = regressions._parse_ref(ref)
+    except ValueError:
+        return None
+    if kind == 'python':
+        expected = first.replace('.', '/') + '.py'
+        return expected if expected in test_files else None
+    if kind == 'cargo':
+        resolved = _cargo_module_file(Path(root), first, second.split('::')[:-1])
+        return resolved if resolved in test_files else None
+    return None
+
+
+def _uncovered_test_files(candidate, test_files, refs):
+    """Changed test files that hold no test one of the row's refs runs.
+
+    Exact, not by bare name: the flag must not attach unrelated refs, and a ref whose module path
+    names another file (or no file) leaves its own changed test uncovered."""
+    covered = {path for ref in refs if (path := _ref_test_file(candidate, ref, test_files))}
+    missing = []
+    for path in test_files:
+        if path in covered:
+            continue
+        if not (candidate / path).is_file():
+            raise Refused(f'{path} is not a file on the tree being promoted; the fix commit deletes or renames it')
+        missing.append(path)
+    return missing
+
+
 def _split_non_test(diff, source_of):
     """Split a diff into (patch text of its non-test hunks, reversed files, kept test files).
 
@@ -769,13 +1026,13 @@ def _split_non_test(diff, source_of):
         if match is None:
             raise Refused(f'fix patch has an unparseable diff header (expected `diff --git a/<path> b/<path>`): {lines[0].rstrip()!r}')
         path = match.group(2)
+        if _skipped_doc(path):
+            continue
         starts = [i for i, text in enumerate(lines) if text.startswith('@@ ')]
         if not starts:
             raise Refused(f'fix commit changes {path} without text hunks (binary or mode-only); cannot split test hunks')
         header = lines[:starts[0]]
         hunks = [lines[a:b] for a, b in zip(starts, starts[1:] + [len(lines)])]
-        if path.startswith('docs/') or path.endswith('.md'):
-            continue
         if _TEST_PATH.search(path):
             test_files.append(path)
             continue
@@ -802,6 +1059,153 @@ def _split_non_test(diff, source_of):
         elif path.endswith('.rs'):
             test_files.append(path)
     return ''.join(patch), reversed_files, test_files
+
+
+_HUNK_HEADER = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
+
+
+def _changed_old_lines(diff):
+    """{path: {line}} of the pre-image lines the diff actually adds or removes (context excluded)."""
+    changed, path, line = {}, None, 0
+    for text in diff.splitlines():
+        if text.startswith('diff --git '):
+            match = re.match(r'diff --git a/(.+) b/(.+)$', text)
+            path = match.group(2) if match else None
+            continue
+        header = _HUNK_HEADER.match(text)
+        if header is not None:
+            line = int(header.group(1))
+            continue
+        if path is None or text.startswith('+++') or text.startswith('---'):
+            continue
+        if text.startswith('-'):
+            changed.setdefault(path, set()).add(line)
+            line += 1
+        elif text.startswith('+'):
+            continue
+        elif text.startswith(' ') or text == '':
+            line += 1
+    return changed
+
+
+def _operator_span(tree, file, line):
+    """(first, last) lines covered by the call/operator starting at `line`, from the source text."""
+    try:
+        lines = (Path(tree) / file).read_text(errors='surrogateescape').splitlines()
+    except OSError:
+        return None
+    if not 1 <= line <= len(lines):
+        return None
+    depth = 0
+    started = False
+    for index in range(line - 1, min(len(lines), line + 200)):
+        for char in lines[index]:
+            if char in '([{':
+                depth += 1
+                started = True
+            elif char in ')]}':
+                depth -= 1
+        if started and depth <= 0:
+            return (line, index + 1)
+    # Unstarted (no bracket) or unclosed within the window: no span, so no acceptance (review N-c).
+    return None
+
+
+def _assertion_in_ranges(entry, ranges, control_dir):
+    """True when the red assertion's line lies inside a hunk the control reversed."""
+    assertion = entry.get('assertion') or {}
+    path, line = assertion.get('file'), assertion.get('line')
+    if not isinstance(path, str) or not isinstance(line, int):
+        return False
+    if os.path.isabs(path):
+        try:
+            path = Path(path).resolve().relative_to(Path(control_dir).resolve()).as_posix()
+        except ValueError:
+            return False
+    return any(first <= line <= last for first, last in ranges.get(path, []))
+
+
+def _classify_control(ident, control, row, tree):
+    """Rewrite a control's entries so a fixture panic or an unnamed panic cannot pass as red.
+
+    (a) `fixture-failure`: a confirmed fixture/setup panic — the registered test's body never ran.
+    (c) `unproven-panic`: a panic at a line that is not an assert macro; the row must name that exact
+    `file:line` in `proving_assertions` for it to count. Python AssertionErrors are unaffected."""
+    named = row.get('proving_assertions') if isinstance(row.get('proving_assertions'), dict) else {}
+    out = {}
+    for ref, entry in control.items():
+        if entry.get('state') != RED:
+            out[ref] = entry
+            continue
+        assertion = entry.get('assertion') or {}
+        if assertion.get('error') == 'AssertionError' or assertion.get('class') == 'assertion':
+            out[ref] = entry
+            continue
+        location = f"{assertion.get('file')}:{assertion.get('line')}"
+        if not assertion:
+            # A cargo FAIL with no panic line is how a `-> Result<()>` test shows a setup error through
+            # `?`; it is not an assertion unless the row names it (ReviewD123Harness3 N3a).
+            if ref.startswith('cargo:') and not named.get(ref):
+                out[ref] = {**entry, 'state': UNPROVEN_PANIC,
+                            'detail': entry.get('detail', '') + ' | cargo FAIL without a panic location; name the ref in proving_assertions'}
+            else:
+                out[ref] = entry
+        elif assertion.get('class') == 'fixture':
+            out[ref] = {**entry, 'state': FIXTURE_FAILURE,
+                        'detail': entry.get('detail', '') + f' | fixture panic at {location}'}
+        elif named.get(ref) == location:
+            out[ref] = entry
+        else:
+            out[ref] = {**entry, 'state': UNPROVEN_PANIC,
+                        'detail': entry.get('detail', '') + f' | panic at {location} is not an assert macro; name it in proving_assertions'}
+    return out
+
+
+def _assertion_in_files(entry, control_dir, test_files):
+    """A red control entry only counts when it failed at an assertion inside a changed test file.
+
+    Cargo panics carry the workspace-relative `panicked at <path>:<line>`; a python traceback frame
+    is absolute inside the control worktree. A panic in production code (or a plain build failure)
+    is not evidence that the corrected oracle guards anything."""
+    assertion = entry.get('assertion')
+    if not isinstance(assertion, dict):
+        return False
+    path, error = assertion.get('file'), assertion.get('error')
+    if not isinstance(path, str) or error not in ('panic', 'AssertionError'):
+        return False
+    if not os.path.isabs(path):
+        return path in test_files
+    try:
+        relative = Path(path).resolve().relative_to(Path(control_dir).resolve()).as_posix()
+    except ValueError:
+        return False
+    return relative in test_files and error == 'AssertionError'
+
+
+def _check_defect_patch(ident, defect, candidate, patch_path):
+    """B1: a defect injection mutates production behaviour only.
+
+    The patch is split exactly like a fix patch: a hunk in a test file, a hunks set that leaves part
+    of the patch out (docs/ or a .md), a build-configuration path, or a hunk inside an inline
+    `#[cfg(test)]` module refuses. Otherwise replaying it could rewrite the very test it must turn red."""
+    text = defect.decode(errors='surrogateescape')
+    parsed, files, test_files = _split_non_test(
+        text, lambda path: (candidate / path).read_text(errors='surrogateescape'))
+    if test_files:
+        raise Refused(f'{ident}: control_b_patch {patch_path} changes test files ({", ".join(sorted(test_files))}); '
+                      'a defect injection mutates production behaviour, never the test it proves')
+    if parsed != text:
+        raise Refused(f'{ident}: control_b_patch {patch_path} leaves part of itself out (a skipped docs/ or .md '
+                      'hunk); only production hunks are allowed')
+    for path in files:
+        if (path in ('Cargo.toml', 'build.rs') or path.endswith(('/Cargo.toml', '/build.rs'))
+                or path.startswith(('.cargo/', '.config/'))
+                or '/.cargo/' in path or '/.config/' in path):
+            raise Refused(f'{ident}: control_b_patch {patch_path} changes build configuration ({path}); refused: '
+                          'a defect injection must not change how the code is built')
+    if not files:
+        raise Refused(f'{ident}: control_b_patch {patch_path} changes no production file')
+    return files
 
 
 def _provision_data(root, tree):
@@ -1293,7 +1697,7 @@ def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client
         'id': ident, 'verdict': 'promoted', 'fix_commit': fix, 'fix_commit_full': fix_full,
         'promoted_at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
         'tree_head': tree_now['head'], 'tree_dirty': tree_now['dirty'], 'tree_sha256': tree_now['sha256'],
-        'client_fix': True, 'control_tree': 'client',
+        'client_fix': True, 'control_tree': 'client', 'control': 'client_receipt_pair',
         'negative_control': control, 'restored': restored_info, 'client_receipt': restored_info,
         'client_control_delta': delta,
         'candidate_refs': checked,
@@ -1323,6 +1727,9 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
     fix = row.get('fix_commit')
     if not fix:
         raise Refused(f'{ident}: no fix_commit recorded')
+    if fix.startswith('client:') and row.get('test_only_fix') is True:
+        raise Refused(f'{ident}: test_only_fix is for a committed core test fix; a client:<sha> fix is proved '
+                      'by real-client receipts, never by a reversed test oracle')
     if fix.startswith('client:'):
         return _promote_client_fix(ident, row=row, fix=fix, root=root, tree_now=tree_now, dry_run=dry_run,
                                    ctx=ctx, client_receipt=client_receipt,
@@ -1356,6 +1763,9 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         raise Refused(f'{ident}: client-surface row needs a passed real-client receipt (--client-receipt <result.json>)')
     if client_receipt:
         receipt_info = check_client_receipt(root, client_receipt, graphical, tree_now)
+    test_only = row.get('test_only_fix') is True
+    if test_only and patch_mode:
+        raise Refused(f'{ident}: test_only_fix is only for a committed fix_commit, not {fix}')
     patch, fix_patch_text = None, None
     if patch_mode:
         if not fix_patch:
@@ -1364,16 +1774,55 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
     elif fix_patch:
         raise Refused(f'{ident}: --fix-patch is only for a fix_commit of the form patch:<sha256>')
     if not patch_mode:
-        patch, reversed_files, test_files = non_test_patch(root, full)
-        if not patch:
-            raise Refused(f'{ident}: fix commit {fix} has no non-test hunks to reverse')
+        if test_only:
+            _, diff = _git(root, 'diff', '--no-renames', '--no-color', f'{full}^1', full)
+            patch, reversed_files = _split_test_hunks(diff, row.get('control_a_files'))
+            test_files = []
+            if not patch:
+                raise Refused(f'{ident}: fix commit {fix} changes no test file: test_only_fix needs a fix in test files')
+        else:
+            patch, reversed_files, test_files = non_test_patch(root, full)
+            if not patch:
+                raise Refused(f'{ident}: fix commit {fix} has no non-test hunks to reverse')
     reverse = ['apply', '-R', '--whitespace=nowarn', '-']
+    defect_control, defect, defect_sha, defect_rel, proving = None, None, None, None, []
+    if test_only:
+        # M2: the defect patch that proves the corrected test is the committed one. The worktree is
+        # not the source (it can change between the audit and the promotion), so the bytes applied
+        # are `git show HEAD:<path>`, hashed and cross-checked against the row's control_b_sha256.
+        defect_rel = row.get('control_b_patch')
+        if not isinstance(defect_rel, str) or not defect_rel:
+            raise Refused(f'{ident}: test_only_fix needs control_b_patch (a committed defect-injection patch)')
+        if defect_rel.startswith('/') or '..' in defect_rel.split('/'):
+            raise Refused(f'{ident}: control_b_patch must be a repo-relative path, got {defect_rel!r}')
+        code, committed = _git(root, 'show', f'HEAD:{defect_rel}', check=False)
+        if code:
+            raise Refused(f'{ident}: control_b_patch {defect_rel} is not committed at HEAD '
+                          '(an untracked defect patch can change between audit and promotion)')
+        defect = committed.encode(errors='surrogateescape')
+        defect_sha = hashlib.sha256(defect).hexdigest()
+        if row.get('control_b_sha256') != defect_sha:
+            raise Refused(f'{ident}: control_b_sha256 is {row.get("control_b_sha256")!r}, but the committed '
+                          f'{defect_rel} hashes to {defect_sha}; record the committed patch hash on the row')
+        try:
+            worktree_bytes = (root / defect_rel).read_bytes()
+        except OSError:
+            raise Refused(f'{ident}: control_b_patch {defect_rel} is not in the worktree') from None
+        if worktree_bytes != defect:
+            raise Refused(f'{ident}: the worktree copy of {defect_rel} differs from HEAD; commit it first '
+                          '(the applied bytes are the committed ones)')
     with contextlib.ExitStack() as stack:
         stack.enter_context(_control_lock(root))
         # Restore always runs on the exact tree being promoted: its HEAD plus any uncommitted diff and
         # untracked files (verified against the fingerprint), never on fix_commit.
         candidate = stack.enter_context(_worktree(root, head, 'candidate'))
         _materialize(root, candidate, tree_now)
+        if test_only:
+            missing = _uncovered_test_files(candidate, reversed_files, refs)
+            if missing:
+                raise Refused(f"{ident}: test_only_fix has no ref whose test is defined in {', '.join(missing)} "
+                              '(every changed test file must hold the exact test the row registers)')
+            _check_defect_patch(ident, defect, candidate, defect_rel)
         if patch_mode:
             # An uncommitted fix: the supplied patch, split like a commit; its identity is the hash of
             # its non-test hunks, and it must still apply in reverse on the exact candidate.
@@ -1391,14 +1840,79 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         # hunks no longer apply there, reverse them at the historical fix_commit instead.
         elif _git(candidate, 'apply', '-R', '--check', '--whitespace=nowarn', '-', stdin=patch.encode(errors='surrogateescape'), check=False)[0] == 0:
             control_tree, control_dir = 'head', candidate
+        elif test_only:
+            # M3: control A restores the old oracle on current code, so a `fix_commit` worktree is
+            # never a control for a test-only row (its tree predates the fix's own other commits).
+            raise Refused(f"{ident}: the fix's test hunks do not reverse onto the tree being promoted, so "
+                          'control A cannot run against current code (control_tree must be head)')
         else:
             control_tree, control_dir = 'fix_commit', stack.enter_context(_worktree(root, full, 'fix'))
+        # Stage the candidate content first: a dirty tree's unstaged diff would otherwise mix with
+        # the reversal, and control B's changed-line ranges are read from that diff (review N-b).
+        _git(control_dir, 'add', '-A')
         _git(control_dir, *reverse, stdin=patch.encode(errors='surrogateescape'))
-        control = runner(ctx, refs, control_dir, True)
-        if not any(entry['state'] == RED for entry in control.values()):
-            raise Refused(f"{ident}: negative control ({control_tree}) did not go red with the fix reversed: "
+        control = _classify_control(ident, runner(ctx, refs, control_dir, True), row, control_dir)
+        valid_red = {ref for ref, entry in control.items()
+                     if entry['state'] == RED and _assertion_in_files(entry, control_dir, reversed_files)} \
+            if test_only else {ref for ref, entry in control.items() if entry['state'] == RED}
+        if not valid_red:
+            raise Refused(f"{ident}: negative control ({control_tree}) did not go red at an assertion with the fix reversed: "
                           + '; '.join(f"{ref}={entry['state']}" + (f" ({entry['detail']})" if entry['detail'] else '') for ref, entry in control.items())
-                          + ' (a check that stays green does not test the fix; one that cannot build or run without it cannot show an assertion failing)')
+                          + (f" (a red outside {', '.join(reversed_files)} is not evidence: a production panic or a build "
+                             'failure is not control A)' if test_only else
+                             ' (a check that stays green does not test the fix; one that cannot build or run without it cannot show an assertion failing)'))
+        if test_only:
+            # Control B: restoring the old oracle only shows the old assertion was red, which a wrongly
+            # deleted assertion also gives. Re-introduce the defect the test claims to catch and require
+            # the corrected test to go red, so the guard's own direction is proven too.
+            # The reversed hunks' line numbers in the candidate come from the reversal just applied,
+            # read before the tree is reset for control B (git applies at an offset once a file grows).
+            # Context lines do not count: the red must sit on a changed line, or on an operator that
+            # starts at the red line and spans one (a multi-line assert), or be named by the row.
+            _, applied = _git(control_dir, 'diff', '-U0', '--no-renames', '--no-color')
+            changed = _changed_old_lines(applied)
+            _materialize(root, candidate, tree_now)
+            if _git(candidate, 'apply', '--check', '--whitespace=nowarn', '-', stdin=defect, check=False)[0]:
+                raise Refused(f"{ident}: control_b_patch {row['control_b_patch']} does not apply on the tree being promoted")
+            _git(candidate, 'apply', '--whitespace=nowarn', '-', stdin=defect)
+            defect_control = _classify_control(ident, runner(ctx, refs, candidate, True), row, candidate)
+            def in_changed(entry, ref):
+                assertion = entry.get('assertion') or {}
+                file, line = assertion.get('file'), assertion.get('line')
+                if not isinstance(file, str) or not isinstance(line, int):
+                    return False
+                if os.path.isabs(file):
+                    try:
+                        file = Path(file).resolve().relative_to(Path(candidate).resolve()).as_posix()
+                    except ValueError:
+                        return False
+                lines = changed.get(file, set())
+                if line in lines:
+                    return True
+                span = _operator_span(candidate, file, line)
+                if span and any(first <= changed_line <= span[1] for changed_line in lines
+                                for first in [span[0]]):
+                    return True
+                return row_named.get(ref) == f'{file}:{line}'
+
+            row_named = row.get('proving_assertions') if isinstance(row.get('proving_assertions'), dict) else {}
+            valid_b = {ref for ref, entry in defect_control.items()
+                       if entry['state'] == RED and _assertion_in_files(entry, candidate, reversed_files)
+                       and in_changed(entry, ref)}
+            if not valid_b:
+                raise Refused(f"{ident}: defect-injection control ({defect_rel}) did not go red at an assertion "
+                              f"inside a hunk the fix reversed in {', '.join(reversed_files)}: "
+                              + '; '.join(f"{ref}={entry['state']}" + (f" ({entry['detail']})" if entry['detail'] else '') for ref, entry in defect_control.items())
+                              + ' (the corrected test does not catch the behaviour it claims to guard)')
+            proving = sorted(valid_red & valid_b)
+            if not proving:
+                raise Refused(f'{ident}: control A red {sorted(valid_red)} and control B red {sorted(valid_b)} do '
+                              'not overlap: the same test has to flip both ways, so the corrected oracle is '
+                              'proven in its own direction and not merely the old assertion')
+            for ref in proving:
+                if _ref_test_file(candidate, ref, reversed_files) is None:
+                    raise Refused(f'{ident}: proving ref {ref} is not defined in '
+                                  f"{', '.join(reversed_files)}: a bare name from another file proves nothing")
         _materialize(root, candidate, tree_now)
         # A ref the supplied receipt already passed on this HEAD is not rerun, unless it carried the red
         # control: its restore proves the red was the reversal, not the environment.
@@ -1412,6 +1926,9 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         'id': ident, 'verdict': 'promoted', 'fix_commit': fix, 'fix_commit_full': full,
         'promoted_at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
         'tree_head': head, 'tree_dirty': tree_now['dirty'], 'tree_sha256': tree_now['sha256'], 'control_tree': control_tree,
+        'control': 'test_hunks' if test_only else 'reversed_fix_hunks',
+        'control_b': ({'patch': defect_rel, 'sha256': defect_sha, 'proving': proving,
+                       'negative_control': defect_control} if test_only else None),
         'fix_patch_sha256': fix[len('patch:'):] if patch_mode else None,
         'reversed_files': reversed_files, 'kept_test_files': test_files,
         'negative_control': control, 'restored': restored, 'client_receipt': receipt_info,

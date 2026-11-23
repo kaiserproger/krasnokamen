@@ -1,0 +1,12 @@
+diff --git a/tools/coreperf/profiles.py b/tools/coreperf/profiles.py
+index 775393d03..97e4fc5fd 100644
+--- a/tools/coreperf/profiles.py
++++ b/tools/coreperf/profiles.py
+@@ -1332,6 +1332,7 @@ def host_receipt(out: Path, *, cpu_root: Path = Path("/sys/devices/system/cpu"),
+     def capture(command: list[str]) -> str:
+         return subprocess.check_output(command, text=True).strip()
+     return {"cpu": json.loads(capture(["lscpu", "--json"])),
++            "cpu_scaling": cpu_scaling(cpu_root),
+             "cgroup_cpu": cgroup_cpu_stat(cgroup_root, procs),
+             "memory_pressure": memory_pressure(cgroup_root, procs, host_pressure),
+             "memory": Path("/proc/meminfo").read_text(), "os": platform.freedesktop_os_release(),

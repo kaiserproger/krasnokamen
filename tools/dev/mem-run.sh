@@ -108,6 +108,12 @@ cmd=("${key_words[@]:$i}")
 if [ "${cmd[0]:-}" = nice ]; then
   if [ "${cmd[1]:-}" = -n ]; then cmd=("${cmd[@]:3}"); else cmd=("${cmd[@]:1}"); fi
 fi
+# A bad cancel grace must fail in a second, not after a token wait or an -x freeze (N12).
+_grace=${KRASNOKAMEN_MEMRUN_CANCEL_GRACE:-15}
+if ! awk -v g="$_grace" 'BEGIN { exit !(g ~ /^[0-9]+([.][0-9]+)?$/ && g + 0 > 0 && g + 0 <= 86400) }'; then
+  echo "mem-run: KRASNOKAMEN_MEMRUN_CANCEL_GRACE must be a finite positive number of seconds no larger than 86400, got '$_grace'" >&2
+  exit 75
+fi
 # Build tokens (owner 2026-11-11): at most three compile commands run host-wide.
 # Compile is decided once from argv, after leading env/nice/ionice/timeout words: cargo
 # with any subcommand but fmt/fetch/tree/metadata/clean/update and the like, gradle(w),
@@ -373,15 +379,62 @@ fi
 [ "$exclusive" = 1 ] && { niceness=0; cpu_pin=(); preemptible=0; }
 # CPUs held by tools/dev/reserve-cpus (owner 2026-11-16, Spain trials) stay out of every
 # new scope except one started with KRASNOKAMEN_RESERVED_CPUS=use; running scopes keep
-# their placement, and the reservation ends with the command that holds it.
-reserved=$(cat "$dir/reserved-cpus" 2>/dev/null || true)
+# their placement, and the reservation ends with the command that holds it. A reservation
+# whose owner died (SIGKILL, OOM, a wrapper kill) is a corpse: say so and clear it, never
+# silently pin every later scope away from those CPUs (or drop the restriction when the
+# stale list covers a whole pool) — #G4, CS341. A one-line file from an older writer has no
+# owner and is honoured as-is (mixed-version compatibility).
+reserved=
+if [ -e "$dir/reserved-cpus" ]; then
+  # A failing helper must not silently drop a live reservation: name it, keep its stderr in a
+  # variable (a shared .err file races between wrappers), validate the first line as a CPU list and
+  # honour that much (ReviewD123Harness1 6, 4 N12).
+  err=
+  errlog=$(mktemp "${TMPDIR:-/tmp}/mem-run-reserved.XXXXXX")
+  if ! verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>"$errlog"); then
+    err=$(cat "$errlog")
+    rm -f "$errlog"
+    first=$(head -n 1 "$dir/reserved-cpus")
+    if ! printf '%s' "$first" | grep -Eqx '[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*'; then
+      echo "mem-run: cannot judge $dir/reserved-cpus ($err) and its first line is not a CPU list; refusing this scope" >&2
+      exit 75
+    fi
+    echo "mem-run: cannot judge $dir/reserved-cpus; honouring its first line '$first' as a CPU list: $err" >&2
+    verdict="keep $first"
+  else
+    err=$(cat "$errlog")
+    rm -f "$errlog"
+    [ -n "$err" ] && echo "mem-run: reserved-cpus verdict said: $err" >&2
+  fi
+  case "$verdict" in
+    keep\ *) reserved=${verdict#keep } ;;
+    stale\ *)
+      echo "mem-run: ignoring stale CPU reservation '${verdict#stale }' (its owner is gone or its pid was reused); clearing $dir/reserved-cpus" >&2
+      python3 "$here/reserved_cpus.py" clear "$dir" >&2 || true
+      # Clearing re-reads under the lock, so it never removes a reservation written meanwhile:
+      # if one is there now, it is live and this scope honours it.
+      verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>/dev/null || echo none)
+      [ "${verdict%% *}" = keep ] && reserved=${verdict#keep }
+      ;;
+    none) : ;;
+    *)
+      echo "mem-run: reserved-cpus verdict '$verdict' is not none/keep/stale; refusing this scope" >&2
+      exit 75
+      ;;
+  esac
+fi
 if [ -n "$reserved" ] && [ "${KRASNOKAMEN_RESERVED_CPUS:-}" != use ] && [ "$exclusive" = 0 ]; then
   declare -A held=()
   for part in ${reserved//,/ }; do for ((c = ${part%-*}; c <= ${part#*-}; c++)); do held[$c]=1; done; done
   pool=0-$((ncpu - 1)); [ "$perf" = 1 ] && pool=$perf_cpus
   allowed=
   for part in ${pool//,/ }; do for ((c = ${part%-*}; c <= ${part#*-}; c++)); do [ -n "${held[$c]:-}" ] || allowed+=${allowed:+,}$c; done; done
-  [ -n "$allowed" ] && cpu_pin=(taskset -c "$allowed")
+  if [ -n "$allowed" ]; then
+    cpu_pin=(taskset -c "$allowed")
+    echo "mem-run: reserved CPUs $reserved are excluded from this scope (cpus=$allowed)" >&2
+  else
+    echo "mem-run: reserved CPUs $reserved cover this whole pool; the reservation cannot restrict it, so the scope keeps cpus=$pool" >&2
+  fi
 fi
 [ "$preemptible" = 1 ] && props=("${props[@]/CPUWeight=50/CPUWeight=10}")
 [ -n "${KRASNOKAMEN_SCENE_SLOT:-}" ] && [ "$perf" = 0 ] && props=("${props[@]/CPUWeight=*/CPUWeight=500}")
@@ -395,9 +448,12 @@ echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf 
 # process tree, so a job kill cannot kill it before it tears the scope down.
 guard_dir=$(mktemp -d "${TMPDIR:-/tmp}/solaris-mem-guard.XXXXXXXX")
 unit="krasnokamen-mem-run-${guard_dir##*.}.scope"
+# The grace was validated next to argument parsing (before any token wait); pass it on unchanged.
+grace=$_grace
 mkfifo "$guard_dir/events" "$guard_dir/ready"
 if ! systemd-run --user --quiet --collect --unit="${unit%.scope}-guard" \
   python3 "$here/mem-run-guard.py" "$guard_dir" "/sys/fs/cgroup$cgroup/$unit" "$$" "$PPID" \
+  "$grace" \
   || ! timeout 10 bash -c 'read -r ready < "$1/ready"' _ "$guard_dir"; then
   rm -rf "$guard_dir"
   echo "mem-run: failed to start scope guardian" >&2
@@ -420,9 +476,46 @@ printf "%s\t%s\t%s\t%s\n" "$cg" "$MEMRUN_EST_KIB" "$MEMRUN_PREEMPTIBLE" "$MEMRUN
 [ "$MEMRUN_EXCLUSIVE" = 1 ] || { flock -u 3; exec 3>&-; }
 notify start
 "$@" <&0 3>&- 6>&- 7>&- 8>&- 9>&- & c=$!
-trap "kill -TERM $c 2>/dev/null" TERM INT HUP
+# A cancellation must reach the whole scope, not only the direct child: a descendant that ignores
+# TERM would otherwise hold the wrapper in `wait`, the scope alive and the build token unspent until
+# a SIGKILL (#G5, CS341). Forward TERM to every process in the scope cgroup and ask the guardian to
+# escalate to cgroup.kill after its grace, so the wrapper always ends.
+cancel() {
+  # One forwarding pass: the scope members get this TERM too, so re-entering the trap would
+  # recurse; a later signal is already covered by the guardian escalation.
+  [ "${cancel_done:-0}" = 1 ] && return
+  cancel_done=1
+  # The direct child first, unconditionally: a failing cgroup.procs read (or an unusable
+  # guardian fifo) must never leave the wrapper in `wait` with nothing signalled (#G5, CS341).
+  kill -TERM "$c" 2>/dev/null || true
+  # The guardian owns escalation: tell it (its own fifo, not the watchdog events stream).
+  local fd
+  if exec {fd}<>"$MEMRUN_GUARD_DIR/events"; then
+    printf "cancel\n" >&"$fd" ||
+      echo "mem-run: cancel: guardian fifo write failed; the scope TERM still applies, no cgroup.kill escalation" >&2
+    exec {fd}>&-
+  else
+    echo "mem-run: cancel: cannot open $MEMRUN_GUARD_DIR/events; the guardian cannot escalate to cgroup.kill" >&2
+  fi
+  local pid
+  for pid in $(cat "/sys/fs/cgroup$cg/cgroup.procs" 2>/dev/null); do
+    # The direct child got its TERM above. A second one can land inside its cleanup (the harness turns
+    # every TERM into KeyboardInterrupt) and cut a result.json write, so skip it and this wrapper.
+    if [ "$pid" = "$$" ] || [ "$pid" = "$c" ]; then continue; fi
+    kill -TERM "$pid" 2>/dev/null || true
+  done
+}
+trap cancel TERM INT HUP
 st=0
 wait "$c" || st=$?
+# A cancel trap can outlive the child: bash reaped it before this wait, so the wait reports
+# 128+signal instead of the status the child exited with. Bash keeps the last reaped status, so asking
+# for it again recovers it - but only for such a status, and a 127 ("no such job") is never accepted.
+if [ "${cancel_done:-0}" = 1 ] && [ "$st" -ge 128 ]; then
+  saved=0
+  wait "$c" || saved=$?
+  [ "$saved" != 127 ] && st=$saved
+fi
 while kill -0 "$c" 2>/dev/null; do wait "$c" || st=$?; done
 # Only a complete, successful run measures the command; an early failure or a
 # cancellation would teach a too-small peak.
