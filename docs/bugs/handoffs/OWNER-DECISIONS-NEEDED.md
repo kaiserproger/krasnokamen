@@ -14,16 +14,24 @@ code reproduces the row's symptom with a red at the row's own assertion:
   pass ran after placement. Patch `patch:057a21dc…`.
 - `TOTEM` / `DEATH-PROTECTION-COMPONENT` — the rescue decision in `commit_damage`
   (`tick/damage.rs:660-675`): the patch restores the pre-fix `died |= player.vitals.hurt(...)` form. Patch
-  `patch:6de54645…`.
-- `DATA-QUERY` — the `data` root routing in `command_context::native` (`:820-823`); the pre-fix partial
-  handler (`command_blocks::data`) no longer exists at HEAD, so the HEAD-equivalent reverse makes `/data`
-  unknown. Patch `patch:b23d0e10…`.
+  `patch:6de54645…`. Their cargo refs pass and the control is ready, but the registered real-client
+  scenario `native-v2-command-score-store` times out on the candidate
+  (`timed out waiting for damage_command_received_health`,
+  `.analysis/validation/20261123T211805-native-v2-command-score-store-5r_93kzn/result.json`), so no
+  `passed` receipt exists; that scenario also does not exercise totems, so it cannot be the row's real
+  proof even when green. Decision needed: a totem-specific real-client scenario (owner/gate owner).
+- `DATA-QUERY` — no honest control found: `git show 0c6f68d8^:crates/mc-core/src/command_data.rs` does
+  not exist and the pre-fix `command_blocks::data` handler is gone at HEAD. Dropping `data` from
+  `command_context::native`'s root list does not red the row's refs (observed with the reverse applied:
+  `.analysis/validation/20261123T212911-test-7u1iawnh`, both refs PASS). Decision needed: a ref that
+  depends on the routing, a client-only proof, or keep open.
 - `COMMAND-CHILD-SENDER-DROPPED` — resolved outright: the real fix commit is `334c3f686`; its diff no
   longer reverses after `76a539ea9`, and the HEAD-equivalent patch restores the root-context
   `source_is_current` check. Patch `patch:b8374c6a…`; promoted with five red cargo refs.
 
-Which of these can be *promoted* depends only on the fresh real-client receipt for their registered
-scenario (the old receipts are on tree `0218c529e`; the candidate is later). No stub was used anywhere.
+Promoted from this list with fresh real-client receipts on the pinned candidate `9c78eee8e` (clean):
+`FALL-002` (brush receipt `20261123T212015`), `INTERACT-001` (axe `20261123T211938`), `SPONGE`
+(sponge `20261123T212044`), `DEATH-NOTIFY` (death-messages `20261123T211907`). No stub was used anywhere.
 
 **Still needs the owner: `SPECIAL-001`.** `special_storage.rs` does not exist at `35308579c^`
 (`git show 35308579c^:crates/mc-core/src/special_storage.rs` = "does not exist"), and the pot/shelf
