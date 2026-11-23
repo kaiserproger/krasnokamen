@@ -11,4 +11,5 @@ regression = [
   "cargo:mc-core:villager::lumber_tests::lumberjack_searches_near_worker_before_cross_village_sweep",
   "cargo:mc-core:villager::lumber_tests::lumberjack_restarts_nearby_search_after_harvest",
 ]
-fix_commit = "197beb170"
+fix_commit = "patch:deb17c038aeff04d4b1298a59e97f501214f9b9ed9d5d6145dd3239ccc79a325"
+repro_check = "HEAD re-break promotions/CIV-SEED24-CROSS-VILLAGE-TREE-SWEEP.patch reverses on the fixed tree (git apply -R --check): it removes Progress::search_origin, restores grid column_at and the radius-square search with the chunk-strip skip, drops the replant cursor reset and the natural-zone cursor preset. The broken tree was compile-checked; see receipts/D123/D123Civ/HANDOFF-7.md. Real-client receipt is the integrated sweep."
