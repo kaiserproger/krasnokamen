@@ -1,14 +1,93 @@
 diff --git a/crates/mc-edge/src/server.rs b/crates/mc-edge/src/server.rs
-index 96f7e794..7148e154 100644
 --- a/crates/mc-edge/src/server.rs
 +++ b/crates/mc-edge/src/server.rs
-@@ -1133,8 +1133,7 @@ impl EdgeServer {
-             match root {
-                 "op" | "deop" => {
-                     let _guard = self.operator_updates.lock().await;
--                    let mut sessions = self.admin.sessions_for_uuid(uuid);
--                    sessions.truncate(1);
+@@ -1028,30 +1028,17 @@
+                 return Ok(true);
+             };
+             let _guard = self.operator_updates.lock().await;
+-            // Historical name path: two permits reserved up front, then the
+-            // mutation and the name lookup, so a single session is reached
+-            // after it may already have changed. The later selector path keeps
+-            // its per-UUID fanout.
+-            let selector = target.starts_with('@');
+             let updates: Vec<_> = profiles
+                 .into_iter()
+                 .map(|(uuid, name)| {
+-                    let sessions = if selector {
+-                        self.admin.sessions_for_uuid(uuid)
+-                    } else {
+-                        Vec::new()
+-                    };
 +                    let sessions = self.admin.sessions_for_uuid(uuid);
-                     let mut permits =
-                         self.hub
-                             .reserve_inputs(1 + sessions.len())
+                     (uuid, name, sessions)
+                 })
+                 .collect();
+-            let slots: usize = if selector {
+-                updates
+-                    .iter()
+-                    .map(|(_, _, sessions)| 1 + sessions.len())
+-                    .sum()
+-            } else {
+-                2
+-            };
++            let slots = updates
++                .iter()
++                .map(|(_, _, sessions)| 1 + sessions.len())
++                .sum();
+             let mut permits = self
+                 .hub
+                 .reserve_inputs(slots)
+@@ -1080,42 +1067,24 @@
+                         operators: self.admin.operator_ids(),
+                     },
+                 );
+-                if selector {
+-                    let level = self.admin.level(uuid);
+-                    for &other in &sessions {
+-                        permits.next().expect("reserved permission update").send(
+-                            PlayerInput::PermissionLevel {
+-                                connection: other,
+-                                level,
+-                            },
+-                        );
+-                    }
+-                    for other in sessions {
+-                        let level = if self.hub.session_locked(other) {
+-                            0
+-                        } else {
+-                            level
+-                        };
+-                        self.send(
+-                            other,
+-                            &crate::command_tree::tree(level, self.hub.plugin_commands()),
+-                        )?;
+-                    }
+-                } else if let Some((other, _, _, _)) =
+-                    self.admin.find(target).filter(|entry| entry.1 == uuid)
+-                {
++                let level = self.admin.level(uuid);
++                for &other in &sessions {
+                     permits.next().expect("reserved permission update").send(
+                         PlayerInput::PermissionLevel {
+                             connection: other,
+-                            level: self.admin.level(uuid),
++                            level,
+                         },
+                     );
++                }
++                for other in sessions {
++                    let level = if self.hub.session_locked(other) {
++                        0
++                    } else {
++                        level
++                    };
+                     self.send(
+                         other,
+-                        &crate::command_tree::tree(
+-                            self.admin.level(uuid),
+-                            self.hub.plugin_commands(),
+-                        ),
++                        &crate::command_tree::tree(level, self.hub.plugin_commands()),
+                     )?;
+                 }
+             }

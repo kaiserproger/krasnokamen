@@ -325,6 +325,53 @@ async fn deop_reaches_rejoining_native_session() {
 }
 
 #[tokio::test]
+async fn deop_reaches_every_registered_session_for_one_uuid() {
+    let (server, _dir) = fixture_in_temp_dir();
+    let (operator, _operator_rx) = register(&server, "Operator", true);
+    let uuid = crate::crypto::offline_uuid("Alex");
+    server.admin.set_op(uuid, "Alex", true).unwrap();
+    let native = server.connections.joining_id();
+    let mut ticks = server.hub.subscribe();
+    let session = connection::admit_native_session(
+        &server,
+        native,
+        uuid,
+        "Alex".into(),
+        "127.0.0.1".parse().unwrap(),
+        mc_core::boundary::ClientSettings {
+            view_distance: 2,
+            locale: "en_us".into(),
+            chat_visibility: mc_core::boundary::ChatVisibility::Full,
+        },
+    )
+    .await
+    .unwrap();
+    // A second registered session for the same UUID, under another name and
+    // before its own admission. The command names that session, so a fanout
+    // selected by name reaches only it; the operator change must follow the
+    // UUID to the session that actually holds the native level.
+    let (pending, _pending_rx) = register(&server, "Alex2", false);
+    server
+        .admin
+        .register(pending, uuid, "Alex2".into(), "127.0.0.1".parse().unwrap());
+    assert_eq!(server.admin.session_level(pending), 4);
+    assert!(
+        server
+            .handle_admin_command(operator, "deop Alex2")
+            .await
+            .unwrap()
+    );
+    assert_eq!(server.admin.session_level(native), 0);
+    assert_eq!(server.admin.session_level(pending), 0);
+    // `set_op` moves both edge levels whatever the fanout does, so only the
+    // authoritative native publication shows which sessions were reached.
+    assert_published_levels(&server, &[(native, 0)], &mut ticks).await;
+    drop(session);
+    server.hub.shutdown();
+    // The fixture's TempDir removes this directory when it is dropped.
+}
+
+#[tokio::test]
 async fn joining_session_and_deop_keep_native_permission_order() {
     use std::future::Future;
     let (server, _dir) = fixture_in_temp_dir();
@@ -401,6 +448,53 @@ async fn assert_native_deopped(
     );
 }
 
+/// Assert the authoritative native permission level the core published for each
+/// connection. The core publishes `PlayerChange::PermissionLevel` on Join and on
+/// every edge `PermissionLevel` input, so this reads the symptom directly instead
+/// of inferring it from a chat-spam disconnect (whose absence would only surface
+/// as a timeout).
+async fn assert_published_levels(
+    server: &EdgeServer,
+    expected: &[(ConnectionId, u8)],
+    ticks: &mut tokio::sync::broadcast::Receiver<mc_core::boundary::TickOutput>,
+) {
+    let mut last: Vec<Option<u8>> = vec![None; expected.len()];
+    for _ in 0..40 {
+        if expected
+            .iter()
+            .zip(&last)
+            .all(|((_, want), seen)| seen == &Some(*want))
+        {
+            return;
+        }
+        ticks
+            .recv()
+            .await
+            .expect("native tick publications stopped");
+        for (connection, changes) in server.hub.try_drain_outbox() {
+            let Some(index) = expected.iter().position(|(id, _)| *id == connection) else {
+                continue;
+            };
+            for change in changes {
+                if let mc_core::boundary::PlayerChange::PermissionLevel { level } = change {
+                    last[index] = Some(level);
+                }
+            }
+        }
+    }
+    let wrong: Vec<_> = expected
+        .iter()
+        .zip(&last)
+        .filter(|((_, want), seen)| *seen != &Some(*want))
+        .map(|((id, want), seen)| format!("connection {} wants {want}, published {seen:?}", id.0))
+        .collect();
+    assert!(
+        wrong.is_empty(),
+        "native permission level publication: {}",
+        wrong.join("; ")
+    );
+}
+
 #[tokio::test]
 async fn deop_between_snapshot_and_registration_reaches_native_join() {
     let (server, _dir) = fixture_in_temp_dir();
@@ -433,6 +527,64 @@ async fn deop_between_snapshot_and_registration_reaches_native_join() {
     .unwrap();
     assert_eq!(server.admin.session_level(id), 0);
     assert_native_deopped(&server, id, &mut ticks).await;
+    drop(session);
+    server.hub.shutdown();
+    // The fixture's TempDir removes this directory when it is dropped.
+}
+
+#[tokio::test]
+async fn deop_between_join_submission_and_late_registration_keeps_native_level() {
+    use std::future::Future;
+    let (server, _dir) = fixture_in_temp_dir();
+    let (operator, _operator_rx) = register(&server, "Operator", true);
+    // A name no other test admits, so the armed rendezvous matches only this
+    // admission (the static is process-wide and tests run concurrently).
+    let subject = "GateSubject";
+    let uuid = crate::crypto::offline_uuid(subject);
+    server.admin.set_op(uuid, subject, true).unwrap();
+    assert_eq!(server.admin.level(uuid), 4);
+    let id = server.connections.joining_id();
+    let mut ticks = server.hub.subscribe();
+    let (reached_tx, reached_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+    *connection::ADMIT_RENDEZVOUS
+        .lock()
+        .expect("admission rendezvous") = Some((uuid, reached_tx, release_rx));
+    let mut joining = Box::pin(connection::admit_native_session(
+        &server,
+        id,
+        uuid,
+        subject.into(),
+        "127.0.0.1".parse().unwrap(),
+        mc_core::boundary::ClientSettings {
+            view_distance: 2,
+            locale: "en_us".into(),
+            chat_visibility: mc_core::boundary::ChatVisibility::Full,
+        },
+    ));
+    // Exactly one poll reaches the boundary and parks: the Join is submitted and,
+    // in the pre-fix order, the session is still unregistered (the fixed order
+    // has registered it and released the operator fence before parking).
+    let first = std::future::poll_fn(|cx| std::task::Poll::Ready(joining.as_mut().poll(cx))).await;
+    assert!(
+        first.is_pending(),
+        "the admission must park at the Join boundary"
+    );
+    reached_rx
+        .await
+        .expect("admission reached the Join boundary");
+    // A real operator command, not an edge-only level change. It resolves the
+    // target through the ops entry, so it works before the session is registered.
+    assert!(
+        server
+            .handle_admin_command(operator, &format!("deop {subject}"))
+            .await
+            .unwrap()
+    );
+    release_tx.send(()).expect("admission still waiting");
+    let session = joining.await.expect("native session admitted");
+    assert_eq!(server.admin.session_level(id), 0);
+    assert_published_levels(&server, &[(id, 0)], &mut ticks).await;
     drop(session);
     server.hub.shutdown();
     // The fixture's TempDir removes this directory when it is dropped.

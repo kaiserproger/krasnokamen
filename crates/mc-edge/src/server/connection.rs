@@ -19,6 +19,40 @@ impl EdgeServer {
     }
 }
 
+/// Test-only rendezvous at the admission boundary "native Join submitted, the
+/// session not yet registered with `admin`". A test arms it for one UUID; the
+/// admission reports arrival and waits for release, so a real op/deop command can
+/// run inside the historical window deterministically. Disarmed it is a no-op and
+/// non-test builds compile it away.
+#[cfg(test)]
+type AdmitRendezvous = (
+    uuid::Uuid,
+    tokio::sync::oneshot::Sender<()>,
+    tokio::sync::oneshot::Receiver<()>,
+);
+
+#[cfg(test)]
+pub(super) static ADMIT_RENDEZVOUS: std::sync::Mutex<Option<AdmitRendezvous>> =
+    std::sync::Mutex::new(None);
+
+#[cfg(test)]
+pub(super) async fn admit_rendezvous(uuid: uuid::Uuid) {
+    let armed = {
+        let mut slot = ADMIT_RENDEZVOUS
+            .lock()
+            .expect("admission rendezvous poisoned");
+        if slot.as_ref().is_some_and(|(armed, _, _)| *armed == uuid) {
+            slot.take()
+        } else {
+            None
+        }
+    };
+    if let Some((_, reached, release)) = armed {
+        let _ = reached.send(());
+        let _ = release.await;
+    }
+}
+
 /// Register the session and enqueue its native Join under the same fence as
 /// op/deop, so a permission update cannot overtake the Join it targets.
 pub(super) async fn admit_native_session(
@@ -37,6 +71,9 @@ pub(super) async fn admit_native_session(
     if session.is_err() {
         server.admin.remove(id);
     }
+    drop(_guard);
+    #[cfg(test)]
+    admit_rendezvous(uuid).await;
     session
 }
 
