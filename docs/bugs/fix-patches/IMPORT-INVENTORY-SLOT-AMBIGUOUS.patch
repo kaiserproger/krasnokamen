@@ -1,5 +1,5 @@
 diff --git a/crates/mc-core/src/ender_chest.rs b/crates/mc-core/src/ender_chest.rs
-index f0c6c70..edff7f4 100644
+index f0c6c7012..edff7f442 100644
 --- a/crates/mc-core/src/ender_chest.rs
 +++ b/crates/mc-core/src/ender_chest.rs
 @@ -40,24 +40,29 @@ pub(crate) fn contents(
@@ -44,7 +44,7 @@ index f0c6c70..edff7f4 100644
      Ok(slots)
  }
 diff --git a/crates/mc-core/src/journal/player_nbt.rs b/crates/mc-core/src/journal/player_nbt.rs
-index d58d20f..6528476 100644
+index d58d20f9e..6528476b8 100644
 --- a/crates/mc-core/src/journal/player_nbt.rs
 +++ b/crates/mc-core/src/journal/player_nbt.rs
 @@ -44,6 +44,7 @@ pub(super) fn player_image_to_tag(
@@ -177,7 +177,7 @@ index d58d20f..6528476 100644
              }
              grid
 diff --git a/crates/mc-core/src/native_checkpoint.rs b/crates/mc-core/src/native_checkpoint.rs
-index 2b3ccf5..3776892 100644
+index 2b3ccf51b..3776892cf 100644
 --- a/crates/mc-core/src/native_checkpoint.rs
 +++ b/crates/mc-core/src/native_checkpoint.rs
 @@ -866,7 +866,13 @@ fn recover_with_clock(
@@ -225,7 +225,7 @@ index 2b3ccf5..3776892 100644
                              && (image.value < 0 || image.tick < *lo || image.tick > *hi)
                          {
 diff --git a/crates/mc-data/src/player_nbt.rs b/crates/mc-data/src/player_nbt.rs
-index 4364c16..3dcd280 100644
+index 4364c1680..3dcd2801c 100644
 --- a/crates/mc-data/src/player_nbt.rs
 +++ b/crates/mc-data/src/player_nbt.rs
 @@ -125,6 +125,36 @@ fn float_list<const N: usize>(tag: &Tag) -> Option<[f32; N]> {
@@ -366,9 +366,18 @@ index 4364c16..3dcd280 100644
              }
          }
 diff --git a/crates/mc-world-conversion/src/import.rs b/crates/mc-world-conversion/src/import.rs
-index 067575e..3f6a314 100644
+index a696e7fc1..3f6a31416 100644
 --- a/crates/mc-world-conversion/src/import.rs
 +++ b/crates/mc-world-conversion/src/import.rs
+@@ -30,7 +30,7 @@ use paths::{
+ };
+ pub(crate) use players::normalize_missing_player_dimensions;
+ pub(crate) use players::player_missing_dimension_source;
+-use players::{admit_player, player_uuid};
++use players::{admit_player, player_uuid, validate_legacy_player_slots};
+ use raids::upgrade_raids_payload;
+ #[cfg(test)]
+ pub(crate) use raids::upgrade_raids_payload_for_tests;
 @@ -171,6 +171,7 @@ pub(super) fn convert(
          } else {
              level_version
@@ -385,3 +394,71 @@ index 067575e..3f6a314 100644
          let report = upgrade::upgrade_player(&mut tag, from)
              .map_err(|error| fail(format!("{}: {error}", path.display())))?;
          record_upgrade(
+diff --git a/crates/mc-world-conversion/src/import/players.rs b/crates/mc-world-conversion/src/import/players.rs
+index 869f9426f..8b0621e6f 100644
+--- a/crates/mc-world-conversion/src/import/players.rs
++++ b/crates/mc-world-conversion/src/import/players.rs
+@@ -100,6 +100,54 @@ pub(crate) fn normalize_missing_player_dimensions(
+     Ok(())
+ }
+ 
++// PlayerEquipmentFix (4312) folds old armor/offhand entries into a map.
++// Validate before that fold, not just before the native array projection.
++pub(super) fn validate_legacy_player_slots(
++    tag: &Tag,
++    from: i32,
++    path: &str,
++) -> Result<(), CoreError> {
++    if from >= 4312 {
++        return Ok(());
++    }
++    if let Some(equipment) =
++        field(tag, "equipment").map_err(|error| fail(format!("{path}: {error}")))?
++        && !matches!(equipment, Tag::Compound(fields) if fields.is_empty())
++    {
++        return Err(fail(format!(
++            "{path}: equipment slot: unsupported before PlayerEquipmentFix 4312"
++        )));
++    }
++    let Some(value) = field(tag, "Inventory").map_err(|error| fail(format!("{path}: {error}")))?
++    else {
++        return Ok(());
++    };
++    let Tag::List(list) = value else {
++        return Err(fail(format!("{path}: Inventory: expected list")));
++    };
++    let mut occupied = 0_u64;
++    for (index, item) in list.elements.iter().enumerate() {
++        let bad_slot =
++            |reason: &str| fail(format!("{path}: Inventory entry {index} Slot: {reason}"));
++        let Some(Tag::Byte(slot)) =
++            field(item, "Slot").map_err(|error| bad_slot(&error.to_string()))?
++        else {
++            return Err(bad_slot("missing byte Slot"));
++        };
++        let bit = match *slot {
++            0..=35 => *slot as u8,
++            100..=103 => (*slot - 100) as u8 + 36,
++            -106 => 40,
++            _ => return Err(bad_slot(&format!("{slot} outside supported legacy slots"))),
++        };
++        if occupied & (1_u64 << bit) != 0 {
++            return Err(bad_slot(&format!("duplicate {slot}")));
++        }
++        occupied |= 1_u64 << bit;
++    }
++    Ok(())
++}
++
+ pub(super) fn admit_player(
+     mut tag: Tag,
+     uuid: uuid::Uuid,
+@@ -115,7 +163,7 @@ pub(super) fn admit_player(
+         )));
+     }
+     let player = mc_core::journal::player_from_tag(&tag, items)
+-        .map_err(|error| fail(format!("{path}: {error}")))?;
++        .map_err(|error| fail(format!("{path}: player {uuid}: {error}")))?;
+     if player.pos.iter().any(|value| !value.is_finite())
+         || !player.yaw.is_finite()
+         || !player.pitch.is_finite()

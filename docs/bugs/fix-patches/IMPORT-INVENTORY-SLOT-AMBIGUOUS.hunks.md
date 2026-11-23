@@ -1,16 +1,17 @@
 # IMPORT-INVENTORY-SLOT-AMBIGUOUS — patch-mode fix identity
 
 Fix: `docs/bugs/fix-patches/IMPORT-INVENTORY-SLOT-AMBIGUOUS.patch`
-(`fix_commit = "patch:f37f927afe4bb3187ecc16ee5680e97de9293e696711227eea3806169c83c588"`).
+(`fix_commit = "patch:e71738fc39a6c19be3e974c6cd51437ce4df3ea8d3839106e63c1de9fefe9993"`).
 It is a diff from the pre-fix form to this candidate; `git apply -R` restores the
 pre-fix code (the acceptance of a missing, repeated or unsupported custody slot).
 Re-audit:
 `python3 -m tools.harness ledger promote IMPORT-INVENTORY-SLOT-AMBIGUOUS --fix-patch docs/bugs/fix-patches/IMPORT-INVENTORY-SLOT-AMBIGUOUS.patch --dry-run`
 
-This patch supersedes the earlier shipped identity `patch:7a364f8eadd208bb3a56b68ad0b8a62b80a35dc4b7800ee0916fde16ae9ae462`:
-that file no longer reversed on the candidate (two refactors moved the code, see
-"Exclusions"), so its hunks are forward-ported here to their HEAD equivalents
-(docs/bugs/README.md step 1, patch mode). Every original non-test hunk is carried
+This patch supersedes `patch:f37f927a…` (which left the moved
+`validate_legacy_player_slots` definition and the `admit_player` message out of
+the identity with a "path relocation" label, not an (a)/(b)/(c) reason; the
+fifth revision carries both) and the earlier shipped `patch:7a364f8e…`, whose
+hunks no longer reversed on the candidate. Every original non-test hunk is carried
 unless it is another row's behaviour (a), API the kept tests call (b), or code a
 later commit rewrote with no HEAD equivalent (c); each exclusion is named below.
 
@@ -42,29 +43,20 @@ later commit rewrote with no HEAD equivalent (c); each exclusion is named below.
 | `mc-data/src/player_nbt.rs:223-266` | 1e13fffe5 | `player_from_fields`: `Inventory`/`equipment` keyed decode, missing/out-of-range/repeated `Slot` refused, equipment names pinned to the eight supported slots |
 | `mc-world-conversion/src/import.rs:171-177` | 1e13fffe5 | the embedded-player path validates legacy slots before `upgrade_player` folds equipment |
 | `mc-world-conversion/src/import.rs:1350-1356` | 1e13fffe5 | the player-file path validates legacy slots before the DFU upgrade |
+| `mc-world-conversion/src/import/players.rs:104-149` | 1e13fffe5 | the moved `validate_legacy_player_slots` definition itself (the a/-side deletes it and drops its name from the `use` line in `import.rs`, so the control has the pre-fix shape: the function does not exist and legacy slots are not validated) |
+| `mc-world-conversion/src/import/players.rs:166-171` | 1e13fffe5 | the moved `admit_player` decode-error message carries the player uuid (a/-side reverts to `{path}: {error}`) |
 
 ## Exclusions
 
-- `import.rs` hunk "fn validate_legacy_player_slots" (original `:720-770`): the
-  HEAD equivalent exists but at another path — the later split moved the
-  function to `import/players.rs:105-149`, where it stays on both sides and is
-  not part of this identity. Only its two call sites are carried (above); in
-  the control they are reversed, so the function stays defined but uncalled (a
-  `dead_code`/unused-import warning, not an error) and legacy slots are not
-  validated — the pre-fix behaviour. The panel's requested label is: moved by a
-  later commit, not rewritten, so the hunk is not applicable to `import.rs`;
-  it is not an (a)/(b)/(c) exclusion of behaviour but a path relocation.
-- `import.rs` hunk at `:735` (`admit_player` decode error gains the player uuid):
-  same relocation — `admit_player` lives at `import/players.rs:166` on HEAD and
-  stays on both sides. The message change is diagnostic only and not this row's
-  pipeline guard; the original `:735` hunk has no `import.rs` pre-image to
-  reverse.
+None. Both hunks the previous identity called "relocations" are carried at
+their HEAD paths above.
 
 ## a/-side adaptations
 
-None beyond the two exclusions above: the pre-fix `Inventory`/`equipment` decode
-is the historical text of `1e13fffe5`, kept verbatim, and `stack_from_fields`
-(which it calls) stays in the file.
+None. The pre-fix `Inventory`/`equipment` decode is the historical text of
+`1e13fffe5`, kept verbatim; `stack_from_fields` (which it calls) stays in the
+file; the moved definition and message are reversed at their HEAD paths, and
+the `use` line drops the deleted name (a plain pre-image, not an adaptation).
 
 ## Proving refs
 
