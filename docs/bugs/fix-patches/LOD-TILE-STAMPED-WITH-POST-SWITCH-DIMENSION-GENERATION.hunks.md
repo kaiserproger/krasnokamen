@@ -1,43 +1,49 @@
-# LOD-TILE-STAMPED-WITH-POST-SWITCH-DIMENSION-GENERATION — patch-mode fix identity
+# LOD-TILE-STAMPED-WITH-POST-SWITCH-DIMENSION-GENERATION — patch-mode fix identity (reworked)
 
 Fix: `docs/bugs/fix-patches/LOD-TILE-STAMPED-WITH-POST-SWITCH-DIMENSION-GENERATION.patch`
-(`fix_commit = "patch:c8c4f61d372c4e7bf73db864ba25c54d0ccb78432221bedb300d5669920f6101"`).
+(`fix_commit = "patch:ea201453aa5025dd6d73c236af85e0283bb1e540687300c126d4e60d6370c149"`).
 It is a diff from the pre-fix form to this candidate; `git apply -R` restores
-the pre-fix code. Re-audit:
+the pre-fix queue. Re-audit:
 `python3 -m tools.harness ledger promote LOD-TILE-STAMPED-WITH-POST-SWITCH-DIMENSION-GENERATION --fix-patch docs/bugs/fix-patches/LOD-TILE-STAMPED-WITH-POST-SWITCH-DIMENSION-GENERATION.patch --dry-run`
 
-## Original fix
+## Why patch mode
 
-`167dccf8d` "fix(edge): fence LOD tiles with the generation captured before
-sampling": `WorldSender::generation()` and `try_send_at()` in
-`crates/mc-edge/src/server/world_queue.rs`, and in `crates/mc-edge/src/lod.rs`
-the generation is captured after the worker permit and before
-`spawn_blocking`, then the tile is enqueued through `enqueue_sampled` under that
-generation.
+The fix landed in `167dccf8d` (the generation stamp through the queue and the
+LOD task) and `7920fc66b` (capture in `request()` and sample synchronously
+under it, so the capture is production code rather than a test-only seam).
+The kept test needs both halves, so the identity is the whole queue path as
+this candidate has it.
 
-## Hunk mapping
+## Commits carried and what each closes
 
-| Patch hunk | Original | What it is |
+| Commit | Closes | Hunks in the patch |
 |---|---|---|
-| `lod.rs` `enqueue_sampled` | 167dccf8d | the sampled tile is stamped with the generation captured before the sample, so a reliable dimension reset during the sample makes the writer discard it |
+| `167dccf8d` | the row's path: a tile sampled before a dimension reset is dropped instead of delivered in the new dimension | `server/world_queue.rs`: `WorldSender::generation()`, `try_send_at(generation, frame)` and the frame's `generation` field from the argument (no longer the live counter at enqueue); `lod.rs`: the `enqueue_sampled`/`sample_tile` helpers |
+| `7920fc66b` | the capture position (before the permit wait / before the sample) and the sampler seam | `lod.rs`: `request()` captures `handles.world_tx.generation()` before spawning, and the blocking sample runs inside `sample_tile`, which enqueues under the captured value |
 
-## Exclusions
-
-- `world_queue.rs` `generation()`/`try_send_at()`: (b) the kept test
-  `lod::tests::tile_sampled_before_a_dimension_reset_is_dropped` calls both, so
-  reversing them stops the control from compiling. They stay on both sides.
-- The `lod.rs` generation capture and the call site stay on both sides: (b) the
-  same reason; only the helper's stamping behaviour is reverted.
+No original hunk is left out.
 
 ## a/-side adaptation
 
-The pre-fix `enqueue_sampled` ignores its `sampled_at` argument and calls
-`try_send`, which stamps the frame at enqueue time — the original bug
-(`reset()` between capture and send no longer fences the tile).
+The kept test — `a_reset_during_the_sample_discards_the_tile` — calls
+`sample_tile(&sender, Some(generation), sampler)` and the `WorldSender`
+accessors, so the pre-image cannot be restored verbatim:
 
-## Proving ref
+- (b) `sample_tile`/`enqueue_sampled`/`WorldSender::generation()`/
+  `try_send_at` keep their signatures (the test calls them; deleting them
+  stops the control building).
+- Their a/-side bodies are the pre-fix behaviour: `try_send_at` stamps the
+  frame with `self.generation.load(Acquire)` at enqueue time (`let _ =
+  generation`), and `sample_tile` ignores the captured value and passes the
+  live generation after the sampler returns. That is the pre-fix
+  `try_send(frame)` inside the task, expressed through the kept names.
 
-`cargo:mc-edge:lod::tests::tile_sampled_before_a_dimension_reset_is_dropped`:
-with the pre-fix helper the stale tile is delivered after `reset()` and the
-test fails at its `Err(TryRecvError::Empty)` assertion; on the candidate the
-writer discards it and releases its queued bytes.
+## Proving ref (crates/mc-edge/src/lod.rs)
+
+- `lod::tests::a_reset_during_the_sample_discards_the_tile` — the sampler
+  calls `sender.reset()`; the a/-side then queues the stale tile under the new
+  generation and the test fails at its own
+  `Err(TryRecvError::Empty)` assertion (the frame is delivered) instead of the
+  empty queue and released credit the candidate keeps. Moving the capture
+  after the sample inside `sample_tile` reddens the same assertion, so the
+  order is part of the identity and the control tests it.

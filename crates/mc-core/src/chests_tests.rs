@@ -638,3 +638,66 @@ fn shulker_lid_obstruction_respects_facing_and_half_block_sweep() {
         assert!(opened(&rig.open(pos)).is_some(), "{facing}");
     }
 }
+
+#[test]
+fn integrity_reserved_refusal_with_a_cold_partner_closes_the_menu() {
+    let mut rig = Rig::new();
+    // Put the partner across a chunk boundary so only that half unloads.
+    rig.left.x = rig.left.x.div_euclid(16) * 16 + 15;
+    rig.right.x = rig.left.x + 1;
+    let slot = rig.state.entities.slot_of(rig.player).unwrap();
+    rig.state.entities.set_pos(
+        slot,
+        [
+            f64::from(rig.left.x),
+            f64::from(Y + 1),
+            f64::from(rig.left.z) + 2.0,
+        ],
+    );
+    let diamond = item(&rig.state, "minecraft:diamond", 3);
+    rig.double_chest(std::slice::from_ref(&diamond), &[]);
+    rig.open(rig.left);
+    let window = rig.state.players[&rig.player].open.as_ref().unwrap().window;
+    let chunk = crate::boundary::ChunkPos {
+        x: rig.right.x.div_euclid(16),
+        z: rig.right.z.div_euclid(16),
+    };
+    rig.state.world.finish_inhabited_tick(rig.state.tick + 1);
+    rig.state
+        .world
+        .set_active_chunks(Default::default(), rig.state.tick + 1);
+    rig.state.world.capture_dirty(&Default::default());
+    rig.state
+        .world
+        .mark_flushed(&[(chunk, rig.state.world.storage_revision(chunk))]);
+    let mut want = rig.state.desired_chunks();
+    want.remove(&chunk);
+    assert!(rig.state.world.evict_outside(&want).contains(&chunk));
+    assert_eq!(rig.block_at(rig.right), None);
+    // A reserved refusal (a reserved SwapHands or a book edit reaches this
+    // path) must refuse by closing the menu, never by resending 27 real slots
+    // plus 27 empty ones or records of the cold half.
+    let effects = crate::tick::inventory_transition_refused(&mut rig.state, rig.player);
+    assert!(
+        rig.state.players[&rig.player].open.is_none(),
+        "the cold-partner refusal closes the menu"
+    );
+    assert!(!rig.state.open_containers.contains(&rig.player));
+    assert!(
+        !effects
+            .changes
+            .iter()
+            .any(|change| matches!(change, PlayerChange::MenuContents { .. })),
+        "a cold-partner refusal must not resend a half-empty menu: {:?}",
+        effects.changes
+    );
+    assert!(
+        effects
+            .changes
+            .iter()
+            .any(|change| matches!(change, PlayerChange::MenuClosed { window: closed } if *closed == window)),
+        "the refusal closes the window: {:?}",
+        effects.changes
+    );
+    assert_eq!(rig.storage(rig.left).unwrap()[0], diamond);
+}

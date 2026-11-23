@@ -158,6 +158,18 @@ pub(crate) fn storage_cells(
     }
 }
 
+/// Where the other half of a double storage block must be, from `pos`'s own
+/// state alone. The coordinate is known even while its chunk is non-resident,
+/// so a menu can refuse instead of reading a half-visible pair.
+pub(crate) fn partner_position(
+    blocks: &BlockRegistry,
+    pos: BlockPos,
+    block_at: &dyn Fn(BlockPos) -> Option<u32>,
+) -> Option<BlockPos> {
+    let (_, facing, kind) = block_at(pos).and_then(|state| parts(blocks, state))?;
+    (kind != ChestType::Single).then(|| step(pos, connected(facing, kind)))
+}
+
 /// Resolve paired custody without allocating a menu's slot-cell vector.
 pub(crate) fn storage_partner(
     blocks: &BlockRegistry,

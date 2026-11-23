@@ -1,21 +1,212 @@
+diff --git a/crates/mc-core/src/journal_touched.rs b/crates/mc-core/src/journal_touched.rs
+index 10f0bfc6a..3aca6f83b 100644
+--- a/crates/mc-core/src/journal_touched.rs
++++ b/crates/mc-core/src/journal_touched.rs
+@@ -562,11 +562,16 @@ pub(crate) fn entity_images(
+         if let std::collections::hash_map::Entry::Occupied(previous) = &mut baseline {
+             let (tick, old_chunk, old) = previous.get_mut();
+             *old_chunk = chunk;
+-            if let EntityKind::Mob { type_id } = body.kind
+-                && old.clock_sensitive(type_id, row.appearance.baby)
+-                && let Some((from, to)) = state.world.simulation_interval(chunk, *tick, output.tick)
+-            {
+-                Arc::make_mut(old).advance_clocks(type_id, row.appearance.baby, to - from);
++            if let EntityKind::Mob { type_id } = body.kind {
++                advance_mob_mirror(
++                    &state.world,
++                    old,
++                    type_id,
++                    row.appearance.baby,
++                    chunk,
++                    *tick,
++                    output.tick,
++                );
+             }
+             *tick = output.tick;
+             if old.matches(body, row) {
+@@ -596,6 +601,49 @@ pub(crate) fn entity_images(
+     state.journal_scan.times.compare = compare_start.elapsed();
+ }
+ 
++/// Project a mob image's clocks through the world's activity and game clock.
++/// The advance is the number of game ticks actually simulated in the span, so
++/// a held interval contributes nothing (the replay projection's rule).
++fn advance_mob_mirror(
++    world: &crate::world::ChunkWorld,
++    image: &mut std::sync::Arc<crate::journal::EntityStateImage>,
++    type_id: u32,
++    baby: bool,
++    chunk: crate::boundary::ChunkPos,
++    from: u64,
++    to: u64,
++) {
++    if image.clock_sensitive(type_id, baby)
++        && let Some((start, end)) = world.simulation_interval(chunk, from, to)
++        && let Some(elapsed) = world.simulated_game_ticks(start, end)
++        && elapsed > 0
++    {
++        std::sync::Arc::make_mut(image).advance_clocks(type_id, baby, elapsed);
++    }
++}
++
++/// Project a villager image's clocks the way replay does: one uninterrupted
++/// running span at a time, each anchored at the previous running boundary.
++fn advance_villager_mirror(
++    world: &crate::world::ChunkWorld,
++    villager: &mut crate::villager::VillagerState,
++    chunk: crate::boundary::ChunkPos,
++    from: u64,
++    to: u64,
++) {
++    let Some((start, end)) = world.simulation_interval(chunk, from, to) else {
++        return;
++    };
++    world.for_each_running_interval(start, end, |first, last| {
++        crate::villager::persistence::advance_running_clocks(
++            villager,
++            world.last_running_at(first),
++            first + 1,
++            last,
++        );
++    });
++}
++
+ /// Clear the compact-record bases. A checkpoint stores neither the WAL's
+ /// transient appearance (living flags, metadata extras) nor a replayed
+ /// projectile state, so every tail after a capture must start with a full
+@@ -771,10 +819,9 @@ fn villager_image(state: &mut TickState, slot: EntitySlot, tick: u64, full: &mut
+         row.villager.as_mut().unwrap().brain_clock = clock;
+     }
+     let villager = state.entities.row(slot).villager.as_deref().unwrap();
++    let world = &state.world;
+     if let Some((from, old)) = state.journaled_villagers.get_mut(&body.id) {
+-        if let Some((start, end)) = state.world.simulation_interval(chunk, *from, tick) {
+-            crate::villager::persistence::advance_clocks(old, start, end);
+-        }
++        advance_villager_mirror(world, old, chunk, *from, tick);
+         *from = tick;
+         if crate::villager::persistence::journal_eq(villager, old) {
+             return;
+@@ -804,9 +851,7 @@ pub(crate) fn assert_baselines_complete(state: &TickState, tick: u64) {
+                 .get(&body.id)
+                 .unwrap_or_else(|| panic!("villager {:?} has no journal baseline", body.id));
+             let mut old: Box<crate::villager::VillagerState> = old.clone();
+-            if let Some((start, end)) = state.world.simulation_interval(chunk, *from, tick) {
+-                crate::villager::persistence::advance_clocks(&mut old, start, end);
+-            }
++            advance_villager_mirror(&state.world, &mut old, chunk, *from, tick);
+             let mut live = villager.clone();
+             live.brain_clock = brain_clock(body, row, state.world.is_active(chunk.x, chunk.z));
+             assert!(
+@@ -822,11 +867,17 @@ pub(crate) fn assert_baselines_complete(state: &TickState, tick: u64) {
+             .journaled_entity_state
+             .get(&body.id)
+             .unwrap_or_else(|| panic!("entity {:?} has no state baseline", body.id));
+-        let mut old = old.as_ref().clone();
+-        if let EntityKind::Mob { type_id } = body.kind
+-            && let Some((start, end)) = state.world.simulation_interval(chunk, *from, tick)
+-        {
+-            old.advance_clocks(type_id, row.appearance.baby, end - start);
++        let mut old = Arc::new(old.as_ref().clone());
++        if let EntityKind::Mob { type_id } = body.kind {
++            advance_mob_mirror(
++                &state.world,
++                &mut old,
++                type_id,
++                row.appearance.baby,
++                chunk,
++                *from,
++                tick,
++            );
+         }
+         assert!(
+             old.matches(body, row),
+diff --git a/crates/mc-core/src/world.rs b/crates/mc-core/src/world.rs
+index 450f221e7..524c4ece8 100644
+--- a/crates/mc-core/src/world.rs
++++ b/crates/mc-core/src/world.rs
+@@ -95,6 +95,20 @@ pub struct ChunkWorld {
+     sim_tick: u64,
+     sim_held_ticks: u64,
+     sim_held_before_tick: u64,
++    /// Native ticks whose game clock was held, as half-open `[start, end)`
++    /// spans, recorded by [`ChunkWorld::refresh_active_clock`]. The journal
++    /// mirror projects game time from them exactly as replay's
++    /// `ReplayGameClock` does, so a held interval never advances a comparison
++    /// image.
++    clock_spans: Vec<clocks::ClockSpan>,
++    /// First native tick whose held count is known: one before the first
++    /// recorded tick, because the published pair carries that boundary too.
++    /// Anchors before it are not projected.
++    clock_since: Option<u64>,
++    /// Held-tick count at [`Self::clock_since`], inclusive.
++    clock_held_base: u64,
++    /// Last tick whose span was recorded (refreshes are idempotent).
++    clock_recorded: Option<u64>,
+     /// Parent-managed active membership (hysteresis set). `refresh_active_clock`
+     /// reconciles it against residency; cached stationary ticks skip re-sends.
+     active_set: HashSet<ChunkPos>,
+@@ -498,6 +512,10 @@ impl ChunkWorld {
+             sim_tick: 0,
+             sim_held_ticks: 0,
+             sim_held_before_tick: 0,
++            clock_spans: Vec::new(),
++            clock_since: None,
++            clock_held_base: 0,
++            clock_recorded: None,
+             active_set: HashSet::default(),
+             block_only: HashSet::default(),
+             active_revision: 0,
 diff --git a/crates/mc-core/src/world/clocks.rs b/crates/mc-core/src/world/clocks.rs
-index 30e69a0..4ead1e4 100644
+index 271c47abb..609abde94 100644
 --- a/crates/mc-core/src/world/clocks.rs
 +++ b/crates/mc-core/src/world/clocks.rs
-@@ -349,30 +349,78 @@ impl ChunkWorld {
-         self.clock_recorded = Some(tick);
+@@ -317,29 +317,119 @@ impl ChunkWorld {
+         (start < end).then_some((start, end))
      }
  
--    /// Pre-fix projection: the activity interval is treated as running time
--    /// and the game clock is ignored, exactly what `journal_touched` did
--    /// inline before the mirror existed.
+-    /// Pre-fix projection (a/-side adaptation of the kept API): the caller's
+-    /// activity interval counts as simulated game time, as the journal mirror
+-    /// computed it inline before the held-span history existed.
++    /// Record this tick's held span once. `set_simulation_clock` published
++    /// `(held at tick, held at tick-1)`; a held tick advances the count by one.
++    /// The pair carries the count at `tick - 1` too, which is where the exact
++    /// history starts, so `clock_since` is `tick - 1`: a baseline seeded by
++    /// recovery at that tick projects exactly.
++    fn record_clock_tick(&mut self, tick: u64) {
++        if self.clock_recorded.is_some_and(|last| tick <= last) {
++            return;
++        }
++        if self.clock_since.is_none() {
++            self.clock_since = Some(tick.saturating_sub(1));
++            self.clock_held_base = self.sim_held_before_tick;
++        }
++        if self.sim_held_ticks > self.sim_held_before_tick {
++            // Cumulative held ticks before a new span keep the lookup a binary
++            // search plus one partial span, not a walk over the session.
++            let held_before = self
++                .clock_spans
++                .last()
++                .map_or(0, |span| span.held_before + (span.end - span.start));
++            match self.clock_spans.last_mut() {
++                Some(span) if span.end == tick => span.end = tick.saturating_add(1),
++                _ => self.clock_spans.push(ClockSpan {
++                    start: tick,
++                    end: tick.saturating_add(1),
++                    held_before,
++                }),
++            }
++        }
++        self.clock_recorded = Some(tick);
++    }
++
 +    /// Game ticks simulated in `(from, to]` from the recorded held spans, or
 +    /// `None` when `from` predates the recorded history (a re-anchored
 +    /// baseline; the caller then leaves the image unadvanced, which can only
 +    /// cost one extra image, never a wrong one).
      #[must_use]
      pub(crate) fn simulated_game_ticks(&self, from: u64, to: u64) -> Option<u64> {
--        Some(to.saturating_sub(from))
+-        (to >= from).then_some(to - from)
 +        if self.clock_since.is_some_and(|since| from < since) {
 +            return None;
 +        }
@@ -25,10 +216,10 @@ index 30e69a0..4ead1e4 100644
 +        )
      }
  
--    /// Pre-fix projection span: one running interval over the whole activity
--    /// interval.
-+    /// Game ticks the clock has run through `tick` (offset by the count before
-+    /// [`Self::clock_since`]); differences across held spans are exact.
+-    /// Pre-fix projection: one uninterrupted running span.
++    /// Game ticks the clock has run through `tick` (offset by the held ticks
++    /// counted at [`Self::clock_since`], inclusive); differences across held
++    /// spans are exact.
 +    fn game_ticks_at(&self, tick: u64) -> u64 {
 +        let index = self.clock_spans.partition_point(|span| span.start <= tick);
 +        let Some(span) = index.checked_sub(1).map(|index| &self.clock_spans[index]) else {
@@ -76,9 +267,17 @@ index 30e69a0..4ead1e4 100644
          }
      }
  
--    /// Pre-fix projection has no held boundaries to look back to.
+-    /// Pre-fix projection: the tick itself is the last running boundary.
 +    /// Last running tick at or before `tick` (`tick` itself when it is not
 +    /// held). Mirrors `ReplayGameClock::last_running_at`.
++    ///
++    /// A world recovered in the middle of a hold starts its spans at the first
++    /// tick it records (`R + 1`), so the hold that began before recovery is not
++    /// visible: for a `tick` in that pre-recovery part this returns `R`, while
++    /// replay (which reads `held_since`) returns `since - 1`. The difference
++    /// shifts only `advance_running_clocks`'s `from` anchor for one release
++    /// comparison, so a working/sleeping/panicking villager can emit one extra
++    /// image at the release; it is a conservative lag, never a wrong value.
      #[must_use]
      pub(crate) fn last_running_at(&self, tick: u64) -> u64 {
 +        let index = self.clock_spans.partition_point(|span| span.start <= tick);
@@ -90,3 +289,11 @@ index 30e69a0..4ead1e4 100644
          tick
      }
  
+@@ -407,6 +497,7 @@ impl ChunkWorld {
+     /// [`Self::set_active_chunks`] stores then calls this same method.
+     pub fn refresh_active_clock(&mut self, tick: u64) {
+         self.sim_tick = tick;
++        self.record_clock_tick(tick);
+         let held_ticks = self.sim_held_ticks;
+         let held_before_tick = self.sim_held_before_tick;
+         // Hot path: no per-tick allocation or sorting. Disjoint field borrows

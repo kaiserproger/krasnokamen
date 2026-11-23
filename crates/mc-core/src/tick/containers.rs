@@ -262,18 +262,48 @@ pub(crate) fn debug_menu_snapshot(
 /// Resync the real current menu after refusing a native inventory transition.
 /// A vehicle or block menu must never be imaged with placeholder empty cargo.
 pub(crate) fn inventory_transition_refused(
-    state: &TickState,
+    state: &mut TickState,
     entity: EntityId,
 ) -> crate::player::PlayerEffects {
-    let Some(player) = state.players.get(&entity) else {
+    let Some(connection) = state.players.get(&entity).map(|player| player.connection) else {
         return crate::player::PlayerEffects::default();
     };
+    // A block menu whose storage spans a non-resident chunk cannot be read:
+    // resending it would show 27 real slots plus 27 empty ones (or overlay
+    // records of the cold half). Refuse by closing the menu instead.
+    let cold = state.open_containers.menu_at(&entity).is_some_and(|open| {
+        let at = BlockPos {
+            x: open.0,
+            y: open.1,
+            z: open.2,
+        };
+        crate::chests::partner_position(&state.registry.blocks, at, &|cell| {
+            state.world.block_at(cell.x, cell.y, cell.z)
+        })
+        .is_some_and(|partner| {
+            state
+                .world
+                .chunk(ChunkPos {
+                    x: partner.x.div_euclid(16),
+                    z: partner.z.div_euclid(16),
+                })
+                .is_none()
+        })
+    });
+    if cold {
+        super::players::close_player_menu(state, connection);
+        return crate::player::PlayerEffects::default();
+    }
     if let Some(slots) = crate::vehicles::container_slots_for_player(state, entity) {
-        return player.inventory_transition_refused(slots);
+        return state.players[&entity].inventory_transition_refused(&slots);
     }
     if crate::ender_chest::is_open(state, entity) {
-        return crate::ender_chest::contents(&player.opaque_player_fields, &state.registry.items)
-            .map(|slots| player.inventory_transition_refused(&slots))
+        let slots = crate::ender_chest::contents(
+            &state.players[&entity].opaque_player_fields,
+            &state.registry.items,
+        );
+        return slots
+            .map(|slots| state.players[&entity].inventory_transition_refused(&slots))
             .unwrap_or_default();
     }
     let cells = state
@@ -281,7 +311,8 @@ pub(crate) fn inventory_transition_refused(
         .menu_at(&entity)
         .map(|open| container_cells(state, *open))
         .unwrap_or_default();
-    player.inventory_transition_refused(&container_slots(state, &cells))
+    let slots = container_slots(state, &cells);
+    state.players[&entity].inventory_transition_refused(&slots)
 }
 
 /// Publish the current authoritative menu image to every viewer after external
