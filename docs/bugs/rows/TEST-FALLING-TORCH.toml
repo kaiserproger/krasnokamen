@@ -8,3 +8,6 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-FALLING-TORCH"
 regression = ["cargo:mc-core:falling::tests::empty_collision_attachment_is_not_a_floor_and_slab_landing_drops_instead"]
 fix_commit = "9cc59fb37b5ea1e543eaca53f5864a0c0613051c"
+test_only_fix = true
+control_b_patch = "docs/bugs/test-only/TEST-FALLING-TORCH-defect.patch"
+repro_check = "Old oracle: falling_tests.rs:346-353 expected the OLD torch replacement (block replaced, no item). Corrected oracle: `empty_collision_attachment_is_not_a_floor_and_slab_landing_drops_instead` asserts the replacement-gated drop from crates/mc-core/src/falling.rs:382-388, matching the pinned FallingBlockEntity bytecode (artifact 64820:1114-1176,1316-1335). Control A: pre-fix test hunks restored -> the old expectation fails on current code. Control B: docs/bugs/test-only/TEST-FALLING-TORCH-defect.patch makes every landing surface replaceable (the old wrong behaviour) -> the corrected test fails. Fix commit 9cc59fb37 touches only crates/mc-core/src/{falling,dimensions,golems}_tests.rs: no asserted behaviour is removed; the changed assertions are listed in HANDOFF-3."

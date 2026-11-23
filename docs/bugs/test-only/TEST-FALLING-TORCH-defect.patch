@@ -1,0 +1,16 @@
+diff --git a/crates/mc-core/src/falling.rs b/crates/mc-core/src/falling.rs
+index 32531a9e1..7628965f4 100644
+--- a/crates/mc-core/src/falling.rs
++++ b/crates/mc-core/src/falling.rs
+@@ -385,7 +385,10 @@ pub(crate) fn run(
+                     path,
+                     "suspicious_sand" | "suspicious_gravel" | "pointed_dripstone"
+                 );
+-            let replaceable = crate::tick::replaceable(state, current);
++            // DEFECT INJECTION (docs/bugs/test-only/TEST-FALLING-TORCH-defect.patch): treat every
++            // landing surface as replaceable, so a non-replaceable block (a torch) is overwritten
++            // instead of dropping the falling block, exactly the old oracle's wrong expectation.
++            let replaceable = true;
+             if !replaceable && !shatter {
+                 drop(state, pos, falling.block_state, spawned);
+             } else if !shatter {

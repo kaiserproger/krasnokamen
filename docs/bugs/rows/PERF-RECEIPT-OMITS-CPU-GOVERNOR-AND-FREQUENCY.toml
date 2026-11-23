@@ -6,5 +6,6 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "receipts/Books/REPORT-R1.md gap G-7 and section F6 (Gregg 6.9.4 scaling governors: pin a fixed governor for benchmarking; hygiene). tools/coreperf/profiles.py records lscpu and affinity only (around :1242-1247); the report read scaling_governor=powersave and a 3-4 GHz swing across a 120 s window that changes cycles per tick and IPC and is not covered by the pin or tree fingerprint. Verified open on main 5bdc02911 (no governor or EPP read in tools/coreperf; tools/bench/common.py reads the governor for a different tool). Fix: record scaling_governor, energy_performance_preference, scaling_min/max_freq, cpuinfo_cur_freq and perf stat's percent time enabled/running in every receipt (read-only file reads) and record the governor pair with every A/B."
-regression = []
+regression = ["python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_receipt_records_the_cpu_clock_state", "python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_cpu_scaling_records_governor_epp_limits_and_frequency_per_cpu"]
 failing_first = "not recorded"
+fix_commit = "patch:6c31ed0fc0bd94363c11f17e16d3650cb460340dc9799b88247122fbfb75405c"

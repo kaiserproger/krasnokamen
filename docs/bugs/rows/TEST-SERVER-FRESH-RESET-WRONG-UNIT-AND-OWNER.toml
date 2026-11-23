@@ -8,3 +8,4 @@ source = "Static inspection of tools/dev/test-server/deploy-reset.sh:7-16 and so
 repro = "manual"
 regression = []
 failing_first = "reported"
+repro_check = "Script fixed on wt/D123Harness: it stops the `solaris` unit and checks that unit, refuses when a krasnokamen process survives the stop, verifies world/ is in the archive and defaults KRASNOKAMEN_SERVER_USER to krasnokamen (the unit User=). No executable proof: the owner prohibits running this helper in any form, including mock or throwaway environments, until separate permission."
