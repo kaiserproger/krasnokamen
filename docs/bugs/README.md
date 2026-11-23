@@ -234,7 +234,14 @@ worker, runs the negative control.
    - **a/-side adaptation.** Leaving out a (b) hunk can force the reversed
      code to construct the kept API (for example an empty field). That line
      is the only a/-side text allowed outside the original pre-image. It must
-     not change behaviour, and `hunks.md` names it.
+     not change behaviour, and `hunks.md` names it. Accepted classes (D123
+     review rounds, 2026-11-24): the kept-API constructor above; an
+     instrumented kept type that stays structurally identical to the
+     pre-image (for example an admission part); a surviving half of a mixed
+     hunk after an (a) split; a type annotation that only lets the reversed
+     tree compile; and a kept helper whose callers are all among the
+     carried hunks. Nothing else is an adaptation: an invented stub or
+     guard is refused.
    - **Proving ref.** `promote.json` records every red ref as plain `FAIL`.
      So `hunks.md` names the ref and `file:line` whose assertion is the row's
      symptom. A ref that goes red only on an assertion of the kept API
