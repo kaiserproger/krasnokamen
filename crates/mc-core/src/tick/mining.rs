@@ -63,11 +63,19 @@ fn cold_target_or_eye(state: &TickState, entity: EntityId, position: BlockPos) -
 
 /// A finish is delivered over the target's +-2 frame, so every cell of that
 /// frame must be resident before the queued finish is extracted.
-fn cold_delivery_frame(state: &TickState, entity: EntityId, position: BlockPos) -> bool {
-    if cold_target_or_eye(state, entity, position) {
-        return true;
-    }
-    (-2..=2).any(|dx| (-2..=2).any(|dz| cold_cell(state, position.x + dx, position.z + dz)))
+fn cold_delivery_frame(state: &TickState, position: BlockPos) -> bool {
+    cold_cell(state, position.x, position.z)
+        || (-2..=2).any(|dx| (-2..=2).any(|dz| cold_cell(state, position.x + dx, position.z + dz)))
+}
+
+/// Reach, life and teleport invalidation, which needs no world read: a pending
+/// dig is still dropped when the player leaves reach while its chunk is cold.
+fn range_holds(state: &TickState, entity: EntityId, position: BlockPos) -> bool {
+    state
+        .players
+        .get(&entity)
+        .is_some_and(|player| player.vitals.health > 0.0)
+        && within_block_reach(state, entity, position)
 }
 
 /// Credit Start's first tick immediately, then each subsequent server tick once.
@@ -75,6 +83,9 @@ fn advanced(state: &TickState, entity: EntityId, mut dig: DigProgress) -> Option
     // A non-resident target pauses: the progress and any queued finish stay, and
     // `block_at` is not asked, because the cold overlay would answer for a chunk
     // the tick does not own.
+    if !range_holds(state, entity, dig.position) {
+        return None;
+    }
     if cold_target_or_eye(state, entity, dig.position) {
         return Some(dig);
     }
@@ -133,18 +144,14 @@ pub(super) fn take_finished(state: &mut TickState, inputs: &mut Vec<crate::bound
         let Some(connection) = state.connections.entity_connection(entity) else {
             continue;
         };
-        // A queued finish waits for its target's chunk; extracting it now would
-        // apply the authoritative finish against the cold overlay.
+        // A queued finish waits for its delivery frame: extracting it now would
+        // apply the authoritative finish over a cold ±2 neighbour.
         let pending_target = state
             .players
             .get(&entity)
             .and_then(|player| player.delayed_dig.as_ref())
             .map(|dig| dig.progress.position);
-        if pending_target.is_some_and(|position| {
-            !state
-                .world
-                .has_chunk(position.x.div_euclid(16), position.z.div_euclid(16))
-        }) {
+        if pending_target.is_some_and(|position| cold_delivery_frame(state, position)) {
             continue;
         }
         let Some(delayed) = state

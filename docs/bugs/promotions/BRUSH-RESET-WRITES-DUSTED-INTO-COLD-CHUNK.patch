@@ -1,0 +1,19 @@
+diff --git a/crates/mc-core/src/brushing.rs b/crates/mc-core/src/brushing.rs
+index deaa65c48..6ac2984ee 100644
+--- a/crates/mc-core/src/brushing.rs
++++ b/crates/mc-core/src/brushing.rs
+@@ -284,6 +284,14 @@ pub(crate) fn run(state: &mut TickState) {
+             y: key[1],
+             z: key[2],
+         };
++        // A non-resident cell is paused, not reset: `block_at` would answer from
++        // the cold overlay and `set_dusted` would decrement and write into it.
++        if !state
++            .world
++            .has_chunk(pos.x.div_euclid(16), pos.z.div_euclid(16))
++        {
++            return true;
++        }
+         if brushable(state, pos).is_none() {
+             return false;
+         }

@@ -11,3 +11,4 @@ failing_first = "not recorded"
 ingress_proof = ["crates/mc-core/src/copper.rs:225 a non-resident use cell is refused before any read or debit", "crates/mc-core/src/copper.rs:306 a cold double-chest partner keeps its overlay state"]
 fix_commit = "c7bd44dd06"
 promotion = "docs/bugs/promotions/COPPER-HONEYCOMB-WAXES-ACROSS-COLD-CHUNK-EDGE.json"
+repro_check = "Deliberate simplification recorded at review: when the other half of a double copper chest is cold, only the resident half is transformed and the honeycomb/axe use is spent on it (the cold half keeps its overlay state). All-or-nothing would need a double-chest admission design; the row covers the cold-primary debit and the cold-partner overlay write, both refused now."

@@ -1,0 +1,17 @@
+diff --git a/crates/mc-core/src/command_context_deferred.rs b/crates/mc-core/src/command_context_deferred.rs
+index 98fcefd57..83fa92262 100644
+--- a/crates/mc-core/src/command_context_deferred.rs
++++ b/crates/mc-core/src/command_context_deferred.rs
+@@ -136,8 +136,10 @@ fn source_is_current(state: &TickState, context: Context, source: Option<EntityI
+ 
+ pub(crate) fn execute_job(state: &mut TickState, job: &super::Job, changes: &mut ChangeSet) {
+     let observed = state.plugin_players.permission(job.context.connection);
+-    // CONTROL: the queued job runs against the root context (historical bug).
+-    if job_source_is_current(state, observed, job) {
++    let Some(world) = crate::dimensions::travel::world(state, job.context.dimension) else {
++        return;
++    };
++    if job_source_is_current(world, observed, job) {
+         // Keep the shared runtime and every loaded world reachable. `native`
+         // selects the source dimension through `execute_context`, which moves
+         // the runtime with it; running on a detached child loses global targets,

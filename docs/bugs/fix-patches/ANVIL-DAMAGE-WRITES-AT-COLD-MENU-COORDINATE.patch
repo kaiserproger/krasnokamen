@@ -24,7 +24,7 @@ index 97b06181d..8348b7242 100644
      let id = state.world.block_at(pos.x, pos.y, pos.z)?;
      let block = state.registry.blocks.by_id(mc_world::BlockStateId(id))?;
 diff --git a/crates/mc-core/src/tick/input/inventory.rs b/crates/mc-core/src/tick/input/inventory.rs
-index e75cb169a..636f36e67 100644
+index e75cb169a..bbcd0523c 100644
 --- a/crates/mc-core/src/tick/input/inventory.rs
 +++ b/crates/mc-core/src/tick/input/inventory.rs
 @@ -225,6 +225,10 @@ pub(in crate::tick) fn container_click(
@@ -38,16 +38,39 @@ index e75cb169a..636f36e67 100644
      if crate::mounts::menus::target(state, entity).is_some() {
          crate::mounts::menus::click(
              state, entity, *window, *state_id, *slot, *button, *mode, changes,
+@@ -479,6 +483,10 @@ pub(in crate::tick) fn container_slot_state(
+     (connection, window, slot, enabled): (&ConnectionId, &u8, &i32, &bool),
+ ) {
+     if let Some(entity) = state.connections.by_connection.get(connection).copied() {
++        if crate::tick::containers::menu_source_cold(state, entity) {
++            crate::tick::close_player_menu(state, *connection);
++            return;
++        }
+         crate::crafter::slot_state(state, entity, *window, *slot, *enabled);
+     }
+ }
+@@ -494,6 +502,10 @@ pub(in crate::tick) fn container_button(
+     if state.entities.slot_of(entity).is_none() {
+         return;
+     }
++    if crate::tick::containers::menu_source_cold(state, entity) {
++        crate::tick::close_player_menu(state, *connection);
++        return;
++    }
+     if crate::lectern::button(state, entity, *window, *button, changes) {
+         return;
+     }
 diff --git a/crates/mc-core/src/tick/stations.rs b/crates/mc-core/src/tick/stations.rs
-index bf2de9c32..a6517bdbf 100644
+index bf2de9c32..8fddec551 100644
 --- a/crates/mc-core/src/tick/stations.rs
 +++ b/crates/mc-core/src/tick/stations.rs
-@@ -139,6 +139,11 @@ pub(super) fn damage_anvil(state: &mut TickState, entity: EntityId, changes: &mu
+@@ -139,6 +139,12 @@ pub(super) fn damage_anvil(state: &mut TickState, entity: EntityId, changes: &mu
      let Some(&(x, y, z)) = state.open_containers.menu_at(&entity) else {
          return;
      };
 +    // The menu coordinate may outlive the chunk: `block_at` would answer from the
-+    // cold overlay and this write would land in it. Damage waits for residency.
++    // cold overlay and this write would land in it. A cold coordinate discards
++    // this damage draw instead of writing the overlay.
 +    if !state.world.has_chunk(x.div_euclid(16), z.div_euclid(16)) {
 +        return;
 +    }

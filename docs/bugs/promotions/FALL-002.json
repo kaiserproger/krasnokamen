@@ -1,0 +1,44 @@
+{
+  "id": "FALL-002",
+  "verdict": "promoted",
+  "fix_commit": "patch:60881820e510c303c858d571fbf9255e78d357e5bf91a7c519431ec22d36b595",
+  "fix_commit_full": "patch:60881820e510c303c858d571fbf9255e78d357e5bf91a7c519431ec22d36b595",
+  "promoted_at": "2026-11-23T19:28:29+00:00",
+  "tree_head": "608f10d002750b1bc8711538f03646c98d0976b6",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "60881820e510c303c858d571fbf9255e78d357e5bf91a7c519431ec22d36b595",
+  "reversed_files": [
+    "crates/mc-core/src/brushing.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:interact_parity_tests::interact_parity_brushing_completes_once": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-ledger-brush": {
+      "state": "unrunnable",
+      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/608f10d00275-cf0de97d-server-x86_64-unknown-linux-gnu-incr/krasnokamen: [Errno 2] No such file or directory: '/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/ledger-builds/52cc746b2707b01b782f024a66f1851dfafb8f01997d3882592d34dd752190f6.json'. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:interact_parity_tests::interact_parity_brushing_completes_once": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T192307-native-v2-ledger-brush-czmbmk7s/result.json",
+    "tree_head": "608f10d002750b1bc8711538f03646c98d0976b6",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "52cc746b2707b01b782f024a66f1851dfafb8f01997d3882592d34dd752190f6",
+    "covers": [
+      "harness:entities:native-v2-ledger-brush"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T192610-ledger-promote-uemqxmvf"
+}

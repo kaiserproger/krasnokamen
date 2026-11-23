@@ -1,0 +1,14 @@
+diff --git a/crates/mc-core/src/projectiles/block_impact.rs b/crates/mc-core/src/projectiles/block_impact.rs
+index 48799a4da..a51debc21 100644
+--- a/crates/mc-core/src/projectiles/block_impact.rs
++++ b/crates/mc-core/src/projectiles/block_impact.rs
+@@ -36,7 +36,8 @@ fn may_break(state: &TickState, slot: EntitySlot, record: &ProjectileState, pos:
+         mc_data::tags::ENTITY_TYPE_REGISTRY,
+         mc_data::tags::IMPACT_PROJECTILES,
+         type_id as i32,
+-    ) && can_break_in_adventure_mode(state, record, pos)
++    ) && boolean(state, BoolRule::PROJECTILES_CAN_BREAK_BLOCKS)
++        && can_break_in_adventure_mode(state, record, pos)
+ }
+ 
+ /// `Projectile.canBreakBlockInAdventureMode`: an ownerless shot (the default

@@ -1,0 +1,14 @@
+diff --git a/crates/mc-core/src/brushing.rs b/crates/mc-core/src/brushing.rs
+index aee072437..04e838961 100644
+--- a/crates/mc-core/src/brushing.rs
++++ b/crates/mc-core/src/brushing.rs
+@@ -33,9 +33,6 @@ fn brushable(state: &TickState, pos: BlockPos) -> Option<bool> {
+     }
+ }
+ pub(crate) fn use_on(state: &mut TickState, actor: EntityId, hand: Hand) -> bool {
+-    // CONTROL: the brush never reaches its handler (historical bug).
+-    let _ = (state, actor, hand);
+-    return false;
+     let Some(player) = state.players.get_mut(&actor) else {
+         return false;
+     };

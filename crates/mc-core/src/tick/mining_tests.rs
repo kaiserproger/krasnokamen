@@ -649,3 +649,64 @@ fn mining_progress_and_a_queued_finish_pause_while_the_target_chunk_is_cold() {
     assert!(state.players[&actor].delayed_dig.is_some());
     assert_eq!(state.world.block_at(POS.x, POS.y, POS.z), Some(current));
 }
+
+#[test]
+fn a_queued_finish_waits_while_a_neighbour_inside_the_delivery_frame_is_cold() {
+    let (mut state, actor, current) = setup("stone");
+    // The target sits at a chunk edge, so only its +-2 delivery frame's +2
+    // column is cold while the target itself stays resident.
+    let pos = BlockPos {
+        x: 15,
+        y: 201,
+        z: 8,
+    };
+    state.world.set_block(pos.x, pos.y, pos.z, current);
+    state.world.fold_overlay();
+    let slot = state.entities.slot_of(actor).unwrap();
+    let body = state.entities.pos(slot);
+    state.entities.set_pos(
+        slot,
+        [f64::from(pos.x) + 0.5, body[1], f64::from(pos.z) + 0.5],
+    );
+    mining::start(&mut state, actor, pos, current);
+    for _ in 0..3 {
+        state.tick += 1;
+        mining::advance(&mut state);
+    }
+    assert!(mining::delay(&mut state, actor, pos, current, || {
+        mining::PendingFinish::Native { sequence: 9 }
+    }));
+    state.world.finish_inhabited_tick(state.tick + 1);
+    state
+        .world
+        .set_active_chunks(Default::default(), state.tick + 1);
+    state.world.capture_dirty(&Default::default());
+    let near = crate::boundary::ChunkPos { x: 0, z: 0 };
+    if state.world.has_chunk(near.x, near.z) {
+        state
+            .world
+            .mark_flushed(&[(near, state.world.storage_revision(near))]);
+    }
+    state
+        .world
+        .evict_outside(&[(near, 0)].into_iter().collect());
+    assert!(
+        state.world.has_chunk(near.x, near.z),
+        "the target column stays resident"
+    );
+    assert!(
+        !state.world.has_chunk(1, 0),
+        "the +2 neighbour column is cold"
+    );
+    for _ in 0..400 {
+        state.tick += 1;
+        mining::advance(&mut state);
+        let mut inputs = Vec::new();
+        mining::take_finished(&mut state, &mut inputs);
+        assert!(
+            inputs.is_empty(),
+            "a cold +-2 neighbour holds the queued finish"
+        );
+    }
+    assert_eq!(state.world.block_at(pos.x, pos.y, pos.z), Some(current));
+}

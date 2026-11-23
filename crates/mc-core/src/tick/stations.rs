@@ -140,7 +140,8 @@ pub(super) fn damage_anvil(state: &mut TickState, entity: EntityId, changes: &mu
         return;
     };
     // The menu coordinate may outlive the chunk: `block_at` would answer from the
-    // cold overlay and this write would land in it. Damage waits for residency.
+    // cold overlay and this write would land in it. A cold coordinate discards
+    // this damage draw instead of writing the overlay.
     if !state.world.has_chunk(x.div_euclid(16), z.div_euclid(16)) {
         return;
     }
