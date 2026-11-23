@@ -1,5 +1,5 @@
 diff --git a/crates/mc-core/src/ender_chest.rs b/crates/mc-core/src/ender_chest.rs
-index f29898fdc..373b61502 100644
+index f0c6c70..edff7f4 100644
 --- a/crates/mc-core/src/ender_chest.rs
 +++ b/crates/mc-core/src/ender_chest.rs
 @@ -40,24 +40,29 @@ pub(crate) fn contents(
@@ -44,7 +44,7 @@ index f29898fdc..373b61502 100644
      Ok(slots)
  }
 diff --git a/crates/mc-core/src/journal/player_nbt.rs b/crates/mc-core/src/journal/player_nbt.rs
-index d58d20f9e..f1955446e 100644
+index d58d20f..6528476 100644
 --- a/crates/mc-core/src/journal/player_nbt.rs
 +++ b/crates/mc-core/src/journal/player_nbt.rs
 @@ -44,6 +44,7 @@ pub(super) fn player_image_to_tag(
@@ -55,7 +55,7 @@ index d58d20f9e..f1955446e 100644
      // Exclude every owned key, even when its fresh optional value is absent.
      opaque_fields.retain(|(key, _)| !player_owned_field(key));
      let mut inventory = Vec::new();
-@@ -303,6 +304,48 @@ pub(super) fn krasnokamen_custody_fields(
+@@ -303,6 +304,63 @@ pub(super) fn krasnokamen_custody_fields(
      Ok(out)
  }
  
@@ -98,13 +98,28 @@ index d58d20f9e..f1955446e 100644
 +            "player opaque fields: expected compound".into(),
 +        ));
 +    };
-+    validate_owned_custody_fields(&entries)
++    validate_owned_custody_fields(&entries)?;
++    if let Some((key, _)) = entries.iter().find(|(key, _)| player_owned_field(key)) {
++        return Err(CoreError::Storage(format!(
++            "owned field in WAL player opaque: {key}; expected typed player post-image"
++        )));
++    }
++    if entries.iter().any(|(key, value)| {
++        key == "recipeBook"
++            && matches!(value, mc_nbt::Tag::Compound(book) if book.iter().any(|(key, _)| key == "recipes"))
++    }) {
++        return Err(CoreError::Storage(
++            "owned field in WAL player opaque: recipeBook.recipes; expected typed unlocked_recipes"
++                .into(),
++        ));
++    }
++    Ok(())
 +}
 +
  /// Decode a player image without touching filesystem state.
  pub fn player_from_tag(
      root: &mc_nbt::Tag,
-@@ -314,6 +357,7 @@ pub fn player_from_tag(
+@@ -314,6 +372,7 @@ pub fn player_from_tag(
      let mc_nbt::Tag::Compound(entries) = root else {
          return Err(failure("NBT", "root is not a compound".into()));
      };
@@ -112,7 +127,7 @@ index d58d20f9e..f1955446e 100644
      let player = player_from_fields(items, VanillaPlayer::default(), entries)
          .map_err(|err| failure("player fields", err.to_string()))?;
      let mut inventory = vec![mc_data::ItemStack::EMPTY; 41];
-@@ -323,9 +367,9 @@ pub fn player_from_tag(
+@@ -323,9 +382,9 @@ pub fn player_from_tag(
          }
      }
      for (name, stack) in player.equipment {
@@ -125,7 +140,7 @@ index d58d20f9e..f1955446e 100644
      }
      let find = |name: &str| {
          entries
-@@ -378,9 +422,11 @@ pub fn player_from_tag(
+@@ -378,9 +437,11 @@ pub fn player_from_tag(
          Some(_) => return Err(failure("unlocked recipes", "expected string list".into())),
      });
      let carried = match find("krasnokamen:Carried") {
@@ -140,7 +155,7 @@ index d58d20f9e..f1955446e 100644
          Some(_) => {
              return Err(failure(
                  "krasnokamen:Carried slot 0",
-@@ -399,12 +445,14 @@ pub fn player_from_tag(
+@@ -399,12 +460,14 @@ pub fn player_from_tag(
                          "expected item compound".into(),
                      ));
                  };
@@ -162,10 +177,10 @@ index d58d20f9e..f1955446e 100644
              }
              grid
 diff --git a/crates/mc-core/src/native_checkpoint.rs b/crates/mc-core/src/native_checkpoint.rs
-index e9862c473..129964730 100644
+index 2b3ccf5..3776892 100644
 --- a/crates/mc-core/src/native_checkpoint.rs
 +++ b/crates/mc-core/src/native_checkpoint.rs
-@@ -697,7 +697,13 @@ pub fn recover_with_reader(
+@@ -866,7 +866,13 @@ fn recover_with_clock(
          let decoded = crate::journal::player_from_tag(
              &decode_tag(&player.record, "player")?,
              &registry.items,
@@ -180,7 +195,7 @@ index e9862c473..129964730 100644
          players.insert(uuid::Uuid::from_bytes(player.uuid).to_string(), decoded);
      }
      for dimension in [Dimension::Overworld, Dimension::Nether, Dimension::End] {
-@@ -814,6 +820,28 @@ pub fn recover_with_reader(
+@@ -1004,6 +1010,28 @@ fn recover_with_clock(
                  }
                  for (lo, hi, entries) in &routed {
                      for entry in entries {
@@ -210,7 +225,7 @@ index e9862c473..129964730 100644
                              && (image.value < 0 || image.tick < *lo || image.tick > *hi)
                          {
 diff --git a/crates/mc-data/src/player_nbt.rs b/crates/mc-data/src/player_nbt.rs
-index ac8614a5c..3dcd2801c 100644
+index 4364c16..3dcd280 100644
 --- a/crates/mc-data/src/player_nbt.rs
 +++ b/crates/mc-data/src/player_nbt.rs
 @@ -125,6 +125,36 @@ fn float_list<const N: usize>(tag: &Tag) -> Option<[f32; N]> {
@@ -351,70 +366,10 @@ index ac8614a5c..3dcd2801c 100644
              }
          }
 diff --git a/crates/mc-world-conversion/src/import.rs b/crates/mc-world-conversion/src/import.rs
-index 805989e75..08ea85439 100644
+index 067575e..3f6a314 100644
 --- a/crates/mc-world-conversion/src/import.rs
 +++ b/crates/mc-world-conversion/src/import.rs
-@@ -720,6 +720,50 @@ pub(super) fn normalize_missing_player_dimensions(
-     Ok(())
- }
- 
-+// PlayerEquipmentFix (4312) folds old armor/offhand entries into a map.
-+// Validate before that fold, not just before the native array projection.
-+fn validate_legacy_player_slots(tag: &Tag, from: i32, path: &str) -> Result<(), CoreError> {
-+    if from >= 4312 {
-+        return Ok(());
-+    }
-+    if let Some(equipment) =
-+        field(tag, "equipment").map_err(|error| fail(format!("{path}: {error}")))?
-+        && !matches!(equipment, Tag::Compound(fields) if fields.is_empty())
-+    {
-+        return Err(fail(format!(
-+            "{path}: equipment slot: unsupported before PlayerEquipmentFix 4312"
-+        )));
-+    }
-+    let Some(value) = field(tag, "Inventory").map_err(|error| fail(format!("{path}: {error}")))?
-+    else {
-+        return Ok(());
-+    };
-+    let Tag::List(list) = value else {
-+        return Err(fail(format!("{path}: Inventory: expected list")));
-+    };
-+    let mut occupied = 0_u64;
-+    for (index, item) in list.elements.iter().enumerate() {
-+        let bad_slot =
-+            |reason: &str| fail(format!("{path}: Inventory entry {index} Slot: {reason}"));
-+        let Some(Tag::Byte(slot)) =
-+            field(item, "Slot").map_err(|error| bad_slot(&error.to_string()))?
-+        else {
-+            return Err(bad_slot("missing byte Slot"));
-+        };
-+        let bit = match *slot {
-+            0..=35 => *slot as u8,
-+            100..=103 => (*slot - 100) as u8 + 36,
-+            -106 => 40,
-+            _ => return Err(bad_slot(&format!("{slot} outside supported legacy slots"))),
-+        };
-+        if occupied & (1_u64 << bit) != 0 {
-+            return Err(bad_slot(&format!("duplicate {slot}")));
-+        }
-+        occupied |= 1_u64 << bit;
-+    }
-+    Ok(())
-+}
-+
- fn admit_player(
-     mut tag: Tag,
-     uuid: uuid::Uuid,
-@@ -735,7 +779,7 @@ fn admit_player(
-         )));
-     }
-     let player = mc_core::journal::player_from_tag(&tag, items)
--        .map_err(|error| fail(format!("{path}: {error}")))?;
-+        .map_err(|error| fail(format!("{path}: player {uuid}: {error}")))?;
-     if player.pos.iter().any(|value| !value.is_finite())
-         || !player.yaw.is_finite()
-         || !player.pitch.is_finite()
-@@ -888,6 +932,7 @@ pub(super) fn convert(
+@@ -171,6 +171,7 @@ pub(super) fn convert(
          } else {
              level_version
          };
@@ -422,7 +377,7 @@ index 805989e75..08ea85439 100644
          let report = upgrade::upgrade_player(player, from)
              .map_err(|error| fail(format!("{path}: {error}")))?;
          let uuid = player_uuid(player, path)?.ok_or_else(|| {
-@@ -2066,6 +2111,7 @@ pub(super) fn convert(
+@@ -1349,6 +1350,7 @@ pub(super) fn convert(
          // 1343 would skip most of it. The per-kind floor
          // (players/maps accept -1) lives in mc-world's upgrade module.
          let from = player_source_version(&tag, &path)?;
