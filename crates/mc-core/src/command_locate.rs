@@ -1393,6 +1393,25 @@ fn submit(
     }
 }
 
+/// Test hook: block until the worker answers one queued search and deliver it
+/// through the normal [`deliver`] path, so a test that just requested a lead
+/// waits for the worker's message instead of racing its thread for CPU. The
+/// tick's own [`drain`] stays non-blocking; this only runs under `cfg(test)`.
+#[cfg(test)]
+pub(crate) fn await_queued_search(state: &mut TickState, timeout: std::time::Duration) -> bool {
+    let received = match state.locate.done.as_ref() {
+        Some(done) => done.recv_timeout(timeout),
+        None => return false,
+    };
+    match received {
+        Ok(result) => {
+            deliver(state, result);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
 /// Drain finished worker searches into player feedback and dolphin treasure
 /// state. Every accepted job has a terminal outcome, including channel loss.
 pub(crate) fn drain(state: &mut TickState) {

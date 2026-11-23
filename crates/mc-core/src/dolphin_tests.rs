@@ -322,15 +322,28 @@ fn fed_dolphin_locates_the_structure_through_its_normal_goal_tick() {
     state.world.fold_overlay();
     feed_normally(&mut state, dolphin);
     // The goal must resolve its lead to the DOLPHIN_LOCATED wreck and nothing
-    // else: the chest 8 blocks on -x is the old container approximation.
+    // else: the chest 8 blocks on -x is the old container approximation. The
+    // locate worker answers on its own thread, so wait for its message: a
+    // 300-tick spin finishes in about a millisecond and loses that race under
+    // fleet load.
     let mut chosen = None;
-    for _ in 0..300 {
+    for _ in 0..4 {
         run_tick(&mut state, &[]);
-        if let Some(lead) = crate::command_locate::dolphin_treasure(&state, dolphin) {
-            chosen = Some(lead);
-            break;
+        match crate::command_locate::dolphin_treasure(&state, dolphin) {
+            Some(crate::command_locate::DolphinTreasure::Pending { .. }) => {
+                assert!(
+                    crate::command_locate::await_queued_search(
+                        &mut state,
+                        std::time::Duration::from_secs(30)
+                    ),
+                    "the locate worker must answer the dolphin search"
+                );
+            }
+            lead => {
+                chosen = lead;
+                break;
+            }
         }
-        std::thread::yield_now();
     }
     match chosen {
         Some(crate::command_locate::DolphinTreasure::Found { pos, .. }) => assert_eq!(
@@ -567,6 +580,24 @@ fn a_player_chest_without_a_located_structure_is_not_a_treasure_lead() {
     );
     state.world.fold_overlay();
     feed_normally(&mut state, dolphin);
+    // Wait for the worker's answer before the tick loop counts ticks: a spin
+    // that outruns the worker thread leaves the lead `Pending` and the fish set.
+    run_tick(&mut state, &[]);
+    for _ in 0..4 {
+        if !matches!(
+            crate::command_locate::dolphin_treasure(&state, dolphin),
+            Some(crate::command_locate::DolphinTreasure::Pending { .. })
+        ) {
+            break;
+        }
+        assert!(
+            crate::command_locate::await_queued_search(
+                &mut state,
+                std::time::Duration::from_secs(30)
+            ),
+            "the locate worker must answer the dolphin search"
+        );
+    }
     let chest_at = [start[0] + 10.0, start[1], start[2]];
     let mut closest = f64::INFINITY;
     let mut ever_found = false;
