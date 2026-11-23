@@ -1,0 +1,61 @@
+{
+  "id": "HARNESS-SCREENS-VOICE-PARTS-OOM",
+  "verdict": "promoted",
+  "fix_commit": "patch:ddeead85aeac35f3f141667e55c80d2a1a99bfd1eb7c8c138d6ffe01b34dad45",
+  "fix_commit_full": "patch:ddeead85aeac35f3f141667e55c80d2a1a99bfd1eb7c8c138d6ffe01b34dad45",
+  "promoted_at": "2026-11-23T19:12:25+00:00",
+  "tree_head": "ab153bd1b2f9668abbb65478ba516374355ea8cb",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "ddeead85aeac35f3f141667e55c80d2a1a99bfd1eb7c8c138d6ffe01b34dad45",
+  "reversed_files": [
+    "tools/harness/backends/screens_voice_qa.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_each_sequential_leg_gets_its_own_full_timeout": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_other_split_gates_keep_the_concurrent_start": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_parts_run_one_at_a_time_so_two_full_legs_never_share_a_scope": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_the_screens_voice_split_driver_runs_its_legs_in_sequence": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/harness/test_split_parts.py",
+        "line": 177,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_each_sequential_leg_gets_its_own_full_timeout": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_other_split_gates_keep_the_concurrent_start": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_parts_run_one_at_a_time_so_two_full_legs_never_share_a_scope": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_the_screens_voice_split_driver_runs_its_legs_in_sequence": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T191207-ledger-promote-u_d__w77"
+}
