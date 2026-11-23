@@ -9,4 +9,4 @@ repro = "client"
 regression = []
 fix_commit = "patch:2a7ddc99d90fa10e8ab04b3ed9f04ff5cf42ccc26deba1d9bd02ce8f1057ca21"
 failing_first = "reported"
-repro_check = "Work-root receipts/HzClientQA/consume-2.log: original consume scenario must pass unchanged on Main's integrated pin; no permanent English-wording test."
+repro_check = "Work-root receipts/HzClientQA/consume-2.log: original consume scenario must pass unchanged on Main's integrated pin; no permanent English-wording test. SCENE 2026-11-23: no registered scene observes /fill feedback text (native-command-feedback tests the gamerule only), and the recorded patch identity cannot be reconstructed from the tree (bd7a05a64's non-test patch hash is 01ca1afa..., not 2a7ddc99...). A forward-ported patch file or a fill-feedback scene step is needed before promotion."
