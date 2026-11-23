@@ -216,8 +216,8 @@ pub(crate) fn run(state: &mut TickState) {
 /// result and steers.
 pub(crate) fn treasure_search(state: &mut TickState) {
     use crate::command_locate::{
-        DolphinTreasure, clear_dolphin_treasure, dolphin_navigation, dolphin_treasure,
-        dolphin_treasure_entities, request_dolphin_treasure, set_dolphin_navigation,
+        DolphinTreasure, clear_dolphin_treasure, dolphin_treasure, dolphin_treasure_entities,
+        request_dolphin_treasure,
     };
 
     // A retained lead belongs to the world, entity and goal run that asked for

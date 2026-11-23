@@ -54,18 +54,30 @@ pub(in crate::tick) fn prepare_rows(
     laps.lap("view");
     if parallel {
         use rayon::prelude::*;
-        #[derive(Default)]
-        struct Admission {
-            kept: Vec<(EntitySlot, u16)>,
-            specials: Vec<(EntityId, crate::hostile::Special)>,
-            resting: Vec<EntitySlot>,
+        let PrepChunk {
+            specials,
+            resting,
+            parts,
+            ..
+        } = out;
+        // The per-chunk admission vectors live in the phase scratch and are
+        // reused tick to tick: one buffer set per chunk instead of three fresh
+        // `Vec`s per chunk on every tick (about 2 k allocations per tick at
+        // 1M slots). The concat order is still chunk order, i.e. slot order.
+        // Keep every buffer the scratch already owns (a smaller world must not
+        // free them) and clear them for this tick.
+        parts.resize_with(periods.len().div_ceil(PREP_CHUNK), AdmissionPart::default);
+        for part in parts.iter_mut() {
+            part.kept.clear();
+            part.specials.clear();
+            part.resting.clear();
         }
-        let parts: Vec<Admission> = periods
+        periods
             .par_chunks(PREP_CHUNK)
+            .zip(parts.par_iter_mut())
             .enumerate()
-            .map(|(chunk, periods)| {
+            .for_each(|(chunk, (periods, part))| {
                 let base = chunk * PREP_CHUNK;
-                let mut part = Admission::default();
                 for (offset, &period) in periods.iter().enumerate() {
                     if period != 0
                         && let Some(kept) = admit_slot(
@@ -80,15 +92,13 @@ pub(in crate::tick) fn prepare_rows(
                         part.kept.push(kept);
                     }
                 }
-                part
-            })
-            .collect();
+            });
         laps.lap("admit_parallel");
         let mut kept = Vec::with_capacity(parts.iter().map(|part| part.kept.len()).sum());
-        for part in parts {
-            kept.extend(part.kept);
-            out.specials.extend(part.specials);
-            out.resting.extend(part.resting);
+        for part in parts.iter_mut() {
+            kept.extend(part.kept.drain(..));
+            specials.extend(part.specials.drain(..));
+            resting.extend(part.resting.drain(..));
         }
         laps.lap("admit_concat");
         let mut is_rare = Vec::new();
@@ -238,6 +248,17 @@ pub(in crate::tick) struct PrepChunk {
     pub(in crate::tick) resting: Vec<EntitySlot>,
     pub(in crate::tick) rare: Vec<usize>,
     pub(in crate::tick) summary: PrepSummary,
+    /// One admission buffer set per [`PREP_CHUNK`] of the parallel pass,
+    /// pooled in the phase scratch (kept after the concat).
+    pub(in crate::tick) parts: Vec<AdmissionPart>,
+}
+
+/// Admission output of one [`PREP_CHUNK`] range, pooled across ticks.
+#[derive(Default)]
+pub(in crate::tick) struct AdmissionPart {
+    pub(in crate::tick) kept: Vec<(EntitySlot, u16)>,
+    pub(in crate::tick) specials: Vec<(EntityId, crate::hostile::Special)>,
+    pub(in crate::tick) resting: Vec<EntitySlot>,
 }
 
 #[derive(Default, Debug, PartialEq, Eq)]
@@ -400,10 +421,6 @@ pub(in crate::tick) fn read_row(
     let hops = blueprint.is_some_and(|blueprint| blueprint.capabilities.hops);
     let hop_delay_scale = blueprint
         .map_or(1, |blueprint| blueprint.capabilities.hop_delay_scale.max(1));
-    let hop_lift = blueprint.map_or(0.0, |blueprint| {
-        f64::from(row.loot.slime_size.unwrap_or(1))
-            * blueprint.capabilities.hop_lift_per_size
-    });
     let hop_tick = hops
         && !row.controls.no_ai
         && crate::entity_motion::hop_due(body.id.0, view.tick, hop_delay_scale);

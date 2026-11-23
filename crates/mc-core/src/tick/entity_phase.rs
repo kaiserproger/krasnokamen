@@ -114,6 +114,9 @@ pub(super) struct EntityPhaseScratch {
     pub(super) activation: HashMap<(i32, i32), u64>,
     pub(super) periods: Vec<u8>,
     pub(super) resting: Vec<EntitySlot>,
+    /// Per-chunk admission buffers of the parallel prepare pass, kept between
+    /// ticks so a repeated tick allocates none of them.
+    pub(super) parts: Vec<AdmissionPart>,
     pub(super) coreperf: Option<std::sync::Arc<crate::boundary::CorePerfTick>>,
     pub(super) rest_proofs: RestProofs,
     /// Zombie-arms decisions of the serial writeback (capacity reused tick to tick).
@@ -203,6 +206,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         mut activation,
         mut periods,
         mut resting,
+        mut parts,
         coreperf: _,
         mut rest_proofs,
         mut arms,
@@ -331,6 +335,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         resting: std::mem::take(&mut resting),
         rare: Vec::new(),
         summary: PrepSummary::default(),
+        parts: std::mem::take(&mut parts),
     };
     prepare_rows(
         state,
@@ -355,6 +360,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         rows,
         specials,
         resting,
+        parts,
         ..
     } = prepared;
     if let (Some(index), Some(counts)) = (perf_index, &mut perf_counts) {
@@ -400,6 +406,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             activation,
             periods,
             resting,
+            parts,
             coreperf,
             rest_proofs,
             arms,
@@ -816,6 +823,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         activation,
         periods,
         resting,
+        parts,
         coreperf,
         rest_proofs,
         arms,

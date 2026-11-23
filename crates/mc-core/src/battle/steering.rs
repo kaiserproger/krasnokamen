@@ -459,11 +459,19 @@ pub(super) fn keep_gap(
     [drive[0] / tick, bounded[1], drive[1] / tick]
 }
 
+/// Mirror the grid's dropped-candidate count into the battle work counters. The
+/// grid keeps at most [`CELL_CAP`] bodies per one-block sub-cell; without this a
+/// heap measurement cannot tell whether neighbours were missing.
+pub(crate) fn record_grid_overflow(formation: &mut FormationRuntime) {
+    formation.work.separation_overflow = formation.neighbours.overflow;
+}
+
 pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Output) {
     battle
         .formation
         .neighbours
         .rebuild(&battle.formation.members);
+    record_grid_overflow(&mut battle.formation);
     let formation = &battle.formation;
     let drives = &mut battle.columns.drive[..formation.members.len()];
     let sample = |(chunk_index, chunk): (usize, &mut [[f64; 3]])| {

@@ -44,8 +44,14 @@ pub(in crate::tick) struct StepCtx<'a> {
     pub(in crate::tick) sky_darken: u8,
 }
 
-pub(in crate::tick) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawIntent>) {
-    let reader = ctx.world.physics_reader();
+/// Step one prepared row. The row is borrowed (a `ReadRow` is ~248 B and a
+/// per-entity copy is pure snapshot traffic) and the physics reader belongs to
+/// the calling lane, so its last-chunk/last-section memo survives between rows.
+pub(in crate::tick) fn step_entity(
+    row: &ReadRow,
+    ctx: &StepCtx,
+    reader: &crate::world::PhysicsReader<'_>,
+) -> (MoveWrite, Vec<RawIntent>) {
     let rows = ctx.rows;
     let players = ctx.players.table();
     let cow_cells = ctx.cow_cells;

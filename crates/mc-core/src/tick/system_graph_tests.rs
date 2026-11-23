@@ -7,6 +7,8 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::tick::ReadRow;
+
 #[derive(Clone, Copy, Debug)]
 enum Mode {
     Scheduled,
@@ -34,7 +36,10 @@ pub(super) fn override_run(ctx: &StepCtx<'_>, output: &mut Vec<RowOutput>) -> bo
             .rows
             .par_iter()
             .with_min_len(256)
-            .map(|row| row.alive.then(|| step_entity(*row, ctx)))
+            .map_init(
+                || ctx.world.physics_reader(),
+                |reader, row| row.alive.then(|| step_entity(row, ctx, reader)),
+            )
             .collect_into_vec(output),
         Mode::Serial => execute(ctx, output, false),
         Mode::Parallel => execute(ctx, output, true),
@@ -184,6 +189,43 @@ fn declared_system_matches_legacy_state_hashes_each_tick() {
         "system-graph parity: 48 ticks, 1024 initial mobs, workers=1/2/4, final={:016x}",
         reference.last().unwrap()
     );
+}
+
+#[test]
+fn entity_step_reuses_one_physics_reader_per_lane() {
+    // `ReadRow` used to be copied into `step_entity` by value and the reader was
+    // rebuilt for every row, discarding its last-chunk/last-section memo. One
+    // reader per lane (and a borrowed row) must keep constructions far below the
+    // row count.
+    let registry = Arc::new(CoreRegistry::load(None).unwrap());
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(4)
+        .build()
+        .unwrap();
+    pool.install(|| {
+        let mut state = fixture(&registry, 1024);
+        let _ = crate::world::take_physics_reader_count();
+        let _ = run_entity_phase(&mut state, true);
+        let readers = crate::world::take_physics_reader_count();
+        assert!(readers > 0, "the phase must build a reader");
+        assert!(
+            readers < 256,
+            "one reader per row is the bug: {readers} readers for 1024 rows"
+        );
+    });
+}
+
+#[test]
+fn step_entity_borrows_its_row() {
+    // A ~248 B `ReadRow` copied per entity per tick is pure snapshot traffic:
+    // the step lane takes it by reference.
+    let step: fn(
+        &ReadRow,
+        &StepCtx<'_>,
+        &crate::world::PhysicsReader<'_>,
+    ) -> (MoveWrite, Vec<RawIntent>) = step_entity;
+    assert!(std::mem::size_of::<ReadRow>() <= 256);
+    let _ = step;
 }
 
 #[test]

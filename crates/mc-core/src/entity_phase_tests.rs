@@ -822,6 +822,49 @@ fn parallel_row_prep_matches_the_serial_prep_including_rare_fixups() {
 }
 
 #[test]
+fn admission_buffers_are_pooled_across_prepares() {
+    // The parallel pass used to build one `Vec<Admission>` per chunk on every
+    // tick (three inner `Vec`s each). The buffers now live in the phase scratch;
+    // a repeated prepare of the same population must reuse the same allocations.
+    let (mut state, _) = resting_cow();
+    let cow = state.registry.cow_type_id;
+    for index in 0..64_u32 {
+        state.spawn_mob(cow, [8.5 + f64::from(index % 8), 101.0, 8.5], 10.0);
+    }
+    state.entities.prepare_motion_hints(&state.registry);
+    let periods: Vec<u8> = (0..state.entities.len()).map(|index| u8::from(index % 4 != 0)).collect();
+    let env = PrepEnv {
+        targets_empty: true,
+        villagers_empty: true,
+        unchanged_since: state.entity_phase_revision,
+        rest_proofs: None,
+    };
+    let mut out = PrepChunk::default();
+    prepare_rows(&state, &periods, &env, true, &mut out);
+    let first: Vec<_> = out
+        .parts
+        .iter()
+        .map(|part| (part.kept.as_ptr(), part.kept.capacity(), part.specials.as_ptr()))
+        .collect();
+    assert!(!first.is_empty(), "the parallel pass pool must exist");
+    assert!(first[0].1 > 0, "the pool kept its capacity");
+    // The phase consumes `rows`/`rare` every tick and re-arms the chunk; only
+    // the pooled admission buffers survive.
+    out.rows.clear();
+    out.rare.clear();
+    prepare_rows(&state, &periods, &env, true, &mut out);
+    let second: Vec<_> = out
+        .parts
+        .iter()
+        .map(|part| (part.kept.as_ptr(), part.kept.capacity(), part.specials.as_ptr()))
+        .collect();
+    assert_eq!(
+        first, second,
+        "a repeated prepare must reuse the pooled admission buffers"
+    );
+}
+
+#[test]
 #[ignore = "algorithm-level release timing; run in the perf lane"]
 fn parallel_row_prep_algorithm_micro() {
     let rows: usize = std::env::var("PREP_ROWS")
@@ -978,7 +1021,8 @@ fn full_step_with_period(
             15
         },
     };
-    step_entity(row, &ctx)
+    let reader = state.world.physics_reader();
+    step_entity(&row, &ctx, &reader)
 }
 
 /// The battle facing rule at the phase (receipts/BattleJitterClient): a moving

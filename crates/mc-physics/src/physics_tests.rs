@@ -1664,6 +1664,74 @@ fn stopped_arrow_embedding_is_not_a_living_support_test() {
 }
 
 #[test]
+fn clip_y_snaps_a_body_resting_within_the_contact_tolerance_of_a_face() {
+    // Vanilla `VoxelShape.collide` covers every axis with the 1.0E-7 face
+    // tolerance; `clip_y` used to skip a face it sat within that tolerance of,
+    // so a body resting one ULP inside a floor kept its whole downward step.
+    let floor = WorldAabb {
+        min_x: -10.0,
+        min_y: -1.0,
+        min_z: -10.0,
+        max_x: 10.0,
+        max_y: 0.0,
+        max_z: 10.0,
+    };
+    let body = WorldAabb {
+        min_x: 0.0,
+        min_y: -1.0e-9,
+        min_z: 0.0,
+        max_x: 0.6,
+        max_y: 1.8,
+        max_z: 0.6,
+    };
+    assert!(
+        clip_y(body, -0.1, std::slice::from_ref(&floor)) >= 0.0,
+        "a body resting inside the floor must be snapped out, not stepped through"
+    );
+    // Deeper than the tolerance is not a contact: the step is untouched.
+    let deep = WorldAabb {
+        min_y: -1.0e-3,
+        max_y: 1.8 - 1.0e-3,
+        ..body
+    };
+    assert_eq!(clip_y(deep, -0.1, std::slice::from_ref(&floor)), -0.1);
+    // Clearly above the floor: the full step survives.
+    let clear = WorldAabb {
+        min_y: 0.5,
+        max_y: 2.3,
+        ..body
+    };
+    assert_eq!(clip_y(clear, -0.1, std::slice::from_ref(&floor)), -0.1);
+    // Ceiling: a head one ULP inside blocks the rise, a clear one does not.
+    let ceiling = WorldAabb {
+        min_x: -10.0,
+        min_y: 1.0,
+        min_z: -10.0,
+        max_x: 10.0,
+        max_y: 2.0,
+        max_z: 10.0,
+    };
+    let head_inside = WorldAabb {
+        max_y: 1.0 + 1.0e-9,
+        min_y: 1.0 + 1.0e-9 - 1.8,
+        ..body
+    };
+    assert!(
+        clip_y(head_inside, 0.1, std::slice::from_ref(&ceiling)) <= 0.0,
+        "a head resting inside the ceiling must not rise"
+    );
+    let head_clear = WorldAabb {
+        max_y: 0.9,
+        min_y: 0.9 - 1.8,
+        ..body
+    };
+    assert_eq!(
+        clip_y(head_clear, 0.1, std::slice::from_ref(&ceiling)),
+        0.1
+    );
+}
+
+#[test]
 fn living_body_starts_full_block_climb_with_jump() {
     let world = LocalBlocks {
         solids: vec![GridPos::new(0, 63, 0), GridPos::new(1, 64, 0)],

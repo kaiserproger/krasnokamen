@@ -1805,15 +1805,25 @@ fn sweep_axis_interval(
     }
 }
 
+/// Vanilla `VoxelShape.collide` applies the same `1.0E-7` face tolerance on every
+/// axis, so a body resting up to [`COLLISION_EPSILON`] inside a floor or a
+/// ceiling is a contact and is snapped back out, exactly like [`clip_x`] and
+/// [`clip_z`] do for their faces.
 fn clip_y(body: WorldAabb, mut dy: f64, collision_boxes: &[WorldAabb]) -> f64 {
     for obstacle in collision_boxes {
         if overlaps_across(body.min_x, body.max_x, obstacle.min_x, obstacle.max_x)
             && overlaps_across(body.min_z, body.max_z, obstacle.min_z, obstacle.max_z)
         {
-            if dy > 0.0 && body.max_y <= obstacle.min_y {
-                dy = dy.min(obstacle.min_y - body.max_y);
-            } else if dy < 0.0 && body.min_y >= obstacle.max_y {
-                dy = dy.max(obstacle.max_y - body.min_y);
+            if dy > 0.0 {
+                let clip = obstacle.min_y - body.max_y;
+                if clip >= -COLLISION_EPSILON && clip < dy {
+                    dy = clip;
+                }
+            } else if dy < 0.0 {
+                let clip = obstacle.max_y - body.min_y;
+                if clip <= COLLISION_EPSILON && clip > dy {
+                    dy = clip;
+                }
             }
         }
     }
