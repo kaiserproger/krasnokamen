@@ -1,0 +1,13 @@
+diff --git a/crates/mc-core/src/tick/dimension.rs b/crates/mc-core/src/tick/dimension.rs
+index de912a76d..38bf46f8a 100644
+--- a/crates/mc-core/src/tick/dimension.rs
++++ b/crates/mc-core/src/tick/dimension.rs
+@@ -375,6 +375,8 @@ fn run_dimension_tick_inner<'a>(
+     }
+     crate::portals::nether::after_blocks(state, &mut block_writes);
+     block_laps.lap("portals_nether");
++    crate::sponge::after_blocks(state, &mut block_writes, &mut popped_drops);
++    block_laps.lap("sponge");
+     crate::fluids::schedule(state, &block_writes);
+     block_laps.lap("fluid_schedule");
+     let block_time = block_start.elapsed();

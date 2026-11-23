@@ -1,0 +1,44 @@
+{
+  "id": "INTERACT-001",
+  "verdict": "promoted",
+  "fix_commit": "patch:db1440f93672cc52aab0b039679e9f46201409758b3ebe0b0ead1f5599309634",
+  "fix_commit_full": "patch:db1440f93672cc52aab0b039679e9f46201409758b3ebe0b0ead1f5599309634",
+  "promoted_at": "2026-11-23T21:45:34+00:00",
+  "tree_head": "9c78eee8e180b69ca720abc6062ae6e3c18dc228",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "db1440f93672cc52aab0b039679e9f46201409758b3ebe0b0ead1f5599309634",
+  "reversed_files": [
+    "crates/mc-core/src/tick/input/interact.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:interact_parity_tests::interact_parity_axes_preserve_properties_and_wear": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-ledger-axe": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:interact_parity_tests::interact_parity_axes_preserve_properties_and_wear": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T211938-native-v2-ledger-axe-146xzfla/result.json",
+    "tree_head": "9c78eee8e180b69ca720abc6062ae6e3c18dc228",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "a70b9c59c4291f4fcb40fbd9a87b494fb3b1f58369b7a8db3976e702fb570f8b",
+    "covers": [
+      "harness:entities:native-v2-ledger-axe"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T214141-ledger-promote-40bzi8mr"
+}

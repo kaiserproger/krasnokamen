@@ -1,0 +1,32 @@
+diff --git a/crates/mc-core/src/tick/damage.rs b/crates/mc-core/src/tick/damage.rs
+index c2d2b9969..4c8d92fd0 100644
+--- a/crates/mc-core/src/tick/damage.rs
++++ b/crates/mc-core/src/tick/damage.rs
+@@ -658,7 +658,8 @@ impl TickState {
+                 }
+             }
+             let before_hit = player.vitals.health;
+-            died |= player.vitals.hurt(kind, reduced);
++            let lethal = player.vitals.hurt(kind, reduced);
++            let health_after_hit = player.vitals.health;
+             player
+                 .statistics
+                 .increment_custom(CustomStat::DamageTaken, (reduced * 10.0).round() as i32);
+@@ -670,9 +671,15 @@ impl TickState {
+                 .increment_custom(CustomStat::DamageResisted, (resisted * 10.0).round() as i32);
+             amounts.1 = (before_hit - player.vitals.health).max(0.0);
+             credit = Some(((before - player.vitals.health).max(0.0), absorbed, resisted));
+-            health_changed |= player.vitals.health != before;
++            if lethal {
++                rescue = totem::rescue(player, &self.registry, kind);
++                if rescue.is_none() {
++                    died = true;
++                }
++            }
++            health_changed |= lethal || player.vitals.health != before;
+             absorption_changed |= player.active_effects.absorption != absorption_before;
+-            let damage = (before_hit.max(0.0) - player.vitals.health.max(0.0)).max(0.0);
++            let damage = (before_hit.max(0.0) - health_after_hit.max(0.0)).max(0.0);
+             if damage > 0.0
+                 && let Some(attacker) = crate::plugin::damage_attacker(source)
+             {

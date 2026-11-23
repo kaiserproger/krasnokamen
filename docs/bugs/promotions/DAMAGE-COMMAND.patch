@@ -1,0 +1,20 @@
+diff --git a/crates/mc-core/src/commands.rs b/crates/mc-core/src/commands.rs
+index 3fefdd315..4068efb88 100644
+--- a/crates/mc-core/src/commands.rs
++++ b/crates/mc-core/src/commands.rs
+@@ -33,6 +33,7 @@ pub const ROOTS: &[(&str, u8)] = &[
+     ("attribute", 2),
+     ("clear", 2),
+     ("kill", 2),
++    ("damage", 2),
+     ("swing", 2),
+     ("time", 2),
+     ("weather", 2),
+@@ -472,6 +473,7 @@ pub fn parse(command: &str, operator: bool) -> Result<Command, CommandError> {
+         "clear" => parse_clear(args),
+         "effect" => crate::effects::parse_command(args),
+         "advancement" => parse_advancement(args),
++        "damage" => crate::command_damage::parse(args).map(Command::Damage),
+         "swing" => crate::command_swing::parse(args).map(Command::Swing),
+         "kill" => match args {
+             [] => Ok(Command::Kill {

@@ -1,0 +1,44 @@
+{
+  "id": "SCORE-CRITERIA-WRITABLE",
+  "verdict": "promoted",
+  "fix_commit": "patch:49684fbf13f63f651932adb59ed33616b0f7178faac54b7af4ccc8182c5f7bf5",
+  "fix_commit_full": "patch:49684fbf13f63f651932adb59ed33616b0f7178faac54b7af4ccc8182c5f7bf5",
+  "promoted_at": "2026-11-23T17:13:58+00:00",
+  "tree_head": "0218c529e8d9c499c71df6b065ed10d23f8c1d8f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "49684fbf13f63f651932adb59ed33616b0f7178faac54b7af4ccc8182c5f7bf5",
+  "reversed_files": [
+    "crates/mc-core/src/scoreboard.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_counter_criteria_allow_writes_and_swap_sources": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-command-score-store": {
+      "state": "unrunnable",
+      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/0218c529e8d9-server-x86_64-unknown-linux-gnu-incr/krasnokamen: [Errno 2] No such file or directory: '/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/ledger-builds/b761e6c147d8654cc08d638804f89864668fe8c87743f7e740ec11a5f357633d.json'. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_counter_criteria_allow_writes_and_swap_sources": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T163153-native-v2-command-score-store-qk0xz17p/result.json",
+    "tree_head": "0218c529e8d9c499c71df6b065ed10d23f8c1d8f",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "b761e6c147d8654cc08d638804f89864668fe8c87743f7e740ec11a5f357633d",
+    "covers": [
+      "harness:entities:native-v2-command-score-store"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T170903-ledger-promote-4gl0n2bf"
+}

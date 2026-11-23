@@ -1,5 +1,5 @@
 use super::*;
-use crate::boundary::{Hand, PlayerInput};
+use crate::boundary::{ClickMode, Hand, PlayerChange, PlayerInput};
 use crate::tick::run_tick;
 use mc_data::Identifier;
 
@@ -192,4 +192,95 @@ fn ender_chest_rejects_corrupt_slots_and_preserves_unknown_fields() {
         .unwrap();
         assert!(contents(&encoded, &items).is_err());
     }
+}
+
+#[test]
+fn ender_chest_click_with_a_cold_menu_coordinate_closes_and_keeps_cursor_custody() {
+    let (mut state, first, _second) = fixture();
+    let chest = state
+        .registry
+        .blocks
+        .block(&Identifier::parse("minecraft:ender_chest").unwrap())
+        .unwrap()
+        .default
+        .0;
+    open_at(&mut state, 1, 8);
+    let carried = ItemStack::new(
+        state
+            .registry
+            .items
+            .id_of(&Identifier::parse("minecraft:diamond").unwrap())
+            .unwrap(),
+        5,
+    );
+    state
+        .players
+        .get_mut(&first)
+        .unwrap()
+        .open
+        .as_mut()
+        .unwrap()
+        .carried = carried.clone();
+    let chunk = crate::boundary::ChunkPos { x: 0, z: 0 };
+    state.world.finish_inhabited_tick(state.tick + 1);
+    state
+        .world
+        .set_active_chunks(Default::default(), state.tick + 1);
+    state.world.capture_dirty(&Default::default());
+    state
+        .world
+        .mark_flushed(&[(chunk, state.world.storage_revision(chunk))]);
+    assert!(
+        state
+            .world
+            .evict_outside(&Default::default())
+            .contains(&chunk)
+    );
+    assert!(!state.world.has_chunk(0, 0));
+    // The cold overlay still answers `block_at` with an ender chest, which is
+    // exactly what must not select the handler.
+    state.world.set_block(8, 65, 8, chest);
+    assert_eq!(state.world.block_at(8, 65, 8), Some(chest));
+    let menu = state.players[&first].open.as_ref().expect("menu survives");
+    let (window, state_id) = (menu.window, menu.state_id);
+    let drains = run_tick(
+        &mut state,
+        &[PlayerInput::ContainerClick {
+            connection: ConnectionId(1),
+            window,
+            state_id,
+            slot: 0,
+            button: 0,
+            mode: ClickMode::Pickup,
+        }],
+    )
+    .1;
+    assert!(
+        state.players[&first].open.is_none(),
+        "a cold menu source closes the menu"
+    );
+    assert!(!state.open_containers.contains(&first));
+    assert!(
+        drains
+            .iter()
+            .flat_map(|(_, queue)| queue)
+            .any(|change| matches!(
+                change,
+                PlayerChange::MenuClosed { window: closed } if *closed == window
+            ))
+    );
+    assert!(
+        contents(
+            &state.players[&first].opaque_player_fields,
+            &state.registry.items
+        )
+        .unwrap()
+        .iter()
+        .all(ItemStack::is_empty),
+        "no click reaches personal ender storage"
+    );
+    assert!(
+        state.players[&first].inventory.slots.contains(&carried),
+        "the cursor item returns to the inventory"
+    );
 }

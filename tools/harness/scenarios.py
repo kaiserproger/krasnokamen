@@ -1495,6 +1495,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="survival at one health, one item consumed, authored speed without default totem effects",
         limits="clear/apply actions only; remove, probability, sound and codec variants have separate Cargo regressions",
     ),
+    "native-v2-p4-totem": _entry(
+        id="native-v2-p4-totem", summary="Default held totem rescues a lethal generic hit; the same hit kills without one",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-p4-totem",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_p4.py"),
+        fixture="held totem of undying, one lethal generic damage command, then the same hit after the rescue effects lapse",
+        proves="survival at one health with the vanilla regeneration/absorption/fire-resistance effects and one consumed totem; death screen and respawn without a totem",
+        limits="default totem only; one generic lethal hit per half; not every death type, offhand-only or inventory-search custody",
+    ),
     "native-v2-team-deaths": _entry(
         id="native-v2-team-deaths", summary="Two native clients in different teams read each other's death messages",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-team-deaths",

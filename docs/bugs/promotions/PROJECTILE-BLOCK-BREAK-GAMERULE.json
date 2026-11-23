@@ -1,0 +1,94 @@
+{
+  "id": "PROJECTILE-BLOCK-BREAK-GAMERULE",
+  "verdict": "promoted",
+  "fix_commit": "patch:ac770ee6826f9c5000c4605787d567fbd03f201fcd3c3fed9586d8e597a3c80f",
+  "fix_commit_full": "patch:ac770ee6826f9c5000c4605787d567fbd03f201fcd3c3fed9586d8e597a3c80f",
+  "promoted_at": "2026-11-23T19:45:18+00:00",
+  "tree_head": "608f10d002750b1bc8711538f03646c98d0976b6",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "ac770ee6826f9c5000c4605787d567fbd03f201fcd3c3fed9586d8e597a3c80f",
+  "reversed_files": [
+    "crates/mc-core/src/projectiles/block_impact.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:plugin_player::zone_protection_tests::projectiles_break_zone_blocks_only_for_admitted_shooters": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:projectiles::flight_tests::arrow_that_breaks_a_pot_falls_to_the_floor_and_stays_pickable": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:projectiles::flight_tests::projectile_breaks_pointed_dripstone_only_with_fast_trident": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:projectiles::flight_tests::projectile_breaks_pot_only_when_rule_enabled": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:projectiles::flight_tests::projectile_cracks_pot_before_destroying_it": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:projectiles::flight_tests::two_shots_at_one_sherd_pot_drop_its_sherds_and_contents_once": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:projectiles::flight_tests::projectile_pot_break_follows_owner_and_spawn_protection": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:projectiles::flight_tests::projectile_breaks_chorus_flower_only_when_rule_enabled": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:projectiles::flight_tests::projectile_breaks_sulfur_spike_only_with_fast_trident": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:plugin_player::zone_protection_tests::projectiles_break_zone_blocks_only_for_admitted_shooters": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:projectiles::flight_tests::arrow_that_breaks_a_pot_falls_to_the_floor_and_stays_pickable": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:projectiles::flight_tests::projectile_breaks_pointed_dripstone_only_with_fast_trident": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:projectiles::flight_tests::projectile_breaks_pot_only_when_rule_enabled": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:projectiles::flight_tests::projectile_cracks_pot_before_destroying_it": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:projectiles::flight_tests::two_shots_at_one_sherd_pot_drop_its_sherds_and_contents_once": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:projectiles::flight_tests::projectile_pot_break_follows_owner_and_spawn_protection": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:projectiles::flight_tests::projectile_breaks_chorus_flower_only_when_rule_enabled": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:projectiles::flight_tests::projectile_breaks_sulfur_spike_only_with_fast_trident": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T194345-ledger-promote-pwkieiu6"
+}

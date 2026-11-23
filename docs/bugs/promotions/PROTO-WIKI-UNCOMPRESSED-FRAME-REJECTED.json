@@ -1,0 +1,30 @@
+{
+  "id": "PROTO-WIKI-UNCOMPRESSED-FRAME-REJECTED",
+  "verdict": "promoted",
+  "fix_commit": "patch:38f4b9936bf6543ca100119699823364f8988dd5832e3c9848e3f1154aadb9fb",
+  "fix_commit_full": "patch:38f4b9936bf6543ca100119699823364f8988dd5832e3c9848e3f1154aadb9fb",
+  "promoted_at": "2026-11-23T16:03:18+00:00",
+  "tree_head": "4a54f35e7932a0f2626df4f785fcff9fa1fcd0f2",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "38f4b9936bf6543ca100119699823364f8988dd5832e3c9848e3f1154aadb9fb",
+  "reversed_files": [
+    "crates/mc-protocol/src/frame.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-protocol:frame::tests::decoder_accepts_uncompressed_frame_at_or_above_threshold": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-protocol:frame::tests::decoder_accepts_uncompressed_frame_at_or_above_threshold": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T155915-ledger-promote-cymq26cc"
+}

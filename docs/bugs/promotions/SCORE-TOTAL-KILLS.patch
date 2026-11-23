@@ -1,0 +1,47 @@
+diff --git a/crates/mc-core/src/scoreboard.rs b/crates/mc-core/src/scoreboard.rs
+index 131f9ea14..c011b1418 100644
+--- a/crates/mc-core/src/scoreboard.rs
++++ b/crates/mc-core/src/scoreboard.rs
+@@ -234,8 +234,8 @@ impl ScoreboardCommand {
+                     "objectives",
+                     "add",
+                     _,
+-                    "dummy" | "trigger" | "deathCount" | "playerKillCount" | "health" | "food"
+-                    | "air" | "armor" | "xp" | "level",
++                    "dummy" | "trigger" | "deathCount" | "playerKillCount" | "totalKillCount"
++                    | "health" | "food" | "air" | "armor" | "xp" | "level",
+                     ..,
+                 ],
+             ) => true,
+@@ -1129,8 +1129,15 @@ pub fn automatic(state: &mut TickState, deaths: &[EntityId], kills: &[(EntityId,
+                         .floor() as i32
+                 }
+                 "deathCount" if deaths.contains(id) => old.unwrap_or(0).wrapping_add(1),
+-                "playerKillCount" => {
+-                    let count = kills.iter().filter(|(killer, _)| killer == id).count() as i32;
++                "playerKillCount" | "totalKillCount" => {
++                    let count = kills
++                        .iter()
++                        .filter(|(killer, victim)| {
++                            killer == id
++                                && (criteria == "totalKillCount"
++                                    || state.players.contains_key(victim))
++                        })
++                        .count() as i32;
+                     if count == 0 {
+                         continue;
+                     }
+diff --git a/crates/mc-core/src/statistics.rs b/crates/mc-core/src/statistics.rs
+index 6e6af1183..c882dfacd 100644
+--- a/crates/mc-core/src/statistics.rs
++++ b/crates/mc-core/src/statistics.rs
+@@ -259,6 +259,9 @@ pub(crate) fn kill(state: &mut TickState, killer: Option<(EntityId, u32)>, victi
+         })
+         .and_then(|entity| living_type(state, entity).map(|type_id| (entity, type_id)));
+     let killer = recent_player.or(killer);
++    if let Some((killer, _)) = killer.filter(|(id, _)| *id != victim) {
++        crate::scoreboard::automatic(state, &[], &[(killer, victim)]);
++    }
+     if let Some(player) = state.players.get_mut(&victim)
+         && let Some((_, type_id)) = killer
+     {

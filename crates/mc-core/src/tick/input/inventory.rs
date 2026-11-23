@@ -225,6 +225,10 @@ pub(in crate::tick) fn container_click(
     if state.entities.slot_of(entity).is_none() {
         return;
     }
+    if crate::tick::containers::menu_source_cold(state, entity) {
+        crate::tick::close_player_menu(state, *connection);
+        return;
+    }
     if crate::mounts::menus::target(state, entity).is_some() {
         crate::mounts::menus::click(
             state, entity, *window, *state_id, *slot, *button, *mode, changes,
@@ -479,6 +483,10 @@ pub(in crate::tick) fn container_slot_state(
     (connection, window, slot, enabled): (&ConnectionId, &u8, &i32, &bool),
 ) {
     if let Some(entity) = state.connections.by_connection.get(connection).copied() {
+        if crate::tick::containers::menu_source_cold(state, entity) {
+            crate::tick::close_player_menu(state, *connection);
+            return;
+        }
         crate::crafter::slot_state(state, entity, *window, *slot, *enabled);
     }
 }
@@ -492,6 +500,10 @@ pub(in crate::tick) fn container_button(
         return;
     };
     if state.entities.slot_of(entity).is_none() {
+        return;
+    }
+    if crate::tick::containers::menu_source_cold(state, entity) {
+        crate::tick::close_player_menu(state, *connection);
         return;
     }
     if crate::lectern::button(state, entity, *window, *button, changes) {

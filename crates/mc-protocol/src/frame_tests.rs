@@ -93,23 +93,26 @@ fn compressed_threshold_edge() {
 }
 
 #[test]
-fn decoder_rejects_uncompressed_frame_at_threshold() {
-    let threshold = 16;
-    let raw_len = threshold;
-    let inner_len = 1 + raw_len;
-    let mut buf = BytesMut::new();
-    buf.write_varint(inner_len as i32);
-    buf.write_varint(0);
-    buf.write_varint(1);
-    buf.resize(buf.len() + raw_len - 1, 0xAB);
-
-    assert!(matches!(
-        try_decode_frame(&mut buf, Compression::Threshold(threshold)),
-        Err(FramingError::UncompressedAboveThreshold {
-            actual,
-            threshold: actual_threshold,
-        }) if actual == raw_len && actual_threshold == threshold
-    ));
+fn decoder_accepts_uncompressed_frame_at_or_above_threshold() {
+    // Vanilla's compression decoder passes a `dataLength == 0` frame through at
+    // any size and checks the threshold only on compressed frames
+    // (receipts/ProtocolWikiCheck/REPORT.md, javap of the 26.3 and 26.1.2 jars).
+    for raw_len in [16_usize, 4096] {
+        let threshold = 16;
+        let id = 0x01;
+        let inner_len = 1 + raw_len;
+        let mut buf = BytesMut::new();
+        buf.write_varint(inner_len as i32);
+        buf.write_varint(0);
+        buf.write_varint(id);
+        buf.resize(buf.len() + raw_len - 1, 0xAB);
+        let frame = try_decode_frame(&mut buf, Compression::Threshold(threshold))
+            .expect("vanilla accepts an uncompressed frame at or above the threshold")
+            .expect("complete");
+        assert_eq!(frame.id, id);
+        assert_eq!(frame.body.len(), raw_len - 1);
+        assert!(buf.is_empty(), "all bytes consumed");
+    }
 }
 
 #[test]

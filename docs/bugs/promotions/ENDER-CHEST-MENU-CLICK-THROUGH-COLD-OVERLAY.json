@@ -1,0 +1,30 @@
+{
+  "id": "ENDER-CHEST-MENU-CLICK-THROUGH-COLD-OVERLAY",
+  "verdict": "promoted",
+  "fix_commit": "patch:d1852b4e407d89f8d4554cd5fb5cd8d14f670f0c3f260859d16a53305f34d985",
+  "fix_commit_full": "patch:d1852b4e407d89f8d4554cd5fb5cd8d14f670f0c3f260859d16a53305f34d985",
+  "promoted_at": "2026-11-23T22:06:42+00:00",
+  "tree_head": "9c78eee8e180b69ca720abc6062ae6e3c18dc228",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "d1852b4e407d89f8d4554cd5fb5cd8d14f670f0c3f260859d16a53305f34d985",
+  "reversed_files": [
+    "crates/mc-core/src/tick/input/inventory.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:ender_chest::tests::ender_chest_click_with_a_cold_menu_coordinate_closes_and_keeps_cursor_custody": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:ender_chest::tests::ender_chest_click_with_a_cold_menu_coordinate_closes_and_keeps_cursor_custody": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T220514-ledger-promote-3mxz2ppq"
+}
