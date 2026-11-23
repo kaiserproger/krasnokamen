@@ -24,6 +24,11 @@ for another row, for API a kept test calls, or for a later rewrite.
 - `cargo:mc-edge:host_telemetry::host_telemetry_tests::sampler_reads_memory_pressure_from_the_cgroup_fixture` — red at `crates/mc-edge/src/host_telemetry_tests.rs:158` in the promotion receipt (`docs/bugs/promotions/PERF-RECEIPT-OMITS-MEMORY-PRESSURE.json`).
 - `python:tools.coreperf.test_profiles:HostReceiptFieldsTests.test_receipt_records_memory_pressure` — red at `/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/coreperf/test_profiles.py:1079` in the promotion receipt (`docs/bugs/promotions/PERF-RECEIPT-OMITS-MEMORY-PRESSURE.json`).
 
+## a/-side adaptation
+
+The reversal drops `cgroup_memory_pressure` / `host_memory_pressure`; the control tree passes empty
+field maps, which changes no behaviour.
+
 ## Claims the control does not prove
 
 Only the memory PSI field is added; a host CPU/IO PSI total is not part of this fix (the row

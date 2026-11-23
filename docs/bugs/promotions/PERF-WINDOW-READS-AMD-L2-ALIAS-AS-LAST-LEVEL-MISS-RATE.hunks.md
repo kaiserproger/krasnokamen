@@ -22,6 +22,14 @@ for another row, for API a kept test calls, or for a later rewrite.
 
 - `python:tools.dev.test_perf_window:PerfWindowRecipeTests.test_the_counter_set_is_the_amd_last_level_events_not_the_l2_aliases` — red at `/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_perf_window.py:64` in the promotion receipt (`docs/bugs/promotions/PERF-WINDOW-READS-AMD-L2-ALIAS-AS-LAST-LEVEL-MISS-RATE.json`).
 
+## a/-side adaptation and the red line
+
+The reversal restores `events=(cache-references cache-misses cycles instructions)` next to the AMD
+last-level counters. The row's symptom is the *alias returning as evidence* (`assertNotIn` at
+test_perf_window.py:67); the red the receipt records is the earlier `assertIn` at :64, because the
+restored alias list also drops the last-level event names the test requires first. The proving ref is
+the same test either way.
+
 ## Claims the control does not prove
 
 None: the patch is the whole behaviour the row names.

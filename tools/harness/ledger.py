@@ -935,6 +935,12 @@ def _declared_module_file(source: Path, name: str):
             # declaration is common and must not stop the walk, a statement must.
             if lines[back].strip() and not lines[back].lstrip().startswith(('#[', '///', '//')):
                 break
+        # A module declared in a non-mod.rs file lives under <stem>/<name>.rs, never beside it
+        # (ReviewD123Harness1 9d: the sibling lookup could bind to an unrelated x.rs).
+        if source.name not in ('mod.rs', 'lib.rs', 'main.rs'):
+            candidate = source.parent / source.stem / f'{name}.rs'
+            if candidate.is_file():
+                return candidate
         candidate = source.parent / f'{name}.rs'
         if candidate.is_file():
             return candidate
