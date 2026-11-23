@@ -1,0 +1,38 @@
+{
+  "id": "HARNESS-SCREENS-VOICE-PARTS-OOM",
+  "verdict": "promoted",
+  "fix_commit": "ef1e8e1083dc968a8e2e6e165c284ef026192c98",
+  "fix_commit_full": "ef1e8e1083dc968a8e2e6e165c284ef026192c98",
+  "promoted_at": "2026-11-23T15:18:04+00:00",
+  "tree_head": "49ce849779995935f75ab4b9edc7214b03509b4f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/coreperf/profiles.py",
+    "tools/dev/mem-run.sh",
+    "tools/dev/perf-window.sh",
+    "tools/dev/reserve-cpus",
+    "tools/harness/profiles.py"
+  ],
+  "kept_test_files": [
+    "tools/harness/test_split_parts.py"
+  ],
+  "negative_control": {
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_parts_run_one_at_a_time_so_two_full_legs_never_share_a_scope": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_split_parts:SplitPartsTests.test_parts_run_one_at_a_time_so_two_full_legs_never_share_a_scope": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T151619-ledger-promote-bqgmdk6e"
+}
