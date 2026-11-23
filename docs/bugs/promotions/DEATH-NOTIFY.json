@@ -1,0 +1,44 @@
+{
+  "id": "DEATH-NOTIFY",
+  "verdict": "promoted",
+  "fix_commit": "patch:616679e6694db5ccffffe249b463d53949cc4b2857aee832b51deca82550db57",
+  "fix_commit_full": "patch:616679e6694db5ccffffe249b463d53949cc4b2857aee832b51deca82550db57",
+  "promoted_at": "2026-11-23T21:52:52+00:00",
+  "tree_head": "9c78eee8e180b69ca720abc6062ae6e3c18dc228",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "616679e6694db5ccffffe249b463d53949cc4b2857aee832b51deca82550db57",
+  "reversed_files": [
+    "crates/mc-core/src/tick/damage.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_death_notification_ignores_broadcast_rule": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-death-messages": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_death_notification_ignores_broadcast_rule": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T211907-native-v2-death-messages-9epvsbj2/result.json",
+    "tree_head": "9c78eee8e180b69ca720abc6062ae6e3c18dc228",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "a70b9c59c4291f4fcb40fbd9a87b494fb3b1f58369b7a8db3976e702fb570f8b",
+    "covers": [
+      "harness:entities:native-v2-death-messages"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T214648-ledger-promote-bmml_lyw"
+}
