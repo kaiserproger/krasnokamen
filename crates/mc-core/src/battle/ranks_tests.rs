@@ -273,10 +273,11 @@ fn rank_and_heap_table() {
 fn a_dense_heap_reports_dropped_separation_candidates() {
     // The separation grid keeps at most CELL_CAP bodies per sub-cell; the battle
     // work counters must report how many were dropped, or a heap measurement
-    // cannot say whether neighbours were missing. Driven through `run_tick` so a
-    // deleted production call (`steering::step`) turns this red.
+    // cannot say whether neighbours were missing. One `run_tick` prepares the
+    // columns, then this drives `steering::step` directly: it proves the counter
+    // reaches `Work`, NOT that the production tick still calls the pass (a
+    // removed call leaves this green; see HANDOFF-5 H4).
     let mut state = started(60);
-    // One tick prepares the columns the steering pass indexes by member.
     crate::tick::run_tick(&mut state, &[]);
     let mut battle = std::mem::take(&mut state.hostile.battle);
     for member in &mut battle.formation.members {

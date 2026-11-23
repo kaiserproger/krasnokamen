@@ -9,6 +9,5 @@ repro = "source"
 regression = [
   "cargo:mc-core:dolphin::tests::fed_dolphin_locates_the_structure_through_its_normal_goal_tick",
   "cargo:mc-core:dolphin::tests::a_player_chest_without_a_located_structure_is_not_a_treasure_lead",
-  "cargo:mc-core:command_locate_tests::worker_loss_releases_a_map_loot_callback_so_the_container_opens_again",
 ]
 failing_first = "reported"

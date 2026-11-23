@@ -224,14 +224,16 @@ fn entity_step_reuses_one_physics_reader_per_lane() {
 fn step_entity_borrows_its_row() {
     // A copied `ReadRow` per entity per tick is pure snapshot traffic: the step
     // lane takes it by reference. The control of this row is compile-level (the
-    // by-value signature does not exist any more); the size bound only guards
-    // against the row growing back past a cache-line pair.
+    // by-value signature does not exist any more). The row is a scalar bundle
+    // read field by field, not a cache-line-packed struct, so the bound only
+    // guards against it growing: it sits at 261 bytes, under the 256 byte
+    // worker-snapshot bound asserted in `entity_phase_tests`.
     let step: fn(
         &ReadRow,
         &StepCtx<'_>,
         &crate::world::PhysicsReader<'_>,
     ) -> (MoveWrite, Vec<RawIntent>) = step_entity;
-    assert!(std::mem::size_of::<ReadRow>() <= 264);
+    assert!(std::mem::size_of::<ReadRow>() <= 256);
     let _ = step;
 }
 
