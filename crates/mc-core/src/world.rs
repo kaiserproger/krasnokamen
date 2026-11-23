@@ -101,9 +101,11 @@ pub struct ChunkWorld {
     /// `ReplayGameClock` does, so a held interval never advances a comparison
     /// image.
     clock_spans: Vec<clocks::ClockSpan>,
-    /// First native tick the spans cover; earlier anchors have no projection.
+    /// First native tick whose held count is known: one before the first
+    /// recorded tick, because the published pair carries that boundary too.
+    /// Anchors before it are not projected.
     clock_since: Option<u64>,
-    /// Held-tick count before [`Self::clock_since`].
+    /// Held-tick count at [`Self::clock_since`], inclusive.
     clock_held_base: u64,
     /// Last tick whose span was recorded (refreshes are idempotent).
     clock_recorded: Option<u64>,

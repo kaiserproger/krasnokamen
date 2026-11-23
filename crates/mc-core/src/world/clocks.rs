@@ -364,8 +364,9 @@ impl ChunkWorld {
         )
     }
 
-    /// Game ticks the clock has run through `tick` (offset by the count before
-    /// [`Self::clock_since`]); differences across held spans are exact.
+    /// Game ticks the clock has run through `tick` (offset by the held ticks
+    /// counted at [`Self::clock_since`], inclusive); differences across held
+    /// spans are exact.
     fn game_ticks_at(&self, tick: u64) -> u64 {
         let index = self.clock_spans.partition_point(|span| span.start <= tick);
         let Some(span) = index.checked_sub(1).map(|index| &self.clock_spans[index]) else {
@@ -413,6 +414,14 @@ impl ChunkWorld {
 
     /// Last running tick at or before `tick` (`tick` itself when it is not
     /// held). Mirrors `ReplayGameClock::last_running_at`.
+    ///
+    /// A world recovered in the middle of a hold starts its spans at the first
+    /// tick it records (`R + 1`), so the hold that began before recovery is not
+    /// visible: for a `tick` in that pre-recovery part this returns `R`, while
+    /// replay (which reads `held_since`) returns `since - 1`. The difference
+    /// shifts only `advance_running_clocks`'s `from` anchor for one release
+    /// comparison, so a working/sleeping/panicking villager can emit one extra
+    /// image at the release; it is a conservative lag, never a wrong value.
     #[must_use]
     pub(crate) fn last_running_at(&self, tick: u64) -> u64 {
         let index = self.clock_spans.partition_point(|span| span.start <= tick);

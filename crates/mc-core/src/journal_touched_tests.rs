@@ -1291,7 +1291,6 @@ fn recovered_mob_clock_does_not_burst_on_the_first_batch() {
     state
         .world
         .ensure_blocking(&[(chunk, 0)].into_iter().collect());
-    state.refresh_active_chunks(0);
     let cow = spawn_idle_cow(&mut state, 8.5);
     let slot = state.entities.slot_of(cow).unwrap();
     state.entities.row_mut(slot).breed_cooldown = 100;
@@ -1379,7 +1378,24 @@ fn the_mirror_agrees_with_the_replay_game_clock_over_holds() {
                 Some(mirror) if mirror == replay => {}
                 other => mismatches.push((from, to, replay, other)),
             }
+            let mut mirrored_spans = Vec::new();
+            state
+                .world
+                .for_each_running_interval(from, to, |first, last| {
+                    mirrored_spans.push((first, last))
+                });
+            let mut replay_spans = Vec::new();
+            game.running_intervals(from, to, |first, last| replay_spans.push((first, last)));
+            assert_eq!(
+                mirrored_spans, replay_spans,
+                "running spans differ for ({from}, {to})"
+            );
         }
+        assert_eq!(
+            state.world.last_running_at(from),
+            game.last_running_at(from),
+            "last running boundary differs at {from}"
+        );
     }
     assert!(
         mismatches.is_empty(),
