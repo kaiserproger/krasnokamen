@@ -1,14 +1,14 @@
 {
   "id": "SETTLEMENT-WALL-STRETCH-WITHOUT-STAND",
   "verdict": "promoted",
-  "fix_commit": "patch:37c1b27ac91ba0cb112c2429e77346233f3f9ff86538d25ef002f87b45043304",
-  "fix_commit_full": "patch:37c1b27ac91ba0cb112c2429e77346233f3f9ff86538d25ef002f87b45043304",
-  "promoted_at": "2026-11-23T16:00:35+00:00",
-  "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
-  "tree_dirty": true,
-  "tree_sha256": "30a04bc3b4c1d31cb8559298cb0c4fdf64da06917d11af377ed2efe1aa6fcd46",
+  "fix_commit": "patch:f630747ddc130aadca7dd1f483db925ac2eb8783a896b7c40feb110d13179abd",
+  "fix_commit_full": "patch:f630747ddc130aadca7dd1f483db925ac2eb8783a896b7c40feb110d13179abd",
+  "promoted_at": "2026-11-23T17:15:53+00:00",
+  "tree_head": "a6f4ca9d6df61b0c745279f15bbb3a54e98954ae",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
-  "fix_patch_sha256": "37c1b27ac91ba0cb112c2429e77346233f3f9ff86538d25ef002f87b45043304",
+  "fix_patch_sha256": "f630747ddc130aadca7dd1f483db925ac2eb8783a896b7c40feb110d13179abd",
   "reversed_files": [
     "crates/mc-core/src/settlements/layout.rs"
   ],
@@ -26,5 +26,5 @@
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T155748-ledger-promote-854oonnm"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T171341-ledger-promote-kz4pv_bj"
 }
