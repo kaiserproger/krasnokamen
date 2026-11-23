@@ -695,9 +695,13 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
         _shutil.copytree(_src, _dst)
     (artifact / "plugins").mkdir(parents=True, exist_ok=True)
     # The second player uses teleport; the owner-order fixture also teleports
-    # its primary player. Claims still use the ordinary player command.
-    if not civilization:
-        prepare_operator_fixture(ctx, [SECOND_USERNAME, *([USERNAME] if owner_order else [])])
+    # its primary player, and the civilization fixture certifies its founding
+    # chest's storage with explicit bounds, an operator-only administration
+    # capability (`settlement building certify storage <bounds>`). Claims still
+    # use the ordinary player command, and `spawn_protection = 0` above keeps the
+    # op entry from enabling vanilla spawn protection.
+    prepare_operator_fixture(ctx, [SECOND_USERNAME,
+                                   *([USERNAME] if owner_order or civilization else [])])
     evidence = ctx.client_evidence
     with binary.open("rb") as server_executable:
         server_hash = hashlib.file_digest(server_executable, "sha256").hexdigest()
