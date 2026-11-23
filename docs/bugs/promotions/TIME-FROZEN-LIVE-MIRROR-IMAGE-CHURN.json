@@ -1,24 +1,26 @@
 {
   "id": "TIME-FROZEN-LIVE-MIRROR-IMAGE-CHURN",
   "verdict": "promoted",
-  "fix_commit": "patch:04e20068872aec5d77762675d0435921f39580e4526415bdf596252277a3be67",
-  "fix_commit_full": "patch:04e20068872aec5d77762675d0435921f39580e4526415bdf596252277a3be67",
-  "promoted_at": "2026-11-23T20:11:20+00:00",
-  "tree_head": "fd196257d4188ba82c0e575bf5202bf63df48b25",
+  "fix_commit": "patch:21994e48dd4fc574831cfbf8f880c4fc9bbcf0c1b814a4c2961198336c29f859",
+  "fix_commit_full": "patch:21994e48dd4fc574831cfbf8f880c4fc9bbcf0c1b814a4c2961198336c29f859",
+  "promoted_at": "2026-11-23T21:09:23+00:00",
+  "tree_head": "d7110b3f0302b3888085998b5655c69fd06e7d20",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
-  "fix_patch_sha256": "04e20068872aec5d77762675d0435921f39580e4526415bdf596252277a3be67",
+  "fix_patch_sha256": "21994e48dd4fc574831cfbf8f880c4fc9bbcf0c1b814a4c2961198336c29f859",
   "reversed_files": [
+    "crates/mc-core/src/journal_touched.rs",
+    "crates/mc-core/src/world.rs",
     "crates/mc-core/src/world/clocks.rs"
   ],
   "kept_test_files": [],
   "negative_control": {
-    "cargo:mc-core:journal_touched::tests::held_game_clock_does_not_churn_a_touched_mob": {
-      "state": "red",
-      "detail": "FAIL"
+    "cargo:mc-core:journal_touched::tests::recovered_mob_clock_does_not_burst_on_the_first_batch": {
+      "state": "green",
+      "detail": ""
     },
-    "cargo:mc-core:journal_touched::tests::held_game_clock_holds_a_working_villager_baseline": {
+    "cargo:mc-core:journal_touched::tests::held_game_clock_does_not_churn_a_touched_mob": {
       "state": "red",
       "detail": "FAIL"
     },
@@ -26,17 +28,17 @@
       "state": "red",
       "detail": "FAIL"
     },
-    "cargo:mc-core:journal_touched::tests::recovered_mob_clock_does_not_burst_on_the_first_batch": {
-      "state": "green",
-      "detail": ""
+    "cargo:mc-core:journal_touched::tests::held_game_clock_holds_a_working_villager_baseline": {
+      "state": "red",
+      "detail": "FAIL"
     }
   },
   "restored": {
-    "cargo:mc-core:journal_touched::tests::held_game_clock_does_not_churn_a_touched_mob": {
+    "cargo:mc-core:journal_touched::tests::recovered_mob_clock_does_not_burst_on_the_first_batch": {
       "state": "green",
       "detail": ""
     },
-    "cargo:mc-core:journal_touched::tests::held_game_clock_holds_a_working_villager_baseline": {
+    "cargo:mc-core:journal_touched::tests::held_game_clock_does_not_churn_a_touched_mob": {
       "state": "green",
       "detail": ""
     },
@@ -44,11 +46,11 @@
       "state": "green",
       "detail": ""
     },
-    "cargo:mc-core:journal_touched::tests::recovered_mob_clock_does_not_burst_on_the_first_batch": {
+    "cargo:mc-core:journal_touched::tests::held_game_clock_holds_a_working_villager_baseline": {
       "state": "green",
       "detail": ""
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261123T200653-ledger-promote-34orijdf"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261123T210546-ledger-promote-jipax1je"
 }
