@@ -93,13 +93,7 @@ class SplitPartsTests(unittest.TestCase):
                          [os.sys.executable, "-m", "tools.harness", "run", "buildings-qa"])
         self.assertTrue((root / "parts").is_dir())
 
-    def test_parts_run_one_at_a_time_so_two_full_legs_never_share_a_scope(self):
-        """Negative control for HARNESS-SCREENS-VOICE-PARTS-OOM: overlap means OOM, not a verdict."""
-        directory = tempfile.TemporaryDirectory()
-        self.addCleanup(directory.cleanup)
-        events: list[str] = []
-        receipts = {"a": passed(), "b": passed()}
-
+    def spawn_recording(self, events, receipts, waits=None):
         def spawn(_argv, env, log_path):
             label = env[profiles.SPLIT_PART_ENV]
             events.append(f"spawn:{label}")
@@ -110,15 +104,53 @@ class SplitPartsTests(unittest.TestCase):
             log_path.write_bytes(b"child log\n")
             def wait(timeout=None):
                 events.append(f"wait:{label}")
+                if waits is not None:
+                    waits.append((label, timeout))
                 return 0
             return SimpleNamespace(wait=wait)
+        return spawn
 
-        with patch.object(profiles, "_spawn_split", spawn):
+    def test_parts_run_one_at_a_time_so_two_full_legs_never_share_a_scope(self):
+        """Negative control for HARNESS-SCREENS-VOICE-PARTS-OOM: overlap means OOM, not a verdict."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        events: list[str] = []
+        receipts = {"a": passed(), "b": passed()}
+        with patch.object(profiles, "_spawn_split", self.spawn_recording(events, receipts)):
             blocks = profiles.run_split(context(directory.name), "screens-voice-qa",
-                                        [profiles.SplitPart("a"), profiles.SplitPart("b")])
+                                        [profiles.SplitPart("a"), profiles.SplitPart("b")],
+                                        sequential=True)
         # Concurrent code would start both legs first: spawn:a, spawn:b, wait:a, wait:b.
         self.assertEqual(events, ["spawn:a", "wait:a", "spawn:b", "wait:b"])
         self.assertEqual([block["status"] for block in blocks], ["passed", "passed"])
+
+    def test_other_split_gates_keep_the_concurrent_start(self):
+        """buildings-qa and civilization-seed-qa parts fit together; only screens is sequential."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        events: list[str] = []
+        receipts = {"a": passed(), "b": passed()}
+        with patch.object(profiles, "_spawn_split", self.spawn_recording(events, receipts)):
+            profiles.run_split(context(directory.name), "buildings-qa",
+                               [profiles.SplitPart("a"), profiles.SplitPart("b")])
+        self.assertEqual(events, ["spawn:a", "spawn:b", "wait:a", "wait:b"])
+
+    def test_each_sequential_leg_gets_its_own_full_timeout(self):
+        """A slow earlier leg must not shorten the next one's budget (shared deadline = false timeout)."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        events: list[str] = []
+        waits: list[tuple[str, float | None]] = []
+        receipts = {"a": passed(), "b": passed()}
+        # wall clock: part a starts at 0 and ends 1500 s later; part b then starts at 1500.
+        ticks = iter([0.0, 0.0, 1500.0, 1500.0])
+        with patch.object(profiles, "_spawn_split", self.spawn_recording(events, receipts, waits)), \
+                patch.object(profiles.time, "monotonic", side_effect=lambda: next(ticks, 3000.0)):
+            profiles.run_split(context(directory.name, timeout_seconds=1500.0),
+                               "screens-voice-qa",
+                               [profiles.SplitPart("a"), profiles.SplitPart("b")], sequential=True)
+        self.assertEqual([label for label, _ in waits], ["a", "b"])
+        self.assertEqual([round(timeout) for _, timeout in waits], [1500, 1500])
 
     def test_the_cli_refuses_parts_for_a_profile_without_independent_parts(self):
         from tools.harness import __main__ as cli
