@@ -669,16 +669,16 @@ control_b_patch = "{defect_path}"
         return root
 
     def runner(self, control_a_red=True, defect_red=True, a_assertion=None, b_assertion=None,
-               b_red_refs=(REF,), b_state=ledger.RED):
+               b_red_refs=(REF,), b_state=ledger.RED, b_line=3):
         """The four steps in order: A (old oracle restored), B (defect injected), restore."""
         seen = []
 
-        def entry(tree, red, assertion_file=None):
+        def entry(tree, red, assertion_file=None, line=3):
             if not red:
                 return {'state': ledger.GREEN, 'detail': ''}
             return {'state': ledger.RED, 'detail': 'test assertion failed',
                     'assertion': {'file': assertion_file or str(tree / 'tools/harness/test_example.py'),
-                                  'line': 3, 'error': 'AssertionError'}}
+                                  'line': line, 'error': 'AssertionError'}}
 
         def run(_ctx, refs, tree, _client):
             test = (tree / 'tools/harness/test_example.py').read_text()
@@ -694,7 +694,7 @@ control_b_patch = "{defect_path}"
                     out[ref] = {'state': b_state, 'detail': 'build error'}
                 else:
                     red = defect_red and ref in b_red_refs
-                    out[ref] = entry(tree, red, b_assertion)
+                    out[ref] = entry(tree, red, b_assertion, b_line)
             return out
 
         run.seen = seen
@@ -744,6 +744,16 @@ control_b_patch = "{defect_path}"
         runner = self.runner(control_a_red=False)
         with self.assertRaisesRegex(ledger.Refused, 'did not go red at an assertion'):
             self.promote(root, runner)
+
+    def test_a_defect_red_outside_the_reversed_hunk_is_refused(self):
+        # ReviewD123Harness1 (BIOME): a red at another assert in the same file proves nothing about
+        # the corrected assertion, so control B's line must lie inside a hunk the fix reversed.
+        root = self.scratch()
+        runner = self.runner(b_line=40)
+        with self.assertRaisesRegex(ledger.Refused, 'inside a hunk the fix reversed'):
+            self.promote(root, runner)
+        self.assertEqual([entry['red'] for entry in runner.seen], [True, True],
+                         'control A ran, then B was judged out of range')
 
     def test_a_defect_control_that_stays_green_is_refused(self):
         root = self.scratch()
@@ -958,6 +968,24 @@ promotion = "docs/bugs/promotions/X.json"
             'control_b': {'sha256': control_b_sha} if control_b_sha else None}))
         return root
 
+    def test_a_narrowed_row_needs_its_receipt_to_reverse_the_named_files(self):
+        root = self.promotion_root(test_only=True, control='test_hunks', control_b_sha='0' * 64)
+        row_path = root / 'docs/bugs/rows/X.toml'
+        row_path.write_text(row_path.read_text() + 'control_a_files = ["tools/harness/test_example.py"]\n')
+        receipt_path = root / 'docs/bugs/promotions/X.json'
+        receipt = json.loads(receipt_path.read_text())
+        receipt['reversed_files'] = ['tools/harness/test_other.py']
+        receipt_path.write_text(json.dumps(receipt))
+        with patch.object(regressions, 'REPO_ROOT', root):
+            row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
+            errors = regressions._promotion_errors('X', row)
+        self.assertTrue(any('control_a_files' in error for error in errors), errors)
+        receipt['reversed_files'] = ['tools/harness/test_example.py']
+        receipt_path.write_text(json.dumps(receipt))
+        with patch.object(regressions, 'REPO_ROOT', root):
+            row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
+            self.assertEqual(regressions._promotion_errors('X', row), [])
+
     def test_a_receipt_may_not_claim_a_test_only_control_without_the_flag(self):
         root = self.promotion_root(test_only=False, control='test_hunks')
         with patch.object(regressions, 'REPO_ROOT', root):
@@ -984,8 +1012,41 @@ class TestOnlyEvidenceTests(unittest.TestCase):
         text = ('        FAIL [   0.123s] mc-edge host_telemetry_tests::bad\n'
                 "thread 'host_telemetry_tests::bad' panicked at crates/mc-edge/src/host_telemetry_tests.rs:120:5:\n"
                 'assertion `left == right` failed\n')
+        # Keyed by (crate, name): a bare name collides across modules (ReviewD123Harness1 9a).
         self.assertEqual(ledger._panic_locations(text),
-                         {'bad': ('crates/mc-edge/src/host_telemetry_tests.rs', 120)})
+                         {('mc-edge', 'bad'): ('crates/mc-edge/src/host_telemetry_tests.rs', 120)})
+        two_modules = ('        FAIL [   0.123s] mc-edge tests::shared\n'
+                       "thread 'tests::shared' panicked at crates/mc-edge/src/tests.rs:10:1:\n"
+                       'assertion failed\n'
+                       '        FAIL [   0.123s] mc-core other::shared\n'
+                       "thread 'other::shared' panicked at crates/mc-core/src/other.rs:20:1:\n"
+                       'assertion failed\n')
+        self.assertEqual(ledger._panic_locations(two_modules), {
+            ('mc-edge', 'shared'): ('crates/mc-edge/src/tests.rs', 10),
+            ('mc-core', 'shared'): ('crates/mc-core/src/other.rs', 20)})
+
+    def test_a_setup_unwrap_panic_is_not_an_assertion(self):
+        # `#[track_caller]` puts `.unwrap()` at the test's own line; M1/M2 must not count it.
+        text = ('        FAIL [   0.123s] mc-edge tests::setup\n'
+                "thread 'tests::setup' panicked at crates/mc-edge/src/tests.rs:44:9:\n"
+                'called `Option::unwrap()` on a `None` value\n')
+        self.assertEqual(ledger._panic_locations(text), {})
+
+    def test_a_python_assertion_ignores_a_mentions_elsewhere(self):
+        # Only the failing block's own exception counts (ReviewD123Harness1 9c).
+        text = ('FAIL: test_guard (tools.harness.test_example.ExampleTests.test_guard)\n'
+                'Traceback (most recent call last):\n'
+                '  File "/repo/tools/harness/test_example.py", line 3, in test_guard\n'
+                'RuntimeError: AssertionError mentioned in a message\n')
+        self.assertIsNone(ledger._python_assertion(text))
+        text = ('Traceback (most recent call last):\n'
+                '  File "/repo/tools/harness/test_example.py", line 7, in test_a\n'
+                'KeyError: 1\n'
+                'Traceback (most recent call last):\n'
+                '  File "/repo/tools/harness/test_example.py", line 12, in test_b\n'
+                'AssertionError: 1 != 2\n')
+        self.assertEqual(ledger._python_assertion(text),
+                         {'file': '/repo/tools/harness/test_example.py', 'line': 12, 'error': 'AssertionError'})
 
     def test_a_python_assertion_uses_the_innermost_frame(self):
         text = ('FAIL: test_guard (tools.harness.test_example.ExampleTests.test_guard)\n'

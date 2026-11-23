@@ -276,36 +276,56 @@ def _exec(ctx, argv, tag, tree, env):
 
 _RESULT_LINE = re.compile(r'^\s+([A-Z][A-Z ]*?)\s+\[\s*[\d.]+s\]\s+(?:\(\s*\d+/\d+\)\s+)?(\S+)\s+(\S+)\s*$', re.MULTILINE)
 _PANIC_LINE = re.compile(r"panicked at ([^\s:]+):(\d+)")
+# A test body's `.unwrap()` panics through #[track_caller] at the test's own line, but it is a setup
+# failure, not an assertion: the M1/M2 gates must not accept it as evidence.
+_SETUP_PANIC = re.compile(r'^called `(?:Option|Result)::(unwrap|expect|unwrap_err|expect_err)')
 
 
 def _panic_locations(text):
-    """{test name: (file, line)} of the panics nextest captured, keyed by the panicking thread.
+    """{(crate, test name): (file, line)} of the assertion panics nextest captured.
 
     A negative control is red only at an assertion: `panicked at <path>:<line>` inside a changed
-    test file is that assertion, a panic in production code is not evidence about the test."""
+    test file is that assertion, a panic in production code is not evidence about the test. The key
+    pairs the panic with the result line it follows (its binary's crate and the test name), so two
+    modules with a test of the same name do not overwrite each other."""
     locations = {}
     current = None
     for line in text.splitlines():
         result = _RESULT_LINE.match(line)
         if result:
-            current = result.group(3)
+            current = (result.group(2).split('::', 1)[0], result.group(3))
             continue
         match = _PANIC_LINE.search(line)
         if match is None:
             continue
+        message = text[text.find(line) + len(line):].splitlines()
+        if message and _SETUP_PANIC.match(message[1].strip() if len(message) > 1 else ''):
+            continue
         thread = re.search(r"thread '([^']+)' panicked", line)
-        name = thread.group(1).rsplit('::', 1)[-1] if thread else (
-            current.rsplit('::', 1)[-1] if current else None)
-        if name:
-            locations[name] = (match.group(1), int(match.group(2)))
+        if thread and '::' in thread.group(1):
+            name = thread.group(1).rsplit('::', 1)[-1]
+            crate = thread.group(1).split('::', 1)[0] if current is None else current[0]
+        elif current is not None:
+            name, crate = current[1], current[0]
+            name = name.rsplit('::', 1)[-1]
+        else:
+            continue
+        locations[(crate, name)] = (match.group(1), int(match.group(2)))
     return locations
 
 
 def _python_assertion(text):
-    """The innermost traceback frame of a failing unittest, when it is an AssertionError."""
-    if 'AssertionError' not in text:
+    """The innermost traceback frame of a failing unittest, when its own exception is AssertionError."""
+    blocks = text.split('Traceback (most recent call last):')
+    if len(blocks) < 2:
         return None
-    frames = re.findall(r'^\s*File "([^"]+)", line (\d+)', text, re.MULTILINE)
+    block = blocks[-1]
+    # The exception line closes the block: `AssertionError: ...` (or `module.Error: ...`). A text that
+    # mentions AssertionError elsewhere (a captured log, another test's output) is not this failure.
+    exception = re.search(r'^([A-Za-z_][\w.]*(?:Error|Exception|Failure))(: .*)?$', block, re.MULTILINE)
+    if exception is None or exception.group(1).rsplit('.', 1)[-1] != 'AssertionError':
+        return None
+    frames = re.findall(r'^\s*File "([^"]+)", line (\d+)', block, re.MULTILINE)
     if not frames:
         return None
     file, line = frames[-1]
@@ -347,7 +367,7 @@ def _run_cargo(ctx, tests, tree):
         elif status in ('PASS', 'LEAK PASS'):
             results[test] = (GREEN, '', None)
         elif status == 'FAIL':
-            location = panics.get(test[1].rsplit('::', 1)[-1])
+            location = panics.get((test[0], test[1].rsplit('::', 1)[-1]))
             assertion = {'file': location[0], 'line': location[1], 'error': 'panic'} if location else None
             results[test] = (RED, status, assertion)
         else:
@@ -983,6 +1003,44 @@ def _split_non_test(diff, source_of):
         elif path.endswith('.rs'):
             test_files.append(path)
     return ''.join(patch), reversed_files, test_files
+
+
+_HUNK_HEADER = re.compile(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@')
+
+
+def _hunk_new_ranges(diff):
+    """{path: [(first, last)]} of the post-image lines the patch's hunks cover.
+
+    A defect-injection control must turn red at the *corrected assertion*: a red at any other line of
+    the same file proves an assertion 9cc59fb37 never touched (ReviewD123Harness1, BIOME)."""
+    ranges, path = {}, None
+    for line in diff.splitlines():
+        if line.startswith('diff --git '):
+            match = re.match(r'diff --git a/(.+) b/(.+)$', line)
+            path = match.group(2) if match else None
+        elif path is not None and line.startswith('@@ '):
+            header = _HUNK_HEADER.match(line)
+            if header is None:
+                continue
+            first = int(header.group(1))
+            count = int(header.group(2) or 1)
+            if count:
+                ranges.setdefault(path, []).append((first, first + count - 1))
+    return ranges
+
+
+def _assertion_in_ranges(entry, ranges, control_dir):
+    """True when the red assertion's line lies inside a hunk the control reversed."""
+    assertion = entry.get('assertion') or {}
+    path, line = assertion.get('file'), assertion.get('line')
+    if not isinstance(path, str) or not isinstance(line, int):
+        return False
+    if os.path.isabs(path):
+        try:
+            path = Path(path).resolve().relative_to(Path(control_dir).resolve()).as_posix()
+        except ValueError:
+            return False
+    return any(first <= line <= last for first, last in ranges.get(path, []))
 
 
 def _assertion_in_files(entry, control_dir, test_files):
@@ -1691,11 +1749,14 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
                 raise Refused(f"{ident}: control_b_patch {row['control_b_patch']} does not apply on the tree being promoted")
             _git(candidate, 'apply', '--whitespace=nowarn', '-', stdin=defect)
             defect_control = runner(ctx, refs, candidate, True)
+            # The defect must red the corrected assertion itself, not another assert in the file.
+            ranges = _hunk_new_ranges(patch)
             valid_b = {ref for ref, entry in defect_control.items()
-                       if entry['state'] == RED and _assertion_in_files(entry, candidate, reversed_files)}
+                       if entry['state'] == RED and _assertion_in_files(entry, candidate, reversed_files)
+                       and _assertion_in_ranges(entry, ranges, candidate)}
             if not valid_b:
-                raise Refused(f"{ident}: defect-injection control ({defect_rel}) did not go red at an assertion in "
-                              f"{', '.join(reversed_files)}: "
+                raise Refused(f"{ident}: defect-injection control ({defect_rel}) did not go red at an assertion "
+                              f"inside a hunk the fix reversed in {', '.join(reversed_files)}: "
                               + '; '.join(f"{ref}={entry['state']}" + (f" ({entry['detail']})" if entry['detail'] else '') for ref, entry in defect_control.items())
                               + ' (the corrected test does not catch the behaviour it claims to guard)')
             proving = sorted(valid_red & valid_b)

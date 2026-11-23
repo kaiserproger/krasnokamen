@@ -56,6 +56,13 @@ def _promotion_errors(ident, bug):
             return [f'{ident}: promotion receipt control_b.sha256 does not match the row control_b_sha256']
     elif control == 'test_hunks':
         return [f'{ident}: control = test_hunks on a row without test_only_fix']
+    # 9e: a narrowed row's receipt must show the narrowing it claims: the files control A reversed
+    # are the files the row named, not the whole commit.
+    narrowed = bug.get('control_a_files')
+    if narrowed is not None:
+        reversed_files = receipt.get('reversed_files')
+        if not isinstance(reversed_files, list) or sorted(reversed_files) != sorted(narrowed):
+            return [f'{ident}: control_a_files {sorted(narrowed)} but the receipt reversed {reversed_files}']
     return []
 
 
