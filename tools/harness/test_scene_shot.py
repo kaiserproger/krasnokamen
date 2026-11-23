@@ -673,9 +673,11 @@ class ToastTests(unittest.TestCase):
             image = Image.new("RGB", scene_shot.WINDOW, (120, 170, 240))
             draw = ImageDraw.Draw(image)
             if name == "toast-early" and toast:
-                # The panel rectangle at GUI scale 3 on 1280x720: x 600..1281, y 0..168.
-                draw.rectangle((600, 0, 1280, 168), fill=(20, 20, 20))
-                draw.rectangle((640, 20, 1180, 40), fill=(240, 240, 240))
+                # The panel rectangle at GUI scale 3 on 1280x720: x 621..1280, y 0..168,
+                # with the yellow title ink and the white message lines inside it.
+                draw.rectangle((621, 0, 1279, 167), fill=(20, 30, 50))
+                draw.rectangle((640, 8, 1180, 26), fill=(255, 255, 0))
+                draw.rectangle((640, 34, 1180, 52), fill=(240, 240, 240))
             image.save(shots / f"{name}.png")
             (shots / f"{name}.json").write_text(json.dumps(frame))
 
@@ -686,7 +688,9 @@ class ToastTests(unittest.TestCase):
             probe = self.Probe()
             scene_shot.check_toasts(probe, root)
             self.assertGreater(probe.report["toast_pixels"]["early_panel"], 1500)
-            self.assertLess(probe.report["toast_pixels"]["late_panel"], 400)
+            self.assertLess(probe.report["toast_pixels"]["late_panel"], 50)
+            self.assertGreater(probe.report["toast_pixels"]["early_title"], 800)
+            self.assertLess(probe.report["toast_pixels"]["late_title"], 50)
             self.store_frames(root, toast=False)
             with self.assertRaisesRegex(AssertionError, "toast_panel_appeared"):
                 scene_shot.check_toasts(self.Probe(), root)

@@ -6,7 +6,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-CREATIVE; the routing half is tracked as QA5-CREATIVE-ROUTING, the hovered-Q half as QA5-CREATIVE-HOVERED-Q"
-regression = ["client:krasnokamen-client:ui::state::drag_tests::shift_with_carried_stack_dispatches_on_release"]
-proving_assertions = { "harness:entities:native-v2-input-menus" = "creative_short_click_exact_pickup" }
+regression = ["harness:entities:native-v2-input-menus", "client:krasnokamen-client:ui::state::drag_tests::shift_with_carried_stack_dispatches_on_release"]
+proving_assertions = { "harness:entities:native-v2-input-menus" = "creative_held_cursor_pixels" }
 failing_first = "not recorded"
 repro_check = "SPLIT 2026-11-24 (review): this row now carries only the carried-stack drawing. The native-v2-input-menus probe stops at the first failed assertion (creative_short_click_exact_pickup), so the later creative_short_pickup / creative_held_cursor_pixels checks were never evaluated against a control; only the client unit ref covers the dispatch. The routed packet swap and the hovered-Q behaviour live in the two rows named in source."

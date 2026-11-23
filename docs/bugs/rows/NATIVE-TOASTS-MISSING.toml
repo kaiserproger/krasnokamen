@@ -4,11 +4,10 @@ title = "Native client renders no toasts: advancement-made, recipe-unlocked and 
 area = "client"
 repro = "source"
 severity = "minor"
-status = "fixed"
+status = "open"
 source = "The client renders toasts in src/ui/toasts.rs (ToastManager 26.3 parity, client:e8fe40c2 territory); the gate said otherwise only because of the capture path. solaris-client 2edbb590 discarded the advancement show-toast flag and had no renderer; 8deb8fd7 added src/ui/toasts.rs, and on 2026-11-24 the retained overlay was shown to carry the toast (448 vertices, layer-2 draw range covering them) while every native-toast capture landed after its 10 s lifetime: the capture was deferred by UiState::animating() for any HUD repaint. Java oracle frames (receipts/VisualItemsClient/20261111T140325-scene-shot-znvexbrh) show the vanilla panel; the native toast-early frame 20261123T214206 now shows the same panel with its yellow title and warning text."
 regression = ["harness:scene-shot:native-toast", "client:krasnokamen-client:ui::toasts::tests::unsecure_server_warning_takes_two_slots_and_hides_after_ten_seconds"]
 proving_assertions = { "harness:scene-shot:native-toast" = "toast_panel_appeared" }
 failing_first = "reported"
-fix_commit = "client:8a9ecaa678"
-repro_check = "ROOT CAUSE 2026-11-24: toasts were always painted - the retained overlay carried 448 toast vertices and the layer-2 draw range covered them - but every capture requested while the HUD repainted was deferred by `UiState::animating()`, so both native-toast shots landed after the unsecure-server toast 10 s lifetime and no toast could ever appear in a gate. `UiState::capture_deferring` now defers only for screen transitions. Fixed green: 20261123T213114-native-toast-9nbbqsax."
-promotion = "docs/bugs/promotions/NATIVE-TOASTS-MISSING.json"
+fix_commit = "client:8deb8fd7"
+repro_check = "STILL OPEN 2026-11-24 (Main review): the toast is painted - the retained overlay carries 448 toast vertices and the layer-2 draw range covers them - and the native-toast gate was red only because the capture path was deferred until the toast had expired; that capture defect is now its own row (CAPTURE-DEFERRED-HUD-TRANSIENT) with fix client:8a9ecaa678/37bdec7f3e. Closing THIS row needs a control that removes toast PAINTING (the real fix is client:8deb8fd7, whose src/ui/toasts.rs paint hunks must be reversed over the current tip); attempts so far: none yet. Advancement and recipe toasts stay unit-covered and are separate rows."

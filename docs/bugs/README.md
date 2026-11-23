@@ -275,10 +275,15 @@ worker, runs the negative control.
    original lines named by `git blame -C -C` - and the next commit re-lands it,
    becoming the row's `fix_commit`. The reversal must be that deletion, never an
    invented stub or an early return: the two commits' diff has to equal the
-   forward-ported real fix. The dossier names the real commit (for example
-   `client:e8fe40c2`) and why the reversal equals its removal; the promotions
-   record the re-landing sha, which must reach the client main without squash or
-   rebase so `fix_commit` stays resolvable.
+   forward-ported real fix. **The same `promotions/<ID>.hunks.md` map as patch
+   mode is mandatory here**: the real commit (a bulk one such as
+   `client:e8fe40c2` is usual), every one of its non-test hunks with the file,
+   the `@@` header and its HEAD equivalent or the (a)/(b)/(c) omission reason,
+   and the a/-side adaptation (for example `_`-parameter renames when the
+   reversed function keeps its signature because kept tests call it). A client
+   reversal promotion without that map is refused. The promotions record the
+   re-landing sha, which must reach the client main without squash or rebase so
+   `fix_commit` stays resolvable.
 4. Automatic negative control: the fix commit's non-test hunks (test files,
    `docs/` and Rust hunks inside inline `#[cfg(test)]` modules stay) are
    reverse-applied onto the candidate in a temporary worktree; only if

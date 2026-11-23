@@ -1,6 +1,6 @@
 [[bug]]
 id = "QA5-CREATIVE-ROUTING"
-title = "Creative slot move was reverted on close: the click sent CONTAINER_CLICK instead of SET_CREATIVE_MODE_SLOT."
+title = "Creative slot-move clicks were routed as CONTAINER_CLICK instead of SET_CREATIVE_MODE_SLOT (packet routing only)."
 area = "client"
 repro = "source"
 severity = "major"

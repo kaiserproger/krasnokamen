@@ -594,9 +594,11 @@ every capture past the toast's 10 s lifetime, which is how the renderer looked
 missing. Advancement/recipe toasts and the text stay unit-covered.
 
 `run scenario native-elytra --client native --windowed` fails if the worn
-elytra does not appear as a wings quad behind the player (MODEL-OPUS-15), that
-is, if the cape-exclusion/asset-profile priority in `entities::equipment` is
-lost. The shape, not exact vanilla pixels, is asserted.
+elytra's back layer does not change the avatar's back region against the same
+player with an empty chest slot (MODEL-OPUS-15), or if a worn chestplate does
+not, or if the idle arm motion between two empty-chest frames exceeds the
+recorded bound. It proves the back layer is drawn; the wing silhouette and the
+vanilla pixel appearance are not asserted.
 
 `run scenario native-placed-head --client native --windowed` fails if an
 unresolved placed head stops drawing the default skin

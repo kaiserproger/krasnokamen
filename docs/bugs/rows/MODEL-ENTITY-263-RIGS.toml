@@ -1,6 +1,6 @@
 [[bug]]
 id = "MODEL-ENTITY-263-RIGS"
-title = "4 entity types new in 26.3 have no rig family: `cushion`, `sulfur_cube`, `poplar_boat`, `poplar_chest_boat` → `material()` errs `no activated rig family` → entity is unrendered (invisible)"
+title = "Four 26.3 entity types (`cushion`, `sulfur_cube`, `poplar_boat`, `poplar_chest_boat`) had no rig family, so `material()` erred `no activated rig family` and the entity was unrendered (invisible)."
 area = "client"
 repro = "source"
 severity = "major"

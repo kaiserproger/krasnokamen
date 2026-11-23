@@ -166,26 +166,35 @@ def check_entity_visuals(probe: ProbeSteps, artifact: Path) -> None:
 def check_toasts(probe: ProbeSteps, artifact: Path) -> None:
     """NATIVE-TOASTS-MISSING: the join-time unsecure-server toast is drawn, then clears.
 
-    The client raises it on the Play login packet (10 s visible); `toast-early` is two seconds
-    after Play and `toast-late` is eighteen. The player stands still, and the ROI is the
-    panel's own `gui/sprites/toast/system` rectangle - `ToastManager` puts x = gui_width -
-    width and y = 0, which at GUI scale 3 on a 1280x720 frame is x 600..1281, y 0..168 - so a
-    dark panel there can only be the toast. Clouds drift between the two frames, so the
-    assertion is the dark panel's presence and later absence, never a whole-frame diff
-    (a calibration on 20261123T213114-native-toast-9nbbqsax measured 89615 early panel pixels
-    and 170 late, the late ones being terrain silhouette)."""
+    The client raises it on the Play login packet (10 s visible). The scene teleports, fills the
+    platform, teleports back, waits 40 ticks and shoots `toast-early`, then `toast-late` about
+    16 s later. The player stands still, and the ROI is the panel's own
+    `gui/sprites/toast/system` rectangle - `ToastManager` puts x = gui_width - width and y = 0,
+    which at GUI scale 3 on a 1280x720 frame is x 621..1280, y 0..168 - so a dark navy panel and
+    its yellow title there can only be the toast. Clouds drift between the two frames, so the
+    assertion is the panel's presence and later absence, never a whole-frame diff (calibrated on
+    20261123T215339-native-toast-nmjj7q5f: early panel 89445, late 0; title 3195 vs 0)."""
     shots = _qa._load_shots(probe, artifact, ("toast-early", "toast-late"))
     early_f, late_f = shots["toast-early"][0], shots["toast-late"][0]
     probe.check("toast_camera_unchanged", all(
         abs(a - b) < 0.01 for a, b in zip(early_f["camera_position"], late_f["camera_position"])
     ) and abs(early_f["yaw"] - late_f["yaw"]) < 0.01 and abs(early_f["pitch"] - late_f["pitch"]) < 0.01)
-    box = (600, 0, 1281, 170)
+    box = (621, 0, 1280, 168)
     panel = lambda r, g, b: max(r, g, b) < 90
+    # `AdvancementToast`/`SystemToast` title ink: 0xffff00 on the navy panel.
+    title = lambda r, g, b: r > 170 and g > 170 and b < 140
     early, late = shots["toast-early"][1], shots["toast-late"][1]
     early_panel, late_panel = _count(early, box, panel), _count(late, box, panel)
+    early_title, late_title = _count(early, box, title), _count(late, box, title)
     probe.report["toast_roi"] = list(box)
-    probe.report["toast_pixels"] = {"early_panel": early_panel, "late_panel": late_panel}
-    probe.check("toast_panel_appeared", early_panel > 1500 and late_panel < 400)
+    probe.report["toast_pixels"] = {
+        "early_panel": early_panel,
+        "late_panel": late_panel,
+        "early_title": early_title,
+        "late_title": late_title,
+    }
+    probe.check("toast_panel_appeared", early_panel > 1500 and late_panel < 50)
+    probe.check("toast_title_drawn", early_title > 800 and late_title < 50)
     probe.report["visual_review_required"] = [
         "Inspect toast-early/toast-late; the pixels prove a toast panel was drawn, not the vanilla layout."
     ]
