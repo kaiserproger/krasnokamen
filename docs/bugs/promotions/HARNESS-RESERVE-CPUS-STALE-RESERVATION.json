@@ -1,0 +1,112 @@
+{
+  "id": "HARNESS-RESERVE-CPUS-STALE-RESERVATION",
+  "verdict": "promoted",
+  "fix_commit": "patch:f0dab557b9b203492e275eee61d7e9ecdca4268cabf3d35f8c1dfa4a9a6b6d79",
+  "fix_commit_full": "patch:f0dab557b9b203492e275eee61d7e9ecdca4268cabf3d35f8c1dfa4a9a6b6d79",
+  "promoted_at": "2026-11-23T16:49:30+00:00",
+  "tree_head": "0fd62b84ae471ca584ef48338c480fc697925097",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "f0dab557b9b203492e275eee61d7e9ecdca4268cabf3d35f8c1dfa4a9a6b6d79",
+  "reversed_files": [
+    "tools/dev/mem-run.sh",
+    "tools/dev/reserve-cpus"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.dev.test_reserve_cpus:MemRunReservationTests.test_a_live_reservation_logs_the_cpus_it_excludes": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_reserve_cpus.py",
+        "line": 176,
+        "error": "AssertionError"
+      }
+    },
+    "python:tools.dev.test_reserve_cpus:MemRunReservationTests.test_a_reservation_covering_the_whole_pool_is_named_not_silently_dropped": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_reserve_cpus:MemRunReservationTests.test_a_stale_reservation_is_named_cleared_and_does_not_pin_the_scope": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_reserve_cpus.py",
+        "line": 167,
+        "error": "AssertionError"
+      }
+    },
+    "python:tools.dev.test_reserve_cpus:ReserveCpusTests.test_a_dead_owner_is_cleared_instead_of_blocking_the_next_reservation": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_reserve_cpus.py",
+        "line": 75,
+        "error": "AssertionError"
+      }
+    },
+    "python:tools.dev.test_reserve_cpus:ReserveCpusTests.test_a_one_line_file_from_an_older_writer_is_honoured": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_reserve_cpus:ReserveCpusTests.test_a_reservation_records_its_live_owner": {
+      "state": "unrunnable",
+      "detail": "no executed test or unittest error; see log"
+    },
+    "python:tools.dev.test_reserve_cpus:ReservedCpusProtocolTests.test_a_corpse_is_stale_and_a_live_owner_is_kept": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_reserve_cpus:ReservedCpusProtocolTests.test_a_reservation_rewritten_after_the_verdict_is_not_unlinked": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_reserve_cpus:ReservedCpusProtocolTests.test_clear_removes_a_corpse_and_keeps_a_live_reservation": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "python:tools.dev.test_reserve_cpus:MemRunReservationTests.test_a_live_reservation_logs_the_cpus_it_excludes": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_reserve_cpus:MemRunReservationTests.test_a_reservation_covering_the_whole_pool_is_named_not_silently_dropped": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_reserve_cpus:MemRunReservationTests.test_a_stale_reservation_is_named_cleared_and_does_not_pin_the_scope": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_reserve_cpus:ReserveCpusTests.test_a_dead_owner_is_cleared_instead_of_blocking_the_next_reservation": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_reserve_cpus:ReserveCpusTests.test_a_one_line_file_from_an_older_writer_is_honoured": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_reserve_cpus:ReserveCpusTests.test_a_reservation_records_its_live_owner": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_reserve_cpus:ReservedCpusProtocolTests.test_a_corpse_is_stale_and_a_live_owner_is_kept": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_reserve_cpus:ReservedCpusProtocolTests.test_a_reservation_rewritten_after_the_verdict_is_not_unlinked": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_reserve_cpus:ReservedCpusProtocolTests.test_clear_removes_a_corpse_and_keeps_a_live_reservation": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T164446-ledger-promote-gsr06j82"
+}
