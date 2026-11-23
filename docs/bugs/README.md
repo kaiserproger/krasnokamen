@@ -413,8 +413,9 @@ be a test file, and `_promotion_errors` refuses a receipt whose `reversed_files`
 A stale patch-mode receipt (missing committed patch or a patch a later commit rewrote) is a REPORT: `regressions` prints "stale patch-mode receipts: N, M without patch" and writes the list; only `ledger promote`/`--dry-run` is strict about it. A committed patch whose bytes differ from the row's `fix_commit` digest is an error.
 
 Patch-mode rows (`fix_commit = "patch:<sha256>"`) are re-audited by reversing their committed
-`docs/bugs/fix-patches/<ID>.patch` on the tree being promoted; a patch that no longer reverses is a
-stale receipt and `_promotion_errors` names it.
+`docs/bugs/fix-patches/<ID>.patch` on the tree being promoted; that reversal is what `ledger promote` and
+a `--dry-run` do, and a patch that no longer reverses is refused there. `regressions` (L2) only reports
+the backlog, as stated above.
 
 ## Probing rows before assignment
 

@@ -28,6 +28,13 @@ construct `run_split(..., sequential=True)` themselves, so reversing those hunks
 running at all. The per-part budget is a separate concern (review item 1 of the D123Harness review) and
 its own tests stay green under this control.
 
+## The two earlier commits
+
+`ef1e8e10` and `49ce8497` are the row's history: they made the split sequential for *every* gate and
+counted the parts' receipts. Their hunks are not in this patch — reason (b): they are API and behaviour
+the kept `run_split` tests call (reversing them stops those tests from running), and reason (c) for the
+receipt-counting lines: `725ee9efe1` rewrote them, so no HEAD equivalent exists.
+
 ## Proving ref and line
 
 `python:tools.harness.test_split_parts:SplitPartsTests.test_the_screens_voice_split_driver_runs_its_legs_in_sequence`

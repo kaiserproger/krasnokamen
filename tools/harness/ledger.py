@@ -290,6 +290,7 @@ _FIXTURE_PANICS = (
 )
 _ASSERT_LINE = re.compile(r'\b(?:assert(?:_eq|_ne)?!|debug_assert(?:_eq|_ne)?!|panic!\s*\()')
 _ASSERT_MESSAGE = re.compile(r'^(assertion|assert\b|explicit panic|panicked at)', re.IGNORECASE)
+_UNWRAP_LINE = re.compile(r'\.(?:unwrap|expect)\s*\(')
 
 FIXTURE_FAILURE = 'fixture-failure'
 UNPROVEN_PANIC = 'unproven-panic'
@@ -351,7 +352,11 @@ def _panic_class(tree, location, message):
     if not 1 <= line <= len(lines):
         return 'unknown'
     source = lines[line - 1]
-    if _ASSERT_LINE.search(source) and _ASSERT_MESSAGE.search(message or ''):
+    # A line that is an unwrap/expect (with #[track_caller] the test's own line) is only an assertion
+    # when the panic message says so (an `assert_eq!` inside `expect(...)`); otherwise it is class (c).
+    if _UNWRAP_LINE.search(source) and not _ASSERT_MESSAGE.match(message or ''):
+        return 'unknown'
+    if _ASSERT_LINE.search(source) and (_ASSERT_MESSAGE.search(message or '') or _UNWRAP_LINE.search(source)):
         return 'assertion'
     return 'unknown'
 

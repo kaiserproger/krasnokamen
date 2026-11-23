@@ -68,10 +68,21 @@ def _promotion_errors(ident, bug):
     # lives at promote/--dry-run, which require and reverse the patch. run() prints the backlog.
     # A patch whose bytes are not the ones fix_commit names is a different inconsistency: fatal.
     if isinstance(fix_commit, str) and fix_commit.startswith('patch:') and ident not in BASE_FIXED:
-        import hashlib
+        # The digest is the one `ledger promote` records: the *non-test* hunks of the committed file
+        # (a curated --fix-patch may carry a test hunk too). Hashing the raw file would reject rows
+        # promote accepts (Main X1).
+        from . import ledger as ledger_tool
         patch = _patch_file(ident)
-        if patch is not None and hashlib.sha256(patch.read_bytes()).hexdigest() != fix_commit[len('patch:'):]:
-            return [f'{ident}: committed patch digest differs from fix_commit ({patch.name})']
+        if patch is not None:
+            try:
+                hunks, _, _ = ledger_tool._split_non_test(
+                    patch.read_text(errors='surrogateescape'),
+                    lambda path: (REPO_ROOT / path).read_text(errors='surrogateescape'))
+            except Exception:
+                return []  # an unparseable patch is reported by the staleness list, not re-judged here
+            import hashlib
+            if hashlib.sha256(hunks.encode(errors='surrogateescape')).hexdigest() != fix_commit[len('patch:'):]:
+                return [f'{ident}: committed patch non-test hunks differ from fix_commit ({patch.name})']
     if promotion is None:
         if bug.get('status') == 'fixed' and ident not in BASE_FIXED:
             return [f'{ident}: fixed without a promotion receipt; only `python3 -m tools.harness ledger promote` may set fixed']

@@ -1008,9 +1008,10 @@ promotion = "docs/bugs/promotions/X.json"
 class StalePatchTests(unittest.TestCase):
     """A patch-mode receipt whose patch no longer reverses is a report in L2, strict at promote.
 
-    ReviewD123Harness3 N1 / Main: an ordinary edit of a historical fix must never turn L2 red, so
-    `_promotion_errors` is silent about staleness (it only reports through run()); the missing patch
-    file stays fatal, and `ledger promote`/`--dry-run` refuses when the patch does not reverse."""
+    ReviewD123Harness3 N1 / Main X1/B1: an ordinary edit of a historical fix must never turn L2 red, so
+    `_promotion_errors` is silent about a missing or stale patch (run() reports the backlog) but fatal
+    when the committed patch's non-test hunks differ from the row's digest. `ledger promote`/`--dry-run`
+    refuses when the patch does not reverse."""
 
     def root(self, with_patch=True):
         import tempfile, hashlib
@@ -1050,6 +1051,31 @@ promotion = "docs/bugs/promotions/X.json"
             stale = regressions._stale_rows([row])
         self.assertEqual(errors, [])
         self.assertEqual(stale, [('X', 'no committed patch')])
+
+    def test_the_digest_is_the_non_test_hunks_like_promote(self):
+        # X1: a curated --fix-patch may carry a test hunk; promote hashes only its non-test hunks, so
+        # regressions must compute the same digest or it fails rows promote accepted.
+        import hashlib
+        root = self.root()
+        rows = root / 'docs/bugs/rows/X.toml'
+        text = ('diff --git a/src/engine.rs b/src/engine.rs\n--- a/src/engine.rs\n+++ b/src/engine.rs\n'
+                '@@ -1 +1 @@\n-a\n+b\n'
+                'diff --git a/tests/new_case.rs b/tests/new_case.rs\n--- a/tests/new_case.rs\n+++ b/tests/new_case.rs\n'
+                '@@ -1 +1 @@\n-a\n+b\n')
+        (root / 'docs/bugs/fix-patches/X.patch').write_text(text)
+        hunks = ('diff --git a/src/engine.rs b/src/engine.rs\n--- a/src/engine.rs\n+++ b/src/engine.rs\n'
+                 '@@ -1 +1 @@\n-a\n+b\n')
+        digest = hashlib.sha256(hunks.encode()).hexdigest()
+        old = rows.read_text().split('fix_commit = "')[1].split('"')[0]
+        body = rows.read_text().replace(old, 'patch:' + digest)
+        rows.write_text(body)
+        receipt = json.loads((root / 'docs/bugs/promotions/X.json').read_text())
+        receipt['fix_commit'] = 'patch:' + digest
+        (root / 'docs/bugs/promotions/X.json').write_text(json.dumps(receipt))
+        with patch.object(regressions, 'REPO_ROOT', root):
+            row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
+            errors = regressions._promotion_errors('X', row)
+        self.assertEqual(errors, [], 'a test hunk in the file must not change the digest')
 
     def test_a_stale_patch_is_a_report_not_an_error(self):
         root = self.root()

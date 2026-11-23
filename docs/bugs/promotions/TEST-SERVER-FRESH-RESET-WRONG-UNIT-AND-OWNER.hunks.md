@@ -6,8 +6,8 @@ later script's comments). The oracle is `tools/dev/test_deploy_reset.py`: it rea
 text and never launches it, because the owner prohibits executing this helper in any form.
 
 The four proving refs and their red lines are in `promotions/TEST-SERVER-FRESH-RESET-WRONG-UNIT-AND-OWNER.json`;
-the receipt reds are at `test_deploy_reset.py:31` (unit name and the exact `is-active` boundary),
-`:53` (the whole archive listing), `:64` (backup collision and the second-resolution name) and `:70`
-(the `User=` default chown), plus the order test registered as a companion.
+the receipt `83c66ef99f` reds are at `test_deploy_reset.py:57` (unit name and the exact
+`is-active` boundary), `:68` (the whole archive listing) and `:75` (the `User=` default chown, backup
+collision included); the order test is registered as a ref and reds at its own assert in the control.
 
 Omitted: nothing — the patch is the whole script change.
