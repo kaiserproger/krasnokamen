@@ -295,7 +295,7 @@ pub(crate) fn inventory_transition_refused(
         return crate::player::PlayerEffects::default();
     }
     if let Some(slots) = crate::vehicles::container_slots_for_player(state, entity) {
-        return state.players[&entity].inventory_transition_refused(&slots);
+        return state.players[&entity].inventory_transition_refused(slots);
     }
     if crate::ender_chest::is_open(state, entity) {
         let slots = crate::ender_chest::contents(
