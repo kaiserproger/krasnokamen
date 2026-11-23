@@ -63,8 +63,10 @@ In the control all three fail at their own assertions: the pre-fix body
 resends the half-empty menu and leaves `open` set. The red is
 `chests_tests.rs:706:5` (the first `MenuContents`-for-the-closed-window
 assertion) for all three refs; the promote receipt is
-`.analysis/validation/20261123T223848-ledger-promote-2rc43auc`
-(`ledger-1-run.log:335`, `:354`, `:373`), restore green in the same receipt.
+`.analysis/validation/20261123T232452-ledger-promote-xi38rkf0`
+(`ledger-1-run.log:335`, `:354`, `:373` on the earlier identical-identity receipt
+`20261123T223848-ledger-promote-2rc43auc`; the current receipt re-ran and restored
+the refs green), restore green in the same receipt.
 
 ## Fix in several commits
 
