@@ -1,0 +1,81 @@
+{
+  "id": "MODEL-ENTITY-263-RIGS",
+  "verdict": "promoted",
+  "fix_commit": "client:e593fa04",
+  "fix_commit_full": "e593fa045cf892790052f600069c2de8c6ea4f9e",
+  "promoted_at": "2026-11-23T14:48:18+00:00",
+  "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T144555-native-263-entity-rigs-_qhtnu7a/result.json",
+    "client_head": "12e076e9c76113246aac2d029da4b3c8c5b601e0",
+    "server_binary_sha256": "dee4c21d0280895ebf04542635557186ea302e2d271d992bb910c2e9aca8b107",
+    "red": [
+      "harness:scene-shot:native-263-entity-rigs"
+    ],
+    "states": {
+      "harness:scene-shot:native-263-entity-rigs": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T144628-native-263-entity-rigs-ecyqjr89/result.json",
+    "client_head": "e593fa045cf892790052f600069c2de8c6ea4f9e",
+    "server_binary_sha256": "dee4c21d0280895ebf04542635557186ea302e2d271d992bb910c2e9aca8b107",
+    "green": [
+      "harness:scene-shot:native-263-entity-rigs"
+    ],
+    "states": {
+      "harness:scene-shot:native-263-entity-rigs": "green"
+    },
+    "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T144628-native-263-entity-rigs-ecyqjr89/result.json",
+    "client_head": "e593fa045cf892790052f600069c2de8c6ea4f9e",
+    "server_binary_sha256": "dee4c21d0280895ebf04542635557186ea302e2d271d992bb910c2e9aca8b107",
+    "green": [
+      "harness:scene-shot:native-263-entity-rigs"
+    ],
+    "states": {
+      "harness:scene-shot:native-263-entity-rigs": "green"
+    },
+    "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "93c6d981a19a944df13b2f52d24c545b22a1c762",
+    "paths": [
+      "assets/krasnokamen/entities/entity-facts.json",
+      "src/entities/presentation.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::asset_model_regression_tests::boat_and_raft_hulls_match_the_vanilla_26_3_layers": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::resources::tests::entity_render_263_cushion_activates_colored_rig_above_ground": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::resources::tests::entity_render_263_poplar_boats_use_boat_hulls_and_poplar_textures": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::resources::tests::entity_render_263_sulfur_cube_activates_both_layers_and_sizes": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::resources::tests::regression_263_cushion_and_painting_metadata": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T144711-ledger-promote-usvl3b_0"
+}
