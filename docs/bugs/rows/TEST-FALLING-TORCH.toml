@@ -4,7 +4,7 @@ title = "`falling_tests.rs:346-353` explicitly expects OLD torch replacement and
 area = "harness"
 repro = "cargo"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-FALLING-TORCH"
 regression = ["cargo:mc-core:falling::tests::empty_collision_attachment_is_not_a_floor_and_slab_landing_drops_instead"]
 fix_commit = "9cc59fb37b5ea1e543eaca53f5864a0c0613051c"
@@ -13,3 +13,4 @@ control_b_patch = "docs/bugs/test-only/TEST-FALLING-TORCH-defect.patch"
 control_a_files = ["crates/mc-core/src/falling_tests.rs"]
 control_b_sha256 = "84e8992c2a2173111ee8f030cd3ee504dbc1fde4337dc7507d54f4823141844d"
 repro_check = "Old versus new assertions of all three test files commit 9cc59fb37 corrected, and the independent evidence for each. (1) falling_tests.rs `empty_collision_attachment_is_not_a_floor_and_slab_landing_drops_instead` (line 345, the row symptom): old asserted block_at(pos) == sand (the empty-collision torch was overwritten) and spawned.is_empty(); new asserts the torch survives, spawned.len() == 1 with one minecraft:sand item, removed.len() == 1 and no falling entity left. Evidence: crates/mc-core/src/falling.rs:382-388 replacement-gated drop and the pinned FallingBlockEntity bytecode artifact 64820:1114-1176,1316-1335. Nothing removed or loosened. (2) dimensions_tests.rs `native_dimension_spawn_tables_and_census_are_local` (line 1657): old asserted the Nether biome equals minecraft:nether_wastes exactly; new accepts any Nether biome (nether_wastes, soul_sand_valley, crimson_forest, warped_forest, basalt_deltas) and still asserts End == minecraft:the_end; the biome-local spawn-entry assertion is unchanged. Evidence: the dimension seed places crimson_forest, so the old fixed name was an oracle defect, not a product change. (3) golems_tests.rs `natural_golem_player_damage_scales_with_difficulty` (line 369): old set player health to 100.0 and broke the loop when it fell below 100.0; new sets 20.0 and breaks below 20.0, so the observed golem hit is visible in the first blows; the damage-range assertions are unchanged. Control A: the pre-commit test hunks restored make (1) fail on current code at the block assertion; Control B: docs/bugs/test-only/TEST-FALLING-TORCH-defect.patch sets replaceable = true (every landing surface replaceable) so (1) fails at the torch-survival assertion, the same test (proving ref). Control A reverses only crates/mc-core/src/falling_tests.rs (control_a_files), so the other two corrections in the same commit stay in place; control A runs on current code (control_tree head)."
+promotion = "docs/bugs/promotions/TEST-FALLING-TORCH.json"
