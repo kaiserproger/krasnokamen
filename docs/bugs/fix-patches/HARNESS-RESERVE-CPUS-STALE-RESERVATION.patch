@@ -1,8 +1,8 @@
 diff --git a/tools/dev/mem-run.sh b/tools/dev/mem-run.sh
-index e996d44b8..e12ad19b3 100755
+index 685041ce0..a674207c2 100755
 --- a/tools/dev/mem-run.sh
 +++ b/tools/dev/mem-run.sh
-@@ -373,15 +373,37 @@ fi
+@@ -373,8 +373,26 @@ fi
  [ "$exclusive" = 1 ] && { niceness=0; cpu_pin=(); preemptible=0; }
  # CPUs held by tools/dev/reserve-cpus (owner 2026-11-16, Spain trials) stay out of every
  # new scope except one started with KRASNOKAMEN_RESERVED_CPUS=use; running scopes keep
@@ -14,69 +14,28 @@ index e996d44b8..e12ad19b3 100755
 +# stale list covers a whole pool) — #G4, CS341. A one-line file from an older writer has no
 +# owner and is honoured as-is (mixed-version compatibility).
 +reserved=
-+if [ -r "$dir/reserved-cpus" ]; then
-+  read -r reserved _ < "$dir/reserved-cpus" || true
-+  owner=$(sed -n '2p' "$dir/reserved-cpus" 2>/dev/null || true)
-+  if [ -n "$reserved" ] && [ -n "$owner" ]; then
-+    owner_pid=${owner%% *}; owner_start=${owner##* }
-+    owner_live=$(awk '{print $22}' "/proc/$owner_pid/stat" 2>/dev/null || true)
-+    if [ "$owner_live" != "$owner_start" ]; then
-+      echo "mem-run: ignoring stale CPU reservation '$reserved' (owner $owner is gone or its pid was reused); removing $dir/reserved-cpus" >&2
-+      rm -f "$dir/reserved-cpus"
-+      reserved=
-+    fi
-+  fi
++if [ -e "$dir/reserved-cpus" ]; then
++  verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>/dev/null || echo none)
++  case "$verdict" in
++    keep\ *) reserved=${verdict#keep } ;;
++    stale\ *)
++      echo "mem-run: ignoring stale CPU reservation '${verdict#stale }' (its owner is gone or its pid was reused); clearing $dir/reserved-cpus" >&2
++      python3 "$here/reserved_cpus.py" clear "$dir" >&2 || true
++      # Clearing re-reads under the lock, so it never removes a reservation written meanwhile:
++      # if one is there now, it is live and this scope honours it.
++      verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>/dev/null || echo none)
++      [ "${verdict%% *}" = keep ] && reserved=${verdict#keep }
++      ;;
++  esac
 +fi
  if [ -n "$reserved" ] && [ "${KRASNOKAMEN_RESERVED_CPUS:-}" != use ] && [ "$exclusive" = 0 ]; then
    declare -A held=()
    for part in ${reserved//,/ }; do for ((c = ${part%-*}; c <= ${part#*-}; c++)); do held[$c]=1; done; done
-   pool=0-$((ncpu - 1)); [ "$perf" = 1 ] && pool=$perf_cpus
-   allowed=
-   for part in ${pool//,/ }; do for ((c = ${part%-*}; c <= ${part#*-}; c++)); do [ -n "${held[$c]:-}" ] || allowed+=${allowed:+,}$c; done; done
--  [ -n "$allowed" ] && cpu_pin=(taskset -c "$allowed")
-+  if [ -n "$allowed" ]; then
-+    cpu_pin=(taskset -c "$allowed")
-+    echo "mem-run: reserved CPUs $reserved are excluded from this scope (cpus=$allowed)" >&2
-+  else
-+    echo "mem-run: reserved CPUs $reserved cover this whole pool; the reservation cannot restrict it, so the scope keeps cpus=$pool" >&2
-+  fi
- fi
- [ "$preemptible" = 1 ] && props=("${props[@]/CPUWeight=50/CPUWeight=10}")
- [ -n "${KRASNOKAMEN_SCENE_SLOT:-}" ] && [ "$perf" = 0 ] && props=("${props[@]/CPUWeight=*/CPUWeight=500}")
-@@ -420,7 +442,27 @@ printf "%s\t%s\t%s\t%s\n" "$cg" "$MEMRUN_EST_KIB" "$MEMRUN_PREEMPTIBLE" "$MEMRUN
- [ "$MEMRUN_EXCLUSIVE" = 1 ] || { flock -u 3; exec 3>&-; }
- notify start
- "$@" <&0 3>&- 6>&- 7>&- 8>&- 9>&- & c=$!
--trap "kill -TERM $c 2>/dev/null" TERM INT HUP
-+# A cancellation must reach the whole scope, not only the direct child: a descendant that ignores
-+# TERM would otherwise hold the wrapper in `wait`, the scope alive and the build token unspent until
-+# a SIGKILL (#G5, CS341). Forward TERM to every process in the scope cgroup and ask the guardian to
-+# escalate to cgroup.kill after its grace, so the wrapper always ends.
-+cancel() {
-+  # One forwarding pass: the scope members get this TERM too, so re-entering the trap would
-+  # recurse; a later signal is already covered by the guardian escalation.
-+  [ "${cancel_done:-0}" = 1 ] && return
-+  cancel_done=1
-+  # The guardian owns escalation: tell it (its own fifo, not the watchdog events stream).
-+  local fd
-+  exec {fd}<>"$MEMRUN_GUARD_DIR/events"
-+  printf "cancel\n" >&"$fd"
-+  exec {fd}>&-
-+  local pid
-+  for pid in $(cat "/sys/fs/cgroup$cg/cgroup.procs" 2>/dev/null); do
-+    [ "$pid" = "$$" ] && continue
-+    kill -TERM "$pid" 2>/dev/null || true
-+  done
-+}
-+trap cancel TERM INT HUP
- st=0
- wait "$c" || st=$?
- while kill -0 "$c" 2>/dev/null; do wait "$c" || st=$?; done
 diff --git a/tools/dev/reserve-cpus b/tools/dev/reserve-cpus
-index 99dcc2035..23ff8d119 100755
+index 99dcc2035..edddd0b5d 100755
 --- a/tools/dev/reserve-cpus
 +++ b/tools/dev/reserve-cpus
-@@ -6,6 +6,11 @@
+@@ -6,9 +6,19 @@
  # mem-run scope started while <command> runs, then give them back. A command
  # that should use the reserved CPUs (the Spain trial servers) runs mem-run with
  # KRASNOKAMEN_RESERVED_CPUS=use. Scopes already running keep their placement.
@@ -85,31 +44,54 @@ index 99dcc2035..23ff8d119 100755
 +# of /proc/<pid>/stat). A killed run leaves the file behind; mem-run and this
 +# script read the owner to tell a live reservation from a corpse (pid gone or
 +# reused), so a stale file cannot silently pin every later scope (#G4, CS341).
++# Clearing a corpse and creating a reservation are serialized on
++# `reserved-cpus.lock` (tools/dev/reserved_cpus.py): a reservation written while a
++# corpse is judged is never removed. Install order on a host: mem-run.sh first,
++# then this script; only the new pair is race-safe together.
  set -euo pipefail
  dir=/tmp/solaris-mem-slots
  file=$dir/reserved-cpus
-@@ -17,8 +22,23 @@ for part in ${cpus//,/ }; do
++here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ [ $# -ge 3 ] && [ "$2" = -- ] || { echo "usage: reserve-cpus <cpu-list> -- <command> [args...]" >&2; exit 2; }
+ cpus=$1; shift 2
+ [[ $cpus =~ ^[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$ ]] || { echo "reserve-cpus: invalid CPU list '$cpus'" >&2; exit 2; }
+@@ -17,12 +27,36 @@ for part in ${cpus//,/ }; do
    [ "${part#*-}" -lt "$ncpu" ] && [ "${part%-*}" -lt "$ncpu" ] || { echo "reserve-cpus: CPU in '$part' is not below $ncpu" >&2; exit 2; }
  done
  mkdir -p "$dir"
-+# A reservation whose owner is gone (SIGKILL, OOM, a wrapper kill) is a corpse: name it and
-+# clear it instead of refusing every future reservation behind it.
-+stale_reservation() {
-+  local owner pid start live
-+  owner=$(sed -n '2p' "$file" 2>/dev/null || true)
-+  [ -n "$owner" ] || return 1          # one-line file: an older writer, cannot be judged
-+  pid=${owner%% *}; start=${owner##* }
-+  live=$(awk '{print $22}' "/proc/$pid/stat" 2>/dev/null || true)
-+  [ -z "$live" ] || [ "$live" != "$start" ]
-+}
-+if [ -e "$file" ] && stale_reservation; then
-+  echo "reserve-cpus: clearing stale reservation $(head -n1 "$file" 2>/dev/null || true) (owner $(sed -n '2p' "$file") is gone)" >&2
-+  rm -f "$file"
-+fi
-+starttime=$(awk '{print $22}' "/proc/$$/stat")
- # noclobber makes the create atomic: a second reservation is refused, not merged.
+-# noclobber makes the create atomic: a second reservation is refused, not merged.
 -if ! (set -o noclobber; printf '%s\n' "$cpus" > "$file") 2>/dev/null; then
-+if ! (set -o noclobber; printf '%s\n%s %s\n' "$cpus" "$$" "$starttime" > "$file") 2>/dev/null; then
++# A reservation whose owner is gone (SIGKILL, OOM, a wrapper kill) is a corpse: name it and
++# clear it instead of refusing every future reservation behind it. The helper re-reads under
++# the lock and unlinks only the bytes it judged, so a fresh reservation is never removed.
++case "$(python3 "$here/reserved_cpus.py" verdict "$dir")" in
++  stale\ *) python3 "$here/reserved_cpus.py" clear "$dir" || true ;;
++esac
++version=$(awk '{print $22}' "/proc/$$/stat")
++# noclobber inside the lock makes the create atomic: a second reservation is refused, not merged.
++if ! (
++  exec {lf}<>"$dir/reserved-cpus.lock"
++  flock "$lf"
++  set -o noclobber
++  printf '%s\n%s %s\n' "$cpus" "$$" "$version" > "$file"
++) 2>/dev/null; then
    echo "reserve-cpus: CPUs already reserved: $(cat "$file" 2>/dev/null)" >&2
    exit 75
  fi
+-release() { rm -f "$file"; echo "reserve-cpus: released $cpus" >&2; }
++starttime=$version
++release() {
++  local content expected
++  (
++    exec {lf}<>"$dir/reserved-cpus.lock"
++    flock "$lf"
++    content=$(cat "$file" 2>/dev/null || true)
++    expected=$(printf '%s\n%s %s' "$cpus" "$$" "$starttime")
++    # Only our own file: a reservation that replaced it is not ours to remove.
++    if [ "$content" = "$expected" ]; then rm -f -- "$file"; fi
++  )
++  echo "reserve-cpus: released $cpus" >&2
++}
+ trap release EXIT
+ trap 'exit 130' INT
+ trap 'exit 143' TERM

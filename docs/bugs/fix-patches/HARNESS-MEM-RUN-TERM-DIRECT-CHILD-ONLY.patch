@@ -1,0 +1,115 @@
+diff --git a/tools/dev/mem-run-guard.py b/tools/dev/mem-run-guard.py
+index d74e2a1c1..c9e6e9071 100755
+--- a/tools/dev/mem-run-guard.py
++++ b/tools/dev/mem-run-guard.py
+@@ -8,6 +8,7 @@ import shutil
+ import signal
+ import socket
+ import sys
++import time
+ 
+ if sys.argv[1] == '--send-locks':
+     fds = array.array('i')
+@@ -24,7 +25,7 @@ if sys.argv[1] == '--send-locks':
+             raise RuntimeError('guardian did not accept locks')
+     sys.exit(0)
+ 
+-control, cgroup, wrapper, caller = sys.argv[1:]
++control, cgroup, wrapper, caller, *rest = sys.argv[1:]
+ selector = selectors.DefaultSelector()
+ fifo = os.open(control + '/events', os.O_RDWR | os.O_NONBLOCK)
+ listener = socket.socket(socket.AF_UNIX)
+@@ -33,6 +34,16 @@ listener.listen(1)
+ selector.register(listener, selectors.EVENT_READ)
+ held_locks = []
+ selector.register(fifo, selectors.EVENT_READ)
++# A cancellation the wrapper forwards (TERM/INT/HUP) starts this escalation: TERM alone cannot
++# stop a descendant that ignores it, and the wrapper would wait forever (#G5, CS341). The grace is
++# an argument from mem-run.sh (`KRASNOKAMEN_MEMRUN_CANCEL_GRACE`, default 15 s): a wrapper killed
++# at the deadline takes its command with it, so a harness that is still writing result.json at the
++# escalation is cut, exactly as a TERM-ignoring descendant would be.
++try:
++    CANCEL_GRACE_SECONDS = float(rest[0]) if rest else 15.0
++except ValueError:
++    sys.exit(f'mem-run-guard: grace must be seconds, got {rest[0]!r}')
++escalate_at = None
+ try:
+     wrapper_fd = os.pidfd_open(int(wrapper))
+     selector.register(wrapper_fd, selectors.EVENT_READ)
+@@ -42,7 +53,10 @@ try:
+     ready_fd = os.open(control + '/ready', os.O_RDWR | os.O_NONBLOCK)
+     os.write(ready_fd, b'ready\n')
+     while True:
+-        events = selector.select()
++        # A cancelled scope is killed after the grace period, whether or not anything else happens.
++        wait = None if escalate_at is None else max(0.0, escalate_at - time.monotonic())
++        events = selector.select(wait)
++        escalated = escalate_at is not None and time.monotonic() >= escalate_at
+         # Completion wins over wrapper exit, but not over the caller dying.
+         caller_dead = caller_fd != wrapper_fd and any(key.fd == caller_fd for key, _ in events)
+         if any(key.fileobj == listener for key, _ in events):
+@@ -59,11 +73,14 @@ try:
+             listener.close()
+         done = False
+         if any(key.fd == fifo for key, _ in events):
+-            done = b'done\n' in os.read(fifo, 4096) and not caller_dead
++            message = os.read(fifo, 4096)
++            if b'cancel' in message:
++                escalate_at = time.monotonic() + CANCEL_GRACE_SECONDS
++            done = b'done\n' in message and not caller_dead
+         if done:
+             # Hold the slot locks until the wrapper exits and the scope empties.
+             select.select([wrapper_fd, caller_fd], [], [])
+-        if done or any(key.fd in (wrapper_fd, caller_fd) for key, _ in events):
++        if done or escalated or any(key.fd in (wrapper_fd, caller_fd) for key, _ in events):
+             # Prevent a surviving launcher from creating the scope after our check.
+             try:
+                 signal.pidfd_send_signal(wrapper_fd, signal.SIGKILL)
+diff --git a/tools/dev/mem-run.sh b/tools/dev/mem-run.sh
+index 775f9bcff..a674207c2 100755
+--- a/tools/dev/mem-run.sh
++++ b/tools/dev/mem-run.sh
+@@ -421,6 +421,7 @@ unit="krasnokamen-mem-run-${guard_dir##*.}.scope"
+ mkfifo "$guard_dir/events" "$guard_dir/ready"
+ if ! systemd-run --user --quiet --collect --unit="${unit%.scope}-guard" \
+   python3 "$here/mem-run-guard.py" "$guard_dir" "/sys/fs/cgroup$cgroup/$unit" "$$" "$PPID" \
++  "${KRASNOKAMEN_MEMRUN_CANCEL_GRACE:-15}" \
+   || ! timeout 10 bash -c 'read -r ready < "$1/ready"' _ "$guard_dir"; then
+   rm -rf "$guard_dir"
+   echo "mem-run: failed to start scope guardian" >&2
+@@ -443,7 +444,34 @@ printf "%s\t%s\t%s\t%s\n" "$cg" "$MEMRUN_EST_KIB" "$MEMRUN_PREEMPTIBLE" "$MEMRUN
+ [ "$MEMRUN_EXCLUSIVE" = 1 ] || { flock -u 3; exec 3>&-; }
+ notify start
+ "$@" <&0 3>&- 6>&- 7>&- 8>&- 9>&- & c=$!
+-trap "kill -TERM $c 2>/dev/null" TERM INT HUP
++# A cancellation must reach the whole scope, not only the direct child: a descendant that ignores
++# TERM would otherwise hold the wrapper in `wait`, the scope alive and the build token unspent until
++# a SIGKILL (#G5, CS341). Forward TERM to every process in the scope cgroup and ask the guardian to
++# escalate to cgroup.kill after its grace, so the wrapper always ends.
++cancel() {
++  # One forwarding pass: the scope members get this TERM too, so re-entering the trap would
++  # recurse; a later signal is already covered by the guardian escalation.
++  [ "${cancel_done:-0}" = 1 ] && return
++  cancel_done=1
++  # The direct child first, unconditionally: a failing cgroup.procs read (or an unusable
++  # guardian fifo) must never leave the wrapper in `wait` with nothing signalled (#G5, CS341).
++  kill -TERM "$c" 2>/dev/null || true
++  # The guardian owns escalation: tell it (its own fifo, not the watchdog events stream).
++  local fd
++  if exec {fd}<>"$MEMRUN_GUARD_DIR/events"; then
++    printf "cancel\n" >&"$fd" ||
++      echo "mem-run: cancel: guardian fifo write failed; the scope TERM still applies, no cgroup.kill escalation" >&2
++    exec {fd}>&-
++  else
++    echo "mem-run: cancel: cannot open $MEMRUN_GUARD_DIR/events; the guardian cannot escalate to cgroup.kill" >&2
++  fi
++  local pid
++  for pid in $(cat "/sys/fs/cgroup$cg/cgroup.procs" 2>/dev/null); do
++    [ "$pid" = "$$" ] && continue
++    kill -TERM "$pid" 2>/dev/null || true
++  done
++}
++trap cancel TERM INT HUP
+ st=0
+ wait "$c" || st=$?
+ while kill -0 "$c" 2>/dev/null; do wait "$c" || st=$?; done

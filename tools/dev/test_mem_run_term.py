@@ -126,7 +126,7 @@ class CancelledScopeTests(unittest.TestCase):
         # cancelling one job by pid does. Only the direct child used to receive it.
         os.kill(int(wrapper), signal.SIGTERM)
         try:
-            proc.wait(timeout=90)
+            proc.wait(timeout=45)
             wait_scope_empty(cg)
         except subprocess.TimeoutExpired:
             self.scope_kill(cg)
@@ -169,7 +169,7 @@ class CancelledScopeTests(unittest.TestCase):
                             'a compile scope must hold a build token while it runs')
         os.kill(int(wrapper), signal.SIGTERM)
         try:
-            proc.wait(timeout=90)
+            proc.wait(timeout=45)
             wait_scope_empty(cg)
         except subprocess.TimeoutExpired:
             self.scope_kill(cg)
