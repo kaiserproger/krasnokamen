@@ -339,6 +339,10 @@ def _panic_class(tree, location, message):
     file, line = location
     if any(pattern.search(message or '') for pattern in _FIXTURE_PANICS) or _SETUP_PANIC.match(message or ''):
         return 'fixture'
+    if not _TEST_PATH.search(file):
+        # An assert macro in production code (even in a test-support module outside _TEST_PATH) is not
+        # evidence about the oracle: class (c) (ReviewD123Harness3 N3b).
+        return 'unknown'
     try:
         lines = (Path(tree) / file).read_text(errors='surrogateescape').splitlines()
     except OSError:
@@ -1105,8 +1109,13 @@ def _classify_control(ident, control, row, tree):
             continue
         location = f"{assertion.get('file')}:{assertion.get('line')}"
         if not assertion:
-            # No panic location (a runner that reports FAIL without one): unchanged, as before.
-            out[ref] = entry
+            # A cargo FAIL with no panic line is how a `-> Result<()>` test shows a setup error through
+            # `?`; it is not an assertion unless the row names it (ReviewD123Harness3 N3a).
+            if ref.startswith('cargo:') and not named.get(ref):
+                out[ref] = {**entry, 'state': UNPROVEN_PANIC,
+                            'detail': entry.get('detail', '') + ' | cargo FAIL without a panic location; name the ref in proving_assertions'}
+            else:
+                out[ref] = entry
         elif assertion.get('class') == 'fixture':
             out[ref] = {**entry, 'state': FIXTURE_FAILURE,
                         'detail': entry.get('detail', '') + f' | fixture panic at {location}'}

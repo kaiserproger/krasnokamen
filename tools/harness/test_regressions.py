@@ -1046,6 +1046,24 @@ class FixturePanicTests(unittest.TestCase):
         self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/tick_tests.rs', 8),
                                              'called `Option::unwrap()` on a `None` value'), 'fixture')
 
+    def test_an_assert_macro_outside_test_paths_is_not_an_assertion(self):
+        # ReviewD123Harness3 N3b: production code and test-support modules outside _TEST_PATH panic
+        # through assert! too; that is class (c), not evidence about the oracle.
+        root = self.tree()
+        (root / 'crates/mc-core/src/test_support.rs').write_text(
+            'fn fixture() {\n    assert!(true);\n}\n')
+        self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/test_support.rs', 2),
+                                             'assertion failed'), 'unknown')
+
+    def test_a_cargo_red_without_a_panic_line_needs_the_row_to_name_it(self):
+        # N3a: a `-> Result<()>` test fails through `?` with no panic line; that is not an assertion.
+        entry = {'state': ledger.RED, 'detail': 'FAIL'}
+        refused = ledger._classify_control('B', {'cargo:mc-core:x::t': entry}, {}, Path('/nonexistent'))
+        self.assertEqual(refused['cargo:mc-core:x::t']['state'], ledger.UNPROVEN_PANIC)
+        named = {'proving_assertions': {'cargo:mc-core:x::t': 'crates/mc-core/src/x_tests.rs:1'}}
+        self.assertEqual(ledger._classify_control('B', {'cargo:mc-core:x::t': entry}, named,
+                                                  Path('/nonexistent'))['cargo:mc-core:x::t']['state'], ledger.RED)
+
     def test_an_assert_macro_is_a_red_even_in_a_shared_helper(self):
         root = self.tree()
         self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/tick_tests.rs', 8),
@@ -1318,7 +1336,10 @@ class LedgerToolTests(unittest.TestCase):
             seen.append(((tree / 'src/engine.rs').read_text(), (tree / 'tests/new_case.rs').exists()))
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
             state = ledger.RED if buggy and red_when_buggy else ledger.GREEN
-            return {ref: {'state': state, 'detail': ''} for ref in refs}
+            # A red names its assertion like a real runner does; a bare FAIL on a cargo ref is class (c).
+            assertion = {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}
+            return {ref: ({'state': state, 'detail': '', 'assertion': assertion} if state == ledger.RED
+                          else {'state': state, 'detail': ''}) for ref in refs}
         run.seen = seen
         return run
 
@@ -1649,7 +1670,7 @@ class LedgerToolTests(unittest.TestCase):
         def runner(ctx, refs, tree, client):
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
             seen.append(((tree / 'src/util.rs').read_text(), (tree / 'src/new.rs').read_text(), buggy))
-            return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
+            return {ref: ({'state': state, 'detail': '', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}} if state == ledger.RED else {'state': state, 'detail': ''}) for ref in refs for state in [ledger.RED if buggy else ledger.GREEN]}
         receipt = self.promote(root, runner)
         # Control and restore both run on HEAD + the uncommitted diff + the untracked file.
         self.assertEqual(seen, [('u2\n', 'n1\n', True), ('u2\n', 'n1\n', False)])
@@ -1674,7 +1695,7 @@ class LedgerToolTests(unittest.TestCase):
     def test_restored_check_that_is_not_green_is_refused(self):
         root = self.scratch()
         def always_red(ctx, refs, tree, client):
-            return {ref: {'state': ledger.RED, 'detail': 'boom'} for ref in refs}
+            return {ref: {'state': ledger.RED, 'detail': 'boom', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}} for ref in refs}
         with self.assertRaisesRegex(ledger.Refused, 'not green on the tree being promoted'):
             self.promote(root, always_red)
 
@@ -1808,7 +1829,7 @@ class LedgerToolTests(unittest.TestCase):
         ctx = profiles.ProfileContext(self.artifacts)
         def runner(ctx, refs, tree, client):
             out = ledger.run_refs(ctx, [ref for ref in refs if ref.startswith('harness:') or ref == 'nonsense'], tree, client)
-            out['cargo:mc-core:mod::t'] = {'state': ledger.RED, 'detail': 'FAIL'}
+            out['cargo:mc-core:mod::t'] = {'state': ledger.RED, 'detail': 'FAIL', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}}
             return out
         rows = ledger.probe(bugs, ['BUG', 'EMPTY', 'BAD'], client=False, ctx=ctx, runner=runner)
         self.assertEqual(rows['BUG']['verdict'], ledger.NEEDS_CLIENT)
@@ -1914,7 +1935,7 @@ class LedgerToolTests(unittest.TestCase):
             seen.append((tree / 'data/vanilla/res.json').exists() and not (tree / 'data').is_symlink() and not (tree / 'data/vanilla').is_symlink())
             (tree / 'data/vanilla/res.json').write_text('{"scribbled": true}')
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
-            return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
+            return {ref: ({'state': state, 'detail': '', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}} if state == ledger.RED else {'state': state, 'detail': ''}) for ref in refs for state in [ledger.RED if buggy else ledger.GREEN]}
         self.promote(root, runner, dry_run=True)
         self.assertEqual(seen, [True, True])
         self.assertEqual((root / 'data/vanilla/res.json').read_text(), '{}')
@@ -1937,7 +1958,7 @@ class LedgerToolTests(unittest.TestCase):
                         and (data / 'vanilla-26.1.2/res.json').is_file()
                         and not (data / 'vanilla-26.1.2').is_symlink())
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
-            return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
+            return {ref: ({'state': state, 'detail': '', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}} if state == ledger.RED else {'state': state, 'detail': ''}) for ref in refs for state in [ledger.RED if buggy else ledger.GREEN]}
         self.promote(root, runner, dry_run=True)
         self.assertEqual(seen, [True, True])
 
@@ -2130,7 +2151,7 @@ class LedgerToolTests(unittest.TestCase):
         def runner(ctx, refs, tree, client):
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
             seen.append(((tree / 'src/engine.rs').read_text(), (tree / 'src/util.rs').read_text(), (tree / 'tests/extra.rs').exists()))
-            return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
+            return {ref: ({'state': state, 'detail': '', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}} if state == ledger.RED else {'state': state, 'detail': ''}) for ref in refs for state in [ledger.RED if buggy else ledger.GREEN]}
         receipt = self.promote(root, runner, fix_patch=fix_file)
         self.assertEqual(seen, [('value = buggy\n', 'u2\n', True), ('value = fixed again\n', 'u2\n', True)])
         self.assertEqual((receipt['control_tree'], receipt['reversed_files'], receipt['kept_test_files']),
@@ -2172,7 +2193,7 @@ class LedgerToolTests(unittest.TestCase):
         def runner(ctx, refs, tree, client):
             trees.append(tree)
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
-            return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
+            return {ref: ({'state': state, 'detail': '', 'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1, 'error': 'panic', 'class': 'assertion'}} if state == ledger.RED else {'state': state, 'detail': ''}) for ref in refs for state in [ledger.RED if buggy else ledger.GREEN]}
         with patch.dict(os.environ, {'KRASNOKAMEN_BUILD_TOKEN': '1'}):  # under wt/ a promote needs a held token
             self.promote(root, runner, dry_run=True)
             self.promote(root, runner, dry_run=True)
