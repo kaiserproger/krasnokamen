@@ -1,10 +1,8 @@
 # Reproducible performance profiles
 
-Krasnokamen is a **draft prerelease**. These profiles measure specific workloads on
-stated hardware; they are not performance guarantees, vanilla-parity proofs or
-player-capacity promises. Protocol bots are real TCP clients, not graphical
-Minecraft clients or human players. No survival/gameplay acceptance claim follows
-from a successful measurement.
+**Draft prerelease:** these hardware/workload measurements prove neither capacity,
+vanilla parity nor survival/gameplay acceptance. Protocol bots are TCP clients,
+not graphical clients or humans.
 
 ## Publication status
 
@@ -114,116 +112,70 @@ indefinitely through terrain. Login includes operator-assisted safe landing.
 
 ### Noncanonical resident-scale variants
 
-`scale-{100k,500k,1m}-{all-active,mostly-resting,sparse-active}` is a
-separate public-command recipe, not a replacement for either official heavy
-profile. The all-active and sparse-active recipes use the same eight mob
-species as the native control; mostly-resting uses 90% cows and 10% zombies
-and rejects a window unless more motion rows actually rested than ran fully.
-The motion rest fence treats held stacks as potential temptation only when a
-registered temptable blueprint lists that item as breeding food; unrelated edit
-materials do not make every temptable animal execute its full decision row.
-Sparse-active requests 10% of residents active. An observer is assigned to
-every advertised active pen, while adjacent forced-chunk tickets retain the
-cold pens without ticking their entity columns. No AI or damage relief is
-added. This setup is a stress fixture, not a representative settlement.
+`scale-{100k,500k,1m}-{all-active,mostly-resting,sparse-active}` uses public
+commands and is **not** either official heavy profile or a representative
+settlement/capacity claim.
 
-Each source-tick sample carries opt-in per-region active-chunk and marked-cohort
-motion admission/full/rest counts. The runner checks the exact tick ID, every
-region's expected active chunk coverage and marked admissions, an exact
-full-plus-resting partition of motion admissions, and a lower bound
-on all live resident rows. The saved snapshot separately checks typed fixture
-UUIDs before and after the run. Live resident totals include players and natural
-entities; they are not represented as exact fixture-only counts. Edge fanout
-also records entity-viewer tracked pairs tagged with their source tick; pairs
-are not distinct entities or proof of packet delivery. Before warmup, one
-opt-in cold capture deduplicates the currently tracked non-self IDs after the
-all-viewer pump and requires a matching core source-tick sample. It is capped
-at 1,000,000 pairs: overflow blocks the row, records a null unique count and
-reports the required pair visits and potential ID count. The resulting unique count is
-pre-warmup server-tracked state, not measured-window, geometric or delivered
-visibility. Results are noncanonical and make no capacity claim.
+| Variant | Fixture and admission |
+|---|---|
+| all-active | Same eight species as native control |
+| mostly-resting | 90% cows, 10% zombies; more motion rows must actually rest than run fully |
+| sparse-active | Same eight species as native control; requests 10% active; observer per advertised active pen; adjacent forced-chunk tickets retain cold pens without ticking their entity columns |
 
-For each name, `--smoke --smoke-residents 80` uses the same recipe shape at a
-smaller resident count, 2 s warmup and 5 s observation. This is a lifecycle
-check only, not a measurement of the advertised ladder size. Full recipes keep
-the ordinary 30 s/120 s windows and seed 42; resource failure or missing
-coverage fails the run rather than shrinking it.
+No AI/damage relief. Held stacks count as potential temptation only when the
+registered temptable blueprint lists that breeding food, not for unrelated
+edit materials.
 
-The scale profiles also accept one noncanonical stress selector:
+Every source tick carries opt-in regional active-chunk and marked-cohort
+motion admissions/full/rest counters. Acceptance checks exact tick identity,
+every region's expected coverage/admissions, exact full+rest partition and a
+lower bound on live residents. Saved before/after typed UUIDs independently
+check fixture survival. Live totals include players/natural entities, not exact
+fixture-only counts.
 
-- `--projectiles 0|100|1000` pulses a fixed-size bank of ordinary arrow-filled
-  dispensers. A source tick must contain exactly the requested number of flight
-  candidates; the peak is also reported, not a sustained-concurrency claim.
-  The unarmed control retains the same bank and must remain at zero.
-- `--xp-orbs 0|10000|100000 --xp-players 0|1|100|1000 --xp-locality compact|spread`
-  uses a single compact bank of ordinary experience-bottle dispensers. The
-  background is retained cold, independently of the explicitly counted observers;
-  XP observers move within their assigned chunks without edit or chat traffic.
-  Zero observers are allowed only with zero orbs; the dashboard must report zero
-  players throughout sampled batches, and all fixture regions stay inactive.
-  The receipt reports the actual active population, not the resident total. Zero
-  adds an observer region but no orb bank, and rejects active XP orbs. Positive
-  canonical counts require an exact owner-observed source tick, not merely offered
-  bottles or sustained concurrency; the maximum observed count is also reported.
-  The noncanonical one-bottle smoke instead requires 3–11 total XP in 1–3
-  owner-observed orb bodies, as a bottle's yield splits into denominations
-  ([Bottle o' Enchanting](https://minecraft.wiki/w/Bottle_o%27_Enchanting),
-  [Experience orb](https://minecraft.wiki/w/Experience_orb)). It is not proof
-  of the canonical exact-body workload. Observer locality is checked against
-  received chunk centers; it does not claim exact positions.
-- `--containers 1000|100000` creates that many chests and five brewing stands.
-  Public item-replace commands supply the stands; periodic water-bottle inputs
-  keep useful brewing work present. The source receipt checks discovery counts
-  by region, active stands, and a tick where all five actual timers advance.
-- `--productive-npcs` is unavailable for every value, including `0`, until
-  CivSim 3/3 and the actual brain-owner callsites are integrated. The following
-  describes the retained acceptance requirements, not an available workload.
-- `--productive-npcs 0|1000|10000` replaces the same number of background mobs
-  with unbound villagers in isolated farm cells. Each cell has a composter and
-  one crop; cells are separated beyond local harvesting reach and public inputs
-  periodically restore mature wheat. The receipt requires each occupied cell
-  to change during the villager-brain phase in the measured interval. This
-  proves isolated crop work, not certified-settlement stock delivery.
-- `--damage-victims 1|1000|10000|100000` replaces that many background mobs
-  with isolated cows over powered arrow dispensers. The cows are summoned with
-  100 health to survive repeated real damage; this is an authored stress
-  condition, not vanilla health or a canonical control. The receipt requires
-  the requested number of distinct accepted victims in a single source tick
-  and separately reports accepted reactive pieces, not command offers.
-- Scale variants accept `--spawn-mobs on|off` and `--spawn-monsters on|off`.
-  Public gamerule commands set them after fixture preparation; the saved native
-  checkpoint must match before and after the run. This proves endpoint state,
-  not per-tick rule or observer counters.
-- `--reactive-pairs N` confines marked iron golems with zombies wearing authored
-  thorns-X armor. Both have raised health. The setup checks saved armor; the run
-  requires at least N accepted reactive damage pieces in the source-tick window.
-  This is a total, not a claim that all pieces occur on one tick.
-- `--churn-percent 0|1|10` replaces that percentage of the background with
-  confined marked cows. Public commands alternate them with pigs and back; the
-  saved receipt checks unaffected identities and a lower bound of one complete
-  identity turnover between snapshots. This is not a per-tick churn-rate proof.
-  Churn, damage and wool triggers use public NBT selectors; their selector work
-  is part of the offered workload and is not attributed to the target owner.
-- `--daylight-zombies N` and `--wool-sheep N` replace background mobs with
-  isolated marked cohorts. Daylight is fixed at 2000 with clear weather; zombies
-  are authored with high health and no head equipment, and each saved after-image
-  must report burning. Sheep start sheared on stone; normal commands introduce
-  grass during the run. The receipt checks saved pre-run wool state and reports
-  the post-run state, not a per-tick density.
-- Fixture blocks used for projectile, XP, damage and brewing preparation and
-  every dispenser's ammunition are checked against the server's read-only
-  saved-world export before measurement.
-- `--map-frames 0|10000|100000` replaces background mobs with item frames.
-  During preparation an ordinary protocol player creates a new filled map in
-  survival for each batch of at most 256 frames, then switches to creative and
-  interacts with each summoned frame; received item metadata is required.
-  Saved before/after images must contain the same frame-to-map identities and
-  native map records validated by the server's recovery decoder.
+Edge tracked pairs carry their source tick; they are neither unique entities
+nor delivered packets. One opt-in pre-warmup cold capture deduplicates tracked
+non-self IDs after the all-viewer pump and requires a matching core sample.
+The 1,000,000-pair cap fails closed on overflow: unique count null, required
+pair visits/potential IDs reported. This is server-tracked pre-warmup state,
+not measured-window, geometric or delivered visibility.
 
-For a small lifecycle check, `--smoke` permits smaller positive stress counts
-and `--smoke-residents`; it is not evidence for the named full-size points.
-The runner rejects missing source counters, insufficient observed peaks and
-dropped trigger writes. Requested work is never substituted for observation.
+Full runs keep seed 42 and 30/120 s windows; missing coverage or resource failure
+fails instead of shrinking the workload. `--smoke --smoke-residents 80` preserves
+recipe shape at reduced population, 2/5 s, for lifecycle checks only.
+
+One noncanonical stress selector may be added:
+
+| Selector | Physical recipe and required observation |
+|---|---|
+| `--projectiles 0\|100\|1000` | Ordinary arrow-filled dispenser bank. The unarmed zero control keeps the bank and must stay at zero in every sample. For positive N, one source tick must contain exactly N flight candidates; report peak separately, not sustained concurrency. |
+| `--xp-orbs 0\|10000\|100000 --xp-players 0\|1\|100\|1000 --xp-locality compact\|spread` | One compact experience-bottle dispenser bank; background retained cold independently of counted observers. Observers move in assigned chunks without edit/chat. Zero observers requires zero orbs, zero dashboard players throughout sampled batches and all fixture regions inactive. A zero-orb run with observers adds their region but no bank and refuses active XP. Positive canonical counts require an exact owner-observed source tick and report maximum, not offered bottles or sustained concurrency. |
+| `--containers 1000\|100000` | N chests plus five brewing stands supplied by public item-replace and periodic water bottles. Check regional discovery, active stands and a source tick advancing all five actual timers. |
+| `--productive-npcs 0\|1000\|10000` | **Unavailable for every value, including 0**, until CivSim 3/3 and actual brain-owner callsites integrate. Retained target: replace N background mobs with unbound villagers in isolated composter/crop cells beyond local harvesting reach; public inputs restore mature wheat; every occupied cell must change in the measured villager-brain phase. Isolated crop work, not certified-stock delivery. |
+| `--damage-victims 1\|1000\|10000\|100000` | Replace N background mobs with isolated cows over powered arrow dispensers, authored 100 HP for repeated real damage. Not vanilla health/canonical control. Require N distinct accepted victims in one source tick; report reactive pieces separately from offers. |
+| `--reactive-pairs N` | Confined marked golems and thorns-X-armored zombies, both raised-health. Check saved armor and at least N accepted reactive pieces over the window, not necessarily one tick. |
+| `--churn-percent 0\|1\|10` | Replace that background percentage with confined marked cows; public commands alternate pigs and cows. Saved images check unaffected identities and at least one complete identity turnover, not per-tick rate. |
+| `--daylight-zombies N` | Replace background with isolated high-health, bare-headed marked zombies; clear day 2000, every saved after-image burning. |
+| `--wool-sheep N` | Replace background with isolated marked sheep, initially sheared on stone; introduce grass by normal commands. Check saved pre-wool state and report post-state, not per-tick density. |
+| `--map-frames 0\|10000\|100000` | Replace background with frames. Ordinary player creates a fresh map in survival per ≤256-frame batch, then equips summoned frames in creative; require received item metadata. Before/after images retain identical frame→map identities and recovery-decoder-validated native map records. |
+
+XP smoke uses one bottle: require 3–11 total XP in 1–3 owner-observed bodies,
+not the canonical exact-body workload
+([bottle](https://minecraft.wiki/w/Bottle_o%27_Enchanting),
+[orb denominations](https://minecraft.wiki/w/Experience_orb)).
+Observer locality checks received chunk centers, not exact positions.
+XP receipts report actual active population, not resident totals.
+
+Scale variants also accept `--spawn-mobs on|off`/`--spawn-monsters on|off`.
+Public post-preparation gamerules must match both saved checkpoints; this
+proves endpoints, not per-tick rules/observers. Churn, damage and wool public
+NBT-selector work belongs to offered load, not the target owner.
+Before measurement, read-only server exports check projectile/XP/damage/brewing
+fixture blocks and every dispenser's ammunition.
+
+Smoke permits smaller positive stress counts, never evidence for full-size
+points. Missing source counters, insufficient observed peaks or dropped trigger
+writes fail; requested work never substitutes for observed work.
 
 ### Windows and metric definitions
 
@@ -260,27 +212,26 @@ dropped trigger writes. Requested work is never substituted for observation.
 
 ## Many-items benchmarks
 
-One **noncanonical** profile measures how the tick pays for dropped-item entities
-(`publication_evidence=false`, `noncanonical=true` in the receipt, so it fills nothing in the pending
-table above). The other many-items benchmark is no profile of its own: the kelp-polluted world is
-`native-100` run on a fixture cache that was prepared on a server still washing kelp out, and
-`--require-cache-hit` keeps a run from silently preparing a clean world in its place (about 4,000
-item entities, 1,270 moving, in the world prepared on 2026-11-12; the window scripts of that date name
-the cache). The recipe never mentions kelp or items, so a fixed server loads exactly that world and
-the receipt stays comparable across the fix.
+`items-heavy` below is noncanonical (`publication_evidence=false`,
+`noncanonical=true`), never a publication-table result. The other many-items
+workload is ordinary `native-100` on a **retained kelp-polluted cache**:
+`--require-cache-hit` prevents silently preparing a clean replacement.
+The 2026-11-12 window scripts name its cache (~4,000 items, 1,270 moving).
+The recipe itself names neither kelp nor items, allowing the fixed server to
+load the same world across a fix.
 
-Items are a small part of that world's cost: in the window-d legs the item probe counted about 4 % of
-all tracked entity pairs and under 1 % of the packets (item movement is gated by the vanilla update
-interval of 20 ticks in the planner); almost all of the roughly 44,000 packets per tick are mobs.
+In window-d, items represented ~4% of tracked pairs and <1% of packets:
+the planner gates their movement at vanilla's 20-tick interval; most of the
+~44,000 packets/tick were mobs.
 
 ### `items-heavy`: N item entities on a sky platform
 
-`python3 -m tools.coreperf.profiles items-heavy --items N [--items-bots 10] "${COMMON[@]}"` builds,
-with public commands only (no gameplay, no randomness), a stone platform at y=199 (no terrain, caves or
-natural mobs) under a stone deck at y=207, a walled and roofed 14x14 observer pad at the origin where
-`--items-bots` (default 10) creative bots land and walk at 20 slots/s without edits or chat, and N item
-entities in four classes (30 %, 30 %, 20 %, 20 %; the ground class takes the rounding remainder),
-seed 42, view/simulation distance 8:
+`python3 -m tools.coreperf.profiles items-heavy --items N [--items-bots 10] "${COMMON[@]}"`
+uses public commands only (no gameplay/randomness), seed 42, VD/SD 8:
+stone floor y=199 (no terrain/caves/natural mobs), deck y=207 and walled/roofed
+14×14 observer pad at origin.
+Ten default creative bots walk at 20 offered slots/s without edit/chat.
+Item classes split 30/30/20/20%, ground taking the rounding remainder:
 
 | Class | Layout | What it exercises |
 |---|---|---|
@@ -289,39 +240,40 @@ seed 42, view/simulation distance 8:
 | `pile_full` | 16 full stacks (count 64) of one kind in one position, piles two blocks apart | a same-kind candidate that cannot receive anything |
 | `pile_mixed` | 16 distinct kinds, count 1, in one position | candidates of the wrong kind |
 
-Nothing merges and nothing is picked up, so the platform population is stationary (checked: the saved
-snapshot must hold exactly N items above the floor before and after the run; items elsewhere, natural
-drops such as the kelp wash-out items of the seed-42 ocean east of the origin, are counted separately
-in the receipt and enter the per-tick census). The deck is what keeps the bots off the items: a bot
-lands on the highest surface with the longest straight runway nearest its anchor, so with no deck the
-10 bots landed on the open platform, walked over the items and moved 1,853 of 10,000 into their
-inventories during the first window-d legs (the failed census; the water class lost nothing and the
-merge scan counted 60 merges). On the deck they walk at y=208, outside the pickup box. Random ticks
-are off (`randomTickSpeed 0`) so that growth, and the wash-out it triggers, is not part of this
-benchmark. The ladder is N = 0 (platform, pad and bots only), 10,000 and 30,000; the maximum is 36,000
-(the items must stay inside the 6-chunk item tracking range of every bot). The fixture cache key
-contains N. All summons run in the last preparation region so items age only from their summon to the
-end of preparation (an item ages 6,000 ticks active before it despawns).
+Before/after snapshots require exactly N items above the floor: no merges or
+pickups. Other drops (including seed-42 ocean kelp) are separate receipt counts
+but enter tick census. The deck keeps bots at y=208 outside pickup reach;
+without it, highest-surface/longest-runway landing put bots among items.
+Early window-d lost 1,853/10,000 to inventories and counted 60 merges
+(water lost none), hence the physical separation.
+
+`randomTickSpeed=0` excludes growth/wash-out. Ladder: 0 (platform/pad/bots),
+10,000, 30,000; maximum 36,000 keeps all items within every bot's six-chunk
+tracking range. N is in the cache key. Summons occur in the final preparation
+region to limit active aging (despawn at 6,000 ticks).
 
 ### Per-item attribution (`MC_CORE_PHASE_LOG=1`, no work when unset)
 
-The server log gains, before each Overworld `phase ms:` line, the lines `items census:` (resident
-items, on ground, moving, mature, and the item step's summed rayon CPU with the clock cost per timed
-item), `items merge:` (on the 20-tick cadence: gather/sort and scan time, candidate and overlapping
-pairs, merges), `items expiry:` (items removed at age 6,000 and the removal time), `items views:` (wire
-view candidates and changed images, and how many are items), and one `edge items:` line per published
-tick (viewers, framed packets and bytes to the bots, items among the entities each viewer holds, planner
-visits, item movement/spawn/metadata packets and bytes, and the fanout phases `index_ms`, `plan_ms`,
-`fill_ms`). `python3 -m tools.coreperf.items_table --leg n0=<run> --leg n10k=<run> --leg n30k=<run>
---leg kelp1=<run> [--md table.md]` turns the runs into the per-phase table, the clock-corrected
-per-item step and merge costs, and the least-squares slope in microseconds per item per tick of every
-column across the ladder (phases, laps, `tick outer ms:` and amortized `checkpoint capture ms:` lines,
-edge fanout), plus a within-run slope per leg. The step timer sums CPU over the rayon
-workers (not wall time); the other lines are wall time on the thread that ran them. The attribution
-costs time itself: every timed item carries one clock-read pair (`clock_ns`, subtracted from the step
-CPU), the census runs inside the entity commit (`census_ms`) and the views probe inside the views phase
-(`probe_ms`); the table reports the entity and views phases net of them, and `probe_ms` on the edge
-line is the pump-thread cost of counting pairs, kept out of `total_ms`.
+Opt-in item log probes precede each Overworld `phase ms:` line; the edge probe
+has the per-published-tick cadence shown below:
+
+| Line | Contents |
+|---|---|
+| `items census:` | Resident/ground/moving/mature items; summed rayon step CPU and timed-item clock cost |
+| `items merge:` | 20-tick gather/sort/scan times, candidate/overlap pairs, merges |
+| `items expiry:` | Age-6,000 removals and time |
+| `items views:` | Wire candidates/changed images, including item counts |
+| `edge items:` (each published tick) | Viewers, framed packets/bytes, tracked items, planner visits, item movement/spawn/metadata packets/bytes; `index_ms`, `plan_ms`, `fill_ms` |
+
+`python3 -m tools.coreperf.items_table --leg n0=<run> --leg n10k=<run>
+--leg n30k=<run> --leg kelp1=<run> [--md table.md]` reports phases,
+clock-corrected item step/merge costs, least-squares µs/item/tick ladder slopes
+and within-run slopes. Columns include phase laps, `tick outer ms:`,
+amortized `checkpoint capture ms:` and edge fanout.
+Only the rayon step is summed worker CPU; other timers are executing-thread
+wall time. Subtract each timed item's `clock_ns` pair. Entity `census_ms` and
+views `probe_ms` are removed from their phase totals; edge `probe_ms` is
+pump-thread counting cost excluded from `total_ms`. Instrumentation is not free.
 
 ## Reproduce
 
@@ -431,29 +383,25 @@ an approved performance measurement. Use the ordinary memory-capped lane, not
 
 ## Historical results
 
-These are earlier claims kept so later documentation cleanups do not lose them.
-They are **not** publication evidence and cannot fill the pending table above.
+Historical claims are kept so later documentation cleanups do not lose them.
+They are **not** current publication evidence and cannot fill the pending table above.
 
 | Release | Workload | Result | Build | Host |
 |---|---|---|---|---|
 | v0.0.8 (tag `57b95ae9`, 2026-10-18) | 100 clients, about 100,000 mixed mobs (`native-100` shape) | about 16 TPS; earlier runs below 10 TPS | frame-pointer build | reference host; exact CPU for this run unverified |
 
-Source: [v0.0.8 release notes at the tag](https://github.com/kaiserproger/krasnokamen/blob/57b95ae9/docs/releases/v0.0.8.md#performance). They also
-report a more compact entity layout and hot passes that no longer scan every
-entity row; they do not establish whether either caused the measured gain.
-The current reference host uses a Ryzen 5 7535HS; the release notes do not
-identify the CPU for this particular run. Its original `result.json`, MSPT
-percentiles and full stage breakdown have not been located. The memory
-figures for 100k-mob runs (server RSS about 2.3 GiB, cgroup peak about 8 GB
-including page cache; [profiling notes](../development/performance-windows-and-profiling.md#load-harness-and-the-frozen-old-core))
-are not known to come from the same run. The next comparable number is a
-`native-100` quiet-window run on a 1.0 release candidate.
+Source: [v0.0.8 notes at the tag](https://github.com/kaiserproger/krasnokamen/blob/57b95ae9/docs/releases/v0.0.8.md#performance).
+They mention compact entity layout and removal of whole-row hot scans, without
+causal attribution. CPU for that run, original `result.json`, MSPT percentiles
+and full stages remain unverified/unlocated. The reference host is a Ryzen 5
+7535HS; separate 100k-mob figures (~2.3 GiB RSS/~8 GB cgroup including cache,
+[profiling notes](../development/performance-windows-and-profiling.md#load-harness-and-the-frozen-old-core))
+are not tied to that run. A new comparable result needs a quiet-window
+`native-100` release-candidate run.
 
-The working notes committed with the release
-([`docs/MEMORY.md` at `1ada2ceb`](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb/docs/MEMORY.md),
-lines 38–42) record the `native-100` rounds before the tag. Their reports and
-receipts were referenced under the ignored `.analysis/` directory and were not
-found in the paths searched; the host is not named per run.
+Pre-tag rounds appear in [working notes at `1ada2ceb`](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb/docs/MEMORY.md),
+lines 38–42. Referenced ignored `.analysis/` receipts were not found in searched
+paths; per-run hosts were not named.
 
 | Date | Change | Frame-pointer steady TPS | Other figures |
 |---|---|---:|---|
@@ -461,11 +409,9 @@ found in the paths searched; the host is not named per run.
 | 2026-10-17 | r9–r10: single-lookup contact revision, page-batched parallel `EntityViews::publish`, parallel read-row prep, villager targets from index | 11.42 | release build 11.91 / 11.56 / 12.72 TPS steady / burst / recovery, p50 83 ms |
 | 2026-10-18 | entity layout (rare components boxed, sorted lanes instead of six `slots_where` scans, dense `Body` columns) | 14.52 → 15.87 | entity phase 29.6 → 24.8 ms, RSS −415 MiB |
 
-The working notes associate the last row's 14.52 → 15.87 TPS change with the
-grouped entity-layout work. It is compatible with the release's rounded
-“about 16 TPS”, but the available sources do not establish that it is the same
-run. The missing report also leaves the contribution of individual changes
-unverified.
+The notes attribute 14.52→15.87 TPS to grouped layout work; it is compatible
+with rounded “about 16”, but neither identical-run provenance nor individual
+contributions are established without the missing report.
 
 ## In-process chunk generation
 
