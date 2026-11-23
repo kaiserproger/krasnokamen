@@ -1,0 +1,30 @@
+{
+  "id": "ENTITY-ADMISSION-SCRATCH-ALLOCATED-PER-CHUNK-EACH-TICK",
+  "verdict": "promoted",
+  "fix_commit": "patch:835007acecb930cc524689db7a634fdfcc582a1ddedd0cdd6d61261258e57a37",
+  "fix_commit_full": "patch:835007acecb930cc524689db7a634fdfcc582a1ddedd0cdd6d61261258e57a37",
+  "promoted_at": "2026-11-23T18:24:01+00:00",
+  "tree_head": "5edf7ba39327d09ac8507668b41d949914d937b8",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "835007acecb930cc524689db7a634fdfcc582a1ddedd0cdd6d61261258e57a37",
+  "reversed_files": [
+    "crates/mc-core/src/tick/entity_phase/prepare.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::admission_buffers_are_pooled_across_prepares": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::admission_buffers_are_pooled_across_prepares": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T181518-ledger-promote-jkd6c4zl"
+}

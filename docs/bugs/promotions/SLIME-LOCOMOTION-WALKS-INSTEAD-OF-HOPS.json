@@ -1,0 +1,62 @@
+{
+  "id": "SLIME-LOCOMOTION-WALKS-INSTEAD-OF-HOPS",
+  "verdict": "promoted",
+  "fix_commit": "patch:3413f57c66ceb55b55040b09355bb937c921c93a3da5142dc48296864323de4d",
+  "fix_commit_full": "patch:3413f57c66ceb55b55040b09355bb937c921c93a3da5142dc48296864323de4d",
+  "promoted_at": "2026-11-23T18:59:35+00:00",
+  "tree_head": "5edf7ba39327d09ac8507668b41d949914d937b8",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "3413f57c66ceb55b55040b09355bb937c921c93a3da5142dc48296864323de4d",
+  "reversed_files": [
+    "crates/mc-core/src/entity_motion.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:entity_motion_tests::slime_hop_climbs_a_full_block_step": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:entity_motion_tests::slime_hops_without_walking_between_jumps": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:entity_motion_tests::an_aggressive_body_divides_its_scaled_jump_delay_by_three": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::far_idle_slime_does_not_rest_on_its_hop_tick": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:entity_motion_tests::hop_tick_rises_the_vanilla_jump_speed_on_its_first_tick": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:entity_motion_tests::slime_hop_climbs_a_full_block_step": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:entity_motion_tests::slime_hops_without_walking_between_jumps": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:entity_motion_tests::an_aggressive_body_divides_its_scaled_jump_delay_by_three": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::far_idle_slime_does_not_rest_on_its_hop_tick": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:entity_motion_tests::hop_tick_rises_the_vanilla_jump_speed_on_its_first_tick": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T185431-ledger-promote-s529e1m_"
+}

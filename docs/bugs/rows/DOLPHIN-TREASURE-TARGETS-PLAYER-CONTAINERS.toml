@@ -3,7 +3,7 @@ id = "DOLPHIN-TREASURE-TARGETS-PLAYER-CONTAINERS"
 title = "A fed dolphin targets any nearby chest or barrel instead of an ocean ruin or shipwreck"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "D113 atomic survival catalog W64; crates/mc-core/src/dolphin.rs nearest_treasure scans loaded chests, trapped chests and barrels and its comment records this as an approximation to vanilla's DOLPHIN_LOCATED structure lookup. A player container can therefore be selected while an ocean ruin or shipwreck is missed. No new client reproduction is claimed."
 repro = "source"
 regression = [
@@ -12,3 +12,4 @@ regression = [
 ]
 failing_first = "reported"
 fix_commit = "patch:543cfd56eed2745560a73f412e31e8f6485fb80ade0ce256a0cb92334a091855"
+promotion = "docs/bugs/promotions/DOLPHIN-TREASURE-TARGETS-PLAYER-CONTAINERS.json"

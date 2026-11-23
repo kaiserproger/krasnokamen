@@ -1,0 +1,30 @@
+{
+  "id": "PHYSICS-CLIP-Y-PARITY",
+  "verdict": "promoted",
+  "fix_commit": "patch:9a3db29e771fadcc8d8708f52ba7b897d935cff7d3d9000c0c5567d6afd15f78",
+  "fix_commit_full": "patch:9a3db29e771fadcc8d8708f52ba7b897d935cff7d3d9000c0c5567d6afd15f78",
+  "promoted_at": "2026-11-23T17:40:51+00:00",
+  "tree_head": "5edf7ba39327d09ac8507668b41d949914d937b8",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "9a3db29e771fadcc8d8708f52ba7b897d935cff7d3d9000c0c5567d6afd15f78",
+  "reversed_files": [
+    "crates/mc-physics/src/lib.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-physics:tests::clip_y_snaps_a_body_resting_within_the_contact_tolerance_of_a_face": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-physics:tests::clip_y_snaps_a_body_resting_within_the_contact_tolerance_of_a_face": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T173842-ledger-promote-gjs16xlk"
+}

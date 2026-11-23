@@ -1,0 +1,38 @@
+{
+  "id": "PHYSICS-READER-MEMO-REBUILT-PER-ENTITY-STEP",
+  "verdict": "promoted",
+  "fix_commit": "patch:9e7c598e039d53e127a84e944965658f39fb20c5bee090de288a256a2121e20c",
+  "fix_commit_full": "patch:9e7c598e039d53e127a84e944965658f39fb20c5bee090de288a256a2121e20c",
+  "promoted_at": "2026-11-23T17:59:56+00:00",
+  "tree_head": "5edf7ba39327d09ac8507668b41d949914d937b8",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "9e7c598e039d53e127a84e944965658f39fb20c5bee090de288a256a2121e20c",
+  "reversed_files": [
+    "crates/mc-core/src/tick/system_graph.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:tick::system_graph::tests::entity_step_reuses_one_physics_reader_per_lane": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:world::world_tests::physics_reader_matches_direct_reads_across_columns_and_overlay": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick::system_graph::tests::entity_step_reuses_one_physics_reader_per_lane": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:world::world_tests::physics_reader_matches_direct_reads_across_columns_and_overlay": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T175502-ledger-promote-02c845c4"
+}
