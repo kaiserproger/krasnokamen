@@ -6,6 +6,31 @@ use mc_protocol::packets::play::{
 };
 use std::sync::Arc;
 
+/// Every path still below `root`, with kind and size, so a post-drop writer is
+/// named by its own output. Test-only diagnostic for
+/// CORE-DROP-LEAVES-WORLD-DIR-WRITER; it never runs outside a failure report.
+fn leftover_paths(root: &std::path::Path) -> Vec<String> {
+    fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<String>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let relative = path.strip_prefix(root).unwrap_or(&path);
+            let size = entry.metadata().map(|meta| meta.len()).unwrap_or(0);
+            if path.is_dir() {
+                out.push(format!("dir {} ({} bytes)", relative.display(), size));
+                walk(root, &path, out);
+            } else {
+                out.push(format!("file {} ({} bytes)", relative.display(), size));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(root, root, &mut out);
+    out
+}
+
 fn body(packet: &crate::plan::PlannedPacket) -> bytes::Bytes {
     let mut bytes = bytes::BytesMut::from(&packet.data[..]);
     mc_protocol::frame::try_decode_frame(
@@ -231,7 +256,16 @@ fn reloaded_recipes_are_announced_once_and_feed_the_next_book() {
         .recipes
         .retain(|recipe| !matches!(recipe.kind, mc_data::recipes::RecipeKind::Stonecutting(_)));
     drop(core);
-    std::fs::remove_dir_all(dir).unwrap();
+    // CORE-DROP-LEAVES-WORLD-DIR-WRITER diagnostic: the assertion stays "the
+    // directory is empty after drop", but a failure now names every entry the
+    // late writer left behind instead of only reporting DirectoryNotEmpty.
+    if let Err(error) = std::fs::remove_dir_all(&dir) {
+        panic!(
+            "remove_dir_all({}) after drop(core) failed: {error}; leftover entries: {:#?}",
+            dir.display(),
+            leftover_paths(&dir)
+        );
+    }
     assert!(!before.catalog.update.stonecutter_recipes.is_empty());
 
     let reload = mc_core::boundary::RegistryReload::new(Arc::new(reloaded));
