@@ -2,30 +2,54 @@
 
 The production-only patch `ENTITY-ADMISSION-SCRATCH-ALLOCATED-PER-CHUNK-EACH-TICK.patch` is the
 forward-ported fix at HEAD, SHA-256 of its non-test hunks
-`835007acecb930cc524689db7a634fdfcc582a1ddedd0cdd6d61261258e57a37`.
+`patch:651c4479aecc97d85ee6581ffb6d7b49d7b8b453d20b1d5d817972a70b0d0c2b`. It reverse-applies on the
+candidate.
 
-| Original production change | Current patch equivalent |
-|---|---|
-| `c393b924068f4211e75f8198a295b5d1058c47d3`: `crates/mc-core/src/tick/entity_phase/prepare.rs` `prepare_rows` reuses the pooled `AdmissionPart` buffers (`parts.resize_with(…, AdmissionPart::default)` over the existing vector, then clears each part) instead of allocating a fresh `Vec<Admission>` set per chunk per tick | Patch's only hunk: a/-side takes the previous set out of `out` and rebuilds a fresh set every prepare (`let _stale_parts = std::mem::take(parts);` then `resize_with`), b/-side is HEAD's reuse. |
+## The reversal is the real pre-image
 
-a/-side adaptation: the single added `let _stale_parts = std::mem::take(parts);` line is the pre-fix
-allocation shape — it makes every prepare construct a fresh set of `AdmissionPart`s while the previous set
-stays alive for the duration of the pass. It changes no behaviour other than allocating.
+`c393b924068`'s `prepare_rows` parallel path is one hunk, and its pre-image (the file at `c393b9240^`,
+`crates/mc-core/src/tick/entity_phase/prepare.rs`) is:
 
-Original non-test exclusions, reason (b) — API the kept ref calls: `tick/entity_phase.rs`
-`EntityPhaseScratch.parts` and `tick/entity_phase/prepare.rs`'s `AdmissionPart` type (both added by the same
-commit, and the test-only `take_admission_parts_constructed` counter counts its `Default`). The kept ref
-`tick::entity_phase::entity_phase_tests::admission_buffers_are_pooled_across_prepares` reads `out.parts` and
-the counter, so reversing the field or the type stops the control from compiling; they stay.
+- a local `struct Admission { kept, specials, resting }` inside `prepare_rows`;
+- `let parts: Vec<Admission> = periods.par_chunks(PREP_CHUNK).enumerate().map(|…| { let mut part =
+  Admission::default(); …; part }).collect();` — one fresh set of three `Vec`s per chunk, on the rayon
+  workers, dropped at the end of the tick;
+- concatenation from that local vector into `kept`/`out.specials`/`out.resting`;
+- `out.parts` is never touched.
 
-Proving ref: `cargo:mc-core:tick::entity_phase::entity_phase_tests::admission_buffers_are_pooled_across_prepares`
-— over a nine-chunk slot range (`8 * PREP_CHUNK + 64`) the first prepare must construct every pooled
-`AdmissionPart` and a repeated prepare of the same population must construct **zero**: it reuses the pool.
-The reversed prepare constructs nine fresh parts on the second prepare and fails at
-`a repeated prepare must not construct admission buffers: the pool is reused`. The count is exact, so the
-assertion does not depend on the allocator handing back the same address (the pointer-identity form of the
-check, which the round-6 review rightly called flaky, is gone).
+The a/-side of the patch is exactly that shape at HEAD: no `parts.resize_with`, no clearing loop, a local
+`Vec<AdmissionPart>` collected from `par_chunks`, concatenation from the local vector, and `out.parts`
+left alone.
 
-This row's control is assertion-level only after this patch: the original commit's blanket reversal removed
-`parts` and made every kept test of the row fail to compile, which `ledger promote` refuses (README
-"the `fixed` rule", rule 4). Nothing is promoted on a compile-level control.
+**Single a/-side adaptation:** the local `Admission` type is spelled with the kept `AdmissionPart` type
+(whose `Default` increments the test-only counter). It is the same three `Vec` fields in the same order with
+the same `Default` (empty) state, so the allocation pattern and the admission behaviour are identical; the
+only difference is that the test can count the constructions instead of comparing allocator addresses.
+
+## Why this control is honest
+
+- The kept ref's first assertion is the count after the first prepare (`>= 9`: every chunk of the slot range
+  built its buffer set); both the pre-fix and the fixed code satisfy it.
+- The second prepare must construct **zero** buffers. The pre-fix tree constructs nine fresh sets here and
+  fails `assert_eq!(take_admission_parts_constructed(), 0, "a repeated prepare must not construct admission
+  buffers: the pool is reused")` with `left: 9`; the fixed tree reuses the pooled `AdmissionPart`s and
+  constructs none.
+- `out.parts.len() == 9` and the capacity check are the **API the fix adds**, so they run only after the
+  count assertion: a pre-fix tree reds at the count, not at a preserved-API assert (README rule: a red on a
+  preserved-API assertion is not evidence).
+- The count is exact because nextest runs each test in its own process, so no other test can construct an
+  `AdmissionPart` concurrently.
+
+## Omitted hunk
+
+Reason (b) — API the kept refs use: `tick/entity_phase.rs`'s `EntityPhaseScratch.parts` field,
+`tick/entity_phase/prepare.rs`'s `AdmissionPart` type (with its test-only counter) and `out.parts`'s
+presence are read by `tick::entity_phase::entity_phase_tests::admission_buffers_are_pooled_across_prepares`;
+reversing them stops the control from compiling. Everything else in `c393b9240` is another row's behaviour
+(reason (a): `entity_phase/step.rs`, `system_graph.rs`, `world.rs`, `battle/*`, `passive_follow.rs`).
+
+## Proving ref
+
+`cargo:mc-core:tick::entity_phase::entity_phase_tests::admission_buffers_are_pooled_across_prepares` — the
+control reverses the allocation shape and reds at the `== 0` count assertion with `left: 9`; the restore is
+green on the same tree.

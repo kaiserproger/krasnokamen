@@ -851,6 +851,24 @@ fn admission_buffers_are_pooled_across_prepares() {
     let mut out = PrepChunk::default();
     let _ = take_admission_parts_constructed();
     prepare_rows(&state, &periods, &env, true, &mut out);
+    assert!(
+        take_admission_parts_constructed() >= 9,
+        "the first prepare must build every admission buffer of the slot range"
+    );
+    // The phase consumes `rows`/`rare` every tick and re-arms the chunk; only
+    // the pooled admission buffers survive.
+    out.rows.clear();
+    out.rare.clear();
+    prepare_rows(&state, &periods, &env, true, &mut out);
+    // The count is exact because nextest runs each test in its own process, so
+    // no other test constructs an `AdmissionPart` concurrently.
+    assert_eq!(
+        take_admission_parts_constructed(),
+        0,
+        "a repeated prepare must not construct admission buffers: the pool is reused"
+    );
+    // The pooled set is the API the fix adds; checked after the count so a
+    // pre-fix tree reds at the count, not at a preserved-API assertion.
     assert_eq!(
         out.parts.len(),
         9,
@@ -859,20 +877,6 @@ fn admission_buffers_are_pooled_across_prepares() {
     assert!(
         out.parts[0].kept.capacity() > 0,
         "the pool kept its capacity"
-    );
-    assert!(
-        take_admission_parts_constructed() >= 9,
-        "the first prepare must build every pooled admission buffer"
-    );
-    // The phase consumes `rows`/`rare` every tick and re-arms the chunk; only
-    // the pooled admission buffers survive.
-    out.rows.clear();
-    out.rare.clear();
-    prepare_rows(&state, &periods, &env, true, &mut out);
-    assert_eq!(
-        take_admission_parts_constructed(),
-        0,
-        "a repeated prepare must not construct admission buffers: the pool is reused"
     );
 }
 
