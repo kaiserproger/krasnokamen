@@ -1,0 +1,38 @@
+{
+  "id": "WAL-BATCH-HAS-NO-STORE-IDENTITY",
+  "verdict": "promoted",
+  "fix_commit": "patch:8e49ad51fa419635a7f28ba00ab5eb135887641e211468c4972e49280a0992b1",
+  "fix_commit_full": "patch:8e49ad51fa419635a7f28ba00ab5eb135887641e211468c4972e49280a0992b1",
+  "promoted_at": "2026-11-23T15:51:01+00:00",
+  "tree_head": "9f7c1649e9d981d6b91ff95ac9e8a0c7686aaf61",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "8e49ad51fa419635a7f28ba00ab5eb135887641e211468c4972e49280a0992b1",
+  "reversed_files": [
+    "crates/mc-core/src/journal.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:journal_tests::recovery_refuses_a_journal_copied_from_another_world": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:journal_tests::recovery_refuses_a_batch_whose_store_id_is_zero": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:journal_tests::recovery_refuses_a_journal_copied_from_another_world": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:journal_tests::recovery_refuses_a_batch_whose_store_id_is_zero": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261123T154954-ledger-promote-0tnxyzbb"
+}

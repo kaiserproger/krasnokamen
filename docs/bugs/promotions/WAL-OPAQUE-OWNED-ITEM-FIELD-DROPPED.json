@@ -1,0 +1,70 @@
+{
+  "id": "WAL-OPAQUE-OWNED-ITEM-FIELD-DROPPED",
+  "verdict": "promoted",
+  "fix_commit": "patch:81e40fc89c6a483fc964c376b54afc072fcd1aabf99f1d19a3273c06da141e21",
+  "fix_commit_full": "patch:81e40fc89c6a483fc964c376b54afc072fcd1aabf99f1d19a3273c06da141e21",
+  "promoted_at": "2026-11-23T16:09:02+00:00",
+  "tree_head": "9f7c1649e9d981d6b91ff95ac9e8a0c7686aaf61",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "81e40fc89c6a483fc964c376b54afc072fcd1aabf99f1d19a3273c06da141e21",
+  "reversed_files": [
+    "crates/mc-core/src/journal/player_nbt.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-world-conversion:wal_owned_player_fields_tests::other_owned_fields_refuse_even_with_valid_or_empty_payloads": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world-conversion:wal_owned_player_fields_tests::single_nonempty_opaque_carried_refuses_wal_recovery_and_export": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world-conversion:wal_owned_player_fields_tests::missing_inventory_slot_in_single_opaque_field_refuses_wal_recovery_and_export": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world-conversion:wal_owned_player_fields_tests::clean_wal_keeps_typed_items_and_supported_opaque_fields_through_export": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:wal_owned_player_fields_tests::repeated_inventory_slot_in_single_opaque_field_refuses_wal_recovery_and_export": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world-conversion:wal_owned_player_fields_tests::single_nested_recipe_list_refuses_wal_recovery_and_export": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-world-conversion:wal_owned_player_fields_tests::other_owned_fields_refuse_even_with_valid_or_empty_payloads": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:wal_owned_player_fields_tests::single_nonempty_opaque_carried_refuses_wal_recovery_and_export": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:wal_owned_player_fields_tests::missing_inventory_slot_in_single_opaque_field_refuses_wal_recovery_and_export": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:wal_owned_player_fields_tests::clean_wal_keeps_typed_items_and_supported_opaque_fields_through_export": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:wal_owned_player_fields_tests::repeated_inventory_slot_in_single_opaque_field_refuses_wal_recovery_and_export": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:wal_owned_player_fields_tests::single_nested_recipe_list_refuses_wal_recovery_and_export": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261123T160616-ledger-promote-qop51n37"
+}

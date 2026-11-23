@@ -439,13 +439,22 @@ is unchanged.
 Every generated native admission image, including vanilla-only generation, must
 become a durable native baseline before dependent WAL can publish. The tick
 queues every required-baseline job before its append; there is no separate
-deferred generated-chunk save. The journal owner waits for the sole native
-writer's Immediate fill-generated commit (behind any checkpoint commit already
-queued there), so a tick that generated chunks puts one native commit per batch
-in front of its append; failure closes admission and withholds the append. The
-tick performs no new synchronous DB write or durability await. This does not
-strengthen gameplay publication: a queued/unflushed tail can still roll back
-consistently, and no per-tick fsync is required.
+deferred generated-chunk save. The journal owner hands the sole native writer
+its Immediate fill-generated commit (behind any checkpoint commit already
+queued there) and then keeps draining the tick's queue into a hold of at most
+`JOURNAL_HOLD_LIMIT` jobs instead of parking it: held work keeps its arrival
+order, nothing held is published before the baseline is durable, and appends
+keep the budget reservations they were admitted with. That wait is the
+writer's own answer, delivered through the same work queue
+(`JournalWork::BaselineDurable`, tagged with the handoff's serial), so no timer
+or polling interval exists; past the hold limit the owner falls back to the
+job's own answer channel. The hold ends when the baseline's durability arrives,
+so a tick that generated chunks still puts one native commit per batch in front
+of its append; failure closes admission and withholds the append and the held
+work. The tick performs no new synchronous DB
+write or durability await. This does not strengthen gameplay publication: a
+queued/unflushed tail can still roll back consistently, and no per-tick fsync is
+required.
 
 Admission refuses and records a load error if the bounded required-baseline
 buffer (1024 per dimension) is full; checkpoint cannot discard that chunk's

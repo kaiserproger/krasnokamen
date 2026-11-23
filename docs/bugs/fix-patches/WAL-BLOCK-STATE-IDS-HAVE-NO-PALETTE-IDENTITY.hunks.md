@@ -33,10 +33,10 @@ None.
 ## Proving refs
 
 - `cargo:mc-core:journal_tests::recovery_refuses_a_tail_written_under_another_block_palette` —
-  red at `crates/mc-core/src/journal_tests.rs:2251` (`.expect("a foreign palette
+  red at `crates/mc-core/src/journal_tests.rs:2188` (`.expect("a foreign palette
   is never replayed")`) and `:2253` (`text.contains("block palette")`).
 - `cargo:mc-core:journal_tests::recovery_refuses_a_batch_whose_palette_digest_is_zero` —
-  red at `crates/mc-core/src/journal_tests.rs:2334`
+  red at `crates/mc-core/src/journal_tests.rs:2271`
   (`.expect("a zero palette digest is not a wildcard")`) and `:2336`
   (`text.contains("block palette")`): the zero-digest wildcard.
 

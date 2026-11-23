@@ -38,11 +38,11 @@ None.
 ## Proving refs
 
 - `cargo:mc-core:journal_tests::recovery_refuses_a_journal_copied_from_another_world` —
-  red at `crates/mc-core/src/journal_tests.rs:2214` (`.expect("a foreign tail is
+  red at `crates/mc-core/src/journal_tests.rs:2151` (`.expect("a foreign tail is
   never replayed")`) and at `:2218` (`text.contains("<source store uuid>")`): the
   row's own symptom, a tail of another world being replayed.
 - `cargo:mc-core:journal_tests::recovery_refuses_a_batch_whose_store_id_is_zero` —
-  red at `crates/mc-core/src/journal_tests.rs:2301`
+  red at `crates/mc-core/src/journal_tests.rs:2238`
   (`.expect("a zero store id is not a wildcard")`) and `:2303`
   (`text.contains("belongs to store")`): the zero-id wildcard the review found.
   With the wildcard present this assertion fails because no refusal is produced.
