@@ -54,19 +54,9 @@ index 2b86f133a..6b61e513a 100644
          tick,
          globals: state
 diff --git a/crates/mc-core/src/world.rs b/crates/mc-core/src/world.rs
-index cdeefd4af..524c4ece8 100644
+index b5c1db89e..524c4ece8 100644
 --- a/crates/mc-core/src/world.rs
 +++ b/crates/mc-core/src/world.rs
-@@ -705,8 +705,8 @@ impl ChunkWorld {
-             x: pos.x.div_euclid(16),
-             z: pos.z.div_euclid(16),
-         };
--        if self.chunks.contains_key(&chunk) {
-         self.block_entity_dirty.insert(chunk);
-+        if self.chunks.contains_key(&chunk) {
-             self.dirty.insert(chunk);
-             self.bump_storage_revision(chunk);
-         } else {
 @@ -755,8 +755,16 @@ impl ChunkWorld {
          pos: ChunkPos,
          capture: &'a mut ChunkCapture,

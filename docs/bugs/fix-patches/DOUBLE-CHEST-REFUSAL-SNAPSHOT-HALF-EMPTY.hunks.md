@@ -7,8 +7,8 @@ Re-audit:
 
 ## Why patch mode
 
-The fix is one uncommitted function in `crates/mc-core/src/tick/containers.rs`
-(commit `fix(core): close a menu whose custody spans a cold chunk`). The
+The fix is one function in `crates/mc-core/src/tick/containers.rs`, committed
+as `96fca8717b` "fix(core): close a menu whose custody spans a cold chunk". The
 patch is the whole function: pre-image verbatim on the a/-side, the candidate
 form on the b/-side.
 
@@ -60,11 +60,20 @@ stack, evicts the named halves (`finish_inhabited_tick`, empty active set,
   chunks evicted.
 
 In the control all three fail at their own assertions: the pre-fix body
-resends the half-empty menu and leaves `open` set.
+resends the half-empty menu and leaves `open` set. The red is
+`chests_tests.rs:706:5` (the first `MenuContents`-for-the-closed-window
+assertion) for all three refs; the promote receipt is
+`.analysis/validation/20261123T223848-ledger-promote-2rc43auc`
+(`ledger-1-run.log:335`, `:354`, `:373`), restore green in the same receipt.
 
 ## Fix in several commits
 
-`696d843631` carried the first (rejected) cold-partner form of the body and
-`c77677ec95` its clippy fix; this identity is the third form and supersedes the
-`patch:6af67cbd`/`patch:4b2427db` receipts, which are deleted. The code lands
-in its own `fix(core):` commit; history is not rewritten.
+| Commit | Closes |
+|---|---|
+| `696d843631` | the first (rejected) cold-partner form of the body, inside a docs-subject commit |
+| `c77677ec95` | its clippy fix (pass the slots slice directly) |
+| `96fca8717b` | the accepted form: the click/recipe custody check, the cold-open-half and both-cold cases, the window-0 resync, `partner_position` deleted |
+
+This identity is the accepted form and supersedes the
+`patch:6af67cbd`/`patch:4b2427db` receipts, which are deleted. History is not
+rewritten.

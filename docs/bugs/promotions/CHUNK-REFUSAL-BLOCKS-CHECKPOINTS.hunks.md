@@ -1,14 +1,16 @@
 # CHUNK-REFUSAL-BLOCKS-CHECKPOINTS: patch-mode fix identity
 
 Original fix: `1b84f73d` "fix(core): preserve custody when refusing corrupt chunks".
-`fix_commit = "patch:dda9bcbe549bcff76401d1fef0c0d621466f71768066b59b2e6af5b79ac610f5"`
+`fix_commit = "patch:7b7f5f553372e75f6678f98bed38ecdceabe2a738f92d54d617fb7cede83b721"`
 names the HEAD equivalents of that fix's non-test hunks in
 `docs/bugs/promotions/CHUNK-REFUSAL-BLOCKS-CHECKPOINTS.patch` (a diff from the
 pre-fix form to the candidate; `git apply -R` restores the pre-fix code).
 Re-audit:
 `python3 -m tools.harness ledger promote CHUNK-REFUSAL-BLOCKS-CHECKPOINTS --fix-patch docs/bugs/promotions/CHUNK-REFUSAL-BLOCKS-CHECKPOINTS.patch --dry-run`
 
-This supersedes `patch:121feead…`, whose a/-side no longer compiled on the tip
+This supersedes `patch:dda9bcbe…` (which carried a synthetic `world.rs:705`
+hunk moving `block_entity_dirty.insert` inside the residency `if`; the a/-side
+now equals HEAD there, class (b)), and `patch:121feead…`, whose a/-side no longer compiled on the tip
 (a later test reads `world.block_entity_dirty`), and the earlier
 `patch:ae9b3c45…`: its hunks no longer
 reversed on the candidate (a later refactor removed the `SaveGenerated` work
@@ -18,7 +20,7 @@ is another row's or owner's behaviour (a), API the kept tests call (b), or code
 a later commit rewrote with no HEAD equivalent (c); each exclusion is named
 below.
 
-Carried (16 of the commit's 23 non-test hunks):
+Carried (13 of the commit's 23 non-test hunks):
 
 | original | HEAD |
 |---|---|
@@ -29,14 +31,14 @@ Carried (16 of the commit's 23 non-test hunks):
 | capture.rs -211,11 dirty_absent failure + second quarantine | capture.rs:297-311 |
 | capture.rs -227,6 debt skips failed | capture.rs:323-325 |
 | capture.rs -276,6 metadata of quarantined chunk not written | capture.rs:375-379 |
-| capture.rs -341,6 `block_entity_dirty` cleared on flush | capture.rs:445 |
-| world.rs -724,8 `defer_checkpoint_chunk` counts instead of load_error | world.rs:737-744 |
+| capture.rs -341,6 `block_entity_dirty` cleared on flush | capture.rs:461 |
+| world.rs -724,8 `defer_checkpoint_chunk` counts instead of load_error | world.rs:758-767 |
 | residency.rs -282,7 doc | residency.rs:285 |
 | residency.rs -298,9 reject keeps dirty_sections, clears dirty_absent | residency.rs:301-306 |
 | journal.rs -106,16 declined/skipped logging | journal.rs:204-234 |
 | mc-world chunk_nbt.rs -369,6 importer: the block owns its record | chunk_nbt.rs:372-395 |
 
-Not carried (3 of 23): world.rs -1375,6 (`RefusedChunk` + Display), world.rs
+Not carried (10 of 23): world.rs -1375,6 (`RefusedChunk` + Display), world.rs
 -1382,10 (`ChunkCapture.refused` field + `refused()`), residency.rs -406,6
 (`refused: Vec::new()` in the generated capture): (b) the kept chunk_loader
 tests call `capture.refused()[0].unsaved/.scheduled`; reversing them is why the
@@ -44,6 +46,11 @@ tests call `capture.refused()[0].unsaved/.scheduled`; reversing them is why the
 capture start initialises the kept field as `refused: Vec::new()`
 (capture.rs:228-249 a/ side; the only a/ line that is not in the original
 pre-image), so `refused()` stays empty in the control.
+
+The a/-side compiles on the tip: plain
+`cargo check -p mc-core --tests` on the reversed tree, log kept at
+`receipts/D123/D123Persist/review/CHUNK-aside-cargo-check.log` (no harness
+profile wraps a bare check).
 
 Not carried (7 hunks, all reason (b)):
 

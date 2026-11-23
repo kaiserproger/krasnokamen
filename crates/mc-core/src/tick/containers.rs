@@ -261,6 +261,9 @@ pub(crate) fn debug_menu_snapshot(
 
 /// Resync the real current menu after refusing a native inventory transition.
 /// A vehicle or block menu must never be imaged with placeholder empty cargo.
+/// Every caller is a live player's own input path (pick item, swap hands,
+/// creative slot, drop, book edit, interact), so `players[&entity]` is an
+/// invariant here rather than a checked precondition.
 pub(crate) fn inventory_transition_refused(
     state: &mut TickState,
     entity: EntityId,
@@ -281,6 +284,9 @@ pub(crate) fn inventory_transition_refused(
     // retained shape must match the reconstructed storage and every block must
     // be resident (the same check the click and recipe paths make). A cold
     // half, whichever one it is, would otherwise be imaged as empty slots.
+    // Menus with no `open_containers` record (Mount, plugin, settlement) have no
+    // cells, so a non-zero retained size fails the shape check and they close
+    // fail-closed here instead of being imaged with an empty placeholder.
     let open_cells = state
         .open_containers
         .menu_at(&entity)

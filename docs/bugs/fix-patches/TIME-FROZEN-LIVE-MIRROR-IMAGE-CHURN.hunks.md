@@ -26,16 +26,18 @@ files the two commits touched, including the `ClockSpan` struct that
 `c8568f0a9` added at the top of `world/clocks.rs` (the a/-side has no such
 type; the adapted helpers do not need it).
 
-Where the reds were obtained:
+Where the reds were obtained (this identity, `patch:f33834c1`):
 
-- the touched-mob, working-villager and differential reds come from the promote
-  control (dry-run `.analysis/validation/20261123T205817-ledger-promote-bm4puhcj`,
-  `negative_control` in its `promote.json`), i.e. from the adapted a/-side
-  helpers computing the old interval arithmetic while the kept tests call them;
+- the promote receipt
+  `.analysis/validation/20261123T225530-ledger-promote-5ygthg55`:
+  `ledger-1-run.log:266` the differential panics at
+  `journal_touched_tests.rs:1389`, `:287` the working-villager test at `:1260`,
+  `:306` the touched-mob test at `:1198` — the adapted a/-side helpers compute
+  the old interval arithmetic while the kept tests call them;
 - the recovery guard is deliberately green there; its evidence is the mutation
-  observed in `.analysis/validation/20261123T203951-test-w4dur139/test.log`
-  (`clock_since = Some(tick)` reddens its own `is_empty`), reverted before the
-  promotion.
+  observed in `.analysis/validation/20261123T203951-test-w4dur139/test.log:147`
+  (`clock_since = Some(tick)` reddens its own `is_empty` at
+  `journal_touched_tests.rs:1314`), reverted before the promotion.
 
 ## a/-side adaptation (the only text outside the original pre-image)
 
@@ -54,16 +56,18 @@ clock fields, and `refresh_active_clock` does not record a tick.
 
 - `held_game_clock_does_not_churn_a_touched_mob` — the cow is touched every
   held tick, so the comparison itself runs; the control's raw advance emits an
-  image and the test fails at its own `image_ids(...).is_empty()` assertion.
+  image and the test fails at its own `image_ids(...).is_empty()` assertion
+  (`journal_touched_tests.rs:1198`).
 - `held_game_clock_holds_a_working_villager_baseline` — a non-wandering
   villager with the brain clock on (`no_ai = false`), touched every held tick;
   the control advances the age through the hold and fails at its own
-  `is_empty()`/age assertions.
+  `is_empty()`/age assertions (`journal_touched_tests.rs:1260`).
 - `the_mirror_agrees_with_the_replay_game_clock_over_holds` — differential
   coverage required by the design note: work → hold → step → hold → release,
   then every `(from, to)` pair of the window must match both
   `ReplayGameClock::between` and its `running_intervals`/`last_running_at`;
-  the control's raw projection disagrees during the holds.
+  the control's raw projection disagrees during the holds
+  (`journal_touched_tests.rs:1389`).
 - `recovered_mob_clock_does_not_burst_on_the_first_batch` — guard for the
   `clock_since = tick - 1` boundary. It is green in the control (the old
   interval matched the live row, so it is not evidence for the reversal), and
