@@ -1,6 +1,6 @@
 [[bug]]
 id = "MODEL-OPUS-15"
-title = "Elytra and capes are never drawn."
+title = "A worn elytra's back layer is never drawn."
 area = "client"
 repro = "source"
 severity = "major"

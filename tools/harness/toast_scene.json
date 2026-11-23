@@ -58,6 +58,9 @@
       "shot": "toast-early"
     },
     {
+      "wait_ticks": 5
+    },
+    {
       "wait_ticks": 320
     },
     {
