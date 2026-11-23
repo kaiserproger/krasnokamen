@@ -1,0 +1,81 @@
+diff --git a/crates/mc-core/src/core/journal.rs b/crates/mc-core/src/core/journal.rs
+index 3af8597be..02349d8b8 100644
+--- b/crates/mc-core/src/core/journal.rs
++++ a/crates/mc-core/src/core/journal.rs
+@@ -960,10 +960,58 @@ pub(super) fn journal_loop(
+                     // applies. The wait itself is the writer's own answer: it
+                     // lands in this queue as `BaselineDurable`, so there is no
+                     // polling interval anywhere.
+-                    // Pre-fix scheduling: the owner waits for the answer and
+-                    // drains nothing, so the bounded queue fills and the tick
+-                    // parks behind the in-flight checkpoint.
+-                    let outcome: Option<Result<(), CoreError>> = durable.recv().ok();
++                    let mut outcome: Option<Result<(), CoreError>> = None;
++                    loop {
++                        if pending.len() >= JOURNAL_HOLD_LIMIT {
++                            outcome = durable.recv().ok();
++                            break;
++                        }
++                        match work_rx.recv() {
++                            Ok(JournalWork::BaselineDurable { serial: answer })
++                                if answer == serial =>
++                            {
++                                // The writer sends the result on `done` first, so
++                                // this receive cannot block on it.
++                                outcome = durable.recv().ok();
++                                break;
++                            }
++                            Ok(work) => {
++                                match durable.try_recv() {
++                                    // The answer is already in: an earlier hold
++                                    // released by the item limit left this wake
++                                    // queued. Publish `work` after the baseline.
++                                    Ok(result) => {
++                                        pending.push_back(work);
++                                        outcome = Some(result);
++                                        break;
++                                    }
++                                    Err(std::sync::mpsc::TryRecvError::Empty) => {
++                                        if native_failed
++                                            .load(std::sync::atomic::Ordering::Acquire)
++                                        {
++                                            tracing::error!(
++                                                "native checkpoint writer died; world halting (fail closed)"
++                                            );
++                                            return;
++                                        }
++                                        pending.push_back(work);
++                                    }
++                                    // The writer died without answering: halt with
++                                    // the baseline withheld, as before.
++                                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
++                                        pending.push_back(work);
++                                        break;
++                                    }
++                                }
++                            }
++                            Err(_) => {
++                                // The tick's queue closed: finish the original
++                                // wait, then report a missing answer as failure.
++                                outcome = durable.recv().ok();
++                                break;
++                            }
++                        }
++                    }
+                     match outcome {
+                         Some(Ok(())) => {}
+                         outcome => {
+@@ -1078,6 +1126,13 @@ pub(super) fn native_writer_loop(
+             break;
+         }
+     }
++    // Drop every job this writer will never run. A baseline job's guard closes
++    // its answer and wakes the journal owner when it is dropped, so a baseline
++    // queued behind a job that stopped the writer fails closed at once instead
++    // of leaving the owner's hold waiting for a tick item that may never come.
++    while let Ok(work) = work_rx.try_recv() {
++        drop(work);
++    }
+     if clean_close {
+         tracing::error!(
+             cause = "journal work channel closed",
