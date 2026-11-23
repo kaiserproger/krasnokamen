@@ -56,7 +56,7 @@ diff --git a/crates/mc-core/src/dolphin.rs b/crates/mc-core/src/dolphin.rs
          return;
      }
      for index in 0..state.entities.len() {
-@@ -197,180 +209,245 @@
+@@ -197,180 +209,145 @@
      }
  }
  
@@ -271,7 +271,40 @@ diff --git a/crates/mc-core/src/dolphin.rs b/crates/mc-core/src/dolphin.rs
 +                let _ = request_dolphin_treasure(state, dolphin, at);
              }
              continue;
-+        };
+-        }
+-        // Swim toward the treasure (vanilla speed ~0.5 blocks/tick pace,
+-        // applied per 10-tick run: 5-block steps).
+-        let dist = d2.sqrt();
+-        let step = (5.0 / dist).min(1.0);
+-        let desired = mc_physics::Vec3::new(
+-            (target[0] - at[0]) * step,
+-            (target[1] - at[1]) * step,
+-            (target[2] - at[2]) * step,
+-        );
+-        let body = state.entities.body(slot);
+-        let sampler = crate::tick::TickSampler {
+-            world: &state.world,
+-            registry: &state.registry,
+         };
+-        if let Some(moved) = mc_physics::resolve_collision_displacement(
+-            &sampler,
+-            mc_physics::Vec3::new(at[0], at[1], at[2]),
+-            mc_physics::Aabb {
+-                half_width: body.half_width,
+-                height: body.height,
+-            },
+-            desired,
+-            false,
+-            0.0,
+-        ) {
+-            state.entities.set_pos(
+-                slot,
+-                [
+-                    at[0] + moved.delta.x,
+-                    at[1] + moved.delta.y,
+-                    at[2] + moved.delta.z,
+-                ],
+-            );
 +        match treasure {
 +            DolphinTreasure::Pending { .. } => {}
 +            DolphinTreasure::Missing { .. } => {
@@ -309,22 +342,9 @@ diff --git a/crates/mc-core/src/dolphin.rs b/crates/mc-core/src/dolphin.rs
 +                }
 +            }
          }
--        // Swim toward the treasure (vanilla speed ~0.5 blocks/tick pace,
--        // applied per 10-tick run: 5-block steps).
--        let dist = d2.sqrt();
--        let step = (5.0 / dist).min(1.0);
--        let desired = mc_physics::Vec3::new(
--            (target[0] - at[0]) * step,
--            (target[1] - at[1]) * step,
--            (target[2] - at[2]) * step,
--        );
--        let body = state.entities.body(slot);
--        let sampler = crate::tick::TickSampler {
--            world: &state.world,
--            registry: &state.registry,
-+    }
-+}
-+
+     }
+ }
+ 
 +fn stop_treasure(state: &mut TickState, slot: EntitySlot, dolphin: EntityId) {
 +    if let Some(d) = state.entities.row_mut(slot).entity_life.dolphin.as_mut() {
 +        d.got_fish = false;
@@ -332,125 +352,6 @@ diff --git a/crates/mc-core/src/dolphin.rs b/crates/mc-core/src/dolphin.rs
 +    crate::command_locate::clear_dolphin_treasure(state, dolphin);
 +}
 +
-+/// Plan the next water waypoint in runtime-only navigation state; true means
-+/// vanilla `stuck` (three failed/blocked waypoints) and the caller clears the
-+/// fish. No entity-row field changes, so this cannot mark a WAL row.
-+fn plan_treasure(
-+    state: &mut TickState,
-+    slot: EntitySlot,
-+    at: [f64; 3],
-+    treasure: [i32; 3],
-+    run: u64,
-+) -> bool {
-+    use crate::command_locate::{DolphinNav, dolphin_navigation, set_dolphin_navigation};
-+    let dolphin = state.entities.body(slot).id;
-+    let mut nav = dolphin_navigation(state, dolphin).unwrap_or(DolphinNav {
-+        target: None,
-+        run,
-+        tries: 0,
-+        last: None,
-+        dimension: state.dimension,
-+    });
-+    if nav.run != run || nav.dimension != state.dimension {
-+        nav = DolphinNav {
-+            target: None,
-+            run,
-+            tries: 0,
-+            last: None,
-+            dimension: state.dimension,
-         };
--        if let Some(moved) = mc_physics::resolve_collision_displacement(
--            &sampler,
--            mc_physics::Vec3::new(at[0], at[1], at[2]),
--            mc_physics::Aabb {
--                half_width: body.half_width,
--                height: body.height,
--            },
--            desired,
--            false,
--            0.0,
--        ) {
--            state.entities.set_pos(
--                slot,
--                [
--                    at[0] + moved.delta.x,
--                    at[1] + moved.delta.y,
--                    at[2] + moved.delta.z,
--                ],
--            );
-+    }
-+    let moved = nav.last.is_some_and(|last| {
-+        let dx = at[0] - last[0];
-+        let dz = at[2] - last[2];
-+        dx * dx + dz * dz > 0.0025
-+    });
-+    if nav.last.is_some() {
-+        if moved {
-+            nav.tries = 0;
-+        } else if nav.target.is_some() {
-+            nav.tries = nav.tries.saturating_add(1);
-+            nav.target = None;
-         }
-     }
-+    nav.last = Some(at);
-+    let reached = nav.target.is_none_or(|target| {
-+        let dx = target[0] - at[0];
-+        let dy = target[1] - at[1];
-+        let dz = target[2] - at[2];
-+        dx * dx + dy * dy + dz * dz < 2.25
-+    });
-+    if reached {
-+        let candidates = water_waypoints(state, at, treasure);
-+        if candidates.is_empty() {
-+            nav.tries = nav.tries.saturating_add(1);
-+            nav.target = None;
-+        } else {
-+            nav.target = Some(candidates[(nav.tries as usize) % candidates.len()]);
-+        }
-+    }
-+    let stuck = nav.tries >= 3;
-+    if stuck {
-+        nav.target = None;
-+    }
-+    set_dolphin_navigation(state, dolphin, nav);
-+    stuck
- }
- 
-+/// Bounded deterministic water waypoints toward the treasure; the caller walks
-+/// them in order so a blocked first choice does not freeze the route.
-+fn water_waypoints(state: &TickState, at: [f64; 3], treasure: [i32; 3]) -> Vec<[f64; 3]> {
-+    let target = [
-+        f64::from(treasure[0]) + 0.5,
-+        f64::from(treasure[1]) + 0.5,
-+        f64::from(treasure[2]) + 0.5,
-+    ];
-+    let dx = target[0] - at[0];
-+    let dz = target[2] - at[2];
-+    let len = (dx * dx + dz * dz).sqrt();
-+    if len < 1.0e-6 {
-+        return Vec::new();
-+    }
-+    let (ux, uz) = (dx / len, dz / len);
-+    let (px, pz) = (-uz, ux);
-+    let dy = (target[1] - at[1]).clamp(-4.0, 4.0);
-+    let mut out = Vec::new();
-+    for advance in [len.min(12.0), len.min(6.0), len.min(3.0)] {
-+        for lateral in [0.0, 4.0, -4.0, 8.0, -8.0] {
-+            let candidate = [
-+                at[0] + ux * advance + px * lateral,
-+                at[1] + dy,
-+                at[2] + uz * advance + pz * lateral,
-+            ];
-+            if crate::conduit::water(state, candidate)
-+                && crate::conduit::water(state, [candidate[0], candidate[1] + 0.6, candidate[2]])
-+            {
-+                out.push(candidate);
-+            }
-+        }
-+    }
-+    out
-+}
-+
- #[derive(Debug, Clone, PartialEq)]
- pub struct FeedPlan {
-     pub target: EntityId,
+ /// Plan the next water waypoint in runtime-only navigation state; true means
+ /// vanilla `stuck` (three failed/blocked waypoints) and the caller clears the
+ /// fish. No entity-row field changes, so this cannot mark a WAL row.

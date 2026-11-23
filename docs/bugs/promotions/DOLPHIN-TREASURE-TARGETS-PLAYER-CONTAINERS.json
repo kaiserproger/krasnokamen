@@ -1,0 +1,38 @@
+{
+  "id": "DOLPHIN-TREASURE-TARGETS-PLAYER-CONTAINERS",
+  "verdict": "promoted",
+  "fix_commit": "patch:e44b5f3e0866a8cd3068568fa51a585adf2fe273cb18c7d2378b7ffd2d05d096",
+  "fix_commit_full": "patch:e44b5f3e0866a8cd3068568fa51a585adf2fe273cb18c7d2378b7ffd2d05d096",
+  "promoted_at": "2026-11-23T20:14:18+00:00",
+  "tree_head": "217dc98be28cf76f12bd13bf19b3afe620447f55",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "e44b5f3e0866a8cd3068568fa51a585adf2fe273cb18c7d2378b7ffd2d05d096",
+  "reversed_files": [
+    "crates/mc-core/src/dolphin.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:dolphin::tests::fed_dolphin_locates_the_structure_through_its_normal_goal_tick": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:dolphin::tests::a_player_chest_without_a_located_structure_is_not_a_treasure_lead": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:dolphin::tests::fed_dolphin_locates_the_structure_through_its_normal_goal_tick": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:dolphin::tests::a_player_chest_without_a_located_structure_is_not_a_treasure_lead": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T200826-ledger-promote-kdachy8d"
+}

@@ -2,7 +2,7 @@
 
 The production-only patch `DOLPHIN-TREASURE-TARGETS-PLAYER-CONTAINERS.patch` is the forward-ported fix at
 HEAD, SHA-256 of its non-test hunks
-`8f1ce20dcffb55f25d5b0e72998586a997a0e9b63b66e448ce0f28e975792d71`.
+`e44b5f3e0866a8cd3068568fa51a585adf2fe273cb18c7d2378b7ffd2d05d096`.
 
 Regenerated on `1c2e9db153` to reverse the **whole** dolphin path of `2c3e1fa2e` (the round-6 review: only
 the `Missing` arm was reverted, so the control still held the new locate request, the `Found`/`plan_treasure`
@@ -27,7 +27,7 @@ The fix landed in two commits on `wt/D123Battle`:
 | `@@ -37,12 +36,14` — `drive`'s doc comment and the new `treasure: Option<[f64; 3]>` parameter | Doc comment included (a/-side is the pre-fix wording); **the parameter is retained, reason (b)**: `crates/mc-core/src/dolphin_tests.rs:204` and `:217` call `drive(pos, air, speed, None, …)` with that argument, so reversing the parameter stops the control from compiling. Its `#[allow(clippy::too_many_arguments)]` comment rides along with the parameter. |
 | `@@ -61,6 +62,17` — the `if let Some(target) = treasure { … }` steering branch inside `drive` | Included: the a/-side omits the branch, so the control steers only at players/toys like the pre-fix code. |
 | `@@ -97,6 +109,7` — `treasure_search(state);` before `run`'s early `return` for an empty dolphin list | Included: the a/-side restores the plain early return (no behaviour difference: with no dolphin there is nothing to search). |
-| `@@ -192,178 +205,243` — the pre-fix `nearest_treasure` + container-scanning `treasure_search` replaced by the locate-lead `treasure_search`, `stop_treasure`, `plan_treasure` and `water_waypoints` | Included in full: the a/-side is the pre-fix `nearest_treasure` + `treasure_search` verbatim (48×24×48 overlay/chunk scan for chest/trapped chest/barrel, 5-block collision-resolved step, clear within 16 squared blocks) and carries none of the three new helpers. |
+| `@@ -192,178 +205,243` — the pre-fix `nearest_treasure` + container-scanning `treasure_search` replaced by the locate-lead `treasure_search`, `stop_treasure`, `plan_treasure` and `water_waypoints` | Included: the a/-side is the pre-fix `nearest_treasure` + `treasure_search` verbatim (48×24×48 overlay/chunk scan for chest/trapped chest/barrel, 5-block collision-resolved step, clear within 16 squared blocks) and drops `stop_treasure` (only the replaced body called it). `plan_treasure` and `water_waypoints` stay, reason (b): `crates/mc-core/src/dolphin_tests.rs:428` calls `plan_treasure`, and `water_waypoints` is its helper (reversing them stops the control from compiling). |
 
 ## Retained hunks and why (rule (b) — API the kept tests call)
 
@@ -52,7 +52,7 @@ Reversing the patch on the candidate gives the pre-fix `treasure_search`: a fed 
 the nearest chest/trapped chest/barrel within 48 blocks and steps 5 blocks toward it every tenth tick. In
 `a_player_chest_without_a_located_structure_is_not_a_treasure_lead` the chest sits 10 blocks on +x, so the
 control walks the dolphin onto it and fails at the **headline** assertion
-`crates/mc-core/src/dolphin_tests.rs:617` — `a player chest must not attract the dolphin: closest squared
+`crates/mc-core/src/dolphin_tests.rs:616` (the `assert!` macro; the expression is :617) — `a player chest must not attract the dolphin: closest squared
 {closest}` — now ordered before the goal-state assertions (they fail on any non-stop `Missing` arm and are
 not evidence on their own). The structure ref
 `cargo:mc-core:dolphin::tests::fed_dolphin_locates_the_structure_through_its_normal_goal_tick` goes red on
