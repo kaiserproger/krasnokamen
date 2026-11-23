@@ -1005,6 +1005,74 @@ promotion = "docs/bugs/promotions/X.json"
             self.assertEqual(regressions._promotion_errors('X', row), [])
 
 
+class FixturePanicTests(unittest.TestCase):
+    """A control red must be an assertion, not a fixture that panicked before the test body ran.
+
+    ReviewD123Harness (Mechanics rows TOTEM, DEATH-PROTECTION-COMPONENT, SPECIAL-001 were promoted on
+    a `Registry("invalid map color registry")` panic at tick_tests.rs:91). The rule has three classes:
+    (a) a confirmed fixture/setup panic refuses; (b) an assert macro, including one in a shared helper
+    inside a `*_tests.rs` file, is a red; (c) any other panic must be named by the row as its proving
+    assertion file:line, or it refuses."""
+
+    def tree(self):
+        import tempfile
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        (root / 'crates/mc-core/src').mkdir(parents=True)
+        (root / 'crates/mc-core/src/tick_tests.rs').write_text(
+            'fn registry() -> Registry {\n'
+            '    load().expect("registry loads")\n'
+            '}\n'
+            '\n'
+            '#[test]\n'
+            'fn tick() {\n'
+            '    let registry = registry();\n'
+            '    assert_eq!(1, 1);\n'
+            '}\n')
+        (root / 'crates/mc-core/src/core_journal_backpressure_tests.rs').write_text(
+            '// helper asserted by tests at 295/319/345\n' * 20 +
+            'fn pressure_is_within_budget(state: &State) {\n'
+            '    assert!(state.queued <= 32, "backpressure");\n'
+            '}\n')
+        return root
+
+    def test_a_fixture_panic_is_classified_fixture(self):
+        root = self.tree()
+        self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/tick_tests.rs', 2),
+                                             'registry loads'), 'fixture')
+        self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/tick_tests.rs', 2),
+                                             'Registry("invalid map color registry")'), 'fixture')
+        self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/tick_tests.rs', 8),
+                                             'called `Option::unwrap()` on a `None` value'), 'fixture')
+
+    def test_an_assert_macro_is_a_red_even_in_a_shared_helper(self):
+        root = self.tree()
+        self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/tick_tests.rs', 8),
+                                             'assertion failed'), 'assertion')
+        self.assertEqual(
+            ledger._panic_class(root, ('crates/mc-core/src/core_journal_backpressure_tests.rs', 22),
+                                'assertion failed: backpressure'), 'assertion')
+
+    def test_an_unknown_helper_panic_needs_the_row_to_name_it(self):
+        root = self.tree()
+        location = ('crates/mc-core/src/core_journal_backpressure_tests.rs', 21)
+        self.assertEqual(ledger._panic_class(root, location, 'some helper failure'), 'unknown')
+        entry = {'state': ledger.RED, 'detail': 'FAIL',
+                 'assertion': {'file': location[0], 'line': location[1], 'error': 'panic', 'class': 'unknown'}}
+        unproven = ledger._classify_control('B', {'r': entry}, {}, root)['r']
+        self.assertEqual(unproven['state'], ledger.UNPROVEN_PANIC)
+        named = {'proving_assertions': {'r': f'{location[0]}:{location[1]}'}}
+        self.assertEqual(ledger._classify_control('B', {'r': entry}, named, root)['r']['state'], ledger.RED)
+
+    def test_a_fixture_panic_entry_refuses_at_the_promote_boundary(self):
+        root = self.tree()
+        entry = {'state': ledger.RED, 'detail': 'FAIL',
+                 'assertion': {'file': 'crates/mc-core/src/tick_tests.rs', 'line': 2, 'error': 'panic',
+                               'class': 'fixture'}}
+        self.assertEqual(ledger._classify_control('B', {'r': entry}, {}, root)['r']['state'],
+                         ledger.FIXTURE_FAILURE)
+
 class TestOnlyEvidenceTests(unittest.TestCase):
     """The evidence a test-only promotion parses out of a run."""
 
@@ -1014,7 +1082,8 @@ class TestOnlyEvidenceTests(unittest.TestCase):
                 'assertion `left == right` failed\n')
         # Keyed by (crate, name): a bare name collides across modules (ReviewD123Harness1 9a).
         self.assertEqual(ledger._panic_locations(text),
-                         {('mc-edge', 'bad'): ('crates/mc-edge/src/host_telemetry_tests.rs', 120)})
+                         {('mc-edge', 'bad'): ('crates/mc-edge/src/host_telemetry_tests.rs', 120,
+                                               'assertion `left == right` failed')})
         two_modules = ('        FAIL [   0.123s] mc-edge tests::shared\n'
                        "thread 'tests::shared' panicked at crates/mc-edge/src/tests.rs:10:1:\n"
                        'assertion failed\n'
@@ -1022,8 +1091,8 @@ class TestOnlyEvidenceTests(unittest.TestCase):
                        "thread 'other::shared' panicked at crates/mc-core/src/other.rs:20:1:\n"
                        'assertion failed\n')
         self.assertEqual(ledger._panic_locations(two_modules), {
-            ('mc-edge', 'shared'): ('crates/mc-edge/src/tests.rs', 10),
-            ('mc-core', 'shared'): ('crates/mc-core/src/other.rs', 20)})
+            ('mc-edge', 'shared'): ('crates/mc-edge/src/tests.rs', 10, 'assertion failed'),
+            ('mc-core', 'shared'): ('crates/mc-core/src/other.rs', 20, 'assertion failed')})
 
     def test_hunk_ranges_use_the_pre_image_and_keep_their_context(self):
         # The applied reversal's - side is the candidate's numbering; context lines count, because a
@@ -1034,11 +1103,14 @@ class TestOnlyEvidenceTests(unittest.TestCase):
         self.assertEqual(ledger._hunk_old_ranges(''), {})
 
     def test_a_setup_unwrap_panic_is_not_an_assertion(self):
-        # `#[track_caller]` puts `.unwrap()` at the test's own line; M1/M2 must not count it.
+        # `#[track_caller]` puts `.unwrap()` at the test's own line; the class is what refuses it.
         text = ('        FAIL [   0.123s] mc-edge tests::setup\n'
                 "thread 'tests::setup' panicked at crates/mc-edge/src/tests.rs:44:9:\n"
                 'called `Option::unwrap()` on a `None` value\n')
-        self.assertEqual(ledger._panic_locations(text), {})
+        locations = ledger._panic_locations(text)
+        self.assertEqual(list(locations), [('mc-edge', 'setup')])
+        self.assertEqual(ledger._panic_class(Path('/nonexistent'), locations[('mc-edge', 'setup')][:2],
+                                             locations[('mc-edge', 'setup')][2]), 'fixture')
 
     def test_a_python_assertion_ignores_a_mentions_elsewhere(self):
         # Only the failing block's own exception counts (ReviewD123Harness1 9c).

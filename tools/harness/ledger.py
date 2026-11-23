@@ -277,17 +277,31 @@ def _exec(ctx, argv, tag, tree, env):
 _RESULT_LINE = re.compile(r'^\s+([A-Z][A-Z ]*?)\s+\[\s*[\d.]+s\]\s+(?:\(\s*\d+/\d+\)\s+)?(\S+)\s+(\S+)\s*$', re.MULTILINE)
 _PANIC_LINE = re.compile(r"panicked at ([^\s:]+):(\d+)")
 # A test body's `.unwrap()` panics through #[track_caller] at the test's own line, but it is a setup
-# failure, not an assertion: the M1/M2 gates must not accept it as evidence.
+# failure, not an assertion: no control kind may accept it as evidence.
 _SETUP_PANIC = re.compile(r'^called `(?:Option|Result)::(unwrap|expect|unwrap_err|expect_err)')
+# Confirmed fixture-setup failures the harness's own tests produced: a shared registry or world
+# builder panics before the registered test body runs (ReviewD123Harness, Mechanics rows: the control
+# was red, but at `Registry("invalid map color registry")` from a fixture, not at an assertion).
+_FIXTURE_PANICS = (
+    re.compile(r'registry loads', re.IGNORECASE),
+    re.compile(r'invalid map color registry', re.IGNORECASE),
+    re.compile(r'\btest_registry\('),
+    re.compile(r'\bfixture_store\('),
+)
+_ASSERT_LINE = re.compile(r'\b(?:assert(?:_eq|_ne)?!|debug_assert(?:_eq|_ne)?!|panic!\s*\()')
+
+FIXTURE_FAILURE = 'fixture-failure'
+UNPROVEN_PANIC = 'unproven-panic'
 
 
 def _panic_locations(text):
-    """{(crate, test name): (file, line)} of the assertion panics nextest captured.
+    """{(crate, test name): (file, line, message)} of the panics nextest captured.
 
-    A negative control is red only at an assertion: `panicked at <path>:<line>` inside a changed
-    test file is that assertion, a panic in production code is not evidence about the test. The key
-    pairs the panic with the result line it follows (its binary's crate and the test name), so two
-    modules with a test of the same name do not overwrite each other."""
+    A negative control is red only at an assertion: `panicked at <path>:<line>` is where the panic
+    happened, and the message plus that source line is what later decides whether it was an
+    assertion or a fixture. The key pairs the panic with the result line it follows (its binary's
+    crate and the test name), so two modules with a test of the same name do not overwrite each
+    other."""
     locations = {}
     current = None
     for line in text.splitlines():
@@ -298,9 +312,8 @@ def _panic_locations(text):
         match = _PANIC_LINE.search(line)
         if match is None:
             continue
-        message = text[text.find(line) + len(line):].splitlines()
-        if message and _SETUP_PANIC.match(message[1].strip() if len(message) > 1 else ''):
-            continue
+        rest = text[text.find(line) + len(line):].splitlines()
+        message = rest[1].strip() if len(rest) > 1 else ''
         thread = re.search(r"thread '([^']+)' panicked", line)
         if thread and '::' in thread.group(1):
             name = thread.group(1).rsplit('::', 1)[-1]
@@ -310,8 +323,32 @@ def _panic_locations(text):
             name = name.rsplit('::', 1)[-1]
         else:
             continue
-        locations[(crate, name)] = (match.group(1), int(match.group(2)))
+        locations[(crate, name)] = (match.group(1), int(match.group(2)), message)
     return locations
+
+
+def _panic_class(tree, location, message):
+    """'assertion' | 'fixture' for a panic a cargo test emitted, from its message and source line.
+
+    (a) a confirmed fixture/setup panic (registry or world builder, a `#[track_caller]`
+    unwrap/expect) is `fixture`: the registered test body never ran its assertion.
+    (b) a panic whose source line is an assert macro (or an explicit `panic!`) is `assertion`; a
+    shared helper inside a `*_tests.rs` file counts, so a helper assert is not rejected.
+    (c) anything else is `unknown` and the promotion must name its file:line as the proving
+    assertion (ReviewD123Harness, fixture-panic rule)."""
+    file, line = location
+    if any(pattern.search(message or '') for pattern in _FIXTURE_PANICS) or _SETUP_PANIC.match(message or ''):
+        return 'fixture'
+    try:
+        lines = (Path(tree) / file).read_text(errors='surrogateescape').splitlines()
+    except OSError:
+        return 'unknown'
+    if not 1 <= line <= len(lines):
+        return 'unknown'
+    source = lines[line - 1]
+    if _ASSERT_LINE.search(source):
+        return 'assertion'
+    return 'unknown'
 
 
 def _python_assertion(text):
@@ -368,7 +405,10 @@ def _run_cargo(ctx, tests, tree):
             results[test] = (GREEN, '', None)
         elif status == 'FAIL':
             location = panics.get((test[0], test[1].rsplit('::', 1)[-1]))
-            assertion = {'file': location[0], 'line': location[1], 'error': 'panic'} if location else None
+            assertion = None
+            if location:
+                assertion = {'file': location[0], 'line': location[1], 'error': 'panic',
+                             'class': _panic_class(tree, location[:2], location[2])}
             results[test] = (RED, status, assertion)
         else:
             results[test] = (UNRUNNABLE, f'{status}; see log', None)
@@ -1045,6 +1085,37 @@ def _assertion_in_ranges(entry, ranges, control_dir):
         except ValueError:
             return False
     return any(first <= line <= last for first, last in ranges.get(path, []))
+
+
+def _classify_control(ident, control, row, tree):
+    """Rewrite a control's entries so a fixture panic or an unnamed panic cannot pass as red.
+
+    (a) `fixture-failure`: a confirmed fixture/setup panic — the registered test's body never ran.
+    (c) `unproven-panic`: a panic at a line that is not an assert macro; the row must name that exact
+    `file:line` in `proving_assertions` for it to count. Python AssertionErrors are unaffected."""
+    named = row.get('proving_assertions') if isinstance(row.get('proving_assertions'), dict) else {}
+    out = {}
+    for ref, entry in control.items():
+        if entry.get('state') != RED:
+            out[ref] = entry
+            continue
+        assertion = entry.get('assertion') or {}
+        if assertion.get('error') == 'AssertionError' or assertion.get('class') == 'assertion':
+            out[ref] = entry
+            continue
+        location = f"{assertion.get('file')}:{assertion.get('line')}"
+        if not assertion:
+            # No panic location (a runner that reports FAIL without one): unchanged, as before.
+            out[ref] = entry
+        elif assertion.get('class') == 'fixture':
+            out[ref] = {**entry, 'state': FIXTURE_FAILURE,
+                        'detail': entry.get('detail', '') + f' | fixture panic at {location}'}
+        elif named.get(ref) == location:
+            out[ref] = entry
+        else:
+            out[ref] = {**entry, 'state': UNPROVEN_PANIC,
+                        'detail': entry.get('detail', '') + f' | panic at {location} is not an assert macro; name it in proving_assertions'}
+    return out
 
 
 def _assertion_in_files(entry, control_dir, test_files):
@@ -1734,7 +1805,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         else:
             control_tree, control_dir = 'fix_commit', stack.enter_context(_worktree(root, full, 'fix'))
         _git(control_dir, *reverse, stdin=patch.encode(errors='surrogateescape'))
-        control = runner(ctx, refs, control_dir, True)
+        control = _classify_control(ident, runner(ctx, refs, control_dir, True), row, control_dir)
         valid_red = {ref for ref, entry in control.items()
                      if entry['state'] == RED and _assertion_in_files(entry, control_dir, reversed_files)} \
             if test_only else {ref for ref, entry in control.items() if entry['state'] == RED}
@@ -1756,7 +1827,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
             if _git(candidate, 'apply', '--check', '--whitespace=nowarn', '-', stdin=defect, check=False)[0]:
                 raise Refused(f"{ident}: control_b_patch {row['control_b_patch']} does not apply on the tree being promoted")
             _git(candidate, 'apply', '--whitespace=nowarn', '-', stdin=defect)
-            defect_control = runner(ctx, refs, candidate, True)
+            defect_control = _classify_control(ident, runner(ctx, refs, candidate, True), row, candidate)
             valid_b = {ref for ref, entry in defect_control.items()
                        if entry['state'] == RED and _assertion_in_files(entry, candidate, reversed_files)
                        and _assertion_in_ranges(entry, ranges, candidate)}
