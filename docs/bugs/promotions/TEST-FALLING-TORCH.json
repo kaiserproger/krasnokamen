@@ -1,0 +1,56 @@
+{
+  "id": "TEST-FALLING-TORCH",
+  "verdict": "promoted",
+  "fix_commit": "9cc59fb37b5ea1e543eaca53f5864a0c0613051c",
+  "fix_commit_full": "9cc59fb37b5ea1e543eaca53f5864a0c0613051c",
+  "promoted_at": "2026-11-23T21:28:27+00:00",
+  "tree_head": "223bf60c2868578432441a99fae773f22b60347b",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "test_hunks",
+  "control_b": {
+    "patch": "docs/bugs/test-only/TEST-FALLING-TORCH-defect.patch",
+    "sha256": "84e8992c2a2173111ee8f030cd3ee504dbc1fde4337dc7507d54f4823141844d",
+    "proving": [
+      "cargo:mc-core:falling::tests::empty_collision_attachment_is_not_a_floor_and_slab_landing_drops_instead"
+    ],
+    "negative_control": {
+      "cargo:mc-core:falling::tests::empty_collision_attachment_is_not_a_floor_and_slab_landing_drops_instead": {
+        "state": "red",
+        "detail": "FAIL",
+        "assertion": {
+          "file": "crates/mc-core/src/falling_tests.rs",
+          "line": 346,
+          "error": "panic",
+          "class": "assertion"
+        }
+      }
+    }
+  },
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/falling_tests.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:falling::tests::empty_collision_attachment_is_not_a_floor_and_slab_landing_drops_instead": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/falling_tests.rs",
+        "line": 346,
+        "error": "panic",
+        "class": "assertion"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-core:falling::tests::empty_collision_attachment_is_not_a_floor_and_slab_landing_drops_instead": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T212428-ledger-promote-092ed0u6"
+}
