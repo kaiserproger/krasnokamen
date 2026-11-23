@@ -2481,3 +2481,49 @@ fn a_contact_never_grows_deeper_than_the_tolerance_behind_a_face() {
         }
     }
 }
+
+#[test]
+fn a_sub_epsilon_axis_step_is_zero_on_every_axis() {
+    // Vanilla `VoxelShape.collideX` returns 0.0 for `|d| < 1.0E-7` once the shape
+    // is non-empty (javap, offsets 9..21); `collideY`/`collideZ` reach the same
+    // body through `AxisCycle`. This kernel used to sweep the sub-epsilon step.
+    let wall = WorldAabb {
+        min_x: 1.0,
+        min_y: 0.0,
+        min_z: 0.0,
+        max_x: 2.0,
+        max_y: 1.0,
+        max_z: 1.0,
+    };
+    let floor = WorldAabb {
+        min_x: -10.0,
+        min_y: -1.0,
+        min_z: -10.0,
+        max_x: 10.0,
+        max_y: 0.0,
+        max_z: 10.0,
+    };
+    let body = WorldAabb {
+        min_x: 0.0,
+        min_y: 0.5,
+        min_z: 0.0,
+        max_x: 0.6,
+        max_y: 1.8,
+        max_z: 0.6,
+    };
+    // A wall 0.4 blocks away is not reached by a 1e-8 step, but vanilla still
+    // refuses the motion outright instead of moving by the tiny amount.
+    assert_eq!(clip_x(body, 1.0e-8, std::slice::from_ref(&wall)), 0.0);
+    assert_eq!(clip_x(body, -1.0e-8, std::slice::from_ref(&wall)), 0.0);
+    // A floor 0.5 below the feet: the same refusal on the vertical axis.
+    assert_eq!(clip_y(body, -1.0e-8, std::slice::from_ref(&floor)), 0.0);
+    assert_eq!(clip_y(body, 1.0e-8, std::slice::from_ref(&floor)), 0.0);
+    // And on z, through its own entry point.
+    assert_eq!(clip_z(body, 1.0e-8, std::slice::from_ref(&wall)), 0.0);
+    assert_eq!(clip_z(body, -1.0e-8, std::slice::from_ref(&wall)), 0.0);
+    // The tolerance is strict: just above it the step survives, and an empty
+    // shape still returns the motion unchanged (vanilla's empty early return).
+    assert_eq!(clip_x(body, 2.0e-7, &[]), 2.0e-7);
+    assert_eq!(clip_y(body, -2.0e-7, &[]), -2.0e-7);
+    assert_eq!(clip_x(body, 1.0e-8, &[]), 1.0e-8);
+}

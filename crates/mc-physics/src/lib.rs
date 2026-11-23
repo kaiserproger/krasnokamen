@@ -1613,6 +1613,12 @@ fn overlaps_across(body_min: f64, body_max: f64, obstacle_min: f64, obstacle_max
 /// being skipped, so the clip and the overlap predicate (`overlaps_across`)
 /// agree about the same contact.
 fn clip_x(body: WorldAabb, mut dx: f64, collision_boxes: &[WorldAabb]) -> f64 {
+    // Vanilla `VoxelShape.collideX` returns 0.0 for a motion under the `1.0E-7`
+    // face tolerance once the shape is non-empty (javap, offsets 9..21);
+    // `collideY`/`collideZ` reach the same body through `AxisCycle`.
+    if !collision_boxes.is_empty() && dx.abs() < COLLISION_EPSILON {
+        return 0.0;
+    }
     for obstacle in collision_boxes {
         if overlaps_across(body.min_y, body.max_y, obstacle.min_y, obstacle.max_y)
             && overlaps_across(body.min_z, body.max_z, obstacle.min_z, obstacle.max_z)
@@ -1634,6 +1640,12 @@ fn clip_x(body: WorldAabb, mut dx: f64, collision_boxes: &[WorldAabb]) -> f64 {
 }
 
 fn clip_z(body: WorldAabb, mut dz: f64, collision_boxes: &[WorldAabb]) -> f64 {
+    // Vanilla `VoxelShape.collideX` returns 0.0 for a motion under the `1.0E-7`
+    // face tolerance once the shape is non-empty (javap, offsets 9..21);
+    // `collideY`/`collideZ` reach the same body through `AxisCycle`.
+    if !collision_boxes.is_empty() && dz.abs() < COLLISION_EPSILON {
+        return 0.0;
+    }
     for obstacle in collision_boxes {
         if overlaps_across(body.min_x, body.max_x, obstacle.min_x, obstacle.max_x)
             && overlaps_across(body.min_y, body.max_y, obstacle.min_y, obstacle.max_y)
@@ -1810,6 +1822,12 @@ fn sweep_axis_interval(
 /// ceiling is a contact and is snapped back out, exactly like [`clip_x`] and
 /// [`clip_z`] do for their faces.
 fn clip_y(body: WorldAabb, mut dy: f64, collision_boxes: &[WorldAabb]) -> f64 {
+    // Vanilla `VoxelShape.collideX` returns 0.0 for a motion under the `1.0E-7`
+    // face tolerance once the shape is non-empty (javap, offsets 9..21);
+    // `collideY`/`collideZ` reach the same body through `AxisCycle`.
+    if !collision_boxes.is_empty() && dy.abs() < COLLISION_EPSILON {
+        return 0.0;
+    }
     for obstacle in collision_boxes {
         if overlaps_across(body.min_x, body.max_x, obstacle.min_x, obstacle.max_x)
             && overlaps_across(body.min_z, body.max_z, obstacle.min_z, obstacle.max_z)
