@@ -1005,6 +1005,58 @@ promotion = "docs/bugs/promotions/X.json"
             self.assertEqual(regressions._promotion_errors('X', row), [])
 
 
+class StalePatchTests(unittest.TestCase):
+    """A patch-mode receipt whose patch no longer reverses is a report in L2, strict at promote.
+
+    ReviewD123Harness3 N1 / Main: an ordinary edit of a historical fix must never turn L2 red, so
+    `_promotion_errors` is silent about staleness (it only reports through run()); the missing patch
+    file stays fatal, and `ledger promote`/`--dry-run` refuses when the patch does not reverse."""
+
+    def root(self, with_patch=True):
+        import tempfile, hashlib
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        (root / 'docs/bugs/rows').mkdir(parents=True)
+        (root / 'docs/bugs/fix-patches').mkdir(parents=True)
+        text = 'diff --git a/nope.rs b/nope.rs\n--- a/nope.rs\n+++ b/nope.rs\n@@ -1 +1 @@\n-a\n+b\n'
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        (root / 'docs/bugs/rows/X.toml').write_text(f'''[[bug]]
+id = "X"
+title = "t"
+area = "harness"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "x"
+regression = []
+fix_commit = "patch:{digest}"
+promotion = "docs/bugs/promotions/X.json"
+''')
+        (root / 'docs/bugs/promotions').mkdir(parents=True)
+        (root / 'docs/bugs/promotions/X.json').write_text(
+            '{"id": "X", "verdict": "promoted", "fix_commit": "patch:%s", "control": "reversed_fix_hunks"}'
+            % digest)
+        if with_patch:
+            (root / 'docs/bugs/fix-patches/X.patch').write_text(text)
+        return root
+
+    def test_a_missing_patch_file_is_fatal(self):
+        root = self.root(with_patch=False)
+        with patch.object(regressions, 'REPO_ROOT', root):
+            row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
+            errors = regressions._promotion_errors('X', row)
+        self.assertTrue(any('no committed patch' in error for error in errors), errors)
+
+    def test_a_stale_patch_is_a_report_not_an_error(self):
+        root = self.root()
+        with patch.object(regressions, 'REPO_ROOT', root):
+            row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
+            errors = regressions._promotion_errors('X', row)
+            stale = regressions._stale_rows([row])
+        self.assertEqual(errors, [], 'staleness must not fail the L2 gate')
+        self.assertEqual(stale, ['X'], 'it is still reported as the backlog')
+
 class FixturePanicTests(unittest.TestCase):
     """A control red must be an assertion, not a fixture that panicked before the test body ran.
 
@@ -1112,13 +1164,18 @@ class TestOnlyEvidenceTests(unittest.TestCase):
             ('mc-edge', 'shared'): ('crates/mc-edge/src/tests.rs', 10, 'assertion failed'),
             ('mc-core', 'shared'): ('crates/mc-core/src/other.rs', 20, 'assertion failed')})
 
-    def test_hunk_ranges_use_the_pre_image_and_keep_their_context(self):
-        # The applied reversal's - side is the candidate's numbering; context lines count, because a
-        # corrected test may fail on an unchanged neighbour of the hunk (FALLING-TORCH: 346 vs 348).
+    def test_changed_lines_exclude_context_and_operators_span_calls(self):
+        # ReviewD123Harness3 N8: only lines the reversal actually changed count (11 here), while an
+        # operator starting at the red line may span a changed line further down.
         diff = ('diff --git a/x.rs b/x.rs\n--- a/x.rs\n+++ b/x.rs\n'
-                '@@ -10,4 +10,5 @@ fn f() {\n ctx\n-old\n+new\n ctx\n')
-        self.assertEqual(ledger._hunk_old_ranges(diff), {'x.rs': [(10, 13)]})
-        self.assertEqual(ledger._hunk_old_ranges(''), {})
+                '@@ -10,3 +10,3 @@ fn f() {\n ctx\n-old\n+new\n ctx\n')
+        self.assertEqual(ledger._changed_old_lines(diff), {'x.rs': {11}})
+        self.assertEqual(ledger._changed_old_lines(''), {})
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'x.rs').write_text('fn f() {\n    assert!(matches!(\n        a, 1 | 2\n    ));\n}\n')
+            self.assertEqual(ledger._operator_span(root, 'x.rs', 2), (2, 4))
 
     def test_a_setup_unwrap_panic_is_not_an_assertion(self):
         # `#[track_caller]` puts `.unwrap()` at the test's own line; the class is what refuses it.
@@ -2159,6 +2216,9 @@ class LedgerToolTests(unittest.TestCase):
         self.assertEqual(receipt['fix_patch_sha256'], recorded[len('patch:'):])
         self.assertTrue(receipt['tree_dirty'])
         self.assertIn('status = "fixed"', ledger_file.read_text())
+        # A patch-mode row must carry its committed patch (fatal otherwise); a re-audit reverses it.
+        (root / 'docs/bugs/fix-patches').mkdir(parents=True, exist_ok=True)
+        (root / 'docs/bugs/fix-patches/BUG.patch').write_text(fix_file.read_text())
         bug = tomllib.loads(ledger_file.read_text())['bug'][0]
         with patch.object(regressions, 'REPO_ROOT', root):
             self.assertEqual(regressions._promotion_errors('BUG', bug), [])

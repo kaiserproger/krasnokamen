@@ -1052,29 +1052,50 @@ def _split_non_test(diff, source_of):
 _HUNK_HEADER = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
 
 
-def _hunk_old_ranges(diff):
-    """{path: [(first, last)]} of the pre-image lines (the tree's own numbering) each hunk covers.
-
-    A defect-injection control must turn red at the *corrected assertion*. Taking the numbers from
-    the recorded patch is wrong: git applies it at an offset once the file has grown, so the ranges
-    are read from the diff the reversal actually produced in the control worktree
-    (ReviewD123Harness1, BIOME: the recorded header said 1657, the applied hunk sat at 1978). The
-    diff keeps its context lines: a corrected test may fail on an unchanged neighbour of the hunk
-    (FALLING-TORCH reds at falling_tests.rs:346, its first changed line is 348)."""
-    ranges, path = {}, None
-    for line in diff.splitlines():
-        if line.startswith('diff --git '):
-            match = re.match(r'diff --git a/(.+) b/(.+)$', line)
+def _changed_old_lines(diff):
+    """{path: {line}} of the pre-image lines the diff actually adds or removes (context excluded)."""
+    changed, path, line = {}, None, 0
+    for text in diff.splitlines():
+        if text.startswith('diff --git '):
+            match = re.match(r'diff --git a/(.+) b/(.+)$', text)
             path = match.group(2) if match else None
-        elif path is not None and line.startswith('@@ '):
-            header = _HUNK_HEADER.match(line)
-            if header is None:
-                continue
-            first = int(header.group(1))
-            count = int(header.group(2) or 1)
-            if count:
-                ranges.setdefault(path, []).append((first, first + count - 1))
-    return ranges
+            continue
+        header = _HUNK_HEADER.match(text)
+        if header is not None:
+            line = int(header.group(1))
+            continue
+        if path is None or text.startswith('+++') or text.startswith('---'):
+            continue
+        if text.startswith('-'):
+            changed.setdefault(path, set()).add(line)
+            line += 1
+        elif text.startswith('+'):
+            continue
+        elif text.startswith(' ') or text == '':
+            line += 1
+    return changed
+
+
+def _operator_span(tree, file, line):
+    """(first, last) lines covered by the call/operator starting at `line`, from the source text."""
+    try:
+        lines = (Path(tree) / file).read_text(errors='surrogateescape').splitlines()
+    except OSError:
+        return None
+    if not 1 <= line <= len(lines):
+        return None
+    depth = 0
+    started = False
+    for index in range(line - 1, min(len(lines), line + 200)):
+        for char in lines[index]:
+            if char in '([{':
+                depth += 1
+                started = True
+            elif char in ')]}':
+                depth -= 1
+        if started and depth <= 0:
+            return (line, index + 1)
+    return (line, len(lines))
 
 
 def _assertion_in_ranges(entry, ranges, control_dir):
@@ -1830,16 +1851,38 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
             # the corrected test to go red, so the guard's own direction is proven too.
             # The reversed hunks' line numbers in the candidate come from the reversal just applied,
             # read before the tree is reset for control B (git applies at an offset once a file grows).
-            _, applied = _git(control_dir, 'diff', '--no-renames', '--no-color')
-            ranges = _hunk_old_ranges(applied)
+            # Context lines do not count: the red must sit on a changed line, or on an operator that
+            # starts at the red line and spans one (a multi-line assert), or be named by the row.
+            _, applied = _git(control_dir, 'diff', '-U0', '--no-renames', '--no-color')
+            changed = _changed_old_lines(applied)
             _materialize(root, candidate, tree_now)
             if _git(candidate, 'apply', '--check', '--whitespace=nowarn', '-', stdin=defect, check=False)[0]:
                 raise Refused(f"{ident}: control_b_patch {row['control_b_patch']} does not apply on the tree being promoted")
             _git(candidate, 'apply', '--whitespace=nowarn', '-', stdin=defect)
             defect_control = _classify_control(ident, runner(ctx, refs, candidate, True), row, candidate)
+            def in_changed(entry, ref):
+                assertion = entry.get('assertion') or {}
+                file, line = assertion.get('file'), assertion.get('line')
+                if not isinstance(file, str) or not isinstance(line, int):
+                    return False
+                if os.path.isabs(file):
+                    try:
+                        file = Path(file).resolve().relative_to(Path(candidate).resolve()).as_posix()
+                    except ValueError:
+                        return False
+                lines = changed.get(file, set())
+                if line in lines:
+                    return True
+                span = _operator_span(candidate, file, line)
+                if span and any(first <= changed_line <= span[1] for changed_line in lines
+                                for first in [span[0]]):
+                    return True
+                return row_named.get(ref) == f'{file}:{line}'
+
+            row_named = row.get('proving_assertions') if isinstance(row.get('proving_assertions'), dict) else {}
             valid_b = {ref for ref, entry in defect_control.items()
                        if entry['state'] == RED and _assertion_in_files(entry, candidate, reversed_files)
-                       and _assertion_in_ranges(entry, ranges, candidate)}
+                       and in_changed(entry, ref)}
             if not valid_b:
                 raise Refused(f"{ident}: defect-injection control ({defect_rel}) did not go red at an assertion "
                               f"inside a hunk the fix reversed in {', '.join(reversed_files)}: "

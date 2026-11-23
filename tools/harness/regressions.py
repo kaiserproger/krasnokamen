@@ -26,24 +26,49 @@ OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_
 PROMOTION_DIR = 'docs/bugs/promotions'
 
 
+def _patch_file(ident):
+    """The committed patch a re-audit passes: fix-patches/ or promotions/, whichever exists."""
+    for rel in (f'docs/bugs/fix-patches/{ident}.patch', f'docs/bugs/promotions/{ident}.patch'):
+        path = REPO_ROOT / rel
+        if path.is_file():
+            return path
+    return None
+
+
+def _patch_reverses(path):
+    """(reverses on HEAD, first error line) for a patch-mode row's committed patch."""
+    import subprocess
+    check = subprocess.run(['git', '-C', str(REPO_ROOT), 'apply', '-R', '--check', '--whitespace=nowarn',
+                            str(path)], capture_output=True, text=True)
+    return check.returncode == 0, (check.stderr.strip().splitlines()[0] if check.stderr.strip() else 'apply --check failed')
+
+
+def _stale_rows(bugs):
+    """Patch-mode rows whose committed patch does not reverse on this tree, sorted."""
+    stale = []
+    for bug in bugs:
+        fix = bug.get('fix_commit')
+        if not isinstance(fix, str) or not fix.startswith('patch:') or bug['id'] in BASE_FIXED:
+            continue
+        patch = _patch_file(bug['id'])
+        if patch is not None and not _patch_reverses(patch)[0]:
+            stale.append(bug['id'])
+    return sorted(stale)
+
+
 def _promotion_errors(ident, bug):
     """Why this row's `fixed` status or `promotion` field is not acceptable, if it is not."""
     promotion, fix_commit = bug.get('promotion'), bug.get('fix_commit')
     if 'fix_commit' in bug and (not isinstance(fix_commit, str) or not re.fullmatch(r'(?:client:)?[0-9a-f]{7,40}|patch:[0-9a-f]{64}', fix_commit)):
         return [f'{ident}: fix_commit must be a lowercase hex commit id, client:<commit> or patch:<sha256>']
     if isinstance(fix_commit, str) and fix_commit.startswith('patch:') and ident not in BASE_FIXED:
-        # README: a patch-mode fix is re-audited by reversing it on the tree being promoted; a patch
-        # that no longer reverses (a later commit rewrote its hunks) is a stale receipt (N1).
-        patch = REPO_ROOT / 'docs/bugs/fix-patches' / f'{ident}.patch'
-        if not patch.is_file():
-            # Patch mode also accepts a patch handed to --fix-patch only; the committed copy is what
-            # a re-audit passes, and only its existence makes the reversal checkable.
-            return []
-        import subprocess
-        check = subprocess.run(['git', '-C', str(REPO_ROOT), 'apply', '-R', '--check', '--whitespace=nowarn',
-                                str(patch)], capture_output=True, text=True)
-        if check.returncode:
-            return [f'{ident}: fix patch no longer reverses on HEAD ({check.stderr.strip().splitlines()[0] if check.stderr.strip() else "apply --check failed"})']
+        # FATAL: a patch-mode row must carry its committed patch; a re-audit reverses it (README:185).
+        patch = _patch_file(ident)
+        if patch is None:
+            return [f'{ident}: patch-mode row has no committed patch under docs/bugs/fix-patches/ or docs/bugs/promotions/']
+        # A stale patch (a later commit rewrote its hunks) is NOT an error here: ordinary edits of
+        # historical fixes must not turn L2 red. Strictness lives at promote/--dry-run; run() reports
+        # the backlog non-fatally.
     if promotion is None:
         if bug.get('status') == 'fixed' and ident not in BASE_FIXED:
             return [f'{ident}: fixed without a promotion receipt; only `python3 -m tools.harness ledger promote` may set fixed']
@@ -700,6 +725,14 @@ def run(ctx, *, cargo_junit: Path | None = None):
             errors.append(f'{ident}: a command repro needs a cargo check through the same command path')
     statuses = {b['id']: b.get('status') for b in bugs if isinstance(b, dict) and isinstance(b.get('id'), str)}
     errors.extend(f'{ident}: reopened row is still in BASE_FIXED; remove it from ledger_base_fixed.py' for ident in sorted(BASE_FIXED) if statuses.get(ident) == 'open')
+    stale = _stale_rows([bug for bug in bugs if isinstance(bug, dict) and isinstance(bug.get('id'), str)])
+    if stale:
+        # Report only: L2 must not fail because a historical fix's hunks were later rewritten.
+        print(f'[regressions] stale patch-mode receipts: {len(stale)}', flush=True)
+        try:
+            (ctx.artifact_dir / 'stale-patch-mode.txt').write_text('\n'.join(stale) + '\n')
+        except OSError:
+            pass
     fixed = sum(isinstance(b, dict) and b.get('status') == 'fixed' for b in bugs)
     print(f'[regressions] open={len(bugs)-fixed} fixed={fixed}', flush=True)
     if errors:
