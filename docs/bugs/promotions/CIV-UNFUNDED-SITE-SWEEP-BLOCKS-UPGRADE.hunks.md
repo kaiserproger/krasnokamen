@@ -1,7 +1,7 @@
 # CIV-UNFUNDED-SITE-SWEEP-BLOCKS-UPGRADE — forward-ported fix patch
 
 Forward patch: `docs/bugs/promotions/CIV-UNFUNDED-SITE-SWEEP-BLOCKS-UPGRADE.patch`
-(`patch:27e4358a39c30bec784213e18d1e8a0bf14517364eec97e61407d4f510ab04dd`), the
+(`patch:8b45c6627bb5593d544183417675b38ceb4b9f554903f961288eac1ffb997583`), the
 row's `fix_commit`. It applies in reverse on the candidate `wt/D123Civ`
 (`git apply -R --check`) and is the net non-test diff from the base
 `f9a8d45596696880fc6a0c9d92f5cd1758002651` to the fixed tree for the two

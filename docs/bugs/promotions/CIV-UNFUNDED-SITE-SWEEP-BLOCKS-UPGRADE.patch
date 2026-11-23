@@ -105,10 +105,10 @@ index 8543bf976..0d6244542 100644
              }
          }
 diff --git a/crates/mc-core/src/settlements/construction_site_refusals.rs b/crates/mc-core/src/settlements/construction_site_refusals.rs
-index cda40274a..4c8471e2c 100644
+index cda40274a..ff6e8a399 100644
 --- a/crates/mc-core/src/settlements/construction_site_refusals.rs
 +++ b/crates/mc-core/src/settlements/construction_site_refusals.rs
-@@ -223,9 +223,13 @@ impl Sweeps {
+@@ -223,9 +223,15 @@ impl Sweeps {
              .retain(|id, sweep| !sweep_stale(id, sweep, blueprint, frontages, topology));
      }
  
@@ -119,13 +119,15 @@ index cda40274a..4c8471e2c 100644
 +    /// A retained sweep of a kind this pass did not advance (its funding was
 +    /// withdrawn) must not hold the slot for other work.
 +    pub(super) fn holding<'a>(&self, kinds: impl IntoIterator<Item = &'a str>) -> bool {
-+        kinds
-+            .into_iter()
-+            .any(|kind| self.live.get(kind).is_some_and(|sweep| sweep.best.is_some()))
++        kinds.into_iter().any(|kind| {
++            self.live
++                .get(kind)
++                .is_some_and(|sweep| sweep.best.is_some())
++        })
      }
  
      /// Candidates this blueprint's live sweep has examined (test observer).
-@@ -481,6 +485,8 @@ pub(super) fn advance(
+@@ -481,6 +487,8 @@ pub(super) fn advance(
          Some(&floors[usize::from(rotation) % 4]),
      ) {
          Ok(cost) if cost == stored => Advance::Cheapest(origin, rotation),
