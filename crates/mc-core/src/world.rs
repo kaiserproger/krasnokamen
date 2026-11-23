@@ -100,7 +100,7 @@ pub struct ChunkWorld {
     /// mirror projects game time from them exactly as replay's
     /// `ReplayGameClock` does, so a held interval never advances a comparison
     /// image.
-    clock_spans: Vec<(u64, u64)>,
+    clock_spans: Vec<clocks::ClockSpan>,
     /// First native tick the spans cover; earlier anchors have no projection.
     clock_since: Option<u64>,
     /// Held-tick count before [`Self::clock_since`].
