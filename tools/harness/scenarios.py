@@ -683,8 +683,8 @@ SCENARIOS: dict[str, Scenario] = {
         owner="core:harness", evidence="graphical", profile="scene-shot",
         scenario_id="native-toast", requires=("xvfb",),
         sources=("tools/harness/toast_scene.json", "tools/harness/backends/scene_shot_checks.py"),
-        fixture="private native client joining a remote (non-local) server, first second after Play and six seconds later",
-        proves="the top-right toast panel and its white text are present right after Play and absent six seconds later",
+        fixture="private native client joining a remote (non-local) server, two seconds after Play and eighteen seconds later",
+        proves="the top-right toast panel is drawn two seconds after Play (dark pixels in the panel's own rectangle) and gone eighteen seconds later",
         limits="one server kind and one toast; the advancement/recipe kinds stay unit-covered",
     ),
     "native-placed-head": _entry(

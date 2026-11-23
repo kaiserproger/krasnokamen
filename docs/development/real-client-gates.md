@@ -583,6 +583,26 @@ shows no rope (MODEL-ENTITY-LEASH). One entity per shot, fixed camera.
 pickaxe or filled bundle slot does not change against undamaged/empty
 replacements, or the durability/fullness bar fill is missing (MODEL-ITEM-BARS).
 
+`run scenario native-toast --client native --windowed` fails if the join-time
+unsecure-server toast is not drawn two seconds after Play or is still drawn
+eighteen seconds later: the ROI is the panel's own `gui/sprites/toast/system`
+rectangle (GUI scale 3 puts it at x 600..1281, y 0..168 on a 1280x720 frame) and
+the assertion is its dark pixels (NATIVE-TOASTS-MISSING). A capture requested
+while the HUD repaints is only deferred for *screen* transitions
+(`UiState::capture_deferring`); deferring it for HUD animation as well pushed
+every capture past the toast's 10 s lifetime, which is how the renderer looked
+missing. Advancement/recipe toasts and the text stay unit-covered.
+
+`run scenario native-elytra --client native --windowed` fails if the worn
+elytra does not appear as a wings quad behind the player (MODEL-OPUS-15), that
+is, if the cape-exclusion/asset-profile priority in `entities::equipment` is
+lost. The shape, not exact vanilla pixels, is asserted.
+
+`run scenario native-placed-head --client native --windowed` fails if an
+unresolved placed head stops drawing the default skin
+(MODEL-PLACED-HEAD-UNRESOLVED); the authored hat layer needs the skin pack and
+is checked by the scenario's own pixel region.
+
 `run scenario native-shade-override --client native --windowed` fails if the
 poppy's plant pixels differ in mean luminance between the north and east views
 (26.3 `shade_direction_override` must suppress per-face directional shading;

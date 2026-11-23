@@ -167,24 +167,27 @@ def check_toasts(probe: ProbeSteps, artifact: Path) -> None:
     """NATIVE-TOASTS-MISSING: the join-time unsecure-server toast is drawn, then clears.
 
     The client raises it on the Play login packet (10 s visible); `toast-early` is two seconds
-    after Play and `toast-late` is eighteen, with the player standing still in both frames, so
-    a change in the top-right corner can only be the toast."""
+    after Play and `toast-late` is eighteen. The player stands still, and the ROI is the
+    panel's own `gui/sprites/toast/system` rectangle - `ToastManager` puts x = gui_width -
+    width and y = 0, which at GUI scale 3 on a 1280x720 frame is x 600..1281, y 0..168 - so a
+    dark panel there can only be the toast. Clouds drift between the two frames, so the
+    assertion is the dark panel's presence and later absence, never a whole-frame diff
+    (a calibration on 20261123T213114-native-toast-9nbbqsax measured 89615 early panel pixels
+    and 170 late, the late ones being terrain silhouette)."""
     shots = _qa._load_shots(probe, artifact, ("toast-early", "toast-late"))
     early_f, late_f = shots["toast-early"][0], shots["toast-late"][0]
     probe.check("toast_camera_unchanged", all(
         abs(a - b) < 0.01 for a, b in zip(early_f["camera_position"], late_f["camera_position"])
     ) and abs(early_f["yaw"] - late_f["yaw"]) < 0.01 and abs(early_f["pitch"] - late_f["pitch"]) < 0.01)
-    # ToastManager: x = gui_width - width, y = 0, so the top-right corner at GUI scale 2.
-    box = (940, 4, 1276, 150)
+    box = (600, 0, 1281, 170)
     panel = lambda r, g, b: max(r, g, b) < 90
     early, late = shots["toast-early"][1], shots["toast-late"][1]
-    changed = _changed(early, late, box)
     early_panel, late_panel = _count(early, box, panel), _count(late, box, panel)
     probe.report["toast_roi"] = list(box)
-    probe.report["toast_pixels"] = {"changed": changed, "early_panel": early_panel, "late_panel": late_panel}
-    probe.check("toast_panel_appeared", changed > 3000 and early_panel > late_panel + 1500)
+    probe.report["toast_pixels"] = {"early_panel": early_panel, "late_panel": late_panel}
+    probe.check("toast_panel_appeared", early_panel > 1500 and late_panel < 400)
     probe.report["visual_review_required"] = [
-        "Inspect toast-early/toast-late; the pixels prove a toast panel and text were drawn, not the vanilla layout."
+        "Inspect toast-early/toast-late; the pixels prove a toast panel was drawn, not the vanilla layout."
     ]
 
 

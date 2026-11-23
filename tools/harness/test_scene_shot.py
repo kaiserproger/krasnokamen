@@ -673,8 +673,9 @@ class ToastTests(unittest.TestCase):
             image = Image.new("RGB", scene_shot.WINDOW, (120, 170, 240))
             draw = ImageDraw.Draw(image)
             if name == "toast-early" and toast:
-                draw.rectangle((950, 8, 1270, 140), fill=(20, 20, 20))
-                draw.rectangle((980, 30, 1200, 44), fill=(240, 240, 240))
+                # The panel rectangle at GUI scale 3 on 1280x720: x 600..1281, y 0..168.
+                draw.rectangle((600, 0, 1280, 168), fill=(20, 20, 20))
+                draw.rectangle((640, 20, 1180, 40), fill=(240, 240, 240))
             image.save(shots / f"{name}.png")
             (shots / f"{name}.json").write_text(json.dumps(frame))
 
@@ -684,7 +685,8 @@ class ToastTests(unittest.TestCase):
             self.store_frames(root)
             probe = self.Probe()
             scene_shot.check_toasts(probe, root)
-            self.assertGreater(probe.report["toast_pixels"]["changed"], 3000)
+            self.assertGreater(probe.report["toast_pixels"]["early_panel"], 1500)
+            self.assertLess(probe.report["toast_pixels"]["late_panel"], 400)
             self.store_frames(root, toast=False)
             with self.assertRaisesRegex(AssertionError, "toast_panel_appeared"):
                 scene_shot.check_toasts(self.Probe(), root)
