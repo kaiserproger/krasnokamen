@@ -823,18 +823,28 @@ fn parallel_row_prep_matches_the_serial_prep_including_rare_fixups() {
 
 #[test]
 fn admission_buffers_are_pooled_across_prepares() {
-    // The parallel pass used to build one `Vec<Admission>` per chunk on every
-    // tick (three inner `Vec`s each). The buffers now live in the phase scratch;
-    // a repeated prepare of the same population must reuse the same allocations.
+    // The parallel pass used to build one `Vec<Admission>` set per chunk on every
+    // tick (three inner `Vec`s each), so a repeated prepare constructed every
+    // `AdmissionPart` again. The buffers now live in the phase scratch: over the
+    // whole slot range (nine pool chunks) a repeated prepare of the same
+    // population must construct none of them. The counter is exact and does not
+    // depend on the allocator reusing an address.
     let (mut state, _) = resting_cow();
     let cow = state.registry.cow_type_id;
     for index in 0..64_u32 {
         state.spawn_mob(cow, [8.5 + f64::from(index % 8), 101.0, 8.5], 10.0);
     }
     state.entities.prepare_motion_hints(&state.registry);
-    let periods: Vec<u8> = (0..state.entities.len())
-        .map(|index| u8::from(index % 4 != 0))
-        .collect();
+    // Nine pool chunks; only the first holds entities, the empty ones still
+    // exercise the pooled `AdmissionPart` set.
+    let mut periods: Vec<u8> = vec![0; PREP_CHUNK * 8 + 64];
+    for (index, period) in periods
+        .iter_mut()
+        .take(state.entities.len() as usize)
+        .enumerate()
+    {
+        *period = u8::from(index % 4 != 0);
+    }
     let env = PrepEnv {
         targets_empty: true,
         villagers_empty: true,
@@ -842,39 +852,30 @@ fn admission_buffers_are_pooled_across_prepares() {
         rest_proofs: None,
     };
     let mut out = PrepChunk::default();
+    let _ = take_admission_parts_constructed();
     prepare_rows(&state, &periods, &env, true, &mut out);
-    let first: Vec<_> = out
-        .parts
-        .iter()
-        .map(|part| {
-            (
-                part.kept.as_ptr(),
-                part.kept.capacity(),
-                part.specials.as_ptr(),
-            )
-        })
-        .collect();
-    assert!(!first.is_empty(), "the parallel pass pool must exist");
-    assert!(first[0].1 > 0, "the pool kept its capacity");
+    assert_eq!(
+        out.parts.len(),
+        9,
+        "the pool must cover the whole nine-chunk slot range"
+    );
+    assert!(
+        out.parts[0].kept.capacity() > 0,
+        "the pool kept its capacity"
+    );
+    assert!(
+        take_admission_parts_constructed() >= 9,
+        "the first prepare must build every pooled admission buffer"
+    );
     // The phase consumes `rows`/`rare` every tick and re-arms the chunk; only
     // the pooled admission buffers survive.
     out.rows.clear();
     out.rare.clear();
     prepare_rows(&state, &periods, &env, true, &mut out);
-    let second: Vec<_> = out
-        .parts
-        .iter()
-        .map(|part| {
-            (
-                part.kept.as_ptr(),
-                part.kept.capacity(),
-                part.specials.as_ptr(),
-            )
-        })
-        .collect();
     assert_eq!(
-        first, second,
-        "a repeated prepare must reuse the pooled admission buffers"
+        take_admission_parts_constructed(),
+        0,
+        "a repeated prepare must not construct admission buffers: the pool is reused"
     );
 }
 

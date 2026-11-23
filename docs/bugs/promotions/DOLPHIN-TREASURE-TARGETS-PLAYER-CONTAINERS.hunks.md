@@ -2,35 +2,64 @@
 
 The production-only patch `DOLPHIN-TREASURE-TARGETS-PLAYER-CONTAINERS.patch` is the forward-ported fix at
 HEAD, SHA-256 of its non-test hunks
-`543cfd56eed2745560a73f412e31e8f6485fb80ade0ce256a0cb92334a091855`.
+`8f1ce20dcffb55f25d5b0e72998586a997a0e9b63b66e448ce0f28e975792d71`.
+
+Regenerated on `1c2e9db153` to reverse the **whole** dolphin path of `2c3e1fa2e` (the round-6 review: only
+the `Missing` arm was reverted, so the control still held the new locate request, the `Found`/`plan_treasure`
+branches and the lead steering, and went red on a weak goal-state assertion). The a/-side is now the pre-fix
+`treasure_search` + `nearest_treasure` (the file's bytes at `2c3e1fa2e^`:195-367), which scans player
+containers and steps the dolphin toward them; every hunk of `2c3e1fa2e` on this path is either in the patch
+or listed below with a reason.
 
 The fix landed in two commits on `wt/D123Battle`:
 
 | Commit | What it closes for this row |
 |---|---|
-| `2c3e1fa2e2a8ac6af9f649dc2917e9ebac2636c2` (`fix(slime,dolphin): hop locomotion and located-structure treasure leads`) | Deletes `nearest_treasure` (the 48-block chest/trapped-chest/barrel scan) and the direct 5-block container step; a fed dolphin now follows a `#minecraft:dolphin_located` structure lead from the async locate worker, and no located structure is vanilla `stuck` (`stop` clears GotFish). |
+| `2c3e1fa2e2a8ac6af9f649dc2917e9ebac2636c2` (`fix(slime,dolphin): hop locomotion and located-structure treasure leads`) | Deletes `nearest_treasure` (the 48-block chest/trapped-chest/barrel scan) and the direct 5-block container step; a fed dolphin now requests a `#minecraft:dolphin_located` structure lead from the async locate worker, walks water waypoints toward it, and no located structure is vanilla's `stuck` (`stop` clears GotFish). |
 | `c7ae9108f2` (`fix(slime,dolphin): restore the aggressive jump delay and retarget the treasure regressions`) | Retargets the two dolphin regressions so they discriminate the container approximation (player parked off-axis, chest 10 blocks away on the side opposite the wreck; the missing-structure case asserts no lead and closest approach > 3 blocks). Test-file only for this row. |
 
-| Original production change | Current patch equivalent |
+## Original `2c3e1fa2e2` hunks on `crates/mc-core/src/dolphin.rs` and their HEAD equivalent
+
+| Original hunk | Current patch |
 |---|---|
-| `2c3e1fa2e2`: `crates/mc-core/src/dolphin.rs` `treasure_search` — the container approximation (scan + 5-block step + clear within 16 squared blocks) replaced by the locate-worker lead and the `Missing` arm stopping the goal | Patch's only hunk, `DolphinTreasure::Missing` arm: a/-side re-expresses the deleted approximation at HEAD (nearest chest/trapped chest/barrel by `world.block_at` in the pre-fix 48×24×48 box, 5-block step through `resolve_collision_displacement`, `stop_treasure` within 16 squared blocks); b/-side is HEAD's `stop_treasure`, the vanilla `stuck` path. |
+| `@@ -1,7 +1,7` — drop `EntityKind` from `use crate::entities::{EntityKind, EntitySlot};` | Included: the a/-side restores the import, because the pre-fix body matches on `EntityKind::Mob`. |
+| `@@ -12,7 +12,6` — the blank line between `DolphinState` and `is_dolphin` | Included (cosmetic; a/-side restores the blank line so the patch is a complete reversal of the commit's `dolphin.rs` text). |
+| `@@ -37,12 +36,14` — `drive`'s doc comment and the new `treasure: Option<[f64; 3]>` parameter | Doc comment included (a/-side is the pre-fix wording); **the parameter is retained, reason (b)**: `crates/mc-core/src/dolphin_tests.rs:204` and `:217` call `drive(pos, air, speed, None, …)` with that argument, so reversing the parameter stops the control from compiling. Its `#[allow(clippy::too_many_arguments)]` comment rides along with the parameter. |
+| `@@ -61,6 +62,17` — the `if let Some(target) = treasure { … }` steering branch inside `drive` | Included: the a/-side omits the branch, so the control steers only at players/toys like the pre-fix code. |
+| `@@ -97,6 +109,7` — `treasure_search(state);` before `run`'s early `return` for an empty dolphin list | Included: the a/-side restores the plain early return (no behaviour difference: with no dolphin there is nothing to search). |
+| `@@ -192,178 +205,243` — the pre-fix `nearest_treasure` + container-scanning `treasure_search` replaced by the locate-lead `treasure_search`, `stop_treasure`, `plan_treasure` and `water_waypoints` | Included in full: the a/-side is the pre-fix `nearest_treasure` + `treasure_search` verbatim (48×24×48 overlay/chunk scan for chest/trapped chest/barrel, 5-block collision-resolved step, clear within 16 squared blocks) and carries none of the three new helpers. |
 
-Original non-test exclusions:
+## Retained hunks and why (rule (b) — API the kept tests call)
 
-- reason (c): the deleted `nearest_treasure` helper itself and the pre-fix `treasure_search` body no longer
-  exist at HEAD, so their only HEAD equivalent is the patch's a/-side arm;
-- reason (b): `crates/mc-core/src/command_locate.rs` (`DolphinTreasure`, `dolphin_treasure`,
-  `request_dolphin_treasure`, `dolphin_navigation`, `set_dolphin_navigation`) — the kept tests call it, so
-  reversing it stops the control from compiling;
-- reason (a): the slime hunks of `2c3e1fa2e2`/`c7ae9108f2` are `SLIME-LOCOMOTION-WALKS-INSTEAD-OF-HOPS`'s
+- `crates/mc-core/src/tick/entity_phase/step.rs`: `StepCtx.dolphin_targets` and the
+  `ctx.dolphin_targets.get(&row.id).copied()` argument at the `crate::dolphin::drive(…)` call, plus
+  `crates/mc-core/src/tick/entity_phase.rs`'s `dolphin_targets: std::sync::Arc::new(state.locate.dolphin_targets(state.dimension))`.
+  They supply `drive`'s retained `treasure` parameter; the only reversal of the call site is to drop the
+  argument, which changes the arity of the callee those kept tests call — the control would not compile.
+- `crates/mc-core/src/command_locate.rs`: `DolphinTreasure` (with its `Pending`/`Found`/`Missing`/`Failed`
+  arms), `DolphinNav`, `dolphin_treasure`, `dolphin_navigation`, `set_dolphin_navigation`,
+  `request_dolphin_treasure` and the `#[cfg(test)] await_queued_search` hook. The kept tests call
+  `dolphin_treasure` (`dolphin_tests.rs`, `command_locate_tests.rs`), `request_dolphin_treasure`
+  (`command_locate_tests.rs`), `dolphin_navigation` and `await_queued_search` (`dolphin_tests.rs`), so
+  reversing the module stops the control from compiling. (The hook lives in a non-test file but is
+  `#[cfg(test)]`; it is not and must not be recorded as a `fix_commit`.)
+- Reason (a): the slime hunks of `2c3e1fa2e2`/`c7ae9108f2` are `SLIME-LOCOMOTION-WALKS-INSTEAD-OF-HOPS`'s
   behaviour and stay on both sides.
 
-Proving ref: `cargo:mc-core:dolphin::tests::a_player_chest_without_a_located_structure_is_not_a_treasure_lead`
-— the control stops red at `crates/mc-core/src/dolphin_tests.rs:590`
-("a missing structure stops the goal and clears GotFish", receipt
-`.analysis/validation/20261123T164031-test-n2mqlp2v/`, log
-`.analysis/codex-logs/D123Battle/control-g2-missing-branch.log`). Also registered and green on both sides:
-`cargo:mc-core:dolphin::tests::fed_dolphin_locates_the_structure_through_its_normal_goal_tick`.
+## Control
+
+Reversing the patch on the candidate gives the pre-fix `treasure_search`: a fed dolphin in water scans for
+the nearest chest/trapped chest/barrel within 48 blocks and steps 5 blocks toward it every tenth tick. In
+`a_player_chest_without_a_located_structure_is_not_a_treasure_lead` the chest sits 10 blocks on +x, so the
+control walks the dolphin onto it and fails at the **headline** assertion
+`crates/mc-core/src/dolphin_tests.rs:617` — `a player chest must not attract the dolphin: closest squared
+{closest}` — now ordered before the goal-state assertions (they fail on any non-stop `Missing` arm and are
+not evidence on their own). The structure ref
+`cargo:mc-core:dolphin::tests::fed_dolphin_locates_the_structure_through_its_normal_goal_tick` goes red on
+the lead it can no longer produce; the restore is green on both refs.
+
+Proving refs: `cargo:mc-core:dolphin::tests::a_player_chest_without_a_located_structure_is_not_a_treasure_lead`
+and `cargo:mc-core:dolphin::tests::fed_dolphin_locates_the_structure_through_its_normal_goal_tick`.
 
 Vanilla reference: `Dolphin$DolphinSwimToTreasureGoal` 26.1.2 (`findNearestMapStructure` with the
 `#minecraft:dolphin_located` tag, radius 50; `stuck` → `stop` clears `GotFish`). Source/test row, no

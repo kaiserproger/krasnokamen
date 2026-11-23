@@ -2521,8 +2521,14 @@ fn a_sub_epsilon_axis_step_is_zero_on_every_axis() {
     // And on z, through its own entry point.
     assert_eq!(clip_z(body, 1.0e-8, std::slice::from_ref(&wall)), 0.0);
     assert_eq!(clip_z(body, -1.0e-8, std::slice::from_ref(&wall)), 0.0);
-    // The tolerance is strict: just above it the step survives, and an empty
-    // shape still returns the motion unchanged (vanilla's empty early return).
+    // The tolerance is strict and applies to a *non-empty* shape: `|d| == 1e-7`
+    // does not take the early return, and just above it a box 0.4 away still
+    // leaves the step alone (a guard `< 1e-3` or `<=` fails these).
+    assert_eq!(clip_x(body, 1.0e-7, std::slice::from_ref(&wall)), 1.0e-7);
+    assert_eq!(clip_x(body, 2.0e-7, std::slice::from_ref(&wall)), 2.0e-7);
+    assert_eq!(clip_y(body, -2.0e-7, std::slice::from_ref(&floor)), -2.0e-7);
+    // An empty shape still returns the motion unchanged (vanilla's empty early
+    // return), sub-epsilon motion included.
     assert_eq!(clip_x(body, 2.0e-7, &[]), 2.0e-7);
     assert_eq!(clip_y(body, -2.0e-7, &[]), -2.0e-7);
     assert_eq!(clip_x(body, 1.0e-8, &[]), 1.0e-8);

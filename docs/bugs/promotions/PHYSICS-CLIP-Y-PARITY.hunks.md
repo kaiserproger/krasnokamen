@@ -1,11 +1,16 @@
 # PHYSICS-CLIP-Y-PARITY — fix-hunk map
 
-The production-only patch `PHYSICS-CLIP-Y-PARITY.patch` is the forward-ported fix at HEAD for the row's
-whole symptom, SHA-256 of its non-test hunks `9a3db29e771fadcc8d8708f52ba7b897d935cff7d3d9000c0c5567d6afd15f78`.
+The production-only patch `PHYSICS-CLIP-Y-PARITY.patch` is the forward-ported fix at HEAD, SHA-256 of its
+non-test hunks `c28b42e4a9b2f9028180fe46b2298e904e0fb1bcb26ee438f577f997e1bf6c14`.
+
+Regenerated on `1c2e9db153` after `f3cdf12a48` inserted the sub-epsilon early-return guard between
+`fn clip_y(…) {` and `for obstacle in collision_boxes {`: that guard is now unchanged **context** in the
+hunk (it is `PHYSICS-CLIP-MISSING-VANILLA-EPSILON-EARLY-RETURN`'s behaviour), so the patch still reverses
+on the candidate and reverses only this row's tolerance change.
 
 | Original production change | Current patch equivalent |
 |---|---|
-| `c393b924068f4211e75f8198a295b5d1058c47d3` (`fix(battle,physics,entity): address the hot-path review`): `crates/mc-physics/src/lib.rs` `clip_y` — the doc comment and the `1.0E-7` contact tolerance (`clip >= -COLLISION_EPSILON && clip < dy` / `clip <= COLLISION_EPSILON && clip > dy`) replacing `dy > 0.0 && body.max_y <= obstacle.min_y` / `dy < 0.0 && body.min_y >= obstacle.max_y` | Byte-identical at HEAD; the patch's only hunk. This is the row's entire fix. |
+| `c393b924068f4211e75f8198a295b5d1058c47d3` (`fix(battle,physics,entity): address the hot-path review`): `crates/mc-physics/src/lib.rs` `clip_y` — the doc comment and the `1.0E-7` contact tolerance (`clip >= -COLLISION_EPSILON && clip < dy` / `clip <= COLLISION_EPSILON && clip > dy`) replacing `dy > 0.0 && body.max_y <= obstacle.min_y` / `dy < 0.0 && body.min_y >= obstacle.max_y` | Byte-identical at HEAD (`git show HEAD:crates/mc-physics/src/lib.rs` at lines 1832-1847): the patch's only hunk, whose b/-side is the head body verbatim. This is the row's entire fix. |
 
 Original non-test exclusions, reason (a) — another row's behaviour: every other non-test hunk of
 `c393b924068` belongs to `ENTITY-ADMISSION-SCRATCH-ALLOCATED-PER-CHUNK-EACH-TICK`,

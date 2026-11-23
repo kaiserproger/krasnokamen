@@ -49,3 +49,47 @@ diff --git a/crates/mc-core/src/entity_motion.rs b/crates/mc-core/src/entity_mot
      // The direction this tick's AI wants to travel: vanilla `MoveControl` turns
      // toward the wanted position, which a combat impulse never moves. It is the
      // drive alone, so no movement-class branch can leak an impulse into it.
+diff --git a/crates/mc-core/src/tick/entity_phase/prepare.rs b/crates/mc-core/src/tick/entity_phase/prepare.rs
+--- a/crates/mc-core/src/tick/entity_phase/prepare.rs
++++ b/crates/mc-core/src/tick/entity_phase/prepare.rs
+@@ -455,7 +455,10 @@
+         && blueprint.is_some_and(|blueprint| {
+             blueprint.capabilities.hop_lift_per_size > 0.0 || row.loot.slime_size.unwrap_or(1) > 1
+         });
+-    let think = battle || motion_thinks(view.tick, flags, period);
++    let hop_tick = hops
++        && !row.controls.no_ai
++        && crate::entity_motion::hop_due(body.id.0, view.tick, hop_delay_scale, aggressive);
++    let think = battle || motion_thinks(view.tick, flags, period) || hop_tick;
+     let needs_rare = crate::enderman::needs_state(row)
+         || crate::plugin_npcs::needs_state(row)
+         || crate::creaking::needs_state(body)
+diff --git a/crates/mc-core/src/tick/entity_phase/rest.rs b/crates/mc-core/src/tick/entity_phase/rest.rs
+--- a/crates/mc-core/src/tick/entity_phase/rest.rs
++++ b/crates/mc-core/src/tick/entity_phase/rest.rs
+@@ -101,6 +101,25 @@
+         return false;
+     }
+     let body = &view.bodies[slot.0 as usize];
++    // A hop tick is a decision tick even in rings that would otherwise rest:
++    // refuse before the ring/footprint shortcut, not only before the memo.
++    if let crate::entities::EntityKind::Mob { type_id } = body.kind
++        && let Some(blueprint) = view.registry.blueprint(type_id)
++        && blueprint.capabilities.hops
++        && !view.entities.row(slot).controls.no_ai
++    {
++        let aggressive = (blueprint.capabilities.hop_lift_per_size > 0.0
++            || view.entities.row(slot).loot.slime_size.unwrap_or(1) > 1)
++            && view.hostile.targets.contains_key(&body.id);
++        if crate::entity_motion::hop_due(
++            body.id.0,
++            view.tick,
++            blueprint.capabilities.hop_delay_scale.max(1),
++            aggressive,
++        ) {
++            return false;
++        }
++    }
+     if view.hostile.targets.contains_key(&body.id)
+         || body
+             .hurt_at

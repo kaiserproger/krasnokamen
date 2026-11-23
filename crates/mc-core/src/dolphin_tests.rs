@@ -610,17 +610,20 @@ fn a_player_chest_without_a_located_structure_is_not_a_treasure_lead() {
             break;
         }
     }
+    // The headline symptom first: the container approximation steers the
+    // dolphin at the player chest, so the control must fail here, not on the
+    // weaker goal-state assertions below.
     assert!(
-        !got_fish(&state, slot),
-        "a missing structure stops the goal and clears GotFish"
+        closest > 9.0,
+        "a player chest must not attract the dolphin: closest squared {closest}"
     );
     assert!(
         !ever_found,
         "no DOLPHIN_LOCATED structure exists, so the chest must never become a lead"
     );
     assert!(
-        closest > 9.0,
-        "a player chest must not attract the dolphin: closest squared {closest}"
+        !got_fish(&state, slot),
+        "a missing structure stops the goal and clears GotFish"
     );
 }
 

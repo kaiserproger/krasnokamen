@@ -254,11 +254,34 @@ pub(in crate::tick) struct PrepChunk {
 }
 
 /// Admission output of one [`PREP_CHUNK`] range, pooled across ticks.
-#[derive(Default)]
 pub(in crate::tick) struct AdmissionPart {
     pub(in crate::tick) kept: Vec<(EntitySlot, u16)>,
     pub(in crate::tick) specials: Vec<(EntityId, crate::hostile::Special)>,
     pub(in crate::tick) resting: Vec<EntitySlot>,
+}
+
+#[cfg(test)]
+static ADMISSION_PARTS_CONSTRUCTED: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// Test-only: how many [`AdmissionPart`]s were constructed since the last call.
+/// The pooled pass constructs none on a repeated prepare; the pre-fix pass
+/// built a fresh set per chunk per tick.
+#[cfg(test)]
+pub(in crate::tick) fn take_admission_parts_constructed() -> usize {
+    ADMISSION_PARTS_CONSTRUCTED.swap(0, std::sync::atomic::Ordering::Relaxed)
+}
+
+impl Default for AdmissionPart {
+    fn default() -> Self {
+        #[cfg(test)]
+        ADMISSION_PARTS_CONSTRUCTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Self {
+            kept: Vec::new(),
+            specials: Vec::new(),
+            resting: Vec::new(),
+        }
+    }
 }
 
 #[derive(Default, Debug, PartialEq, Eq)]
