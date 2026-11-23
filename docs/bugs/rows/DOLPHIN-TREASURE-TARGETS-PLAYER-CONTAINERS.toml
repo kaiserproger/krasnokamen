@@ -6,5 +6,9 @@ severity = "major"
 status = "open"
 source = "D113 atomic survival catalog W64; crates/mc-core/src/dolphin.rs nearest_treasure scans loaded chests, trapped chests and barrels and its comment records this as an approximation to vanilla's DOLPHIN_LOCATED structure lookup. A player container can therefore be selected while an ocean ruin or shipwreck is missed. No new client reproduction is claimed."
 repro = "source"
-regression = []
+regression = [
+  "cargo:mc-core:dolphin::tests::fed_dolphin_locates_the_structure_through_its_normal_goal_tick",
+  "cargo:mc-core:dolphin::tests::a_player_chest_without_a_located_structure_is_not_a_treasure_lead",
+  "cargo:mc-core:command_locate_tests::worker_loss_releases_a_map_loot_callback_so_the_container_opens_again",
+]
 failing_first = "reported"
