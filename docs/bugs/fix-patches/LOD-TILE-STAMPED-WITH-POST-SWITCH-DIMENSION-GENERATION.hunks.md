@@ -1,7 +1,7 @@
 # LOD-TILE-STAMPED-WITH-POST-SWITCH-DIMENSION-GENERATION — patch-mode fix identity (reworked)
 
 Fix: `docs/bugs/fix-patches/LOD-TILE-STAMPED-WITH-POST-SWITCH-DIMENSION-GENERATION.patch`
-(`fix_commit = "patch:ea201453aa5025dd6d73c236af85e0283bb1e540687300c126d4e60d6370c149"`).
+(`fix_commit = "patch:5d7c362d91d3e5343523c09a1dc003ca3f557fc697477bbfba7f9fe7b4466b53"`).
 It is a diff from the pre-fix form to this candidate; `git apply -R` restores
 the pre-fix queue. Re-audit:
 `python3 -m tools.harness ledger promote LOD-TILE-STAMPED-WITH-POST-SWITCH-DIMENSION-GENERATION --fix-patch docs/bugs/fix-patches/LOD-TILE-STAMPED-WITH-POST-SWITCH-DIMENSION-GENERATION.patch --dry-run`

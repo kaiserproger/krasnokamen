@@ -1,43 +1,44 @@
 diff --git a/crates/mc-edge/src/lod.rs b/crates/mc-edge/src/lod.rs
-index 6e37f9b86..e2a5b8aaf 100644
+index 095334347..e2a5b8aaf 100644
 --- a/crates/mc-edge/src/lod.rs
 +++ b/crates/mc-edge/src/lod.rs
-@@ -177,6 +177,34 @@ pub(crate) fn encode_tile(
+@@ -177,8 +177,9 @@ pub(crate) fn encode_tile(
      out
  }
  
+-/// Queue a sampled tile under the generation the queue holds now: the
+-/// pre-fix enqueue, which stamps the frame at send time.
 +/// Queue a tile sampled under the generation captured before the sample. A
 +/// reliable dimension reset while sampling makes the writer discard the frame
 +/// instead of applying an old-dimension tile in the new one.
-+fn enqueue_sampled(
-+    sender: &crate::server::WorldSender,
-+    sampled_at: u64,
-+    frame: bytes::Bytes,
-+) -> bool {
-+    sender.try_send_at(sampled_at, frame).is_ok()
-+}
-+
-+/// Capture the queue generation, run `sample` and enqueue the frame under that
+ fn enqueue_sampled(
+     sender: &crate::server::WorldSender,
+     sampled_at: u64,
+@@ -188,19 +189,20 @@ fn enqueue_sampled(
+ }
+ 
+ /// Capture the queue generation, run `sample` and enqueue the frame under that
+-/// generation.
 +/// generation. The capture must precede `sample`: a dimension reset while the
 +/// tile is sampled has to fence the frame out of the new dimension.
-+fn sample_tile(
-+    sender: &crate::server::WorldSender,
-+    captured: Option<u64>,
-+    sample: impl FnOnce() -> Option<bytes::Bytes>,
-+) -> bool {
+ fn sample_tile(
+     sender: &crate::server::WorldSender,
+     captured: Option<u64>,
+     sample: impl FnOnce() -> Option<bytes::Bytes>,
+ ) -> bool {
+-    let Some(_captured) = captured else {
 +    let Some(sampled_at) = captured else {
-+        return false;
-+    };
-+    let Some(frame) = sample() else {
-+        return false;
-+    };
+         return false;
+     };
+     let Some(frame) = sample() else {
+         return false;
+     };
+-    enqueue_sampled(sender, sender.generation(), frame)
 +    enqueue_sampled(sender, sampled_at, frame)
-+}
-+
+ }
+ 
  fn varint(out: &mut Vec<u8>, mut value: u32) {
-     loop {
-         if value < 0x80 {
-@@ -283,6 +311,10 @@ impl LodConnection {
+@@ -309,6 +311,10 @@ impl LodConnection {
                  self.inflight.fetch_sub(1, Ordering::AcqRel);
                  continue;
              }
@@ -48,7 +49,7 @@ index 6e37f9b86..e2a5b8aaf 100644
              let inflight = Arc::clone(&self.inflight);
              let workers = Arc::clone(&service.workers);
              let server = Arc::clone(server);
-@@ -291,74 +323,54 @@ impl LodConnection {
+@@ -317,42 +323,48 @@ impl LodConnection {
                  let Ok(_permit) = workers.acquire_owned().await else {
                      return;
                  };
@@ -124,38 +125,6 @@ index 6e37f9b86..e2a5b8aaf 100644
                  }
              });
          }
-         Ok(())
-     }
- 
--/// Queue a sampled tile under the generation the queue holds now: the
--/// pre-fix enqueue, which stamps the frame at send time.
--fn enqueue_sampled(
--    sender: &crate::server::WorldSender,
--    sampled_at: u64,
--    frame: bytes::Bytes,
--) -> bool {
--    sender.try_send_at(sampled_at, frame).is_ok()
--}
--
--/// Capture the queue generation, run `sample` and enqueue the frame under that
--/// generation.
--fn sample_tile(
--    sender: &crate::server::WorldSender,
--    captured: Option<u64>,
--    sample: impl FnOnce() -> Option<bytes::Bytes>,
--) -> bool {
--    let Some(_captured) = captured else {
--        return false;
--    };
--    let Some(frame) = sample() else {
--        return false;
--    };
--    enqueue_sampled(sender, sender.generation(), frame)
--}
--
-     /// Whether any part of the tile lies within `max_distance` of the anchor.
-     fn near(&self, request: TileRequest, max_distance: u32) -> bool {
-         let size = (TILE_EDGE as f64) * f64::from(1u32 << request.level);
 @@ -386,6 +398,36 @@ impl Drop for Done {
  mod tests {
      use super::*;
