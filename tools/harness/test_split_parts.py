@@ -152,6 +152,31 @@ class SplitPartsTests(unittest.TestCase):
         self.assertEqual([label for label, _ in waits], ["a", "b"])
         self.assertEqual([round(timeout) for _, timeout in waits], [1500, 1500])
 
+    def test_the_screens_voice_split_driver_runs_its_legs_in_sequence(self):
+        # HARNESS-SCREENS-VOICE-PARTS-OOM: the driver, not run_split, decides the gate's scope. Two
+        # overlapping full legs exceeded one 12 GiB scope, so the driver passes sequential=True and
+        # the order is spawn:a, wait:a, spawn:b. Deleting the kwarg leaves every run_split test green
+        # (they pass it themselves), which is why this seam is tested here.
+        from tools.harness.backends import screens_voice_qa as driver
+        calls = []
+
+        def fake(ctx, profile, parts, *, sequential=False):
+            for part in parts:
+                calls.append("spawn:" + part.label)
+                if sequential:
+                    calls.append("wait:" + part.label)
+            return [{"label": part.label} for part in parts]
+
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(driver, "run_split", fake), \
+                patch.object(driver, "merge_leg_parts", lambda blocks, legs: {"parts": blocks}), \
+                patch.dict(os.environ, {"KRASNOKAMEN_PW_ROOT": ""}):
+            legs = driver.split_legs()
+            driver._split_run(SimpleNamespace(parts=len(legs), artifact_dir=Path(directory)), 30.0)
+        expected = [item for leg in legs for item in (f"spawn:{leg}", f"wait:{leg}")]
+        self.assertEqual(calls, expected,
+                         "each leg must start only after the previous leg's receipt was read")
+
     def test_the_cli_refuses_parts_for_a_profile_without_independent_parts(self):
         from tools.harness import __main__ as cli
         with patch("sys.stderr", new_callable=io.StringIO) as error, \
