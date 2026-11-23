@@ -205,7 +205,6 @@ pub(crate) fn run(state: &mut TickState) {
     }
 }
 
-
 /// DOLPHIN-TREASURE (`Dolphin$DolphinSwimToTreasureGoal`, 26.1.2): a fed
 /// dolphin with air >= 100 locates the nearest `#minecraft:dolphin_located`
 /// structure (`findNearestMapStructure(tag, blockPosition, 50, false)`:
@@ -277,7 +276,10 @@ pub(crate) fn treasure_search(state: &mut TickState) {
             continue;
         }
         let at = state.entities.pos(slot);
-        let (cx, cz) = (floor_i32(at[0]).div_euclid(16), floor_i32(at[2]).div_euclid(16));
+        let (cx, cz) = (
+            floor_i32(at[0]).div_euclid(16),
+            floor_i32(at[2]).div_euclid(16),
+        );
         if !state.world.is_active(cx, cz) || !crate::conduit::water(state, at) {
             continue;
         }
@@ -352,9 +354,7 @@ fn plan_treasure(
     treasure: [i32; 3],
     run: u64,
 ) -> bool {
-    use crate::command_locate::{
-        DolphinNav, dolphin_navigation, set_dolphin_navigation,
-    };
+    use crate::command_locate::{DolphinNav, dolphin_navigation, set_dolphin_navigation};
     let dolphin = state.entities.body(slot).id;
     let mut nav = dolphin_navigation(state, dolphin).unwrap_or(DolphinNav {
         target: None,

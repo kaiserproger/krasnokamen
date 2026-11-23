@@ -1721,14 +1721,12 @@ fn clip_y_snaps_a_body_resting_within_the_contact_tolerance_of_a_face() {
         "a head resting inside the ceiling must not rise"
     );
     let head_clear = WorldAabb {
-        max_y: 0.9,
-        min_y: 0.9 - 1.8,
+        max_y: 0.5,
+        min_y: 0.5 - 1.8,
         ..body
     };
-    assert_eq!(
-        clip_y(head_clear, 0.1, std::slice::from_ref(&ceiling)),
-        0.1
-    );
+    // 1.0 - 0.5 is exact in f64, so the clip equals the request.
+    assert_eq!(clip_y(head_clear, 0.1, std::slice::from_ref(&ceiling)), 0.1);
 }
 
 #[test]

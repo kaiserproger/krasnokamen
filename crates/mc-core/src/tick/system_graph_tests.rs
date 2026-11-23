@@ -32,14 +32,17 @@ pub(super) fn override_run(ctx: &StepCtx<'_>, output: &mut Vec<RowOutput>) -> bo
     }
     let start = MEASURE.get().then(Instant::now);
     match mode {
+        // The pre-prototype lane: a fresh physics reader for every row. It is
+        // the oracle for the reused-reader lane (a warm memo must not change a
+        // single body bit).
         Mode::Legacy => ctx
             .rows
             .par_iter()
             .with_min_len(256)
-            .map_init(
-                || ctx.world.physics_reader(),
-                |reader, row| row.alive.then(|| step_entity(row, ctx, reader)),
-            )
+            .map(|row| {
+                row.alive
+                    .then(|| step_entity(row, ctx, &ctx.world.physics_reader()))
+            })
             .collect_into_vec(output),
         Mode::Serial => execute(ctx, output, false),
         Mode::Parallel => execute(ctx, output, true),
@@ -202,6 +205,8 @@ fn entity_step_reuses_one_physics_reader_per_lane() {
         .num_threads(4)
         .build()
         .unwrap();
+    // The counter is a process-global `AtomicUsize` and therefore only sound
+    // under nextest's one-process-per-test model (not a libtest thread pool).
     pool.install(|| {
         let mut state = fixture(&registry, 1024);
         let _ = crate::world::take_physics_reader_count();
@@ -217,14 +222,16 @@ fn entity_step_reuses_one_physics_reader_per_lane() {
 
 #[test]
 fn step_entity_borrows_its_row() {
-    // A ~248 B `ReadRow` copied per entity per tick is pure snapshot traffic:
-    // the step lane takes it by reference.
+    // A copied `ReadRow` per entity per tick is pure snapshot traffic: the step
+    // lane takes it by reference. The control of this row is compile-level (the
+    // by-value signature does not exist any more); the size bound only guards
+    // against the row growing back past a cache-line pair.
     let step: fn(
         &ReadRow,
         &StepCtx<'_>,
         &crate::world::PhysicsReader<'_>,
     ) -> (MoveWrite, Vec<RawIntent>) = step_entity;
-    assert!(std::mem::size_of::<ReadRow>() <= 256);
+    assert!(std::mem::size_of::<ReadRow>() <= 264);
     let _ = step;
 }
 

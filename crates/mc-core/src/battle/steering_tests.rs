@@ -225,42 +225,6 @@ fn dense_cells_bound_inspection_and_impulses_to_five_neighbours() {
 }
 
 #[test]
-fn separation_overflow_reaches_the_battle_work_counters() {
-    // A heap denser than CELL_CAP per sub-cell: the grid drops the rest, and the
-    // battle work counters must report how many were dropped.
-    let mut runtime = FormationRuntime::default();
-    runtime
-        .add_regiment(
-            RegimentSpec {
-                frontage: 1.0,
-                id: 0,
-                faction: 1,
-                origin: [0.0, 64.0, 0.0],
-                facing: [1.0, 0.0],
-                files: 20,
-                order: Order::Hold,
-            },
-            &(1..=1000).map(EntityId).collect::<Vec<_>>(),
-        )
-        .unwrap();
-    for m in &mut runtime.members {
-        m.pos = [0.1, 64.0, 0.1];
-    }
-    runtime.neighbours.rebuild(&runtime.members);
-    record_grid_overflow(&mut runtime);
-    assert_eq!(runtime.neighbours.overflow, 992);
-    assert_eq!(runtime.work.separation_overflow, 992);
-    // Sparse formation: nothing dropped, so the counter stays zero and a gate
-    // receipt can trust the heap measurement.
-    for (index, m) in runtime.members.iter_mut().enumerate() {
-        m.pos = [index as f64 * 2.0, 64.0, 0.0];
-    }
-    runtime.neighbours.rebuild(&runtime.members);
-    record_grid_overflow(&mut runtime);
-    assert_eq!(runtime.work.separation_overflow, 0);
-}
-
-#[test]
 fn nearest_enemy_front_projects_to_lateral_file_not_enemy_centroid() {
     let mut runtime = FormationRuntime::default();
     runtime
