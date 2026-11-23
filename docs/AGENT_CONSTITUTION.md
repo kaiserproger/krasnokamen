@@ -66,3 +66,8 @@ in force before 1.0.
 
 Stay in your write set. Respect shared limits (disk, memory admission, audio, desktop, live
 server). Report one honest YAML result with receipts.
+
+Main keeps an active goal moving: a finished or expired subtask does not finish
+the goal. Advance the next authorized eligible item instead of waiting on an
+unrelated timer; if none can proceed, name the concrete blocker and wake condition.
+Stop on an explicit owner stop or the finite goal's actual stop condition.
