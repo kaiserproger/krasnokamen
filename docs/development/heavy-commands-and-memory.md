@@ -179,6 +179,19 @@ waiters must fail on old and pass on new. Scopes can vanish between glob/read;
 ignore failed reads, but only `cgroup.events` `populated 0` proves empty
 (`cgroup.procs` omits child cgroups).
 
+**Install order when the wrapper's guardian arguments change** (since 2026-11-23): the two are one
+protocol, so install the parts a new wrapper *needs* before the wrapper itself, each by atomic mv:
+
+1. `mem-run-guard.py` — the argument list is positional; a wrapper that passes five arguments to a
+   four-argument guard makes every launch exit 75 before the scope exists.
+2. `reserved_cpus.py` and `reserve-cpus` — a wrapper that reads `verdict`/`clear` refuses (exit 75)
+   when the helper is missing, so it must already be beside it.
+3. `mem-run.sh` last. It is the only file that decides which of the others it calls, so a rollback is
+   `mv` the old wrapper back first.
+
+Never install the wrapper first "because it is the entry point": every command on the host would fail
+until the guard copy lands, and mixed versions on the shared host share one lock and registration dir.
+
 ## When the owner says the machine is choking
 
 Owner-approved 2026-10-24 response: renice rustc/cargo/java/qemu to 19; new

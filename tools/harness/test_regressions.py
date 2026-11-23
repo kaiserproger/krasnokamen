@@ -877,6 +877,15 @@ control_b_patch = "{defect_path}"
         with self.assertRaisesRegex(ledger.Refused, 'which the fix commit does not change'):
             self.promote(root, self.runner())
 
+    def test_a_production_file_in_the_fix_commit_is_refused_even_with_control_a_files(self):
+        # The narrowing chooses what control A reverses; it must never hide a production file from
+        # the "a test_only_fix commit changes only test files" refusal (ReviewD123Harness2 item 1).
+        root = self.scratch(production_hunk=True, control_a_files=['tools/harness/test_example.py'])
+        runner = self.runner()
+        with self.assertRaisesRegex(ledger.Refused, 'src/engine.rs is production code'):
+            self.promote(root, runner)
+        self.assertEqual(runner.seen, [])
+
     def test_the_row_flag_needs_its_evidence(self):
         base = '''[[bug]]
 id = "B"

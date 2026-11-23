@@ -76,6 +76,23 @@ class ReserveCpusTests(unittest.TestCase):
         self.assertIn('clearing stale reservation 6,7', done.stderr)
         self.assertFalse((self.state / 'reserved-cpus').exists(), 'released after the command')
 
+    def test_the_locked_create_refuses_a_second_reservation_and_release_removes_only_its_own(self):
+        # ReviewD123Harness2 item 6: the flock-guarded create and the own-file release were only
+        # exercised through the protocol module, never through the script.
+        first = self.holder()
+        try:
+            self.assertIn('reserved 6,7 for', first.stderr.readline())
+            second = self.reserve('8', '--', 'true')
+            self.assertEqual(second.returncode, 75, second.stderr)
+            self.assertIn('CPUs already reserved', second.stderr)
+            # A foreign file under the same lock: the first reservation's release must not touch it.
+            (self.state / 'reserved-cpus').write_text('8\n' + (self.state / 'reserved-cpus').read_text().split(chr(10))[1] + chr(10))
+        finally:
+            first.stdin.close()
+            first.wait(timeout=30)
+        self.assertTrue((self.state / 'reserved-cpus').exists(),
+                        'a reservation that replaced ours is not ours to remove')
+
     def test_a_one_line_file_from_an_older_writer_is_honoured(self):
         self.state.mkdir()
         (self.state / 'reserved-cpus').write_text('6,7\n')
@@ -103,6 +120,14 @@ class ReservedCpusProtocolTests(unittest.TestCase):
         self.assertEqual(self.protocol.verdict('6,7\n'), 'keep 6,7')
         self.assertEqual(self.protocol.verdict('not a cpu list\n'), 'none')
         self.assertEqual(self.protocol.verdict(''), 'none')
+
+    def test_a_present_unparseable_owner_is_stale_not_immortal(self):
+        # ReviewD123Harness2 item 3: only a MISSING owner line means an older writer. A line that
+        # claims an owner but cannot be checked must not keep the CPUs pinned forever.
+        for line in ('garbage', '12', '12 34 56', 'x 1'):
+            with self.subTest(owner=line):
+                self.assertEqual(self.protocol.verdict(f'6,7\n{line}\n'), 'stale 6,7')
+        self.assertEqual(self.protocol.verdict('6,7\n\n'), 'keep 6,7', 'a blank owner line is an older writer')
 
     def test_a_reservation_rewritten_after_the_verdict_is_not_unlinked(self):
         # TOCTOU: judge the corpse, then a live reservation replaces the file before the unlink.
@@ -183,6 +208,31 @@ class MemRunReservationTests(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn('cover this whole pool', done.stderr)
         self.assertIn('keeps cpus=', done.stderr)
+
+    def test_a_failing_verdict_helper_is_named_and_the_scope_refused(self):
+        # ReviewD123Harness2 item 3(b): a crashed helper used to read as "none" and a real
+        # reservation was silently ignored. It must fail closed and show the helper's stderr.
+        (self.root / 'reserved_cpus.py').write_text(
+            "import sys\nprint('no module named reserved_cpus', file=sys.stderr)\nsys.exit(3)\n")
+        self.state.mkdir()
+        (self.state / 'reserved-cpus').write_text(f'0\n{os.getpid()} {starttime(os.getpid())}\n')
+        done = self.run_true()
+        self.assertEqual(done.returncode, 75, done.stderr)
+        self.assertIn('cannot judge', done.stderr)
+        self.assertIn('no module named reserved_cpus', done.stderr)
+        self.assertTrue((self.state / 'reserved-cpus').exists(), 'the reservation was left in place')
+
+    def test_a_non_numeric_cancel_grace_is_named_before_the_scope_starts(self):
+        # ReviewD123Harness2 item 4: `nan` passes the guardian's float() and breaks its select().
+        self.state.mkdir()
+        for value in ('nan', 'inf', '-1', '0', 'soon'):
+            with self.subTest(grace=value):
+                env = {**self.env, 'KRASNOKAMEN_MEMRUN_CANCEL_GRACE': value}
+                done = subprocess.run([str(self.runner), '-m', '1G', 'true'], env=env,
+                                      capture_output=True, text=True, timeout=120)
+                self.assertEqual(done.returncode, 75, done.stderr)
+                self.assertIn('KRASNOKAMEN_MEMRUN_CANCEL_GRACE must be a finite positive number', done.stderr)
+                self.assertNotIn('failed to start scope guardian', done.stderr)
 
 
 if __name__ == '__main__':

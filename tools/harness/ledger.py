@@ -807,8 +807,9 @@ def non_test_patch(root, commit):
 def _split_test_hunks(diff, only=None):
     """The fix commit's test-file hunks: (patch text, test files). Refused otherwise.
 
-    `only` narrows control A to the listed test files (a row field `control_a_files`): one commit
-    often corrects several oracles, and a row's control must reverse its own file, not another row's.
+    `only` narrows *what control A reverses* to the listed test files (a row field `control_a_files`):
+    one commit often corrects several oracles, and a row's control must reverse its own file, not
+    another row's. It never narrows the refusal: every non-doc path of the commit is still judged.
 
     `test_only_fix` accepts a fix whose guard IS a corrected test oracle, so the control reverses the
     test hunks instead of production hunks. It refuses any non-doc path that is not a test file: a fix
@@ -824,11 +825,13 @@ def _split_test_hunks(diff, only=None):
         path = match.group(2)
         if _skipped_doc(path):
             continue
-        if only is not None and path not in only:
-            continue
+        # Every non-doc path is judged, whether or not `only` reverses it: `control_a_files` chooses
+        # what control A undoes, it never licenses a production file in the fix commit.
         if not _TEST_PATH.search(path):
             raise Refused(f'{path} is production code: a test_only_fix fix commit may change only test files '
                           '(use the ordinary non-test control for a real code fix)')
+        if only is not None and path not in only:
+            continue
         if any(text.startswith('+++ /dev/null') or text.startswith('--- /dev/null') for text in lines):
             raise Refused(f'{path} is deleted or renamed by the fix commit: a test_only_fix control restores the '
                           'corrected test in place, so a removed test file has no control A')
@@ -864,7 +867,9 @@ def _declared_module_file(source: Path, name: str):
             path_attr = _PATH_ATTR.match(lines[back])
             if path_attr:
                 return source.parent / path_attr.group(1)
-            if line.strip() and not lines[back].lstrip().startswith(('#[', '///', '//')):
+            # Walk only over blank lines, attributes and comments: a blank line above the mod
+            # declaration is common and must not stop the walk, a statement must.
+            if lines[back].strip() and not lines[back].lstrip().startswith(('#[', '///', '//')):
                 break
         candidate = source.parent / f'{name}.rs'
         if candidate.is_file():

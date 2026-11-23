@@ -1,6 +1,6 @@
 [[bug]]
 id = "HARNESS-RESERVE-CPUS-STALE-RESERVATION"
-title = "A stale CPU reservation left by a killed `reserve-cpus` silently pins every later `mem-run` scope away from those CPUs, or drops the restriction entirely when the stale list covers a whole lane pool"
+title = "A stale CPU reservation left by a killed `reserve-cpus` silently pins every later `mem-run` scope away from those CPUs instead of being named and cleared (the whole-pool fallback is asserted by the suite, not by this row's control)"
 area = "harness"
 severity = "minor"
 status = "fixed"

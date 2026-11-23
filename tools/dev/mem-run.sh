@@ -380,7 +380,13 @@ fi
 # owner and is honoured as-is (mixed-version compatibility).
 reserved=
 if [ -e "$dir/reserved-cpus" ]; then
-  verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>/dev/null || echo none)
+  # A failing helper must not silently drop a live reservation: fail closed, with its stderr.
+  verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>"$dir/reserved-cpus.err") || {
+    echo "mem-run: cannot judge $dir/reserved-cpus and will not ignore a possible CPU reservation: $(cat "$dir/reserved-cpus.err" 2>/dev/null)" >&2
+    rm -f "$dir/reserved-cpus.err"
+    exit 75
+  }
+  rm -f "$dir/reserved-cpus.err"
   case "$verdict" in
     keep\ *) reserved=${verdict#keep } ;;
     stale\ *)
@@ -418,10 +424,18 @@ echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf 
 # process tree, so a job kill cannot kill it before it tears the scope down.
 guard_dir=$(mktemp -d "${TMPDIR:-/tmp}/solaris-mem-guard.XXXXXXXX")
 unit="krasnokamen-mem-run-${guard_dir##*.}.scope"
+# The guardian takes the escalation grace as an argument and only rejects a non-number; `nan`, `inf`
+# or `-1` would pass its float() and then break its select() deadline with the scope still running.
+grace=${KRASNOKAMEN_MEMRUN_CANCEL_GRACE:-15}
+if ! awk -v g="$grace" 'BEGIN { exit !(g ~ /^[0-9]+([.][0-9]+)?$/ && g + 0 > 0) }'; then
+  rm -rf "$guard_dir"
+  echo "mem-run: KRASNOKAMEN_MEMRUN_CANCEL_GRACE must be a finite positive number of seconds, got '$grace'" >&2
+  exit 75
+fi
 mkfifo "$guard_dir/events" "$guard_dir/ready"
 if ! systemd-run --user --quiet --collect --unit="${unit%.scope}-guard" \
   python3 "$here/mem-run-guard.py" "$guard_dir" "/sys/fs/cgroup$cgroup/$unit" "$$" "$PPID" \
-  "${KRASNOKAMEN_MEMRUN_CANCEL_GRACE:-15}" \
+  "$grace" \
   || ! timeout 10 bash -c 'read -r ready < "$1/ready"' _ "$guard_dir"; then
   rm -rf "$guard_dir"
   echo "mem-run: failed to start scope guardian" >&2
@@ -467,7 +481,9 @@ cancel() {
   fi
   local pid
   for pid in $(cat "/sys/fs/cgroup$cg/cgroup.procs" 2>/dev/null); do
-    [ "$pid" = "$$" ] && continue
+    # The direct child got its TERM above. A second one can land inside its cleanup (the harness turns
+    # every TERM into KeyboardInterrupt) and cut a result.json write, so skip it and this wrapper.
+    if [ "$pid" = "$$" ] || [ "$pid" = "$c" ]; then continue; fi
     kill -TERM "$pid" 2>/dev/null || true
   done
 }

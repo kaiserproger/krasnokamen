@@ -16,9 +16,20 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SCRIPT = HERE / 'perf-window.sh'
-# Verified on real captures: receipts/G2/laptop-perf-20k/report-{fp,dwarf}.txt hold caller lines,
-# the flat BattleBaseline reports do not.
+# Verified on real captures: a frame-pointer report holds caller lines, a flat self-time report
+# does not. The fixture below pins both shapes so the pattern is exercised, not only quoted.
 CALLERS = r'^ +(\||-{2}[0-9])'
+GRAPH_REPORT = """# Samples: 1K of event 'ls_dmnd_fills_from_sys.all'
+#
+            |          |--12.34%--mc_core::step_entity
+            |          |          |--9.00%--mc_core::read_row
+            --8.00%--mc_edge::tick
+"""
+FLAT_REPORT = """# Samples: 1K of event 'ls_dmnd_fills_from_sys.all'
+#
+-  5.00%  mc_core  mc_core::step_entity
+  3.00%  mc_edge  mc_edge::tick
+"""
 
 
 class PerfWindowRecipeTests(unittest.TestCase):
@@ -85,6 +96,15 @@ class PerfWindowRecipeTests(unittest.TestCase):
         # A capture without caller frames is refused, not quoted; the pattern is the verified one.
         self.assertIn('no caller frames', code)
         self.assertIn(CALLERS, code)
+
+    def test_the_caller_pattern_matches_a_graph_report_and_not_a_flat_one(self):
+        # ReviewD123Harness2 item 6: the regex was only grepped out of the script text. Run the
+        # same grep the script runs against both report shapes.
+        def matches(text):
+            done = subprocess.run(['grep', '-qE', CALLERS, '-'], input=text, text=True)
+            return done.returncode == 0
+        self.assertTrue(matches(GRAPH_REPORT), 'a frame-pointer report has caller lines')
+        self.assertFalse(matches(FLAT_REPORT), 'a flat self-time report must be refused')
 
 
 if __name__ == '__main__':

@@ -35,12 +35,16 @@ def parse(text: str) -> tuple[str | None, str | None]:
 
 
 def owner_alive(owner: str | None) -> bool | None:
-    """True/False for a live/dead owner; None when the line cannot be judged (an older writer)."""
+    """True/False for a live/dead owner; None only when there is no owner line (an older writer).
+
+    A present line that cannot be parsed claims a live owner and cannot be checked, so it is treated
+    as stale: keeping it would pin the CPUs for as long as the file survives, and clear() unlinks only
+    the exact bytes judged, so a live writer is never raced."""
     if owner is None:
         return None
     parts = owner.split()
     if len(parts) != 2 or not parts[0].isdigit():
-        return None
+        return False
     pid, start = parts
     try:
         text = Path(f'/proc/{pid}/stat').read_text()

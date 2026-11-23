@@ -1,6 +1,6 @@
 [[bug]]
 id = "PERF-WINDOW-HAS-NO-CALL-GRAPH-AND-NO-MAINTAINED-SCRIPT"
-title = "The box profiling recipe runs perf record without -g and lives only in receipts/Perf1M/perf-window.sh, with no maintained script under tools/, so captures give self time only and cannot say which caller causes the cache fills."
+title = "The box profiling recipe runs perf record without -g (and lived only in receipts/Perf1M/perf-window.sh, not under tools/), so captures give self time only and cannot say which caller causes the cache fills; the control reverses the `-g --call-graph fp` flag, the maintained script is the fix commit's new file."
 area = "harness"
 repro = "source"
 severity = "minor"

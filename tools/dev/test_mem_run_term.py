@@ -34,6 +34,21 @@ print(f'- {os.getpid()} {os.getppid()} {cg}', flush=True)
 signal.pause()
 '''
 
+COUNTING = r'''
+import os, signal, time
+terms = 0
+def handler(*_):
+    global terms
+    terms += 1
+    open(os.environ['TEST_TERM_LOG'], 'w').write(str(terms))
+signal.signal(signal.SIGTERM, handler)
+cg = open('/proc/self/cgroup').read().strip().split('::', 1)[1]
+print(f'- {os.getpid()} {os.getppid()} {cg}', flush=True)
+time.sleep(0.6)   # outlive the wrapper's single forwarding pass, which runs inside its TERM trap
+open(os.environ['TEST_TERM_LOG'], 'w').write(str(terms))
+os._exit(0 if terms else 2)
+'''
+
 
 def wait_scope_empty(cg: str, timeout: float = 60) -> None:
     """Wait on the scope's cgroup.events until `populated 0` (or the cgroup is gone)."""
@@ -152,6 +167,9 @@ class CancelledScopeTests(unittest.TestCase):
                 time.sleep(0.05)
 
     def test_a_term_honouring_child_ends_the_scope_before_the_escalation(self):
+        # Companion check: it is green in the control too (the forwarding sweep also TERMs this
+        # child), so it proves "the scope ends without escalation", not direct-child-first. That
+        # ordering is test_a_cancelled_child_receives_exactly_one_term's claim.
         root, runner, env = self.sandbox()
         env['KRASNOKAMEN_MEMRUN_CANCEL_GRACE'] = '60'
         proc, _, child, wrapper, cg = self.start(runner, env, child=HONOURING)
@@ -164,6 +182,24 @@ class CancelledScopeTests(unittest.TestCase):
             self.fail('a TERM-honouring child did not end its scope without the guardian escalation')
         wait_scope_empty(cg)
         self.assertNotEqual(proc.returncode, 0, 'a cancelled command is not a successful run')
+
+    def test_a_cancelled_child_receives_exactly_one_term(self):
+        # ReviewD123Harness2 item 2: the wrapper TERMed the direct child and then TERMed it again in
+        # the cgroup.procs sweep; the harness turns every TERM into KeyboardInterrupt, so the second
+        # could cut a result.json write. The sweep must skip the child it already signalled.
+        root, runner, env = self.sandbox()
+        log = root / 'terms'
+        proc, _, _, wrapper, cg = self.start(runner, {**env, 'TEST_TERM_LOG': str(log)}, child=COUNTING)
+        os.kill(int(wrapper), signal.SIGTERM)
+        try:
+            proc.wait(timeout=45)
+        except subprocess.TimeoutExpired:
+            self.scope_kill(cg)
+            self.fail('the cancelled counting child never ended')
+        wait_scope_empty(cg)
+        self.assertTrue(log.exists(), 'the child never ran its TERM handler')
+        self.assertEqual(log.read_text().strip(), '1',
+                         'the direct child got the cancellation TERM exactly once')
 
     def test_the_token_is_held_during_the_scope_and_free_after_a_cancellation(self):
         root, runner, env = self.sandbox()

@@ -44,14 +44,13 @@ if ! (
   echo "reserve-cpus: CPUs already reserved: $(cat "$file" 2>/dev/null)" >&2
   exit 75
 fi
-starttime=$version
 release() {
   local content expected
   (
     exec {lf}<>"$dir/reserved-cpus.lock"
     flock "$lf"
     content=$(cat "$file" 2>/dev/null || true)
-    expected=$(printf '%s\n%s %s' "$cpus" "$$" "$starttime")
+    expected=$(printf '%s\n%s %s' "$cpus" "$$" "$version")
     # Only our own file: a reservation that replaced it is not ours to remove.
     if [ "$content" = "$expected" ]; then rm -f -- "$file"; fi
   )
