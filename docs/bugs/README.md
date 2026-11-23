@@ -208,8 +208,7 @@ worker, runs the negative control.
    A missing mapping, timeout, launch error or crash cannot carry the control.
    The restore receipt covers only its reported refs; every other registered ref
    must run green on the candidate. A row whose only refs are unit tests cannot
-   use this form.
-   The candidate is the
+   use this form. The candidate is the
    exact tree: `HEAD` plus its uncommitted diff and untracked files
    (`docs/bugs/` aside), identified by a fingerprint; no commit is needed. The
    control and the restore worktrees reproduce it, verified by that fingerprint.
@@ -358,7 +357,26 @@ defect-injection patch in `control_b_patch` (repo-relative, normally
 
 The gate also refuses the flag when the fix commit changes any production file, when a changed test file
 holds no test one of the row's refs runs, when the defect patch is missing or does not apply, and when
-the row lacks `repro_check`. `repro_check` states what the old oracle asserted and the independent
+the row lacks `repro_check`. Stricter still:
+
+- **The defect patch is the committed one.** It is read with `git show HEAD:<control_b_patch>`, its
+  worktree copy must be identical (an uncommitted edit refuses), and the row records
+  `control_b_sha256`, which `regressions.run` checks against the committed bytes and
+  `_promotion_errors` checks against `control_b.sha256` in the receipt.
+- **It mutates production behaviour only.** Split like a fix patch, it may not touch a test file, an
+  inline `#[cfg(test)]` module, a `docs/` path other than `docs/bugs/`, a `*.md`, or build
+  configuration (`Cargo.toml`, `build.rs`, `.cargo/`, `.config/`); a hunk it would leave out refuses.
+- **Red means an observed assertion failure in a changed test file.** Cargo's `panicked at <path>` must
+  name a reversed test file; a python innermost traceback frame must be a changed test file and an
+  `AssertionError`. A production-code panic or a build failure is unrunnable, never red.
+- **The same test must flip both ways.** `control_b.proving` is the non-empty intersection of control
+  A's red refs and control B's red refs, and each proving ref's test must be defined in a reversed
+  file (python by module path, cargo by `crates/<crate>/` plus module path). Coverage is by that exact
+  mapping, never by a bare function name.
+- **Control A always runs on current code** (`control_tree: head`): a test-only fix whose test hunks do
+  not reverse onto the candidate refuses instead of falling back to a `fix_commit` worktree. A
+  `client:<sha>` fix can never be `test_only_fix`.
+- A corrected test in a test file the fix deleted or renamed has no control A and refuses. `repro_check` states what the old oracle asserted and the independent
 evidence (vanilla data/bytecode, spec, arithmetic) that the new one is right; the review of a test-only
 batch lists old versus new assertions and justifies every removed or loosened one. A row whose defect
 cannot be injected stays `fixed-unpromoted(test-only: oracle unproven)` — control A alone never promotes.
