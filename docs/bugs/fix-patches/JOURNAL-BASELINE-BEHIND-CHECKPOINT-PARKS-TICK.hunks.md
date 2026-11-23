@@ -1,8 +1,10 @@
 # JOURNAL-BASELINE-BEHIND-CHECKPOINT-PARKS-TICK — negative-control patch
 
 Fix: `docs/bugs/fix-patches/JOURNAL-BASELINE-BEHIND-CHECKPOINT-PARKS-TICK.patch`
-(`fix_commit = "patch:c31baef245918fe396da17c256f74e40ad7d5d6d9fa2719d0554f38560a2e1d7"`, the sha256 of that file).
+(`fix_commit = "patch:c31baef245918fe396da17c256f74e40ad7d5d6d9fa2719d0554f38560a2e1d7"`, sha256 of that file).
 It is a diff from the adapted pre-fix form to the candidate (HEAD); `git apply -R` restores the pre-fix form.
+An earlier partial patch omitted the owner-built answer guard, the writer wake and the serial counter; the reviewer
+rejected it for that reason, the row was reopened, and that identity no longer appears in the tree.
 
 ## Commits covered
 
