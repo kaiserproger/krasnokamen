@@ -125,11 +125,8 @@ pub(crate) fn dragon_egg(state: &mut TickState, actor: EntityId, pos: BlockPos) 
         }
         if !state
             .world
-            .has_chunk(target.x.div_euclid(16), target.z.div_euclid(16))
-            || !state
-                .world
-                .block_at(target.x, target.y, target.z)
-                .is_some_and(|id| id == state.registry.states.air)
+            .block_at(target.x, target.y, target.z)
+            .is_some_and(|id| id == state.registry.states.air)
             || !crate::plugin_player::allows_block(state, actor, target)
         {
             continue;
