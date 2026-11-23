@@ -1,0 +1,39 @@
+{
+  "id": "QUIRK-FARM-OMITS-VANILLA-SELF-CHECK",
+  "verdict": "promoted",
+  "fix_commit": "63e1f0d96",
+  "fix_commit_full": "63e1f0d96752df9307e2f8bdbab1db10edbc5e13",
+  "promoted_at": "2026-11-23T14:36:47+00:00",
+  "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/harness/backends/scene_shot_execute.py",
+    "tools/harness/quirk_parity/__main__.py",
+    "tools/harness/quirk_parity/compare.py",
+    "tools/harness/quirk_parity/scenarios/qc-piston-bud.json",
+    "tools/harness/quirk_parity/scenarios/redstone-lever-lamp.json"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/dimensions_tests.rs",
+    "tools/harness/test_matrix_blocks.py",
+    "tools/harness/test_quirk_compare.py",
+    "tools/harness/test_scene_shot.py"
+  ],
+  "negative_control": {
+    "python:tools.harness.test_quirk_compare:FarmOracleTests.test_every_seed_must_pass_vanilla_population_check_even_when_rates_match": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_quirk_compare:FarmOracleTests.test_every_seed_must_pass_vanilla_population_check_even_when_rates_match": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T143642-ledger-promote-lku3h489"
+}

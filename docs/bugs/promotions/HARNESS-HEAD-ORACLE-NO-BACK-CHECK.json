@@ -1,0 +1,40 @@
+{
+  "id": "HARNESS-HEAD-ORACLE-NO-BACK-CHECK",
+  "verdict": "promoted",
+  "fix_commit": "071d9c593",
+  "fix_commit_full": "071d9c59363ea324abce833aa3d408d07e972c8e",
+  "promoted_at": "2026-11-23T14:37:10+00:00",
+  "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "fix_commit",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/harness/backends/scene_shot.py"
+  ],
+  "kept_test_files": [
+    "tools/harness/test_scene_shot.py"
+  ],
+  "negative_control": {
+    "python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_allows_small_pose_raster_changes_on_back": {
+      "state": "unrunnable",
+      "detail": "no executed test or unittest error; see log"
+    },
+    "python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_extra_back_patch_even_with_correct_head": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_allows_small_pose_raster_changes_on_back": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_extra_back_patch_even_with_correct_head": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T143658-ledger-promote-k1iplro4"
+}

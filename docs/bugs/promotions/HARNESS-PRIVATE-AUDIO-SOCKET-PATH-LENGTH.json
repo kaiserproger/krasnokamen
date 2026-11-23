@@ -1,0 +1,40 @@
+{
+  "id": "HARNESS-PRIVATE-AUDIO-SOCKET-PATH-LENGTH",
+  "verdict": "promoted",
+  "fix_commit": "e1ae29d5c",
+  "fix_commit_full": "e1ae29d5cb4b66e3976a4e4504ca7c868d9210f3",
+  "promoted_at": "2026-11-23T14:37:21+00:00",
+  "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/harness/screen_audio_graph.sh"
+  ],
+  "kept_test_files": [
+    "tools/harness/test_screen_audio_graph.py"
+  ],
+  "negative_control": {
+    "python:tools.harness.test_screen_audio_graph:PrivateGraphCleanupTests.test_long_explicit_scratch_is_rejected_before_daemons": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_screen_audio_graph:PrivateGraphCleanupTests.test_long_tmpdir_keeps_socket_fixture_short": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_screen_audio_graph:PrivateGraphCleanupTests.test_long_explicit_scratch_is_rejected_before_daemons": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_screen_audio_graph:PrivateGraphCleanupTests.test_long_tmpdir_keeps_socket_fixture_short": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T143716-ledger-promote-d5h5bneo"
+}
