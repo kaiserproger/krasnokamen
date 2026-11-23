@@ -1,8 +1,21 @@
 diff --git a/tools/dev/mem-run.sh b/tools/dev/mem-run.sh
-index e996d44b8..79989ecc2 100755
+index e996d44b8..b2d23192a 100755
 --- a/tools/dev/mem-run.sh
 +++ b/tools/dev/mem-run.sh
-@@ -373,15 +373,44 @@ fi
+@@ -108,6 +108,12 @@ cmd=("${key_words[@]:$i}")
+ if [ "${cmd[0]:-}" = nice ]; then
+   if [ "${cmd[1]:-}" = -n ]; then cmd=("${cmd[@]:3}"); else cmd=("${cmd[@]:1}"); fi
+ fi
++# A bad cancel grace must fail in a second, not after a token wait or an -x freeze (N12).
++_grace=${KRASNOKAMEN_MEMRUN_CANCEL_GRACE:-15}
++if ! awk -v g="$_grace" 'BEGIN { exit !(g ~ /^[0-9]+([.][0-9]+)?$/ && g + 0 > 0 && g + 0 <= 86400) }'; then
++  echo "mem-run: KRASNOKAMEN_MEMRUN_CANCEL_GRACE must be a finite positive number of seconds no larger than 86400, got '$_grace'" >&2
++  exit 75
++fi
+ # Build tokens (owner 2026-11-11): at most three compile commands run host-wide.
+ # Compile is decided once from argv, after leading env/nice/ionice/timeout words: cargo
+ # with any subcommand but fmt/fetch/tree/metadata/clean/update and the like, gradle(w),
+@@ -373,15 +379,51 @@ fi
  [ "$exclusive" = 1 ] && { niceness=0; cpu_pin=(); preemptible=0; }
  # CPUs held by tools/dev/reserve-cpus (owner 2026-11-16, Spain trials) stay out of every
  # new scope except one started with KRASNOKAMEN_RESERVED_CPUS=use; running scopes keep
@@ -15,13 +28,20 @@ index e996d44b8..79989ecc2 100755
 +# owner and is honoured as-is (mixed-version compatibility).
 +reserved=
 +if [ -e "$dir/reserved-cpus" ]; then
-+  # A failing helper must not silently drop a live reservation: fail closed. The file's first line is
-+  # the CPU list by construction, so honour that much and say why (ReviewD123Harness1 6).
-+  verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>"$dir/reserved-cpus.err") || {
-+    echo "mem-run: cannot judge $dir/reserved-cpus; honouring its first line as a CPU list: $(cat "$dir/reserved-cpus.err" 2>/dev/null)" >&2
-+    verdict="keep $(head -n 1 "$dir/reserved-cpus")"
++  # A failing helper must not silently drop a live reservation: name it, keep its stderr in a
++  # variable (a shared .err file races between wrappers), validate the first line as a CPU list and
++  # honour that much (ReviewD123Harness1 6, 4 N12).
++  err=
++  verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>&1) || {
++    err=$verdict
++    first=$(head -n 1 "$dir/reserved-cpus")
++    if ! printf '%s' "$first" | grep -Eqx '[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*'; then
++      echo "mem-run: cannot judge $dir/reserved-cpus ($err) and its first line is not a CPU list; refusing this scope" >&2
++      exit 75
++    fi
++    echo "mem-run: cannot judge $dir/reserved-cpus; honouring its first line '$first' as a CPU list: $err" >&2
++    verdict="keep $first"
 +  }
-+  rm -f "$dir/reserved-cpus.err"
 +  case "$verdict" in
 +    keep\ *) reserved=${verdict#keep } ;;
 +    stale\ *)
@@ -50,7 +70,7 @@ index e996d44b8..79989ecc2 100755
  fi
  [ "$preemptible" = 1 ] && props=("${props[@]/CPUWeight=50/CPUWeight=10}")
  [ -n "${KRASNOKAMEN_SCENE_SLOT:-}" ] && [ "$perf" = 0 ] && props=("${props[@]/CPUWeight=*/CPUWeight=500}")
-@@ -395,9 +424,18 @@ echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf
+@@ -395,9 +437,23 @@ echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf
  # process tree, so a job kill cannot kill it before it tears the scope down.
  guard_dir=$(mktemp -d "${TMPDIR:-/tmp}/solaris-mem-guard.XXXXXXXX")
  unit="krasnokamen-mem-run-${guard_dir##*.}.scope"
@@ -62,6 +82,11 @@ index e996d44b8..79989ecc2 100755
 +  echo "mem-run: KRASNOKAMEN_MEMRUN_CANCEL_GRACE must be a finite positive number of seconds, got '$grace'" >&2
 +  exit 75
 +fi
++if ! awk -v g="$grace" 'BEGIN { exit !(g + 0 <= 86400) }'; then
++  rm -rf "$guard_dir"
++  echo "mem-run: KRASNOKAMEN_MEMRUN_CANCEL_GRACE is a whole day or more ($grace); refusing" >&2
++  exit 75
++fi
  mkfifo "$guard_dir/events" "$guard_dir/ready"
  if ! systemd-run --user --quiet --collect --unit="${unit%.scope}-guard" \
    python3 "$here/mem-run-guard.py" "$guard_dir" "/sys/fs/cgroup$cgroup/$unit" "$$" "$PPID" \
@@ -69,7 +94,7 @@ index e996d44b8..79989ecc2 100755
    || ! timeout 10 bash -c 'read -r ready < "$1/ready"' _ "$guard_dir"; then
    rm -rf "$guard_dir"
    echo "mem-run: failed to start scope guardian" >&2
-@@ -420,9 +458,42 @@ printf "%s\t%s\t%s\t%s\n" "$cg" "$MEMRUN_EST_KIB" "$MEMRUN_PREEMPTIBLE" "$MEMRUN
+@@ -420,9 +476,42 @@ printf "%s\t%s\t%s\t%s\n" "$cg" "$MEMRUN_EST_KIB" "$MEMRUN_PREEMPTIBLE" "$MEMRUN
  [ "$MEMRUN_EXCLUSIVE" = 1 ] || { flock -u 3; exec 3>&-; }
  notify start
  "$@" <&0 3>&- 6>&- 7>&- 8>&- 9>&- & c=$!

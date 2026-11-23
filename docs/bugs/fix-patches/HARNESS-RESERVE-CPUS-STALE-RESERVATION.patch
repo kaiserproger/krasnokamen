@@ -1,8 +1,8 @@
 diff --git a/tools/dev/reserve-cpus b/tools/dev/reserve-cpus
-index edddd0b5d..a377df942 100755
+index edddd0b5d..d9a1da0b9 100755
 --- a/tools/dev/reserve-cpus
 +++ b/tools/dev/reserve-cpus
-@@ -13,8 +13,10 @@
+@@ -13,8 +13,11 @@
  # reused), so a stale file cannot silently pin every later scope (#G4, CS341).
  # Clearing a corpse and creating a reservation are serialized on
  # `reserved-cpus.lock` (tools/dev/reserved_cpus.py): a reservation written while a
@@ -10,12 +10,13 @@ index edddd0b5d..a377df942 100755
 -# then this script; only the new pair is race-safe together.
 +# corpse is judged is never removed. Install order on a host (ReviewD123Harness1 6):
 +# `mem-run-guard.py` and `reserved_cpus.py` first, then `mem-run.sh`, then this
-+# script — a newer wrapper refuses (exit 75) without its helper, and an older
-+# wrapper does not know the owner line.
++# script — a newer wrapper names a missing helper, honours the file's first line as
++# a CPU list and refuses only when that line is not one, and an older wrapper does
++# not know the owner line.
  set -euo pipefail
  dir=/tmp/solaris-mem-slots
  file=$dir/reserved-cpus
-@@ -44,14 +46,13 @@ if ! (
+@@ -44,14 +47,13 @@ if ! (
    echo "reserve-cpus: CPUs already reserved: $(cat "$file" 2>/dev/null)" >&2
    exit 75
  fi
@@ -32,22 +33,23 @@ index edddd0b5d..a377df942 100755
      if [ "$content" = "$expected" ]; then rm -f -- "$file"; fi
    )
 diff --git a/tools/dev/reserved_cpus.py b/tools/dev/reserved_cpus.py
-index 79e96f8af..3c2bbfcae 100755
+index 79e96f8af..568004533 100755
 --- a/tools/dev/reserved_cpus.py
 +++ b/tools/dev/reserved_cpus.py
-@@ -10,8 +10,9 @@ file under that lock: only the exact bytes that were judged stale are unlinked.
+@@ -10,8 +10,10 @@ file under that lock: only the exact bytes that were judged stale are unlinked.
      python3 tools/dev/reserved_cpus.py verdict <state-dir>   # "none" | "keep <cpus>" | "stale <cpus>"
      python3 tools/dev/reserved_cpus.py clear <state-dir>     # remove the corpse we judged, if unchanged
  
 -Install order on a host: mem-run.sh first, then reserve-cpus. An old mem-run ignores the
 -owner line and honours any file it finds, so only the new pair is race-safe together.
 +Install order on a host: `mem-run-guard.py` and this helper first, then `mem-run.sh`, then
-+`reserve-cpus`. A wrapper refuses (exit 75) when this helper is missing, and an older wrapper
++`reserve-cpus`. A wrapper that cannot run this helper names it, honours the reservation file's
++first line as a CPU list and refuses (exit 75) only when that line is not one; an older wrapper
 +ignores the owner line and honours any file it finds, so only the new three are race-safe together.
  """
  from __future__ import annotations
  
-@@ -35,12 +36,16 @@ def parse(text: str) -> tuple[str | None, str | None]:
+@@ -35,12 +37,16 @@ def parse(text: str) -> tuple[str | None, str | None]:
  
  
  def owner_alive(owner: str | None) -> bool | None:
