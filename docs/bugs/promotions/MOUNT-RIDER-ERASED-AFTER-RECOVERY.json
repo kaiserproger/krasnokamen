@@ -1,0 +1,32 @@
+{
+  "id": "MOUNT-RIDER-ERASED-AFTER-RECOVERY",
+  "verdict": "promoted",
+  "fix_commit": "94f312783",
+  "fix_commit_full": "94f3127830b9f15f97931e10d31f9f735be5e9d4",
+  "promoted_at": "2026-11-23T18:45:32+00:00",
+  "tree_head": "9d71f238c6044f8820868a1e2dc4531481e03042",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/mounts.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/mounts_persistence_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:core::mounts_persistence_tests::happy_ghast_admission_leave_and_reconnect_survive_wal_recovery": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:core::mounts_persistence_tests::happy_ghast_admission_leave_and_reconnect_survive_wal_recovery": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261123T184122-ledger-promote-2tazvo1z"
+}

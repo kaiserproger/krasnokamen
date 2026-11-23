@@ -1,0 +1,36 @@
+{
+  "id": "MOUNT-PORTAL-DROPS-CHEST-CARGO",
+  "verdict": "promoted",
+  "fix_commit": "f8cdf9468",
+  "fix_commit_full": "f8cdf946844f5218a69458051b75a5152609d105",
+  "promoted_at": "2026-11-23T18:27:23+00:00",
+  "tree_head": "9d71f238c6044f8820868a1e2dc4531481e03042",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "fix_commit",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/dimensions_travel.rs",
+    "crates/mc-core/src/mounts.rs",
+    "crates/mc-core/src/tick/auth.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/mounts_persistence_tests.rs",
+    "crates/mc-core/src/mounts_tests.rs",
+    "crates/mc-core/src/portals_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:portals::tests::donkey_portal_transfer_keeps_chest_and_exact_cargo_without_source_drops": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:portals::tests::donkey_portal_transfer_keeps_chest_and_exact_cargo_without_source_drops": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261123T182128-ledger-promote-q2qiq738"
+}
