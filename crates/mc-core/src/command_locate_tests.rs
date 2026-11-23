@@ -914,32 +914,47 @@ fn a_late_completion_does_not_replace_a_newer_dolphin_run() {
 }
 
 #[test]
-fn worker_loss_does_not_consume_a_map_loot_callback() {
-    let (mut state, _) = locate_fixture();
+fn worker_loss_releases_a_map_loot_callback_so_the_container_opens_again() {
+    // The pending loot plan lives in `maps.pending_loot` until the callback's
+    // `completed` removes it. Dropping the continuation left it registered
+    // forever: every later `before_open` returned waiting=true and the container
+    // never opened again. The failure continuation must release it.
+    let (mut state, connection) = locate_fixture();
     let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
     let (done_tx, done_rx) = std::sync::mpsc::channel();
     state.locate.jobs = Some(jobs_tx);
     state.locate.done = Some(done_rx);
-    let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let flag = Arc::clone(&called);
+    let released = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let reply_called = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let release_flag = Arc::clone(&released);
+    let reply_flag = Arc::clone(&reply_called);
     state.locate.queued = 1;
     state.locate.pending.insert(
         1,
         super::PendingLocate {
-            owner: super::LocateOwner::Connection(ConnectionId(1)),
+            owner: super::LocateOwner::Connection(connection),
             kind: super::LocateKind::Structure,
             origin: (0, 64, 0),
             dimension: state.dimension,
-            completion: super::LocateCompletion::Callback(Box::new(move |_, _| {
-                flag.store(true, std::sync::atomic::Ordering::SeqCst);
-            })),
+            completion: super::LocateCompletion::Callback {
+                reply: Box::new(move |_, _| {
+                    reply_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                }),
+                on_failure: Some(Box::new(move |_| {
+                    release_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                })),
+            },
         },
     );
     drop(done_tx);
     super::drain(&mut state);
     assert!(
-        !called.load(std::sync::atomic::Ordering::SeqCst),
-        "worker loss must leave the unopened loot callback unconsumed"
+        released.load(std::sync::atomic::Ordering::SeqCst),
+        "worker loss must release the pending loot/trade plan"
+    );
+    assert!(
+        !reply_called.load(std::sync::atomic::Ordering::SeqCst),
+        "the success reply must not consume an unopened container"
     );
     assert!(state.locate.pending.is_empty());
     assert!(state.locate.jobs.is_none() && state.locate.done.is_none());
@@ -993,9 +1008,11 @@ fn a_lost_worker_terminates_dolphin_and_command_jobs() {
         "worker loss is Failed, not Missing: {:?}",
         state.locate.dolphin.get(&dolphin)
     );
-    assert!(state.outbox.get(&connection).is_some_and(|events| events.iter().any(
-        |event| matches!(event, PlayerChange::Chat { message } if message.contains("unavailable"))
-    )));
+    assert!(state.outbox.get(&connection).is_some_and(|events| {
+        events.iter().any(|event| {
+            matches!(event, PlayerChange::Chat { message } if message.contains("unavailable"))
+        })
+    }));
     assert_eq!(state.locate.queued, 0);
 }
 
@@ -1018,14 +1035,19 @@ fn structure_lookup_callback_runs_on_drain_even_after_requester_disconnects() {
             kind: super::LocateKind::Structure,
             origin: (0, 64, 0),
             dimension: state.dimension,
-            completion: super::LocateCompletion::Callback(Box::new(move |state, result| {
-                assert_eq!(
-                    state.locate.busy(super::LocateOwner::Connection(connection)),
-                    0,
-                    "release before callback can resubmit"
-                );
-                *output.lock() = Some(result);
-            })),
+            completion: super::LocateCompletion::Callback {
+                reply: Box::new(move |state, result| {
+                    assert_eq!(
+                        state
+                            .locate
+                            .busy(super::LocateOwner::Connection(connection)),
+                        0,
+                        "release before callback can resubmit"
+                    );
+                    *output.lock() = Some(result);
+                }),
+                on_failure: None,
+            },
         },
     );
     tx.send(super::LocateDone {
@@ -1066,6 +1088,7 @@ fn structure_lookup_refuses_unknown_tags_radius_and_busy_connections_without_cha
         skip_existing_chunks: true,
         referenced: Vec::new(),
         reply: Box::new(|_, _| panic!("rejected request must not complete")),
+        on_failure: None,
     };
     assert!(!super::submit_structure_lookup(
         &mut state,

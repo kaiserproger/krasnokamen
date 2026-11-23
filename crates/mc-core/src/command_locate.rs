@@ -695,9 +695,7 @@ impl LocateState {
             LocateOwner::Connection(connection) => {
                 self.in_flight.get(&connection).copied().unwrap_or(0)
             }
-            LocateOwner::Entity(entity) => {
-                self.entity_in_flight.get(&entity).copied().unwrap_or(0)
-            }
+            LocateOwner::Entity(entity) => self.entity_in_flight.get(&entity).copied().unwrap_or(0),
         }
     }
 
@@ -1168,6 +1166,11 @@ pub(crate) enum DolphinTreasure {
 }
 
 type StructureLookupReply = Box<dyn FnOnce(&mut TickState, Option<mc_world::BlockPos>) + Send>;
+/// Terminal failure of a deferred lookup (metadata unreadable, worker loss,
+/// owner changed dimension). A loot/trade plan must release itself here: leaving
+/// the map/loot entry registered blocks every later open for the rest of the
+/// session.
+type StructureLookupFailure = Box<dyn FnOnce(&mut TickState) + Send>;
 
 /// Deferred loot/trade lookup. Completion runs on the native tick, including
 /// disconnected requesters; the callback validates its own container/token.
@@ -1179,12 +1182,18 @@ pub(crate) struct StructureLookupRequest {
     pub skip_existing_chunks: bool,
     pub referenced: Vec<mc_world::BlockPos>,
     pub reply: StructureLookupReply,
+    /// Releases the caller's pending plan when the lookup cannot complete. The
+    /// container then opens on its next attempt instead of waiting forever.
+    pub on_failure: Option<StructureLookupFailure>,
 }
 
 enum LocateCompletion {
     Command(String),
     Eye(crate::projectiles::eye::EyeUse),
-    Callback(StructureLookupReply),
+    Callback {
+        reply: StructureLookupReply,
+        on_failure: Option<StructureLookupFailure>,
+    },
     Dolphin(EntityId),
 }
 
@@ -1220,7 +1229,10 @@ pub(crate) fn submit_structure_lookup(
         LocateKind::Structure,
         request.origin,
         targets,
-        LocateCompletion::Callback(request.reply),
+        LocateCompletion::Callback {
+            reply: request.reply,
+            on_failure: request.on_failure,
+        },
         StructureSearchOptions {
             radius_rings: request.search_radius_rings,
             skip_referenced: request.skip_existing_chunks,
@@ -1265,9 +1277,7 @@ fn submit(
         LocateOwner::Entity(_) => 1,
     };
     if state.locate.busy(owner) >= limit {
-        if !quiet
-            && let LocateOwner::Connection(connection) = owner
-        {
+        if !quiet && let LocateOwner::Connection(connection) = owner {
             state.push_player(
                 connection,
                 PlayerChange::Chat {
@@ -1287,14 +1297,11 @@ fn submit(
         MAX_QUEUED_JOBS
     };
     if state.locate.queued >= capacity {
-        if !quiet
-            && let LocateOwner::Connection(connection) = owner
-        {
+        if !quiet && let LocateOwner::Connection(connection) = owner {
             state.push_player(
                 connection,
                 PlayerChange::Chat {
-                    message: "Too many locate searches are running; try again in a moment"
-                        .into(),
+                    message: "Too many locate searches are running; try again in a moment".into(),
                 },
             );
         }
@@ -1303,9 +1310,7 @@ fn submit(
     // Readiness before the expensive resident-chunk metadata snapshot.
     if let Err(error) = state.locate.worker() {
         tracing::error!(%error, "locate worker thread could not start");
-        if !quiet
-            && let LocateOwner::Connection(connection) = owner
-        {
+        if !quiet && let LocateOwner::Connection(connection) = owner {
             state.push_player(
                 connection,
                 PlayerChange::Chat {
@@ -1335,9 +1340,7 @@ fn submit(
         Err(error) => {
             // A thread that cannot start is a command failure, not a tick panic.
             tracing::error!(%error, "locate worker thread could not start");
-            if !quiet
-                && let LocateOwner::Connection(connection) = owner
-            {
+            if !quiet && let LocateOwner::Connection(connection) = owner {
                 state.push_player(
                     connection,
                     PlayerChange::Chat {
@@ -1365,9 +1368,7 @@ fn submit(
             Some(id)
         }
         Err(TrySendError::Full(_)) => {
-            if !quiet
-                && let LocateOwner::Connection(connection) = owner
-            {
+            if !quiet && let LocateOwner::Connection(connection) = owner {
                 state.push_player(
                     connection,
                     PlayerChange::Chat {
@@ -1379,9 +1380,7 @@ fn submit(
             None
         }
         Err(TrySendError::Disconnected(_)) => {
-            if !quiet
-                && let LocateOwner::Connection(connection) = owner
-            {
+            if !quiet && let LocateOwner::Connection(connection) = owner {
                 state.push_player(
                     connection,
                     PlayerChange::Chat {
@@ -1439,12 +1438,17 @@ fn deliver(state: &mut TickState, done: LocateDone) {
                 crate::projectiles::eye::complete(state, request, hit.pos);
             }
         }
-        LocateCompletion::Callback(reply) => {
-            // A metadata/read failure is not "no destination": invoking the
-            // callback with None consumes an unopened loot table and loses its
-            // map. Drop the continuation and leave the container untouched.
+        LocateCompletion::Callback { reply, on_failure } => {
+            // A metadata/read failure is not "no destination": release the
+            // caller's pending loot/trade plan so its container opens again
+            // (a fresh search next time) instead of waiting forever.
             if done.error.is_some() {
-                tracing::warn!("locate callback refused: metadata unreadable; container left unopened");
+                tracing::warn!(
+                    "locate callback refused: metadata unreadable; pending plan released"
+                );
+                if let Some(release) = on_failure {
+                    release(state);
+                }
                 return;
             }
             let hit = done.hit.map(|hit| mc_world::BlockPos {
@@ -1498,7 +1502,14 @@ fn deliver(state: &mut TickState, done: LocateDone) {
             state.locate.dolphin.insert(dolphin, treasure);
         }
         LocateCompletion::Command(display) => {
-            command_result(state, pending.owner, pending.kind, pending.origin, display, done);
+            command_result(
+                state,
+                pending.owner,
+                pending.kind,
+                pending.origin,
+                display,
+                done,
+            );
         }
     }
 }
@@ -1521,7 +1532,10 @@ fn command_result(
         return;
     }
     if done.error.is_some() {
-        tracing::warn!(connection = connection.0, "locate search failed to read metadata");
+        tracing::warn!(
+            connection = connection.0,
+            "locate search failed to read metadata"
+        );
         state.push_player(
             connection,
             PlayerChange::Chat {
@@ -1579,8 +1593,12 @@ fn terminal_wrong_dimension(state: &mut TickState, pending: PendingLocate) {
                 );
             }
         }
-        LocateCompletion::Callback(_) => {
-            // Cross-world: preserve an unopened container instead of consuming it.
+        LocateCompletion::Callback { on_failure, .. } => {
+            // Cross-world: the search cannot answer this dimension, so release
+            // the pending plan; the container re-plans when reopened.
+            if let Some(release) = on_failure {
+                release(state);
+            }
         }
         LocateCompletion::Dolphin(dolphin) => {
             state.locate.dolphin.remove(&dolphin);
@@ -1614,9 +1632,13 @@ fn fail_worker(state: &mut TickState) {
                     );
                 }
             }
-            LocateCompletion::Callback(_) => {
-                // Infrastructure loss must not consume unopened loot.
-                tracing::warn!("locate worker lost: map/loot callback left unopened");
+            LocateCompletion::Callback { on_failure, .. } => {
+                // Infrastructure loss must not wedge the container: release the
+                // pending loot/trade plan so the next open plans a new search.
+                tracing::warn!("locate worker lost: pending map/loot plan released");
+                if let Some(release) = on_failure {
+                    release(state);
+                }
             }
             LocateCompletion::Dolphin(dolphin) => {
                 let matches = state.locate.dolphin.get(&dolphin).is_some_and(|treasure| {
