@@ -586,7 +586,8 @@ replacements, or the durability/fullness bar fill is missing (MODEL-ITEM-BARS).
 `run scenario native-toast --client native --windowed` fails if the join-time
 unsecure-server toast is not drawn two seconds after Play or is still drawn
 eighteen seconds later: the ROI is the panel's own `gui/sprites/toast/system`
-rectangle (GUI scale 3 puts it at x 600..1281, y 0..168 on a 1280x720 frame) and
+rectangle (GUI scale 3 puts it at x 621..1280, y 0..168 on a 1280x720 frame,
+inside the frame) and
 the assertion is its dark pixels (NATIVE-TOASTS-MISSING). A capture requested
 while the HUD repaints is only deferred for *screen* transitions
 (`UiState::capture_deferring`); deferring it for HUD animation as well pushed
