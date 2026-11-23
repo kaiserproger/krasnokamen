@@ -1,10 +1,16 @@
 diff --git a/crates/mc-core/src/tick/containers.rs b/crates/mc-core/src/tick/containers.rs
-index 97b06181d..7b769e212 100644
+index c288d0f88..af941f920 100644
 --- a/crates/mc-core/src/tick/containers.rs
 +++ b/crates/mc-core/src/tick/containers.rs
-@@ -262,26 +262,47 @@ pub(crate) fn debug_menu_snapshot(
+@@ -261,29 +261,54 @@ pub(crate) fn debug_menu_snapshot(
+ 
  /// Resync the real current menu after refusing a native inventory transition.
  /// A vehicle or block menu must never be imaged with placeholder empty cargo.
+-/// Resync the real current menu after refusing a native inventory transition.
+-/// A vehicle or block menu must never be imaged with placeholder empty cargo.
++/// Every caller is a live player's own input path (pick item, swap hands,
++/// creative slot, drop, book edit, interact), so `players[&entity]` is an
++/// invariant here rather than a checked precondition.
  pub(crate) fn inventory_transition_refused(
 -    state: &TickState,
 +    state: &mut TickState,
@@ -33,6 +39,9 @@ index 97b06181d..7b769e212 100644
 +    // retained shape must match the reconstructed storage and every block must
 +    // be resident (the same check the click and recipe paths make). A cold
 +    // half, whichever one it is, would otherwise be imaged as empty slots.
++    // Menus with no `open_containers` record (Mount, plugin, settlement) have no
++    // cells, so a non-zero retained size fails the shape check and they close
++    // fail-closed here instead of being imaged with an empty placeholder.
 +    let open_cells = state
          .open_containers
          .menu_at(&entity)
