@@ -4,8 +4,9 @@ title = "The box perf window counts the generic cache-references and cache-misse
 area = "harness"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "receipts/Books/REPORT-R1.md gap G-8 and section F6 (Gregg 13 perf counter semantics, 6.3.7 IPC; hygiene). receipts/Perf1M/perf-window.sh counts cache-references and cache-misses beside ls_dmnd_fills_from_sys.all (line 97); receipts/Perf1M/ROADMAP.md item 2 quotes '1.32 G cache-misses / 7.87 G references = 16.8 %' as a last-level statement. An optimisation could be accepted or rejected on an L2 story. Verified open (the counter set in perf-window.sh is unchanged). Fix: replace the aliases with the explicit AMD events (l2_request_g1.all, l2_misses.all, ls_dmnd_fills_from_sys.all), correct the roadmap sentence, and take the top-down verdict now: perf stat -M PipelineL1 --per-thread -p <pid> -- sleep 60 (the host advertises PipelineL1/PipelineL2, l3_cache, data_fabric)."
 regression = ["python:tools.dev.test_perf_window:PerfWindowRecipeTests.test_the_counter_set_is_the_amd_last_level_events_not_the_l2_aliases"]
 failing_first = "not recorded"
 fix_commit = "patch:4c591801cc62517529505ebcdac13e394c12b54aee756c53a4a2190fd1f27309"
+promotion = "docs/bugs/promotions/PERF-WINDOW-READS-AMD-L2-ALIAS-AS-LAST-LEVEL-MISS-RATE.json"
