@@ -1,45 +1,70 @@
-# DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY — patch-mode fix identity (new fix)
+# DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY — patch-mode fix identity (third form)
 
 Fix: `docs/bugs/fix-patches/DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY.patch`
-(`fix_commit = "patch:4b2427db26a3655cf61a61d70d0da199d367934cc6c193419d95588928724c90"`).
+(`fix_commit = "patch:PENDING"`).
 Re-audit:
 `python3 -m tools.harness ledger promote DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY --fix-patch docs/bugs/fix-patches/DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY.patch --dry-run`
 
 ## Why patch mode
 
-The fix is uncommitted work in this lane (`696d843631` swept the body in with a
-docs commit, then `1e5f305f2e` fixed the regression's assertion). The
-signature change (`&mut TickState`) is spread over four call sites and one
-kept test; reversing the commit would restore the `&TickState` signature and
-stop the control from building against the kept test. The identity therefore
-carries the body change only.
+The fix is one uncommitted function in `crates/mc-core/src/tick/containers.rs`
+(commit `fix(core): close a menu whose custody spans a cold chunk`). The
+patch is the whole function: pre-image verbatim on the a/-side, the candidate
+form on the b/-side.
 
 ## What the patch carries
 
-`crates/mc-core/src/tick/containers.rs`, `inventory_transition_refused`: the
-cold-partner check (`chests::partner_position` at the open menu's block, then
-`ChunkWorld::chunk` for the partner half) and, for a cold partner, the refusal
-by `close_player_menu` returning empty effects instead of resending the menu
-image. This is the row's whole path: the pre-fix body rebuilds `container_cells`
-from whatever half is readable and sends 27 real slots plus 27 empty ones.
+`inventory_transition_refused` in `crates/mc-core/src/tick/containers.rs`:
 
-## a/-side adaptation
+- the vehicle and ender returns come first (unchanged on both sides);
+- the block-menu branch reconstructs the menu's cells and slots, then applies
+  the same custody check the click (`tick/input/inventory.rs`) and recipe
+  (`place_recipe`) paths make: `menu.kind.container_size() != container.len()`
+  or any named block non-resident (`ChunkWorld::block_at` is `None`);
+- a cold half — the open half, the partner, or both — closes the menu through
+  `close_player_menu` and returns a window-0 resync
+  (`inventory_transition_refused(&[])`, which resolves against
+  `inventory_menu` once `open` is cleared) so the client's predicted stack,
+  cursor or book edit rolls back;
+- otherwise the real storage is resent.
 
-The kept test calls `inventory_transition_refused(&mut state, player)`, so the
-`&mut TickState` parameter is kept on the a/-side (reason (b): restoring the
-pre-image's `&TickState` stops the control from building). The body is the
-pre-fix resync verbatim in behaviour (`players.get` then
-`inventory_transition_refused(&slots)`), with the same names. The call sites
-are unchanged on both sides, so nothing else outside the original pre-image is
-constructed.
+`chests::partner_position` is deleted: the cold test does not need the
+partner's coordinate (that helper was the second convention the review
+rejected).
 
-## Proving ref (crates/mc-core/src/chests_tests.rs)
+## a/-side
 
-- `integrity_reserved_refusal_with_a_cold_partner_closes_the_menu` — a
-  54-slot double chest whose left half sits at `x = 15` of its chunk; only the
-  right half's chunk is evicted (`finish_inhabited_tick`, empty active set,
-  `capture_dirty`, `mark_flushed`, `evict_outside`). The refusal must leave
-  `player.open == None`, the container set empty, the readable half's diamond
-  in place, and a `MenuClosed` for the opened window in the player's outbox.
-  In the control the menu stays open (the pre-fix resync) and the test fails at
-  its own `"the cold-partner refusal closes the menu"` assertion.
+None. The a/-side is the pre-fix function text exactly as it stood in
+`ac8c352a3` (`state: &TickState`, `player.inventory_transition_refused(...)`
+for vehicles and the tail): `&mut` callers coerce to `&`, so neither the
+call sites nor the kept tests need an adaptation. No text outside the original
+pre-image is constructed.
+
+## Proving refs (crates/mc-core/src/chests_tests.rs)
+
+All three share `reserved_refusal_with_a_cold_half`, which puts the halves on
+opposite sides of a chunk boundary, opens the selected half, sets a cursor
+stack, evicts the named halves (`finish_inhabited_tick`, empty active set,
+`capture_dirty`, `mark_flushed`, `evict_outside`) and calls the refusal.
+
+- `integrity_reserved_refusal_with_a_cold_partner_closes_the_menu` — open
+  left half, partner cold. Asserts: no `MenuContents` for the open window
+  (never a 27+27 image), a `MenuClosed` in the player outbox, a window-0
+  resync, `open` cleared, the readable half's diamond intact, and the cursor
+  emerald in the player's inventory.
+- `integrity_reserved_refusal_with_a_cold_open_half_closes_the_menu` — the
+  menu is anchored on the half whose chunk is cold; the partner is resident.
+  This is the case the earlier identity missed (the partner-position check
+  returned `None`).
+- `integrity_reserved_refusal_with_both_halves_cold_closes_the_menu` — both
+  chunks evicted.
+
+In the control all three fail at their own assertions: the pre-fix body
+resends the half-empty menu and leaves `open` set.
+
+## Fix in several commits
+
+`696d843631` carried the first (rejected) cold-partner form of the body and
+`c77677ec95` its clippy fix; this identity is the third form and supersedes the
+`patch:6af67cbd`/`patch:4b2427db` receipts, which are deleted. The code lands
+in its own `fix(core):` commit; history is not rewritten.

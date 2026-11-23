@@ -639,10 +639,37 @@ fn shulker_lid_obstruction_respects_facing_and_half_block_sweep() {
     }
 }
 
-#[test]
-fn integrity_reserved_refusal_with_a_cold_partner_closes_the_menu() {
+/// Evict the chunks of `halves` from residency, keeping the rest desired.
+fn evict_halves(rig: &mut Rig, halves: &[BlockPos]) {
+    let mut want = rig.state.desired_chunks();
+    for half in halves {
+        let chunk = crate::boundary::ChunkPos {
+            x: half.x.div_euclid(16),
+            z: half.z.div_euclid(16),
+        };
+        rig.state.world.finish_inhabited_tick(rig.state.tick + 1);
+        rig.state
+            .world
+            .set_active_chunks(Default::default(), rig.state.tick + 1);
+        rig.state.world.capture_dirty(&Default::default());
+        rig.state
+            .world
+            .mark_flushed(&[(chunk, rig.state.world.storage_revision(chunk))]);
+        want.remove(&chunk);
+    }
+    assert!(rig.state.world.evict_outside(&want).iter().count() > 0);
+    for half in halves {
+        assert_eq!(rig.block_at(*half), None, "half at {half:?} is evicted");
+    }
+}
+
+/// A reserved refusal with a cold half must close the menu, never resend it:
+/// a 27-real-plus-27-empty image, or records of the cold half from the overlay,
+/// would tell the client a lie about custody. `open_left` selects which half the
+/// menu is anchored on; `cold` names the halves whose chunks are evicted.
+fn reserved_refusal_with_a_cold_half(open_left: bool, cold: [bool; 2]) -> Rig {
     let mut rig = Rig::new();
-    // Put the partner across a chunk boundary so only that half unloads.
+    // Put the halves across a chunk boundary so they evict separately.
     rig.left.x = rig.left.x.div_euclid(16) * 16 + 15;
     rig.right.x = rig.left.x + 1;
     let slot = rig.state.entities.slot_of(rig.player).unwrap();
@@ -655,52 +682,89 @@ fn integrity_reserved_refusal_with_a_cold_partner_closes_the_menu() {
         ],
     );
     let diamond = item(&rig.state, "minecraft:diamond", 3);
-    rig.double_chest(std::slice::from_ref(&diamond), &[]);
-    rig.open(rig.left);
+    let gold = item(&rig.state, "minecraft:gold_ingot", 2);
+    rig.double_chest(std::slice::from_ref(&diamond), std::slice::from_ref(&gold));
+    rig.open(if open_left { rig.left } else { rig.right });
     let window = rig.state.players[&rig.player].open.as_ref().unwrap().window;
-    let chunk = crate::boundary::ChunkPos {
-        x: rig.right.x.div_euclid(16),
-        z: rig.right.z.div_euclid(16),
-    };
-    rig.state.world.finish_inhabited_tick(rig.state.tick + 1);
+    // A cursor stack the close must return to the player's inventory.
     rig.state
-        .world
-        .set_active_chunks(Default::default(), rig.state.tick + 1);
-    rig.state.world.capture_dirty(&Default::default());
-    rig.state
-        .world
-        .mark_flushed(&[(chunk, rig.state.world.storage_revision(chunk))]);
-    let mut want = rig.state.desired_chunks();
-    want.remove(&chunk);
-    assert!(rig.state.world.evict_outside(&want).contains(&chunk));
-    assert_eq!(rig.block_at(rig.right), None);
-    // A reserved refusal (a reserved SwapHands or a book edit reaches this
-    // path) must refuse by closing the menu, never by resending 27 real slots
-    // plus 27 empty ones or records of the cold half.
+        .players
+        .get_mut(&rig.player)
+        .unwrap()
+        .open
+        .as_mut()
+        .unwrap()
+        .carried = item(&rig.state, "minecraft:emerald", 2);
+    let cold_halves: Vec<BlockPos> = [rig.left, rig.right]
+        .into_iter()
+        .zip(cold)
+        .filter_map(|(half, cold)| cold.then_some(half))
+        .collect();
+    evict_halves(&mut rig, &cold_halves);
     let effects = crate::tick::inventory_transition_refused(&mut rig.state, rig.player);
+    let player = &rig.state.players[&rig.player];
     assert!(
-        rig.state.players[&rig.player].open.is_none(),
-        "the cold-partner refusal closes the menu"
-    );
-    assert!(!rig.state.open_containers.contains(&rig.player));
-    assert!(
-        !effects
-            .changes
-            .iter()
-            .any(|change| matches!(change, PlayerChange::MenuContents { .. })),
-        "a cold-partner refusal must not resend a half-empty menu: {:?}",
+        !effects.changes.iter().any(|change| matches!(
+            change,
+            PlayerChange::MenuContents { window: sent, .. } if *sent == window
+        )),
+        "a cold half must not resend the menu: {:?}",
         effects.changes
     );
-    let connection = rig.state.players[&rig.player].connection;
+    let connection = player.connection;
     assert!(
-        rig.state
-            .outbox
-            .get(&connection)
-            .is_some_and(|queue| queue
-                .iter()
-                .any(|change| matches!(change, PlayerChange::MenuClosed { window: closed } if *closed == window))),
-        "the refusal closes the window: {:?}",
+        rig.state.outbox.get(&connection).is_some_and(|queue| queue
+            .iter()
+            .any(|change| matches!(change, PlayerChange::MenuClosed { window: closed } if *closed == window))),
+        "the refusal closes window {window}: {:?}",
         rig.state.outbox.get(&connection)
     );
-    assert_eq!(rig.storage(rig.left).unwrap()[0], diamond);
+    assert!(
+        player.open.is_none(),
+        "the cold-half refusal closes the menu"
+    );
+    assert!(!rig.state.open_containers.contains(&rig.player));
+    // The window-0 resync rolls back predictions (NB2).
+    assert!(
+        effects
+            .changes
+            .iter()
+            .any(|change| matches!(change, PlayerChange::MenuContents { window: 0, .. })),
+        "the refusal resyncs the player's inventory: {:?}",
+        effects.changes
+    );
+    rig
+}
+
+#[test]
+fn integrity_reserved_refusal_with_a_cold_partner_closes_the_menu() {
+    let rig = reserved_refusal_with_a_cold_half(true, [false, true]);
+    // The close returns the cursor stack to the player's inventory.
+    let emerald = rig
+        .state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:emerald").expect("id"))
+        .expect("emerald");
+    let carried: i32 = rig.state.players[&rig.player]
+        .inventory
+        .slots
+        .iter()
+        .filter(|stack| stack.item_id == emerald)
+        .map(|stack| stack.count)
+        .sum();
+    assert_eq!(carried, 2, "the cursor stack returns to the inventory");
+    assert_eq!(rig.storage(rig.left).unwrap()[0].count, 3);
+}
+
+#[test]
+fn integrity_reserved_refusal_with_a_cold_open_half_closes_the_menu() {
+    // The menu is anchored on the half whose chunk is cold; the partner is
+    // resident. The cold check must not depend on the partner position.
+    reserved_refusal_with_a_cold_half(false, [false, true]);
+}
+
+#[test]
+fn integrity_reserved_refusal_with_both_halves_cold_closes_the_menu() {
+    reserved_refusal_with_a_cold_half(true, [true, true]);
 }
