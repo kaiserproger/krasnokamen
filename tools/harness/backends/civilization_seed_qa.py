@@ -205,8 +205,11 @@ def completed_project(building: dict[str, Any], baseline_buildings: set[int],
                  and village._blueprint_placements(building, blueprints[p["blueprint"]], p["origin"])), None)
 
 
-def entity_census(probe: ProbeSteps, entity_type: str | None = None) -> dict[str, Any]:
-    """Read every page, without shrinking the 128-block received-entity census."""
+class _CensusUnstable(RuntimeError):
+    """A paginated read whose entity membership moved while the pages were fetched."""
+
+
+def _census_pages(probe: ProbeSteps, entity_type: str | None) -> dict[str, Any]:
     arguments: dict[str, Any] = {"radius": 128, "limit": 16, "cursor": ""}
     if entity_type is not None:
         arguments["entity_type"] = entity_type
@@ -218,7 +221,7 @@ def entity_census(probe: ProbeSteps, entity_type: str | None = None) -> dict[str
         if total is None:
             total = page["visible_count"]
         elif page["visible_count"] != total:
-            raise RuntimeError("entity census membership changed during pagination")
+            raise _CensusUnstable("entity census membership changed during pagination")
         for entity in page["entities"]:
             identity = entity["entity_id"]
             if identity in seen or (entity_type is not None and entity["entity_type"] != entity_type):
@@ -228,12 +231,28 @@ def entity_census(probe: ProbeSteps, entity_type: str | None = None) -> dict[str
         cursor = page.get("next_cursor")
         if cursor is None:
             if page["truncated"] or len(rows) != page["visible_count"]:
-                raise RuntimeError("entity census is incomplete or changed during pagination")
+                raise _CensusUnstable("entity census is incomplete or changed during pagination")
             return {**page, "entities": rows, "census_pages_complete": True}
         if (not page["truncated"] or not page["entities"] or
                 (arguments["cursor"] and int(cursor) <= int(arguments["cursor"]))):
             raise RuntimeError("entity census cursor did not advance")
         arguments["cursor"] = cursor
+
+
+def entity_census(probe: ProbeSteps, entity_type: str | None = None) -> dict[str, Any]:
+    """Read every page, without shrinking the 128-block received-entity census.
+
+    A live village changes while the 16-row pages are fetched — a mob walks into the
+    128-block box, an animal breeds, a resident dies — so a pass whose membership moved
+    is retried instead of failing the gate; five unstable passes still refuse."""
+    for attempt in range(5):
+        try:
+            return _census_pages(probe, entity_type)
+        except _CensusUnstable as error:
+            if attempt == 4:
+                raise RuntimeError(f"entity census membership changed during pagination ({error})") from error
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
+    raise AssertionError("unreachable")
 
 
 def capture_house(probe: ProbeSteps, artifact: Path, label: str,
