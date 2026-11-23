@@ -8,3 +8,8 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-DIMENSION-BIOME"
 regression = ["cargo:mc-core:dimensions::tests::native_dimension_spawn_tables_and_census_are_local"]
 fix_commit = "9cc59fb37b5ea1e543eaca53f5864a0c0613051c"
+test_only_fix = true
+control_b_patch = "docs/bugs/test-only/TEST-DIMENSION-BIOME-defect.patch"
+control_b_sha256 = "401745b2b002bc8490cf99209bb258fb24a9f31bee3631e1dc89e0fdec66452b"
+control_a_files = ["crates/mc-core/src/dimensions_tests.rs"]
+repro_check = "Old oracle asserted the Nether biome at (8,64,8) equals minecraft:nether_wastes exactly; the real dimension seed places minecraft:crimson_forest there, so the old assertion failed on correct generation. The corrected oracle accepts any of the five Nether biomes and still requires minecraft:the_end for the End, keeps the biome-local spawn-entry assertion (every entry has a registered entity type) and the census assertions (one local spawn counted in its dimension, none counted in the Overworld). Evidence: data/vanilla dimension/biome tables. Control A: the fixed-name oracle restored fails on current code. Control B: the defect patch stops the census from dropping chunks of the dimension it is not in, so the Overworld census counts the Nether resident and the final `census == 0` assertion fails."
