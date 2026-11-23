@@ -220,7 +220,7 @@ class MemRunReservationTests(unittest.TestCase):
         done = self.run_true()
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertIn('cannot judge', done.stderr)
-        self.assertIn('honouring its first line as a CPU list', done.stderr)
+        self.assertIn("honouring its first line '0' as a CPU list", done.stderr)
         self.assertIn('no module named reserved_cpus', done.stderr)
         self.assertIn('reserved CPUs 0 are excluded', done.stderr)
         self.assertTrue((self.state / 'reserved-cpus').exists(), 'the reservation was left in place')

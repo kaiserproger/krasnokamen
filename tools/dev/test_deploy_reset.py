@@ -3,6 +3,7 @@
 Every assertion here is about a line the script would execute on the VPS; the script itself is never
 launched. TEST-SERVER-FRESH-RESET-WRONG-UNIT-AND-OWNER.
 """
+import re
 import unittest
 from pathlib import Path
 
@@ -22,10 +23,30 @@ class FreshResetGuardTests(unittest.TestCase):
     def test_it_stops_and_checks_the_solaris_unit_not_krasnokamen(self):
         code = self.code()
         self.assertIn('systemctl stop solaris', code)
-        self.assertIn('systemctl is-active --quiet solaris', code)
+        # The unit name comes from the tracked unit file, not from memory (N2).
+        unit = (SCRIPT.parent / 'solaris.service').read_text()
+        name = re.search(r'^Description=Krasnokamen Minecraft server \(test\)', unit, re.M)
+        self.assertIsNotNone(name, 'the tracked unit is the one the helper restarts')
+        # `is-active --quiet solaris` would also match solaris-metrics: require the exact unit name.
+        self.assertRegex(code, r'is-active --quiet solaris(?=[\s;]|$)')
         self.assertNotIn('is-active --quiet krasnokamen', code)
         # A stopped unit is not proof the process is gone.
         self.assertIn('pgrep -x krasnokamen', code)
+
+    def test_every_exit_guard_precedes_the_destructive_steps(self):
+        # Order is the point of the row: a guard after `rm -rf world` protects nothing (N2).
+        lines = self.code().splitlines()
+        guards = [i for i, line in enumerate(lines) if 'exit 1' in line]
+        destructive = [i for i, line in enumerate(lines)
+                       if re.match(r'(rm -rf world|mv krasnokamen)', line.strip())]
+        self.assertTrue(guards, 'the helper must refuse when a check fails')
+        self.assertTrue(destructive, 'the helper replaces the world and the binary')
+        first = min(destructive)
+        before = [i for i in guards if i < first]
+        self.assertGreaterEqual(
+            len(before), 4,
+            'stop check, survivor check, backup collision, and the archive listing/world entry guard all'
+            ' run before rm -rf world/mv')
 
     def test_it_reads_the_whole_archive_listing_before_judging_it(self):
         code = self.code()

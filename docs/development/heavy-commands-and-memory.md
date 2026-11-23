@@ -184,10 +184,13 @@ protocol, so install the parts a new wrapper *needs* before the wrapper itself, 
 
 1. `mem-run-guard.py` — the argument list is positional; a wrapper that passes five arguments to a
    four-argument guard makes every launch exit 75 before the scope exists.
-2. `reserved_cpus.py` and `reserve-cpus` — a wrapper that reads `verdict`/`clear` refuses (exit 75)
-   when the helper is missing, so it must already be beside it.
-3. `mem-run.sh` last. It is the only file that decides which of the others it calls, so a rollback is
+2. `reserved_cpus.py` — a wrapper that cannot judge the reservation file names the helper, keeps its
+   stderr, honours the file's first line as a CPU list and refuses (exit 75) only when that line is
+   not a CPU list, so the helper must already be beside it.
+3. `mem-run.sh` next. It is the only file that decides which of the others it calls, so a rollback is
    `mv` the old wrapper back first.
+4. `reserve-cpus` last: it writes the owner line the new wrapper understands; an older wrapper
+   ignores that line but still honours the file.
 
 Never install the wrapper first "because it is the entry point": every command on the host would fail
 until the guard copy lands, and mixed versions on the shared host share one lock and registration dir.

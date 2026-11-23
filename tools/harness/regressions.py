@@ -31,6 +31,19 @@ def _promotion_errors(ident, bug):
     promotion, fix_commit = bug.get('promotion'), bug.get('fix_commit')
     if 'fix_commit' in bug and (not isinstance(fix_commit, str) or not re.fullmatch(r'(?:client:)?[0-9a-f]{7,40}|patch:[0-9a-f]{64}', fix_commit)):
         return [f'{ident}: fix_commit must be a lowercase hex commit id, client:<commit> or patch:<sha256>']
+    if isinstance(fix_commit, str) and fix_commit.startswith('patch:') and ident not in BASE_FIXED:
+        # README: a patch-mode fix is re-audited by reversing it on the tree being promoted; a patch
+        # that no longer reverses (a later commit rewrote its hunks) is a stale receipt (N1).
+        patch = REPO_ROOT / 'docs/bugs/fix-patches' / f'{ident}.patch'
+        if not patch.is_file():
+            # Patch mode also accepts a patch handed to --fix-patch only; the committed copy is what
+            # a re-audit passes, and only its existence makes the reversal checkable.
+            return []
+        import subprocess
+        check = subprocess.run(['git', '-C', str(REPO_ROOT), 'apply', '-R', '--check', '--whitespace=nowarn',
+                                str(patch)], capture_output=True, text=True)
+        if check.returncode:
+            return [f'{ident}: fix patch no longer reverses on HEAD ({check.stderr.strip().splitlines()[0] if check.stderr.strip() else "apply --check failed"})']
     if promotion is None:
         if bug.get('status') == 'fixed' and ident not in BASE_FIXED:
             return [f'{ident}: fixed without a promotion receipt; only `python3 -m tools.harness ledger promote` may set fixed']

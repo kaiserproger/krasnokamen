@@ -35,7 +35,7 @@ signal.pause()
 '''
 
 COUNTING = r'''
-import os, signal, time
+import os, signal
 terms = 0
 def handler(*_):
     global terms
@@ -44,9 +44,8 @@ def handler(*_):
 signal.signal(signal.SIGTERM, handler)
 cg = open('/proc/self/cgroup').read().strip().split('::', 1)[1]
 print(f'- {os.getpid()} {os.getppid()} {cg}', flush=True)
-time.sleep(0.6)   # outlive the wrapper's single forwarding pass, which runs inside its TERM trap
-open(os.environ['TEST_TERM_LOG'], 'w').write(str(terms))
-os._exit(0 if terms else 2)
+while True:
+    signal.pause()   # outlive the forwarding pass by staying alive until the guardian kills the scope
 '''
 
 

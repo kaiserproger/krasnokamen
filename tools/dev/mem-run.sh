@@ -108,6 +108,12 @@ cmd=("${key_words[@]:$i}")
 if [ "${cmd[0]:-}" = nice ]; then
   if [ "${cmd[1]:-}" = -n ]; then cmd=("${cmd[@]:3}"); else cmd=("${cmd[@]:1}"); fi
 fi
+# A bad cancel grace must fail in a second, not after a token wait or an -x freeze (N12).
+_grace=${KRASNOKAMEN_MEMRUN_CANCEL_GRACE:-15}
+if ! awk -v g="$_grace" 'BEGIN { exit !(g ~ /^[0-9]+([.][0-9]+)?$/ && g + 0 > 0 && g + 0 <= 86400) }'; then
+  echo "mem-run: KRASNOKAMEN_MEMRUN_CANCEL_GRACE must be a finite positive number of seconds no larger than 86400, got '$_grace'" >&2
+  exit 75
+fi
 # Build tokens (owner 2026-11-11): at most three compile commands run host-wide.
 # Compile is decided once from argv, after leading env/nice/ionice/timeout words: cargo
 # with any subcommand but fmt/fetch/tree/metadata/clean/update and the like, gradle(w),
@@ -380,13 +386,20 @@ fi
 # owner and is honoured as-is (mixed-version compatibility).
 reserved=
 if [ -e "$dir/reserved-cpus" ]; then
-  # A failing helper must not silently drop a live reservation: fail closed. The file's first line is
-  # the CPU list by construction, so honour that much and say why (ReviewD123Harness1 6).
-  verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>"$dir/reserved-cpus.err") || {
-    echo "mem-run: cannot judge $dir/reserved-cpus; honouring its first line as a CPU list: $(cat "$dir/reserved-cpus.err" 2>/dev/null)" >&2
-    verdict="keep $(head -n 1 "$dir/reserved-cpus")"
+  # A failing helper must not silently drop a live reservation: name it, keep its stderr in a
+  # variable (a shared .err file races between wrappers), validate the first line as a CPU list and
+  # honour that much (ReviewD123Harness1 6, 4 N12).
+  err=
+  verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>&1) || {
+    err=$verdict
+    first=$(head -n 1 "$dir/reserved-cpus")
+    if ! printf '%s' "$first" | grep -Eqx '[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*'; then
+      echo "mem-run: cannot judge $dir/reserved-cpus ($err) and its first line is not a CPU list; refusing this scope" >&2
+      exit 75
+    fi
+    echo "mem-run: cannot judge $dir/reserved-cpus; honouring its first line '$first' as a CPU list: $err" >&2
+    verdict="keep $first"
   }
-  rm -f "$dir/reserved-cpus.err"
   case "$verdict" in
     keep\ *) reserved=${verdict#keep } ;;
     stale\ *)
@@ -430,6 +443,11 @@ grace=${KRASNOKAMEN_MEMRUN_CANCEL_GRACE:-15}
 if ! awk -v g="$grace" 'BEGIN { exit !(g ~ /^[0-9]+([.][0-9]+)?$/ && g + 0 > 0) }'; then
   rm -rf "$guard_dir"
   echo "mem-run: KRASNOKAMEN_MEMRUN_CANCEL_GRACE must be a finite positive number of seconds, got '$grace'" >&2
+  exit 75
+fi
+if ! awk -v g="$grace" 'BEGIN { exit !(g + 0 <= 86400) }'; then
+  rm -rf "$guard_dir"
+  echo "mem-run: KRASNOKAMEN_MEMRUN_CANCEL_GRACE is a whole day or more ($grace); refusing" >&2
   exit 75
 fi
 mkfifo "$guard_dir/events" "$guard_dir/ready"

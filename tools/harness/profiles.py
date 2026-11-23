@@ -151,7 +151,7 @@ def _await_split_part(part: SplitPart, root: Path, log_path: Path,
     except subprocess.TimeoutExpired:
         stop_process(proc)
         exit_code = None
-        failures.append(f"{part.label}: timed out after {remaining:.0f}s")
+        failures.append(f"{part.label}: timed out after {remaining:.0f}s of its {timeout:.0f}s budget")
     return _judge_split_part(part, root, log_path, exit_code, failures)
 
 
