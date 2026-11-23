@@ -8,4 +8,5 @@ status = "open"
 source = "CoreBlockers: capture.load_error from the failed-chunk map (world/capture.rs, core/journal.rs); server.log of native-v2-corrupt-block-entities showed no 'checkpoint committed' after the refusal."
 regression = ["cargo:mc-core:chunk_loader::tests::refused_chunk_never_blocks_other_chunks_and_stays_refused", "cargo:mc-core:chunk_loader::tests::refusing_a_resident_chunk_keeps_custody_of_its_unsaved_edits", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
-fix_commit = "patch:ae9b3c453c1f32ffffa901dbfbc56d7670f8ae05051fbe61b94126972a0deb90"
+fix_commit = "patch:121feead8c57090f2d0ccab1375b6c8a0590128583aa7ab1856ce43e8e5007f8"
+repro_check = "Identity regenerated on the tip (patch:121feead, docs/bugs/promotions/CHUNK-REFUSAL-BLOCKS-CHECKPOINTS.{patch,hunks.md}); 20 of 23 original non-test hunks carried, four SaveGenerated hunks dropped as removed by a later refactor, capture start adapted to the test-only container_work field. The cargo refs are red-by-assertion in the pre-fix form (chunk_loader_tests.rs:885). Promotion is blocked only on the real-client gate: the row carries harness:entities:native-v2-corrupt-block-entities, so ledger promote demands a passed --client-receipt on this candidate, which this persistence lane cannot produce."

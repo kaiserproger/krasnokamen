@@ -1,8 +1,8 @@
 diff --git a/crates/mc-core/src/world/capture.rs b/crates/mc-core/src/world/capture.rs
-index e51bda4..1fa7816 100644
+index 402ff2d..843b7c2 100644
 --- a/crates/mc-core/src/world/capture.rs
 +++ b/crates/mc-core/src/world/capture.rs
-@@ -28,6 +28,56 @@ impl ChunkWorld {
+@@ -29,6 +29,56 @@ impl ChunkWorld {
          complete
      }
  
@@ -59,7 +59,7 @@ index e51bda4..1fa7816 100644
      /// Inject checkpoint block-entity storage into a chunk's typed maps
      /// (cleared first for this chunk's columns so removals persist).
      pub(super) fn inject_block_entities(
-@@ -181,12 +231,20 @@ impl ChunkWorld {
+@@ -178,12 +228,20 @@ impl ChunkWorld {
          block_entities: &crate::core::CheckpointBlockEntities,
      ) -> ChunkCapture {
          let capture_start = std::time::Instant::now();
@@ -80,9 +80,9 @@ index e51bda4..1fa7816 100644
 +            load_error: declined,
 +            refused,
              generated_bases: false,
-         };
-         // Fold resident intervals only at checkpoint; absent images are frozen
-@@ -194,7 +252,9 @@ impl ChunkWorld {
+             #[cfg(all(test, debug_assertions))]
+             container_work: ContainerCaptureWork::default(),
+@@ -193,7 +251,9 @@ impl ChunkWorld {
          let inhabited: Vec<_> = self
              .inhabited_time
              .iter()
@@ -93,7 +93,7 @@ index e51bda4..1fa7816 100644
              .collect();
          for pos in inhabited {
              if let Some(chunk) = self.chunks.get_mut(&pos) {
-@@ -225,9 +285,7 @@ impl ChunkWorld {
+@@ -224,9 +284,7 @@ impl ChunkWorld {
              .filter(|pos| !self.chunks.contains_key(pos))
              .collect();
          for pos in homeless {
@@ -104,7 +104,7 @@ index e51bda4..1fa7816 100644
          }
          self.fold_overlay();
          // Absent chunks with pending block-entity changes: make them
-@@ -236,11 +294,21 @@ impl ChunkWorld {
+@@ -235,11 +293,21 @@ impl ChunkWorld {
          for pos in std::mem::take(&mut self.dirty_absent) {
              if self.materialize(pos) {
                  self.dirty.insert(pos);
@@ -128,7 +128,7 @@ index e51bda4..1fa7816 100644
          let materialize_time = capture_start.elapsed();
          // Changed debt rides the chunk checkpoint. Clean live anchors and
          // unchanged nonzero debt already ride the manifest; advancing live
-@@ -252,6 +320,9 @@ impl ChunkWorld {
+@@ -251,6 +319,9 @@ impl ChunkWorld {
              .filter_map(|(pos, debt)| debt.dirty.then_some(*pos))
              .collect();
          for pos in debt {
@@ -138,7 +138,7 @@ index e51bda4..1fa7816 100644
              if !self.chunks.contains_key(&pos) {
                  // Non-resident debt rides the deferred path (frozen image,
                  // journal-thread application, revision-fenced ACK) — never
-@@ -301,6 +372,11 @@ impl ChunkWorld {
+@@ -319,6 +390,11 @@ impl ChunkWorld {
          let dirty: Vec<ChunkPos> = self.dirty.iter().copied().collect();
          for pos in dirty {
              if !self.chunks.contains_key(&pos) {
@@ -150,7 +150,7 @@ index e51bda4..1fa7816 100644
                  if let Some(counter) = self.inhabited_time.get(&pos) {
                      let image = crate::journal::InhabitedTimeImage {
                          value: counter.image.value_at(self.inhabited_tick),
-@@ -366,6 +442,7 @@ impl ChunkWorld {
+@@ -382,6 +458,7 @@ impl ChunkWorld {
              if self.revisions.get(pos) == Some(revision) {
                  self.dirty.remove(pos);
                  self.dirty_sections.remove(pos);
@@ -159,7 +159,7 @@ index e51bda4..1fa7816 100644
                      debt.dirty = false;
                  }
 diff --git a/crates/mc-core/src/world.rs b/crates/mc-core/src/world.rs
-index faeb415..cf89559 100644
+index 501b66c..d18d300 100644
 --- a/crates/mc-core/src/world.rs
 +++ b/crates/mc-core/src/world.rs
 @@ -76,6 +76,11 @@ pub struct ChunkWorld {
@@ -174,7 +174,7 @@ index faeb415..cf89559 100644
      /// 001 slice0 active-only catch-up debt authority (001-d/e): per-chunk
      /// `{ last_sim, remaining }`. `active` membership is parent-managed via
      /// [`Self::set_active_chunks`]; strict empty default (never implicit).
-@@ -487,6 +492,7 @@ impl ChunkWorld {
+@@ -502,6 +507,7 @@ impl ChunkWorld {
              route_touched: Vec::new(),
              dirty: HashSet::default(),
              dirty_absent: HashSet::default(),
@@ -182,7 +182,7 @@ index faeb415..cf89559 100644
              dirty_sections: HashMap::default(),
              inhabited_time: HashMap::default(),
              inhabited_tick: 0,
-@@ -666,6 +672,7 @@ impl ChunkWorld {
+@@ -681,6 +687,7 @@ impl ChunkWorld {
              x: pos.x.div_euclid(16),
              z: pos.z.div_euclid(16),
          };
@@ -190,7 +190,7 @@ index faeb415..cf89559 100644
          if self.chunks.contains_key(&chunk) {
              self.dirty.insert(chunk);
              self.bump_storage_revision(chunk);
-@@ -715,8 +722,16 @@ impl ChunkWorld {
+@@ -730,8 +737,16 @@ impl ChunkWorld {
          pos: ChunkPos,
          capture: &'a mut ChunkCapture,
      ) -> Option<&'a mut DeferredChunkCapture> {
@@ -210,7 +210,7 @@ index faeb415..cf89559 100644
          }
          self.in_flight.remove(&pos);
 diff --git a/crates/mc-core/src/world/residency.rs b/crates/mc-core/src/world/residency.rs
-index dff6e7b..ba00ecf 100644
+index 499a0a9..42fd612 100644
 --- a/crates/mc-core/src/world/residency.rs
 +++ b/crates/mc-core/src/world/residency.rs
 @@ -282,7 +282,7 @@ impl ChunkWorld {
@@ -238,10 +238,10 @@ index dff6e7b..ba00ecf 100644
              self.active_revision += 1;
              self.poi_revisions.insert(pos);
 diff --git a/crates/mc-core/src/core/journal.rs b/crates/mc-core/src/core/journal.rs
-index 05b30ce..97bab95 100644
+index 5e1e0c4..ef65001 100644
 --- a/crates/mc-core/src/core/journal.rs
 +++ b/crates/mc-core/src/core/journal.rs
-@@ -152,16 +152,46 @@ pub(super) fn start_checkpoint_with_reply(
+@@ -204,16 +204,46 @@ pub(super) fn start_checkpoint_with_reply(
      let dimensions = crate::dimensions::checkpoint::capture(state, tick);
      let tombstones = checkpoint_tombstones(state);
      let dimensions_time = capture_start.elapsed();
@@ -292,57 +292,8 @@ index 05b30ce..97bab95 100644
      let job = CheckpointJob {
          tick,
          globals: state
-@@ -578,7 +608,7 @@ pub(super) enum NativeWork {
-         job: Box<CheckpointJob>,
-         plugins: Result<Box<crate::plugin::PluginState>, CoreError>,
-     },
--    SaveGenerated(crate::world::ChunkCapture),
-+    SaveGenerated(Box<crate::world::ChunkCapture>),
-     /// Copy the last committed checkpoint and the WAL after it (hot backup).
-     Backup {
-         job: BackupJob,
-diff --git a/crates/mc-core/src/core.rs b/crates/mc-core/src/core.rs
-index 1725d49..58b4a47 100644
---- a/crates/mc-core/src/core.rs
-+++ b/crates/mc-core/src/core.rs
-@@ -212,7 +212,7 @@ enum JournalWork {
-     Checkpoint(Box<CheckpointJob>),
-     /// Save generated chunks into their still-empty slots. Forwarded to the
-     /// native writer so the native DB has one writer, ordered with checkpoints.
--    SaveGenerated(crate::world::ChunkCapture),
-+    SaveGenerated(Box<crate::world::ChunkCapture>),
-     /// Stop the thread.
-     Shutdown,
-     /// Copy the native database and WAL after the last committed checkpoint into
-diff --git a/crates/mc-core/src/core/tick_loop.rs b/crates/mc-core/src/core/tick_loop.rs
-index b929643..5946e6d 100644
---- a/crates/mc-core/src/core/tick_loop.rs
-+++ b/crates/mc-core/src/core/tick_loop.rs
-@@ -300,7 +300,9 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
-             channels
-                 .generated_busy
-                 .store(true, std::sync::atomic::Ordering::Release);
--            let _ = channels.work_tx.send(JournalWork::SaveGenerated(batch));
-+            let _ = channels
-+                .work_tx
-+                .send(JournalWork::SaveGenerated(Box::new(batch)));
-         }
-         // Timings ride in the output they describe (never a shared
-         // last-tick slot a reader could pair with the wrong tick).
-@@ -599,7 +601,10 @@ pub(super) fn send_shutdown(
-         "core tick owner stopping"
-     );
-     while let Some(batch) = crate::dimensions::checkpoint::take_generated(state, 0) {
--        if work_tx.send(JournalWork::SaveGenerated(batch)).is_err() {
-+        if work_tx
-+            .send(JournalWork::SaveGenerated(Box::new(batch)))
-+            .is_err()
-+        {
-             tracing::error!(
-                 cause = "journal work channel closed",
-                 "core shutdown could not save generated chunks"
 diff --git a/crates/mc-world/src/anvil/chunk_nbt.rs b/crates/mc-world/src/anvil/chunk_nbt.rs
-index a1c5a49..7539ea8 100644
+index b0b7b38..55ad223 100644
 --- a/crates/mc-world/src/anvil/chunk_nbt.rs
 +++ b/crates/mc-world/src/anvil/chunk_nbt.rs
 @@ -369,6 +369,30 @@ fn chunk_from_nbt_with_items_impl(
