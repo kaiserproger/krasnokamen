@@ -1,0 +1,22 @@
+diff --git a/crates/mc-core/src/settlements/construction_site_refusals.rs b/crates/mc-core/src/settlements/construction_site_refusals.rs
+index 437692fd6..ff6e8a399 100644
+--- a/crates/mc-core/src/settlements/construction_site_refusals.rs
++++ b/crates/mc-core/src/settlements/construction_site_refusals.rs
+@@ -728,6 +728,7 @@ pub(super) fn check(
+                 }
+                 let property = record.contains([x, y, z]);
+                 let tree = super::super::forestry::tree_or_sapling(state, block);
++                let tree_clearable = tree && clearance.clearable(state, [x, y, z], Some(lot));
+                 // A lot crop and a retired village path cell are the
+                 // re-layout's own removal work, never a refusal.
+                 // A retired village path is always the re-layout's work. A lot
+@@ -741,7 +742,8 @@ pub(super) fn check(
+                     continue;
+                 }
+                 if state.block_entities.contains_key(&(x, y, z))
+-                    || (!clearable(state, block) && !excavatable(state, block))
++                    || (tree && !tree_clearable)
++                    || (!clearable(state, block) && !excavatable(state, block) && !tree_clearable)
+                 {
+                     return Err(tree_refusal(state, [x, y, z], property));
+                 }
