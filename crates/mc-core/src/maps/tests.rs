@@ -537,6 +537,37 @@ fn finish_lookup(state: &mut TickState) {
     }
 }
 #[test]
+fn a_released_locate_plan_lets_the_container_open_again() {
+    // F2: a metadata error, a wrong-dimension reply and a lost worker all call
+    // this same release; each must drop the pending plan so the container is
+    // not wedged behind a search that will never answer.
+    let (mut state, _gate) = explorer_fixture();
+    let cells = [(0, 80, 0)];
+    assert!(crate::maps::loot::before_open(
+        &mut state,
+        ConnectionId(1),
+        &open_input(1),
+        &cells
+    ));
+    let key = *state.maps.pending_loot.keys().next().expect("a pending plan");
+    let release = crate::command_locate::take_pending_callback_release(&mut state)
+        .expect("the queued container search must be releasable");
+    release(&mut state);
+    assert!(
+        !state.maps.pending_loot.contains_key(&key),
+        "a released plan must leave pending_loot"
+    );
+    assert!(crate::maps::loot::before_open(
+        &mut state,
+        ConnectionId(1),
+        &open_input(1),
+        &cells
+    ));
+    assert_eq!(state.maps.pending_loot.len(), 1, "reopening re-plans");
+    assert_eq!(state.maps.next_id, 0, "no map was created");
+}
+
+#[test]
 fn saved_maps_two_first_opens_one_map_and_wal_restart_never_regenerates() {
     use crate::journal::{JournalWriter, Replay, replay_batches};
     let (mut state, gate) = explorer_fixture();

@@ -1187,7 +1187,7 @@ pub(crate) struct StructureLookupRequest {
     pub on_failure: Option<StructureLookupFailure>,
 }
 
-enum LocateCompletion {
+pub(crate) enum LocateCompletion {
     Command(String),
     Eye(crate::projectiles::eye::EyeUse),
     Callback {
@@ -1605,6 +1605,23 @@ fn terminal_wrong_dimension(state: &mut TickState, pending: PendingLocate) {
             state.locate.dolphin_nav.remove(&dolphin);
         }
         LocateCompletion::Eye(_) => {}
+    }
+}
+
+/// Test hook: take the failure continuation of the oldest queued callback
+/// search, exactly as the metadata-error, wrong-dimension and worker-loss
+/// paths would invoke it.
+#[cfg(test)]
+pub(crate) fn take_pending_callback_release(
+    state: &mut TickState,
+) -> Option<StructureLookupFailure> {
+    let id = *state.locate.pending.keys().next()?;
+    let pending = state.locate.pending.remove(&id)?;
+    match pending.completion {
+        LocateCompletion::Callback { on_failure, .. } => on_failure,
+        LocateCompletion::Command(_) | LocateCompletion::Eye(_) | LocateCompletion::Dolphin(_) => {
+            None
+        }
     }
 }
 
