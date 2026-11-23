@@ -1,7 +1,8 @@
 diff --git a/crates/mc-core/src/settlements/production.rs b/crates/mc-core/src/settlements/production.rs
+index d092b8a7f..8d0f5530e 100644
 --- a/crates/mc-core/src/settlements/production.rs
 +++ b/crates/mc-core/src/settlements/production.rs
-@@ -26,6 +26,8 @@
+@@ -26,6 +26,8 @@ use crate::tick::TickState;
  const MANUAL: &str = "paused";
  /// Retry delay for paused jobs: causal, never backfills missed portions.
  const RETRY_TICKS: u64 = 20;
@@ -10,7 +11,7 @@ diff --git a/crates/mc-core/src/settlements/production.rs b/crates/mc-core/src/s
  /// Largest autocraft chain one order may admit.
  pub(super) const MAX_ORDER_STEPS: usize = 32;
  
-@@ -1301,8 +1303,12 @@
+@@ -1301,8 +1303,12 @@ pub(crate) fn execute(
              Ok(true)
          }
          Request::Resume { job } => {
@@ -25,7 +26,7 @@ diff --git a/crates/mc-core/src/settlements/production.rs b/crates/mc-core/src/s
              }
              let tick = world.tick_control.game_ticks(world.tick);
              let Some(entry) = state.jobs.get_mut(&job) else {
-@@ -1473,6 +1479,7 @@
+@@ -1473,6 +1479,7 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut
      let tick_now = world.tick_control.game_ticks(world.tick);
      let consumed = offscreen::consume(world, settlement, &mut state.consumption);
      let mut finished = Vec::new();
@@ -33,34 +34,31 @@ diff --git a/crates/mc-core/src/settlements/production.rs b/crates/mc-core/src/s
      let changed = state.cursor.run(
          &mut state.jobs,
          |job| {
-@@ -1482,8 +1489,16 @@
+@@ -1482,10 +1489,13 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut
                  && offscreen::ready(job, tick_now)
          },
          |_, job| {
 -            if worker_slot(world, settlement, job.worker).is_err() {
--                return park(job, "missing worker", tick_now.saturating_add(RETRY_TICKS)).into();
 +            if let Err(failure) = worker_slot(world, settlement, job.worker) {
 +                if matches!(failure, Failure::NotFound) && !gone.contains(&job.worker) {
 +                    gone.push(job.worker);
 +                }
-+                let advanced = offscreen::advance(job, tick_now) != 0;
-+                let deferred = std::mem::take(&mut job.deferred) != 0;
+                 let advanced = offscreen::advance(job, tick_now) != 0;
+                 let deferred = std::mem::take(&mut job.deferred) != 0;
+-                return (park(job, "missing worker", tick_now.saturating_add(RETRY_TICKS))
 +                return (park(job, MISSING_WORKER, tick_now.saturating_add(RETRY_TICKS))
-+                    || advanced
-+                    || deferred)
-+                    .into();
-             }
-             let produced_before = job.done;
-             let changed = offscreen::visit(world, settlement, job, tick_now);
-@@ -1509,9 +1524,71 @@
+                     || advanced
+                     || deferred)
+                     .into();
+@@ -1514,7 +1524,69 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut
          }
      }
      state.completed = state.completed.saturating_add(finished.len() as u64);
 -    changed || consumed || !finished.is_empty()
 +    let retaken = retake(world, settlement, state, &gone);
 +    changed || consumed || retaken || !finished.is_empty()
- }
- 
++}
++
 +/// A worker that died or no longer exists can never finish its jobs. Every
 +/// unfinished job it held (its whole order) passes to the nearest free
 +/// resident, so the order resumes instead of parking on a dead uuid. Output
@@ -120,8 +118,6 @@ diff --git a/crates/mc-core/src/settlements/production.rs b/crates/mc-core/src/s
 +        }
 +    }
 +    changed
-+}
-+
+ }
+ 
  /// Every settlement has daily food demand, even without a production job.
- pub(crate) fn active(_state: &State) -> bool {
-     true

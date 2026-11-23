@@ -25,9 +25,10 @@ candidate:
 | 7c691bb50 | `villager/stroll_swim_tests.rs`: 39 test lines | present | kept (test) |
 | 7c691bb50 | `docs/bugs/ledger.toml` | moved on | kept (docs) |
 | b4f9aa2d6 | `settlements/allocator.rs`: the vanilla WATER malus 80 in `find_path_ctx` (14 lines) and the `cost` addition | same code at `allocator.rs:1116-1130` | **included** (the work-route half of this row) |
-| b4f9aa2d6 | `villager/brain.rs`: formatting of the `foot` expression | at HEAD | **omitted** — formatting of the included hunk, no behaviour |
-| b4f9aa2d6 | `settlements/autonomy_tests.rs`, `construction_founding*.rs`, `construction_planner_tests.rs`, `settlements/registry.rs`, `villager/stroll_swim_tests.rs` | at HEAD | kept (tests) |
-| b4f9aa2d6 | `villager/brain.rs` 8-line reformat aside from the above; `docs/architecture/settlements.md` | at HEAD | kept (docs) |
+| b4f9aa2d6 | `villager/brain.rs`: formatting of the `foot` expression | rewritten by the same commit's later reformat; the expression at HEAD is the reformatted equivalent of the included hunk | **included in effect** — no separate hunk: the included `brain.rs` hunk at HEAD already carries the formatting |
+| b4f9aa2d6 | `settlements/autonomy_tests.rs`, `construction_planner_tests.rs`, `villager/stroll_swim_tests.rs` | at HEAD | kept (test) |
+| b4f9aa2d6 | `settlements/registry.rs`, `settlements/construction_founding*.rs` (production files) | at HEAD | **omitted, reason (a)**: their behaviour belongs to other rows (registry/founding culture work); reversing it would turn the control red on another row's assertion |
+| b4f9aa2d6 | `docs/architecture/settlements.md` | at HEAD | kept (docs) |
 
 No a/-side adaptation was needed.
 

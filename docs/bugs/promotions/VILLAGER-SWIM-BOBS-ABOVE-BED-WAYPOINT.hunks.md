@@ -18,7 +18,7 @@ registered refs (they moved under `villager::brain::tests` afterwards).
 |---|---|---|
 | `motion.rs` `move_committed_with_route`: inline arrival check replaced by `waypoint_reached(...)` | `motion.rs:485-489`, reverted inline band 0.6 | **included** |
 | `motion.rs` `move_skipped`: same replacement (0.09 horizontal, 0.6 band) | `motion.rs:550-554` | **included** |
-| `motion.rs`: `WAYPOINT_VERTICAL_REACH` + `FLOATING_WAYPOINT_VERTICAL_REACH` consts, `waypoint_reached`, `body_box`, `wet`, and `immersion` rebuilt on `body_box` | same block, `motion.rs:588-651` | **included**, except the `WAYPOINT_VERTICAL_REACH` const, which stays because `villager/building.rs:399` reads `super::brain::WAYPOINT_VERTICAL_REACH` — reversing it stops the control compiling (reason (b)) |
+| `motion.rs`: `WAYPOINT_VERTICAL_REACH` + `FLOATING_WAYPOINT_VERTICAL_REACH` consts, `waypoint_reached`, `body_box`, `wet`, and `immersion` rebuilt on `body_box` | same block, `motion.rs:588-651` | **included**, except the `WAYPOINT_VERTICAL_REACH` const, which stays because `villager/building.rs:399` reads `super::brain::WAYPOINT_VERTICAL_REACH` in production: reversing it changes another row's behaviour and would turn the control red on an assertion that is not this row's (reason (a), not (b)) |
 | `villager/stroll_swim_tests.rs`: 223 test lines | present | kept (test) |
 
 The a-side is the pre-image at HEAD: `immersion` builds its
