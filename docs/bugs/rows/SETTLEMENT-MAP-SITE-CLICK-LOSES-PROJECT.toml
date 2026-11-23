@@ -8,3 +8,5 @@ source = "D63 DV5: in b4d49f18d804 and current Main, map markers and active proj
 repro = "client"
 regression = []
 failing_first = "not recorded"
+fix_commit = "f8f27afda8"
+repro_check = "Fix ported from the owner-verified candidate (QwDV5RouteV2 uncommitted on b4d49f18d, pin b4d49f18d804-02f507b4) as f8f27afda8; five DV5 regressions green on the committed tree (.analysis/validation/20261123T191304-test-okwmmwow, 104 settlements::ui tests) and red by the row own assertion with only selected_project_screen reversed (.analysis/validation/20261123T191740-test-_gm7ipne: exactly the selected native facts, not an aggregate), control tree builds. Control patch promotions/SETTLEMENT-MAP-SITE-CLICK-LOSES-PROJECT.patch reverses on the committed tree. Real-client receipt is the integrated sweep; harness:settlement-map-qa:selected_card step still to author."

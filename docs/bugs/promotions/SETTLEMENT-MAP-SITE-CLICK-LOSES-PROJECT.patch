@@ -1,0 +1,31 @@
+diff --git a/crates/mc-core/src/settlements/ui.rs b/crates/mc-core/src/settlements/ui.rs
+index 0c9a35fbd..b9090b999 100644
+--- a/crates/mc-core/src/settlements/ui.rs
++++ b/crates/mc-core/src/settlements/ui.rs
+@@ -2136,9 +2136,24 @@ fn selected_project_screen(
+     state: &mut TickState,
+     connection: ConnectionId,
+     ctx: &Ctx,
+-    _structure: Option<&str>,
++    structure: Option<&str>,
+ ) {
+-    project_status_screen(state, connection, ctx);
++    let facts = structure
++        .and_then(|structure| {
++            let record = state.settlements.get(ctx.id)?;
++            super::construction::project_for_structure(record, structure)
++        })
++        .map_or_else(
++            || ctx.t(Key::StateChanged).to_owned(),
++            |project| project_text(state, ctx, project).unwrap_or_else(|error| error),
++        );
++    present(
++        state,
++        connection,
++        ctx,
++        "project_selected",
++        Dialog::notice(ctx.t(Key::Status), button(ctx.t(Key::Back), "back", ctx.id)).text(facts),
++    );
+ }
+ 
+ /// Compact project facts. Exact materials remain on the paged C1 icon card.

@@ -8,4 +8,5 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/20261104T085019-civilization-seed-qa-di4hpibs/result.json"
 failing_first = "reported"
 regression = ["cargo:mc-core:villager::shepherd_tests::shepherd_uses_a_simulated_sheep_not_a_closer_inactive_one", "cargo:mc-core:settlements::construction::availability::tests::inactive_sheep_is_not_a_live_wool_source"]
-fix_commit = "898af4725"
+fix_commit = "patch:e9e14515da90d5c16d66eac0737a6889a5b395d2af731e6ab65e0469428d9291"
+repro_check = "HEAD re-break promotions/CIVILIZATION-INACTIVE-SHEEP-TARGET.patch (construction_availability.rs only, from 898af4725) reverses on the committed tree; its cargo ref inactive_sheep_is_not_a_live_wool_source lives in that file. shepherd.rs/brain.rs are the EMPLOYED-SHEARING row (omitted, reason a). Real-client receipt is the integrated sweep."
