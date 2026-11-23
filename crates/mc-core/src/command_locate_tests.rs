@@ -831,7 +831,7 @@ fn dolphin_requests_reserve_command_queue_capacity_before_the_snapshot() {
         dolphin,
         [8.5, 200.0, 8.5]
     ));
-    assert!(state.locate.dolphin.get(&dolphin).is_none());
+    assert!(!state.locate.dolphin.contains_key(&dolphin));
     assert_eq!(
         state.locate.queued,
         super::MAX_QUEUED_JOBS - super::COMMAND_QUEUE_RESERVE,

@@ -39,6 +39,10 @@ pub(crate) fn breathe(air: i32, eye_in_water: bool) -> (i32, bool) {
 /// A low-air dolphin surfaces before anything else; a fed dolphin follows its
 /// treasure water waypoint through the normal entity step, then a wet player
 /// (the Grace pass separately requires swimming), or a floating toy.
+// Eight plain inputs of distinct kinds: the position, the air gate, the speed,
+// the retained lead, two position iterators, the block probe and the registry.
+// Same shape as `battle::combat`/`ender_chest` and not worth a struct.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn drive(
     pos: [f64; 3],
     air: i32,

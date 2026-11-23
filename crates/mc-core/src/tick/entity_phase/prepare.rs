@@ -96,9 +96,9 @@ pub(in crate::tick) fn prepare_rows(
         laps.lap("admit_parallel");
         let mut kept = Vec::with_capacity(parts.iter().map(|part| part.kept.len()).sum());
         for part in parts.iter_mut() {
-            kept.extend(part.kept.drain(..));
-            specials.extend(part.specials.drain(..));
-            resting.extend(part.resting.drain(..));
+            kept.append(&mut part.kept);
+            specials.append(&mut part.specials);
+            resting.append(&mut part.resting);
         }
         laps.lap("admit_concat");
         let mut is_rare = Vec::new();
