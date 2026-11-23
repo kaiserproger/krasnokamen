@@ -691,13 +691,16 @@ fn integrity_reserved_refusal_with_a_cold_partner_closes_the_menu() {
         "a cold-partner refusal must not resend a half-empty menu: {:?}",
         effects.changes
     );
+    let connection = rig.state.players[&rig.player].connection;
     assert!(
-        effects
-            .changes
-            .iter()
-            .any(|change| matches!(change, PlayerChange::MenuClosed { window: closed } if *closed == window)),
+        rig.state
+            .outbox
+            .get(&connection)
+            .is_some_and(|queue| queue
+                .iter()
+                .any(|change| matches!(change, PlayerChange::MenuClosed { window: closed } if *closed == window))),
         "the refusal closes the window: {:?}",
-        effects.changes
+        rig.state.outbox.get(&connection)
     );
     assert_eq!(rig.storage(rig.left).unwrap()[0], diamond);
 }
