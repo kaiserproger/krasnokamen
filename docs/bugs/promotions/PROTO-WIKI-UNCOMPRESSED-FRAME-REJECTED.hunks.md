@@ -1,17 +1,46 @@
-# PROTO-WIKI-UNCOMPRESSED-FRAME-REJECTED — promotion patch mapping
+# PROTO-WIKI-UNCOMPRESSED-FRAME-REJECTED: patch-mode fix identity
 
-- original fix: `dd5662e81c` (the amended fix commit on this branch; frame.rs hunk) (or its HEAD equivalent; see below)
-- patch: `promotions/PROTO-WIKI-UNCOMPRESSED-FRAME-REJECTED.patch` = the non-test hunks of the fix as they stand at the promoted HEAD,
-  also kept at `docs/bugs/fix-patches/PROTO-WIKI-UNCOMPRESSED-FRAME-REJECTED.patch` and passed to `ledger promote --fix-patch`.
-- control: reversing this patch on the exact candidate must fail the row's own registered ref.
+Original fix: `dd5662e81c` (`fix(protocol): accept an uncompressed frame at or above the threshold like
+vanilla`); `git cat-file -t dd5662e81c` = commit. That commit carries both a product hunk in
+`crates/mc-protocol/src/frame.rs` and the parity test hunks in `crates/mc-protocol/src/frame_tests.rs`.
+`fix_commit = "patch:38f4b9936bf6543ca1…"` names the HEAD equivalents of the product hunks in
+`docs/bugs/promotions/PROTO-WIKI-UNCOMPRESSED-FRAME-REJECTED.patch` (a diff from the pre-fix form to the
+candidate; `git apply -R` restores the pre-fix code). Re-audit:
+`python3 -m tools.harness ledger promote PROTO-WIKI-UNCOMPRESSED-FRAME-REJECTED --fix-patch docs/bugs/promotions/PROTO-WIKI-UNCOMPRESSED-FRAME-REJECTED.patch --dry-run`.
+Rule (docs/bugs/README.md, step 1): every original non-test hunk is carried unless it is another row's or
+owner's behaviour, API the kept tests call, or code a later commit rewrote.
 
-## Hunks
+## Carried
 
-mc-protocol/src/frame.rs: drop the `dataLength == 0` threshold rejection and the removed error variant. The same commit also carries the frame parity test (a test-file hunk, kept in the control); the control reverses only the frame.rs hunk.
+- `frame.rs @@ -131,9 +131,6 @@ pub enum FramingError` — drops the `UncompressedAboveThreshold` variant. HEAD
+  `crates/mc-protocol/src/frame.rs:131` (`CompressedBelowThreshold` followed directly by
+  `IncompleteCompressedStream`): carried verbatim.
+- `frame.rs @@ -224,10 +221,13 @@ pub fn try_decode_frame_plan` — `data_length == 0` passes the body through at any
+  size instead of rejecting `actual >= threshold`. HEAD `crates/mc-protocol/src/frame.rs:222-233` reads
+  the varint id and returns `FrameDecodePlan::Ready` for the zero-length case (the comment citing
+  `receipts/ProtocolWikiCheck/REPORT.md` is at HEAD `:225-230`): carried verbatim.
+
+Proving ref: `cargo:mc-protocol:frame::tests::decoder_accepts_uncompressed_frame_at_or_above_threshold`.
+Its own assertion is `crates/mc-protocol/src/frame_tests.rs:110` —
+`.expect("vanilla accepts an uncompressed frame at or above the threshold")` in the body of
+`fn decoder_accepts_uncompressed_frame_at_or_above_threshold` (`frame_tests.rs:96`); with the reverse
+applied the decoder returns `Err(UncompressedAboveThreshold)` and that expect panics. Nothing else in the
+control asserts.
+
+## Original non-test hunks (complete)
+
+```
+## dd5662e81c non-test hunks (kept test files: crates/mc-protocol/src/frame_tests.rs)
+- crates/mc-protocol/src/frame.rs: -131,9 +131,6 pub enum FramingError; -224,10 +221,13 pub fn try_decode_frame_plan(
+```
+
+## Not carried
+
+- `frame_tests.rs @@ -93,23 +93,26 @@ fn compressed_threshold_edge` — (b) test hunk, kept so the
+  control compiles and runs the ref. Its `round_trip` helper and the new
+  `decoder_accepts_uncompressed_frame_at_or_above_threshold` are what the red runs.
+- `docs/bugs/rows/PROTO-WIKI-UNCOMPRESSED-FRAME-REJECTED.toml` hunk — (b) ledger text, never reversed.
 
 ## Omitted hunks and reasons
 
-- The original commit's test/test-wiring hunks are omitted: (b) the tests are kept in the candidate and
-  reversing the wiring would stop the control from compiling.
-- Any hunk the original commit had in files this row does not own is omitted: (a) it belongs to another
-  row's behaviour.
+None beyond the two above; every non-test hunk of the original fix is carried.

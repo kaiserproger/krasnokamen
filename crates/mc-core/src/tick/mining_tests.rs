@@ -709,4 +709,34 @@ fn a_queued_finish_waits_while_a_neighbour_inside_the_delivery_frame_is_cold() {
         );
     }
     assert_eq!(state.world.block_at(pos.x, pos.y, pos.z), Some(current));
+    // Admitting the cold neighbour delivers the queued finish exactly once; a
+    // delivery here also proves the queue reached 100% (`take_finished` only
+    // extracts a full dig).
+    state.world.ensure_blocking(&state.desired_chunks());
+    assert!(state.world.has_chunk(1, 0));
+    state.tick += 1;
+    let mut inputs = Vec::new();
+    mining::take_finished(&mut state, &mut inputs);
+    assert_eq!(
+        inputs.len(),
+        1,
+        "the admitted delivery frame releases the queued finish"
+    );
+    assert!(matches!(
+        inputs[0],
+        PlayerInput::Dig {
+            action: DigAction::Finish,
+            sequence: 9,
+            ..
+        }
+    ));
+    // The finish is consumed by the delivered input, not by take_finished: the
+    // slot stays (the input path drops it) but a second pass delivers nothing.
+    let mut again = Vec::new();
+    state.tick += 1;
+    mining::take_finished(&mut state, &mut again);
+    assert!(
+        again.is_empty(),
+        "a queued finish is delivered exactly once"
+    );
 }

@@ -61,11 +61,21 @@ fn cold_target_or_eye(state: &TickState, entity: EntityId, position: BlockPos) -
         || eye_cell(state, entity).is_some_and(|eye| cold_cell(state, eye[0], eye[2]))
 }
 
-/// A finish is delivered over the target's +-2 frame, so every cell of that
-/// frame must be resident before the queued finish is extracted.
-fn cold_delivery_frame(state: &TickState, position: BlockPos) -> bool {
-    cold_cell(state, position.x, position.z)
-        || (-2..=2).any(|dx| (-2..=2).any(|dz| cold_cell(state, position.x + dx, position.z + dz)))
+/// A finish is delivered over the target's +-2 frame and applied under the
+/// actor's own chunk, so every chunk of that frame must be resident before the
+/// queued finish is extracted. The +-2 span crosses at most two chunk columns
+/// per axis, so this is at most four lookups.
+fn cold_delivery_frame(state: &TickState, entity: EntityId, position: BlockPos) -> bool {
+    let span = |centre: i32| ((centre - 2).div_euclid(16), (centre + 2).div_euclid(16));
+    let (x0, x1) = span(position.x);
+    let (z0, z1) = span(position.z);
+    if (z0..=z1).any(|cz| (x0..=x1).any(|cx| !state.world.has_chunk(cx, cz))) {
+        return true;
+    }
+    state.entities.slot_of(entity).is_some_and(|slot| {
+        let body = state.entities.pos(slot);
+        cold_cell(state, body[0].floor() as i32, body[2].floor() as i32)
+    })
 }
 
 /// Reach, life and teleport invalidation, which needs no world read: a pending
@@ -144,14 +154,21 @@ pub(super) fn take_finished(state: &mut TickState, inputs: &mut Vec<crate::bound
         let Some(connection) = state.connections.entity_connection(entity) else {
             continue;
         };
-        // A queued finish waits for its delivery frame: extracting it now would
-        // apply the authoritative finish over a cold ±2 neighbour.
-        let pending_target = state
+        // Only a block at 100% with a queued finish is delivered; check that
+        // before the frame scan so an ordinary dig never pays for it.
+        let Some(pending) = state
             .players
             .get(&entity)
             .and_then(|player| player.delayed_dig.as_ref())
-            .map(|dig| dig.progress.position);
-        if pending_target.is_some_and(|position| cold_delivery_frame(state, position)) {
+            .filter(|dig| dig.progress.progress >= 1.0 && dig.finish.is_some())
+        else {
+            continue;
+        };
+        let position = pending.progress.position;
+        // A queued finish waits for its delivery frame: extracting it now would
+        // apply the authoritative finish over a cold ±2 neighbour or under a
+        // cold player chunk.
+        if cold_delivery_frame(state, entity, position) {
             continue;
         }
         let Some(delayed) = state
@@ -161,9 +178,6 @@ pub(super) fn take_finished(state: &mut TickState, inputs: &mut Vec<crate::bound
         else {
             continue;
         };
-        if delayed.progress.progress < 1.0 {
-            continue;
-        }
         let Some(finish) = delayed.finish.take() else {
             continue;
         };
