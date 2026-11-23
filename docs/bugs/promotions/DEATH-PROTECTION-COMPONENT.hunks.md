@@ -22,7 +22,7 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
 - `tick/damage.rs @@ -550,7 +550,7 @@` — **compile-support a/-side line**: `let mut rescue = None` →
   `let mut rescue: Option<totem::Rescue> = None`. The later `b7020b427` restructure added the kept
   application block (`crates/mc-core/src/tick/damage.rs:693-720`) whose `rescue.used` leaves the local
-  untyped once the assignment is reversed (E0282, observed 2026-11-25 in the control tree). Same local,
+  untyped once the assignment is reversed (E0282, observed 2026-11-24 in the control tree). Same local,
   same initialiser, annotation only; the b/+ side is the untyped declaration.
 - Sibling note: TOTEM carries the identical patch body because both rows come from `de780c882`'s one
   decision point; each control reds its own test (default totem vs held component) — see the proving refs.
@@ -49,8 +49,10 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   component's *presence* is therefore not reversed; the rescue's decision point is, which is where this
   row's behaviour lives (a held `stick` with the component must rescue — without the decision no item
   can).
-- `tick/damage.rs @@ -152,6/-295,6` — (b) the `totems` vector/apply wiring, inert once `rescue` is never
-  assigned.
+- `tick/damage.rs @@ -152,6/-295,6` and the `if let Some(mut rescue) = rescue { … }` application block
+  (`crates/mc-core/src/tick/damage.rs:693-720`) — (c) rewritten in `b7020b427` around the decision point; no
+  kept test calls it directly and it is inert with `rescue == None`. The `rescue.is_none() &&` term in
+  `combat_hit` (`:689`) is neutral at `None`.
 - `docs/ARCHITECTURE.md` — (b) docs; test files — (b) kept.
 
 ## Proving ref (file:line of the failing assertion)

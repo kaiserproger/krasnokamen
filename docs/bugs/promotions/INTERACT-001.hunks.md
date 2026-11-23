@@ -64,6 +64,9 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
 - `brushing.rs`, `sponge.rs`, `painting.rs`, `spawn_protection.rs`, `special_storage.rs` (the other new
   modules) — (a) FALL-002, SPONGE, SPECIAL-001 and the painting/spawn rows; their controls reverse their
   own call sites/bodies.
+- The same commit's four other `tick/input/interact.rs` hunks — `-60,7 +60,8`, `-78,6 +79,12`,
+  `-166,6 +173,8`, `-178,6 +187,9` — (a) the dragon-egg and spawn-protection routing of the same rebase,
+  carried by those rows/gates; they are not the axe dispatch.
 - All remaining files — (a) the rebase's other rows (dragon egg, painting, spawn protection, special
   storage, chest/lectern custody, edge/config plumbing); (b) test files kept.
 - `example.toml`/`docs/QUIRK_PARITY.md` — (b) docs/config text, never reversed.
@@ -75,6 +78,6 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   `crates/mc-core/src/interact_parity_tests.rs:48-52`
   `assert_eq!(state.world.block_at(POS...), Some(block(&state, result, props)), "{source}")` fails on the
   first case (`oak_log` stays `oak_log`), and `:54` (wear `Some(3)`) fails too.
-- Client ref `harness:entities:native-v2-ledger-axe` green receipt on the gate-wave tree:
-  `.analysis/validation/20261123T192234-native-v2-ledger-axe-cb0sqx0m/result.json` (tree `0218c529e`);
-  a fresh receipt on this candidate is required for promotion (see HANDOFF-6).
+- Client ref `harness:entities:native-v2-ledger-axe` green receipt on the candidate `9c78eee8e`:
+  `.analysis/validation/20261123T211938-native-v2-ledger-axe-146xzfla/result.json` (promotion record
+  `docs/bugs/promotions/INTERACT-001.json`).

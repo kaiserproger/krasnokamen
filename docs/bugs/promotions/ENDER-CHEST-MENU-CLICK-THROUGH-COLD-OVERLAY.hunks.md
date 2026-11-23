@@ -5,7 +5,7 @@ overlay`) — the `menu_source_cold` helper plus the `container_click` guard tha
 before any handler is selected (cursor custody kept). `b460f313cc` later extended the same check to
 `container_slot_state`/`container_button` and this lane rewrote the helper's doc comment. The whole commit
 no longer reverses on HEAD, so the row moves to a scoped patch: `fix_commit =
-"patch:0db22dafacbc9521…"` names the HEAD equivalent of the click guard only, in
+"patch:0db22dafacbc9521…"` names the HEAD equivalent of the three menu guards plus the slot-of guard, in
 `docs/bugs/promotions/ENDER-CHEST-MENU-CLICK-THROUGH-COLD-OVERLAY.patch` (a diff from the pre-fix form to
 the candidate; `git apply -R` restores the pre-fix code). Re-audit:
 `python3 -m tools.harness ledger promote ENDER-CHEST-MENU-CLICK-THROUGH-COLD-OVERLAY --fix-patch docs/bugs/promotions/ENDER-CHEST-MENU-CLICK-THROUGH-COLD-OVERLAY.patch --dry-run`.
@@ -23,16 +23,25 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   `crates/mc-core/src/tick/input/inventory.rs:489-492` and `:508-511`). **The owner of the three guard
   hunks is this row** (ANVIL's patch is stations-only and does not carry them; a whole-commit reverse is
   not possible). Reversing them lets a cold slot-state/button reach the crafter/station handlers.
-- `tick/input/inventory.rs @@ -483,6 +483,9 @@ fn container_slot_state` — the
-  `state.entities.slot_of(entity).is_none()` early return ahead of the cold guard. It is this row's
-  responsibility because the close path it protects is the menu-close path: with a despawned owner
-  (`state.connections` still mapping the connection) the reversed tree reaches
-  `crates/mc-core/src/tick/players.rs:179-183`'s `.expect("native menu owner")` and panics on the dropped
-  menu contents.
+- `tick/input/inventory.rs` slot-of early return in `container_slot_state` — **`b748b9c053`** (this lane),
+  HEAD `crates/mc-core/src/tick/input/inventory.rs:486-488`. It keeps the input off the crafter path when
+  `state.connections` still maps a connection whose entity row is gone. **Not the `expect` panic**: with
+  the guard alone reversed nothing reaches `.expect("native menu owner")` — the fixture carries no cursor
+  and the drop set is empty — but reversing the whole patch removes the cold guard too, so
+  `close_player_menu` runs (`crates/mc-core/src/tick/players.rs:155-173`) and the observed red
+  (20261123T231647-ledger-promote-d6x5u_d1) lands on the `MenuClosed`/custody assertions.
+  Mechanism: `expire_native_openers` (`crates/mc-core/src/tick/dimension.rs:301`) runs after
+  `apply_inputs` and only touches `until=Some(..)` entries (`crates/mc-core/src/tick/custody.rs:286-297`),
+  while `menu_at` filters `until.is_none()` (`crates/mc-core/src/tick/containers.rs:246-250`), so a ghost
+  menu persists in `open_containers`; the close path is what the guard keeps from running.
 
 ## Original non-test hunks (complete)
 
 ```
+## b748b9c053 non-test hunks (kept test files: crates/mc-core/src/ender_chest_tests.rs)
+- crates/mc-core/src/tick/input/inventory.rs: slot-of early return in container_slot_state
+## b460f313cc non-test hunks (kept test files: crates/mc-core/src/tick/input/inventory.rs only via the guards below, tick/stations_tests.rs)
+- crates/mc-core/src/tick/input/inventory.rs: -483,6 +483,10 (container_slot_state cold guard); -502,6 +506,10 (container_button cold guard)
 ## c7bd44dd06 non-test hunks (kept test files: brushing_tests.rs, copper_tests.rs, ender_chest_tests.rs, interact_parity_tests.rs, tick/mining_tests.rs, tick/stations_tests.rs)
 - crates/mc-core/src/brushing.rs: -284,6 +284,14; -296,3 +304,7
 - crates/mc-core/src/copper.rs: -220,6 +220,14; -298,6 +306,9
@@ -46,10 +55,12 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
 
 ## Not carried
 
-- `tick/containers.rs @@ -4,6 +4,20 @@` (`menu_source_cold`) — (b) the two other click inputs'
-  guards (`b460f313cc`, `inventory.rs:486-489`/`:505-508`) and `damage_anvil`'s conversation call the
-  helper, so reversing it stops the control from compiling. The helper's doc comment was rewritten by this
-  lane (c) to name exactly the gated inputs.
+- `tick/containers.rs @@ -4,6 +4,20 @@` (`menu_source_cold`) — (b) the three carried guards
+  (`crates/mc-core/src/tick/input/inventory.rs:228`, `:489`, `:508`) are its only callers, so reversing the
+  helper stops the patch's own hunks from compiling; `damage_anvil` does not call it. No other row carries
+  the helper (`ANVIL-DAMAGE-WRITES-AT-COLD-MENU-COORDINATE` is stations-only), which is why it stays here,
+  un-owned by any control but needed to compile. The helper's doc comment was rewritten by this lane (c)
+  to name exactly the gated inputs.
 - (nothing left over: the `container_slot_state`/`container_button` guards and the slot-of guard are
   **carried** by this row — see Carried.)
 - `brushing.rs`, `copper.rs`, `tick/mining.rs`, `tick/stations.rs`, `tick.rs`, `vanilla_interact.rs` —
@@ -67,8 +78,10 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   (`crates/mc-core/src/ender_chest_tests.rs:256`, `:305`): with the guards reversed the cold
   slot-state/button input leaves the menu open and no `MenuClosed` is pushed.
 - `cargo:mc-core:ender_chest::tests::ender_chest_slot_state_for_a_despawned_player_leaves_the_cold_menu_alone`
-  (`crates/mc-core/src/ender_chest_tests.rs:324`): **not evidence.** The promotion control
-  (`20261123T231647-ledger-promote-d6x5u_d1`) observed it green with the slot-of guard reversed: the
-  fixture's despawned owner never reaches the close path through `run_tick`, so the guard is a defensive
-  invariant without a reversible control. The three cold tests above are the row's controls (all red in
-  that control).
+  (`crates/mc-core/src/ender_chest_tests.rs:324`): **not evidence on its own.** The promotion control
+  (`20261123T231647-ledger-promote-d6x5u_d1`) observed it green with the slot-of guard reversed, because
+  that reverse leaves the cold guard in place: `menu_source_cold` is false, `close_player_menu` never runs,
+  and the menu survives as the test expects. With the whole patch reversed it reds through
+  `close_player_menu` (`crates/mc-core/src/tick/players.rs:155-173`, `MenuClosed` + custody assertions).
+  A one-hunk control (slot-of only) would be the proof that the guard itself matters; not run — the
+  promoting dry-run/receipts are the recorded controls.

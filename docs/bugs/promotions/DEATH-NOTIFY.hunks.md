@@ -82,5 +82,7 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   `assert!(state.outbox[&ConnectionId(1)].iter().any(|change| matches!(change, PlayerChange::Died { .. })))`
   fails once the push is back inside `if show` (the dying player receives nothing while the observer
   broadcast stays suppressed, `:80-90`).
-- Client ref `harness:entities:native-v2-death-messages` — no receipt is on file for this candidate; a
-  fresh real-client run is required for promotion (see HANDOFF-6).
+- Client ref `harness:entities:native-v2-death-messages` green receipt on the candidate `9c78eee8e`:
+  `.analysis/validation/20261123T211907-native-v2-death-messages-9epvsbj2/result.json` (assertion
+  `victim_gets_death_screen_despite_show_death_messages_false`; promotion record
+  `docs/bugs/promotions/DEATH-NOTIFY.json`).

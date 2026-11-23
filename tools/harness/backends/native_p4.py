@@ -365,13 +365,17 @@ def _totem(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _give(steps, "minecraft:totem_of_undying")
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     steps.call("minecraft_wait_ticks", {"ticks": 25})
+    before = steps.observe()["player"]["health"]
     steps.fixture("damage @s 100 minecraft:generic")
-    saved = steps.wait(lambda state: state["player"]["health"] == 1,
+    # Wait for the hit to land (any health change or the death screen), then
+    # assert the rescue: on a tree without the rescue the change is death, so the
+    # assertion fails instead of the wait timing out.
+    saved = steps.wait(lambda state: state["player"]["health"] != before
+                       or state["screen"]["open"],
                        "totem_rescue_at_one_health_received")
     steps.check("default_totem_survives_at_one_health",
                 saved["player"]["health"] == 1 and saved["in_play"] is True)
     _inventory(steps, "minecraft:totem_of_undying", 0)
-    steps.check("default_totem_consumed_by_the_rescue", True)
     steps.fixture("data get entity @s active_effects")
     snapshot = steps.wait(
         lambda state: any("has the following entity data:" in line
@@ -391,10 +395,13 @@ def _totem(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # without a held totem.
     steps.call("minecraft_wait_ticks", {"ticks": 220})
     steps.fixture("effect clear @s")
+    before = steps.observe()["player"]["health"]
     steps.fixture("damage @s 100 minecraft:generic")
-    steps.wait(lambda state: state["player"]["health"] == 0 and state["screen"]["open"],
-               "totem_absent_death_received")
-    steps.check("no_totem_lethal_damage_kills_the_player", True)
+    died = steps.wait(lambda state: state["player"]["health"] != before
+                      or state["screen"]["open"],
+                      "totem_absent_death_received")
+    steps.check("no_totem_lethal_damage_kills_the_player",
+                died["player"]["health"] == 0 and died["screen"]["open"])
     _capture(steps, "p4-totem-death")
     steps.call("minecraft_respawn", {"timeout_seconds": steps.remaining()})
     alive = steps.wait(lambda state: state["player"]["health"] is not None
@@ -429,9 +436,13 @@ def _death_protection(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.call("minecraft_wait_ticks", {"ticks": 25})
     generic_start = len(steps.client.p4_damage_wire())
     steps.fixture("gamemode survival @s")
+    before = steps.observe()["player"]["health"]
     steps.fixture("damage @s 100 minecraft:generic")
-    saved = steps.wait(lambda state: state["player"]["health"] == 1,
+    saved = steps.wait(lambda state: state["player"]["health"] != before
+                       or state["screen"]["open"],
                        "custom_death_protection_prevents_death")
+    steps.check("custom_death_protection_keeps_one_health",
+                saved["player"]["health"] == 1 and saved["in_play"] is True)
     steps.check("generic_command_damage_identity_received", any(
         event["entity_id"] == player_id and event["type"] == "minecraft:generic"
         for event in steps.client.p4_damage_wire()[generic_start:]))

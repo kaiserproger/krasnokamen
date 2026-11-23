@@ -25,7 +25,7 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   before the hurt call, `let mut rescue = None` → `let mut rescue: Option<totem::Rescue> = None` in the
   a/-side. The later `b7020b427` restructure added the kept `if let Some(mut rescue) = rescue { … }`
   application block (`crates/mc-core/src/tick/damage.rs:693-720`), whose `rescue.used` leaves `rescue`
-  otherwise untyped once the assignment is reversed (E0282, observed 2026-11-25 in the control tree). The
+  otherwise untyped once the assignment is reversed (E0282, observed 2026-11-24 in the control tree). The
   a/-side line is the same local, same initialiser, annotated only so the reversed tree compiles; it adds
   no behaviour and never reaches the candidate (the patch's b/+ side is the untyped declaration).
 
@@ -54,8 +54,14 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   `death_protection` component parsing is what the kept tests author
   (`ItemArgument::parse("stick[death_protection=...]")`); reversing them stops the control from
   compiling.
-- `tick/damage.rs @@ -152,6/-295,6` (the `totems` vector and the post-loop apply) — (b) kept for the same
-  reason; they are inert once `rescue` is never assigned.
+- `tick/damage.rs @@ -152,6/-295,6` (the `totems` vector and the post-loop apply) and the kept
+  `if let Some(mut rescue) = rescue { … }` application block (`crates/mc-core/src/tick/damage.rs:693-720`)
+  — (c) a later commit (`b7020b427`, "integrate death protection and entity damage state") rewrote that
+  region around the decision point, so the pre-fix shape is "decision gone, application inert with
+  `rescue == None`". No kept test calls the application block directly; it is left in place so the reverse
+  stays one decision-point hunk. The `rescue.is_none() &&` term in `combat_hit`
+  (`crates/mc-core/src/tick/damage.rs:689`) is neutral at `None`, so the reversed tree records the same
+  hit identity up to the death decision.
 - `docs/ARCHITECTURE.md` — (b) docs.
 - Test files — (b) kept.
 

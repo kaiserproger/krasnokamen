@@ -9,7 +9,7 @@ replaced the root-state check in `execute_job` with a per-job check. `fix_commit
 Rule (docs/bugs/README.md, step 1): every original non-test hunk is carried unless it is another row's or
 owner's behaviour, API the kept tests call, or code a later commit rewrote.
 
-## Mechanism (HEAD, corrected 2026-11-25 after the final review)
+## Mechanism (HEAD, corrected 2026-11-24 after the final review)
 
 `execute_job` (`crates/mc-core/src/command_context_deferred.rs:137-142`) reads the permission observed
 during the job's dimension phase, resolves that world, and runs the job only when
@@ -39,12 +39,16 @@ fails and the queued `/kill`, `/summon` and `/gamerule` job is dropped — the r
 
 ## Not carried
 
-- The `source_is_current` world sweep (`@@ -135,9 +135,50`) — (a) it predates the fix (present beside
-  `execute_job` in old trees, `wt/XCoreItems/.../command_context_deferred.rs:126-139`); it is not a hunk
-  of `334c3f686`, so there is nothing to reverse. It stays because the reversed body calls it.
-- `job_source_is_current` (HEAD `:164-190`) — (b) the reversed body no longer calls it, but it is kept
-  unchanged (dead code there) so the patch stays a minimal one-hunk reverse; it is not a test API.
-- Test files — (b) kept.
+- The `source_is_current` sweep/changed-world code inside `@@ -135,9 +135,50` — **(a)-not-a-hunk of this
+  fix**: it predates `334c3f686` (present beside `execute_job` in old trees,
+  `wt/XCoreItems/.../command_context_deferred.rs:126-139`), so there is nothing of it to reverse; it stays
+  because the reversed body calls it. Labelling it (a) means "other row/pre-fix code", not "another hunk".
+- `command_context_deferred.rs @@ -150,6 +191,28 @@ pub(crate) fn execute_job` — this fix's second hunk:
+  the `job_source_is_current` helper that the new `execute_job` body calls. Carried inside the single
+  reversed hunk region: the patch's b/+ side keeps it, the a/- side (its reverse) leaves it in place
+  unused. It is not reversed because no test calls it directly (only `execute_job` does) and the patch
+  must stay a minimal one-hunk reverse; (b) applies to the *kept* lines, not to a behaviour reverse.
+- Test files — kept (b).
 
 ## Proving refs (file:line of the failing assertion)
 

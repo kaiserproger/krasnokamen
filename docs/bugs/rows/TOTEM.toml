@@ -8,5 +8,5 @@ status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TOTEM"
 regression = ["cargo:mc-core:tick_tests::combat_parity_tests::fix_mobs_totem_intercepts_lethal_damage_in_either_hand_but_not_void", "harness:entities:native-v2-p4-totem"]
 fix_commit = "patch:11f2526265bfb37f4a20fa035cba57ccc4af07da9e011310181ce932de98402b"
-repro_check = "Open. The old control red was a fixture panic in the fix_commit tree; the stub patch is withdrawn. The HEAD-equivalent patch reverses only the rescue decision in commit_damage (real prior code), and TOTEM's own test fails at `held totem must prevent death`."
+repro_check = "Promoted 2026-11-23 on patch:11f2526265bfb37f. Negative control (promotion record): the reversed tree fails `cargo:mc-core:tick_tests::combat_parity_tests::fix_mobs_totem_intercepts_lethal_damage_in_either_hand_but_not_void` at `crates/mc-core/src/tick/combat_parity_tests.rs:503` (`held totem must prevent death`), restored green on the candidate. Real-client ref `harness:entities:native-v2-p4-totem` green on the pinned candidate (`.analysis/validation/20261123T222754-native-v2-p4-totem-65mn_ngj/result.json`, 15/15). Gap: the harness ref has no reverted-tree pin, so the client control is unrunnable; the row rests on the cargo assertion red plus that green receipt."
 promotion = "docs/bugs/promotions/TOTEM.json"

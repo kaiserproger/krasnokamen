@@ -8,5 +8,5 @@ status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-PROTECTION-COMPONENT"
 regression = ["cargo:mc-core:tick_tests::combat_parity_tests::death_protection_component_rescues_any_held_item_without_default_totem_effects", "harness:entities:native-v2-p4-death-protection"]
 fix_commit = "patch:11f2526265bfb37f4a20fa035cba57ccc4af07da9e011310181ce932de98402b"
-repro_check = "Open. Same withdrawn stub as TOTEM. The HEAD-equivalent patch reverses the rescue decision in commit_damage (real prior code); the component test fails at `{item} in slot {hand}` deaths assertion."
+repro_check = "Promoted 2026-11-23 on patch:11f2526265bfb37f (same decision point as TOTEM). Negative control: the reversed tree fails `cargo:mc-core:tick_tests::combat_parity_tests::death_protection_component_rescues_any_held_item_without_default_totem_effects` at the `{item} in slot {hand}` deaths assertion; restored green. Real-client ref `harness:entities:native-v2-p4-death-protection` green on the pinned candidate (`.analysis/validation/20261123T222939-native-v2-p4-death-protection-t2oyivrz/result.json`). Gap: no reverted-tree pin for the harness ref, so the client control is unrunnable; the row rests on the cargo assertion red plus that green receipt."
 promotion = "docs/bugs/promotions/DEATH-PROTECTION-COMPONENT.json"
