@@ -1,14 +1,19 @@
 diff --git a/crates/mc-core/src/natural_spawn.rs b/crates/mc-core/src/natural_spawn.rs
-index 91293f847..24c468079 100644
+index 91293f847..11ce16327 100644
 --- a/crates/mc-core/src/natural_spawn.rs
 +++ b/crates/mc-core/src/natural_spawn.rs
-@@ -656,7 +656,8 @@ fn census_with(
-     for _ in 0..state.entities.len() {
-         audit_s12_tests::visit(0);
+@@ -678,7 +678,13 @@ fn census_with(
+         state.spawn_census.local_counts.push(counts);
      }
--    state.spawn_census.chunks.retain(|_, chunk| chunk.active);
-+    // DEFECT INJECTION (docs/bugs/test-only/TEST-DIMENSION-BIOME-defect.patch):
-+    // the census no longer drops chunks of the dimension it is not in.
-     for player in players {
-         let cell = chunk_of(*player);
-         let mut counts = [0; 7];
+     state.spawn_census.tick = Some(state.tick);
+-    state.spawn_census.global
++    // DEFECT INJECTION (docs/bugs/test-only/TEST-DIMENSION-BIOME-defect.patch): the census also
++    // counts the residents of every other dimension, so it is no longer dimension-local.
++    let mut global = state.spawn_census.global;
++    for other in state.other_dimensions.values() {
++        global[0] += other.entities.len();
++    }
++    global
+ }
+ 
+ fn nearest_sq(players: &[[f64; 3]], pos: [f64; 3]) -> f64 {
