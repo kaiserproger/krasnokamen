@@ -657,7 +657,7 @@ fn evict_halves(rig: &mut Rig, halves: &[BlockPos]) {
             .mark_flushed(&[(chunk, rig.state.world.storage_revision(chunk))]);
         want.remove(&chunk);
     }
-    assert!(rig.state.world.evict_outside(&want).iter().count() > 0);
+    assert!(!rig.state.world.evict_outside(&want).is_empty());
     for half in halves {
         assert_eq!(rig.block_at(*half), None, "half at {half:?} is evicted");
     }
