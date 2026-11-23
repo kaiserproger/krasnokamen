@@ -8,10 +8,9 @@ source = "CS341 audit A 2026-11-17, receipts/CS341/REPORT-A.md G4, read from cod
 repro = "source"
 regression = [
   "python:tools.dev.test_reserve_cpus:ReservedCpusProtocolTests.test_a_present_unparseable_owner_is_stale_not_immortal",
-  "python:tools.dev.test_reserve_cpus:MemRunReservationTests.test_a_failing_verdict_helper_is_named_and_the_first_line_honoured",
   "python:tools.dev.test_reserve_cpus:MemRunReservationTests.test_a_stale_reservation_is_named_cleared_and_does_not_pin_the_scope",
   "python:tools.dev.test_reserve_cpus:MemRunReservationTests.test_a_live_reservation_logs_the_cpus_it_excludes",
   "python:tools.dev.test_reserve_cpus:ReserveCpusTests.test_the_locked_create_refuses_a_second_reservation_and_release_removes_only_its_own",
 ]
 failing_first = "not recorded"
-fix_commit = "patch:7309aa95119926a1c46e05bcabce288abafb63cadef78455e4a6902abb9b52d7"
+fix_commit = "patch:56a5054ab01f2e4308063b8a47dac776bd2315d94d14d050d367524c1ba6a135"
