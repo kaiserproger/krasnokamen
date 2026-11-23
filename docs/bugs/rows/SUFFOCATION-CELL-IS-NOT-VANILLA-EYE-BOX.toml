@@ -4,8 +4,9 @@ title = "Mob wall suffocation tests one cell at the feet column at floor(y + 0.9
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "Perf1M item-1 gate audit 2026-11-20 (receipts/Perf1M/item1-mob-census/dual-rule-verdict.json, driver wt/Perf1MR3 55a02fd0a). Core: crates/mc-core/src/contact_hazards.rs contact_cells (one cell at foot_xz, y = floor(pos.y + 0.9 * height)) and the suffocates check that reads it. Vanilla 26.x Entity.isInWall (javap of the local jar): AABB.ofSize(eyePosition, width * 0.8, 1.0E-6, width * 0.8), cell counts when not air, isSuffocating and its collision shape intersects the box. On the R3k-2 export (250,000 fixture mobs, every eye-box column read) the pin cell lies outside the vanilla box for 117 mobs and the vanilla box covers cells other than the pin cell for 214,610; no mob was in a suffocating cell under either rule. Example: spider y=64.21, height 0.9, eye 0.65: core checks y=65, vanilla y=64."
-regression = ["cargo:mc-core:contact_hazards_tests::suffocation_uses_the_vanilla_eye_box_not_the_foot_column_pin"]
+regression = ["cargo:mc-core:tick_tests::contact_hazards_tests::suffocation_uses_the_vanilla_eye_box_not_the_foot_column_pin"]
 failing_first = "not recorded"
 fix_commit = "patch:55764c6fc05b9dbcd698bb942c71df97c1169dcac45176532a01ae6577d6da43"
+promotion = "docs/bugs/promotions/SUFFOCATION-CELL-IS-NOT-VANILLA-EYE-BOX.json"
