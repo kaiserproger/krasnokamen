@@ -1,0 +1,30 @@
+{
+  "id": "LOD-TILE-STAMPED-WITH-POST-SWITCH-DIMENSION-GENERATION",
+  "verdict": "promoted",
+  "fix_commit": "patch:c8c4f61d372c4e7bf73db864ba25c54d0ccb78432221bedb300d5669920f6101",
+  "fix_commit_full": "patch:c8c4f61d372c4e7bf73db864ba25c54d0ccb78432221bedb300d5669920f6101",
+  "promoted_at": "2026-11-23T20:20:41+00:00",
+  "tree_head": "968142933377a1f3d24ca6e73809daea1efec5e7",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "c8c4f61d372c4e7bf73db864ba25c54d0ccb78432221bedb300d5669920f6101",
+  "reversed_files": [
+    "crates/mc-edge/src/lod.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:lod::tests::tile_sampled_before_a_dimension_reset_is_dropped": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:lod::tests::tile_sampled_before_a_dimension_reset_is_dropped": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261123T201843-ledger-promote-2hfecktd"
+}
