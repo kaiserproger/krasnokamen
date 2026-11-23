@@ -34,7 +34,10 @@ fn cpu_stat_reads_the_throttle_counters() {
     assert_eq!(cpu_stat_field(text, "throttled_usec"), Some(4242));
     assert_eq!(cpu_stat_field("nr_periods 900\n", "nr_throttled"), None);
     // `nr_throttled_extra` must not answer for `nr_throttled`.
-    assert_eq!(cpu_stat_field("nr_throttled_extra 5\n", "nr_throttled"), None);
+    assert_eq!(
+        cpu_stat_field("nr_throttled_extra 5\n", "nr_throttled"),
+        None
+    );
 }
 
 /// PSI memory saturation beside memory.current (PERF-RECEIPT-OMITS-MEMORY-PRESSURE).
@@ -47,7 +50,11 @@ fn memory_pressure_parses_some_and_full() {
     assert_eq!(pressure.some_total_usec, Some(987_654));
     assert_eq!(pressure.full_avg10_centi, Some(120));
     assert_eq!(pressure.full_total_usec, Some(12_345));
-    assert_eq!(parse_pressure(""), None, "an empty file is unavailable, never zero");
+    assert_eq!(
+        parse_pressure(""),
+        None,
+        "an empty file is unavailable, never zero"
+    );
     // A truncated kernel without `full` still reports what it has.
     let some_only = parse_pressure("some avg10=0.00 avg60=0.00 avg300=0.00 total=0\n")
         .expect("some is present");

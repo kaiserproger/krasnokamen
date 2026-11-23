@@ -420,7 +420,10 @@ async fn telemetry_jsonl_joins_host_samples_by_tick() {
     // Saturation travels with the sample: throttle counters and PSI memory pressure.
     assert_eq!(lines[0]["host"]["cgroup_cpu_nr_throttled"], 7);
     assert_eq!(lines[0]["host"]["cgroup_cpu_throttled_usec"], 1_500);
-    assert_eq!(lines[0]["host"]["cgroup_memory_pressure"]["some_avg10_centi"], 45);
+    assert_eq!(
+        lines[0]["host"]["cgroup_memory_pressure"]["some_avg10_centi"],
+        45
+    );
     assert!(lines[0]["host"]["cgroup_memory_pressure"]["full_avg10_centi"].is_null());
     assert!(lines[0]["host"]["process_rss_bytes"].is_null());
     assert!(lines[1]["host"].is_null());
