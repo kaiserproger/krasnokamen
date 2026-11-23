@@ -549,7 +549,12 @@ fn a_released_locate_plan_lets_the_container_open_again() {
         &open_input(1),
         &cells
     ));
-    let key = *state.maps.pending_loot.keys().next().expect("a pending plan");
+    let key = *state
+        .maps
+        .pending_loot
+        .keys()
+        .next()
+        .expect("a pending plan");
     let release = crate::command_locate::take_pending_callback_release(&mut state)
         .expect("the queued container search must be releasable");
     release(&mut state);
