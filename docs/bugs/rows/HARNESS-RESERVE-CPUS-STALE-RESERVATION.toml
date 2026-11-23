@@ -3,7 +3,7 @@ id = "HARNESS-RESERVE-CPUS-STALE-RESERVATION"
 title = "A stale CPU reservation left by a killed `reserve-cpus` silently pins every later `mem-run` scope away from those CPUs instead of being named and cleared (the whole-pool fallback is asserted by the suite, not by this row's control)"
 area = "harness"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "CS341 audit A 2026-11-17, receipts/CS341/REPORT-A.md G4, read from code and not reproduced: tools/dev/reserve-cpus:20-30 creates /tmp/solaris-mem-slots/reserved-cpus with only the CPU list (`printf '%s\n' \"$cpus\" > \"$file\"`, noclobber) and releases it from `trap release EXIT`; a SIGKILL (agent cancel, OOM) or a wrapper kill leaves the file behind, and tools/dev/mem-run.sh:365-373 then excludes those CPUs from every new scope, including the perf lane's own pool (`pool=$perf_cpus`), so -p A/B numbers shrink with no line in the log saying why; when the stale list covers a whole pool, `allowed` is empty and mem-run.sh:371-372 skips `cpu_pin`, so the scope runs on the reserved CPUs and the reservation is ignored instead. tools/dev/README.md:17 states the file is removed when the command ends. Nothing records a pid or checks freshness; /tmp is tmpfs, so only a reboot clears it. Repro: `tools/dev/reserve-cpus 6,7 -- sleep 60` and SIGKILL the script's pid, then run `tools/dev/mem-run.sh -m 1G sh -c 'grep Cpus_allowed_list /proc/self/status'` and see the reserved CPUs excluded with no reservation owner alive."
 repro = "source"
 regression = [
@@ -14,3 +14,4 @@ regression = [
 ]
 failing_first = "not recorded"
 fix_commit = "patch:e6311be35ff8a5bfe1aadc8cc276a4b1f554f6f2406eb2bae3b9fd0821091c3b"
+promotion = "docs/bugs/promotions/HARNESS-RESERVE-CPUS-STALE-RESERVATION.json"
