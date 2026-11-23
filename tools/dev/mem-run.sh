@@ -390,8 +390,10 @@ if [ -e "$dir/reserved-cpus" ]; then
   # variable (a shared .err file races between wrappers), validate the first line as a CPU list and
   # honour that much (ReviewD123Harness1 6, 4 N12).
   err=
-  verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>&1) || {
-    err=$verdict
+  errlog=$(mktemp "${TMPDIR:-/tmp}/mem-run-reserved.XXXXXX")
+  if ! verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>"$errlog"); then
+    err=$(cat "$errlog")
+    rm -f "$errlog"
     first=$(head -n 1 "$dir/reserved-cpus")
     if ! printf '%s' "$first" | grep -Eqx '[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*'; then
       echo "mem-run: cannot judge $dir/reserved-cpus ($err) and its first line is not a CPU list; refusing this scope" >&2
@@ -399,7 +401,11 @@ if [ -e "$dir/reserved-cpus" ]; then
     fi
     echo "mem-run: cannot judge $dir/reserved-cpus; honouring its first line '$first' as a CPU list: $err" >&2
     verdict="keep $first"
-  }
+  else
+    err=$(cat "$errlog")
+    rm -f "$errlog"
+    [ -n "$err" ] && echo "mem-run: reserved-cpus verdict said: $err" >&2
+  fi
   case "$verdict" in
     keep\ *) reserved=${verdict#keep } ;;
     stale\ *)
@@ -409,6 +415,11 @@ if [ -e "$dir/reserved-cpus" ]; then
       # if one is there now, it is live and this scope honours it.
       verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>/dev/null || echo none)
       [ "${verdict%% *}" = keep ] && reserved=${verdict#keep }
+      ;;
+    none) : ;;
+    *)
+      echo "mem-run: reserved-cpus verdict '$verdict' is not none/keep/stale; refusing this scope" >&2
+      exit 75
       ;;
   esac
 fi
@@ -437,19 +448,8 @@ echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf 
 # process tree, so a job kill cannot kill it before it tears the scope down.
 guard_dir=$(mktemp -d "${TMPDIR:-/tmp}/solaris-mem-guard.XXXXXXXX")
 unit="krasnokamen-mem-run-${guard_dir##*.}.scope"
-# The guardian takes the escalation grace as an argument and only rejects a non-number; `nan`, `inf`
-# or `-1` would pass its float() and then break its select() deadline with the scope still running.
-grace=${KRASNOKAMEN_MEMRUN_CANCEL_GRACE:-15}
-if ! awk -v g="$grace" 'BEGIN { exit !(g ~ /^[0-9]+([.][0-9]+)?$/ && g + 0 > 0) }'; then
-  rm -rf "$guard_dir"
-  echo "mem-run: KRASNOKAMEN_MEMRUN_CANCEL_GRACE must be a finite positive number of seconds, got '$grace'" >&2
-  exit 75
-fi
-if ! awk -v g="$grace" 'BEGIN { exit !(g + 0 <= 86400) }'; then
-  rm -rf "$guard_dir"
-  echo "mem-run: KRASNOKAMEN_MEMRUN_CANCEL_GRACE is a whole day or more ($grace); refusing" >&2
-  exit 75
-fi
+# The grace was validated next to argument parsing (before any token wait); pass it on unchanged.
+grace=$_grace
 mkfifo "$guard_dir/events" "$guard_dir/ready"
 if ! systemd-run --user --quiet --collect --unit="${unit%.scope}-guard" \
   python3 "$here/mem-run-guard.py" "$guard_dir" "/sys/fs/cgroup$cgroup/$unit" "$$" "$PPID" \
@@ -509,9 +509,13 @@ trap cancel TERM INT HUP
 st=0
 wait "$c" || st=$?
 # A cancel trap can outlive the child: bash reaped it before this wait, so the wait reports
-# 143 (interrupted) instead of the status the child exited with. Bash keeps the last reaped status, so asking
-# for it again recovers it; a child that is still running is waited for once more.
-[ "${cancel_done:-0}" = 1 ] && { wait "$c" || st=$?; }
+# 128+signal instead of the status the child exited with. Bash keeps the last reaped status, so asking
+# for it again recovers it - but only for such a status, and a 127 ("no such job") is never accepted.
+if [ "${cancel_done:-0}" = 1 ] && [ "$st" -ge 128 ]; then
+  saved=0
+  wait "$c" || saved=$?
+  [ "$saved" != 127 ] && st=$saved
+fi
 while kill -0 "$c" 2>/dev/null; do wait "$c" || st=$?; done
 # Only a complete, successful run measures the command; an early failure or a
 # cancellation would teach a too-small peak.

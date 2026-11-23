@@ -90,8 +90,8 @@ perf script -i "$out/perf.data" > "$out/script.txt" 2>&1 || {
 }
 # A self-time-only capture cannot say which caller causes the fills: a graph report with children
 # prints caller lines as `            |`-prefixed branches and `            --<percent>--` leaves.
-# The pattern is checked against real captures (receipts/G2/laptop-perf-20k/report-{fp,dwarf}.txt
-# have callers; the flat BattleBaseline reports do not).
+# The pattern is exercised by the fixture in tools/dev/test_perf_window.py (a frame-pointer
+# report matches, a flat self-time report does not).
 if ! grep -qE '^ +(\||-{2}[0-9])' "$out/callgraph.txt"; then
   echo "perf-window: no caller frames in callgraph.txt (rebuild the server with RUSTFLAGS=-C force-frame-pointers=yes and rerun); files in $out" >&2
   exit 2

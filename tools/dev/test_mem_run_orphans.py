@@ -133,7 +133,8 @@ class ScopeLifetimeTests(unittest.TestCase):
                 for stream in (proc.stdin, proc.stdout, proc.stderr):
                     if stream:
                         stream.close()
-            quiet = subprocess.run([str(runner), '-x', '-m', '1G', 'true'], env=other_env,
+            quiet = subprocess.run([str(runner), '-x', '-m', '1G', 'true'],
+                                   env={**other_env, 'KRASNOKAMEN_WINDOW_OVERRIDE': '1'},
                                    capture_output=True, text=True, timeout=30)
             self.assertEqual(quiet.returncode, 0, quiet.stderr)
 

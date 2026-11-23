@@ -225,6 +225,16 @@ class MemRunReservationTests(unittest.TestCase):
         self.assertIn('reserved CPUs 0 are excluded', done.stderr)
         self.assertTrue((self.state / 'reserved-cpus').exists(), 'the reservation was left in place')
 
+    def test_a_garbage_first_line_with_a_failing_helper_refuses_the_scope(self):
+        # Sonnet G: fail-closed must not honour a first line that is not a CPU list.
+        (self.root / 'reserved_cpus.py').write_text(
+            "import sys\nprint('no module named reserved_cpus', file=sys.stderr)\nsys.exit(3)\n")
+        self.state.mkdir()
+        (self.state / 'reserved-cpus').write_text('not a cpu list\n1 2\n')
+        done = self.run_true()
+        self.assertEqual(done.returncode, 75, done.stderr)
+        self.assertIn('first line is not a CPU list', done.stderr)
+
     def test_a_non_numeric_cancel_grace_is_named_before_the_scope_starts(self):
         # ReviewD123Harness2 item 4: `nan` passes the guardian's float() and breaks its select().
         self.state.mkdir()

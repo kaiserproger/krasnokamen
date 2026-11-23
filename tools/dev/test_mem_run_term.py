@@ -28,7 +28,7 @@ os.waitpid(pid, 0)
 '''
 HONOURING = r'''
 import os, signal, sys
-signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(23))
 cg = open('/proc/self/cgroup').read().strip().split('::', 1)[1]
 print(f'- {os.getpid()} {os.getppid()} {cg}', flush=True)
 signal.pause()
@@ -188,7 +188,8 @@ class CancelledScopeTests(unittest.TestCase):
             self.scope_kill(cg)
             self.fail('a TERM-honouring child did not end its scope without the guardian escalation')
         wait_scope_empty(cg)
-        self.assertNotEqual(proc.returncode, 0, 'a cancelled command is not a successful run')
+        self.assertEqual(proc.returncode, 23,
+                         'the wrapper must report the child status the trap could have reaped past')
 
     def test_a_cancelled_child_receives_exactly_one_term(self):
         # ReviewD123Harness2 item 2: the wrapper TERMed the direct child and then TERMed it again in
