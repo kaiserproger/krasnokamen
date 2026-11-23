@@ -1213,8 +1213,8 @@ fn d8_construction_icons_list_all_sites_and_all_indexed_owner_orders() {
     {
         assert!(!screen.icons[index].is_empty());
         assert!(matches!(
-            screen.targets[index],
-            Target::Dialog("project_status_details")
+            &screen.targets[index],
+            Target::Project(structure) if structure == &project.structure
         ));
         assert!(
             contents.contains(&super::super::corner_text(project.origin)),

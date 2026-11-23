@@ -3083,3 +3083,6 @@ fn unknown_blueprint_names_never_expose_raw_identifiers() {
         assert!(!second.contains("unregistered_blueprint_two"));
     }
 }
+
+#[path = "ui_project_selection_tests.rs"]
+mod project_selection;

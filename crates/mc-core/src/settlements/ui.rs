@@ -271,6 +271,9 @@ fn dispatch(
         "projects" => menus::projects(state, connection, ctx),
         "project_status" => menus::project(state, connection, ctx),
         "project_status_details" => project_status_screen(state, connection, ctx),
+        "project_selected" => {
+            selected_project_screen(state, connection, ctx, payload.string("structure"))
+        }
         "settings" => settings_screen(state, connection, ctx, ""),
         "certify" => certify_screen(
             state,
@@ -2126,6 +2129,31 @@ fn project_phase(ctx: &Ctx, state: &str) -> &'static str {
         Lang::En => labels.0,
         Lang::Ru => labels.1,
     }
+}
+
+/// A marker or icon carries the native structure handle, never a project index.
+fn selected_project_screen(
+    state: &mut TickState,
+    connection: ConnectionId,
+    ctx: &Ctx,
+    structure: Option<&str>,
+) {
+    let facts = structure
+        .and_then(|structure| {
+            let record = state.settlements.get(ctx.id)?;
+            super::construction::project_for_structure(record, structure)
+        })
+        .map_or_else(
+            || ctx.t(Key::StateChanged).to_owned(),
+            |project| project_text(state, ctx, project).unwrap_or_else(|error| error),
+        );
+    present(
+        state,
+        connection,
+        ctx,
+        "project_selected",
+        Dialog::notice(ctx.t(Key::Status), button(ctx.t(Key::Back), "back", ctx.id)).text(facts),
+    );
 }
 
 /// Compact project facts. Exact materials remain on the paged C1 icon card.

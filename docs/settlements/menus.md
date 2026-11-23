@@ -104,12 +104,16 @@ Material icons remain below the project and order lists. Queued orders retain th
 The map gives each active site a hover naming its blueprint, level and corner;
 overlapping map cells retain all site descriptions. Its legend also lists each
 site as `Active site: <display name> L<level> · <x> <y> <z>`.
-Clicking any active site opens the complete Construction status. The summary
-count/head does not replace the project list.
-The Construction chest has one icon per active site (facts in its lore, click
-for status) and one icon per pending order (click to review cancelling that
-exact indexed intent). A separate map icon opens the map. The clock opens the complete status dialog; material
-icons remain paged below the lists. A visitor can inspect but cannot cancel.
+Clicking an active site opens only that project's native facts, identified by its
+stable structure handle. An overlapping cell first offers each site separately.
+Back restores the exact map viewport or chooser that opened the selected facts;
+a removed site reports changed state and never selects a neighbour.
+The Construction chest has one icon per active site (click for that site's facts)
+and one icon per pending order (click to review cancelling that exact indexed intent).
+Back from a site's facts restores the actual chest page. The explicit Status
+and clock controls still open the complete settlement-wide status; a separate map
+icon opens the map. Material icons remain paged below the lists. A visitor can
+inspect but cannot cancel.
 
 The `village-owner-order-qa` gate observes two waiting orders, a funded later
 order lifting over an unfunded head, the head fencing autonomous admission, two

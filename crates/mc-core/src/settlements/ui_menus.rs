@@ -231,6 +231,7 @@ enum Target {
         building: BuildingId,
     },
     Blueprint(String),
+    Project(String),
     Pending {
         index: usize,
         order: crate::settlements::construction::OwnerOrder,
@@ -692,6 +693,10 @@ fn click(
     }
     match target {
         Target::Back => super::navigation::back(state, connection, &ctx),
+        Target::Project(structure) => {
+            close(state, connection, entity, true);
+            super::selected_project_screen(state, connection, &ctx, Some(&structure));
+        }
         Target::Pending { index, order } => {
             close(state, connection, entity, true);
             let payload = Tag::Compound(vec![
@@ -2103,7 +2108,7 @@ fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
                 text(name),
                 &lore,
             ),
-            Target::Dialog("project_status_details"),
+            Target::Project(project.structure.clone()),
         );
     }
     for (index, order) in crate::settlements::construction::orders(record).enumerate() {

@@ -862,7 +862,7 @@ fn d8_every_site_survives_a_shared_map_cell_hover_legend_and_click_payload() {
     assert!(
         actions(&picked)
             .iter()
-            .filter(|action| *action == "krasnokamen:settlement/project_status")
+            .filter(|action| *action == "krasnokamen:settlement/project_selected")
             .count()
             >= 4
     );
@@ -873,7 +873,7 @@ fn d8_every_site_survives_a_shared_map_cell_hover_legend_and_click_payload() {
     assert!(
         actions(&stale)
             .iter()
-            .any(|action| action == "krasnokamen:settlement/project_status")
+            .any(|action| action == "krasnokamen:settlement/project_selected")
     );
 }
 
