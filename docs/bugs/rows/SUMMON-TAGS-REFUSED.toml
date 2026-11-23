@@ -3,7 +3,7 @@ id = "SUMMON-TAGS-REFUSED"
 title = "Summon rejects vanilla scoreboard Tags and spawns no entity"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Stage3 S3Issue1 REPORT.md F1: summon with Tags failed with Unknown or unsupported summon NBT field Tags"
 repro = "client"
 regression = ["cargo:mc-core:command_summon::tests::summon_tags_match_selectors_and_survive_checkpoint", "cargo:mc-core:command_summon::tests::summon_tags_reject_invalid_types_before_spawn", "harness:scene-shot:native-command-feedback"]
@@ -11,3 +11,4 @@ proving_assertions = { "harness:scene-shot:native-command-feedback" = "summon-ta
 fix_commit = "3a79a7535"
 failing_first = "reported"
 repro_check = "FixBatchA/summon-control-red.log: completed tests fail before entity allocation with only the production fix reverted. summon-suite-green.log: 70 passed. Windowed native-command-feedback: summon-client-red/result.json fails summon-tags_contains_0 using control server d0f4170ac7df; summon-client-green/result.json passes the same assertion on server 868f716e2dc0 with client 12e076e9c761. Screenshot reviewed."
+promotion = "docs/bugs/promotions/SUMMON-TAGS-REFUSED.json"

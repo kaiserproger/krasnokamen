@@ -1,0 +1,56 @@
+{
+  "id": "SUMMON-TAGS-REFUSED",
+  "verdict": "promoted",
+  "fix_commit": "3a79a7535",
+  "fix_commit_full": "3a79a753538a3334ba335325a29b01109157cde3",
+  "promoted_at": "2026-11-23T19:06:57+00:00",
+  "tree_head": "0218c529e8d9c499c71df6b065ed10d23f8c1d8f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "fix_commit",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/command_execution.rs",
+    "crates/mc-core/src/command_summon.rs",
+    "tools/harness/command_feedback_scene.json"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/command_summon_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:command_summon::tests::summon_tags_match_selectors_and_survive_checkpoint": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_summon::tests::summon_tags_reject_invalid_types_before_spawn": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-command-feedback": {
+      "state": "unrunnable",
+      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/0218c529e8d9-server-x86_64-unknown-linux-gnu-incr/krasnokamen: [Errno 2] No such file or directory: '/run/media/kaiserroman/games/solaris-work/wt/ledger-control-fix/.analysis/ledger-builds/b761e6c147d8654cc08d638804f89864668fe8c87743f7e740ec11a5f357633d.json'. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-fix` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_summon::tests::summon_tags_match_selectors_and_survive_checkpoint": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_summon::tests::summon_tags_reject_invalid_types_before_spawn": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T163742-native-command-feedback-gss9v4nv/result.json",
+    "tree_head": "0218c529e8d9c499c71df6b065ed10d23f8c1d8f",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "b761e6c147d8654cc08d638804f89864668fe8c87743f7e740ec11a5f357633d",
+    "covers": [
+      "harness:scene-shot:native-command-feedback"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T190233-ledger-promote-yi78pqau"
+}
