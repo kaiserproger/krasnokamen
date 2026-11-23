@@ -81,6 +81,10 @@ class CancelledScopeTests(unittest.TestCase):
         env = {**os.environ, 'CARGO_TARGET_DIR': str(root / 'targets' / 'slot-a'),
                'KRASNOKAMEN_SLOT_TARGETS': str(root / 'targets'), 'KRASNOKAMEN_SLOT_MIN_FREE_GB': '0',
                'KRASNOKAMEN_MEMRUN_CANCEL_GRACE': '1'}
+        # The sandbox must take its OWN build token: nested reuse would make a promote's token look
+        # like this scope's, and the token assertions below would test the outer runner.
+        for name in ('KRASNOKAMEN_BUILD_TOKEN', 'KRASNOKAMEN_BUILD_TOKEN_PID', 'KRASNOKAMEN_BUILD_LANE'):
+            env.pop(name, None)
         return root, runner, env
 
     def start(self, runner, env, *, child, compile=False):
@@ -165,6 +169,7 @@ class CancelledScopeTests(unittest.TestCase):
         root, runner, env = self.sandbox()
         proc, grandchild, child, wrapper, cg = self.start(runner, env, child=IGNORING, compile=True)
         token = root / 'state' / 'tokens' / 'token-1.lock'
+        self.assertTrue(token.exists(), 'a compile scope must create its build token')
         self.assertNotEqual(subprocess.run(['flock', '-n', str(token), 'true']).returncode, 0,
                             'a compile scope must hold a build token while it runs')
         os.kill(int(wrapper), signal.SIGTERM)
