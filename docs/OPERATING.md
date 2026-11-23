@@ -1051,11 +1051,13 @@ compatibility format, not a live fallback or dual-write store.
 
 What a crash can lose beyond the last checkpoint comes from two windows. First,
 a tick is shown to clients once its journal batch is queued, before the batch is
-published (written, fsynced and renamed into place): up to 128 batches (6.4 s of
-ticks, at most 256 MiB of estimated payload) can wait behind the one the journal
-thread is handling. Any crash, SIGKILL included, can lose every batch not yet
-published: the queued ones, and the current one if its rename has not happened,
-so an empty queue does not close this window. Second, the journal directory is
+published (written, fsynced and renamed into place): up to 128 queued batches
+behind the one the journal thread is handling, plus up to 1024 batches the owner
+holds while a generated baseline waits behind an in-flight checkpoint commit
+(about 51 s at 20 TPS for payload-free batches; payload bytes stay under 256 MiB
+of estimated payload). Any crash, SIGKILL included, can lose every batch not yet
+published: the queued and held ones, and the current one if its rename has not
+happened, so an empty queue does not close this window. Second, the journal directory is
 fsynced only every `journal_fsync_every_batches` published batches (10 by
 default), so a host power loss can also drop up to that many published batches.
 A clean stop flushes both.

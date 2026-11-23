@@ -245,9 +245,11 @@ another recovery.
 - **Acknowledgement window.** A tick reaches clients once its batch is queued,
   before the batch is published (written, fsynced, renamed). Two windows follow.
   Any crash, SIGKILL included, can lose every batch not yet published: up to
-  128 queued batches or 256 MiB of post-images (about 6.4 s at 20 TPS, fewer
-  ticks when batches are large) and the batch being written if its rename has
-  not happened, so an empty queue does not close it. A host power loss can also
+  128 queued batches, plus up to 1024 batches the owner holds while a generated
+  baseline waits behind an in-flight checkpoint commit (about 51 s at 20 TPS for
+  payload-free batches; payload bytes stay under 256 MiB of post-images), and the
+  batch being written if its rename has not happened, so an empty queue does not
+  close it. A host power loss can also
   drop up to `journal_fsync_every_batches` published batches whose names the
   directory fsync has not yet made durable, and a lost name before later ones
   leaves a hole in the tail. Setting the cadence to 1 closes only this second

@@ -305,18 +305,20 @@ enum JournalWork {
     /// commits every domain in one transaction, reports on the job's `done`
     /// channel and prunes. The tick thread never waits for the native write —
     /// queue admission is blocking backpressure while full — and the journal
-    /// thread does not wait for the checkpoint commit either, but a later
+    /// does not wait for the checkpoint commit either, but a later
     /// `RequireGenerated` does: the single native writer runs it after the
-    /// commit, so `Append`s queued behind that baseline wait for both. The ACK
-    /// on `done` still only reports disk durability, never queue admission.
+    /// commit, so the owner receives later `Append`s without publishing them
+    /// until that baseline is durable. The ACK on `done` still only reports
+    /// disk durability, never queue admission.
     Checkpoint(Box<CheckpointJob>),
     /// Freeze this tick's generated baselines before its dependent WAL: the
-    /// journal owner waits for the native writer's Immediate commit of every
-    /// such batch before it handles the next item, so on a tick that generated
-    /// chunks each later `Append` waits behind one native commit per batch.
-    /// `wake` is the tick's own queue sender, carried only for that wait: the
-    /// writer uses it to queue the batch's answer (`BaselineDurable`), and drops
-    /// it with the job, so no owner-held sender can mask producer close.
+    /// journal owner holds every later item (up to `JOURNAL_HOLD_LIMIT` of
+    /// them) and publishes none before the native writer's Immediate commit of
+    /// this batch, so on a tick that generated chunks each later `Append`
+    /// follows one native commit per batch. `wake` is the tick's own queue
+    /// sender, carried only for that wait: the writer answers through it
+    /// (`BaselineDurable`) and it dies with the job, so no owner-held sender can
+    /// mask producer close.
     RequireGenerated {
         capture: Box<crate::world::ChunkCapture>,
         wake: std::sync::mpsc::SyncSender<JournalWork>,
@@ -345,11 +347,16 @@ struct BackupJob {
 /// 0.1-1.6 s, parked the two-deep queue's tick for up to 267 ms): while the
 /// journal keeps up the queue is empty. The tick thread still sends with
 /// blocking `send`, so a journal slower than that parks the tick instead of
-/// growing memory; accepted batches are never dropped or reordered. A crash
-/// loses at most the batches still queued, i.e. up to this many ticks, and
-/// only while the journal thread is stalled. `SyncSender::send` fails only
-/// when the journal thread is gone (receiver disconnected) — the existing
-/// fail-closed halt.
+/// growing memory; accepted batches are never dropped or reordered.
+///
+/// One window is longer than this queue: while a generated baseline waits
+/// behind an in-flight checkpoint commit, the owner holds up to
+/// `JOURNAL_HOLD_LIMIT` (1024) further items in arrival order, so the visible
+/// but unpublished tail is at most 128 queued + 1024 held batches (about 51 s
+/// at 20 TPS when every batch is payload-free; the byte budget still bounds
+/// payloads). A crash loses at most that tail, and only while the journal is
+/// stalled. `SyncSender::send` fails only when the journal thread is gone
+/// (receiver disconnected) — the existing fail-closed halt.
 const JOURNAL_WORK_QUEUE: usize = 128;
 /// Production journal work transport: `sync_channel` with room for
 /// [`JOURNAL_WORK_QUEUE`] queued batches; `send` blocks while full and fails
