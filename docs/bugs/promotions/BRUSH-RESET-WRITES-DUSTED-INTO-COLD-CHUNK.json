@@ -1,0 +1,30 @@
+{
+  "id": "BRUSH-RESET-WRITES-DUSTED-INTO-COLD-CHUNK",
+  "verdict": "promoted",
+  "fix_commit": "patch:c823b5fb1e65415d77a3aecbce296824aca04b7956112fb36f419faf48005769",
+  "fix_commit_full": "patch:c823b5fb1e65415d77a3aecbce296824aca04b7956112fb36f419faf48005769",
+  "promoted_at": "2026-11-23T15:59:09+00:00",
+  "tree_head": "4a54f35e7932a0f2626df4f785fcff9fa1fcd0f2",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "c823b5fb1e65415d77a3aecbce296824aca04b7956112fb36f419faf48005769",
+  "reversed_files": [
+    "crates/mc-core/src/brushing.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:brushing::cold_residency_tests::brush_reset_pauses_on_a_cold_cell_instead_of_decrementing_its_overlay": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:brushing::cold_residency_tests::brush_reset_pauses_on_a_cold_cell_instead_of_decrementing_its_overlay": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T155634-ledger-promote-qxwwu8ce"
+}
