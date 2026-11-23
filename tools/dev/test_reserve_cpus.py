@@ -1,0 +1,140 @@
+"""Reservation identity: a dead owner must not keep pinning later mem-run scopes (#G4, CS341).
+
+Real scopes, but every run here is `true` under a 1G cap, so the test only exercises the
+reservation file protocol and the two scripts that read and write it.
+"""
+import os
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+
+
+def starttime(pid: int) -> str:
+    """Field 22 of /proc/<pid>/stat: what tells a live owner from a reused pid."""
+    return Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[19]
+
+
+def dead_pid() -> int:
+    done = subprocess.Popen(['python3', '-c', 'pass'])
+    done.wait(timeout=30)
+    return done.pid
+
+
+class ReserveCpusTests(unittest.TestCase):
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.state = self.root / 'state'
+        source = (HERE / 'reserve-cpus').read_text()
+        self.script = self.root / 'reserve-cpus'
+        self.script.write_text(source.replace('dir=/tmp/solaris-mem-slots', f'dir={self.state}', 1))
+        self.script.chmod(0o755)
+
+    def reserve(self, *args, **kwargs):
+        return subprocess.run([str(self.script), *args], capture_output=True, text=True, **kwargs)
+
+    def holder(self):
+        """A command that outlives the reservation-file check until the test closes its stdin."""
+        return subprocess.Popen([str(self.script), '6,7', '--', 'python3', '-c', 'import sys; sys.stdin.read()'],
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    def test_a_reservation_records_its_live_owner(self):
+        proc = self.holder()
+        try:
+            # The script announces the reservation after writing the file: wait for that line, not a sleep.
+            self.assertIn('reserved 6,7 for', proc.stderr.readline())
+            cpus, owner = (self.state / 'reserved-cpus').read_text().splitlines()[:2]
+            self.assertEqual(cpus, '6,7')
+            pid, start = owner.split()
+            self.assertEqual(int(pid), proc.pid)
+            self.assertEqual(starttime(int(pid)), start)
+        finally:
+            proc.stdin.close()
+            proc.wait(timeout=30)
+        self.assertFalse((self.state / 'reserved-cpus').exists(), 'release removes the file')
+
+    def test_a_dead_owner_is_cleared_instead_of_blocking_the_next_reservation(self):
+        self.state.mkdir()
+        corpse = dead_pid()
+        (self.state / 'reserved-cpus').write_text(f'6,7\n{corpse} {corpse}\n')
+        done = self.reserve('8', '--', 'true')
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn('clearing stale reservation 6,7', done.stderr)
+        self.assertFalse((self.state / 'reserved-cpus').exists(), 'released after the command')
+
+    def test_a_one_line_file_from_an_older_writer_is_honoured(self):
+        self.state.mkdir()
+        (self.state / 'reserved-cpus').write_text('6,7\n')
+        done = self.reserve('8', '--', 'true')
+        self.assertEqual(done.returncode, 75, done.stderr)
+        self.assertIn('CPUs already reserved: 6,7', done.stderr)
+        self.assertEqual((self.state / 'reserved-cpus').read_text(), '6,7\n')
+
+
+class MemRunReservationTests(unittest.TestCase):
+    """The scope's side: stale reservations are logged and cleared, live ones are logged."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = self.root = Path(tmp.name)
+        slice_name = f'memtest{os.getpid()}.slice'
+        subprocess.run(['systemctl', '--user', 'start', slice_name], check=True)
+        self.addCleanup(subprocess.run, ['systemctl', '--user', 'stop', slice_name], check=False)
+        watchdog = f'memtest{os.getpid()}-watchdog'
+        self.addCleanup(subprocess.run, ['systemctl', '--user', 'stop', watchdog + '.service'], check=False)
+        source = (HERE / 'mem-run.sh').read_text()
+        source = source.replace('dir=/tmp/solaris-mem-slots', f'dir={root}/state', 1)
+        source = source.replace('slice=solaris-heavy.slice', f'slice={slice_name}', 1)
+        source = source.replace('solaris-heavy-watchdog', watchdog)
+        self.runner = root / 'mem-run.sh'
+        self.runner.write_text(source)
+        self.runner.chmod(0o755)
+        for name in ('slot-select.sh', 'heavy-watchdog.py', 'release-build-policy.sh',
+                     'measurement-window.py', 'measurement-windows'):
+            shutil.copy(HERE / name, root)
+        shutil.copy(HERE / 'mem-run-guard.py', root)
+        (root / 'targets' / 'slot-a').mkdir(parents=True)
+        self.env = os.environ.copy()
+        self.env.update(CARGO_TARGET_DIR=str(root / 'targets' / 'slot-a'),
+                        KRASNOKAMEN_SLOT_TARGETS=str(root / 'targets'), KRASNOKAMEN_SLOT_MIN_FREE_GB='0')
+        self.state = root / 'state'
+
+    def run_true(self):
+        return subprocess.run([str(self.runner), '-m', '1G', 'true'], env=self.env,
+                              capture_output=True, text=True, timeout=120)
+
+    def test_a_stale_reservation_is_named_cleared_and_does_not_pin_the_scope(self):
+        self.state.mkdir()
+        corpse = dead_pid()
+        (self.state / 'reserved-cpus').write_text(f'0\n{corpse} 1\n')
+        done = self.run_true()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn('ignoring stale CPU reservation', done.stderr)
+        self.assertNotIn('reserved CPUs', done.stderr.split('ignoring stale CPU reservation')[0])
+        self.assertFalse((self.state / 'reserved-cpus').exists(), 'the corpse is removed')
+
+    def test_a_live_reservation_logs_the_cpus_it_excludes(self):
+        self.state.mkdir()
+        (self.state / 'reserved-cpus').write_text(f'0\n{os.getpid()} {starttime(os.getpid())}\n')
+        done = self.run_true()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn('reserved CPUs 0 are excluded from this scope', done.stderr)
+
+    def test_a_reservation_covering_the_whole_pool_is_named_not_silently_dropped(self):
+        self.state.mkdir()
+        ncpu = os.cpu_count() or 1
+        (self.state / 'reserved-cpus').write_text(f'0-{ncpu - 1}\n{os.getpid()} {starttime(os.getpid())}\n')
+        done = self.run_true()
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn('cover this whole pool', done.stderr)
+        self.assertIn('keeps cpus=', done.stderr)
+
+
+if __name__ == '__main__':
+    unittest.main()

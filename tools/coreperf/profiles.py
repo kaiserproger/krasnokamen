@@ -1236,6 +1236,93 @@ def schedule(args: argparse.Namespace, recipe: dict[str, Any] | None = None) -> 
     return plan
 
 
+def cpu_scaling(root: Path = Path("/sys/devices/system/cpu")) -> dict[str, Any]:
+    """Per-CPU clock policy and current frequency, so two runs on the same pin can be compared.
+
+    A receipt that records only lscpu cannot tell a 3 GHz run from a 4.6 GHz one: this host runs
+    `powersave` and swings 3-4 GHz inside a window (PERF-RECEIPT-OMITS-CPU-GOVERNOR-AND-FREQUENCY).
+    Every value is a read-only sysfs read; a missing file is omitted, never guessed."""
+    fields = ("scaling_governor", "energy_performance_preference", "scaling_min_freq",
+              "scaling_max_freq", "cpuinfo_cur_freq")
+    policies: dict[str, dict[str, str]] = {}
+    for cpu in sorted(root.glob("cpu[0-9]*")):
+        values = {}
+        for field in fields:
+            try:
+                values[field] = (cpu / "cpufreq" / field).read_text().strip()
+            except OSError:
+                continue
+        if values:
+            policies[cpu.name] = values
+    distinct = {field: sorted({values[field] for values in policies.values() if field in values})
+                for field in fields}
+    return {"policies": policies, "distinct": distinct}
+
+
+def _cgroup_dir(root: Path = Path("/sys/fs/cgroup"), procs: Path = Path("/proc/self/cgroup")) -> Path | None:
+    """This process's cgroup v2 directory from the `0::<path>` line, or None."""
+    try:
+        relative = procs.read_text().strip().split("::", 1)[1].lstrip("/")
+    except (OSError, IndexError):
+        return None
+    return root / relative if relative else root
+
+
+def cgroup_cpu_stat(root: Path = Path("/sys/fs/cgroup"), procs: Path = Path("/proc/self/cgroup")) -> dict[str, int]:
+    """Cumulative `cpu.stat` counters of this process's cgroup: usage and the throttle fields.
+
+    `nr_periods`/`nr_throttled`/`throttled_usec` are what separate 'expensive code' from 'not
+    enough CPU' under the mem-run CPUQuota (PERF-RECEIPT-OMITS-CPU-SATURATION)."""
+    directory = _cgroup_dir(root, procs)
+    if directory is None:
+        return {}
+    try:
+        text = (directory / "cpu.stat").read_text()
+    except OSError:
+        return {}
+    wanted = ("usage_usec", "nr_periods", "nr_throttled", "throttled_usec")
+    values: dict[str, int] = {}
+    for line in text.splitlines():
+        key, _, value = line.partition(" ")
+        if key in wanted and value.strip().isdigit():
+            values[key] = int(value.strip())
+    return values
+
+
+def memory_pressure(root: Path = Path("/sys/fs/cgroup"), procs: Path = Path("/proc/self/cgroup"),
+                    host: Path = Path("/proc/pressure/memory")) -> dict[str, Any]:
+    """PSI for memory: the host `/proc/pressure/memory` and this cgroup's `memory.pressure`.
+
+    Some/full `avg10` (hundredths of a percent, integer) and cumulative `total` microseconds are
+    the saturation signal beside VmHWM/memory.current (PERF-RECEIPT-OMITS-MEMORY-PRESSURE)."""
+    def parse(text: str) -> dict[str, dict[str, int]]:
+        out: dict[str, dict[str, int]] = {}
+        for line in text.splitlines():
+            kind, _, rest = line.partition(" ")
+            fields: dict[str, int] = {}
+            for part in rest.split():
+                key, _, value = part.partition("=")
+                try:
+                    fields[key] = int(round(float(value) * 100)) if key.startswith("avg") else int(value)
+                except ValueError:
+                    continue
+            if fields:
+                out[kind] = fields
+        return out
+    result: dict[str, Any] = {"host": {}, "cgroup": {}}
+    try:
+        result["host"] = parse(host.read_text())
+    except OSError:
+        pass
+    directory = _cgroup_dir(root, procs)
+    if directory is not None:
+        try:
+            result["cgroup"] = parse((directory / "memory.pressure").read_text())
+        except OSError:
+            pass
+    return result
+
+
 def host_receipt(out: Path) -> dict[str, Any]:
     def capture(command: list[str]) -> str:
         return subprocess.check_output(command, text=True).strip()

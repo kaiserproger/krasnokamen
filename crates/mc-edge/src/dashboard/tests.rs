@@ -344,6 +344,14 @@ async fn telemetry_jsonl_joins_host_samples_by_tick() {
         sampled_unix_ns: 1_800_000_000_500_000_000,
         cgroup_memory_current_bytes: Some(3 << 30),
         cgroup_cpu_usage_usec: Some(42_000_000),
+        cgroup_cpu_nr_throttled: Some(7),
+        cgroup_cpu_throttled_usec: Some(1_500),
+        cgroup_memory_pressure: Some(crate::host_telemetry::MemoryPressure {
+            some_avg10_centi: Some(45),
+            some_total_usec: Some(42),
+            full_avg10_centi: None,
+            full_total_usec: None,
+        }),
         cpu_total_ticks: Some(9_000),
         cpu_steal_ticks: Some(12),
         process_rss_bytes: None,
@@ -409,6 +417,11 @@ async fn telemetry_jsonl_joins_host_samples_by_tick() {
     assert_eq!(lines[0]["phase_us"]["entity_us"], 0);
     assert_eq!(lines[0]["host"]["cgroup_memory_current_bytes"], 3u64 << 30);
     assert_eq!(lines[0]["host"]["cpu_steal_ticks"], 12);
+    // Saturation travels with the sample: throttle counters and PSI memory pressure.
+    assert_eq!(lines[0]["host"]["cgroup_cpu_nr_throttled"], 7);
+    assert_eq!(lines[0]["host"]["cgroup_cpu_throttled_usec"], 1_500);
+    assert_eq!(lines[0]["host"]["cgroup_memory_pressure"]["some_avg10_centi"], 45);
+    assert!(lines[0]["host"]["cgroup_memory_pressure"]["full_avg10_centi"].is_null());
     assert!(lines[0]["host"]["process_rss_bytes"].is_null());
     assert!(lines[1]["host"].is_null());
     assert_eq!(

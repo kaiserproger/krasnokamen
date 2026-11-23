@@ -7,7 +7,10 @@
 //! - cgroup v2 `memory.current` (bytes) and `cpu.stat` `usage_usec`
 //!   (cumulative microseconds), both including descendants, of the cgroup
 //!   `/proc/self/cgroup` names on its `0::<path>` line, under `/sys/fs/cgroup`
-//!   (<https://docs.kernel.org/admin-guide/cgroup-v2.html>);
+//!   (<https://docs.kernel.org/admin-guide/cgroup-v2.html>). `cpu.stat` also
+//!   carries `nr_throttled`/`throttled_usec` (CPUQuota saturation: expensive code
+//!   versus not enough CPU) and `memory.pressure` carries the PSI some/full
+//!   `avg10`/`total` (memory saturation beside `memory.current`);
 //! - the aggregate `cpu` line of `/proc/stat` in `USER_HZ` ticks: `steal`
 //!   (eighth field) and `user` through `steal` summed. `guest` and
 //!   `guest_nice` are left out of the sum because the kernel already counts
@@ -24,12 +27,25 @@ use serde::Serialize;
 /// Core ticks per host sample (one per second at 20 TPS).
 pub(crate) const SAMPLE_TICKS: u64 = 20;
 
+/// `memory.pressure` PSI for the cgroup: `some`/`full` `avg10` in hundredths of a percent and
+/// cumulative `total` microseconds. `Some` when the file named at least one kind.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct MemoryPressure {
+    pub some_avg10_centi: Option<u64>,
+    pub some_total_usec: Option<u64>,
+    pub full_avg10_centi: Option<u64>,
+    pub full_total_usec: Option<u64>,
+}
+
 /// One host sample.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct HostSample {
     pub sampled_unix_ns: u64,
     pub cgroup_memory_current_bytes: Option<u64>,
     pub cgroup_cpu_usage_usec: Option<u64>,
+    pub cgroup_cpu_nr_throttled: Option<u64>,
+    pub cgroup_cpu_throttled_usec: Option<u64>,
+    pub cgroup_memory_pressure: Option<MemoryPressure>,
     pub cpu_total_ticks: Option<u64>,
     pub cpu_steal_ticks: Option<u64>,
     pub process_rss_bytes: Option<u64>,
@@ -68,11 +84,21 @@ impl HostSampler {
         let read = |path: &Path| std::fs::read_to_string(path).ok();
         let cgroup_file = |name: &str| self.cgroup.as_ref().and_then(|dir| read(&dir.join(name)));
         let cpu = read(Path::new("/proc/stat")).and_then(|text| proc_stat_cpu(&text));
+        let cpu_stat = cgroup_file("cpu.stat");
         HostSample {
             sampled_unix_ns: crate::dashboard::unix_ns(),
             cgroup_memory_current_bytes: cgroup_file("memory.current")
                 .and_then(|text| text.trim().parse().ok()),
-            cgroup_cpu_usage_usec: cgroup_file("cpu.stat").and_then(|text| cpu_stat_usage(&text)),
+            cgroup_cpu_usage_usec: cpu_stat.as_deref().and_then(cpu_stat_usage),
+            cgroup_cpu_nr_throttled: cpu_stat
+                .as_deref()
+                .and_then(|text| cpu_stat_field(text, "nr_throttled")),
+            cgroup_cpu_throttled_usec: cpu_stat
+                .as_deref()
+                .and_then(|text| cpu_stat_field(text, "throttled_usec")),
+            cgroup_memory_pressure: cgroup_file("memory.pressure")
+                .as_deref()
+                .and_then(parse_pressure),
             cpu_total_ticks: cpu.map(|(total, _)| total),
             cpu_steal_ticks: cpu.map(|(_, steal)| steal),
             process_rss_bytes: resident_memory_bytes(),
@@ -90,11 +116,58 @@ fn cgroup_v2_dir(root: &Path, proc_self_cgroup: &str) -> Option<PathBuf> {
 
 /// `usage_usec` of a cgroup v2 `cpu.stat`.
 fn cpu_stat_usage(text: &str) -> Option<u64> {
+    cpu_stat_field(text, "usage_usec")
+}
+
+/// One named cumulative counter of a cgroup v2 `cpu.stat` (`nr_throttled`, `throttled_usec`).
+fn cpu_stat_field(text: &str, name: &str) -> Option<u64> {
     text.lines()
-        .find_map(|line| line.strip_prefix("usage_usec "))?
+        .find_map(|line| line.strip_prefix(name)?.strip_prefix(' '))?
         .trim()
         .parse()
         .ok()
+}
+
+/// `some`/`full` of a `memory.pressure` PSI file. `avg10` is a percentage with two decimals, so
+/// hundredths keep it exact and integral; `total` is cumulative microseconds.
+fn parse_pressure(text: &str) -> Option<MemoryPressure> {
+    let mut pressure = MemoryPressure::default();
+    let mut seen = false;
+    for line in text.lines() {
+        let mut parts = line.split_whitespace();
+        let Some(kind) = parts.next() else { continue };
+        let mut avg10_centi = None;
+        let mut total_usec = None;
+        for part in parts {
+            let Some((key, value)) = part.split_once('=') else {
+                continue;
+            };
+            match key {
+                "avg10" => {
+                    avg10_centi = value
+                        .parse::<f64>()
+                        .ok()
+                        .map(|value| (value * 100.0).round() as u64);
+                }
+                "total" => total_usec = value.parse().ok(),
+                _ => {}
+            }
+        }
+        match kind {
+            "some" => {
+                pressure.some_avg10_centi = avg10_centi;
+                pressure.some_total_usec = total_usec;
+                seen = true;
+            }
+            "full" => {
+                pressure.full_avg10_centi = avg10_centi;
+                pressure.full_total_usec = total_usec;
+                seen = true;
+            }
+            _ => {}
+        }
+    }
+    seen.then_some(pressure)
 }
 
 /// `(user..steal summed, steal)` of the aggregate `/proc/stat` `cpu` line.

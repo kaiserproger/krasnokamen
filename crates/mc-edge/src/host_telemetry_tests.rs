@@ -25,6 +25,35 @@ fn cpu_stat_reads_usage_usec() {
     assert_eq!(cpu_stat_usage("user_usec 1\n"), None);
 }
 
+/// CPUQuota saturation: the throttle counters separate expensive code from too little CPU
+/// (PERF-RECEIPT-OMITS-CPU-SATURATION). Cumulative, so None when the kernel does not report them.
+#[test]
+fn cpu_stat_reads_the_throttle_counters() {
+    let text = "usage_usec 9\nnr_periods 900\nnr_throttled 17\nthrottled_usec 4242\n";
+    assert_eq!(cpu_stat_field(text, "nr_throttled"), Some(17));
+    assert_eq!(cpu_stat_field(text, "throttled_usec"), Some(4242));
+    assert_eq!(cpu_stat_field("nr_periods 900\n", "nr_throttled"), None);
+    // `nr_throttled_extra` must not answer for `nr_throttled`.
+    assert_eq!(cpu_stat_field("nr_throttled_extra 5\n", "nr_throttled"), None);
+}
+
+/// PSI memory saturation beside memory.current (PERF-RECEIPT-OMITS-MEMORY-PRESSURE).
+#[test]
+fn memory_pressure_parses_some_and_full() {
+    let text = "some avg10=0.45 avg60=0.10 avg300=0.02 total=987654\n\
+                full avg10=1.20 avg60=0.30 avg300=0.05 total=12345\n";
+    let pressure = parse_pressure(text).expect("a pressure file with both kinds");
+    assert_eq!(pressure.some_avg10_centi, Some(45));
+    assert_eq!(pressure.some_total_usec, Some(987_654));
+    assert_eq!(pressure.full_avg10_centi, Some(120));
+    assert_eq!(pressure.full_total_usec, Some(12_345));
+    assert_eq!(parse_pressure(""), None, "an empty file is unavailable, never zero");
+    // A truncated kernel without `full` still reports what it has.
+    let some_only = parse_pressure("some avg10=0.00 avg60=0.00 avg300=0.00 total=0\n")
+        .expect("some is present");
+    assert_eq!(some_only.full_total_usec, None);
+}
+
 /// `steal` is the eighth field; the total stops there because guest time
 /// is already inside `user`/`nice`; per-CPU lines are ignored.
 #[test]
@@ -58,6 +87,9 @@ fn missing_cgroup_reads_none() {
     let sample = sampler.sample();
     assert_eq!(sample.cgroup_memory_current_bytes, None);
     assert_eq!(sample.cgroup_cpu_usage_usec, None);
+    assert_eq!(sample.cgroup_cpu_nr_throttled, None);
+    assert_eq!(sample.cgroup_cpu_throttled_usec, None);
+    assert_eq!(sample.cgroup_memory_pressure, None);
     assert!(sample.sampled_unix_ns > 0);
 }
 

@@ -442,7 +442,27 @@ printf "%s\t%s\t%s\t%s\n" "$cg" "$MEMRUN_EST_KIB" "$MEMRUN_PREEMPTIBLE" "$MEMRUN
 [ "$MEMRUN_EXCLUSIVE" = 1 ] || { flock -u 3; exec 3>&-; }
 notify start
 "$@" <&0 3>&- 6>&- 7>&- 8>&- 9>&- & c=$!
-trap "kill -TERM $c 2>/dev/null" TERM INT HUP
+# A cancellation must reach the whole scope, not only the direct child: a descendant that ignores
+# TERM would otherwise hold the wrapper in `wait`, the scope alive and the build token unspent until
+# a SIGKILL (#G5, CS341). Forward TERM to every process in the scope cgroup and ask the guardian to
+# escalate to cgroup.kill after its grace, so the wrapper always ends.
+cancel() {
+  # One forwarding pass: the scope members get this TERM too, so re-entering the trap would
+  # recurse; a later signal is already covered by the guardian escalation.
+  [ "${cancel_done:-0}" = 1 ] && return
+  cancel_done=1
+  # The guardian owns escalation: tell it (its own fifo, not the watchdog events stream).
+  local fd
+  exec {fd}<>"$MEMRUN_GUARD_DIR/events"
+  printf "cancel\n" >&"$fd"
+  exec {fd}>&-
+  local pid
+  for pid in $(cat "/sys/fs/cgroup$cg/cgroup.procs" 2>/dev/null); do
+    [ "$pid" = "$$" ] && continue
+    kill -TERM "$pid" 2>/dev/null || true
+  done
+}
+trap cancel TERM INT HUP
 st=0
 wait "$c" || st=$?
 while kill -0 "$c" 2>/dev/null; do wait "$c" || st=$?; done
