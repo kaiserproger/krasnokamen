@@ -1,27 +1,37 @@
 # Owner decisions needed — D123Mechanics (from the control reviews, 2026-11-24)
 
-## 1. New-handler rows have no honest control — accept an absent-handler stub?
+## 1. New-handler rows — resolved by a real pre-image; one row still needs the owner
 
-Rows whose fix introduced a brand-new handler/module (or whose only written patched fix is a digest
-without a resolvable commit) cannot be reversed honestly: reversing the fix does not compile, and an
-early-return stub invents an a/-side the reviewers rejected. These rows are open, not
-fixed-unpromoted (the ledger has no such state):
+The control review rejected the stub a/-sides of these rows. Re-examined against the branch, each fix's
+*pre-image is the dispatch or decision point*, not a stub, and a HEAD-equivalent reverse of real prior
+code reproduces the row's symptom with a red at the row's own assertion:
 
-- FALL-002 (brush handler introduced by `35308579c`; `brushing.rs` module)
-- INTERACT-001 (axe handler; the pre-fix form of `vanilla_interact::axe` cannot be restored)
-- SPONGE (absorption pass added by `35308579c`)
-- COMMAND-CHILD-SENDER-DROPPED (the stored fix is `patch:d761f696…`; no commit to resolve)
-- TOTEM / DEATH-PROTECTION-COMPONENT (old control red was a fixture panic; the rescue entry is a
-  new-generation handler)
-- SPECIAL-001 (old control red was a fixture panic; pot/shelf storage module)
-- DATA-QUERY (its stored patch carried a synthetic a/-side; the HEAD pre-image needs archaeology of
-  `5c060d5df`/`0c6f68d8`)
+- `FALL-002` — the two `brushing::use_on` dispatch terms (`tick/input/interact.rs:330-332`,
+  `:625-627`); pre-fix the brush use was never reached. Patch `patch:414ec86d…`.
+- `INTERACT-001` — the `vanilla_interact::axe` term (`interact.rs:330-332`); pre-fix the axe use was
+  never reached. Patch `patch:db1440f9…`.
+- `SPONGE` — the `sponge::after_blocks` tick hook (`tick/dimension.rs:378-379`); pre-fix no absorption
+  pass ran after placement. Patch `patch:057a21dc…`.
+- `TOTEM` / `DEATH-PROTECTION-COMPONENT` — the rescue decision in `commit_damage`
+  (`tick/damage.rs:660-675`): the patch restores the pre-fix `died |= player.vitals.hurt(...)` form. Patch
+  `patch:6de54645…`.
+- `DATA-QUERY` — the `data` root routing in `command_context::native` (`:820-823`); the pre-fix partial
+  handler (`command_blocks::data`) no longer exists at HEAD, so the HEAD-equivalent reverse makes `/data`
+  unknown. Patch `patch:b23d0e10…`.
+- `COMMAND-CHILD-SENDER-DROPPED` — resolved outright: the real fix commit is `334c3f686`; its diff no
+  longer reverses after `76a539ea9`, and the HEAD-equivalent patch restores the root-context
+  `source_is_current` check. Patch `patch:b8374c6a…`; promoted with five red cargo refs.
 
-Question: accept an early-return stub as the *control* for these rows (documented as an adapted
-re-break in hunks.md), or keep them open until a real pre-image control exists?
+Which of these can be *promoted* depends only on the fresh real-client receipt for their registered
+scenario (the old receipts are on tree `0218c529e`; the candidate is later). No stub was used anywhere.
 
-My recommendation: keep them open; stubs as controls weaken the negative-control rule. If you accept
-stubs, each needs a one-line caveat in `promotions/<ID>.hunks.md` and I can re-promote them quickly.
+**Still needs the owner: `SPECIAL-001`.** `special_storage.rs` does not exist at `35308579c^`
+(`git show 35308579c^:crates/mc-core/src/special_storage.rs` = "does not exist"), and the pot/shelf
+behaviour has no pre-image at all — the module *is* the fix. Its two refs (`shelf::tests::…`,
+`interact_parity_tests::interact_parity_decorated_pot_stores_one_item`) cannot be red without an invented
+stub. Owner decision: accept a documented absent-module stub for this one row, split the row into
+"module exists + hydrates" (provable by a new loss test at HEAD) and "vanilla behaviour" (client gate), or
+keep it open.
 
 # Civilization lane — remaining non-ready rows (D123CivD, 2026-11-24)
 
