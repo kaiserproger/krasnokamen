@@ -1,0 +1,58 @@
+{
+  "id": "LEDGER-LAUNCHER-NO-LIB",
+  "verdict": "promoted",
+  "fix_commit": "a24ff7f93",
+  "fix_commit_full": "a24ff7f93bc70aeb47e74e133ac610b33e2a1529",
+  "promoted_at": "2026-11-23T15:30:40+00:00",
+  "tree_head": "c2692b269c24e147908d9aa382f28aa61a1d4287",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/harness/ledger.py"
+  ],
+  "kept_test_files": [
+    "tools/harness/test_regressions.py"
+  ],
+  "negative_control": {
+    "python:tools.harness.test_regressions:ClientRefTests.test_client_bin_only_package_uses_named_binary_target": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_regressions:ClientRefTests.test_client_bin_ref_cannot_pass_by_selecting_no_test": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_regressions:ClientRefTests.test_client_lib_package_uses_library_target": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_regressions:ClientRefTests.test_client_unknown_or_ambiguous_target_fails_closed": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_regressions:ClientRefTests.test_client_bin_only_package_uses_named_binary_target": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_regressions:ClientRefTests.test_client_bin_ref_cannot_pass_by_selecting_no_test": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_regressions:ClientRefTests.test_client_lib_package_uses_library_target": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_regressions:ClientRefTests.test_client_unknown_or_ambiguous_target_fails_closed": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T152434-ledger-promote-wkrnkdvk"
+}
