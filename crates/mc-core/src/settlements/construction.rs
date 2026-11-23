@@ -1497,11 +1497,9 @@ struct SitePass {
     report: site_refusals::Report,
     /// At least one kind's whole sweep still has candidates to examine.
     running: bool,
-    /// A kind whose own sweep ran unfinished in this pass already holds a legal
-    /// candidate, so its cheapest lot is worth holding the slot for. Scoped to
-    /// that same kind: an empty sweep, an invalidated candidate, or a stale
-    /// sweep of another kind (even a now-unfunded one that this pass never
-    /// advanced) never blocks other work.
+    /// A kind this pass advanced ran unfinished and already holds a legal
+    /// candidate: its cheapest lot is worth the slot. Another kind's sweep,
+    /// even a now-unfunded one, never blocks other work.
     waiting: bool,
     /// This pass really ran the catalog House's sweep (`advance` was called for
     /// a House kind, whatever it returned). The same catalog House can be
@@ -1547,7 +1545,7 @@ fn site_project<'a>(
     let mut cursor = start % count;
     let share = attempts / kinds.len().max(1) as u32;
     let mut running = false;
-    let mut waiting = false;
+    let mut advanced: Vec<&'a str> = Vec::with_capacity(kinds.len());
     let mut house_advanced = false;
     let mut survey = site_refusals::Survey::default();
     for blueprint in kinds {
@@ -1579,6 +1577,7 @@ fn site_project<'a>(
         if blueprint.kind == BuildingKind::House {
             house_advanced = true;
         }
+        advanced.push(blueprint.id.as_str());
         match site_refusals::advance(
             state,
             record,
@@ -1591,13 +1590,9 @@ fn site_project<'a>(
             &mut budget,
             &mut report,
         ) {
-            site_refusals::Advance::Incomplete { next, holding } => {
+            site_refusals::Advance::Incomplete(next) => {
                 cursor = next;
                 running = true;
-                // Only this same kind's sweep owns the hold: it advanced
-                // unfinished in this pass and already holds a legal candidate,
-                // so its cheapest lot is decided after the last frontage.
-                waiting |= holding;
             }
             site_refusals::Advance::Empty => {
                 cursor = 0;
@@ -1619,15 +1614,13 @@ fn site_project<'a>(
                     &mut report,
                 );
                 // A refused materialization is not an admission: an earlier
-                // kind's unfinished sweep that holds a lot still holds the
-                // slot. A materialized site takes precedence in the planning
-                // pass.
+                // kind's unfinished sweep that holds a lot keeps the slot.
                 return SitePass {
                     site,
                     cursor: 0,
                     report,
                     running,
-                    waiting,
+                    waiting: sweeps.holding(advanced.iter().copied()),
                     house_advanced,
                 };
             }
@@ -1638,7 +1631,8 @@ fn site_project<'a>(
         cursor,
         report,
         running,
-        waiting,
+        // Only the kinds this pass advanced own the hold.
+        waiting: sweeps.holding(advanced.iter().copied()),
         house_advanced,
     }
 }

@@ -1021,7 +1021,7 @@ fn a_stale_ranking_restarts_instead_of_admitting_the_old_winner() {
         &mut report,
     );
     assert!(
-        matches!(first, site_refusals::Advance::Incomplete { .. }),
+        matches!(first, site_refusals::Advance::Incomplete(_)),
         "one candidate cannot finish the sweep: {first:?}"
     );
     // Between passes the world moves: one plain interior column of A loses
@@ -1066,7 +1066,7 @@ fn a_stale_ranking_restarts_instead_of_admitting_the_old_winner() {
             &mut budget,
             &mut report,
         ) {
-            site_refusals::Advance::Incomplete { .. } => {}
+            site_refusals::Advance::Incomplete(_) => {}
             site_refusals::Advance::Empty => panic!("the plan keeps legal lots"),
             site_refusals::Advance::Cheapest(origin, rotation) => {
                 winner = Some((origin, rotation));
@@ -1162,7 +1162,7 @@ fn a_reordered_walk_of_the_same_length_restarts_the_sweep() {
         &mut budget,
         &mut report,
     );
-    assert!(matches!(first, site_refusals::Advance::Incomplete { .. }));
+    assert!(matches!(first, site_refusals::Advance::Incomplete(_)));
     // The walk is reordered, same length; the old cursor would skip the winner.
     hole(&mut state.world, column, air);
     let mut admitted = None;
@@ -1181,7 +1181,7 @@ fn a_reordered_walk_of_the_same_length_restarts_the_sweep() {
             &mut budget,
             &mut report,
         ) {
-            site_refusals::Advance::Incomplete { .. } => {}
+            site_refusals::Advance::Incomplete(_) => {}
             site_refusals::Advance::Empty => panic!("the plan keeps legal lots"),
             site_refusals::Advance::Cheapest(origin, rotation) => {
                 admitted = Some((origin, rotation));

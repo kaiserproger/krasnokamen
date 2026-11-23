@@ -110,7 +110,12 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // its replanting proof into construction_replant.rs: 1209. Measured
         // 1136 on main 31c50392e (drift after the 1209 entry: the SpainBuilders
         // site withdrawal and the wave-1 relayout merges), 2026-11-19.
-        ("settlements/construction.rs", 1_136),
+        // CIV-UNFUNDED-SITE-SWEEP (D123), 2026-11-23: a sweep's slot hold is
+        // scoped to the kinds the pass advanced (`advanced`, `house_advanced`
+        // and the ordinary-revisit merge): 1142. The next extraction candidate
+        // is `site_project` itself, which belongs beside the sweeps it drives
+        // in `construction_site_refusals.rs`.
+        ("settlements/construction.rs", 1_142),
         // B3 (EdgeScale, 2026-11-18): the edge-visible unlocked-session mirror
         // is projected only when its inputs move, so `Connections` carries one
         // membership generation and advances it in `insert`,

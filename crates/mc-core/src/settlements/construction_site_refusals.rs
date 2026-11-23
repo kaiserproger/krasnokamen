@@ -223,6 +223,15 @@ impl Sweeps {
             .retain(|id, sweep| !sweep_stale(id, sweep, blueprint, frontages, topology));
     }
 
+    /// Some unfinished sweep of these kinds already holds a legal candidate.
+    /// A retained sweep of a kind this pass did not advance (its funding was
+    /// withdrawn) must not hold the slot for other work.
+    pub(super) fn holding<'a>(&self, kinds: impl IntoIterator<Item = &'a str>) -> bool {
+        kinds
+            .into_iter()
+            .any(|kind| self.live.get(kind).is_some_and(|sweep| sweep.best.is_some()))
+    }
+
     /// Candidates this blueprint's live sweep has examined (test observer).
     #[cfg(test)]
     pub(super) fn examined(&self, blueprint: &str) -> Option<u32> {
@@ -263,9 +272,7 @@ fn distance_sq(a: [i32; 3], b: [i32; 3]) -> i64 {
 #[derive(Debug)]
 pub(super) enum Advance {
     /// The sweep is unfinished; nothing may be admitted from it yet.
-    /// `holding` says this same sweep already holds a legal candidate, so its
-    /// cheapest lot is decided only after the last frontage.
-    Incomplete { next: u32, holding: bool },
+    Incomplete(u32),
     /// A complete sweep found no legal lot.
     Empty,
     /// The complete sweep's cheapest legal lot; equal costs go to the lot
@@ -455,10 +462,7 @@ pub(super) fn advance(
     }
     if sweep.next < sweep.frontages {
         let next = (sweep.start + sweep.next) % sweep.frontages;
-        return Advance::Incomplete {
-            next,
-            holding: sweep.best.is_some(),
-        };
+        return Advance::Incomplete(next);
     }
     let best = sweeps
         .live
@@ -481,12 +485,9 @@ pub(super) fn advance(
         Some(&floors[usize::from(rotation) % 4]),
     ) {
         Ok(cost) if cost == stored => Advance::Cheapest(origin, rotation),
-        // The world moved under the stored candidate: it is gone, so this
-        // restart owns no hold until it ranks a new one.
-        Ok(_) | Err(_) => Advance::Incomplete {
-            next: 0,
-            holding: false,
-        },
+        // The world moved under the stored candidate: it is gone (the sweep was
+        // removed above), so this restart holds nothing.
+        Ok(_) | Err(_) => Advance::Incomplete(0),
     }
 }
 
