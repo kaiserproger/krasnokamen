@@ -93,6 +93,72 @@ fn missing_cgroup_reads_none() {
     assert!(sample.sampled_unix_ns > 0);
 }
 
+/// A temporary cgroup directory named by the test: the production `sample()` reads exactly these
+/// files, so the registered refs fail at their assertion when the sample wiring is reversed — the
+/// parse helpers above cannot be refs, they would stop compiling instead of going red.
+fn fixture_cgroup(name: &str, files: &[(&str, &str)]) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "krasnokamen-host-telemetry-{}-{name}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("fixture cgroup directory");
+    for (file, text) in files {
+        std::fs::write(dir.join(file), text).expect("fixture cgroup file");
+    }
+    dir
+}
+
+/// PERF-RECEIPT-OMITS-CPU-SATURATION on the server: the sample carries the throttle counters.
+#[test]
+fn sampler_reads_the_throttle_counters_from_the_cgroup_fixture() {
+    let dir = fixture_cgroup(
+        "cpu-stat",
+        &[(
+            "cpu.stat",
+            "usage_usec 123456789\nuser_usec 100\nsystem_usec 23\nnr_periods 900\n\
+             nr_throttled 17\nthrottled_usec 4242\n",
+        )],
+    );
+    let sampler = HostSampler {
+        cgroup: Some(dir.clone()),
+        last_window: None,
+    };
+    let sample = sampler.sample();
+    std::fs::remove_dir_all(&dir).ok();
+    assert_eq!(sample.cgroup_cpu_usage_usec, Some(123_456_789));
+    assert_eq!(sample.cgroup_cpu_nr_throttled, Some(17));
+    assert_eq!(sample.cgroup_cpu_throttled_usec, Some(4242));
+}
+
+/// PERF-RECEIPT-OMITS-MEMORY-PRESSURE on the server: the sample carries the cgroup PSI.
+#[test]
+fn sampler_reads_memory_pressure_from_the_cgroup_fixture() {
+    let dir = fixture_cgroup(
+        "memory-pressure",
+        &[(
+            "memory.pressure",
+            "some avg10=0.45 avg60=0.10 avg300=0.02 total=987654\n\
+             full avg10=1.20 avg60=0.30 avg300=0.05 total=12345\n",
+        )],
+    );
+    let sampler = HostSampler {
+        cgroup: Some(dir.clone()),
+        last_window: None,
+    };
+    let sample = sampler.sample();
+    std::fs::remove_dir_all(&dir).ok();
+    assert_eq!(
+        sample.cgroup_memory_pressure,
+        Some(MemoryPressure {
+            some_avg10_centi: Some(45),
+            some_total_usec: Some(987_654),
+            full_avg10_centi: Some(120),
+            full_total_usec: Some(12_345),
+        })
+    );
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn live_linux_sample_reads_proc() {

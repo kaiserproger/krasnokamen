@@ -1323,13 +1323,18 @@ def memory_pressure(root: Path = Path("/sys/fs/cgroup"), procs: Path = Path("/pr
     return result
 
 
-def host_receipt(out: Path) -> dict[str, Any]:
+def host_receipt(out: Path, *, cpu_root: Path = Path("/sys/devices/system/cpu"),
+                 cgroup_root: Path = Path("/sys/fs/cgroup"),
+                 procs: Path = Path("/proc/self/cgroup"),
+                 host_pressure: Path = Path("/proc/pressure/memory")) -> dict[str, Any]:
+    """The host state that changes a run's meaning. The path arguments exist so a test can drive
+    the production receipt from a temporary sysfs/cgroup tree instead of asserting only key shapes."""
     def capture(command: list[str]) -> str:
         return subprocess.check_output(command, text=True).strip()
     return {"cpu": json.loads(capture(["lscpu", "--json"])),
-            "cpu_scaling": cpu_scaling(),
-            "cgroup_cpu": cgroup_cpu_stat(),
-            "memory_pressure": memory_pressure(),
+            "cpu_scaling": cpu_scaling(cpu_root),
+            "cgroup_cpu": cgroup_cpu_stat(cgroup_root, procs),
+            "memory_pressure": memory_pressure(cgroup_root, procs, host_pressure),
             "memory": Path("/proc/meminfo").read_text(), "os": platform.freedesktop_os_release(),
             "kernel": platform.uname()._asdict(),
             "disks": json.loads(capture(["lsblk", "--json", "-o", "NAME,MODEL,SIZE,ROTA,FSTYPE,MOUNTPOINTS"])),
