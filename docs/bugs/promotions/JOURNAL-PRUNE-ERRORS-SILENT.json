@@ -1,0 +1,30 @@
+{
+  "id": "JOURNAL-PRUNE-ERRORS-SILENT",
+  "verdict": "promoted",
+  "fix_commit": "patch:a91be6b8f6fe65a21f2e54f42f97b092d8a3f2d8f0d0887a435cbd9b2f211c9d",
+  "fix_commit_full": "patch:a91be6b8f6fe65a21f2e54f42f97b092d8a3f2d8f0d0887a435cbd9b2f211c9d",
+  "promoted_at": "2026-11-23T15:47:47+00:00",
+  "tree_head": "ec44ff6890372e34384c1ab196d31a2ab7d86eee",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "a91be6b8f6fe65a21f2e54f42f97b092d8a3f2d8f0d0887a435cbd9b2f211c9d",
+  "reversed_files": [
+    "crates/mc-core/src/journal.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:journal_tests::prune_reports_and_counts_a_refused_removal": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:journal_tests::prune_reports_and_counts_a_refused_removal": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261123T154353-ledger-promote-dh2imfj2"
+}
