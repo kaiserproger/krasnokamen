@@ -1498,7 +1498,8 @@ fn column_cells(
 }
 
 /// The cells one wall stretch or gatehouse still owes: `Some(None)` when it
-/// stands, `None` when part of it is not loaded.
+/// stands, `None` when part of it is not loaded or when a column it still owes
+/// has no builder stand beside it (such a stretch is not planned at all).
 fn span_work(state: &TickState, record: &SettlementRecord, span: Span) -> Option<Option<Work>> {
     let anchor = record.anchor;
     let cobble = state.registry.states.cobblestone;
@@ -1529,19 +1530,20 @@ fn span_work(state: &TickState, record: &SettlementRecord, span: Span) -> Option
             } else {
                 vec![cobble; GATE_HEIGHT]
             };
-            cells.extend(column_cells(state, record, [x, z], cobble, &profile)?);
+            let owed = column_cells(state, record, [x, z], cobble, &profile)?;
+            // A column with no builder stand beside it would prepare and then
+            // stall the whole stretch until the next cancellation admits it
+            // again, so a stretch that owes work on such a column is not
+            // planned at all.
+            if !owed.is_empty()
+                && stand_columns(anchor, span.kind, x, z)
+                    .into_iter()
+                    .all(|[sx, sz]| construction::surface_y(state, anchor[1], sx, sz).is_none())
+            {
+                return None;
+            }
+            cells.extend(owed);
         }
-    }
-    // A column with no builder stand beside it would prepare and then stall the
-    // whole stretch until the next cancellation admits it again, so a stretch
-    // that owes work on such a column is not planned at all.
-    let owed: HashSet<[i32; 2]> = cells.iter().map(|cell| [cell.at[0], cell.at[2]]).collect();
-    if owed.iter().any(|&[x, z]| {
-        stand_columns(anchor, span.kind, x, z)
-            .into_iter()
-            .all(|[sx, sz]| construction::surface_y(state, anchor[1], sx, sz).is_none())
-    }) {
-        return None;
     }
     Some(work_of(cells))
 }
