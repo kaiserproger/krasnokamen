@@ -6,5 +6,5 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "receipts/Books/REPORT-R2.md finding R2-3 (Bakhvalov 8.1, Drepper; perf, H5). ReadRow = 248 B (PREP_MICRO size_of_read_row=248, receipts/CritiqueTriage/prep-100k.log:4, prep-1m.log:4); prepare_rows (crates/mc-core/src/tick/entity_phase.rs) fills out.rows and tick/system_graph.rs runs step_entity(*row, ctx) by value per entity; the repo micro parallel_row_prep_algorithm_micro measured 46.267 ms (parallel) / 88.081 ms (serial) over 4 iterations at 1M rows (prep-1m.log:7-8). Verified open on main 5bdc02911 (system_graph.rs: |row: &ReadRow| row.alive.then(|| step_entity(*row, ctx)); worker_snapshot_keeps_rare_state_in_entity_store asserts only <= 256 B). Fix shape: (a) take &ReadRow in the closure and step_entity (only three passive_follow::idle call sites keep a *row copy), (b) move the two Option<[f64;3]> target fields (32 B each) into a rare side vector (64 B off the row); tighten the 256 B assertion into a real ratchet."
-regression = []
+regression = ["cargo:mc-core:tick::system_graph::tests::step_entity_borrows_its_row", "cargo:mc-core:entity_phase_tests::worker_snapshot_keeps_rare_state_in_entity_store"]
 failing_first = "not recorded"

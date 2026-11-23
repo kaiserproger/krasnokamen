@@ -6,5 +6,5 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "Files this gap as promised by the R6 amendment 2 (CrowdPush): the physics fix widens the vanilla `VoxelShape.collideX`/`collideZ` face tolerance (`clip >= -1.0E-7`, `clip <= 1.0E-7`) for the horizontal axes and adds the `sweep_axis_interval` contact clamp, which covers `resolve_until_first_impact` and the horizontal sweep. `clip_y` in crates/mc-physics/src/lib.rs is unchanged and still skips a face it is within the tolerance of, so the vertical paths that use it (`resolve_axes`) keep the pre-R6 behaviour. Not reproduced as a failure; no test covers a body resting 1 ULP inside a floor or ceiling. Needs an audit of `VoxelShape.collideY` in the local 26.1.2 oracle and a regression on the vertical faces before any 26.1.2 parity claim."
-regression = []
+regression = ["cargo:mc-physics:physics_tests::clip_y_snaps_a_body_resting_within_the_contact_tolerance_of_a_face"]
 failing_first = "not recorded"
