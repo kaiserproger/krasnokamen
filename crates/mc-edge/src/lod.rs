@@ -177,6 +177,17 @@ pub(crate) fn encode_tile(
     out
 }
 
+/// Queue a tile sampled under the generation captured before the sample. A
+/// reliable dimension reset while sampling makes the writer discard the frame
+/// instead of applying an old-dimension tile in the new one.
+fn enqueue_sampled(
+    sender: &crate::server::WorldSender,
+    sampled_at: u64,
+    frame: bytes::Bytes,
+) -> bool {
+    sender.try_send_at(sampled_at, frame).is_ok()
+}
+
 fn varint(out: &mut Vec<u8>, mut value: u32) {
     loop {
         if value < 0x80 {
@@ -291,6 +302,15 @@ impl LodConnection {
                 let Ok(_permit) = workers.acquire_owned().await else {
                     return;
                 };
+                // Captured before the sample: a dimension reset while the tile
+                // is being sampled must make the writer discard it.
+                let Some(sampled_at) = server
+                    .connections
+                    .get(connection)
+                    .map(|handles| handles.world_tx.generation())
+                else {
+                    return;
+                };
                 let hub = Arc::clone(&server.hub);
                 let samples = tokio::task::spawn_blocking(move || {
                     hub.lod_tile(
@@ -317,7 +337,7 @@ impl LodConnection {
                     return;
                 };
                 if let Some(handles) = server.connections.get(connection)
-                    && handles.world_tx.try_send(frame).is_ok()
+                    && enqueue_sampled(&handles.world_tx, sampled_at, frame)
                 {
                     tracing::debug!(
                         connection = connection.0,
@@ -359,6 +379,38 @@ impl Drop for Done {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A tile sampled before a reliable dimension reset must not reach the new
+    /// dimension: the frame carries the generation captured at sample start and
+    /// the writer discards it, releasing its queued credit.
+    #[test]
+    fn tile_sampled_before_a_dimension_reset_is_dropped() {
+        let (sender, mut receiver) = crate::server::world_queue(4, 256);
+        let sampled_at = sender.generation();
+        sender.reset();
+        assert!(enqueue_sampled(
+            &sender,
+            sampled_at,
+            bytes::Bytes::from(vec![1u8; 32])
+        ));
+        assert!(matches!(
+            receiver.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+        ));
+        assert_eq!(
+            sender.queued_bytes(),
+            0,
+            "the discarded tile released its queued bytes"
+        );
+        // A tile sampled after the reset is delivered.
+        let sampled_at = sender.generation();
+        assert!(enqueue_sampled(
+            &sender,
+            sampled_at,
+            bytes::Bytes::from(vec![2u8; 16])
+        ));
+        assert_eq!(receiver.try_recv().unwrap().len(), 16);
+    }
 
     #[test]
     fn request_round_trips_and_rejects_malformed() {
