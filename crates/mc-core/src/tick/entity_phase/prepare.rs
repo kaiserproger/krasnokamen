@@ -421,9 +421,17 @@ pub(in crate::tick) fn read_row(
     let hops = blueprint.is_some_and(|blueprint| blueprint.capabilities.hops);
     let hop_delay_scale =
         blueprint.map_or(1, |blueprint| blueprint.capabilities.hop_delay_scale.max(1));
-    let aggressive = blueprint
-        .is_some_and(|blueprint| blueprint.capabilities.hop_always_aggressive)
-        || view.hostile.targets.contains_key(&body.id);
+    // `Slime$SlimeMoveControl.tick` divides the delay by three only while its
+    // move control is aggressive: `SlimeAttackGoal` sets that when a target
+    // exists and `isDealsDamage` holds (any magma size, slime size > 1;
+    // `Slime.isDealsDamage`, `MagmaCube.canDealDamage`). An idle hopper keeps
+    // the full delay.
+    let has_retained_target = view.hostile.targets.contains_key(&body.id);
+    let aggressive = hops
+        && has_retained_target
+        && blueprint.is_some_and(|blueprint| {
+            blueprint.capabilities.hop_lift_per_size > 0.0 || row.loot.slime_size.unwrap_or(1) > 1
+        });
     let hop_tick = hops
         && !row.controls.no_ai
         && crate::entity_motion::hop_due(body.id.0, view.tick, hop_delay_scale, aggressive);
@@ -506,7 +514,7 @@ pub(in crate::tick) fn read_row(
     let read = ReadRow {
         think,
         battle,
-        has_retained_target: view.hostile.targets.contains_key(&body.id),
+        has_retained_target,
         retain_target: !battle && blueprint.is_some_and(crate::hostile::retains_target),
         enderman_target: rare.enderman_target,
         plugin_target: rare.plugin_target,

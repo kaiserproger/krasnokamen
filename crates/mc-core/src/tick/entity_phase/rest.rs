@@ -104,12 +104,13 @@ pub(in crate::tick) fn early_entity_rest(
     // A hop tick is a decision tick even in rings that would otherwise rest:
     // refuse before the ring/footprint shortcut, not only before the memo.
     if let crate::entities::EntityKind::Mob { type_id } = body.kind
-        && !view.entities.row(slot).controls.no_ai
         && let Some(blueprint) = view.registry.blueprint(type_id)
         && blueprint.capabilities.hops
+        && !view.entities.row(slot).controls.no_ai
     {
-        let aggressive = blueprint.capabilities.hop_always_aggressive
-            || view.hostile.targets.contains_key(&body.id);
+        let aggressive = (blueprint.capabilities.hop_lift_per_size > 0.0
+            || view.entities.row(slot).loot.slime_size.unwrap_or(1) > 1)
+            && view.hostile.targets.contains_key(&body.id);
         if crate::entity_motion::hop_due(
             body.id.0,
             view.tick,

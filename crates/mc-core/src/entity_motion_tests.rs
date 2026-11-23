@@ -264,6 +264,11 @@ fn an_aggressive_body_divides_its_scaled_jump_delay_by_three() {
             ticks.len(),
             calm.len()
         );
+        let idle_period = calm[1] - calm[0];
+        assert!(
+            (10 * scale..=29 * scale).contains(&idle_period),
+            "an idle hopper keeps the full delay: {idle_period}"
+        );
     }
 }
 

@@ -99,9 +99,12 @@ add up to a damaging fall. This does not grant fall immunity: a detached free
 fall still accumulates distance and damages spiders on landing.
 
 Slime and magma-cube locomotion is the `hops` capability family
-(`hops`, `hop_delay_scale`, `hop_lift_per_size`, `hop_always_aggressive`):
+(`hops`, `hop_delay_scale`, `hop_lift_per_size`):
 `Slime$SlimeMoveControl` has no ground traction, jumps every
-`getJumpDelay()` (`random(20)+10`, divided by three while aggressive),
+`getJumpDelay()` (`random(20)+10`, divided by three while the move control is
+aggressive: `SlimeAttackGoal` sets it only with a retained target and
+`isDealsDamage` — any magma cube size, a slime of size > 1 (`Slime.isDealsDamage`,
+`MagmaCube.canDealDamage`); an idle hopper keeps 40..116 ticks),
 `MagmaCube.getJumpDelay` multiplies that by four and `jumpFromGround` adds
 `size*0.1` blocks/tick. Both keep the head on the body. The native cadence is a
 deterministic phase on an absolute tick clock, not vanilla's delay counted only

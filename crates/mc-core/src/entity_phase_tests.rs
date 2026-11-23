@@ -1446,6 +1446,41 @@ fn far_idle_slime_does_not_rest_on_its_hop_tick() {
 }
 
 #[test]
+fn only_a_damaging_hopper_with_a_target_divides_its_delay() {
+    // `SlimeAttackGoal` makes the move control aggressive only when a target
+    // exists and `isDealsDamage` holds (slime size > 1, any magma size); an idle
+    // magma cube therefore keeps the loop's 40..116 tick delay.
+    for (name, size, target, expected) in [
+        ("minecraft:magma_cube", 1, false, false),
+        ("minecraft:magma_cube", 1, true, true),
+        ("minecraft:slime", 1, true, false),
+        ("minecraft:slime", 4, true, true),
+        ("minecraft:slime", 4, false, false),
+    ] {
+        let (mut state, slot) = resting_mob(name);
+        state.entities.row_mut(slot).loot.slime_size = Some(size);
+        let id = state.entities.body(slot).id;
+        if target {
+            state.hostile.targets.insert(
+                id,
+                (
+                    (crate::boundary::EntityId(id.0 + 1), [8.0, 101.0, 8.0]),
+                    1.5,
+                ),
+            );
+        }
+        state.entities.prepare_motion_hints(&state.registry);
+        let flags = state.entities.motion_flags(slot);
+        let view = PrepView::of(&state);
+        let (row, _) = read_row(&view, slot, flags, 1, &RarePrep::of(&state, slot));
+        assert_eq!(
+            row.hop_aggressive, expected,
+            "{name} size {size} target {target}"
+        );
+    }
+}
+
+#[test]
 fn far_slime_hop_tick_is_an_ai_decision_tick() {
     // `think |= hop_tick`: without it a mid/far slime whose activation ring does
     // not decide would hop only on decision phases and some never line up.
