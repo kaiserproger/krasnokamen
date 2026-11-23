@@ -1,0 +1,317 @@
+diff --git a/crates/mc-core/src/dimensions_tests.rs b/crates/mc-core/src/dimensions_tests.rs
+index 13ecf6e5a..d066d434d 100644
+--- a/crates/mc-core/src/dimensions_tests.rs
++++ b/crates/mc-core/src/dimensions_tests.rs
+@@ -1826,6 +1826,62 @@ fn anchor_respawn_waits_for_loaded_area_and_consumes_one_charge() {
+     assert_eq!(state.players[&bob].respawn_point, None);
+ }
+ 
++/// A respawn into another dimension spends the anchor charge at the
++/// coordinator boundary. The published Nether projection carries that block
++/// change, so its chunk image and revision must carry the spent charge too.
++#[test]
++fn cross_dimension_anchor_respawn_publishes_the_spent_charge_in_its_chunk_image() {
++    let (mut state, alice, _) = worlds();
++    let nether = state.other_dimensions.get_mut(&Dimension::Nether).unwrap();
++    load_spawn_area(nether);
++    nether.tickets.insert(
++        "anchor-respawn".into(),
++        (mc_world::ChunkPos { x: 0, z: 0 }, 1),
++    );
++    let anchor = block(nether, "respawn_anchor");
++    let charged = rules::anchor_state(nether, anchor, 2).unwrap();
++    let spent = rules::anchor_state(nether, anchor, 1).unwrap();
++    nether.world.set_block(4, 150, 4, charged);
++    nether.world.fold_overlay();
++    let player = state.players.get_mut(&alice).unwrap();
++    player.respawn_point = Some([4, 150, 4]);
++    player.respawn_dimension = Dimension::Nether;
++    player.respawn_forced = false;
++    let (killed, _) = command(&mut state, 1, "kill");
++    let image = |output: &crate::boundary::TickOutput| {
++        let chunk = output.snapshot.dimensions[&Dimension::Nether]
++            .snapshot
++            .chunks
++            .iter()
++            .find(|chunk| (chunk.pos.x, chunk.pos.z) == (0, 0))
++            .unwrap();
++        (chunk.revision, chunk.chunk.get_block(4, 150, 4))
++    };
++    let (before, _) = image(&killed);
++    let (respawned, _, _) = crate::tick::run_tick(
++        &mut state,
++        &[PlayerInput::Respawn {
++            connection: ConnectionId(1),
++        }],
++    );
++    assert_eq!(travel::locate(&state, alice).unwrap().0, Dimension::Nether);
++    let anchor_at = crate::boundary::BlockPos { x: 4, y: 150, z: 4 };
++    assert!(
++        respawned.snapshot.dimensions[&Dimension::Nether]
++            .changes
++            .blocks
++            .iter()
++            .any(|change| change.position == anchor_at && change.state == spent),
++        "the coordinator respawn spends the charge in this tick"
++    );
++    let (revision, published) = image(&respawned);
++    assert_eq!(published, Some(mc_world::BlockStateId(spent)));
++    assert_ne!(
++        revision, before,
++        "the spent charge moves the chunk revision"
++    );
++}
++
+ #[test]
+ fn nether_bucket_water_evaporates_but_cauldron_retains_it() {
+     let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
+diff --git a/crates/mc-core/src/dimensions_travel.rs b/crates/mc-core/src/dimensions_travel.rs
+index 4f1413120..f4ff18916 100644
+--- a/crates/mc-core/src/dimensions_travel.rs
++++ b/crates/mc-core/src/dimensions_travel.rs
+@@ -677,6 +677,12 @@ fn refresh(world: &mut TickState, output: &mut TickOutput, mut changes: ChangeSe
+     snapshot.raining = world.weather.0 != crate::commands::Weather::Clear;
+     snapshot.rain_level = world.rain_level;
+     snapshot.thunder_level = world.thunder_level;
++    // Coordinator writers (a respawn consuming an anchor charge, a command
++    // placing a block directly) leave their post-images in the overlay. Fold
++    // them so every block change appended below ships in this chunk image and
++    // revision: the edge explains a later revision by that tick's own block
++    // and light changes, so a fold left to the next tick is never resent.
++    world.world.fold_overlay();
+     snapshot.chunks = world.world.snapshot();
+     let chunks_done = phase_start.map(|start| start.elapsed()).unwrap_or_default();
+     if entity_changes {
+diff --git a/crates/mc-edge/src/plan/coordinator_block_tests.rs b/crates/mc-edge/src/plan/coordinator_block_tests.rs
+new file mode 100644
+index 000000000..5c2efa925
+--- /dev/null
++++ b/crates/mc-edge/src/plan/coordinator_block_tests.rs
+@@ -0,0 +1,213 @@
++//! A block the core writes at its dimension coordinator (here a cross-dimension
++//! respawn spending an anchor charge) reaches a viewer already holding the chunk.
++use super::*;
++use mc_core::boundary::PlayerInput;
++use mc_core::dimensions::Dimension;
++use mc_core::registry::CoreRegistry;
++use mc_core::tick::{TickState, run_tick};
++use mc_protocol::packets::play::{
++    BlockUpdate, ForgetLevelChunk, LevelChunkWithLight, SectionBlocksUpdate, pack_section_pos,
++    pack_section_relative_pos,
++};
++
++const ANCHOR: [i32; 3] = [4, 150, 4];
++
++fn world(dimension: Dimension, registry: &Arc<CoreRegistry>) -> TickState {
++    let blocks = Arc::clone(&registry.blocks);
++    let generator: Arc<dyn mc_world::ChunkGenerator> = match dimension {
++        Dimension::Nether => Arc::new(mc_worldgen::NetherGenerator::try_new(42, blocks).unwrap()),
++        _ => Arc::new(mc_worldgen::TerrainGenerator::new(42, blocks)),
++    };
++    let world = mc_core::world::ChunkWorld::new(
++        42,
++        generator,
++        registry,
++        mc_world::BlockStateId(registry.states.air),
++        [8, 150, 8],
++        dimension.geometry(),
++    );
++    let mut state = TickState::new(Arc::clone(registry), world, 0, 4096);
++    state.dimension = dimension;
++    state.gamerules.insert("spawn_mobs".into(), "false".into());
++    // Respawns wait for the 3x3 area around the spawn and the respawn point.
++    let centre = mc_world::ChunkPos { x: 0, z: 0 };
++    state
++        .tickets
++        .insert("coordinator-block".into(), (centre, 1));
++    let want = (-1..=1)
++        .flat_map(|x| (-1..=1).map(move |z| (mc_world::ChunkPos { x, z }, 0)))
++        .collect();
++    state.world.ensure_blocking(&want);
++    for x in 0..16 {
++        for z in 0..16 {
++            state.world.set_block(x, 149, z, registry.states.stone);
++        }
++    }
++    state.world.fold_overlay();
++    state
++}
++
++fn tick(root: &mut TickState, inputs: &[PlayerInput]) -> TickOutput {
++    run_tick(root, inputs).0
++}
++
++fn command(root: &mut TickState, connection: u64, command: &str) -> TickOutput {
++    tick(
++        root,
++        &[PlayerInput::Command {
++            connection: ConnectionId(connection),
++            command: command.into(),
++            permission_level: 2,
++        }],
++    )
++}
++
++fn anchor(registry: &CoreRegistry, charges: u8) -> u32 {
++    registry
++        .blocks
++        .by_name_and_props(
++            &mc_data::Identifier::parse("minecraft:respawn_anchor").unwrap(),
++            &[("charges".into(), charges.to_string())],
++        )
++        .unwrap()
++        .0
++}
++
++/// Apply one planned packet to the client's view of the anchor cell. A chunk
++/// placeholder stands for the frame of the planned output (the frame cache is
++/// keyed by its revision), so the model reads the cell from that snapshot.
++fn apply(client: &mut Option<u32>, packet: &PlannedPacket, output: &TickOutput) {
++    let [x, y, z] = ANCHOR;
++    if let Some(chunk) = packet.chunk {
++        assert_eq!(packet.id, LevelChunkWithLight::ID);
++        if chunk == (0, 0) {
++            let image = output.in_dimension(Dimension::Nether).unwrap();
++            *client = find_chunk(&image.snapshot.chunks, chunk)
++                .and_then(|chunk| chunk.chunk.get_block(x as u8, y, z as u8))
++                .map(|state| state.0);
++        }
++        return;
++    }
++    let body = body_of(packet);
++    if packet.id == BlockUpdate::ID {
++        let update = BlockUpdate::decode(&mut &body[..]).unwrap();
++        if update.position == pack_block_pos(x, y, z) {
++            *client = Some(update.state_id as u32);
++        }
++    } else if packet.id == SectionBlocksUpdate::ID {
++        let update = SectionBlocksUpdate::decode(&mut &body[..]).unwrap();
++        if update.section_pos == pack_section_pos(x >> 4, y >> 4, z >> 4) {
++            for change in update.changes {
++                if change.relative_pos == pack_section_relative_pos(x, y, z) {
++                    *client = Some(change.state_id as u32);
++                }
++            }
++        }
++    } else if packet.id == ForgetLevelChunk::ID {
++        let forget = ForgetLevelChunk::decode(&mut &body[..]).unwrap();
++        if (forget.chunk_x, forget.chunk_z) == (0, 0) {
++            *client = None;
++        }
++    }
++}
++
++/// One viewer's planner and its client's view of the anchor cell.
++struct Client {
++    viewer: ViewerState,
++    anchor: Option<u32>,
++    cache: ChunkPacketCache,
++}
++
++impl Client {
++    /// Plan every published output in order, as the pump does, and apply it.
++    fn publish(&mut self, output: TickOutput) -> TickOutput {
++        for packet in plan_viewer(&output, &mut self.viewer, 0, &self.cache) {
++            apply(&mut self.anchor, &packet, &output);
++        }
++        output
++    }
++}
++
++/// Bob holds the Nether chunk with a charged anchor while Alice, dead in the
++/// Overworld, respawns at that anchor. The coordinator spends the charge and
++/// the next tick's light follows it; Bob's client must end with the spent
++/// anchor, not the charged one it held.
++#[test]
++fn coordinator_respawn_anchor_charge_reaches_a_viewer_holding_the_chunk() {
++    let content = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
++    let registry = Arc::new(CoreRegistry::load(Some(&content)).unwrap());
++    let mut root = world(Dimension::Overworld, &registry);
++    let mut nether = world(Dimension::Nether, &registry);
++    nether
++        .world
++        .set_block(ANCHOR[0], ANCHOR[1], ANCHOR[2], anchor(&registry, 2));
++    nether.world.fold_overlay();
++    root.other_dimensions
++        .insert(Dimension::Nether, Box::new(nether));
++    tick(
++        &mut root,
++        &[1, 2].map(|id: u64| PlayerInput::Join {
++            connection: ConnectionId(id),
++            uuid: uuid::Uuid::from_u128(u128::from(id)),
++            name: if id == 1 { "Alice" } else { "Bob" }.into(),
++            permission_level: 0,
++        }),
++    );
++    let alice = root.connections.entity_of(ConnectionId(1)).unwrap();
++    let bob = root.connections.entity_of(ConnectionId(2)).unwrap();
++    command(&mut root, 2, "execute in the_nether run tp Bob 8 150 8");
++    let player = root.players.get_mut(&alice).unwrap();
++    player.respawn_point = Some(ANCHOR);
++    player.respawn_dimension = Dimension::Nether;
++    player.respawn_forced = false;
++
++    let mut viewer = ViewerState::new(ConnectionId(2), bob, [8.5, 150.0, 8.5]);
++    viewer.dimension = Dimension::Nether;
++    viewer.chunk_batches.lock().acknowledge(64.0);
++    let mut client = Client {
++        viewer,
++        anchor: None,
++        cache: ChunkPacketCache::new(),
++    };
++    for _ in 0..3 {
++        client.publish(tick(&mut root, &[]));
++    }
++    assert_eq!(
++        client.anchor,
++        Some(anchor(&registry, 2)),
++        "Bob holds the charged anchor"
++    );
++    client.publish(command(&mut root, 1, "kill"));
++    let respawned = client.publish(tick(
++        &mut root,
++        &[PlayerInput::Respawn {
++            connection: ConnectionId(1),
++        }],
++    ));
++    let at = mc_world::chunk::BlockPos {
++        x: ANCHOR[0],
++        y: ANCHOR[1],
++        z: ANCHOR[2],
++    };
++    assert!(
++        respawned
++            .in_dimension(Dimension::Nether)
++            .unwrap()
++            .changes
++            .blocks
++            .iter()
++            .any(|change| change.position == at && change.state == anchor(&registry, 1)),
++        "the coordinator spends the charge in the respawn tick"
++    );
++    for _ in 0..3 {
++        client.publish(tick(&mut root, &[]));
++    }
++    let nether = &root.other_dimensions[&Dimension::Nether];
++    assert!(nether.players.contains_key(&alice));
++    let server = nether.world.block_at(ANCHOR[0], ANCHOR[1], ANCHOR[2]);
++    assert_eq!(server, Some(anchor(&registry, 1)));
++    assert_eq!(
++        client.anchor, server,
++        "Bob's client converges to the spent anchor"
++    );
++}
+diff --git a/crates/mc-edge/src/plan_tests.rs b/crates/mc-edge/src/plan_tests.rs
+index 46d6b6181..35dfb6bcb 100644
+--- a/crates/mc-edge/src/plan_tests.rs
++++ b/crates/mc-edge/src/plan_tests.rs
+@@ -50,6 +50,9 @@ mod entity_interest_tests;
+ #[path = "plan/books_frames_tests.rs"]
+ mod books_frames_tests;
+ 
++#[path = "plan/coordinator_block_tests.rs"]
++mod coordinator_block_tests;
++
+ fn with_cache<T>(f: impl FnOnce(&ChunkPacketCache) -> T) -> T {
+     f(&ChunkPacketCache::new())
+ }
