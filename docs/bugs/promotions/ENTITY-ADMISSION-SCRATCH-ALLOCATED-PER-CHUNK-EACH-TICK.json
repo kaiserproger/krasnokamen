@@ -3,8 +3,8 @@
   "verdict": "promoted",
   "fix_commit": "patch:835007acecb930cc524689db7a634fdfcc582a1ddedd0cdd6d61261258e57a37",
   "fix_commit_full": "patch:835007acecb930cc524689db7a634fdfcc582a1ddedd0cdd6d61261258e57a37",
-  "promoted_at": "2026-11-23T19:57:23+00:00",
-  "tree_head": "217dc98be28cf76f12bd13bf19b3afe620447f55",
+  "promoted_at": "2026-11-23T20:36:34+00:00",
+  "tree_head": "9bb3db3691793034ffe43ff189bb8aef8eca1813",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
@@ -26,5 +26,5 @@
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T195538-ledger-promote-2vssxyoo"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T203224-ledger-promote-_7oa2t46"
 }
