@@ -7,3 +7,4 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/result.yaml"
 regression = ["cargo:mc-core:settlements::construction::site_tests::funded_workshops_reach_lots_past_a_road_obstruction_via_the_verge"]
+fix_commit = "898af4725"

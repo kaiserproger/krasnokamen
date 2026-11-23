@@ -7,3 +7,4 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#GOLEM-GOSSIP"
 regression = ["cargo:mc-core:villager::brain::tests::golem_gossip_summoning_requires_five_recently_sleeping_villagers"]
+fix_commit = "1a53ca2a6"

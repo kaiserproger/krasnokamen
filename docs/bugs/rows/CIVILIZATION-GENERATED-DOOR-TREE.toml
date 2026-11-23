@@ -6,4 +6,5 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/route-conclusion.yaml"
-regression = []
+regression = ["cargo:mc-worldgen:terrain::village_seed_tests::seed24_village_entrance_keeps_headroom_after_decoration"]
+fix_commit = "4e6874ded"

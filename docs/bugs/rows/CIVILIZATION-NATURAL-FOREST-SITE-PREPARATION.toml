@@ -27,3 +27,4 @@ regression = [
   "cargo:mc-core:settlements::forestry::tests::forest_work_recovers_checkpoint_and_sealed_wal_without_duplicate_drops",
   "cargo:mc-world:native::maintenance::tests::forest_evidence_rejects_imported_but_accepts_generated_and_missing_baselines",
 ]
+fix_commit = "3d6822c28"

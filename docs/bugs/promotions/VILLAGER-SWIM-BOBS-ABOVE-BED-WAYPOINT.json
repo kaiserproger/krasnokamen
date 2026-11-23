@@ -1,0 +1,62 @@
+{
+  "id": "VILLAGER-SWIM-BOBS-ABOVE-BED-WAYPOINT",
+  "verdict": "promoted",
+  "fix_commit": "patch:424cf2f485ea2e5e0b256fb230d078cf6e23070a9b864a0ad31fb28d9f6afe62",
+  "fix_commit_full": "patch:424cf2f485ea2e5e0b256fb230d078cf6e23070a9b864a0ad31fb28d9f6afe62",
+  "promoted_at": "2026-11-23T15:14:37+00:00",
+  "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "424cf2f485ea2e5e0b256fb230d078cf6e23070a9b864a0ad31fb28d9f6afe62",
+  "reversed_files": [
+    "crates/mc-core/src/villager/brain/motion.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::a_dry_body_above_its_waypoint_keeps_the_tight_vertical_band": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::a_swimmer_over_a_bed_waypoint_advances_before_the_bob_dips": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::a_skipped_swim_decision_advances_a_bed_waypoint_before_the_bob_dips": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::an_unsupported_waypoint_keeps_the_tight_band_for_a_wet_body": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::a_swimming_resident_does_not_hover_over_its_waypoint": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::a_dry_body_above_its_waypoint_keeps_the_tight_vertical_band": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::a_swimmer_over_a_bed_waypoint_advances_before_the_bob_dips": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::a_skipped_swim_decision_advances_a_bed_waypoint_before_the_bob_dips": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::an_unsupported_waypoint_keeps_the_tight_band_for_a_wet_body": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::stroll_swim_tests::a_swimming_resident_does_not_hover_over_its_waypoint": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T151053-ledger-promote-gkjc5d7y"
+}

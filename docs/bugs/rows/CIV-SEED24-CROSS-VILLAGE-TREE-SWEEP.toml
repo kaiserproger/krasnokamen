@@ -11,3 +11,4 @@ regression = [
   "cargo:mc-core:villager::lumber_tests::lumberjack_searches_near_worker_before_cross_village_sweep",
   "cargo:mc-core:villager::lumber_tests::lumberjack_restarts_nearby_search_after_harvest",
 ]
+fix_commit = "197beb170"

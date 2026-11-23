@@ -1,0 +1,30 @@
+{
+  "id": "CIVILIZATION-PREMATURE-LOG-DELIVERY",
+  "verdict": "promoted",
+  "fix_commit": "patch:29f14df11329b16959cc52fa841f5c67385a5c8b9d8639cc5d26d09eb2d6555a",
+  "fix_commit_full": "patch:29f14df11329b16959cc52fa841f5c67385a5c8b9d8639cc5d26d09eb2d6555a",
+  "promoted_at": "2026-11-23T15:30:36+00:00",
+  "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
+  "tree_dirty": true,
+  "tree_sha256": "d9a049221968786e0118f202c8729c00ebfc420970d50f0ac739a26b75cd3fc2",
+  "control_tree": "head",
+  "fix_patch_sha256": "29f14df11329b16959cc52fa841f5c67385a5c8b9d8639cc5d26d09eb2d6555a",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/construction.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::construction::planner_tests::an_already_funded_candidate_does_not_send_each_harvested_log_home": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::construction::planner_tests::an_already_funded_candidate_does_not_send_each_harvested_log_home": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T152410-ledger-promote-i9mk98xc"
+}

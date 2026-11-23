@@ -1,0 +1,127 @@
+diff --git a/crates/mc-core/src/settlements/production.rs b/crates/mc-core/src/settlements/production.rs
+--- a/crates/mc-core/src/settlements/production.rs
++++ b/crates/mc-core/src/settlements/production.rs
+@@ -26,6 +26,8 @@
+ const MANUAL: &str = "paused";
+ /// Retry delay for paused jobs: causal, never backfills missed portions.
+ const RETRY_TICKS: u64 = 20;
++/// Auto-pause while the job's worker is gone; [`retake`] clears it.
++const MISSING_WORKER: &str = "missing worker";
+ /// Largest autocraft chain one order may admit.
+ pub(super) const MAX_ORDER_STEPS: usize = 32;
+ 
+@@ -1301,8 +1303,12 @@
+             Ok(true)
+         }
+         Request::Resume { job } => {
+-            if let Some(entry) = state.jobs.get(&job) {
+-                worker_slot(world, settlement, entry.worker)?;
++            if let Some(worker) = state.jobs.get(&job).map(|entry| entry.worker)
++                && let Err(failure) = worker_slot(world, settlement, worker)
++                && !(matches!(failure, Failure::NotFound)
++                    && retake(world, settlement, state, &[worker]))
++            {
++                return Err(failure);
+             }
+             let tick = world.tick_control.game_ticks(world.tick);
+             let Some(entry) = state.jobs.get_mut(&job) else {
+@@ -1473,6 +1479,7 @@
+     let tick_now = world.tick_control.game_ticks(world.tick);
+     let consumed = offscreen::consume(world, settlement, &mut state.consumption);
+     let mut finished = Vec::new();
++    let mut gone = Vec::new();
+     let changed = state.cursor.run(
+         &mut state.jobs,
+         |job| {
+@@ -1482,8 +1489,16 @@
+                 && offscreen::ready(job, tick_now)
+         },
+         |_, job| {
+-            if worker_slot(world, settlement, job.worker).is_err() {
+-                return park(job, "missing worker", tick_now.saturating_add(RETRY_TICKS)).into();
++            if let Err(failure) = worker_slot(world, settlement, job.worker) {
++                if matches!(failure, Failure::NotFound) && !gone.contains(&job.worker) {
++                    gone.push(job.worker);
++                }
++                let advanced = offscreen::advance(job, tick_now) != 0;
++                let deferred = std::mem::take(&mut job.deferred) != 0;
++                return (park(job, MISSING_WORKER, tick_now.saturating_add(RETRY_TICKS))
++                    || advanced
++                    || deferred)
++                    .into();
+             }
+             let produced_before = job.done;
+             let changed = offscreen::visit(world, settlement, job, tick_now);
+@@ -1509,9 +1524,71 @@
+         }
+     }
+     state.completed = state.completed.saturating_add(finished.len() as u64);
+-    changed || consumed || !finished.is_empty()
++    let retaken = retake(world, settlement, state, &gone);
++    changed || consumed || retaken || !finished.is_empty()
+ }
+ 
++/// A worker that died or no longer exists can never finish its jobs. Every
++/// unfinished job it held (its whole order) passes to the nearest free
++/// resident, so the order resumes instead of parking on a dead uuid. Output
++/// owed from the old carry is not forged: its delivery check then reports the
++/// loss and asks for a cancel.
++fn retake(world: &TickState, settlement: SettlementId, state: &mut State, gone: &[Uuid]) -> bool {
++    let mut changed = false;
++    for &dead in gone {
++        let Some(stand) = state
++            .jobs
++            .values()
++            .find(|job| job.unfinished() && job.worker == dead)
++            .map(|job| job.stand_at)
++        else {
++            continue;
++        };
++        let replacement = world
++            .entities
++            .slots()
++            .filter(|&slot| {
++                world
++                    .entities
++                    .row(slot)
++                    .villager
++                    .as_ref()
++                    .is_some_and(|v| v.settlement == Some(settlement))
++            })
++            .map(|slot| {
++                (
++                    reach(world.entities.pos(slot), stand),
++                    world.entities.row(slot).uuid,
++                )
++            })
++            .filter(|&(_, uuid)| {
++                worker_slot(world, settlement, uuid).is_ok()
++                    && !state
++                        .jobs
++                        .values()
++                        .any(|job| job.unfinished() && job.worker == uuid)
++            })
++            .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
++        let Some((_, worker)) = replacement else {
++            continue;
++        };
++        for job in state
++            .jobs
++            .values_mut()
++            .filter(|job| job.unfinished() && job.worker == dead)
++        {
++            job.worker = worker;
++            job.fetch_at = None;
++            if job.paused.as_deref() == Some(MISSING_WORKER) {
++                job.paused = None;
++                job.retry_at = 0;
++            }
++            changed = true;
++        }
++    }
++    changed
++}
++
+ /// Every settlement has daily food demand, even without a production job.
+ pub(crate) fn active(_state: &State) -> bool {
+     true

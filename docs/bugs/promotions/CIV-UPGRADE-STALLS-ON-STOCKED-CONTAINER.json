@@ -1,0 +1,45 @@
+{
+  "id": "CIV-UPGRADE-STALLS-ON-STOCKED-CONTAINER",
+  "verdict": "promoted",
+  "fix_commit": "5ae49587a5366fe838793070ac508a87e4e54fff",
+  "fix_commit_full": "5ae49587a5366fe838793070ac508a87e4e54fff",
+  "promoted_at": "2026-11-23T14:45:48+00:00",
+  "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/assets/blueprints/barracks.json",
+    "crates/mc-core/assets/blueprints/mason.json",
+    "crates/mc-core/assets/blueprints/storage.json",
+    "crates/mc-core/src/settlements/blueprints.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/settlements/blueprints_tests.rs",
+    "crates/mc-core/src/settlements/construction_tests.rs",
+    "crates/mc-core/src/villager/building_autonomy_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:settlements::construction::tests::stocked_storage_upgrades_around_its_level_one_containers": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:settlements::blueprints::tests::upgrade_levels_keep_previous_containers": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::construction::tests::stocked_storage_upgrades_around_its_level_one_containers": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::blueprints::tests::upgrade_levels_keep_previous_containers": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T144019-ledger-promote-x7ykz5xw"
+}

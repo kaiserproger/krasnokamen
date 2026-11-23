@@ -8,3 +8,4 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/20261104T081120-civilization-seed-qa-f7kvk6_m/result.json"
 failing_first = "reported"
 regression = ["cargo:mc-core:settlements::construction::site_tests::street_work_releases_its_builder_after_completion", "cargo:mc-core:settlements::construction::site_tests::waiting_house_wool_demand_survives_an_active_street_project"]
+fix_commit = "898af4725"
