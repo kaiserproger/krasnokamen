@@ -10,4 +10,3 @@ regression = ["cargo:mc-edge:lod::tests::a_reset_during_the_sample_discards_the_
 failing_first = "not recorded"
 fix_commit = "patch:ea201453aa5025dd6d73c236af85e0283bb1e540687300c126d4e60d6370c149"
 repro_check = "Fixed in 167dccf8d and 7920fc66b: WorldSender carries the queue generation on the frame (try_send_at), request() captures it before the permit wait, and the blocking sample runs inside sample_tile, which enqueues under the captured value, so a dimension reset during the sample makes the writer discard the tile and release its credit. Patch-mode identity patch:ea201453 carries both commits' non-test hunks; the a/-side keeps the kept test's names ((b)) with the pre-fix bodies (stamp at enqueue, capture after the sample), so the regression reddens at its own TryRecvError::Empty assertion."
-promotion = "docs/bugs/promotions/LOD-TILE-STAMPED-WITH-POST-SWITCH-DIMENSION-GENERATION.json"
