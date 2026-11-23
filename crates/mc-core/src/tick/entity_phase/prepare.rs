@@ -254,6 +254,7 @@ pub(in crate::tick) struct PrepChunk {
 }
 
 /// Admission output of one [`PREP_CHUNK`] range, pooled across ticks.
+#[cfg_attr(not(test), derive(Default))]
 pub(in crate::tick) struct AdmissionPart {
     pub(in crate::tick) kept: Vec<(EntitySlot, u16)>,
     pub(in crate::tick) specials: Vec<(EntityId, crate::hostile::Special)>,
@@ -272,9 +273,9 @@ pub(in crate::tick) fn take_admission_parts_constructed() -> usize {
     ADMISSION_PARTS_CONSTRUCTED.swap(0, std::sync::atomic::Ordering::Relaxed)
 }
 
+#[cfg(test)]
 impl Default for AdmissionPart {
     fn default() -> Self {
-        #[cfg(test)]
         ADMISSION_PARTS_CONSTRUCTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Self {
             kept: Vec::new(),

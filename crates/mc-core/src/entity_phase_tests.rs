@@ -838,11 +838,8 @@ fn admission_buffers_are_pooled_across_prepares() {
     // Nine pool chunks; only the first holds entities, the empty ones still
     // exercise the pooled `AdmissionPart` set.
     let mut periods: Vec<u8> = vec![0; PREP_CHUNK * 8 + 64];
-    for (index, period) in periods
-        .iter_mut()
-        .take(state.entities.len() as usize)
-        .enumerate()
-    {
+    let entity_count = state.entities.len();
+    for (index, period) in periods.iter_mut().take(entity_count).enumerate() {
         *period = u8::from(index % 4 != 0);
     }
     let env = PrepEnv {
