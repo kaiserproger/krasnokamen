@@ -490,6 +490,10 @@ cancel() {
 trap cancel TERM INT HUP
 st=0
 wait "$c" || st=$?
+# A cancel trap can outlive the child: bash reaped it before this wait, so the wait reports
+# 143 (interrupted) instead of the status the child exited with. Bash keeps the last reaped status, so asking
+# for it again recovers it; a child that is still running is waited for once more.
+[ "${cancel_done:-0}" = 1 ] && { wait "$c" || st=$?; }
 while kill -0 "$c" 2>/dev/null; do wait "$c" || st=$?; done
 # Only a complete, successful run measures the command; an early failure or a
 # cancellation would teach a too-small peak.
