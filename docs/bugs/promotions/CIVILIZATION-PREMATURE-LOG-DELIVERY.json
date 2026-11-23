@@ -3,10 +3,10 @@
   "verdict": "promoted",
   "fix_commit": "patch:29f14df11329b16959cc52fa841f5c67385a5c8b9d8639cc5d26d09eb2d6555a",
   "fix_commit_full": "patch:29f14df11329b16959cc52fa841f5c67385a5c8b9d8639cc5d26d09eb2d6555a",
-  "promoted_at": "2026-11-23T15:30:36+00:00",
-  "tree_head": "f9a8d45596696880fc6a0c9d92f5cd1758002651",
-  "tree_dirty": true,
-  "tree_sha256": "d9a049221968786e0118f202c8729c00ebfc420970d50f0ac739a26b75cd3fc2",
+  "promoted_at": "2026-11-23T17:23:22+00:00",
+  "tree_head": "610492f316b4811857558e58e3099eb183c8b5c1",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
   "fix_patch_sha256": "29f14df11329b16959cc52fa841f5c67385a5c8b9d8639cc5d26d09eb2d6555a",
   "reversed_files": [
@@ -26,5 +26,5 @@
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T152410-ledger-promote-i9mk98xc"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Civ/.analysis/validation/20261123T172014-ledger-promote-wnn62i7l"
 }
