@@ -8,5 +8,5 @@ status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-TOTAL-KILLS"
 regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_actual_mob_and_player_deaths_credit_distinct_kill_counters_once", "harness:entities:native-v2-command-score-store"]
 fix_commit = "patch:f8dd23107df8d86196bd9f2eb2526329eb997ef64e6e3a82573f2dc6d3c1ac0b"
-repro_check = "round 2: patch digest verified. Control control-B.log: reversed -> red `objectives add kills totalKillCount` refused (usage)"
+repro_check = "Round-2 control reversed the scoreboard.rs counter hunks. Soft spot recorded at review: the statistics.rs mob-kill credit hunk was never red on its own; the client scenario native-v2-command-score-store covers the counters. A statistics-only control with a mob-kill assertion is still missing."
 promotion = "docs/bugs/promotions/SCORE-TOTAL-KILLS.json"
