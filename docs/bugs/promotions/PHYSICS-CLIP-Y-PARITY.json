@@ -1,14 +1,14 @@
 {
   "id": "PHYSICS-CLIP-Y-PARITY",
   "verdict": "promoted",
-  "fix_commit": "patch:c28b42e4a9b2f9028180fe46b2298e904e0fb1bcb26ee438f577f997e1bf6c14",
-  "fix_commit_full": "patch:c28b42e4a9b2f9028180fe46b2298e904e0fb1bcb26ee438f577f997e1bf6c14",
-  "promoted_at": "2026-11-23T20:37:25+00:00",
-  "tree_head": "9bb3db3691793034ffe43ff189bb8aef8eca1813",
+  "fix_commit": "patch:6f14a921444557b0c0c3217978577f7932157c37c849da601abc8b519e4a0eed",
+  "fix_commit_full": "patch:6f14a921444557b0c0c3217978577f7932157c37c849da601abc8b519e4a0eed",
+  "promoted_at": "2026-11-23T22:16:50+00:00",
+  "tree_head": "18a6c1a99a742a107074cb6ca37aa47428e7ea84",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
-  "fix_patch_sha256": "c28b42e4a9b2f9028180fe46b2298e904e0fb1bcb26ee438f577f997e1bf6c14",
+  "fix_patch_sha256": "6f14a921444557b0c0c3217978577f7932157c37c849da601abc8b519e4a0eed",
   "reversed_files": [
     "crates/mc-physics/src/lib.rs"
   ],
@@ -26,5 +26,5 @@
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T203718-ledger-promote-3caf74lk"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T221637-ledger-promote-tqcu4sp4"
 }
