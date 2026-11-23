@@ -894,8 +894,6 @@ fn a_late_completion_does_not_replace_a_newer_dolphin_run() {
     done_tx
         .send(super::LocateDone {
             id: 1,
-            kind: super::LocateKind::Structure,
-            origin: (0, 64, 0),
             hit: Some(super::LocateHit {
                 pos: (5, 60, 5),
                 found_id: id("minecraft:shipwreck"),
@@ -1032,8 +1030,6 @@ fn structure_lookup_callback_runs_on_drain_even_after_requester_disconnects() {
     );
     tx.send(super::LocateDone {
         id: run,
-        kind: super::LocateKind::Structure,
-        origin: (0, 64, 0),
         hit: Some(super::LocateHit {
             pos: (117, -20, 130),
             found_id: id("minecraft:buried_treasure"),

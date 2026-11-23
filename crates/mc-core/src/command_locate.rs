@@ -677,10 +677,6 @@ pub(crate) struct DolphinNav {
 }
 
 impl LocateState {
-    pub(crate) fn navigation(&self, dolphin: EntityId) -> Option<DolphinNav> {
-        self.dolphin_nav.get(&dolphin).copied()
-    }
-
     /// Targets valid in one dimension, copied for the parallel prepare pass.
     pub(crate) fn dolphin_targets(
         &self,
@@ -790,8 +786,6 @@ enum LocateKind {
 /// A finished worker search, delivered to the tick thread.
 struct LocateDone {
     id: u64,
-    kind: LocateKind,
-    origin: (i32, i32, i32),
     hit: Option<LocateHit>,
     /// A metadata/read refusal is not "no structure": dolphin goals keep their
     /// fish and retry, commands answer unavailable instead of not_found.
@@ -833,8 +827,6 @@ fn locate_worker(jobs: Receiver<LocateJob>, done: Sender<LocateDone>) {
         let elapsed_ms = start.elapsed().as_millis();
         let result = LocateDone {
             id: job.id,
-            kind: job.kind,
-            origin: job.origin,
             hit,
             error,
             elapsed_ms,
@@ -1438,7 +1430,7 @@ fn deliver(state: &mut TickState, done: LocateDone) {
     state.locate.queued = state.locate.queued.saturating_sub(1);
     release(state, pending.owner);
     if pending.dimension != state.dimension {
-        terminal_wrong_dimension(state, done.id, pending);
+        terminal_wrong_dimension(state, pending);
         return;
     }
     match pending.completion {
@@ -1572,7 +1564,7 @@ fn command_result(
 
 /// The owner changed dimension while its search ran: finish the owed job but
 /// never apply a stale lead to a new goal.
-fn terminal_wrong_dimension(state: &mut TickState, run: u64, pending: PendingLocate) {
+fn terminal_wrong_dimension(state: &mut TickState, pending: PendingLocate) {
     match pending.completion {
         LocateCompletion::Command(_) => {
             if let LocateOwner::Connection(connection) = pending.owner
@@ -1726,10 +1718,6 @@ pub(crate) fn dolphin_navigation(state: &TickState, dolphin: EntityId) -> Option
 
 pub(crate) fn set_dolphin_navigation(state: &mut TickState, dolphin: EntityId, nav: DolphinNav) {
     state.locate.dolphin_nav.insert(dolphin, nav);
-}
-
-pub(crate) fn clear_dolphin_navigation(state: &mut TickState, dolphin: EntityId) {
-    state.locate.dolphin_nav.remove(&dolphin);
 }
 
 /// Vanilla `showLocateResult` display name: `#tag (resolved)` for tags.
