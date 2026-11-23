@@ -1,0 +1,19 @@
+diff --git a/crates/mc-core/src/villager/brain/social.rs b/crates/mc-core/src/villager/brain/social.rs
+index b2199c3c6..b61ab2705 100644
+--- a/crates/mc-core/src/villager/brain/social.rs
++++ b/crates/mc-core/src/villager/brain/social.rs
+@@ -1014,7 +1014,13 @@ pub(super) fn golems(state: &mut TickState, cache: &mut PoiCache, changes: &mut
+             spawn = Some(pos);
+             break;
+         }
+-        if let Some(_pos) = spawn {
++        if let Some(pos) = spawn {
++            let id = state.spawn_mob(type_id, pos, 100.0);
++            if let Some(slot) = state.entities.slot_of(id) {
++                cache.golems.push(slot);
++            }
++            changes.entities_spawned.push(id);
++            spawned += 1;
+             cache.nearby_residents.clear();
+             cache
+                 .nearby_residents
