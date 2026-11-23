@@ -8,5 +8,5 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:156"
 regression = ["harness:scene-shot:native-entity-visuals", "client:krasnokamen-client:entities::krasnokamen_models::tests::post_rc4_reauthored_rigs_keep_their_reference_silhouettes"]
 fix_commit = "client:ee258651"
-proving_assertions = { "harness:scene-shot:native-entity-visuals" = "vindicator_legs_teal" }
-repro_check = "Round 6 client:ee258651 rig control red (receipts/XHarnessGates/client-r6-revert-red.log); native-entity-visuals checks texture colors and requires visual review. CONTROL 2026-11-23: native-entity-visuals PASSES on the pre-fix client 3dcc56ad (vindicator_legs_teal true), so the registered scene does not discriminate the rig fix."
+proving_assertions = { "harness:scene-shot:native-entity-visuals" = "vindicator_arms_not_teal" }
+repro_check = "Round 6 client:ee258651 rig control red (receipts/XHarnessGates/client-r6-revert-red.log); native-entity-visuals checks texture colours and requires visual review. CONTROL corrected 2026-11-23: 3dcc56ad was not a pre-fix revision (it contains ee258651). On ee258651's actual parent 35df28a0 the scene fails first at vindicator_arms_not_teal (158 teal arm pixels from the swapped trouser/coat rows; 0 after the fix), so the arms assertion, not the later legs one, carries this row's symptom."
