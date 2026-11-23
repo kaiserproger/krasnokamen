@@ -1,8 +1,16 @@
 # JOURNAL-BASELINE-BEHIND-CHECKPOINT-PARKS-TICK — negative-control patch
 
-Fix: `docs/bugs/fix-patches/JOURNAL-BASELINE-BEHIND-CHECKPOINT-PARKS-TICK.patch`
-(`fix_commit = "patch:c31baef245918fe396da17c256f74e40ad7d5d6d9fa2719d0554f38560a2e1d7"`, the sha256 of that file).
-It is a diff from the adapted pre-fix form to the candidate (HEAD); `git apply -R` restores the pre-fix form.
+Receipt-of-record identity: `docs/bugs/fix-patches/JOURNAL-BASELINE-BEHIND-CHECKPOINT-PARKS-TICK.patch`
+(`fix_commit = "patch:c329db74025d9a6e9db290455345922026524b08297fd852ccd2ec235d685869"`, sha256 of that file, the
+bytes the promotion receipt records). It carries the journal.rs scheduling delta only.
+
+Re-audit evidence: `docs/bugs/fix-patches/JOURNAL-BASELINE-BEHIND-CHECKPOINT-PARKS-TICK.extended.patch`
+(sha256 `c31baef245918fe396da17c256f74e40ad7d5d6d9fa2719d0554f38560a2e1d7`) additionally reverts the owner-built
+answer guard, the writer wake and the serial counter; it re-audited green by dry-run
+`.analysis/validation/20261123T162209-ledger-promote-jcgae8cu`. The extended file is supplementary evidence, not the
+promotion identity, because a fixed row cannot be re-promoted and the promotion receipt binds to the c329db… bytes.
+
+Both are diffs from the adapted pre-fix form to the candidate (HEAD); `git apply -R` restores the pre-fix form.
 
 ## Commits covered
 
