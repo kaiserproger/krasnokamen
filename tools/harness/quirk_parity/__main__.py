@@ -124,8 +124,10 @@ def run_krasnokamen(scenarios: list[dict], out: Path, args) -> dict[str, dict]:
         paths.append(str(path))
     receipt = krasnokamen_dir / "receipt.json"
     env = dict(os.environ, KRASNOKAMEN_QUIRK_SCENARIOS=":".join(paths), KRASNOKAMEN_QUIRK_RECEIPT=str(receipt))
-    command = [str(MEM_RUN), "-m", "4G", "cargo", "test", "-p", "mc-core", "--lib", TEST_NAME,
-               "--", "--ignored", "--exact", "--nocapture"]
+    command = [str(MEM_RUN), "-m", "12G"]
+    if os.environ.get("RUSTC_WRAPPER") == "":
+        command += ["env", "RUSTC_WRAPPER="]
+    command += ["cargo", "test", "-p", "mc-core", "--lib", TEST_NAME, "--", "--ignored", "--exact", "--nocapture"]
     if not MEM_RUN.is_file():
         command = command[1 + 2:]
     log = krasnokamen_dir / "krasnokamen.log"
@@ -196,6 +198,15 @@ def rate_group_verdict(group: str, variants: list[dict], vanilla: dict, krasnoka
             reasons.append("vanilla rejected setup commands (scenario bug)")
             entry["vanilla_command_errors"] = run["command_log"]
             break
+    for variant in variants:
+        run = vanilla.get(variant["id"])
+        if run is None:
+            continue
+        failures = compare.check_vanilla(variant, run)
+        if failures:
+            entry.setdefault("vanilla_selfcheck_failures", {})[variant["id"]] = failures
+    if entry.get("vanilla_selfcheck_failures"):
+        reasons.append("vanilla does not show the quirk this scenario encodes")
     for run in sruns:
         if krasnokamen_rejections(run) and not scenario.get("allow_krasnokamen_command_errors"):
             reasons.append("Krasnokamen rejected commands vanilla accepted")
@@ -223,9 +234,22 @@ def fuzz_verdict(scenario: dict, vanilla: dict, krasnokamen: dict, entry: dict, 
     diff = compare.compare_scenario(scenario, vanilla, krasnokamen)
     dupes = seeded.dupe_cells(scenario, vanilla)
     diverging: dict[int, list[str]] = {}
-    for phase, cells in diff["phases"].items():
-        for index in cells.get("cells", {}):
-            diverging.setdefault(int(index), []).append(phase)
+    shape: list[str] = []
+    for phase, detail in diff["phases"].items():
+        for key, value in detail.items():
+            if key == "cells":
+                continue
+            if isinstance(value, str):
+                shape.append(f"{phase}: {key}: {value}")
+            elif isinstance(value, dict) and set(value) == {"error"}:
+                shape.append(f"{phase}: {key}: {value['error']}")
+            else:
+                shape.append(f"{phase}: {key} difference outside per-cell detail")
+        for index, cell_detail in detail.get("cells", {}).items():
+            if index.isdigit():
+                diverging.setdefault(int(index), []).append(phase)
+            else:
+                shape.append(f"{phase}: {cell_detail}")
     cells_meta = {c["index"]: c for c in scenario["fuzz"]["cells"]}
     entry["fuzz"] = {
         "seed": scenario["fuzz"]["seed"], "cells": len(cells_meta),
@@ -240,6 +264,8 @@ def fuzz_verdict(scenario: dict, vanilla: dict, krasnokamen: dict, entry: dict, 
         reasons.append("Krasnokamen diverges from vanilla on a vanilla TNT-duplication cell")
     elif diverging:
         entry["status"] = "findings"
+    if shape:
+        reasons.append("comparison shape differs: " + "; ".join(shape[:5]))
     if reasons:
         entry["status"] = "fail"
         entry["reasons"] = reasons

@@ -71,12 +71,32 @@ Metric kinds: `container_items` (all hoppers/chests/barrels/...), `item_entities
 `name[sorted props]`, e.g. `minecraft:wheat[age=7]`). Rate comparison: mean production per seed,
 Krasnokamen vs vanilla; passes inside `tolerance_pct` of the vanilla mean or two
 standard errors of the seed noise, whichever is wider.
+Every seeded farm variant must also pass its own `vanilla_expect` self-check.
+Failures are reported by variant ID and fail the group even if mean rates match
+or the scenario has a known divergence.
 
 Blocks are compared as `name[sorted props]` (non-air only); entities by count
 per type (item entities per item id, weighted by stack size); randomised
 quantities (TNT launch direction, explosion block selection) are compared as
 counts, not positions. Keep exact-state scenarios shorter than any fuse that
 ends in an explosion (80 ticks).
+
+The comparator reports missing or extra selected phases, unequal or one-sided
+cell lists, and missing or unequal per-tick traces as differences rather than
+discarding unmatched observations. Trace comparison follows the scenario's
+top-level `trace` flag; the initial setup snapshot has no trace. The fuzz gate
+fails on receipt-shape differences, including differences outside per-cell data.
+
+The `qc-piston-bud` vanilla self-check covers the idle sticky piston and its
+payload, both piston extensions and the sticky push after a neighbour update,
+the unpowered control, and normal-piston retraction. Its expected states come
+from a retained 26.1.2 vanilla observation. The `tools.harness.test_quirk_compare`
+unit suite checks that missing phases or block positions and altered
+piston/payload states fail the self-check. The scenario passed against an
+isolated vanilla 26.1.2 server on 2026-11-23 (tree `44d7260c9a2c`, receipt
+`.analysis/validation/20261123T112209-quirk-parity-sovx077r/result.json`).
+That is an in-process native-tick comparison, not a graphical-client or broad
+parity gate.
 
 ## Scenario families
 

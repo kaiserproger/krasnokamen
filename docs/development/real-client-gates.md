@@ -680,6 +680,9 @@ position), `max_height` (a sleeping pose is 0.2 tall), `profession` (the receive
 VillagerData) and `baby` (the received DATA_BABY_ID; a row that never received it matches
 neither `true` nor `false`). It counts the matching received entities and fails `<name>_min` or
 `<name>_max`; the artifact keeps the same-thread `game_time` and every received row.
+It rejects snapshots whose `truncated` field is true or missing; an incomplete
+page cannot prove a count or absence. Counts still cover only entities received
+by the client within the requested radius and any supplied box.
 The village scenes judge settlement behaviour with it, in game ticks on a frozen clock:
 `native-village-idle-stroll` (six residents dropped 40 blocks from the bell walk back
 within 32 blocks in 3000 ticks; two villagers dropped into a 4-deep pond float up within 100 ticks),

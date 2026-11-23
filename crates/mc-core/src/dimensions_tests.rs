@@ -2733,6 +2733,84 @@ fn rejoin_child_dimension_keeps_the_clients_chat_setting() {
 }
 
 #[test]
+fn kill_from_the_nether_clears_the_live_nether_cow_and_spares_the_root() {
+    let (mut state, _, bob) = worlds();
+    assert_eq!(travel::locate(&state, bob).unwrap().0, Dimension::Nether);
+    let cow = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:cow").unwrap())
+        .unwrap();
+    // Fixture injection: create both cows directly through the real state
+    // API, before the one command. Both stand at the same coordinates, so only
+    // the sender's dimension decides which one the command reaches. The third
+    // `spawn_mob` argument is health, so both get a live value (10.0), unlike a
+    // 0.0 death-state sentinel.
+    let root_cow = state.spawn_mob(cow, [8.0, 150.0, 8.0], 10.0);
+    // The two worlds otherwise allocate wire ids independently; synchronize
+    // after the root spawn so the Nether cow cannot reuse root_cow's EntityId.
+    travel::sync_wire_ids(&mut state);
+    let nether_cow = state
+        .other_dimensions
+        .get_mut(&Dimension::Nether)
+        .unwrap()
+        .spawn_mob(cow, [8.0, 150.0, 8.0], 10.0);
+    assert_ne!(
+        root_cow, nether_cow,
+        "cross-world EntityIds must be distinct"
+    );
+    let root_slot = state.entities.slot_of(root_cow).expect("root sentinel");
+    assert!(
+        state.entities.body(root_slot).alive,
+        "root sentinel must be alive"
+    );
+    assert!(
+        state.entities.row(root_slot).health > 0.0,
+        "root sentinel must have positive health"
+    );
+    let nether = &state.other_dimensions[&Dimension::Nether];
+    let nether_slot = nether.entities.slot_of(nether_cow).expect("Nether cow");
+    assert!(
+        nether.entities.body(nether_slot).alive,
+        "Nether cow must be alive"
+    );
+    assert!(
+        nether.entities.row(nether_slot).health > 0.0,
+        "Nether cow must have positive health"
+    );
+    // `distance` is what scopes the selector to the sender's dimension. A bare
+    // `@e[type=minecraft:cow,limit=1]` is routed globally and, with arbitrary
+    // id order, would take the earlier-spawned root cow even on a fixed tree.
+    let (_, drains) = command(
+        &mut state,
+        2,
+        "kill @e[type=minecraft:cow,limit=1,distance=..2]",
+    );
+    let nether = &state.other_dimensions[&Dimension::Nether];
+    // `slot_of` intentionally hides dead rows, so this means "no live cow",
+    // not "physically removed"; the corpse may stay for its 20-tick death.
+    assert!(
+        nether.entities.slot_of(nether_cow).is_none(),
+        "the child kill left a live Nether cow: {drains:?}"
+    );
+    if let Some(corpse) = nether.entities.slot_of_any(nether_cow) {
+        assert!(
+            !nether.entities.body(corpse).alive,
+            "the Nether cow corpse must be dead, not merely aged out"
+        );
+        assert_eq!(
+            nether.entities.row(corpse).appearance.health,
+            0.0,
+            "the corpse health is clamped to zero"
+        );
+    }
+    assert!(
+        state.entities.slot_of(root_cow).is_some(),
+        "the child kill cleared the live root sentinel"
+    );
+}
+
+#[test]
 fn data_edits_an_entity_for_senders_in_the_nether_and_the_end() {
     for (dimension, sender) in [(Dimension::Nether, 2), (Dimension::End, 1)] {
         let (mut state, alice, bob) = worlds();

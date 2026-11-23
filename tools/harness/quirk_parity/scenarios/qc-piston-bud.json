@@ -61,6 +61,26 @@
    "equals": "minecraft:piston[extended=false,facing=east]"
   },
   {
+   "phase": "idle",
+   "check": "block",
+   "pos": [
+    6,
+    64,
+    2
+   ],
+   "equals": "minecraft:sticky_piston[extended=false,facing=east]"
+  },
+  {
+   "phase": "idle",
+   "check": "block",
+   "pos": [
+    7,
+    64,
+    2
+   ],
+   "equals": "minecraft:cobblestone"
+  },
+  {
    "phase": "bud",
    "check": "block",
    "pos": [
@@ -74,7 +94,57 @@
    "phase": "bud",
    "check": "block",
    "pos": [
+    3,
+    64,
+    2
+   ],
+   "equals": "minecraft:piston_head[facing=east,short=false,type=normal]"
+  },
+  {
+   "phase": "bud",
+   "check": "block",
+   "pos": [
+    6,
+    64,
+    2
+   ],
+   "equals": "minecraft:sticky_piston[extended=true,facing=east]"
+  },
+  {
+   "phase": "bud",
+   "check": "block",
+   "pos": [
+    7,
+    64,
+    2
+   ],
+   "equals": "minecraft:piston_head[facing=east,short=false,type=sticky]"
+  },
+  {
+   "phase": "bud",
+   "check": "block",
+   "pos": [
+    8,
+    64,
+    2
+   ],
+   "equals": "minecraft:cobblestone"
+  },
+  {
+   "phase": "bud",
+   "check": "block",
+   "pos": [
     10,
+    64,
+    2
+   ],
+   "equals": "minecraft:piston[extended=false,facing=east]"
+  },
+  {
+   "phase": "retract-on-removal",
+   "check": "block",
+   "pos": [
+    2,
     64,
     2
    ],

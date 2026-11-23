@@ -7,5 +7,6 @@ status = "open"
 source = "Real vanilla 26.1.2 differential scenario qc-piston-bud: during the idle phase the vanilla sticky piston at 6,64,2 remains retracted with cobblestone at 7,64,2; Krasnokamen extends it and moves the cobblestone to 8,64,2. Observed in .analysis/validation/20261123T082926-quirk-parity-etrrji0s/quirk-parity/receipt.json on dirty HEAD 17b4abddc370, tree sha256 afa33b66114fc8498a2c6e19272c4ee3b47dd9bff6dd8e89df9f0faa75c63192. The same command passed on integrated tree 1ea0483ea62c9ef86095b0745f34641efc1455a19fb6471a960c10287cbd0d7b in .analysis/validation/20261123T111912-quirk-parity-gcvrvdw0/result.json, and on subsequent tree 44d7260c9a2cd5db13d0c183d0fe9c214556308e3ed019a78cf5e8b516887d2c with RUSTC_WRAPPER empty in .analysis/validation/20261123T112209-quirk-parity-sovx077r/result.json. No graphical-client reproduction claimed."
 repro = "command"
 regression = ["cargo:mc-core:redstone::tests::non_component_writes_do_not_wake_a_quasi_connected_sticky_piston"]
+fix_commit = "dc8569b0ac1152499cd463cdc6fabdaf79b72f88"
 failing_first = "reported"
 repro_check = "python3 -m tools.harness run quirk-parity -- --scenario qc-piston-bud; real vanilla 26.1.2 and Java 25 required"

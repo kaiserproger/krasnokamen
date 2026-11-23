@@ -45,15 +45,45 @@ class BlocksContractTests(unittest.TestCase):
 
     def test_all_matrix_domains_import_and_health_requires_received_value(self):
         from . import matrix_domains
+        missing_health = False
         for module in pkgutil.iter_modules(matrix_domains.__path__):
             if not module.name.startswith('test_'):
                 with self.subTest(module=module.name):
-                    importlib.import_module(matrix_domains.__name__ + '.' + module.name)
+                    try:
+                        importlib.import_module(matrix_domains.__name__ + '.' + module.name)
+                    except ImportError as error:
+                        if (error.name != matrix_domains.__name__ + '._blocks'
+                                or not error.msg.startswith("cannot import name 'entity_health' from ")):
+                            raise
+                        missing_health = True
+                        self.fail(f'{module.name}: consumer import contract broken: {error}')
+        if missing_health:
+            return
         ctx=self.context(snapshot={'entities':[{'type':'minecraft:iron_golem','health':42.0}]})
         self.assertEqual(b.entity_health(ctx,'iron_golem'),42.0)
         ctx=self.context(snapshot={'entities':[{'type':'minecraft:iron_golem'}]})
         with self.assertRaisesRegex(MissingCapability,'health'):
             b.entity_health(ctx,'iron_golem')
+
+    def test_missing_health_import_is_the_only_classified_contract_failure(self):
+        cases = (
+            (ImportError("cannot import name 'entity_health' from '_blocks'",
+                         name='tools.harness.matrix_domains._blocks'), True),
+            (ModuleNotFoundError("No module named 'optional_dependency'",
+                                 name='optional_dependency'), False),
+            (ImportError("cannot import name 'other' from '_blocks'",
+                         name='tools.harness.matrix_domains._blocks'), False),
+            (ImportError("cannot import name 'entity_health' from 'other'",
+                         name='other'), False),
+        )
+        for error, expected_failure in cases:
+            with self.subTest(error=str(error)), \
+                    patch.object(pkgutil, 'iter_modules', return_value=[SimpleNamespace(name='fixture')]), \
+                    patch.object(importlib, 'import_module', side_effect=error):
+                result = unittest.TestResult()
+                self.__class__('test_all_matrix_domains_import_and_health_requires_received_value').run(result)
+                self.assertEqual(len(result.failures), int(expected_failure))
+                self.assertEqual(len(result.errors), int(not expected_failure))
 
     def test_every_matrix_domain_imports(self):
         import pkgutil

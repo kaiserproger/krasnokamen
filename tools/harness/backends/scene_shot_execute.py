@@ -396,6 +396,8 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             entities = result.get("entities")
             if not isinstance(entities, list) or any(not isinstance(row, dict) for row in entities):
                 raise RuntimeError("entity snapshot omitted entities")
+            if result.get("truncated") is not False:
+                raise RuntimeError("entity snapshot is truncated or omitted truncation status")
             if type(result.get("game_time")) is not int:
                 raise RuntimeError("entity snapshot omitted same-thread game_time")
             found = matching_entities(entities, value)

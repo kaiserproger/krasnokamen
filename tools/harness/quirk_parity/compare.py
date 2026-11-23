@@ -41,10 +41,23 @@ def block_diff(vanilla: dict, krasnokamen: dict, ignore: list[str]) -> list[dict
 
 
 def compare_snapshot(spec: dict, vanilla: dict, krasnokamen: dict) -> dict[str, Any]:
-    """Compare one snapshot; multi-cell snapshots are compared cell by cell."""
-    if "cells" in vanilla and "cells" in krasnokamen:
+    """Compare one snapshot; multi-cell snapshots are compared cell by cell.
+
+    A cell list present on only one side, or with a different length, is itself a
+    difference: zipping unequal lists would drop the unmatched tail observations
+    and pass a truncated or padded receipt as a match.
+    """
+    va_cells = vanilla.get("cells")
+    so_cells = krasnokamen.get("cells")
+    if va_cells is not None or so_cells is not None:
+        if va_cells is None or so_cells is None:
+            missing = "vanilla" if va_cells is None else "Krasnokamen"
+            return {"cells": {"error": f"per-cell snapshot missing from {missing}"}}
+        if len(va_cells) != len(so_cells):
+            return {"cells": {"error":
+                              f"cell count differs: vanilla {len(va_cells)}, Krasnokamen {len(so_cells)}"}}
         cells = {}
-        for index, (va, so) in enumerate(zip(vanilla["cells"], krasnokamen["cells"])):
+        for index, (va, so) in enumerate(zip(va_cells, so_cells)):
             diff = compare_cell(spec, va, so)
             if diff:
                 cells[str(index)] = diff
@@ -87,12 +100,17 @@ def compare_cell(spec: dict, vanilla: dict, krasnokamen: dict) -> dict[str, Any]
 
 
 def compare_scenario(scenario: dict, vanilla: dict, krasnokamen: dict) -> dict[str, Any]:
-    """Return {"phases": {name: diff}, "match": bool}."""
+    """Return {"phases": {name: diff}, "match": bool}.
+
+    Traces are compared only when the scenario root enables ``trace`` — the same
+    key the drivers read to record them; ``compare`` holds comparison rules, not
+    the trace switch.
+    """
     spec = scenario.get("compare", {})
     only = set(spec.get("phases", []))
     phases: dict[str, Any] = {}
     by_name = {phase["name"]: phase for phase in krasnokamen["phases"]}
-    for phase in vanilla["phases"]:
+    for index, phase in enumerate(vanilla["phases"]):
         name = phase["name"]
         if only and name not in only:
             continue
@@ -101,16 +119,41 @@ def compare_scenario(scenario: dict, vanilla: dict, krasnokamen: dict) -> dict[s
             phases[name] = {"error": "phase missing from Krasnokamen receipt"}
             continue
         diff = compare_snapshot(spec, phase["snapshot"], other["snapshot"])
-        if spec.get("trace") and "trace" in phase and "trace" in other:
-            rows = {}
-            for index, (va, so) in enumerate(zip(phase["trace"], other["trace"])):
-                tick_diff = compare_snapshot(spec, va, so)
-                if tick_diff:
-                    rows[str(index + 1)] = tick_diff
-            if rows:
-                diff["trace"] = rows
+        # Both drivers record no trace for the initial "setup" phase (always the
+        # first receipt entry) but record one for every declared phase when the
+        # scenario enables traces, even when the phase has zero ticks. A
+        # one-sided trace stays a difference; so does a declared phase where
+        # both receipts omit the trace entirely.
+        if scenario.get("trace"):
+            va_trace, so_trace = phase.get("trace"), other.get("trace")
+            if va_trace is None and so_trace is None:
+                if not (index == 0 and name == "setup"):
+                    diff["trace"] = {"error": "trace missing from both phase receipts"}
+            elif va_trace is None or so_trace is None:
+                missing = "vanilla" if va_trace is None else "Krasnokamen"
+                diff["trace"] = {"error": f"trace missing from {missing} phase receipt"}
+            elif len(va_trace) != len(so_trace):
+                diff["trace"] = {"error":
+                                 f"trace length differs: vanilla {len(va_trace)}, Krasnokamen {len(so_trace)}"}
+            else:
+                rows = {}
+                for tick, (va, so) in enumerate(zip(va_trace, so_trace)):
+                    tick_diff = compare_snapshot(spec, va, so)
+                    if tick_diff:
+                        rows[str(tick + 1)] = tick_diff
+                if rows:
+                    diff["trace"] = rows
         if diff:
             phases[name] = diff
+    # Both drivers emit the same phase names for one scenario; an extra phase on
+    # the Krasnokamen side is a receipt-shape difference, not a silent skip.
+    # compare.phases still limits the check to the selected phase names.
+    vanilla_names = {phase["name"] for phase in vanilla["phases"]}
+    for phase in krasnokamen["phases"]:
+        name = phase["name"]
+        if name in vanilla_names or (only and name not in only):
+            continue
+        phases[name] = {"error": "phase not present in vanilla receipt"}
     return {"phases": phases, "match": not phases}
 
 

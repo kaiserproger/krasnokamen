@@ -1,0 +1,102 @@
+{
+ "id": "redstone-lever-lamp",
+ "family": "redstone",
+ "description": "An adjacent redstone lamp turns on and off with a floor lever; an isolated control lamp stays dark. The same block-state writes and tick intervals run on both servers.",
+ "box": [
+  0,
+  60,
+  0,
+  15,
+  70,
+  15
+ ],
+ "setup": [
+  "fill 0 63 0 15 63 15 minecraft:stone",
+  "setblock 2 64 2 minecraft:lever[face=floor,facing=north,powered=false]",
+  "setblock 3 64 2 minecraft:redstone_lamp[lit=false]",
+  "setblock 6 64 2 minecraft:redstone_lamp[lit=false]"
+ ],
+ "phases": [
+  {
+   "name": "on",
+   "commands": [
+    "setblock 2 64 2 minecraft:lever[face=floor,facing=north,powered=true]"
+   ],
+   "ticks": 4
+  },
+  {
+   "name": "off",
+   "commands": [
+    "setblock 2 64 2 minecraft:lever[face=floor,facing=north,powered=false]"
+   ],
+   "ticks": 8
+  }
+ ],
+ "compare": {
+  "blocks": "exact",
+  "entities": "counts"
+ },
+ "vanilla_expect": [
+  {
+   "phase": "on",
+   "check": "block",
+   "pos": [
+    2,
+    64,
+    2
+   ],
+   "equals": "minecraft:lever[face=floor,facing=north,powered=true]"
+  },
+  {
+   "phase": "on",
+   "check": "block",
+   "pos": [
+    3,
+    64,
+    2
+   ],
+   "equals": "minecraft:redstone_lamp[lit=true]"
+  },
+  {
+   "phase": "on",
+   "check": "block",
+   "pos": [
+    6,
+    64,
+    2
+   ],
+   "equals": "minecraft:redstone_lamp[lit=false]"
+  },
+  {
+   "phase": "off",
+   "check": "block",
+   "pos": [
+    2,
+    64,
+    2
+   ],
+   "equals": "minecraft:lever[face=floor,facing=north,powered=false]"
+  },
+  {
+   "phase": "off",
+   "check": "block",
+   "pos": [
+    3,
+    64,
+    2
+   ],
+   "equals": "minecraft:redstone_lamp[lit=false]"
+  },
+  {
+   "phase": "off",
+   "check": "block",
+   "pos": [
+    6,
+    64,
+    2
+   ],
+   "equals": "minecraft:redstone_lamp[lit=false]"
+  }
+ ],
+ "settle_ticks": 4
+}

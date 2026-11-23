@@ -135,6 +135,37 @@ class SceneShotTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "entity snapshot omitted entities"):
                         scene_shot.execute(probe, root, [step], client)
 
+    def test_entity_count_requires_complete_snapshot(self):
+        class Probe:
+            def __init__(self, result):
+                self.result = result
+                self.checks = {}
+            def call(self, name, args):
+                return self.result
+            def check(self, name, condition):
+                self.checks[name] = bool(condition)
+                if not condition:
+                    raise AssertionError(name)
+
+        golem = {"entity_type": "minecraft:iron_golem", "x": 0, "y": 0, "z": 0}
+        zombie = {"entity_type": "minecraft:zombie", "x": 0, "y": 0, "z": 0}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for entities, minimum, maximum in (([zombie], 0, 0), ([golem], 1, 1)):
+                step = {"assert_entities": {"name": "golems", "args": {"limit": 1},
+                                           "entity_type": "minecraft:iron_golem",
+                                           "min": minimum, "max": maximum}}
+                for status in (True, None, 0):
+                    result = {"entities": entities, "game_time": 1201}
+                    if status is not None:
+                        result["truncated"] = status
+                    with self.subTest(entities=entities, status=status):
+                        with self.assertRaisesRegex(RuntimeError, "truncated"):
+                            scene_shot.execute(Probe(result), root, [step])
+                probe = Probe({"entities": entities, "game_time": 1201, "truncated": False})
+                scene_shot.execute(probe, root, [step])
+                self.assertTrue(probe.checks["golems_min"] and probe.checks["golems_max"])
+
     def test_require_entities_rejects_empty_or_invalid_type_lists(self):
         for types in ([], ["zombie"], [""], [None]):
             step = {"require_entities": {"name": "subjects", "args": {}, "types": types}}

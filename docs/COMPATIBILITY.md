@@ -7,6 +7,8 @@ Import installs every endpoint cache automatically; bumps keep older versions.
 Static source and tracked regressions are not proof of a current real-client pass. See the
 [real-client gate contract](development/real-client-gates.md),
 [DoD](DEFINITION_OF_DONE.md), and [historical ledger](VALIDATION_LEDGER.md).
+This dated inventory is a starting point, not a complete current-kernel
+denominator or a measurement of release readiness.
 
 `partial` denotes implemented behavior with an indicated limitation or evidence
 gap; `works` is limited to the stated scope, not complete parity. `missing`
