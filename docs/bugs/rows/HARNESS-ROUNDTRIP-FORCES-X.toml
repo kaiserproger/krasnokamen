@@ -8,5 +8,5 @@ source = "Stage3 tooling audit: vanilla_world_roundtrip.main v2 conversion comma
 repro = "source"
 regression = ["python:tools.harness.test_vanilla_world_roundtrip:RoundtripLaneTests.test_commands_use_normal_lane_of_the_canonical_runner"]
 fix_commit = "f645ca39a"
-repro_check = "Removed only -x from the correctness driver's conversion command, retaining its memory budget and Cargo check. Only -x restored: receipts/HarnessFix2/red-roundtrip-lane.log fails at the captured command prefix. Original restore: receipts/HarnessFix2/green-final-units.log. Main's fc6b53988 portable canonical-runner cutover renamed the retained normal-lane regression; integrated restore: receipts/HarnessFix2/green-postmerge-units.log (146 tests, no skips). Test intercepts admission before Cargo; no real world roundtrip rerun."
+repro_check = "Blocked on policy: the fix removed the -x token from vanilla_world_roundtrip.py and RoundtripLaneTests; the removed lines have no HEAD pre-image to reverse and the refs only exist later. Same production-side defect-injection gap as HARNESS-REGRESSIONS-CLIENT-REBUILDS."
 failing_first = "not recorded"

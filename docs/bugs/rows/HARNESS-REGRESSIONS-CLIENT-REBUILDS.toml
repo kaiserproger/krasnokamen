@@ -15,5 +15,5 @@ regression = [
   "python:tools.harness.test_regressions:ReleasePinTests.test_negative_control_accepts_only_its_own_registered_pin",
 ]
 fix_commit = "a39164dc9"
-repro_check = "HarnessPins/negative-pin.log: all eight pin tests fail with only the base _release_server restored, at the forbidden release-build invocation. HarnessPins/refusal.log and its result.json: real regressions-client invocation refuses the absent pin before executing any command."
+repro_check = "Blocked on policy: the fix (a39164dc9) is a pin-lookup rewrite plus removals; later commits rewrote the same lines, so no HEAD pre-image exists to reverse, and at the fix commit the refs need APIs added later (control unrunnable). Closing it needs a production-side defect-injection mode (the test-only control_b_patch refuses test-file mutations and this row is not test-only), which is a gate extension the review did not authorise."
 failing_first = "not recorded"

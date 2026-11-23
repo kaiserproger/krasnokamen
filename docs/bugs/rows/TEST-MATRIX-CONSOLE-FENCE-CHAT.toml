@@ -7,5 +7,5 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-MATRIX-CONSOLE-FENCE-CHAT"
 regression = ["python:tools.harness.matrix_domains.test_commands:DomainContractTests.test_console_acknowledgment_is_never_received_player_chat"]
-repro_check = "matrix-random random:4 with two protocol clients; observe MatrixConsoleFence feedback. The real fix has no retained patch and synthetic filter removal is not a real control. The previous fix_commit value patch:df70fb9dc2c94a992826305d4854355aca7352c0289e941e535ba1c69830711c has no retained docs/bugs/fix-patches/TEST-MATRIX-CONSOLE-FENCE-CHAT.patch and is not evidence of a reversible fix. QAWave on a70133113 could not resolve this ref, but XHarnessJava is merged here; it now passes unittest (receipts/M3Ledger/python-refs.log)."
+repro_check = "Blocked: fix a195a9b05 only ADDS the oracle (the test did not exist before), so control A has no pre-fix test hunk to restore (reversing an added test file is a deletion, unrunnable), and no product behaviour exists to inject as control B. The guard is the test itself; promotion needs a policy decision for added-test rows."
 failing_first = "reported"
