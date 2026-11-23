@@ -689,7 +689,7 @@ pub(super) enum NativeWork {
 /// answer channel and the wake travel inside the job, so a job that is never
 /// executed (the writer stopped or closed its queue) still closes `done` and
 /// wakes the owner when it is dropped.
-struct BaselineWake {
+pub(super) struct BaselineWake {
     done: Option<std::sync::mpsc::Sender<Result<(), CoreError>>>,
     signal: Option<std::sync::mpsc::SyncSender<JournalWork>>,
     serial: u64,
