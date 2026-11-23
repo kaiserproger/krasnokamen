@@ -280,11 +280,7 @@ fn ender_chest_click_with_a_cold_menu_coordinate_closes_and_keeps_cursor_custody
         "no click reaches personal ender storage"
     );
     assert!(
-        state.players[&first]
-            .inventory
-            .slots
-            .iter()
-            .any(|stack| *stack == carried),
+        state.players[&first].inventory.slots.contains(&carried),
         "the cursor item returns to the inventory"
     );
 }
