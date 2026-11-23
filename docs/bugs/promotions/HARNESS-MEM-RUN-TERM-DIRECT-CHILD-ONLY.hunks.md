@@ -1,40 +1,19 @@
-# HARNESS-MEM-RUN-TERM-DIRECT-CHILD-ONLY — patch mode
+# HARNESS-MEM-RUN-TERM-DIRECT-CHILD-ONLY — patch mode, several commits
 
-`fix_commit = patch:24d942a8b353c596c10be4e663db3120e7cd68bfd56087e7372184bf6db21d94`
+`fix_commit = patch:08df9f05193f63924b70b07fece8bdabc32f7dee1cc5e2344e74dc8976507373` (`docs/bugs/fix-patches/HARNESS-MEM-RUN-TERM-DIRECT-CHILD-ONLY.patch`, sha256 `08df9f05193f63924b70b07fece8bdabc32f7dee1cc5e2344e74dc8976507373`).
 
-Derived from `5675e500ff`: cancel() forwards TERM to the direct child first, then to every other scope member. The patch is committed as
-`docs/bugs/fix-patches/HARNESS-MEM-RUN-TERM-DIRECT-CHILD-ONLY.patch` (the row digest is `patch:24d942a8b353c596c10be4e663db3120e7cd68bfd56087e7372184bf6db21d94`;
-`sha256` of the file: `24d942a8b353c596c10be4e663db3120e7cd68bfd56087e7372184bf6db21d94`).
+The path: the wrapper cancels a scope by TERMing the direct child first, forwarding TERM to the other scope members, and asking the guardian to escalate; the child status a fast trap could reap past is recovered; the cancel grace is validated at argument parsing. Commits: `5675e500ff` (the first TERM pass, the guardian escalation / the owner-line
+protocol), `480d512731` (the sweep skips the already-signalled child, the grace validation / the stale-owner
+verdict and the shared lock), `7d8f2a36d5` (the saved-status recovery, the fail-closed reservation / the
+alias removal and install-order text).
 
-## Hunks the patch carries
+## Omitted: the reservation block and `reserved_cpus.py`/`reserve-cpus` hunks of the same commits — reason (a), they are HARNESS-RESERVE-CPUS-STALE-RESERVATION's path (its own patch now carries them).
 
-| file | +start | +count | hunk |
-|---|---|---|---|
-| tools/dev/mem-run-guard.py | 8 | 7 | import shutil |
-| tools/dev/mem-run-guard.py | 25 | 7 | if sys.argv[1] == '--send-locks': |
-| tools/dev/mem-run-guard.py | 34 | 16 | listener.listen(1) |
-| tools/dev/mem-run-guard.py | 53 | 10 | try: |
-| tools/dev/mem-run-guard.py | 73 | 14 | try: |
-| tools/dev/mem-run.sh | 421 | 7 | unit="krasnokamen-mem-run-${guard_dir##*.}.scope" |
-| tools/dev/mem-run.sh | 444 | 34 | printf "%s\t%s\t%s\t%s\n" "$cg" "$MEMRUN_EST_KIB" "$MEMRUN_PREEMPTIBLE" "$MEMRUN |
+Nothing else is omitted: every other non-test hunk of those commits is in this patch.
 
-## Original hunks left out
+## Proving refs and lines (from `docs/bugs/promotions/HARNESS-MEM-RUN-TERM-DIRECT-CHILD-ONLY.json`)
 
-The patch is a fix in several commits: `5675e500ff` (TERM to the direct child first, the cgroup sweep,
-the guardian escalation), `480d512731` (the sweep skips the child it already signalled, the grace
-validation) and `7d8f2a36d5` (the failed-status recovery, the fail-closed reservation fallback,
-the install-order text). It is the complete base→HEAD diff of `tools/dev/mem-run.sh`, so nothing of
-this file is omitted; the commit's test-file hunks are never part of a fix patch.
-
-Omitted from this patch: the *reservation-helper* hunks of the same commits (`tools/dev/reserved_cpus.py`,
-`tools/dev/reserve-cpus`) — reason **(a)**: they are HARNESS-RESERVE-CPUS-STALE-RESERVATION's own path,
-and reversing them here would red that row's assertions inside this control.
-
-## Proving ref and line
-
-- `python:tools.dev.test_mem_run_term:CancelledScopeTests.test_a_term_ignoring_descendant_does_not_hold_the_scope` — red at `/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_mem_run_term.py:137` in the promotion receipt (`docs/bugs/promotions/HARNESS-MEM-RUN-TERM-DIRECT-CHILD-ONLY.json`).
-- `python:tools.dev.test_mem_run_term:CancelledScopeTests.test_the_token_is_held_during_the_scope_and_free_after_a_cancellation` — red at `/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_mem_run_term.py:181` in the promotion receipt (`docs/bugs/promotions/HARNESS-MEM-RUN-TERM-DIRECT-CHILD-ONLY.json`).
-
-## Claims the control does not prove
-
-None: the patch is the whole behaviour the row names.
+- `python:tools.dev.test_mem_run_term:CancelledScopeTests.test_a_cancelled_child_receives_exactly_one_term` — red at `/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_mem_run_term.py:206`
+- `python:tools.dev.test_mem_run_term:CancelledScopeTests.test_a_term_ignoring_descendant_does_not_hold_the_scope` — red at `/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_mem_run_term.py:166`
+- `python:tools.dev.test_mem_run_term:CancelledScopeTests.test_the_token_is_held_during_the_scope_and_free_after_a_cancellation` — red at `/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_mem_run_term.py:225`
+- `python:tools.dev.test_reserve_cpus:MemRunReservationTests.test_a_non_numeric_cancel_grace_is_named_before_the_scope_starts` — red at `/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_reserve_cpus.py:246`

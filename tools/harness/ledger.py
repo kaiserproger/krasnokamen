@@ -289,6 +289,7 @@ _FIXTURE_PANICS = (
     re.compile(r'\bfixture_store\('),
 )
 _ASSERT_LINE = re.compile(r'\b(?:assert(?:_eq|_ne)?!|debug_assert(?:_eq|_ne)?!|panic!\s*\()')
+_ASSERT_MESSAGE = re.compile(r'^(assertion|assert\b|explicit panic|panicked at)', re.IGNORECASE)
 
 FIXTURE_FAILURE = 'fixture-failure'
 UNPROVEN_PANIC = 'unproven-panic'
@@ -350,7 +351,7 @@ def _panic_class(tree, location, message):
     if not 1 <= line <= len(lines):
         return 'unknown'
     source = lines[line - 1]
-    if _ASSERT_LINE.search(source):
+    if _ASSERT_LINE.search(source) and _ASSERT_MESSAGE.search(message or ''):
         return 'assertion'
     return 'unknown'
 
@@ -1101,7 +1102,8 @@ def _operator_span(tree, file, line):
                 depth -= 1
         if started and depth <= 0:
             return (line, index + 1)
-    return (line, len(lines))
+    # Unstarted (no bracket) or unclosed within the window: no span, so no acceptance (review N-c).
+    return None
 
 
 def _assertion_in_ranges(entry, ranges, control_dir):
@@ -1840,6 +1842,9 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
                           'control A cannot run against current code (control_tree must be head)')
         else:
             control_tree, control_dir = 'fix_commit', stack.enter_context(_worktree(root, full, 'fix'))
+        # Stage the candidate content first: a dirty tree's unstaged diff would otherwise mix with
+        # the reversal, and control B's changed-line ranges are read from that diff (review N-b).
+        _git(control_dir, 'add', '-A')
         _git(control_dir, *reverse, stdin=patch.encode(errors='surrogateescape'))
         control = _classify_control(ident, runner(ctx, refs, control_dir, True), row, control_dir)
         valid_red = {ref for ref, entry in control.items()

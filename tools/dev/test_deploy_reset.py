@@ -42,9 +42,13 @@ class FreshResetGuardTests(unittest.TestCase):
         self.assertTrue(guards, 'the helper must refuse when a check fails')
         self.assertTrue(destructive, 'the helper replaces the world and the binary')
         first = min(destructive)
-        before = [i for i in guards if i < first]
+        # The only post-destructive refusal is the start check after `systemctl start solaris`.
+        start = next((i for i, line in enumerate(lines) if 'systemctl start solaris' in line), len(lines))
+        pre = [i for i in guards if i < start]
+        self.assertTrue(all(i < first for i in pre),
+                        'every pre-start exit 1 sits before the first rm -rf world/mv')
         self.assertGreaterEqual(
-            len(before), 4,
+            len([i for i in guards if i < first]), 4,
             'stop check, survivor check, backup collision, and the archive listing/world entry guard all'
             ' run before rm -rf world/mv')
 
@@ -67,7 +71,13 @@ class FreshResetGuardTests(unittest.TestCase):
         self.assertIn('$$', code)
 
     def test_it_owns_the_binary_as_the_unit_user(self):
-        self.assertIn('chown "${KRASNOKAMEN_SERVER_USER:-krasnokamen}:"', self.code())
+        code = self.code()
+        self.assertIn('chown "${KRASNOKAMEN_SERVER_USER:-krasnokamen}:"', code)
+        # The default must be the unit's own User=, read from the tracked unit file (review N-e).
+        unit = (SCRIPT.parent / 'solaris.service').read_text()
+        user = re.search(r'^User=(\S+)$', unit, re.M)
+        self.assertIsNotNone(user, 'the unit declares User=')
+        self.assertIn(f'${{KRASNOKAMEN_SERVER_USER:-{user.group(1)}}}', code)
 
 
 if __name__ == '__main__':

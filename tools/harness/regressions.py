@@ -66,6 +66,12 @@ def _promotion_errors(ident, bug):
     # A patch-mode row whose committed patch is missing or no longer reverses is a REPORT, never an
     # L2 error: ordinary edits of historical fixes must not turn the gate red (Main B1). Strictness
     # lives at promote/--dry-run, which require and reverse the patch. run() prints the backlog.
+    # A patch whose bytes are not the ones fix_commit names is a different inconsistency: fatal.
+    if isinstance(fix_commit, str) and fix_commit.startswith('patch:') and ident not in BASE_FIXED:
+        import hashlib
+        patch = _patch_file(ident)
+        if patch is not None and hashlib.sha256(patch.read_bytes()).hexdigest() != fix_commit[len('patch:'):]:
+            return [f'{ident}: committed patch digest differs from fix_commit ({patch.name})']
     if promotion is None:
         if bug.get('status') == 'fixed' and ident not in BASE_FIXED:
             return [f'{ident}: fixed without a promotion receipt; only `python3 -m tools.harness ledger promote` may set fixed']
