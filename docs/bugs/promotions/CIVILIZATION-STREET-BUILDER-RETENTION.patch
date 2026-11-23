@@ -1,0 +1,15 @@
+diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
+index a618d1a5e..0d6244542 100644
+--- a/crates/mc-core/src/settlements/construction.rs
++++ b/crates/mc-core/src/settlements/construction.rs
+@@ -2854,9 +2854,7 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+     }
+     if project.blueprint == furnace::NAME || layout::infra(&project.blueprint) {
+         // Infrastructure work is temporary employment.
+-        if project.blueprint == furnace::NAME {
+-            release_builder(state, id, project.builder);
+-        }
++        release_builder(state, id, project.builder);
+         let record = state.settlements.get_mut(id).expect("finished settlement");
+         if project.blueprint == furnace::NAME {
+             record.furnace_workstation = Some(project.structure.clone());
