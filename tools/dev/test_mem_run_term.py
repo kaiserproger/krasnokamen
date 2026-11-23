@@ -159,9 +159,10 @@ class CancelledScopeTests(unittest.TestCase):
         # cancelling one job by pid does. Only the direct child used to receive it.
         os.kill(int(wrapper), signal.SIGTERM)
         try:
-            proc.wait(timeout=45)
-            wait_scope_empty(cg)
-        except subprocess.TimeoutExpired:
+            # The cgroup's own event is the primary signal; the wrapper's exit is awaited after it.
+            wait_scope_empty(cg, timeout=45)
+            proc.wait(timeout=10)
+        except (AssertionError, subprocess.TimeoutExpired):
             self.scope_kill(cg)
             self.fail('the cancelled scope never ended: a TERM-ignoring descendant held the '
                       'wrapper, the scope and its build token (pre-fix behaviour)')

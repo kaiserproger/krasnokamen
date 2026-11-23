@@ -26,4 +26,6 @@ for another row, for API a kept test calls, or for a later rewrite.
 
 ## Claims the control does not prove
 
-None: the patch is the whole behaviour the row names.
+Trimmed to what is asserted today (ReviewD123Harness1 12): the receipt carries the cgroup
+`cpu.stat` throttling counters (`usage_usec`, `nr_periods`, `nr_throttled`, `throttled_usec`), not
+CPU PSI totals; the row names CPU saturation, and PSI totals are the memory row's field.

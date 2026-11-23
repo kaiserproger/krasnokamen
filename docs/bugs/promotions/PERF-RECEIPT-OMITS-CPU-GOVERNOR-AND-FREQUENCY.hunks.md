@@ -24,6 +24,8 @@ for another row, for API a kept test calls, or for a later rewrite.
 
 ## Claims the control does not prove
 
-The a/-side `cgroup_cpu_*: None` pre-image is the receipt field the reversal drops; the governor
-pair and enabled/running ratio are asserted by the same test at its own lines, which is the red
-recorded above. A separate per-field red for each of the pair is not produced.
+Trimmed to what is asserted today (ReviewD123Harness1 12): the test asserts `cpu_scaling` is present
+and, per policy, `scaling_governor` (cpu0), `energy_performance_preference` (cpu1) and the distinct
+`cpuinfo_cur_freq` list — one red at the first of those (`test_profiles.py:1051`). It does NOT assert
+an enabled/running ratio per A/B, a governor "pair" as one field, or min/max frequencies as separate
+lines; no row or hunks text claims those now.
