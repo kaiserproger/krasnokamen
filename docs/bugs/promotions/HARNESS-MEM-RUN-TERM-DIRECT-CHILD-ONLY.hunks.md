@@ -20,9 +20,15 @@ Derived from `5675e500ff`: cancel() forwards TERM to the direct child first, the
 
 ## Original hunks left out
 
-None beyond the fix commit's own test-file hunks (test files are never part of a fix patch).
-The patch is the complete non-test hunk set of the behaviour the row names; nothing is omitted
-for another row, for API a kept test calls, or for a later rewrite.
+The patch is a fix in several commits: `5675e500ff` (TERM to the direct child first, the cgroup sweep,
+the guardian escalation), `480d512731` (the sweep skips the child it already signalled, the grace
+validation) and `7d8f2a36d5` (the failed-status recovery, the fail-closed reservation fallback,
+the install-order text). It is the complete base→HEAD diff of `tools/dev/mem-run.sh`, so nothing of
+this file is omitted; the commit's test-file hunks are never part of a fix patch.
+
+Omitted from this patch: the *reservation-helper* hunks of the same commits (`tools/dev/reserved_cpus.py`,
+`tools/dev/reserve-cpus`) — reason **(a)**: they are HARNESS-RESERVE-CPUS-STALE-RESERVATION's own path,
+and reversing them here would red that row's assertions inside this control.
 
 ## Proving ref and line
 

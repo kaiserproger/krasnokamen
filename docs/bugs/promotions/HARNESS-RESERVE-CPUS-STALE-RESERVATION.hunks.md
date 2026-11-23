@@ -16,9 +16,16 @@ Derived from `5675e500ff`: a stale reservation is named, its corpse cleared unde
 
 ## Original hunks left out
 
-None beyond the fix commit's own test-file hunks (test files are never part of a fix patch).
-The patch is the complete non-test hunk set of the behaviour the row names; nothing is omitted
-for another row, for API a kept test calls, or for a later rewrite.
+The patch is a fix in several commits — `5675e500ff` (the reservation-file protocol: owner line,
+`verdict`/`clear` under the shared lock) plus `480d512731` and `7d8f2a36d5` (unparseable owner =
+stale, the `starttime` alias removal, the install-order text) — narrowed to the hunks after
+`5675e500ff` for one reason: reversing the whole protocol makes every ref in
+`tools.dev.test_reserve_cpus` unrunnable (the helper would have no `verdict`/`clear`), so control A
+could not run at all. The reverted code is the *later* fix, which keeps the API the tests call.
+
+Omitted from this patch: the `reserved_cpus.py` docstring/install-order lines and the `reserve-cpus`
+header are text-only; the *whole-pool* message hunk of `mem-run.sh` is not reversed here (it is
+`mem-run.sh`'s file — reason (a), MEM-RUN's own patch) and the row title says so.
 
 ## Proving ref and line
 
