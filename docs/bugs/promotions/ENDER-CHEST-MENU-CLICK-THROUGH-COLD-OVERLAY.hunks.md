@@ -50,9 +50,8 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   guards (`b460f313cc`, `inventory.rs:486-489`/`:505-508`) and `damage_anvil`'s conversation call the
   helper, so reversing it stops the control from compiling. The helper's doc comment was rewritten by this
   lane (c) to name exactly the gated inputs.
-- `tick/input/inventory.rs` `container_slot_state`/`container_button` guards (`b460f313cc`) — (a) the
-  ANVIL/crafter/lectern menu-close behaviour in the same dispatch family; the ANVIL control proves the
-  damage path, and this row's ref proves the click path.
+- (nothing left over: the `container_slot_state`/`container_button` guards and the slot-of guard are
+  **carried** by this row — see Carried.)
 - `brushing.rs`, `copper.rs`, `tick/mining.rs`, `tick/stations.rs`, `tick.rs`, `vanilla_interact.rs` —
   (a) BRUSH, COPPER, MINING, ANVIL and DRAGON-EGG rows; (c) where those rows later rewrote the code.
 - Test files — (b) kept.
@@ -60,7 +59,16 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
 ## Proving ref (file:line of the failing assertion)
 
 - `cargo:mc-core:ender_chest::tests::ender_chest_click_with_a_cold_menu_coordinate_closes_and_keeps_cursor_custody`
-  — `crates/mc-core/src/ender_chest_tests.rs:260` `"a cold menu source closes the menu"` fails once the
-  click passes the cold coordinate (the menu stays open), and `:284` (`"the cursor item returns to the
-  inventory"`) fails after it; the review's observed red is `.analysis` `20261123T200242…`-class
-  `closes the menu`.
+  — `crates/mc-core/src/ender_chest_tests.rs:418` `"a cold menu source closes the menu"` fails once the
+  click passes the cold coordinate (the menu stays open), and `:442` (`"the cursor item returns to the
+  inventory"`) fails after it.
+- `cargo:mc-core:ender_chest::tests::ender_chest_slot_state_with_a_cold_menu_closes_and_keeps_cursor_custody`
+  and `…::ender_chest_button_with_a_cold_menu_closes_and_keeps_cursor_custody`
+  (`crates/mc-core/src/ender_chest_tests.rs:256`, `:305`): with the guards reversed the cold
+  slot-state/button input leaves the menu open and no `MenuClosed` is pushed.
+- `cargo:mc-core:ender_chest::tests::ender_chest_slot_state_for_a_despawned_player_leaves_the_cold_menu_alone`
+  (`crates/mc-core/src/ender_chest_tests.rs:324`): **not evidence.** The promotion control
+  (`20261123T231647-ledger-promote-d6x5u_d1`) observed it green with the slot-of guard reversed: the
+  fixture's despawned owner never reaches the close path through `run_tick`, so the guard is a defensive
+  invariant without a reversible control. The three cold tests above are the row's controls (all red in
+  that control).

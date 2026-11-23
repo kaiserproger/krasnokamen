@@ -1,30 +1,54 @@
 {
   "id": "ENDER-CHEST-MENU-CLICK-THROUGH-COLD-OVERLAY",
   "verdict": "promoted",
-  "fix_commit": "patch:d1852b4e407d89f8d4554cd5fb5cd8d14f670f0c3f260859d16a53305f34d985",
-  "fix_commit_full": "patch:d1852b4e407d89f8d4554cd5fb5cd8d14f670f0c3f260859d16a53305f34d985",
-  "promoted_at": "2026-11-23T22:06:42+00:00",
-  "tree_head": "9c78eee8e180b69ca720abc6062ae6e3c18dc228",
+  "fix_commit": "patch:0db22dafacbc9521171e85c65fb24dde7c8a5856cded1263aac6df8444c7302b",
+  "fix_commit_full": "patch:0db22dafacbc9521171e85c65fb24dde7c8a5856cded1263aac6df8444c7302b",
+  "promoted_at": "2026-11-23T23:19:31+00:00",
+  "tree_head": "b748b9c0532176bd937f6c09fcfabee5447258b9",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
-  "fix_patch_sha256": "d1852b4e407d89f8d4554cd5fb5cd8d14f670f0c3f260859d16a53305f34d985",
+  "fix_patch_sha256": "0db22dafacbc9521171e85c65fb24dde7c8a5856cded1263aac6df8444c7302b",
   "reversed_files": [
     "crates/mc-core/src/tick/input/inventory.rs"
   ],
   "kept_test_files": [],
   "negative_control": {
+    "cargo:mc-core:ender_chest::tests::ender_chest_button_with_a_cold_menu_closes_and_keeps_cursor_custody": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:ender_chest::tests::ender_chest_slot_state_with_a_cold_menu_closes_and_keeps_cursor_custody": {
+      "state": "red",
+      "detail": "FAIL"
+    },
     "cargo:mc-core:ender_chest::tests::ender_chest_click_with_a_cold_menu_coordinate_closes_and_keeps_cursor_custody": {
       "state": "red",
       "detail": "FAIL"
+    },
+    "cargo:mc-core:ender_chest::tests::ender_chest_slot_state_for_a_despawned_player_leaves_the_cold_menu_alone": {
+      "state": "green",
+      "detail": ""
     }
   },
   "restored": {
+    "cargo:mc-core:ender_chest::tests::ender_chest_button_with_a_cold_menu_closes_and_keeps_cursor_custody": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:ender_chest::tests::ender_chest_slot_state_with_a_cold_menu_closes_and_keeps_cursor_custody": {
+      "state": "green",
+      "detail": ""
+    },
     "cargo:mc-core:ender_chest::tests::ender_chest_click_with_a_cold_menu_coordinate_closes_and_keeps_cursor_custody": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:ender_chest::tests::ender_chest_slot_state_for_a_despawned_player_leaves_the_cold_menu_alone": {
       "state": "green",
       "detail": ""
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T220514-ledger-promote-3mxz2ppq"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T231647-ledger-promote-d6x5u_d1"
 }
