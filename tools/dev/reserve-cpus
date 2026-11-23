@@ -11,9 +11,14 @@
 # of /proc/<pid>/stat). A killed run leaves the file behind; mem-run and this
 # script read the owner to tell a live reservation from a corpse (pid gone or
 # reused), so a stale file cannot silently pin every later scope (#G4, CS341).
+# Clearing a corpse and creating a reservation are serialized on
+# `reserved-cpus.lock` (tools/dev/reserved_cpus.py): a reservation written while a
+# corpse is judged is never removed. Install order on a host: mem-run.sh first,
+# then this script; only the new pair is race-safe together.
 set -euo pipefail
 dir=/tmp/solaris-mem-slots
 file=$dir/reserved-cpus
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 [ $# -ge 3 ] && [ "$2" = -- ] || { echo "usage: reserve-cpus <cpu-list> -- <command> [args...]" >&2; exit 2; }
 cpus=$1; shift 2
 [[ $cpus =~ ^[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$ ]] || { echo "reserve-cpus: invalid CPU list '$cpus'" >&2; exit 2; }
@@ -23,26 +28,35 @@ for part in ${cpus//,/ }; do
 done
 mkdir -p "$dir"
 # A reservation whose owner is gone (SIGKILL, OOM, a wrapper kill) is a corpse: name it and
-# clear it instead of refusing every future reservation behind it.
-stale_reservation() {
-  local owner pid start live
-  owner=$(sed -n '2p' "$file" 2>/dev/null || true)
-  [ -n "$owner" ] || return 1          # one-line file: an older writer, cannot be judged
-  pid=${owner%% *}; start=${owner##* }
-  live=$(awk '{print $22}' "/proc/$pid/stat" 2>/dev/null || true)
-  [ -z "$live" ] || [ "$live" != "$start" ]
-}
-if [ -e "$file" ] && stale_reservation; then
-  echo "reserve-cpus: clearing stale reservation $(head -n1 "$file" 2>/dev/null || true) (owner $(sed -n '2p' "$file") is gone)" >&2
-  rm -f "$file"
-fi
-starttime=$(awk '{print $22}' "/proc/$$/stat")
-# noclobber makes the create atomic: a second reservation is refused, not merged.
-if ! (set -o noclobber; printf '%s\n%s %s\n' "$cpus" "$$" "$starttime" > "$file") 2>/dev/null; then
+# clear it instead of refusing every future reservation behind it. The helper re-reads under
+# the lock and unlinks only the bytes it judged, so a fresh reservation is never removed.
+case "$(python3 "$here/reserved_cpus.py" verdict "$dir")" in
+  stale\ *) python3 "$here/reserved_cpus.py" clear "$dir" || true ;;
+esac
+version=$(awk '{print $22}' "/proc/$$/stat")
+# noclobber inside the lock makes the create atomic: a second reservation is refused, not merged.
+if ! (
+  exec {lf}<>"$dir/reserved-cpus.lock"
+  flock "$lf"
+  set -o noclobber
+  printf '%s\n%s %s\n' "$cpus" "$$" "$version" > "$file"
+) 2>/dev/null; then
   echo "reserve-cpus: CPUs already reserved: $(cat "$file" 2>/dev/null)" >&2
   exit 75
 fi
-release() { rm -f "$file"; echo "reserve-cpus: released $cpus" >&2; }
+starttime=$version
+release() {
+  local content expected
+  (
+    exec {lf}<>"$dir/reserved-cpus.lock"
+    flock "$lf"
+    content=$(cat "$file" 2>/dev/null || true)
+    expected=$(printf '%s\n%s %s' "$cpus" "$$" "$starttime")
+    # Only our own file: a reservation that replaced it is not ours to remove.
+    if [ "$content" = "$expected" ]; then rm -f -- "$file"; fi
+  )
+  echo "reserve-cpus: released $cpus" >&2
+}
 trap release EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM

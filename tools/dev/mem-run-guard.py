@@ -25,7 +25,7 @@ if sys.argv[1] == '--send-locks':
             raise RuntimeError('guardian did not accept locks')
     sys.exit(0)
 
-control, cgroup, wrapper, caller = sys.argv[1:]
+control, cgroup, wrapper, caller, *rest = sys.argv[1:]
 selector = selectors.DefaultSelector()
 fifo = os.open(control + '/events', os.O_RDWR | os.O_NONBLOCK)
 listener = socket.socket(socket.AF_UNIX)
@@ -35,8 +35,14 @@ selector.register(listener, selectors.EVENT_READ)
 held_locks = []
 selector.register(fifo, selectors.EVENT_READ)
 # A cancellation the wrapper forwards (TERM/INT/HUP) starts this escalation: TERM alone cannot
-# stop a descendant that ignores it, and the wrapper would wait forever (#G5, CS341).
-CANCEL_GRACE_SECONDS = 15.0
+# stop a descendant that ignores it, and the wrapper would wait forever (#G5, CS341). The grace is
+# an argument from mem-run.sh (`KRASNOKAMEN_MEMRUN_CANCEL_GRACE`, default 15 s): a wrapper killed
+# at the deadline takes its command with it, so a harness that is still writing result.json at the
+# escalation is cut, exactly as a TERM-ignoring descendant would be.
+try:
+    CANCEL_GRACE_SECONDS = float(rest[0]) if rest else 15.0
+except ValueError:
+    sys.exit(f'mem-run-guard: grace must be seconds, got {rest[0]!r}')
 escalate_at = None
 try:
     wrapper_fd = os.pidfd_open(int(wrapper))

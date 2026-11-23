@@ -379,18 +379,19 @@ fi
 # stale list covers a whole pool) — #G4, CS341. A one-line file from an older writer has no
 # owner and is honoured as-is (mixed-version compatibility).
 reserved=
-if [ -r "$dir/reserved-cpus" ]; then
-  read -r reserved _ < "$dir/reserved-cpus" || true
-  owner=$(sed -n '2p' "$dir/reserved-cpus" 2>/dev/null || true)
-  if [ -n "$reserved" ] && [ -n "$owner" ]; then
-    owner_pid=${owner%% *}; owner_start=${owner##* }
-    owner_live=$(awk '{print $22}' "/proc/$owner_pid/stat" 2>/dev/null || true)
-    if [ "$owner_live" != "$owner_start" ]; then
-      echo "mem-run: ignoring stale CPU reservation '$reserved' (owner $owner is gone or its pid was reused); removing $dir/reserved-cpus" >&2
-      rm -f "$dir/reserved-cpus"
-      reserved=
-    fi
-  fi
+if [ -e "$dir/reserved-cpus" ]; then
+  verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>/dev/null || echo none)
+  case "$verdict" in
+    keep\ *) reserved=${verdict#keep } ;;
+    stale\ *)
+      echo "mem-run: ignoring stale CPU reservation '${verdict#stale }' (its owner is gone or its pid was reused); clearing $dir/reserved-cpus" >&2
+      python3 "$here/reserved_cpus.py" clear "$dir" >&2 || true
+      # Clearing re-reads under the lock, so it never removes a reservation written meanwhile:
+      # if one is there now, it is live and this scope honours it.
+      verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>/dev/null || echo none)
+      [ "${verdict%% *}" = keep ] && reserved=${verdict#keep }
+      ;;
+  esac
 fi
 if [ -n "$reserved" ] && [ "${KRASNOKAMEN_RESERVED_CPUS:-}" != use ] && [ "$exclusive" = 0 ]; then
   declare -A held=()
@@ -420,6 +421,7 @@ unit="krasnokamen-mem-run-${guard_dir##*.}.scope"
 mkfifo "$guard_dir/events" "$guard_dir/ready"
 if ! systemd-run --user --quiet --collect --unit="${unit%.scope}-guard" \
   python3 "$here/mem-run-guard.py" "$guard_dir" "/sys/fs/cgroup$cgroup/$unit" "$$" "$PPID" \
+  "${KRASNOKAMEN_MEMRUN_CANCEL_GRACE:-15}" \
   || ! timeout 10 bash -c 'read -r ready < "$1/ready"' _ "$guard_dir"; then
   rm -rf "$guard_dir"
   echo "mem-run: failed to start scope guardian" >&2
@@ -451,11 +453,18 @@ cancel() {
   # recurse; a later signal is already covered by the guardian escalation.
   [ "${cancel_done:-0}" = 1 ] && return
   cancel_done=1
+  # The direct child first, unconditionally: a failing cgroup.procs read (or an unusable
+  # guardian fifo) must never leave the wrapper in `wait` with nothing signalled (#G5, CS341).
+  kill -TERM "$c" 2>/dev/null || true
   # The guardian owns escalation: tell it (its own fifo, not the watchdog events stream).
   local fd
-  exec {fd}<>"$MEMRUN_GUARD_DIR/events"
-  printf "cancel\n" >&"$fd"
-  exec {fd}>&-
+  if exec {fd}<>"$MEMRUN_GUARD_DIR/events"; then
+    printf "cancel\n" >&"$fd" ||
+      echo "mem-run: cancel: guardian fifo write failed; the scope TERM still applies, no cgroup.kill escalation" >&2
+    exec {fd}>&-
+  else
+    echo "mem-run: cancel: cannot open $MEMRUN_GUARD_DIR/events; the guardian cannot escalate to cgroup.kill" >&2
+  fi
   local pid
   for pid in $(cat "/sys/fs/cgroup$cg/cgroup.procs" 2>/dev/null); do
     [ "$pid" = "$$" ] && continue

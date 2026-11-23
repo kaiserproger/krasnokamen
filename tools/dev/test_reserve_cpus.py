@@ -3,6 +3,7 @@
 Real scopes, but every run here is `true` under a 1G cap, so the test only exercises the
 reservation file protocol and the two scripts that read and write it.
 """
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -11,6 +12,13 @@ import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+
+
+def protocol():
+    spec = importlib.util.spec_from_file_location('reserved_cpus_under_test', HERE / 'reserved_cpus.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def starttime(pid: int) -> str:
@@ -34,6 +42,7 @@ class ReserveCpusTests(unittest.TestCase):
         self.script = self.root / 'reserve-cpus'
         self.script.write_text(source.replace('dir=/tmp/solaris-mem-slots', f'dir={self.state}', 1))
         self.script.chmod(0o755)
+        shutil.copy(HERE / 'reserved_cpus.py', self.root)
 
     def reserve(self, *args, **kwargs):
         return subprocess.run([str(self.script), *args], capture_output=True, text=True, **kwargs)
@@ -76,6 +85,46 @@ class ReserveCpusTests(unittest.TestCase):
         self.assertEqual((self.state / 'reserved-cpus').read_text(), '6,7\n')
 
 
+class ReservedCpusProtocolTests(unittest.TestCase):
+    """The shared file protocol: judge an owner, and never unlink bytes that changed meanwhile."""
+
+    def setUp(self) -> None:
+        self.protocol = protocol()
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.state = Path(tmp.name)
+
+    def test_a_corpse_is_stale_and_a_live_owner_is_kept(self):
+        dead = dead_pid()
+        self.assertEqual(self.protocol.verdict(f'6,7\n{dead} 1\n'), 'stale 6,7')
+        live = f'6,7\n{os.getpid()} {starttime(os.getpid())}\n'
+        self.assertEqual(self.protocol.verdict(live), 'keep 6,7')
+        # An older one-line writer cannot be judged: honour it, exactly as mem-run always has.
+        self.assertEqual(self.protocol.verdict('6,7\n'), 'keep 6,7')
+        self.assertEqual(self.protocol.verdict('not a cpu list\n'), 'none')
+        self.assertEqual(self.protocol.verdict(''), 'none')
+
+    def test_a_reservation_rewritten_after_the_verdict_is_not_unlinked(self):
+        # TOCTOU: judge the corpse, then a live reservation replaces the file before the unlink.
+        corpse = f'6,7\n{dead_pid()} 1\n'
+        (self.state / 'reserved-cpus').write_text(corpse)
+        self.assertEqual(self.protocol.verdict(corpse), 'stale 6,7')
+        live = f'8\n{os.getpid()} {starttime(os.getpid())}\n'
+        (self.state / 'reserved-cpus').write_text(live)
+        self.assertFalse(self.protocol.unlink_if_unchanged(self.state, corpse),
+                         'the bytes that were judged were not the bytes on disk')
+        self.assertEqual((self.state / 'reserved-cpus').read_text(), live, 'the live reservation survives')
+
+    def test_clear_removes_a_corpse_and_keeps_a_live_reservation(self):
+        (self.state / 'reserved-cpus').write_text(f'6,7\n{dead_pid()} 1\n')
+        self.assertIn('clearing stale reservation 6,7', self.protocol.clear(self.state))
+        self.assertFalse((self.state / 'reserved-cpus').exists())
+        live = f'6,7\n{os.getpid()} {starttime(os.getpid())}\n'
+        (self.state / 'reserved-cpus').write_text(live)
+        self.assertEqual(self.protocol.clear(self.state), '')
+        self.assertEqual((self.state / 'reserved-cpus').read_text(), live)
+
+
 class MemRunReservationTests(unittest.TestCase):
     """The scope's side: stale reservations are logged and cleared, live ones are logged."""
 
@@ -96,7 +145,7 @@ class MemRunReservationTests(unittest.TestCase):
         self.runner.write_text(source)
         self.runner.chmod(0o755)
         for name in ('slot-select.sh', 'heavy-watchdog.py', 'release-build-policy.sh',
-                     'measurement-window.py', 'measurement-windows'):
+                     'measurement-window.py', 'measurement-windows', 'reserved_cpus.py'):
             shutil.copy(HERE / name, root)
         shutil.copy(HERE / 'mem-run-guard.py', root)
         (root / 'targets' / 'slot-a').mkdir(parents=True)

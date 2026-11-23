@@ -63,7 +63,13 @@ quiet window. A `-p` compile would hold its token while queued: **do not build i
   Outside a grant, refuse 75 and name next start, before acquiring locks.
   Only Main's explicitly authorized `KRASNOKAMEN_WINDOW_OVERRIDE=1` overrides.
 - A guardian kills cancelled jobs' scopes and retains locks until empty.
-  Cancel the parent job, not just children.
+  Cancel the parent job, not just children. On a wrapper signal the scope gets
+  `TERM` directly first, then every `cgroup.procs` member; the guardian
+  escalates to `cgroup.kill` (`SIGKILL` to the whole scope, the wrapper
+  included) after `KRASNOKAMEN_MEMRUN_CANCEL_GRACE` seconds, default 15 — a
+  harness still writing `result.json` at that deadline is cut with its scope.
+  If the guardian fifo is unwritable the runner says so on stderr and the
+  `TERM` pass still applies.
 - Exit 75 is admission refusal (named cgroup/watchdog/window/target cause), not
   an executed gate. Token, scene, exclusive and perf waits have different owners;
   waiting is not death. Consume completion, never poll or bypass another lane.
