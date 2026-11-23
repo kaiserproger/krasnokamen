@@ -12,5 +12,5 @@ failing_first = "not recorded"
 # Window proof: deop_between_join_submission_and_late_registration_keeps_native_level parks the admission at the real boundary (Join submitted, session not yet registered) through the #[cfg(test)] AdmitRendezvous instrumentation in server/connection.rs, issues a real `deop`, and asserts the published native PermissionLevel is 0 (inverse: the Join's 4). Test-only instrumentation, identical on both patch sides, compiled out of release builds; the fixed order drops the operator fence before parking so the command cannot deadlock.
 # The stub refresh_join_permission_tree body on the control side is test-API adaptation, not a pre-image: the function did not exist before 0504a280.
 # Stage2X SLICES.md:126 and receipts/XEdgeOps/control-A.log: deop_between_snapshot_and_registration_reaches_native_join stays green under reversal.
-fix_commit = "patch:bf716a13d456ed6bbe9a34b4cf8956a57835d384aa4d9c1524c1f2ee34cae489"
+fix_commit = "patch:7a30a926ec93da2eac398a6aafba067c0810796d57468ef82c7842c2f7786c60"
 promotion = "docs/bugs/promotions/EDGE-OP-JOIN-STALE-PERMISSION.json"
