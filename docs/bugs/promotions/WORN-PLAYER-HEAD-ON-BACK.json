@@ -1,0 +1,71 @@
+{
+  "id": "WORN-PLAYER-HEAD-ON-BACK",
+  "verdict": "promoted",
+  "fix_commit": "client:2cf3cfd0307556d0ec413f292a19df2d7cf7ee11",
+  "fix_commit_full": "2cf3cfd0307556d0ec413f292a19df2d7cf7ee11",
+  "promoted_at": "2026-11-23T16:01:16+00:00",
+  "tree_head": "e1cb1a3e0c58f767aa099b88d639697028dc6d05",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T155915-native-player-head-3ugiaunl/result.json",
+    "client_head": "98e4b5bb2cb65d766bfc588d3756aaa7fe2da6c8",
+    "server_binary_sha256": "03cfd4623dd5da42eccbf2f8ba651712374b958d739851599bdb85084d51e48f",
+    "red": [
+      "harness:scene-shot:native-player-head"
+    ],
+    "states": {
+      "harness:scene-shot:native-player-head": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T155952-native-player-head-o1nzfwxp/result.json",
+    "client_head": "2cf3cfd0307556d0ec413f292a19df2d7cf7ee11",
+    "server_binary_sha256": "03cfd4623dd5da42eccbf2f8ba651712374b958d739851599bdb85084d51e48f",
+    "green": [
+      "harness:scene-shot:native-player-head"
+    ],
+    "states": {
+      "harness:scene-shot:native-player-head": "green"
+    },
+    "tree_head": "e1cb1a3e0c58f767aa099b88d639697028dc6d05",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T155952-native-player-head-o1nzfwxp/result.json",
+    "client_head": "2cf3cfd0307556d0ec413f292a19df2d7cf7ee11",
+    "server_binary_sha256": "03cfd4623dd5da42eccbf2f8ba651712374b958d739851599bdb85084d51e48f",
+    "green": [
+      "harness:scene-shot:native-player-head"
+    ],
+    "states": {
+      "harness:scene-shot:native-player-head": "green"
+    },
+    "tree_head": "e1cb1a3e0c58f767aa099b88d639697028dc6d05",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "2d1b53de3deaa29cfaa6312d9485032ba57e7e0f",
+    "paths": [
+      "src/entities.rs",
+      "src/entities/crowd.rs",
+      "src/entities/presentation.rs",
+      "src/ui/items.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::animation_tests::worn_skull_and_custom_head_follow_the_head_bone_not_the_hand_pose": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::crowd::tests::worn_skull_composites_match_cpu_and_do_not_alias_ordinary_head_items": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T160038-ledger-promote-u1iwvsry"
+}
