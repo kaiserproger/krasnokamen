@@ -44,15 +44,17 @@ def _patch_reverses(path):
 
 
 def _stale_rows(bugs):
-    """Patch-mode rows whose committed patch does not reverse on this tree, sorted."""
+    """[(id, reason)] of patch-mode rows whose committed patch is missing or does not reverse."""
     stale = []
     for bug in bugs:
         fix = bug.get('fix_commit')
         if not isinstance(fix, str) or not fix.startswith('patch:') or bug['id'] in BASE_FIXED:
             continue
         patch = _patch_file(bug['id'])
-        if patch is not None and not _patch_reverses(patch)[0]:
-            stale.append(bug['id'])
+        if patch is None:
+            stale.append((bug['id'], 'no committed patch'))
+        elif not _patch_reverses(patch)[0]:
+            stale.append((bug['id'], 'does not reverse'))
     return sorted(stale)
 
 
@@ -61,14 +63,9 @@ def _promotion_errors(ident, bug):
     promotion, fix_commit = bug.get('promotion'), bug.get('fix_commit')
     if 'fix_commit' in bug and (not isinstance(fix_commit, str) or not re.fullmatch(r'(?:client:)?[0-9a-f]{7,40}|patch:[0-9a-f]{64}', fix_commit)):
         return [f'{ident}: fix_commit must be a lowercase hex commit id, client:<commit> or patch:<sha256>']
-    if isinstance(fix_commit, str) and fix_commit.startswith('patch:') and ident not in BASE_FIXED:
-        # FATAL: a patch-mode row must carry its committed patch; a re-audit reverses it (README:185).
-        patch = _patch_file(ident)
-        if patch is None:
-            return [f'{ident}: patch-mode row has no committed patch under docs/bugs/fix-patches/ or docs/bugs/promotions/']
-        # A stale patch (a later commit rewrote its hunks) is NOT an error here: ordinary edits of
-        # historical fixes must not turn L2 red. Strictness lives at promote/--dry-run; run() reports
-        # the backlog non-fatally.
+    # A patch-mode row whose committed patch is missing or no longer reverses is a REPORT, never an
+    # L2 error: ordinary edits of historical fixes must not turn the gate red (Main B1). Strictness
+    # lives at promote/--dry-run, which require and reverse the patch. run() prints the backlog.
     if promotion is None:
         if bug.get('status') == 'fixed' and ident not in BASE_FIXED:
             return [f'{ident}: fixed without a promotion receipt; only `python3 -m tools.harness ledger promote` may set fixed']
@@ -728,9 +725,11 @@ def run(ctx, *, cargo_junit: Path | None = None):
     stale = _stale_rows([bug for bug in bugs if isinstance(bug, dict) and isinstance(bug.get('id'), str)])
     if stale:
         # Report only: L2 must not fail because a historical fix's hunks were later rewritten.
-        print(f'[regressions] stale patch-mode receipts: {len(stale)}', flush=True)
+        missing = sum(1 for _, reason in stale if reason == 'no committed patch')
+        print(f'[regressions] stale patch-mode receipts: {len(stale)}, {missing} without patch', flush=True)
         try:
-            (ctx.artifact_dir / 'stale-patch-mode.txt').write_text('\n'.join(stale) + '\n')
+            (ctx.artifact_dir / 'stale-patch-mode.txt').write_text(
+                ''.join(f'{ident}\t{reason}\n' for ident, reason in stale))
         except OSError:
             pass
     fixed = sum(isinstance(b, dict) and b.get('status') == 'fixed' for b in bugs)

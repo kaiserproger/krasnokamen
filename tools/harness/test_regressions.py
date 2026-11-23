@@ -1041,12 +1041,15 @@ promotion = "docs/bugs/promotions/X.json"
             (root / 'docs/bugs/fix-patches/X.patch').write_text(text)
         return root
 
-    def test_a_missing_patch_file_is_fatal(self):
+    def test_a_missing_patch_file_is_reported_not_fatal(self):
+        # Main B1: seven historical rows carry only promotions/<ID>.json; they must not turn L2 red.
         root = self.root(with_patch=False)
         with patch.object(regressions, 'REPO_ROOT', root):
             row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
             errors = regressions._promotion_errors('X', row)
-        self.assertTrue(any('no committed patch' in error for error in errors), errors)
+            stale = regressions._stale_rows([row])
+        self.assertEqual(errors, [])
+        self.assertEqual(stale, [('X', 'no committed patch')])
 
     def test_a_stale_patch_is_a_report_not_an_error(self):
         root = self.root()
@@ -1055,7 +1058,7 @@ promotion = "docs/bugs/promotions/X.json"
             errors = regressions._promotion_errors('X', row)
             stale = regressions._stale_rows([row])
         self.assertEqual(errors, [], 'staleness must not fail the L2 gate')
-        self.assertEqual(stale, ['X'], 'it is still reported as the backlog')
+        self.assertEqual(stale, [('X', 'does not reverse')], 'it is still reported as the backlog')
 
 class FixturePanicTests(unittest.TestCase):
     """A control red must be an assertion, not a fixture that panicked before the test body ran.

@@ -1,3 +1,53 @@
+diff --git a/tools/dev/mem-run.sh b/tools/dev/mem-run.sh
+--- a/tools/dev/mem-run.sh
++++ b/tools/dev/mem-run.sh
+@@ -384,7 +384,45 @@
+ # silently pin every later scope away from those CPUs (or drop the restriction when the
+ # stale list covers a whole pool) — #G4, CS341. A one-line file from an older writer has no
+ # owner and is honoured as-is (mixed-version compatibility).
+-reserved=$(cat "$dir/reserved-cpus" 2>/dev/null || true)
++reserved=
++if [ -e "$dir/reserved-cpus" ]; then
++  # A failing helper must not silently drop a live reservation: name it, keep its stderr in a
++  # variable (a shared .err file races between wrappers), validate the first line as a CPU list and
++  # honour that much (ReviewD123Harness1 6, 4 N12).
++  err=
++  errlog=$(mktemp "${TMPDIR:-/tmp}/mem-run-reserved.XXXXXX")
++  if ! verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>"$errlog"); then
++    err=$(cat "$errlog")
++    rm -f "$errlog"
++    first=$(head -n 1 "$dir/reserved-cpus")
++    if ! printf '%s' "$first" | grep -Eqx '[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*'; then
++      echo "mem-run: cannot judge $dir/reserved-cpus ($err) and its first line is not a CPU list; refusing this scope" >&2
++      exit 75
++    fi
++    echo "mem-run: cannot judge $dir/reserved-cpus; honouring its first line '$first' as a CPU list: $err" >&2
++    verdict="keep $first"
++  else
++    err=$(cat "$errlog")
++    rm -f "$errlog"
++    [ -n "$err" ] && echo "mem-run: reserved-cpus verdict said: $err" >&2
++  fi
++  case "$verdict" in
++    keep\ *) reserved=${verdict#keep } ;;
++    stale\ *)
++      echo "mem-run: ignoring stale CPU reservation '${verdict#stale }' (its owner is gone or its pid was reused); clearing $dir/reserved-cpus" >&2
++      python3 "$here/reserved_cpus.py" clear "$dir" >&2 || true
++      # Clearing re-reads under the lock, so it never removes a reservation written meanwhile:
++      # if one is there now, it is live and this scope honours it.
++      verdict=$(python3 "$here/reserved_cpus.py" verdict "$dir" 2>/dev/null || echo none)
++      [ "${verdict%% *}" = keep ] && reserved=${verdict#keep }
++      ;;
++    none) : ;;
++    *)
++      echo "mem-run: reserved-cpus verdict '$verdict' is not none/keep/stale; refusing this scope" >&2
++      exit 75
++      ;;
++  esac
++fi
+ if [ -n "$reserved" ] && [ "${KRASNOKAMEN_RESERVED_CPUS:-}" != use ] && [ "$exclusive" = 0 ]; then
+   declare -A held=()
+   for part in ${reserved//,/ }; do for ((c = ${part%-*}; c <= ${part#*-}; c++)); do held[$c]=1; done; done
 diff --git a/tools/dev/reserve-cpus b/tools/dev/reserve-cpus
 index edddd0b5d..d9a1da0b9 100755
 --- a/tools/dev/reserve-cpus
