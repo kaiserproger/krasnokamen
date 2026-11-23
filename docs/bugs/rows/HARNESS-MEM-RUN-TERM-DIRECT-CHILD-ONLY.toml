@@ -3,7 +3,7 @@ id = "HARNESS-MEM-RUN-TERM-DIRECT-CHILD-ONLY"
 title = "`mem-run` forwards a stop signal to its direct child only, so a descendant that ignores it keeps the wrapper, the scope and the build token held until the wrapper is SIGKILLed"
 area = "harness"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "CS341 audit A 2026-11-17, receipts/CS341/REPORT-A.md G5, read from code and not reproduced: tools/dev/mem-run.sh:410-411 background the command (`\"$@\" <&0 3>&- 6>&- 7>&- 8>&- 9>&- & c=$!`) and install `trap \"kill -TERM $c\" TERM INT HUP`; the only whole-scope cleanup is tools/dev/mem-run-guard.py:63-84, which fires when the wrapper or its caller dies. A targeted `kill -TERM <mem-run pid>` (an agent cancelling one job by pid) with a command whose children ignore TERM leaves the wrapper blocked in `wait` forever, so the guardian sees a live wrapper, the scope is never killed and the build token it holds is not released until someone SIGKILLs the wrapper. Ctrl-C at a terminal hides this because the kernel signals the whole foreground process group. Repro: `tools/dev/mem-run.sh -m 1G sh -c 'trap \"\" TERM; sleep 600' &`, `kill -TERM` the mem-run pid, then check the scope stays populated and the token is still held in tools/dev/fleet-status."
 repro = "source"
 regression = [
@@ -15,3 +15,4 @@ regression = [
 ]
 failing_first = "not recorded"
 fix_commit = "patch:08df9f05193f63924b70b07fece8bdabc32f7dee1cc5e2344e74dc8976507373"
+promotion = "docs/bugs/promotions/HARNESS-MEM-RUN-TERM-DIRECT-CHILD-ONLY.json"
