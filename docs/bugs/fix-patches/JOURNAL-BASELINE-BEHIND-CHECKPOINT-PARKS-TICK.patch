@@ -1,15 +1,124 @@
 diff --git a/crates/mc-core/src/core/journal.rs b/crates/mc-core/src/core/journal.rs
-index 3af8597be..02349d8b8 100644
+index 9a5eca0a1..02349d8b8 100644
 --- b/crates/mc-core/src/core/journal.rs
 +++ a/crates/mc-core/src/core/journal.rs
-@@ -960,10 +960,58 @@ pub(super) fn journal_loop(
-                     // applies. The wait itself is the writer's own answer: it
-                     // lands in this queue as `BaselineDurable`, so there is no
-                     // polling interval anywhere.
+@@ -670,11 +670,14 @@ pub(super) enum NativeWork {
+         job: Box<CheckpointJob>,
+         plugins: Result<Box<crate::plugin::PluginState>, CoreError>,
+     },
+-    /// Commit generated baselines (Immediate); `done` reports durability to the
+-    /// journal owner, which withholds later `Append`s until it arrives.
++    /// Commit generated baselines (Immediate). `wake` carries the answer
++    /// channel and the queue wake built by the owner: the writer answers through
++    /// it, and any drop of this job (refusal, unwind, closed writer queue) also
++    /// answers as closed and wakes the owner, which withholds later `Append`s
++    /// until that answer arrives.
+     RequireGenerated {
+         chunks: Box<crate::world::ChunkCapture>,
+-        done: std::sync::mpsc::Sender<Result<(), CoreError>>,
++        wake: BaselineWake,
+     },
+     /// Copy the last committed checkpoint and the WAL after it (hot backup).
+     Backup { job: BackupJob, through: u64 },
+@@ -682,6 +685,43 @@ pub(super) enum NativeWork {
+     Shutdown,
+ }
+ 
++/// One baseline handoff, owned by the owner from the moment it is queued: the
++/// answer channel and the wake travel inside the job, so a job that is never
++/// executed (the writer stopped or closed its queue) still closes `done` and
++/// wakes the owner when it is dropped.
++struct BaselineWake {
++    done: Option<std::sync::mpsc::Sender<Result<(), CoreError>>>,
++    signal: Option<std::sync::mpsc::SyncSender<JournalWork>>,
++    serial: u64,
++}
++
++impl BaselineWake {
++    /// Sends the commit result on the job's own channel; the wake follows from
++    /// the guard's drop, so the answer is already final when it arrives.
++    fn answer(&mut self, result: Result<(), CoreError>) {
++        if let Some(done) = self.done.take() {
++            let _ = done.send(result);
++        }
++    }
++}
++
++impl Drop for BaselineWake {
++    fn drop(&mut self) {
++        // Close the answer channel first: a dropped, never-executed job must
++        // read as a closed (failed) answer, never as a pending one.
++        self.done.take();
++        let Some(signal) = self.signal.take() else {
++            return;
++        };
++        // A full queue means the owner is draining it and will see the closed
++        // answer on its next receive check; a lost wake is always recovered
++        // because `done` is closed before this send is attempted.
++        let _ = signal.try_send(JournalWork::BaselineDurable {
++            serial: self.serial,
++        });
++    }
++}
++
+ /// Longest hold of the owner's tick queue while a generated baseline waits
+ /// behind an in-flight checkpoint: work received meanwhile keeps its arrival
+ /// order and is published only after that baseline is durable. Past this many
+@@ -763,6 +803,9 @@ pub(super) fn journal_loop(
+         // unfillable.
+         let mut pending: std::collections::VecDeque<JournalWork> =
+             std::collections::VecDeque::new();
++        // Identifies each baseline handoff so its durability wake is matched to
++        // the hold that waits for it.
++        let mut next_baseline_serial: u64 = 0;
+         loop {
+             let work = match pending.pop_front() {
+                 Some(work) => work,
+@@ -882,22 +925,93 @@ pub(super) fn journal_loop(
+                         return;
+                     }
+                 },
+-                JournalWork::RequireGenerated { capture, wake: _ } => {
++                JournalWork::RequireGenerated { capture, wake } => {
+                     let (done, durable) = std::sync::mpsc::channel();
++                    let serial = next_baseline_serial;
++                    next_baseline_serial += 1;
++                    // The guard is built here, so a job the writer never runs
++                    // (queue closed, writer dead behind a checkpoint) closes
++                    // `done` and wakes this queue when it drops instead of
++                    // leaving the hold to wait for a tick item that may never
++                    // come.
+                     if native_tx
+                         .send(NativeWork::RequireGenerated {
+                             chunks: capture,
+-                            done,
++                            wake: BaselineWake {
++                                done: Some(done),
++                                signal: Some(wake),
++                                serial,
++                            },
+                         })
+                         .is_err()
+                     {
+                         tracing::error!("required baseline handoff failed; world halting");
+                         return;
+                     }
 -                    // Pre-fix scheduling: the owner waits for the answer and
 -                    // drains nothing, so the bounded queue fills and the tick
 -                    // parks behind the in-flight checkpoint.
 -                    let outcome: Option<Result<(), CoreError>> = durable.recv().ok();
++                    // The sole native writer may still be committing an earlier
++                    // checkpoint, so this baseline can take seconds. Keep the
++                    // tick's queue draining into `pending` instead of parking it:
++                    // every held job was queued after the baseline, keeps its
++                    // arrival order, and is published only after the baseline is
++                    // durable, so the crash ordering (baseline before dependent
++                    // WAL) is unchanged. Held appends keep their budget
++                    // reservations, and the hold itself is bounded by
++                    // JOURNAL_HOLD_LIMIT items; past it the original blocking wait
++                    // applies. The wait itself is the writer's own answer: it
++                    // lands in this queue as `BaselineDurable`, so there is no
++                    // polling interval anywhere.
 +                    let mut outcome: Option<Result<(), CoreError>> = None;
 +                    loop {
 +                        if pending.len() >= JOURNAL_HOLD_LIMIT {
@@ -65,7 +174,7 @@ index 3af8597be..02349d8b8 100644
                      match outcome {
                          Some(Ok(())) => {}
                          outcome => {
-@@ -1078,6 +1126,13 @@ pub(super) fn native_writer_loop(
+@@ -1012,6 +1126,13 @@ pub(super) fn native_writer_loop(
              break;
          }
      }
@@ -79,3 +188,20 @@ index 3af8597be..02349d8b8 100644
      if clean_close {
          tracing::error!(
              cause = "journal work channel closed",
+@@ -1162,10 +1283,14 @@ pub(super) fn run_native_work(
+                 return std::ops::ControlFlow::Break("checkpoint marker not durable");
+             }
+         }
+-        NativeWork::RequireGenerated { chunks, done } => {
++        NativeWork::RequireGenerated { chunks, mut wake } => {
+             // The same sole native writer performs an Immediate baseline
+             // commit before the journal owner can append its dependent edits.
+-            let _ = done.send(chunks.fill_generated());
++            // `answer` sends the result on the owner's channel and the guard's
++            // drop then wakes the owner's queue, so a refusal and an unwind
++            // both release the hold and the answer is final when it arrives.
++            let result = chunks.fill_generated();
++            wake.answer(result);
+         }
+         NativeWork::Backup { job, through } => {
+             let started = std::time::Instant::now();
