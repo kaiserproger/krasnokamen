@@ -22,7 +22,7 @@ OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_
             # A fix whose every hunk is in test files: the corrected oracle IS the guard. The promotion
             # runs two controls (docs/bugs/README.md): the pre-fix test hunks restored must go red on
             # current code, and a committed defect-injection patch must turn the corrected test red.
-            'test_only_fix', 'control_b_patch', 'control_b_sha256'}
+            'test_only_fix', 'control_b_patch', 'control_b_sha256', 'control_a_files'}
 PROMOTION_DIR = 'docs/bugs/promotions'
 
 
@@ -642,6 +642,14 @@ def run(ctx, *, cargo_junit: Path | None = None):
                             errors.append(f'{ident}: control_b_sha256 does not match the committed {defect}')
         if 'control_b_patch' in bug and test_only is not True:
             errors.append(f'{ident}: control_b_patch is only for a row with test_only_fix = true')
+        if 'control_a_files' in bug:
+            narrowed = bug['control_a_files']
+            if test_only is not True:
+                errors.append(f'{ident}: control_a_files is only for a row with test_only_fix = true')
+            elif (not isinstance(narrowed, list) or not narrowed
+                  or any(not isinstance(path, str) or not path or path.startswith('/') or '..' in path.split('/')
+                         or not re.search(r'\.(?:rs|py)$', path) for path in narrowed)):
+                errors.append(f'{ident}: control_a_files must be a non-empty list of repo-relative .rs/.py paths')
         refs = bug.get('regression')
         if not isinstance(refs, list) or any(not isinstance(ref, str) for ref in refs):
             errors.append(f'{ident}: regression must be a list of check refs')

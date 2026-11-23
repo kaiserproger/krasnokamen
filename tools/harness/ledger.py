@@ -804,8 +804,11 @@ def non_test_patch(root, commit):
     return _split_non_test(diff, lambda path: _git(root, 'show', f'{commit}:{path}')[1])
 
 
-def _split_test_hunks(diff):
+def _split_test_hunks(diff, only=None):
     """The fix commit's test-file hunks: (patch text, test files). Refused otherwise.
+
+    `only` narrows control A to the listed test files (a row field `control_a_files`): one commit
+    often corrects several oracles, and a row's control must reverse its own file, not another row's.
 
     `test_only_fix` accepts a fix whose guard IS a corrected test oracle, so the control reverses the
     test hunks instead of production hunks. It refuses any non-doc path that is not a test file: a fix
@@ -821,6 +824,8 @@ def _split_test_hunks(diff):
         path = match.group(2)
         if _skipped_doc(path):
             continue
+        if only is not None and path not in only:
+            continue
         if not _TEST_PATH.search(path):
             raise Refused(f'{path} is production code: a test_only_fix fix commit may change only test files '
                           '(use the ordinary non-test control for a real code fix)')
@@ -831,16 +836,70 @@ def _split_test_hunks(diff):
             raise Refused(f'{path} changes without text hunks (binary or mode-only); cannot be a control')
         patch.extend(lines)
         files.append(path)
+    if only is not None:
+        missing = sorted(set(only) - set(files))
+        if missing:
+            raise Refused(f"control_a_files names {', '.join(missing)}, which the fix commit does not change "
+                          'as a test file')
+        if not files:
+            raise Refused(f"control_a_files {sorted(only)} names no file of the fix commit's test hunks")
     return ''.join(patch), files
 
 
-def _ref_test_file(ref, test_files):
-    """The changed test file a registered ref's test body is defined in, or None.
+_MOD_DECL = re.compile(r'^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+([A-Za-z0-9_]+)\s*;')
+_PATH_ATTR = re.compile(r'^\s*#\[path\s*=\s*"([^"]+)"\]\s*$')
 
-    A bare function name is ambiguous (two files can hold `test_fix`): python refs name their
-    module (`tools/harness/test_x.py`), cargo refs name the module path under `crates/<crate>/`
-    (`host_telemetry_tests::sample...` is `crates/mc-edge/src/host_telemetry_tests.rs`, and an
-    inline `host_telemetry::tests::x` is `crates/mc-edge/src/host_telemetry.rs`)."""
+
+def _declared_module_file(source: Path, name: str):
+    """The file `mod <name>;` in `source` names, honouring a preceding `#[path = "..."]`."""
+    try:
+        lines = source.read_text(errors='surrogateescape').splitlines()
+    except OSError:
+        return None
+    for index, line in enumerate(lines):
+        match = _MOD_DECL.match(line)
+        if match is None or match.group(1) != name:
+            continue
+        for back in range(index - 1, max(index - 5, -1), -1):
+            path_attr = _PATH_ATTR.match(lines[back])
+            if path_attr:
+                return source.parent / path_attr.group(1)
+            if line.strip() and not lines[back].lstrip().startswith(('#[', '///', '//')):
+                break
+        candidate = source.parent / f'{name}.rs'
+        if candidate.is_file():
+            return candidate
+        candidate = source.parent / name / 'mod.rs'
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _cargo_module_file(root: Path, crate: str, module: list[str]):
+    """The crate source file a module path (`a::b`) names, or None.
+
+    The test file of a `cargo:<crate>:<module::path::test>` ref is not its name spelled with
+    slashes: `falling::tests` is `falling_tests.rs` through `#[path = "..."] mod tests;`, and
+    `fluids_tests::parity` is `fluid_parity_tests.rs`. Following the mod declarations is the only
+    exact mapping, and it must pin the file, never a bare test-function name."""
+    base = Path('crates') / crate / 'src'
+    source = None
+    for entry in ('lib.rs', 'main.rs'):
+        if (root / base / entry).is_file():
+            source = base / entry
+            break
+    if source is None:
+        return None
+    for name in module:
+        source = _declared_module_file(root / source, name)
+        if source is None:
+            return None
+        source = source.relative_to(root)
+    return source.as_posix()
+
+
+def _ref_test_file(root: Path, ref: str, test_files):
+    """The changed test file a registered ref's test body is defined in, or None."""
     try:
         kind, first, second = regressions._parse_ref(ref)
     except ValueError:
@@ -849,22 +908,8 @@ def _ref_test_file(ref, test_files):
         expected = first.replace('.', '/') + '.py'
         return expected if expected in test_files else None
     if kind == 'cargo':
-        module = second.split('::')[:-1]
-        prefix = f'crates/{first}/'
-        for path in test_files:
-            if not path.startswith(prefix) or not path.endswith('.rs'):
-                continue
-            parts = path[len(prefix):][:-3].split('/')
-            if parts and parts[0] == 'src':
-                parts = parts[1:]
-            if parts and parts[-1] in ('mod', 'lib'):
-                parts = parts[:-1]
-            if module[:len(parts)] == parts:
-                return path
-            # `#[cfg(test)] #[path = "x_tests.rs"] mod tests;` inside x.rs: the ref names x::tests.
-            if parts and parts[-1].endswith('_tests'):
-                if module == parts[:-1] + [parts[-1][:-len('_tests')], 'tests']:
-                    return path
+        resolved = _cargo_module_file(Path(root), first, second.split('::')[:-1])
+        return resolved if resolved in test_files else None
     return None
 
 
@@ -873,7 +918,7 @@ def _uncovered_test_files(candidate, test_files, refs):
 
     Exact, not by bare name: the flag must not attach unrelated refs, and a ref whose module path
     names another file (or no file) leaves its own changed test uncovered."""
-    covered = {path for ref in refs if (path := _ref_test_file(ref, test_files))}
+    covered = {path for ref in refs if (path := _ref_test_file(candidate, ref, test_files))}
     missing = []
     for path in test_files:
         if path in covered:
@@ -1550,7 +1595,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
     if not patch_mode:
         if test_only:
             _, diff = _git(root, 'diff', '--no-renames', '--no-color', f'{full}^1', full)
-            patch, reversed_files = _split_test_hunks(diff)
+            patch, reversed_files = _split_test_hunks(diff, row.get('control_a_files'))
             test_files = []
             if not patch:
                 raise Refused(f'{ident}: fix commit {fix} changes no test file: test_only_fix needs a fix in test files')
@@ -1654,7 +1699,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
                               'not overlap: the same test has to flip both ways, so the corrected oracle is '
                               'proven in its own direction and not merely the old assertion')
             for ref in proving:
-                if _ref_test_file(ref, reversed_files) is None:
+                if _ref_test_file(candidate, ref, reversed_files) is None:
                     raise Refused(f'{ident}: proving ref {ref} is not defined in '
                                   f"{', '.join(reversed_files)}: a bare name from another file proves nothing")
         _materialize(root, candidate, tree_now)

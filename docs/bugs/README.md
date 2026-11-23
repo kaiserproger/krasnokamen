@@ -376,6 +376,10 @@ the row lacks `repro_check`. Stricter still:
 - **Control A always runs on current code** (`control_tree: head`): a test-only fix whose test hunks do
   not reverse onto the candidate refuses instead of falling back to a `fix_commit` worktree. A
   `client:<sha>` fix can never be `test_only_fix`.
+- **A row may narrow control A to its own file.** One commit often corrects several oracles; a row
+  names them in `control_a_files` and control A reverses only those hunks, with every listed file
+  required to be a test file of the fix commit and to hold a ref's test. Without the field control A
+  reverses every changed test file (and every one needs a ref).
 - A corrected test in a test file the fix deleted or renamed has no control A and refuses. `repro_check` states what the old oracle asserted and the independent
 evidence (vanilla data/bytecode, spec, arithmetic) that the new one is right; the review of a test-only
 batch lists old versus new assertions and justifies every removed or loosened one. A row whose defect

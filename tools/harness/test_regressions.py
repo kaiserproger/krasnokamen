@@ -598,7 +598,8 @@ class TestOnlyFixTests(unittest.TestCase):
 
     def scratch(self, production_hunk=False, covered=True, defect_text=None,
                 defect_path='docs/bugs/test-only/BUG-defect.patch', write_patch=True,
-                defect=None, later_edit=False, sha_override=None):
+                defect=None, later_edit=False, sha_override=None, two_files=False,
+                refs=None, control_a_files=None):
         """Repo whose fix commit changes only the test oracle, plus a committed defect patch.
 
         `defect` is a callable(root) -> diff for a case's own mutation (a test-file hunk, docs, a
@@ -621,6 +622,8 @@ class TestOnlyFixTests(unittest.TestCase):
         self.git(root, 'commit', '-qm', 'base')
         if covered:
             (root / 'tools/harness/test_example.py').write_text(self.NEW)
+            if two_files:
+                (root / 'tools/harness/test_other.py').write_text(self.OTHER_NEW)
         else:
             # The fix corrects a test in another file than the row's ref names.
             (root / 'tools/harness/test_other.py').write_text(self.OTHER_NEW)
@@ -649,11 +652,12 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "x"
-regression = ["{self.REF}", "{self.REF_OTHER}"]
+regression = {json.dumps(refs or [self.REF, self.REF_OTHER])}
 fix_commit = "{self.fix}"
 repro_check = "old oracle asserted value == old; vanilla 26.3 data says ok"
 test_only_fix = true
 control_b_patch = "{defect_path}"
+{("control_a_files = " + json.dumps(control_a_files)) if control_a_files else ""}
 {"" if sha_override else f'control_b_sha256 = "{defect_sha}"' if defect_sha else ""}
 ''')
         if sha_override:
@@ -678,8 +682,9 @@ control_b_patch = "{defect_path}"
 
         def run(_ctx, refs, tree, _client):
             test = (tree / 'tools/harness/test_example.py').read_text()
+            other = (tree / 'tools/harness/test_other.py').read_text()
             defect = 'defect' in (tree / 'src/engine.rs').read_text()
-            seen.append({'test': test, 'defect': defect, 'red': defect or '"old"' in test})
+            seen.append({'test': test, 'other': other, 'defect': defect, 'red': defect or '"old"' in test})
             old_oracle = '"old"' in test
             out = {}
             for ref in refs:
@@ -856,6 +861,22 @@ control_b_patch = "{defect_path}"
             self.promote(root, runner)
         self.assertEqual(runner.seen, [])
 
+    def test_control_a_files_narrows_the_reversal_to_the_row_s_own_file(self):
+        root = self.scratch(two_files=True, refs=[self.REF],
+                            control_a_files=['tools/harness/test_example.py'])
+        runner = self.runner()
+        receipt = self.promote(root, runner)
+        self.assertEqual(receipt['reversed_files'], ['tools/harness/test_example.py'])
+        # Control A restored only the row's file: the other corrected oracle stayed corrected.
+        self.assertIn('"old"', runner.seen[0]['test'])
+        self.assertEqual(runner.seen[0]['other'], self.OTHER_NEW)
+        self.assertEqual(receipt['control_b']['proving'], [self.REF])
+
+    def test_control_a_files_naming_an_unchanged_file_is_refused(self):
+        root = self.scratch(control_a_files=['tools/harness/test_absent.py'])
+        with self.assertRaisesRegex(ledger.Refused, 'which the fix commit does not change'):
+            self.promote(root, self.runner())
+
     def test_the_row_flag_needs_its_evidence(self):
         base = '''[[bug]]
 id = "B"
@@ -881,6 +902,10 @@ repro_check = "old oracle wrote the wrong value"
                    'control_b_sha256 = "' + '0' * 64 + '"\n',
             base + 'test_only_fix = true\ncontrol_b_patch = "docs/bugs/test-only/defect.patch"\n'
                    'control_b_sha256 = "' + '0' * 64 + '"\nfix_commit = "client:' + '0' * 40 + '"\n',
+            base + 'control_a_files = ["crates/mc-core/src/plants_tests.rs"]\n',
+            base + 'test_only_fix = true\ncontrol_a_files = []\n',
+            base + 'test_only_fix = true\ncontrol_a_files = ["/etc/passwd.rs"]\n',
+            base + 'test_only_fix = true\ncontrol_a_files = ["docs/bugs/x.rs"]\n',
         ]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -962,22 +987,41 @@ class TestOnlyEvidenceTests(unittest.TestCase):
                          {'file': '/repo/tools/harness/test_example.py', 'line': 3, 'error': 'AssertionError'})
         self.assertIsNone(ledger._python_assertion('RuntimeError: boom\n'))
 
-    def test_a_ref_maps_to_its_own_changed_file(self):
-        files = ['crates/mc-edge/src/host_telemetry_tests.rs', 'crates/mc-core/src/engine_tests.rs']
-        self.assertEqual(ledger._ref_test_file(
-            'cargo:mc-edge:host_telemetry_tests::sampler_reads_the_throttle_counters_from_the_cgroup_fixture', files),
-            'crates/mc-edge/src/host_telemetry_tests.rs')
-        self.assertIsNone(ledger._ref_test_file('cargo:mc-edge:engine_tests::test_guard', files))
-        self.assertIsNone(ledger._ref_test_file('python:tools.harness.test_other:ExampleTests.test_guard', files))
-        self.assertEqual(ledger._ref_test_file(
-            'python:tools.other.test_x:ExampleTests.test_guard', ['tools/other/test_x.py']),
-            'tools/other/test_x.py')
-        # A #[path = "x_tests.rs"] mod tests inside x.rs: the ref names x::tests, the hunks are in x_tests.rs.
-        self.assertEqual(ledger._ref_test_file(
-            'cargo:mc-core:falling::tests::empty_collision_attachment_is_not_a_floor_and_slab_landing_drops_instead',
-            ['crates/mc-core/src/falling_tests.rs']), 'crates/mc-core/src/falling_tests.rs')
-        self.assertEqual(ledger._ref_test_file('cargo:mc-core:falling::tests::x',
-                                               ['crates/mc-core/src/dimensions_tests.rs']), None)
+    def test_a_ref_maps_to_its_own_changed_file_through_mod_declarations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for path, text in {
+                'crates/mc-core/src/lib.rs': '#[cfg(test)]\nmod farming_tests;\n#[cfg(test)]\nmod fluids_tests;\n',
+                'crates/mc-core/src/farming_tests.rs': '#[path = "plants_tests.rs"]\nmod plants_tests;\n',
+                'crates/mc-core/src/plants_tests.rs': 'fn test() {}\n',
+                'crates/mc-core/src/fluids_tests.rs': '#[path = "fluid_parity_tests.rs"]\nmod parity;\n',
+                'crates/mc-core/src/fluid_parity_tests.rs': 'fn test() {}\n',
+                'crates/mc-edge/src/lib.rs': 'mod host_telemetry;\n',
+                'crates/mc-edge/src/host_telemetry.rs':
+                    '#[cfg(test)]\n#[path = "host_telemetry_tests.rs"]\nmod host_telemetry_tests;\n',
+                'crates/mc-edge/src/host_telemetry_tests.rs': 'fn test() {}\n',
+            }.items():
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_text(text)
+            plants = ['crates/mc-core/src/plants_tests.rs']
+            self.assertEqual(ledger._ref_test_file(
+                root, 'cargo:mc-core:farming_tests::plants_tests::native_random_sampler_grows_chorus_flowers',
+                plants), 'crates/mc-core/src/plants_tests.rs')
+            self.assertIsNone(ledger._ref_test_file(root, 'cargo:mc-core:fluids_tests::parity::x', plants))
+            self.assertEqual(ledger._ref_test_file(
+                root, 'cargo:mc-core:fluids_tests::parity::physics_water_selects_nearest_descent',
+                ['crates/mc-core/src/fluid_parity_tests.rs']), 'crates/mc-core/src/fluid_parity_tests.rs')
+            self.assertEqual(ledger._ref_test_file(
+                root, 'cargo:mc-edge:host_telemetry::host_telemetry_tests::'
+                      'sampler_reads_the_throttle_counters_from_the_cgroup_fixture',
+                ['crates/mc-edge/src/host_telemetry_tests.rs']), 'crates/mc-edge/src/host_telemetry_tests.rs')
+            self.assertIsNone(ledger._ref_test_file(
+                root, 'cargo:mc-core:falling::tests::x', plants))
+            self.assertEqual(ledger._ref_test_file(
+                root, 'python:tools.other.test_x:ExampleTests.test_guard', ['tools/other/test_x.py']),
+                'tools/other/test_x.py')
+            self.assertIsNone(ledger._ref_test_file(
+                root, 'python:tools.harness.test_other:ExampleTests.test_guard', plants))
 
 
 class ClientRefTests(unittest.TestCase):
