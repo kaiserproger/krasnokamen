@@ -1,0 +1,76 @@
+{
+  "id": "HARNESS-MEM-RUN-TERM-DIRECT-CHILD-ONLY",
+  "verdict": "promoted",
+  "fix_commit": "patch:27fefeaf1e0fc8f55ebf6414c2357fbf817299e6c7f0f3ec4911592842d857ab",
+  "fix_commit_full": "patch:27fefeaf1e0fc8f55ebf6414c2357fbf817299e6c7f0f3ec4911592842d857ab",
+  "promoted_at": "2026-11-23T21:33:37+00:00",
+  "tree_head": "d7f373132b7200a647c11382e8645249218f1071",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "27fefeaf1e0fc8f55ebf6414c2357fbf817299e6c7f0f3ec4911592842d857ab",
+  "reversed_files": [
+    "tools/dev/mem-run.sh"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.dev.test_mem_run_term:CancelledScopeTests.test_a_cancelled_child_receives_exactly_one_term": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_mem_run_term.py",
+        "line": 205,
+        "error": "AssertionError"
+      }
+    },
+    "python:tools.dev.test_mem_run_term:CancelledScopeTests.test_a_term_ignoring_descendant_does_not_hold_the_scope": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_mem_run_term.py",
+        "line": 166,
+        "error": "AssertionError"
+      }
+    },
+    "python:tools.dev.test_mem_run_term:CancelledScopeTests.test_the_token_is_held_during_the_scope_and_free_after_a_cancellation": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_mem_run_term.py",
+        "line": 224,
+        "error": "AssertionError"
+      }
+    },
+    "python:tools.dev.test_reserve_cpus:MemRunReservationTests.test_a_non_numeric_cancel_grace_is_named_before_the_scope_starts": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/dev/test_reserve_cpus.py",
+        "line": 236,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "python:tools.dev.test_mem_run_term:CancelledScopeTests.test_a_cancelled_child_receives_exactly_one_term": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_mem_run_term:CancelledScopeTests.test_a_term_ignoring_descendant_does_not_hold_the_scope": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_mem_run_term:CancelledScopeTests.test_the_token_is_held_during_the_scope_and_free_after_a_cancellation": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.dev.test_reserve_cpus:MemRunReservationTests.test_a_non_numeric_cancel_grace_is_named_before_the_scope_starts": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T213030-ledger-promote-667z1hvt"
+}
