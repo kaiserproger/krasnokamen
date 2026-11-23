@@ -7,7 +7,7 @@ import struct
 from typing import Any
 
 from .native_p1 import _aim, _capture, _inventory, _rows
-from .native_v2 import _block, _click, _echo, _open, _point, _set, _use
+from .native_v2 import _block, _click, _echo, _give, _open, _point, _set, _use
 from .probe_steps import ProbeSteps, container_slot, item_count
 
 class DamageWireReceipt:
