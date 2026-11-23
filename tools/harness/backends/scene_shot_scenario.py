@@ -26,6 +26,7 @@ from . import scene_shot as _qa
 from .scene_shot_checks import (
     check_263_entity_rigs, check_dynamic_context, check_elytra, check_entity_visuals, check_gait_spider,
     check_item_bars, check_placed_head, check_player_head, check_shade_override, check_shelf_clock,
+    check_toasts,
     player_head_skin_pack,
 )
 from .scene_shot_client import (
@@ -47,6 +48,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-shelf-clock": "shelf_clock_scene.json",
         "native-entity-visuals": "entity_visuals_scene.json",
         "native-elytra": "elytra_scene.json",
+        "native-toast": "toast_scene.json",
         "native-item-bars": "item_bars_scene.json",
         "native-shade-override": "shade_override_scene.json",
         "native-player-head": "player_head_scene.json",
@@ -328,6 +330,8 @@ def run(
                 check_shelf_clock(probe, artifact)
             elif ctx.scenario_id == "native-elytra":
                 check_elytra(probe, artifact)
+            elif ctx.scenario_id == "native-toast":
+                check_toasts(probe, artifact)
             elif ctx.scenario_id == "native-entity-visuals":
                 check_entity_visuals(probe, artifact)
             elif ctx.scenario_id == "native-item-bars":

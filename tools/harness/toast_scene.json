@@ -1,0 +1,34 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "shot": "toast-0"
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "shot": "toast-10"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "toast-40"
+    },
+    {
+      "wait_ticks": 140
+    },
+    {
+      "shot": "toast-late"
+    }
+  ]
+}

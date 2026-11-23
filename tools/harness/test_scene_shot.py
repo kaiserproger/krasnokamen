@@ -655,6 +655,41 @@ class ElytraTests(unittest.TestCase):
                 scene_shot.check_placed_head(PlayerHeadTests.Probe(), root)
 
 
+class ToastTests(unittest.TestCase):
+    class Probe:
+        def __init__(self):
+            self.report = {}
+        def check(self, name, value):
+            if not value:
+                raise AssertionError(name)
+
+    def store_frames(self, root, *, toast=True):
+        from PIL import Image, ImageDraw
+
+        shots = root / "screenshots"
+        shots.mkdir(exist_ok=True)
+        frame = {"gpu_completion": True, "camera_position": [1000.5, 161.62, 1000.5], "yaw": 0, "pitch": 0}
+        for name in ("toast-0", "toast-10", "toast-40", "toast-late"):
+            image = Image.new("RGB", scene_shot.WINDOW, (120, 170, 240))
+            draw = ImageDraw.Draw(image)
+            if name == "toast-10" and toast:
+                draw.rectangle((950, 8, 1270, 140), fill=(20, 20, 20))
+                draw.rectangle((980, 30, 1200, 44), fill=(240, 240, 240))
+            image.save(shots / f"{name}.png")
+            (shots / f"{name}.json").write_text(json.dumps(frame))
+
+    def test_join_toast_panel_is_required(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.store_frames(root)
+            probe = self.Probe()
+            scene_shot.check_toasts(probe, root)
+            self.assertGreater(probe.report["toast_pixels"]["toast-10"]["panel"], 1500)
+            self.store_frames(root, toast=False)
+            with self.assertRaisesRegex(AssertionError, "toast_visible_after_join"):
+                scene_shot.check_toasts(self.Probe(), root)
+
+
 class WalkCaptureArtifactsTests(unittest.TestCase):
     def test_each_retry_owns_an_artifact_and_misses_are_bounded(self):
         spec = {"name": "walk", "entity_type": "minecraft:zombie", "phase": 1.5,

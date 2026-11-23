@@ -678,6 +678,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="checks the received hotbar/durability observation and the framed shot",
         limits="one fixture and one camera per shot; the visual review of each frame stays with the operator",
     ),
+    "native-toast": _entry(
+        id="native-toast", summary="The join-time unsecure-server toast is drawn and then clears",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-toast", requires=("xvfb",),
+        sources=("tools/harness/toast_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client joining a remote (non-local) server, first second after Play and six seconds later",
+        proves="the top-right toast panel and its white text are present right after Play and absent six seconds later",
+        limits="one server kind and one toast; the advancement/recipe kinds stay unit-covered",
+    ),
     "native-placed-head": _entry(
         id="native-placed-head", summary="An unresolved placed player head keeps the default skin instead of drawing nothing",
         owner="core:harness", evidence="graphical", profile="scene-shot",
