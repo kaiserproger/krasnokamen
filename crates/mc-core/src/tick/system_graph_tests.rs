@@ -225,9 +225,10 @@ fn step_entity_borrows_its_row() {
     // A copied `ReadRow` per entity per tick is pure snapshot traffic: the step
     // lane takes it by reference. The control of this row is compile-level (the
     // by-value signature does not exist any more). The row is a scalar bundle
-    // read field by field, not a cache-line-packed struct, so the bound only
-    // guards against it growing: it sits at 261 bytes, under the 256 byte
-    // worker-snapshot bound asserted in `entity_phase_tests`.
+    // read field by field, not a cache-line-packed struct, so the bound below is
+    // a growth ratchet at the 256 byte worker-snapshot bound asserted in
+    // `entity_phase_tests::worker_snapshot_keeps_rare_state_in_entity_store`.
+    // Its remaining 64 B of inline targets are `ENTITY-READ-ROW-INLINE-TARGETS-64-BYTES`.
     let step: fn(
         &ReadRow,
         &StepCtx<'_>,

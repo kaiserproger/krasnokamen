@@ -1,0 +1,88 @@
+diff --git a/crates/mc-core/src/dolphin.rs b/crates/mc-core/src/dolphin.rs
+--- a/crates/mc-core/src/dolphin.rs
++++ b/crates/mc-core/src/dolphin.rs
+@@ -300,82 +300,8 @@
+         match treasure {
+             DolphinTreasure::Pending { .. } => {}
+             DolphinTreasure::Missing { .. } => {
+-                // Engine approximation (pre-2c3e1fa2e): the async structure
+-                // lookup is requester-bound, so the nearest treasure container
+-                // within 48 blocks stands in for the structure position.
+-                let is_treasure = |id: mc_world::BlockStateId| {
+-                    state.registry.blocks.by_id(id).is_some_and(|b| {
+-                        matches!(
+-                            b.block.id.path(),
+-                            "chest" | "trapped_chest" | "barrel"
+-                        )
+-                    })
+-                };
+-                let (cx, cy, cz) = (floor_i32(at[0]), floor_i32(at[1]), floor_i32(at[2]));
+-                let min = [cx - 48, cy - 24, cz - 48];
+-                let max = [cx + 48, cy + 24, cz + 48];
+-                let mut best: Option<([i32; 3], f64)> = None;
+-                for x in min[0]..=max[0] {
+-                    for y in min[1]..=max[1] {
+-                        for z in min[2]..=max[2] {
+-                            if !state
+-                                .world
+-                                .block_at(x, y, z)
+-                                .is_some_and(|id| is_treasure(mc_world::BlockStateId(id)))
+-                            {
+-                                continue;
+-                            }
+-                            let p = [x, y, z];
+-                            let d2 = p
+-                                .into_iter()
+-                                .zip(at)
+-                                .map(|(v, a)| (f64::from(v) + 0.5 - a).powi(2))
+-                                .sum::<f64>();
+-                            if best.is_none_or(|(old, distance)| {
+-                                d2 < distance || (d2 == distance && p < old)
+-                            }) {
+-                                best = Some((p, d2));
+-                            }
+-                        }
+-                    }
+-                }
+-                let Some((p, d2)) = best else { continue };
+-                if d2 < 16.0 {
+-                    stop_treasure(state, slot, dolphin);
+-                    continue;
+-                }
+-                let target = p.map(|v| f64::from(v) + 0.5);
+-                let step = (5.0 / d2.sqrt()).min(1.0);
+-                let desired = mc_physics::Vec3::new(
+-                    (target[0] - at[0]) * step,
+-                    (target[1] - at[1]) * step,
+-                    (target[2] - at[2]) * step,
+-                );
+-                let body = state.entities.body(slot);
+-                let sampler = crate::tick::TickSampler {
+-                    world: &state.world,
+-                    registry: &state.registry,
+-                };
+-                if let Some(moved) = mc_physics::resolve_collision_displacement(
+-                    &sampler,
+-                    mc_physics::Vec3::new(at[0], at[1], at[2]),
+-                    mc_physics::Aabb {
+-                        half_width: body.half_width,
+-                        height: body.height,
+-                    },
+-                    desired,
+-                    false,
+-                    0.0,
+-                ) {
+-                    state.entities.set_pos(
+-                        slot,
+-                        [
+-                            at[0] + moved.delta.x,
+-                            at[1] + moved.delta.y,
+-                            at[2] + moved.delta.z,
+-                        ],
+-                    );
+-                }
++                // Vanilla `stuck`: `stop` clears GotFish.
++                stop_treasure(state, slot, dolphin);
+             }
+             DolphinTreasure::Failed { retry_at, .. } => {
+                 if state.tick >= retry_at {

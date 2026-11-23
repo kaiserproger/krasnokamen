@@ -1,0 +1,47 @@
+diff --git a/crates/mc-core/src/tick/system_graph.rs b/crates/mc-core/src/tick/system_graph.rs
+--- a/crates/mc-core/src/tick/system_graph.rs
++++ b/crates/mc-core/src/tick/system_graph.rs
+@@ -1,7 +1,7 @@
+ //! Bounded ADR 0017 prototype: one declared, row-parallel system between
+ //! preparation and ordered writeback. No authority or mutable columns escape.
+ 
+-use super::{MoveWrite, RawIntent, ReadRow, StepCtx, step_entity};
++use super::{MoveWrite, RawIntent, StepCtx, step_entity};
+ use rayon::prelude::*;
+ 
+ type RowOutput = Option<(MoveWrite, Vec<RawIntent>)>;
+@@ -76,21 +76,26 @@
+ }
+ 
+ fn execute(ctx: &StepCtx<'_>, output: &mut Vec<RowOutput>, parallel: bool) {
+-    // Pre-fix: a fresh physics reader per entity step, so its last-chunk and
+-    // last-section memo never survives two rows of one lane.
+-    let step = |row: &ReadRow| {
+-        row.alive
+-            .then(|| step_entity(row, ctx, &ctx.world.physics_reader()))
+-    };
+     if parallel {
++        // One physics reader per rayon job: its last-chunk and last-section memo
++        // is what makes the first block probe of a row cheap, and a reader per
++        // row threw that memo away exactly in a pen of mobs sharing a chunk.
+         ctx.rows
+             .par_iter()
+             .with_min_len(ENTITY_STEP.min_partition)
+-            .map(step)
++            .map_init(
++                || ctx.world.physics_reader(),
++                |reader, row| row.alive.then(|| step_entity(row, ctx, reader)),
++            )
+             .collect_into_vec(output);
+     } else {
++        let reader = ctx.world.physics_reader();
+         output.clear();
+-        output.extend(ctx.rows.iter().map(step));
++        output.extend(
++            ctx.rows
++                .iter()
++                .map(|row| row.alive.then(|| step_entity(row, ctx, &reader))),
++        );
+     }
+ }
+ 

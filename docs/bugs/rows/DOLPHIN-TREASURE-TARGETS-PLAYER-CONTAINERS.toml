@@ -11,3 +11,4 @@ regression = [
   "cargo:mc-core:dolphin::tests::a_player_chest_without_a_located_structure_is_not_a_treasure_lead",
 ]
 failing_first = "reported"
+fix_commit = "patch:543cfd56eed2745560a73f412e31e8f6485fb80ade0ce256a0cb92334a091855"

@@ -1,0 +1,14 @@
+diff --git a/crates/mc-core/src/tick/entity_phase/prepare.rs b/crates/mc-core/src/tick/entity_phase/prepare.rs
+--- a/crates/mc-core/src/tick/entity_phase/prepare.rs
++++ b/crates/mc-core/src/tick/entity_phase/prepare.rs
+@@ -66,10 +66,6 @@
+         // 1M slots). The concat order is still chunk order, i.e. slot order.
+         // `resize_with` keeps the pooled `AdmissionPart`s (and their inner
+         // capacity) across ticks; each is cleared for this tick.
+-        // Pre-fix: every prepare allocates its own set of per-chunk admission
+-        // buffers and holds the previous tick's set until the pass returns, so
+-        // no allocation is carried across ticks.
+-        let _stale_parts = std::mem::take(parts);
+         parts.resize_with(periods.len().div_ceil(PREP_CHUNK), AdmissionPart::default);
+         for part in parts.iter_mut() {
+             part.kept.clear();

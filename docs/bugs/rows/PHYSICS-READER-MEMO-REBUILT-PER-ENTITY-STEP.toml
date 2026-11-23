@@ -6,5 +6,6 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "receipts/Books/REPORT-R2.md finding R2-5 (Bakhvalov 8.1, Drepper; perf). crates/mc-core/src/world.rs PhysicsReader caches the last chunk and the last 16-high section and documents that it is never retained across entity steps; tick/entity_phase.rs step_entity starts with let reader = ctx.world.physics_reader(); the probe is inlined into PhysicsReader::block_at (2.21 % self in the measured leg). Verified open on main 5bdc02911. Fix: rows.par_iter().map_init(|| ctx.world.physics_reader(), |reader, row| ...) (or for_each_init), one reader per rayon worker; the type is Cell-based and single-owner and the world is immutable during the phase (world.rs states the invariant); keep the warm-versus-fresh reader test (world_tests.rs:1476-1490). Measure by wall-clock A/B of the entity phase and l1_data_cache_fills_from_memory."
-regression = ["cargo:mc-core:world_tests::physics_reader_matches_direct_reads_across_columns_and_overlay"]
+regression = ["cargo:mc-core:world_tests::physics_reader_matches_direct_reads_across_columns_and_overlay", "cargo:mc-core:tick::system_graph::tests::entity_step_reuses_one_physics_reader_per_lane"]
 failing_first = "not recorded"
+fix_commit = "patch:9e7c598e039d53e127a84e944965658f39fb20c5bee090de288a256a2121e20c"

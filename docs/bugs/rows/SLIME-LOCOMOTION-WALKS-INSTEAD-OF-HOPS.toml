@@ -14,3 +14,4 @@ regression = [
   "cargo:mc-core:tick::entity_phase::entity_phase_tests::far_idle_slime_does_not_rest_on_its_hop_tick",
 ]
 failing_first = "reported"
+fix_commit = "patch:3413f57c66ceb55b55040b09355bb937c921c93a3da5142dc48296864323de4d"
