@@ -12,3 +12,8 @@ regression = [
 ]
 repro_check = "The fix spans 40b28f732, 60f1d475b and 9a8fd193e on wt/XEdgeEvents, not merged into wt/M3Server at filing. The same-tick dimension-transfer gap of 9a8fd193e is DIMENSION-SWITCH-KNOCKBACK-DISCONNECT, not this row. The queue-pressure part (40b28f732) is EDGE-ONESHOT-EXPLOSION-QUEUE-PRESSURE; lag detection and coalescing (60f1d475b) still need a patch-mode promote. Branch checks server::admin_tests::explosion_queue_tests::{explosions_deliver_or_explicitly_close_under_queue_pressure,broadcast_lag_closes_only_recipients_of_skipped_knockback,six_hundred_explosions_coalesce_knockback_without_disconnect}; coalescing is a synthetic queue test, not a live TNT burst. Negative controls: receipts/XEdgeEvents/negative-queue.log, round3-lag-red-broadcast_lag_closes_only_recipients_of_skipped_knockback.log and round3-edge-red-same_tick_dimension_switch_explicitly_closes_unprojected_knockback.log. Multi-commit promotion needs a committed fix patch after integration."
 failing_first = "not recorded"
+# Promote attempt not made yet (D123Battle round 6 ran the five perf/dolphin/slime rows): this commit's
+# production hunks add `tick_loop`/`boundary` API its kept refs call, so a blanket reversal probably will
+# not build; if so, the fix needs a curated patch like the perf rows (keep the API, reverse only the
+# lag detection / coalescing decision).
+fix_commit = "60f1d475bd5243f5dca58683d90698e9dbcebf7a"
