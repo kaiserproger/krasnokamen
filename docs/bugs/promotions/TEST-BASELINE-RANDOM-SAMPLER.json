@@ -1,0 +1,66 @@
+{
+  "id": "TEST-BASELINE-RANDOM-SAMPLER",
+  "verdict": "promoted",
+  "fix_commit": "f945cba85234105543de42b37709cf31e8eb253a",
+  "fix_commit_full": "f945cba85234105543de42b37709cf31e8eb253a",
+  "promoted_at": "2026-11-23T17:55:05+00:00",
+  "tree_head": "bb4ed91efaa667b6d20f618f30326e9edeb3c40f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "test_hunks",
+  "control_b": {
+    "patch": "docs/bugs/test-only/TEST-BASELINE-RANDOM-SAMPLER-defect.patch",
+    "sha256": "b3409bb0d7c54a5bd5f96063fcec742e17c3eedd75b4f18205229533d5dd25da",
+    "proving": [
+      "cargo:mc-core:farming_tests::plants_tests::native_random_sampler_reaches_extra_plants_and_support_cascade"
+    ],
+    "negative_control": {
+      "cargo:mc-core:farming_tests::plants_tests::native_random_sampler_reaches_extra_plants_and_support_cascade": {
+        "state": "red",
+        "detail": "FAIL",
+        "assertion": {
+          "file": "crates/mc-core/src/plants_tests.rs",
+          "line": 393,
+          "error": "panic"
+        }
+      },
+      "cargo:mc-core:farming_tests::plants_tests::native_random_sampler_grows_chorus_flowers": {
+        "state": "green",
+        "detail": ""
+      }
+    }
+  },
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/plants_tests.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:farming_tests::plants_tests::native_random_sampler_reaches_extra_plants_and_support_cascade": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/plants_tests.rs",
+        "line": 381,
+        "error": "panic"
+      }
+    },
+    "cargo:mc-core:farming_tests::plants_tests::native_random_sampler_grows_chorus_flowers": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-core:farming_tests::plants_tests::native_random_sampler_reaches_extra_plants_and_support_cascade": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:farming_tests::plants_tests::native_random_sampler_grows_chorus_flowers": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261123T174924-ledger-promote-298p9o40"
+}
