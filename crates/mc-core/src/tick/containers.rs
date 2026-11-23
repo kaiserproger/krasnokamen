@@ -4,6 +4,20 @@
 use super::*;
 use mc_data::block_entity_kinds::BlockEntityKind;
 
+/// Whether `actor`'s open block menu names a cell whose chunk is not resident.
+///
+/// The cold overlay still answers [`crate::world::ChunkWorld::block_at`] for a
+/// non-resident chunk, so every menu input and menu-coordinate write asks
+/// residency first: a stale coordinate must not select a handler that reads or
+/// writes the overlay, and a cold source closes the menu (cursor custody intact)
+/// exactly as a destroyed container does.
+pub(super) fn menu_source_cold(state: &TickState, actor: EntityId) -> bool {
+    state
+        .open_containers
+        .menu_at(&actor)
+        .is_some_and(|&(x, _, z)| !state.world.has_chunk(x.div_euclid(16), z.div_euclid(16)))
+}
+
 fn animated_block(state: &TickState, pos: BlockPos) -> Option<(BlockEntityKind, u32, u32)> {
     let id = state.world.block_at(pos.x, pos.y, pos.z)?;
     let block = state.registry.blocks.by_id(mc_world::BlockStateId(id))?;

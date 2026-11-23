@@ -75,6 +75,9 @@ mod duplicate_login_tests;
 mod furnace_tests;
 #[cfg(test)]
 pub(crate) mod mining_tests;
+#[cfg(test)]
+#[path = "tick/stations_tests.rs"]
+mod stations_tests;
 
 #[cfg(test)]
 #[path = "auth_gate_tests.rs"]

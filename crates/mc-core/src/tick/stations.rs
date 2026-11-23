@@ -139,6 +139,11 @@ pub(super) fn damage_anvil(state: &mut TickState, entity: EntityId, changes: &mu
     let Some(&(x, y, z)) = state.open_containers.menu_at(&entity) else {
         return;
     };
+    // The menu coordinate may outlive the chunk: `block_at` would answer from the
+    // cold overlay and this write would land in it. Damage waits for residency.
+    if !state.world.has_chunk(x.div_euclid(16), z.div_euclid(16)) {
+        return;
+    }
     let Some(current) = state.world.block_at(x, y, z) else {
         return;
     };

@@ -284,6 +284,14 @@ pub(crate) fn run(state: &mut TickState) {
             y: key[1],
             z: key[2],
         };
+        // A non-resident cell is paused, not reset: `block_at` would answer from
+        // the cold overlay and `set_dusted` would decrement and write into it.
+        if !state
+            .world
+            .has_chunk(pos.x.div_euclid(16), pos.z.div_euclid(16))
+        {
+            return true;
+        }
         if brushable(state, pos).is_none() {
             return false;
         }
@@ -296,3 +304,7 @@ pub(crate) fn run(state: &mut TickState) {
     });
     state.brushing.progress = progress;
 }
+
+#[cfg(test)]
+#[path = "brushing_tests.rs"]
+mod tests;

@@ -1892,3 +1892,63 @@ fn copper_scan_uses_independent_draw_from_gate() {
         .is_some()
     );
 }
+
+#[test]
+fn copper_waxing_and_scraping_wait_for_a_resident_cell_and_spare_a_cold_partner() {
+    let mut state = fixture(None);
+    let player = join(&mut state);
+    let copper = block(&state, "copper_block", &[]);
+    let cold = BlockPos {
+        x: 16,
+        y: 200,
+        z: 1,
+    };
+    state.world.set_block(cold.x, cold.y, cold.z, copper);
+    assert!(!state.world.has_chunk(1, 0));
+    assert_eq!(state.world.block_at(cold.x, cold.y, cold.z), Some(copper));
+    state.players.get_mut(&player).unwrap().inventory.slots[0] = stack("honeycomb", 2);
+    assert!(
+        !use_on(&mut state, player, Hand::Main, cold),
+        "a non-resident cell is not waxed"
+    );
+    assert_eq!(state.world.block_at(cold.x, cold.y, cold.z), Some(copper));
+    assert_eq!(state.players[&player].inventory.slots[0].count, 2);
+    // A double copper chest whose other half is cold changes only the half the
+    // player used; the cold half's overlay keeps its own state.
+    let left = BlockPos {
+        x: 15,
+        y: 200,
+        z: 1,
+    };
+    let right = BlockPos {
+        x: 16,
+        y: 200,
+        z: 1,
+    };
+    install(
+        &mut state,
+        left,
+        "copper_chest",
+        "left",
+        vec![stack("diamond", 3)],
+    );
+    let right_state = block(
+        &state,
+        "copper_chest",
+        &[("facing", "north"), ("type", "right")],
+    );
+    state
+        .world
+        .set_block(right.x, right.y, right.z, right_state);
+    assert_eq!(
+        state.world.block_at(right.x, right.y, right.z),
+        Some(right_state)
+    );
+    assert!(use_on(&mut state, player, Hand::Main, left));
+    assert!(at(&state, left).block.id.path().starts_with("waxed_"));
+    assert_eq!(
+        state.world.block_at(right.x, right.y, right.z),
+        Some(right_state),
+        "a cold partner is not waxed through the overlay"
+    );
+}

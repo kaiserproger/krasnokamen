@@ -6,5 +6,6 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "receipts/ArchDesign/RESIDENCY-CONSUMERS-R11.md and DESIGN-RESIDENCY-R12.md (read-only audit). On main 3068dfb1b the target search reads block_at over +-15 (crates/mc-core/src/vanilla_interact.rs:110,126-134; entries tick/input/interact.rs:87,180) and block_at serves the overlay of a non-resident chunk (world.rs:951-965). Fix and scene: DESIGN-RESIDENCY-R12/R16 wide frame +-15 checked before the target search; T16i wide-frame scenes (T16i-6..8)."
-regression = []
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_never_teleports_into_a_cold_overlay"]
 failing_first = "not recorded"
+ingress_proof = ["crates/mc-core/src/vanilla_interact.rs:128 the teleport target search accepts only a resident air cell"]

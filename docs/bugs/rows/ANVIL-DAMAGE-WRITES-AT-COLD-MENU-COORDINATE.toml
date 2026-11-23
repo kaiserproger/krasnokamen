@@ -6,5 +6,6 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "receipts/ArchDesign/DESIGN-RESIDENCY-R14.md (found beyond the R13 vote; read-only audit). On main 3068dfb1b damage_anvil writes the anvil state at the menu coordinate (crates/mc-core/src/tick/stations.rs:143,184) without a residency check. Fix: DESIGN-RESIDENCY-R14/R16 menu-source check before handler selection for every menu input (cold -> close_player_menu, input not applied)."
-regression = []
+regression = ["cargo:mc-core:tick::stations_tests::anvil_damage_waits_for_a_resident_menu_coordinate"]
 failing_first = "not recorded"
+ingress_proof = ["crates/mc-core/src/tick/input/inventory.rs:228 menu_source_cold closes a cold menu before handler selection", "crates/mc-core/src/tick/stations.rs:144 has_chunk guard before damage_anvil reads or writes the menu coordinate"]

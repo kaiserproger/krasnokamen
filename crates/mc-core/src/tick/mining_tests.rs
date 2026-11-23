@@ -597,3 +597,55 @@ fn ice_break_respects_support_silk_touch_creative_and_nether() {
         air
     );
 }
+
+#[test]
+fn mining_progress_and_a_queued_finish_pause_while_the_target_chunk_is_cold() {
+    let (mut state, actor, current) = setup("stone");
+    mining::start(&mut state, actor, POS, current);
+    for _ in 0..3 {
+        state.tick += 1;
+        mining::advance(&mut state);
+    }
+    assert!(mining::delay(&mut state, actor, POS, current, || {
+        mining::PendingFinish::Native { sequence: 7 }
+    }));
+    assert!(state.players[&actor].delayed_dig.is_some());
+    let chunk = crate::boundary::ChunkPos {
+        x: POS.x.div_euclid(16),
+        z: POS.z.div_euclid(16),
+    };
+    state.world.finish_inhabited_tick(state.tick + 1);
+    state
+        .world
+        .set_active_chunks(Default::default(), state.tick + 1);
+    state.world.capture_dirty(&Default::default());
+    state
+        .world
+        .mark_flushed(&[(chunk, state.world.storage_revision(chunk))]);
+    assert!(
+        state
+            .world
+            .evict_outside(&Default::default())
+            .contains(&chunk)
+    );
+    assert!(!state.world.has_chunk(chunk.x, chunk.z));
+    // A cold stone image is still answered by `block_at`; progress must not
+    // accrue from it and the queued finish must not be extracted.
+    state.world.set_block(POS.x, POS.y, POS.z, current);
+    for _ in 0..200 {
+        state.tick += 1;
+        mining::advance(&mut state);
+        let mut inputs = Vec::new();
+        mining::take_finished(&mut state, &mut inputs);
+        assert!(
+            inputs.is_empty(),
+            "a queued finish waits for its target chunk"
+        );
+        assert!(
+            !mining::allows(&state, actor, POS, current, DigAction::Finish),
+            "a cold target pauses mining progress instead of finishing"
+        );
+    }
+    assert!(state.players[&actor].delayed_dig.is_some());
+    assert_eq!(state.world.block_at(POS.x, POS.y, POS.z), Some(current));
+}

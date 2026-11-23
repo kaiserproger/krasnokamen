@@ -38,8 +38,46 @@ fn valid_target(state: &TickState, entity: EntityId, dig: DigProgress) -> bool {
         && !crate::plugin_inventories::has_reservations_for_block(state, dig.position)
 }
 
+fn cold_cell(state: &TickState, x: i32, z: i32) -> bool {
+    !state.world.has_chunk(x.div_euclid(16), z.div_euclid(16))
+}
+
+/// The eye cell the mining speed reads, in the actor's own column.
+fn eye_cell(state: &TickState, entity: EntityId) -> Option<[i32; 3]> {
+    let slot = state.entities.slot_of(entity)?;
+    let body = state.entities.pos(slot);
+    Some([
+        body[0].floor() as i32,
+        (body[1] + crate::tick::player_eye_height(state.entities.row(slot).appearance.pose)).floor()
+            as i32,
+        body[2].floor() as i32,
+    ])
+}
+
+/// Freeze instead of sampling a cell the tick does not own: `block_at` answers
+/// from the cold overlay for a non-resident chunk.
+fn cold_target_or_eye(state: &TickState, entity: EntityId, position: BlockPos) -> bool {
+    cold_cell(state, position.x, position.z)
+        || eye_cell(state, entity).is_some_and(|eye| cold_cell(state, eye[0], eye[2]))
+}
+
+/// A finish is delivered over the target's +-2 frame, so every cell of that
+/// frame must be resident before the queued finish is extracted.
+fn cold_delivery_frame(state: &TickState, entity: EntityId, position: BlockPos) -> bool {
+    if cold_target_or_eye(state, entity, position) {
+        return true;
+    }
+    (-2..=2).any(|dx| (-2..=2).any(|dz| cold_cell(state, position.x + dx, position.z + dz)))
+}
+
 /// Credit Start's first tick immediately, then each subsequent server tick once.
 fn advanced(state: &TickState, entity: EntityId, mut dig: DigProgress) -> Option<DigProgress> {
+    // A non-resident target pauses: the progress and any queued finish stay, and
+    // `block_at` is not asked, because the cold overlay would answer for a chunk
+    // the tick does not own.
+    if cold_target_or_eye(state, entity, dig.position) {
+        return Some(dig);
+    }
     if !valid_target(state, entity, dig) {
         return None;
     }
@@ -95,6 +133,20 @@ pub(super) fn take_finished(state: &mut TickState, inputs: &mut Vec<crate::bound
         let Some(connection) = state.connections.entity_connection(entity) else {
             continue;
         };
+        // A queued finish waits for its target's chunk; extracting it now would
+        // apply the authoritative finish against the cold overlay.
+        let pending_target = state
+            .players
+            .get(&entity)
+            .and_then(|player| player.delayed_dig.as_ref())
+            .map(|dig| dig.progress.position);
+        if pending_target.is_some_and(|position| {
+            !state
+                .world
+                .has_chunk(position.x.div_euclid(16), position.z.div_euclid(16))
+        }) {
+            continue;
+        }
         let Some(delayed) = state
             .players
             .get_mut(&entity)
