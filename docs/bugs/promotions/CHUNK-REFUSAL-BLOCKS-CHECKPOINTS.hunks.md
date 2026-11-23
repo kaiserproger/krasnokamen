@@ -1,14 +1,16 @@
 # CHUNK-REFUSAL-BLOCKS-CHECKPOINTS: patch-mode fix identity
 
 Original fix: `1b84f73d` "fix(core): preserve custody when refusing corrupt chunks".
-`fix_commit = "patch:121feead8c57090f2d0ccab1375b6c8a0590128583aa7ab1856ce43e8e5007f8"`
+`fix_commit = "patch:dda9bcbe549bcff76401d1fef0c0d621466f71768066b59b2e6af5b79ac610f5"`
 names the HEAD equivalents of that fix's non-test hunks in
 `docs/bugs/promotions/CHUNK-REFUSAL-BLOCKS-CHECKPOINTS.patch` (a diff from the
 pre-fix form to the candidate; `git apply -R` restores the pre-fix code).
 Re-audit:
 `python3 -m tools.harness ledger promote CHUNK-REFUSAL-BLOCKS-CHECKPOINTS --fix-patch docs/bugs/promotions/CHUNK-REFUSAL-BLOCKS-CHECKPOINTS.patch --dry-run`
 
-This supersedes the earlier identity `patch:ae9b3c45…`: its hunks no longer
+This supersedes `patch:121feead…`, whose a/-side no longer compiled on the tip
+(a later test reads `world.block_entity_dirty`), and the earlier
+`patch:ae9b3c45…`: its hunks no longer
 reversed on the candidate (a later refactor removed the `SaveGenerated` work
 item and added the test-only `ContainerCaptureWork` field), so the patch was
 regenerated against the tip. Every original non-test hunk is carried unless it
@@ -28,9 +30,6 @@ Carried (16 of the commit's 23 non-test hunks):
 | capture.rs -227,6 debt skips failed | capture.rs:323-325 |
 | capture.rs -276,6 metadata of quarantined chunk not written | capture.rs:375-379 |
 | capture.rs -341,6 `block_entity_dirty` cleared on flush | capture.rs:445 |
-| world.rs -76,6 `block_entity_dirty` field | world.rs:79-83 |
-| world.rs -496,6 its init | world.rs:507 |
-| world.rs -675,6 its insert in `mark_block_entity_dirty` | world.rs:687 |
 | world.rs -724,8 `defer_checkpoint_chunk` counts instead of load_error | world.rs:737-744 |
 | residency.rs -282,7 doc | residency.rs:285 |
 | residency.rs -298,9 reject keeps dirty_sections, clears dirty_absent | residency.rs:301-306 |
@@ -46,13 +45,23 @@ capture start initialises the kept field as `refused: Vec::new()`
 (capture.rs:228-249 a/ side; the only a/ line that is not in the original
 pre-image), so `refused()` stays empty in the control.
 
-Not carried (4 hunks, size-only, dropped by this regeneration):
-- core.rs -212,7, core/journal.rs -532,7 and core/tick_loop.rs -288,7/-587,7
-  `Box<ChunkCapture>`: these only box the capture to shrink the work item; a
-  later refactor removed the `SaveGenerated` journal/native work item (its
-  `take_generated` lost the tick argument), so the surrounding code no longer
-  exists and the ownership shape has no HEAD equivalent to reverse. The row's
-  custody behaviour does not depend on it, so dropping it is harmless.
+Not carried (7 hunks, all reason (b)):
+
+- `Box<ChunkCapture>` in `core.rs` (`JournalWork::RequireGenerated.capture`),
+  `core/journal.rs` (`NativeWork::RequireGenerated.chunks`) and the two boxing
+  sites in `core/tick_loop.rs`: the kept tests construct the boxed form —
+  `core_journal_backpressure_tests.rs:413` and `:839` send
+  `JournalWork::RequireGenerated { capture: Box::new(invalid), .. }`.
+- `world.rs` `block_entity_dirty` (field, initializer, insert in
+  `mark_block_entity_dirty`): the kept `world_capture_tests.rs:354` reads
+  `world.block_entity_dirty`.
+
+Both were observed as compile failures when reversed
+(E0308 at the two backpressure lines, E0609 at the world_capture line), so the
+control could not build; HEAD does keep `Box<ChunkCapture>` (`core.rs:323`,
+`core/journal.rs:693`) and the field, so this is a kept-API exclusion, not a
+missing HEAD equivalent, and the row's custody behaviour does not depend on
+either.
 
 ## a/-side adaptation
 

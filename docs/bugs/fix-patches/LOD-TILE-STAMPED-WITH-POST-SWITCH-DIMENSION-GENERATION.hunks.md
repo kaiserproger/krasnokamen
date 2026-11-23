@@ -38,6 +38,14 @@ accessors, so the pre-image cannot be restored verbatim:
   live generation after the sampler returns. That is the pre-fix
   `try_send(frame)` inside the task, expressed through the kept names.
 
+### Where the red was obtained
+
+The promote dry-run `.analysis/validation/20261123T213404-ledger-promote-ffh6t24m`
+(`promote.json` → `negative_control`: `red`, detail `FAIL`) ran the kept test
+against the a/-side bodies (stamp at enqueue, capture after the sample) and
+observed the delivery assertion fail; the real promotion
+`.analysis/validation/20261123T213938-ledger-promote-arcn7hh6` restored it green.
+
 ## Proving ref (crates/mc-edge/src/lod.rs)
 
 - `lod::tests::a_reset_during_the_sample_discards_the_tile` — the sampler

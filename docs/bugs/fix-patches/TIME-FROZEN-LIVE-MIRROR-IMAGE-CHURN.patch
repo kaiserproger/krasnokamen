@@ -158,10 +158,26 @@ index 450f221e7..524c4ece8 100644
              block_only: HashSet::default(),
              active_revision: 0,
 diff --git a/crates/mc-core/src/world/clocks.rs b/crates/mc-core/src/world/clocks.rs
-index 271c47abb..609abde94 100644
+index e82f638ad..609abde94 100644
 --- a/crates/mc-core/src/world/clocks.rs
 +++ b/crates/mc-core/src/world/clocks.rs
-@@ -317,29 +317,119 @@ impl ChunkWorld {
+@@ -3,6 +3,15 @@
+ 
+ use super::*;
+ 
++/// One native interval whose game clock was held, with the held ticks that
++/// precede it. Half-open: `start..end` are held ticks.
++#[derive(Debug, Clone, Copy)]
++pub(crate) struct ClockSpan {
++    start: u64,
++    end: u64,
++    held_before: u64,
++}
++
+ impl ChunkWorld {
+     /// Read the live counter, including ticks not yet captured for persistence.
+     pub(crate) fn inhabited_time(&self, pos: ChunkPos) -> i64 {
+@@ -308,29 +317,119 @@ impl ChunkWorld {
          (start < end).then_some((start, end))
      }
  
@@ -289,7 +305,7 @@ index 271c47abb..609abde94 100644
          tick
      }
  
-@@ -407,6 +497,7 @@ impl ChunkWorld {
+@@ -398,6 +497,7 @@ impl ChunkWorld {
      /// [`Self::set_active_chunks`] stores then calls this same method.
      pub fn refresh_active_clock(&mut self, tick: u64) {
          self.sim_tick = tick;

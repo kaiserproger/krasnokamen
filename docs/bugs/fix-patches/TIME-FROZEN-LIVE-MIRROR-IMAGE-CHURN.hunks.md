@@ -1,7 +1,7 @@
 # TIME-FROZEN-LIVE-MIRROR-IMAGE-CHURN — patch-mode fix identity (second rework)
 
 Fix: `docs/bugs/fix-patches/TIME-FROZEN-LIVE-MIRROR-IMAGE-CHURN.patch`
-(`fix_commit = "patch:21994e48dd4fc574831cfbf8f880c4fc9bbcf0c1b814a4c2961198336c29f859"`).
+(`fix_commit = "patch:f33834c1ae41ebccc665a3a6d07894a0fec676b9b5302cb3fb824fc4b58aad62"`).
 It is a diff from the pre-fix form to this candidate; `git apply -R` restores
 the pre-fix projection. Re-audit:
 `python3 -m tools.harness ledger promote TIME-FROZEN-LIVE-MIRROR-IMAGE-CHURN --fix-patch docs/bugs/fix-patches/TIME-FROZEN-LIVE-MIRROR-IMAGE-CHURN.patch --dry-run`
@@ -22,7 +22,20 @@ this candidate has it.
 | `c8568f0a9` | the recovery boundary and the O(log n) spans | the same `world/clocks.rs` and `world.rs` hunks, in their final form (the patch is HEAD's text, so the follow-up's arithmetic is inside it) |
 
 No original hunk is left out: the three files above are all the non-test
-files the two commits touched.
+files the two commits touched, including the `ClockSpan` struct that
+`c8568f0a9` added at the top of `world/clocks.rs` (the a/-side has no such
+type; the adapted helpers do not need it).
+
+Where the reds were obtained:
+
+- the touched-mob, working-villager and differential reds come from the promote
+  control (dry-run `.analysis/validation/20261123T205817-ledger-promote-bm4puhcj`,
+  `negative_control` in its `promote.json`), i.e. from the adapted a/-side
+  helpers computing the old interval arithmetic while the kept tests call them;
+- the recovery guard is deliberately green there; its evidence is the mutation
+  observed in `.analysis/validation/20261123T203951-test-w4dur139/test.log`
+  (`clock_since = Some(tick)` reddens its own `is_empty`), reverted before the
+  promotion.
 
 ## a/-side adaptation (the only text outside the original pre-image)
 
