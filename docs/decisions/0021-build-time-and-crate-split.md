@@ -41,32 +41,21 @@ on, mold, no sccache, and one run each. Receipts are in
 | One-line `mc-core` edit → `mc-core` unit-test binary | 76–99 s |
 | One-line `mc-edge` edit → server binary | 8 s |
 
-- **`mc-core` is one crate of about 400k lines**: about 201k production and
-  199k in `*_tests.rs`.
-- **Incremental compilation barely helps it.** A trivial edit recompiles the
-  `mc-core` lib in 42 s against 55 s cold. `mc-edge` downstream then rebuilds in
-  22–28 s against 22 s cold.
-- **Where a cold `mc-core` compile goes:** about 18 s front end (type and
-  borrow checking), 9 s metadata, 7 s monomorphization and about 30 s
-  codegen/LLVM.
-- **A parallel front end gave nothing:** with `-Z threads=8`, the build took
-  60 s.
-- **Build and test configurations share no workspace artifacts.**
-  `cargo build -p mc-edge`, `cargo build -p mc-core` and
-  `cargo test -p mc-core` resolve different features for low-level
-  dependencies, among them `bitflags`, `log`, `smallvec`, `digest` and
-  `typenum`. The first test build after a change to a lower crate therefore
-  rebuilds `mc-data`, `mc-world`, `mc-worldgen`, `mc-script` and
-  `mc-plugin-host` again, about 3–4 minutes. Cargo's
-  `resolver.feature-unification` is unstable on 1.99.
-- **`mc-core`'s modules are one dependency cycle.** 189 of its 197 top-level
-  modules (185k of 201k lines) are one strongly connected component; `tick`
-  alone reaches 148 modules. The first version of this ADR said "of 421": that
-  was the number of top-level file and directory names in `src/`, 194 test
-  files included. The line figures are raw lines: 201k of every
-  non-`*_tests.rs` file, 185k of each cycle module's `<m>.rs` and `<m>/` files,
-  inline tests included. The cycle ratchet below counts by the module tree,
-  tests excluded: 188k of 195k.
+- **Crate size:** about 400k lines: 201k production and 199k in `*_tests.rs`.
+- **Incremental cost:** a trivial edit compiles `mc-core` in 42 s versus 55 s
+  cold, then rebuilds `mc-edge` in 22–28 s versus 22 s cold. Cold core phases:
+  front end/type/borrow checking ~18 s, metadata 9 s, monomorphization 7 s,
+  codegen/LLVM ~30 s. Parallel front end (`-Z threads=8`) took 60 s: no gain.
+- **Feature mismatch:** separate `mc-edge` build, `mc-core` build and core test
+  commands resolve different low-level features (`bitflags`, `log`, `smallvec`,
+  `digest`, `typenum`). After a lower-crate edit, the first test build repeats
+  `mc-data`, `mc-world`, `mc-worldgen`, `mc-script` and `mc-plugin-host`: ~3–4 min.
+  Cargo's `resolver.feature-unification` is unstable on 1.99.
+- **Dependency cycle:** 189/197 top-level modules (185k/201k production lines)
+  form one SCC; `tick` reaches 148. The original denominator 421 counted file
+  and directory names, including 194 test files. These are raw-line counts:
+  non-`*_tests.rs` files and cycle modules' `<m>.rs`/`<m>/`, inline tests included.
+  The production-module-tree ratchet below excludes tests: 188k/195k lines.
 
 ## Step 1 (implemented): line-table debuginfo
 
@@ -84,39 +73,28 @@ Receipts: `.analysis/codex-logs/build-time/20261105T123032Z-line-tables/`.
 | Cold `mc-core` lib alone | 55 s | 42 s |
 | Peak RSS of the cold build | 4.1 GB | 3.0 GB |
 
-The result is mixed. Every `mc-core` path and the cold build got faster. The
-binary crate's share of an `mc-core` edit fell from 13–22 s to 2 s. The
-`mc-edge`-only edit took longer in this single run: its `mc_edge` incremental
-compile went from 3 s to 11 s, and the cause is unexplained.
+Core paths and cold builds improved; the binary's share of a core edit fell
+from 13–22 s to 2 s. The single-run edge-only regression is unexplained:
+`mc_edge` incremental compilation rose from 3 s to 11 s.
 
 ## Step 2 (designed, not started): settlements crate pilot
 
 The pilot design is in `receipts/CrateSplitDesign/design.md`, outside Git,
 along with the reference tables behind its counts.
 
-- **What moves:** settlements, the villager AI behaviours,
-  `plugin_structures`, `plugin_settlements` and the settlement command
-  handler. That is 34.4k production and 46.5k test lines.
-- **Why it is expensive:** settlement state is part of `mc-core`'s persisted
-  model, through `TickState`, the villager cold-row column and `JournalEntry`.
-  The smallest cut needs:
-  - splitting 27 files into state and behaviour halves, with about 3.4k lines
-    moving into `mc-core`;
-  - a 17-method `SettlementSystems` hook trait called at 20 sites and wired by
-    `mc-edge`;
-  - widening about 495 private or `pub(crate)` items to `pub`;
-  - turning 12 `cfg(test)` seams into production code;
-  - touching 286 files.
-- **Expected gain [INFERENCE]:** a settlements unit-test build of about
-  21–26 s instead of the current 60–71 s. Other `mc-core` edits would change
-  little.
-- **Risks:**
-  - Release speed: villager brains would lose cross-crate inlining, and the
-    workspace has no LTO.
-  - The internals made `pub` stay public for good, and every new settlements
-    feature grows the hook layer. That is the boundary 0011 rejected.
-  - Merge conflicts: 71 of the 302 `mc-core` commits since 2026-10-22 touched
-    this area.
+- **Scope:** settlements, villager AI behaviours, `plugin_structures`,
+  `plugin_settlements` and settlement commands: 34.4k production/46.5k test lines.
+- **Coupling:** persisted state spans `TickState`, the villager cold-row column
+  and `JournalEntry`. The minimum cut splits 27 files (about 3.4k lines back
+  into core), adds a 17-method `SettlementSystems` trait at 20 call sites wired
+  by edge, widens ~495 private/`pub(crate)` items, moves 12 test-only seams into
+  production and touches 286 files.
+- **Gain [INFERENCE]:** settlements unit-test builds ~21–26 s versus 60–71 s;
+  little improvement for other core edits.
+- **Risks:** villager brains lose cross-crate inlining without workspace LTO;
+  permanently public internals and a hook layer growing with every settlement
+  feature repeat the boundary rejected by 0011; 71/302 core commits since
+  2026-10-22 touched this area, making conflicts likely.
 
 The design's recommendation was no-go until Step 3 narrows the coupling. The
 owner overrode the timing on 2026-11-19 (D65: «Да, начать сейчас, параллельно с
@@ -171,58 +149,47 @@ pinned base/candidate pair; no build-time or runtime gain is claimed.
 
 ### Shared dependency feature owner
 
-`mc-edge` depends on `workspace-features` normally; `mc-core` uses it only as a
-dev dependency. Standalone lower crates keep their own small dependency graphs.
-The feature owner's library has no runtime API; its manifest activates the union
-of third-party features used by the server and core tests. It depends on no Krasnokamen
-crate, so it cannot introduce a reverse domain dependency. Cargo's
+`workspace-features` has no runtime API or local crate dependency: its manifest
+owns the third-party union for edge's normal dependencies and core's dev
+dependencies, without reverse domain edges or inflating standalone lower crates.
+Cargo's unstable
 [`resolver.feature-unification`](https://doc.rust-lang.org/cargo/reference/unstable.html#feature-unification)
-still requires an unstable flag; setting the configuration alone is ignored.
-This implementation needs neither nightly nor `RUSTC_BOOTSTRAP`.
+is ignored without its flag; this implementation needs neither nightly nor
+`RUSTC_BOOTSTRAP`.
 
-Resolver 2 separates host/build dependencies from target dependencies. The
-proc-macro `syn` union is therefore a build dependency, activated by the crate's
-build target; ordinary dependency features stay on the target side. Unix rustix
-and Linux raw-sys features retain their platform predicates. Optional GPU
-backends and test-only frameworks are not pulled into production just to unify
-their own features.
+Resolver 2 separates host/build and target contexts. The proc-macro `syn` union
+is a build dependency activated by the build target; ordinary features remain
+target dependencies. Preserve Unix rustix/Linux raw-sys predicates. Do not pull
+optional GPU backends or test-only frameworks into production for unification.
 
-On `4d32f280`, separate `mc-edge` build and `mc-core` test resolution differed in
-11 shared package contexts: digest, getrandom, hashbrown, lazy_static, num-traits,
-rand_core, regex-syntax, semver, smallvec, typenum (target), and syn (host).
-The original all-workspace variant made `mc-edge` build, `mc-core` build,
-`mc-core` tests and workspace tests agree in their common dependency contexts on
-`x86_64-unknown-linux-gnu` with default features. However, it expanded standalone
-mc-nbt's dependency graph from 11 to 84 packages. The root-only variant avoids
-that leaf cost; its comparative rebuild measurements remain pending. The lockfile
-adds only the local feature-owner package, not a new third-party version.
+**Resolution evidence, not build/performance acceptance:**
 
-This is **dependency-resolution evidence, not build or performance acceptance**.
-Receipts outside Git: `receipts/CrateSplit/feature-comparison.json`,
-`*-context.txt`, `*-unified.txt`, and `feature-union-before.json`. The plan and
-manifest graph are in that directory too. Cargo tree commands use
+| Tree/variant | Observation |
+|---|---|
+| `4d32f280`, separate edge build/core tests | 11 differing shared contexts: target digest, getrandom, hashbrown, lazy_static, num-traits, rand_core, regex-syntax, semver, smallvec, typenum; host syn |
+| Original all-workspace union | Edge/core builds, core/workspace tests agree in common contexts on default-feature `x86_64-unknown-linux-gnu`, but mc-nbt grows from 11 to 84 packages |
+| Root-only, merged `168023ec` | 222 shared server-build/core-test contexts, zero feature differences; standalone mc-nbt has nine distinct packages and no unifier edge |
+
+Root-only avoids the leaf cost; rebuild gains remain unmeasured. The lockfile
+adds only the local feature owner, no third-party version. Evidence, plan and
+manifest graph: `receipts/CrateSplit/feature-comparison.json`, `*-context.txt`,
+`*-unified.txt`, `feature-union-before.json`, `root-only-comparison.json`,
+`root-only-leaf.txt`. Cargo tree uses
 `--locked --offline --prefix depth --format '{p}|{f}'`, with `-e normal,build`
-for builds and `-e normal,build,dev` for tests. Compare package version and
-host/target context, not just package name or an aggregate feature union.
-On merged base `168023ec`, root-only server-build and core-test resolution has
-222 shared package contexts and zero feature differences
-(`receipts/CrateSplit/root-only-comparison.json`). The standalone mc-nbt tree
-contains nine distinct packages (`root-only-leaf.txt`), with no unifier edge.
+for builds and `-e normal,build,dev` for tests. Compare version and host/target
+context, not package name or aggregate feature union.
 
-Ordinary acceptance on this feature tree: workspace build, formatting,
-code-health and documentation links passed. The core/edge unit run passed
-4601 of 4602 tests (81 skipped) before its 3600-second command deadline.
-`adopted_village_with_resident_shears_produces_stock_and_builds` remained running.
-Main identified it as a pre-existing slow test outside this feature diff and
-directed no rerun; it is not claimed passed. Receipts:
+**Ordinary acceptance:** workspace build, formatting, code-health and doclinks
+passed. Core/edge tests reached 4601/4602 passes (81 skipped) before the 3600 s
+deadline; `adopted_village_with_resident_shears_produces_stock_and_builds` was
+still running. Main identified this as pre-existing/outside the diff and directed
+no rerun; it is not passed. Receipts under `receipts/CrateSplit`:
 `root-only-workspace-build-02`, `root-only-consumer-tests-01/acceptance.json`,
-`root-only-fmt-01`, `root-only-code-health-01` and `root-only-doclinks.json`.
+`root-only-fmt-01`, `root-only-code-health-01`, `root-only-doclinks.json`.
 
-When changing dependencies, update the shared feature owner to the resolved
-union, preserving platform/host distinctions and excluding test-only packages.
-Check the same feature contexts, then build and run the affected tests. A
-feature-tree match does not prove that profile or compiler-option differences
-cannot still trigger a rebuild.
+Dependency changes update the resolved union with platform/host distinctions
+and without test-only packages, check those contexts, then build and run affected
+tests. Matching features cannot exclude profile/compiler-option rebuilds.
 
 | Scenario on the current Step 3 tree | Before | After |
 |---|---|---|
@@ -231,225 +198,179 @@ cannot still trigger a rebuild.
 | Trivial `mc-edge` edit → server | Awaiting batched quiet window | Awaiting batched quiet window |
 | Lower-crate edit → first core test build after server | Awaiting batched quiet window | Awaiting batched quiet window |
 
-Use the Step 1 quiet-lane method for both columns, on frozen trees with
-incremental compilation, existing dev/test profiles, clang/mold and no sccache.
-The historical tables above are not substitutes for these measurements.
-The clean baseline's first core test compilation took 250.887 s and rebuilt
-eight lower libraries after the server build. This cold test is not the
-lower-edit measurement. Receipts: `baseline-server-cold-02` and
-`baseline-core-test-cold` under `receipts/CrateSplit`. Main deferred further
-timings while campaign gates run: ordinary `-m` validation is not performance
-evidence; neither cancelled `-x` nor cancelled `-p` attempts supply a comparison.
+Both columns require frozen trees with Step 1's quiet-lane method: incremental,
+existing dev/test profiles, clang/mold, no sccache. Historical timings above are
+not substitutes. The clean baseline's first core test compile took 250.887 s,
+rebuilding eight lower libraries after the server; it is not a lower-edit
+measurement. Receipts under `receipts/CrateSplit`: `baseline-server-cold-02`,
+`baseline-core-test-cold`. Main deferred timings during campaign gates; ordinary
+`-m` validation and cancelled `-x`/`-p` attempts provide no comparison.
 
 ### Offline ownership boundaries
 
-`mc-world-conversion` owns Anvil import/export, census and probes.
-`mc-world-tools` owns pregeneration, native prune/compact and worldgen revision
-upgrades. The edge's operator CLI depends on both; neither production nor test
-dependencies point back from the core to these operator crates.
+| Owner | Boundary |
+|---|---|
+| `mc-world-conversion` | Anvil import/export, census, probes |
+| `mc-world-tools` | Pregeneration, native prune/compact, worldgen revision upgrades |
+| Edge operator CLI | Depends on both; core has no production or test reverse dependency |
+| Existing native owners | Checkpoint codecs, recovery, metadata, plugin-startup records; public persistence APIs, not injected `TickState` hooks |
+| `native_checkpoint` | Entity hydration shared by live dimension recovery and import |
+| `ChunkSource::new_native` / existing worker pool | Immutable store/generator/registry/population inputs and queue/worker lifetimes; offline and live use the same terrain factory, admission bounds and load/generate path |
 
-Core-native checkpoint codecs, recovery, metadata and plugin-startup records
-remain with their existing owners. These are actual public persistence APIs,
-not injected hooks or wrappers around `TickState`; the extraction changes no
-encoded records. The native entity hydration implementation now belongs to
-`native_checkpoint` and is shared by live dimension recovery and import.
+Encoded records and generation fidelity do not change. Core-private assertions
+stay in core; converter round trips use public `Core` I/O or native store/journal
+formats. Mount cargo crosses a real joined player's menu, checkpoint, export and
+reimport. Java-oracle and malformed-projectile import tests move with conversion;
+core retains direct WAL recovery, despawn, POI exclusivity, warning-clock and bee
+custody tests. Both offline crates supply the real vanilla cache, not core
+`cfg(test)` defaults or newly public fixtures.
 
-`ChunkSource::new_native` owns the immutable store, generator, registry and
-population inputs used by both live worlds and offline pregeneration. The
-existing worker pool owns its queues and worker lifetimes. Offline tools use
-the same terrain factory, admission bounds and load/generate path as serving;
-no second generator or reduced-fidelity import path is introduced.
+`live_capture_tests.rs` retains portable checkpoint round trips for trader
+purchases, shrieker warning aging, villager job claims and inhabited time.
+Public queues/outputs drive mutations; journal capture and dimension hydration
+remain private. Inhabited-time coverage requires a nonzero checkpoint contribution
+and later active intervals separated by a spectator interval.
 
-Private core scenario assertions remain in core tests. Cross-owner round trips
-live with the converter and exercise public `Core` inputs/outputs or the native
-store/journal format. In particular, mount cargo still crosses a real joined
-player's menu, checkpoint, export and reimport; the Java oracle and malformed
-projectile import checks move with the converter. The core retains its direct
-WAL recovery, despawn, POI exclusivity, warning-clock and bee custody assertions.
-Both offline crates supply the actual vanilla cache in tests rather than
-relying on the core's `cfg(test)` defaults or publishing private fixture APIs.
+`live_capture_crash_tests.rs` adds a **Linux-only** (`cfg(target_os = "linux")`)
+chain: child runs the public-Core scenario, obtains `Core::backup` baseline,
+then acts; inotify only wakes observation, while native WAL decoding validates
+published payloads, checksums and contiguous coverage through the action tick.
+It exits without Core destructors/shutdown checkpoint; parent exports offline
+and asserts checkpoint/replay ticks and Anvil/NBT state. This is neither power-loss
+nor cross-platform crash coverage. Revised scenarios/capture-negative controls
+await execution under the heavy-run hold; prior manually driven `TickState`
+results do not validate this revision.
 
-The converter's `live_capture_tests.rs` keeps portable runtime-checkpoint round
-trips for wandering-trader purchases, shrieker warning aging, villager job-site
-claims and inhabited time. Mutations use public `Core` input queues and observed
-outputs; mutable journal capture and dimension hydration remain private. The
-inhabited-time case requires a nonzero checkpoint contribution plus later active
-intervals separated by a spectator interval.
+Harness paths/test discovery follow the owners; path-only matrix migration stays
+separate from implementation commits.
 
-The additional checkpoint-plus-WAL crash/export chain in
-`live_capture_crash_tests.rs` is **Linux-only** (`cfg(target_os = "linux")`).
-A child runs the same public-Core scenario, obtains its baseline through the
-unchanged `Core::backup` checkpoint path, then performs the domain actions.
-Inotify only wakes the observer: native WAL decoding must validate published
-payloads, checksums and contiguous coverage through the observed action tick.
-The child exits without Core destructors, so no shutdown checkpoint can absorb
-the tail; the parent exports offline and checks both checkpoint/replay ticks and
-Anvil/NBT state. This does not claim power-loss testing or cross-platform crash
-coverage. The revised scenarios and their capture-negative controls are pending
-execution while the owner-host heavy-run hold is in force; prior results from
-the manually driven TickState candidate do not validate this revision.
+Historical extraction measurements: 193 core top-level modules/191830 production
+lines, SCC still 189 (all four offline modules were already outside it: no cycle
+reduction). Literal/path-comparison ceilings drop to 2617/114; others unchanged.
+The local graph has 18 crates/55 edges including dev edges, no cycle. Receipts
+under `receipts/CrateSplit`: `offline-root-only-code-health-01`,
+`crate-edges-root-only-extracted.json`.
 
-Harness source paths and test discovery follow the new owners. The path-only
-matrix migration is kept separate from implementation commits.
-
-Canonical structural measurements on the extracted tree: 193 top-level core
-modules and 191830 production lines; the largest SCC remains 189 modules.
-These four offline modules were already outside the SCC: this extraction is
-not a cycle reduction. The core's vanilla-literal and path-comparison ceilings
-drop to the measured 2617 and 114; the other ceilings remain unchanged.
-The local crate graph has 18 crates and 55 edges including development edges,
-with no cycle. Receipts: `offline-root-only-code-health-01` and
-`crate-edges-root-only-extracted.json` under `receipts/CrateSplit`.
-
-Ordinary extraction acceptance passed on merged base `d5f3a8c9`: the complete
-workspace build, 153 selected tests across both offline crates and affected core
-recovery scenarios, formatting, and the tightened code-health ratchets.
-The test runner skipped 3781 tests outside this selection or marked ignored;
-this is not a full-workspace correctness claim. Receipts under
+On merged `d5f3a8c9`, workspace build, 153 selected offline/core-recovery tests,
+formatting and tightened code-health passed; 3781 tests were outside selection
+or ignored, **not** a full-workspace correctness claim. Receipts under
 `receipts/CrateSplit`: `offline-root-only-workspace-build-02`,
-`offline-root-only-affected-tests-01`, `offline-root-only-fmt-01`, and
+`offline-root-only-affected-tests-01`, `offline-root-only-fmt-01`,
 `offline-root-only-code-health-02`.
 
 ### Config owns block-log policy
 
-`config::BlockLogSettings` owns the unchanged enabled/retention/count policy and
-defaults; `block_log::BlockLog` still owns capture, queries, pruning and recovery.
-Core configuration and the edge adapter use the new owner directly, with no
-compatibility alias. No persisted field or operator configuration key changes.
+`config::BlockLogSettings` owns enabled/retention/count policy and defaults;
+`block_log::BlockLog` owns capture/query/prune/recovery. Core config and edge use
+the new owner without an alias; policy, persisted fields and operator keys stay
+unchanged.
 
-On base `6b594d8f`, canonical code-health measured 189 of 193 modules in the
-largest cycle (191,211 production lines). This cut measures 186 of 193
-(190,745 lines): `config`, `debt` and `carrier_blocks` leave it. The ceiling
-is lowered to 186. Receipt:
-`receipts/CrateCuts/cut1-cycle/20261109T133700-code-health-4zqnqllh/code-health.log`.
+| Historical evidence | Result |
+|---|---|
+| `6b594d8f` → policy cut | SCC 189/193 modules, 191,211 production lines → 186/193, 190,745; `config`, `debt`, `carrier_blocks` leave; ceiling 186 |
+| Converter prerequisite | Traders, warden warning clocks, villager jobs and inhabited time each pass graceful checkpoint and abrupt-exit checkpoint/WAL export (8 checks) on unchanged production; removing recovered export projections fails all 8 exported-value assertions |
+| Affected acceptance | 21 selected block-log, edge-config and live persistence tests pass; no build-time gain established |
 
-The converter prerequisite restores four live domain checks through both graceful
-checkpoint export and abrupt-exit checkpoint/WAL-tail export: wandering traders,
-warden warning clocks, villager job claims and inhabited time. All eight pass
-on unchanged production code; removing their recovered export projections makes
-all eight fail at exported-value assertions. Evidence and mutation patch:
-`receipts/CrateCuts/persistence-base-evidence.json` and
-`receipts/CrateCuts/persistence-negative.patch`.
-
-Affected acceptance passes all 21 selected block-log, edge configuration and live
-persistence tests. Receipt:
+Receipts: `receipts/CrateCuts/cut1-cycle/20261109T133700-code-health-4zqnqllh/code-health.log`,
+`receipts/CrateCuts/persistence-base-evidence.json`,
+`receipts/CrateCuts/persistence-negative.patch`,
 `receipts/CrateCuts/cut1-affected/20261109T133909-test-6yma_vz9/test.log`.
-Build-time comparisons remain deferred to Main's batched quiet window; ordinary
-acceptance durations establish no performance gain.
+Build comparisons await Main's quiet batch, not ordinary acceptance durations.
 
 ### Tick owns settled-block orchestration
 
-The former top-level `blocks` module is now `tick::blocks`, with byte-identical
-phase code and the same position in `run_tick`. Falling, placement, plants and
-sign policy keep their existing owners; no adapter or callback replaces the
-removed top-level module. Three fluid owner tests call the tick child directly.
+Top-level `blocks` becomes `tick::blocks`, byte-identical and at the same
+`run_tick` position. Falling/placement/plants/sign policy owners remain; no adapter
+or callback replaces the module. Three fluid owner tests call the tick child.
 
-Canonical code-health measures 185 of 192 top-level modules in the cycle
-(190,746 production lines), down from 186 of 193 after the policy cut. The
-ceiling is lowered to 185. This removes a false boundary, not a runtime algorithm.
-Receipts: `receipts/CrateCuts/cut2-byte-oracle.json` and
+Historical SCC: 186/193 after the policy cut → 185/192 modules, 190,746 production
+lines; ceiling 185. This removes a false boundary, not a runtime algorithm.
+Byte oracle/measurement:
+`receipts/CrateCuts/cut2-byte-oracle.json`,
 `receipts/CrateCuts/cut2-cycle/20261109T142805-code-health-gpu84yzk/code-health.log`.
-
-Affected acceptance passes all 172 selected block tools, falling, placement,
-fluid and live checkpoint/WAL/export tests, plus formatting and the tightened
-code-health gate. Receipts are under `receipts/CrateCuts/cut2-affected/`,
-`cut2-fmt/` and `cut2-ratchet/`. Build timing remains deferred to the same
-quiet-window batch; this cut makes no build-speed claim.
+All 172 selected block-tool/falling/placement/fluid/live checkpoint-WAL-export
+tests, formatting and tightened code-health pass under
+`receipts/CrateCuts/cut2-affected/`, `cut2-fmt/`, `cut2-ratchet/`.
+Build timing remains in the quiet-window batch: no speed claim.
 
 ### Pure book encoding, tick-owned inventory authority
 
-`books::replacement` depends only on `mc-data` and `mc-nbt`: the original stack,
-item registry, pages, optional title and explicit author yield a replacement or
-refusal. UTF-16 limits and book component replacement remain unchanged.
-`tick::book_actions` retains session, alive/spectator and slot checks, book-open
-publication, the custody-floor check immediately before commit, and authoritative
-inventory publication. The two dispatchers call that existing tick owner;
-there is no second inventory API or injected policy.
+`books::replacement` is pure `mc-data`/`mc-nbt` encoding: original stack,
+registry, pages, optional title and explicit author produce a replacement or
+refusal; UTF-16 limits/component replacement stay unchanged. `tick::book_actions`
+owns session/alive/spectator/slot checks, opening, custody-floor validation
+immediately before commit and authoritative inventory publication. Both dispatchers
+call it: no second inventory API or injected policy.
 
-Canonical code-health measures 184 of 192 top-level modules in the cycle
-(190,691 production lines), with `books` now outside it; the ceiling is lowered
-to 184. Receipt:
+Historical SCC: 184/192 modules, 190,691 production lines; `books` leaves, ceiling
+184. Receipt:
 `receipts/CrateCuts/cut3-cycle/20261109T144106-code-health-xokla2h6/code-health.log`.
-The build-time effect still requires Main's frozen quiet-window batch.
+The 42 selected book/live checkpoint-WAL-export tests and formatting pass
+(`receipts/CrateCuts/cut3-affected/20261109T144409-test-n8x7ak6i/`,
+`cut3-fmt/20261109T145156-fmt-uuuzn3x_/`). Coverage includes exact/over-limit
+UTF-16, unrelated components, real native custody refusal and both hand dispatchers.
 
-Affected acceptance passes all 42 selected book and live checkpoint/WAL/export
-tests and formatting (`receipts/CrateCuts/cut3-affected/20261109T144409-test-n8x7ak6i/`
-and `cut3-fmt/20261109T145156-fmt-uuuzn3x_/`). New coverage exercises exact and
-over-limit UTF-16 input, unrelated component preservation, real native custody
-reservation refusal, and book opening through both hand dispatchers.
-
-After rebasing onto `9062a976`, the tightened 184-module gate passes
+On rebase `9062a976`, the 184-module gate passes
 (`receipts/CrateCuts/rebased-ratchet/20261109T150721-code-health-fxfimnf8/`).
-Separate negative controls also fail at the original inventory assertions:
-raising the UTF-16 page bound accepts an oversized page, and removing the
-custody-floor check signs a reserved writable book. Both mutations are restored.
-Receipts: `receipts/CrateCuts/rebased-utf16-negative/20261109T150825-test-lilybvrm/`
-and `rebased-custody-negative/20261109T151112-test-4397i811/`.
-Final cuts are rebased onto `8dd2c61f`. Strict workspace Clippy passes
-(`receipts/CrateCuts/final-clippy/20261111T083013-clippy-utavssiy/`).
-The full workspace/all-target suite passes 7,496 of 7,497 tests
-(`receipts/CrateCuts/final-nextest/20261111T083049-test-82ddtht3/`); its sole
-failure is the pre-existing one-tick illusioner fixture after Main's target-search
-cadence change. A separate approved fixture patch retains every assertion and
-journals each tick until acquisition; it passes three requested runs under
-`receipts/CrateCuts/illusioner-positive-{1,2,3}/`. Earlier regression and formatting
-passes are retained rather than repeated. This is staged L2 evidence, not a claim
-of a new all-green `correctness` invocation; the exact trees and receipts are in
-`receipts/CrateCuts/final-manifest.json`. Build timing remains Main's quiet-window
-batch; no build-speed or real-client acceptance claim is made by these cuts.
+Two restored negative mutations fail the original assertions: raising the UTF-16
+page bound admits oversized pages; dropping custody-floor validation signs a
+reserved book. Receipts:
+`receipts/CrateCuts/rebased-utf16-negative/20261109T150825-test-lilybvrm/`,
+`rebased-custody-negative/20261109T151112-test-4397i811/`.
+
+Final rebase `8dd2c61f`: strict workspace Clippy passes
+(`receipts/CrateCuts/final-clippy/20261111T083013-clippy-utavssiy/`);
+workspace/all-target tests pass 7,496/7,497
+(`receipts/CrateCuts/final-nextest/20261111T083049-test-82ddtht3/`).
+The sole failure is the pre-existing one-tick illusioner fixture after Main's
+target-search cadence change. An approved fixture patch preserves all assertions
+and journals each tick until acquisition; three requested runs pass under
+`receipts/CrateCuts/illusioner-positive-{1,2,3}/`. Earlier regression/formatting
+passes are retained, not repeated. This is staged L2, **not** a fresh all-green
+`correctness`, real-client or build-speed claim. Exact trees/receipts:
+`receipts/CrateCuts/final-manifest.json`; timing awaits Main's frozen quiet batch.
 
 
 ### Entity view pages are a boundary child, motion gate is an entity child
 
-`entity_views` owned the dense copy-on-write page container for
-`boundary::EntityView` records and nothing else: its only out-edge was back to
-`boundary`, and `boundary` was its only referrer (a `pub use`). It is
-`boundary::views` now, byte for byte (test file included), so a false top-level
-cycle node disappears while `boundary::EntityViews` stays the public path.
+The dense COW page container `entity_views` had only `boundary` as referrer
+(a re-export) and out-edge; its records are `boundary::EntityView`. It moves,
+tests included, byte-for-byte to `boundary::views`, removing a false top-level
+node while keeping public `boundary::EntityViews`.
 
-The native motion gate policy — which motion lanes one entity runs — left
-`entities.rs` for its owner `entities/motion_gate.rs` with bytes verbatim. The
-store keeps the `flags`/`hints` columns, their dirty queue and custody; the gate
-owns the classification that fills them from hot body state, cold retained state
-and the blueprint registry. As a submodule of the entity host it is not a cycle
-node. `entities` itself cannot leave the cycle: every store method names
-`boundary` and `blueprint` types, which are inside it.
+Motion-lane classification moves verbatim from `entities.rs` to
+`entities/motion_gate.rs`. The store retains `flags`/`hints`, dirty queue and
+custody; the gate fills them from hot body, cold retained state and blueprint
+registry. The child adds no top-level node. `entities` still depends on cyclic
+`boundary`/`blueprint` types throughout its store methods and cannot leave.
 
-Canonical code-health on the integration tree measures 186 of 199 top-level
-modules in the largest cycle (235,960 production lines) and 864
-items/statements in `entities.rs` (925 before); the ceilings drop to 186 and
-864. No encoded record,
-call order or gameplay decision changed. Move script and measurement logs:
+Historical integration measurement: SCC 186/199 modules, 235,960 production
+lines; `entities.rs` 925 → 864 items/statements; ceilings 186/864. No encoded
+record, call order or gameplay decision changes. Move script/measurements:
 `receipts/CutEntities/`.
 
 ### Cycle ratchet (implemented 2026-11-07)
 
-The owner approved a gate that keeps the cycle from growing while Step 3 waits.
-`cargo run -p xtask -- code-health` builds `mc-core`'s top-level module graph
-from production code with `syn`. Edges are `crate::` and `super::` paths in
-`use` items, expressions, types and macro bodies; root re-exports resolve to
-their module. `#[cfg(test)]` items and `*_tests.rs` files are skipped. Tarjan
-gives the strongly connected components.
+Owner-approved on 2026-11-07:
+`cargo run -p xtask -- code-health` builds the production top-level module graph
+with `syn` and finds SCCs with Tarjan. Edges include `crate::`/`super::` paths
+in use items, expressions, types and macro bodies; root re-exports resolve to
+owners. `#[cfg(test)]` items and `*_tests.rs` are excluded.
 
-- **Gate:** no module may join the largest component. Ceiling set on
-  `ffd52010`: 189 modules. Receipts: `receipts/CoherenceRatchet/`, outside
-  Git. The component's production lines (188,451 on `ffd52010`) are a printed
-  trend, never a failure: every feature inside a cycle module adds lines, so a
-  line ceiling would only be raised by ritual.
-- **Ceilings only go down by default.** A lower measurement prints
-  `ceiling can drop to N`, and that change lowers the constant. Raising a
-  ceiling is an explicit edit of the constant in
-  `crates/xtask/src/code_health/ratchet.rs` with a reason comment.
-- **Hints:** the report prints the most connected modules in the cycle and the
-  modules that leave it for the fewest cut edges. On `ffd52010`, cutting
-  `config -> block_log` frees 4 modules.
-- **Limit:** only named module paths are edges. A dependency through a type's
-  methods without a module path does not count.
-- **New xtask dependencies: `syn` and `proc-macro2`.** Before: text counters that
-  missed macro bodies, counted comments and could not resolve modules. That
-  made a failing gate impossible: no exact count, no module graph. `syn`
-  replaces the text counters, which are deleted; both crates were already in
-  `Cargo.lock` through other crates.
+- **Gate:** no module may join the largest component. Original `ffd52010`
+  ceiling: 189 modules (`receipts/CoherenceRatchet/`, outside Git). Its 188,451
+  production lines are a printed trend, never a failure: ordinary features add
+  lines, so a line ceiling would merely be raised by ritual.
+- **Ceilings fall by default:** `ceiling can drop to N` requires lowering the
+  constant in the same change. Raising one requires an explicit constant edit
+  and reason comment in `crates/xtask/src/code_health/ratchet.rs`.
+- **Hints:** highest-connectivity modules and cheapest cut edges; on `ffd52010`,
+  cutting `config -> block_log` frees four modules.
+- **Limit:** only named paths count, not dependencies resolved through methods
+  without a module path.
+- **Dependencies:** `syn`/`proc-macro2` were already in Cargo.lock. They replace
+  the deleted text counters (missed macros, counted comments, unresolved modules)
+  with the exact count/graph needed for a failing gate.
 
 The same gate ratchets four anti-pattern counts; see
 [agent tooling](../AGENT_TOOLING.md#code-health-ratchets).
