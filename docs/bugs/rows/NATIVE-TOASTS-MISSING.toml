@@ -4,10 +4,11 @@ title = "Native client renders no toasts: advancement-made, recipe-unlocked and 
 area = "client"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "The client renders toasts in src/ui/toasts.rs (ToastManager 26.3 parity, client:e8fe40c2 territory); the gate said otherwise only because of the capture path. solaris-client 2edbb590 discarded the advancement show-toast flag and had no renderer; 8deb8fd7 added src/ui/toasts.rs, and on 2026-11-24 the retained overlay was shown to carry the toast (448 vertices, layer-2 draw range covering them) while every native-toast capture landed after its 10 s lifetime: the capture was deferred by UiState::animating() for any HUD repaint. Java oracle frames (receipts/VisualItemsClient/20261111T140325-scene-shot-znvexbrh) show the vanilla panel; the native toast-early frame 20261123T214206 now shows the same panel with its yellow title and warning text."
 regression = ["harness:scene-shot:native-toast", "client:krasnokamen-client:ui::toasts::tests::unsecure_server_warning_takes_two_slots_and_hides_after_ten_seconds"]
 proving_assertions = { "harness:scene-shot:native-toast" = "toast_panel_appeared" }
 failing_first = "reported"
 fix_commit = "client:e32052ade6"
 repro_check = "The behaviour came with client:8deb8fd7 (2026-11-11, pre-rename, not pinnable) and the tip pair is the committed reversal client:6c3ebb27ac -> re-land client:e32052ade6; the hunk map is promotions/NATIVE-TOASTS-MISSING.hunks.md. `git blame -C -C -L 3683,3685 src/ui/state.rs` names the paint call as 8deb8fd78, and the reversal restores that hunk pre-image `Ok(())`. Control = 6c3ebb27ac on candidate core 107eb70061: native-toast FAILS at toast_panel_appeared (20261123T225248-native-toast-oa0ho1kj) - no panel pixels at all; restore = e32052ade6 passes (20261123T230254-native-toast-wh85md65, early panel 89615, title 3195, late 0). The capture-deferral defect that made the gate red earlier is its own promoted row CAPTURE-DEFERRED-HUD-TRANSIENT."
+promotion = "docs/bugs/promotions/NATIVE-TOASTS-MISSING.json"
