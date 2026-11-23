@@ -246,8 +246,8 @@ another recovery.
   before the batch is published (written, fsynced, renamed). Two windows follow.
   Any crash, SIGKILL included, can lose every batch not yet published: up to
   128 queued batches, plus up to 1024 batches the owner holds while a generated
-  baseline waits behind an in-flight checkpoint commit (about 51 s at 20 TPS for
-  payload-free batches; payload bytes stay under 256 MiB of post-images), and the
+  baseline waits behind an in-flight checkpoint commit (1152 items in all, about 57.6 s at 20 TPS
+  for payload-free batches; payload bytes stay under 256 MiB of post-images), and the
   batch being written if its rename has not happened, so an empty queue does not
   close it. A host power loss can also
   drop up to `journal_fsync_every_batches` published batches whose names the

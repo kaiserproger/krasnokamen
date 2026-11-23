@@ -1054,7 +1054,7 @@ a tick is shown to clients once its journal batch is queued, before the batch is
 published (written, fsynced and renamed into place): up to 128 queued batches
 behind the one the journal thread is handling, plus up to 1024 batches the owner
 holds while a generated baseline waits behind an in-flight checkpoint commit
-(about 51 s at 20 TPS for payload-free batches; payload bytes stay under 256 MiB
+(1152 items in all, about 57.6 s at 20 TPS for payload-free batches; payload bytes stay under 256 MiB
 of estimated payload). Any crash, SIGKILL included, can lose every batch not yet
 published: the queued and held ones, and the current one if its rename has not
 happened, so an empty queue does not close this window. Second, the journal directory is

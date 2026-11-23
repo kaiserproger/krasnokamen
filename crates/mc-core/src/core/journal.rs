@@ -728,14 +728,16 @@ impl Drop for BaselineWake {
 /// held items the original blocking wait applies, so the hold's memory stays
 /// bounded even for payload-free batches.
 ///
-/// Sized from the measured checkpoint window rather than a round number: the
-/// redb checkpoint commits that park a baseline behind them take 10.8-16.6 s
-/// (receipts/CheckpointJoinStall), and a saturated tick runs 20 TPS, so the
-/// wait needs room for ~216-332 items. 1024 items is ~51 s at 20 TPS: three
-/// times the longest measured window, with a hard item bound so the hold can
-/// never grow without limit. Payload bytes stay under `JOURNAL_QUEUE_BYTES`;
-/// empty batches are priced at the item bound only, i.e. tens of KiB.
-const JOURNAL_HOLD_LIMIT: usize = 1024;
+/// Sized from the measured checkpoint window rather than a round number: a
+/// redb checkpoint commit that parks a baseline behind it took 10.8-16.6 s on
+/// the owner host under load (CheckpointJoinStall DESIGN.md:17 and
+/// receipts/Perf1M/LAPTOP-R3k-4-REPORT.md:10; it grows with load), so the wait
+/// needs room for a few hundred ticks. 1024 items is ~144 s at the report's
+/// ~7.3 TPS and 51 s at a saturated 20 TPS: far beyond the longest measured
+/// window, with a hard item bound so the hold can never grow without limit.
+/// Payload bytes stay under `JOURNAL_QUEUE_BYTES`; empty batches are priced at
+/// the item bound only, i.e. tens of KiB.
+pub(super) const JOURNAL_HOLD_LIMIT: usize = 1024;
 
 /// Journal thread: owns WAL appends and their fsyncs, and gates each
 /// checkpoint's WAL coverage. Checkpoint jobs arrive FIFO behind the appends of
@@ -804,11 +806,6 @@ pub(super) fn journal_loop(
         // Identifies each baseline handoff so its durability wake is matched to
         // the hold that waits for it.
         let mut next_baseline_serial: u64 = 0;
-        // A wake for a handoff whose hold has not started yet. The writer
-        // answers a second baseline while the first hold is still ending, so
-        // the event can reach the loop between two holds; dropping it would
-        // leave the next hold waiting for an answer that already arrived.
-        let mut deferred_answer: Option<u64> = None;
         loop {
             let work = match pending.pop_front() {
                 Some(work) => work,
@@ -965,11 +962,6 @@ pub(super) fn journal_loop(
                     // polling interval anywhere.
                     let mut outcome: Option<Result<(), CoreError>> = None;
                     loop {
-                        if deferred_answer == Some(serial) {
-                            deferred_answer = None;
-                            outcome = durable.recv().ok();
-                            break;
-                        }
                         if pending.len() >= JOURNAL_HOLD_LIMIT {
                             outcome = durable.recv().ok();
                             break;
@@ -1032,11 +1024,10 @@ pub(super) fn journal_loop(
                     }
                 }
                 JournalWork::BaselineDurable { serial } => {
-                    // The wake belongs to a handoff this owner has not begun
-                    // holding (its answer is already on that job's channel):
-                    // keep it, the next hold consumes it first.
-                    deferred_answer = Some(serial);
-                    tracing::trace!(serial, "baseline durability wake before its hold");
+                    // Nothing holds that handoff here: its answer already
+                    // travelled on the job's own channel, so the wake is only
+                    // useful to the hold that waits for it.
+                    tracing::trace!(serial, "baseline durability wake outside its hold");
                 }
                 JournalWork::Shutdown => {
                     if let Err(error) = writer.flush() {

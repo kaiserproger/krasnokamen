@@ -352,9 +352,9 @@ struct BackupJob {
 /// One window is longer than this queue: while a generated baseline waits
 /// behind an in-flight checkpoint commit, the owner holds up to
 /// `JOURNAL_HOLD_LIMIT` (1024) further items in arrival order, so the visible
-/// but unpublished tail is at most 128 queued + 1024 held batches (about 51 s
-/// at 20 TPS when every batch is payload-free; the byte budget still bounds
-/// payloads). A crash loses at most that tail, and only while the journal is
+/// but unpublished tail is at most 128 queued + 1024 held items, 1152 in all
+/// (about 57.6 s at 20 TPS when every batch is payload-free; the byte budget
+/// still bounds payloads). A crash loses at most that tail, and only while the journal is
 /// stalled. `SyncSender::send` fails only when the journal thread is gone
 /// (receiver disconnected) — the existing fail-closed halt.
 const JOURNAL_WORK_QUEUE: usize = 128;
