@@ -3,10 +3,11 @@ id = "EDGE-QUEUED-OP-AFTER-DEOP"
 title = "An operator command waiting for capacity can execute after the initiator is deopped"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Independent review of 0504a280 operator admission"
 repro = "source"
 regression = ["cargo:mc-edge:server::admin_tests::queued_op_is_rejected_after_initiator_is_deopped"]
 failing_first = "not recorded"
 # fix commit 878f1535 bundles unrelated API changes its tests need; the control reverses only the post-wait permission re-check (docs/bugs/fix-patches/EDGE-QUEUED-OP-AFTER-DEOP.patch)
 fix_commit = "patch:6ec10e90d8d8499a29c99abf09bca4fb653940b30418dcd6256084156cfd09f7"
+promotion = "docs/bugs/promotions/EDGE-QUEUED-OP-AFTER-DEOP.json"

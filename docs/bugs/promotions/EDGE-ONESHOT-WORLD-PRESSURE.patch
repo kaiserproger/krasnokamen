@@ -1,0 +1,168 @@
+diff --git a/crates/mc-edge/src/fanout.rs b/crates/mc-edge/src/fanout.rs
+--- a/crates/mc-edge/src/fanout.rs
++++ b/crates/mc-edge/src/fanout.rs
+@@ -2,17 +2,16 @@
+ //!
+ //! Split traffic classes:
+ //!
+-//! - **World state** (chunk packets, entity spawns/moves/removes, block
+-//!   deltas, one-shot visuals): best-effort, planned within each viewer's
+-//!   world-queue credit (free frame slots and free bytes, see
+-//!   [`crate::server::WorldSender`]) so nothing planned is ever dropped. On
+-//!   lag the pump skips to the latest tick and reconciles each viewer's held
+-//!   world view against it; stale world packets are simply never sent.
+-//! - **Player-change-derived packets** (join/sync, acks, menus, cursor,
+-//!   health, experience, chat, game-mode): NEVER skipped. They route to a
+-//!   separate per-connection **reliable queue** at the server layer, which
+-//!   is in-order and bounded; overflow disconnects that connection rather
+-//!   than stalling the tick or dropping a change.
++//! - **World state** (chunks, entity snapshots, block deltas) and one-shot
++//!   visuals, including visual-only explosions: best-effort within world
++//!   credit. A competing producer can still refuse a planned send; snapshot
++//!   state is re-planned, but visuals may drop.
++//! - **Player changes and explosion knockback**: reliable FIFO; overflow
++//!   disconnects rather than silently dropping an authoritative effect.
++//!   Each publish sums a recipient's explosion impulses into one packet, so
++//!   a large visual burst cannot fill that FIFO. On broadcast lag, cumulative
++//!   knockback epochs identify affected recipients for an explicit disconnect;
++//!   unaffected viewers reconcile against retained snapshots.
+ //!
+ //! `publish` plans with `rayon` (one viewer per thread); each packet is
+ //! framed once at plan time with threshold-256 compression, and encoded
+@@ -40,7 +39,7 @@
+ pub enum Priority {
+     /// Never dropped; overflow disconnects the connection.
+     Reliable,
+-    /// World queue; planned within its free slots, so it never overflows.
++    /// World queue; snapshot state is repaired on refusal, visuals may drop.
+     BestEffort,
+     /// Batch start followed by exactly `count` chunks and one finished frame.
+     /// The pump queues the entire group atomically, charging every frame slot.
+diff --git a/crates/mc-edge/src/plan/tick_index.rs b/crates/mc-edge/src/plan/tick_index.rs
+--- a/crates/mc-edge/src/plan/tick_index.rs
++++ b/crates/mc-edge/src/plan/tick_index.rs
+@@ -23,6 +23,8 @@
+ pub(crate) struct TickPlanIndex {
+     pub(super) blocks: HashMap<(i32, i32), Vec<usize>>,
+     pub(super) explosions: HashMap<(i32, i32), Vec<usize>>,
++    /// Recipient impulses are independent of the 64-block visual index.
++    pub(super) knockback: HashMap<EntityId, (usize, [f64; 3])>,
+     pub(super) events: HashMap<(i32, i32), Vec<usize>>,
+     pub(super) entity_base: Option<u64>,
+     /// Anti-xray: hideable ores a block change this tick just exposed, keyed by
+@@ -99,6 +101,14 @@
+                 .entry(entity_chunk(explosion.center))
+                 .or_default()
+                 .push(i);
++            for &(recipient, push) in &explosion.knockback {
++                if push != [0.0; 3] {
++                    let (_, sum) = index.knockback.entry(recipient).or_insert((i, [0.0; 3]));
++                    for axis in 0..3 {
++                        sum[axis] += push[axis];
++                    }
++                }
++            }
+         }
+         for (i, event) in output.changes.entity_events.iter().enumerate() {
+             index
+diff --git a/crates/mc-edge/src/plan/viewer_plan.rs b/crates/mc-edge/src/plan/viewer_plan.rs
+--- a/crates/mc-edge/src/plan/viewer_plan.rs
++++ b/crates/mc-edge/src/plan/viewer_plan.rs
+@@ -15,8 +15,8 @@
+ /// (nearest first), entity removals, spawns (nearest first), appearance/moves
+ /// (most overdue, nearest first), visual events. Work that does not fit stays
+ /// unsent in the viewer cache and is planned again from a newer snapshot.
+-/// Explosions, including the viewer's knockback, have no snapshot image to
+-/// reconcile and use the reliable FIFO instead of spending world credit.
++/// Recipient knockback has no snapshot image and is summed into one reliable
++/// explosion per publish. Remaining explosion visuals spend world credit.
+ #[cfg(test)]
+ pub(crate) fn plan_viewer(
+     output: &TickOutput,
+@@ -115,20 +115,31 @@
+     if let Some(own) = own_entity(snapshot, viewer) {
+         viewer.position = own.position;
+     }
+-    // These events have no later snapshot image to reconcile. In particular,
+-    // dropping one loses its recipient's knockback, not just a visual effect.
++    // Impulses are additive on the client. One reliable packet per recipient
++    // preserves their sum without overflowing the FIFO on a large TNT burst.
+     index.explosions_near(viewer.position, &mut scratch.events);
++    let impulse = index.knockback.get(&viewer.entity_id);
++    let carrier = impulse.map(|&(event, _)| event);
++    if let Some(&(event, push)) = impulse {
++        push_reliable(
++            &mut out,
++            conn,
++            &explode_packet(&changes.explosions[event], Some(push)),
++        );
++    }
+     for &event in &scratch.events {
++        if Some(event) == carrier {
++            continue;
++        }
+         let explosion = &changes.explosions[event];
+         let [x, y, z] = viewer.position;
+         let [cx, cy, cz] = explosion.center;
+-        if (x - cx).powi(2) + (y - cy).powi(2) + (z - cz).powi(2) <= EXPLOSION_RANGE_SQ {
+-            let knockback = explosion
+-                .knockback
+-                .iter()
+-                .find(|(entity, _)| *entity == viewer.entity_id)
+-                .map(|(_, push)| *push);
+-            push_reliable(&mut out, conn, &explode_packet(explosion, knockback));
++        if (x - cx).powi(2) + (y - cy).powi(2) + (z - cz).powi(2) <= EXPLOSION_RANGE_SQ
++            && !try_push(&mut out, &mut credit, |out| {
++                push_best_effort(out, conn, &explode_packet(explosion, None));
++            })
++        {
++            break;
+         }
+     }
+     // Heartbeats and discontinuities share the reliable FIFO: an older queued
+diff --git a/crates/mc-edge/src/server/pump.rs b/crates/mc-edge/src/server/pump.rs
+--- a/crates/mc-edge/src/server/pump.rs
++++ b/crates/mc-edge/src/server/pump.rs
+@@ -600,19 +600,37 @@
+     true
+ }
+ 
+-/// Pre-fix policy: a skipped knockback tick was not detected at all, so nobody
+-/// is closed here; the join baseline is still tracked for the accessor.
++/// Counts are cumulative across published ticks, not just the latest impulse
++/// tick: a retained impulse must not conceal an earlier, skipped one.
+ pub(super) fn close_skipped_knockback(
+-    _server: &Arc<EdgeServer>,
+-    _out: &TickOutput,
++    server: &Arc<EdgeServer>,
++    out: &TickOutput,
+     seen: &mut BTreeMap<ConnectionId, u64>,
+-    _viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
++    viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
+     connections: &mut HashMap<ConnectionId, ConnectionHandles>,
+ ) {
+     seen.retain(|id, _| connections.contains_key(id));
+     for (&id, handles) in connections.iter() {
+         seen.entry(id).or_insert(handles.knockback_baseline);
+     }
++    for (&id, &(count, last_tick)) in out.snapshot.player_knockback_ticks.iter() {
++        if !connections.contains_key(&id) {
++            continue;
++        }
++        let previous = seen[&id];
++        seen.insert(id, previous.max(count));
++        let current = u64::from(last_tick == out.tick);
++        let reason = if count.saturating_sub(previous) > current {
++            Some("skipped-explosion-knockback")
++        } else {
++            None
++        };
++        if let Some(reason) = reason {
++            server.connections.close(id, reason);
++            connections.remove(&id);
++            viewers.remove(&id);
++        }
++    }
+ }
+ 
+ /// Publish one tick to all viewers and route the addressed packets.
