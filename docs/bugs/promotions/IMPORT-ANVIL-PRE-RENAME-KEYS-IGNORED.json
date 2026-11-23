@@ -1,0 +1,30 @@
+{
+  "id": "IMPORT-ANVIL-PRE-RENAME-KEYS-IGNORED",
+  "verdict": "promoted",
+  "fix_commit": "patch:8e2d0965f3aa38d090cb3b411ad4b59518716f511032c38f1ee5dcd0b713120f",
+  "fix_commit_full": "patch:8e2d0965f3aa38d090cb3b411ad4b59518716f511032c38f1ee5dcd0b713120f",
+  "promoted_at": "2026-11-23T19:00:07+00:00",
+  "tree_head": "9d71f238c6044f8820868a1e2dc4531481e03042",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "8e2d0965f3aa38d090cb3b411ad4b59518716f511032c38f1ee5dcd0b713120f",
+  "reversed_files": [
+    "crates/mc-world-conversion/src/pre_rename.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-world-conversion:pre_rename::tests::rc5_export_with_a_player_rider_keeps_its_fields_and_the_rider": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-world-conversion:pre_rename::tests::rc5_export_with_a_player_rider_keeps_its_fields_and_the_rider": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261123T185759-ledger-promote-ip3agheo"
+}
