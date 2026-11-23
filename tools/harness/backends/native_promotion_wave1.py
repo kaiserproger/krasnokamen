@@ -428,6 +428,16 @@ def _goat_ram(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                                            "after": (r := _same_row(steps, sid)) and r["health"]}
 
 
+def _game_time(steps: ProbeSteps) -> int:
+    """The client's observed simulation clock; the `/time query gametime` reply is a
+    translatable component the native chat does not carry, so the chat cannot supply it."""
+    clock = steps.observe().get("time")
+    value = clock.get("game_time") if isinstance(clock, dict) else None
+    if not isinstance(value, int) or value < 200:
+        raise RuntimeError(f"the client observes no usable game_time: {clock!r}")
+    return value
+
+
 def _golem_gossip(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = origin
     steps.fixture("gamerule spawn_mobs false")
@@ -441,16 +451,7 @@ def _golem_gossip(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         villagers.append(_wanderer_at(steps, "minecraft:villager", px, pz,
                                       exclude=tuple(v["entity_uuid"] for v in villagers)))
     _echo(steps, "gossip_villagers_ordered")
-    steps.fixture("time query gametime")
-    state = _chat_has(steps, "gametime_read", "time is")
-    # `gamerule advance_time false` already replied "Gamerule advance_time is now set to: false",
-    # which contains "time is" but no tick; read the reply that carries the tick number.
-    gametime = next((match for line in state["recent_chat"]
-                     if (match := re.search(r"time is (\d+)", line)) is not None), None)
-    if gametime is None:
-        raise RuntimeError("time query gametime reply is not in the recent chat: "
-                           + repr(state["recent_chat"][-5:]))
-    tick = int(gametime.group(1))
+    tick = _game_time(steps)
     for row in villagers:
         uuid_ = row["entity_uuid"]
         steps.fixture(f'data merge entity {uuid_} {{Brain:{{memories:{{"minecraft:last_slept":'
