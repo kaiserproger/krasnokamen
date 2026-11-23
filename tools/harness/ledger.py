@@ -1005,14 +1005,16 @@ def _split_non_test(diff, source_of):
     return ''.join(patch), reversed_files, test_files
 
 
-_HUNK_HEADER = re.compile(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@')
+_HUNK_HEADER = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
 
 
-def _hunk_new_ranges(diff):
-    """{path: [(first, last)]} of the post-image lines the patch's hunks cover.
+def _hunk_old_ranges(diff):
+    """{path: [(first, last)]} of the pre-image lines (the tree's own numbering) each hunk covers.
 
-    A defect-injection control must turn red at the *corrected assertion*: a red at any other line of
-    the same file proves an assertion 9cc59fb37 never touched (ReviewD123Harness1, BIOME)."""
+    A defect-injection control must turn red at the *corrected assertion*. Taking the numbers from
+    the recorded patch is wrong: git applies it at an offset once the file has grown, so the ranges
+    are read from the diff the reversal actually produced in the control worktree
+    (ReviewD123Harness1, BIOME: the recorded header said 1657, the applied hunk sat at 1978)."""
     ranges, path = {}, None
     for line in diff.splitlines():
         if line.startswith('diff --git '):
@@ -1744,13 +1746,15 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
             # Control B: restoring the old oracle only shows the old assertion was red, which a wrongly
             # deleted assertion also gives. Re-introduce the defect the test claims to catch and require
             # the corrected test to go red, so the guard's own direction is proven too.
+            # The reversed hunks' line numbers in the candidate come from the reversal just applied,
+            # read before the tree is reset for control B (git applies at an offset once a file grows).
+            _, applied = _git(control_dir, 'diff', '-U0', '--no-renames', '--no-color')
+            ranges = _hunk_old_ranges(applied)
             _materialize(root, candidate, tree_now)
             if _git(candidate, 'apply', '--check', '--whitespace=nowarn', '-', stdin=defect, check=False)[0]:
                 raise Refused(f"{ident}: control_b_patch {row['control_b_patch']} does not apply on the tree being promoted")
             _git(candidate, 'apply', '--whitespace=nowarn', '-', stdin=defect)
             defect_control = runner(ctx, refs, candidate, True)
-            # The defect must red the corrected assertion itself, not another assert in the file.
-            ranges = _hunk_new_ranges(patch)
             valid_b = {ref for ref, entry in defect_control.items()
                        if entry['state'] == RED and _assertion_in_files(entry, candidate, reversed_files)
                        and _assertion_in_ranges(entry, ranges, candidate)}
