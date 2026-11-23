@@ -8,3 +8,4 @@ source = "D60 wiki-vs-code audit, item 1, 2026-11-20. Local javap of the vanilla
 repro = "source"
 regression = ["cargo:mc-protocol:frame::tests::decoder_accepts_uncompressed_frame_at_or_above_threshold"]
 failing_first = "reported"
+fix_commit = "patch:38f4b9936bf6543ca100119699823364f8988dd5832e3c9848e3f1154aadb9fb"

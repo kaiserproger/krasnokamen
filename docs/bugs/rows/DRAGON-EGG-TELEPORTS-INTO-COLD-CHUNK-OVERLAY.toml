@@ -9,3 +9,4 @@ source = "receipts/ArchDesign/RESIDENCY-CONSUMERS-R11.md and DESIGN-RESIDENCY-R1
 regression = ["cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_never_teleports_into_a_cold_overlay"]
 failing_first = "not recorded"
 ingress_proof = ["crates/mc-core/src/vanilla_interact.rs:128 the teleport target search accepts only a resident air cell"]
+fix_commit = "c7bd44dd06"

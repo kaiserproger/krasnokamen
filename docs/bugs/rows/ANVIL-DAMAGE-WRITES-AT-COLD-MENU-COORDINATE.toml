@@ -9,3 +9,4 @@ source = "receipts/ArchDesign/DESIGN-RESIDENCY-R14.md (found beyond the R13 vote
 regression = ["cargo:mc-core:tick::stations_tests::anvil_damage_waits_for_a_resident_menu_coordinate"]
 failing_first = "not recorded"
 ingress_proof = ["crates/mc-core/src/tick/input/inventory.rs:228 menu_source_cold closes a cold menu before handler selection", "crates/mc-core/src/tick/stations.rs:144 has_chunk guard before damage_anvil reads or writes the menu coordinate"]
+fix_commit = "c7bd44dd06"

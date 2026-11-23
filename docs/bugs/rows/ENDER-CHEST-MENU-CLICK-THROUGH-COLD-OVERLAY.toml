@@ -9,3 +9,4 @@ source = "receipts/ArchDesign/VOTE-RESIDENCY-R13-astra.md item 4 and DESIGN-RESI
 regression = ["cargo:mc-core:ender_chest::tests::ender_chest_click_with_a_cold_menu_coordinate_closes_and_keeps_cursor_custody"]
 failing_first = "not recorded"
 ingress_proof = ["crates/mc-core/src/tick/input/inventory.rs:228 menu_source_cold closes a cold ender-chest menu before is_open selects personal storage"]
+fix_commit = "c7bd44dd06"

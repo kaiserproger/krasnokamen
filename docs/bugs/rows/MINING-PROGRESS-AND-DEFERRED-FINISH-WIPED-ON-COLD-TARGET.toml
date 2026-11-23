@@ -9,3 +9,4 @@ source = "receipts/ArchDesign/VOTE-RESIDENCY-R13-astra.md item 2, VOTE-RESIDENCY
 regression = ["cargo:mc-core:tick::mining_tests::mining_progress_and_a_queued_finish_pause_while_the_target_chunk_is_cold"]
 failing_first = "not recorded"
 ingress_proof = ["crates/mc-core/src/tick/mining.rs:75 cold_target_or_eye freezes progress before valid_target reads block_at", "crates/mc-core/src/tick/mining.rs:90 cold_delivery_frame holds a queued finish until the +-2 frame is resident"]
+fix_commit = "c7bd44dd06"

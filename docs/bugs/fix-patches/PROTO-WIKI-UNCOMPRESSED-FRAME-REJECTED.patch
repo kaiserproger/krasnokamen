@@ -1,0 +1,32 @@
+diff --git a/crates/mc-protocol/src/frame.rs b/crates/mc-protocol/src/frame.rs
+index 0b9d6e7d5..204668f6f 100644
+--- a/crates/mc-protocol/src/frame.rs
++++ b/crates/mc-protocol/src/frame.rs
+@@ -131,9 +131,6 @@ pub enum FramingError {
+     #[error("compressed frame declared data_length {claimed} below threshold {threshold}")]
+     CompressedBelowThreshold { claimed: usize, threshold: usize },
+ 
+-    #[error("uncompressed frame contained {actual} bytes at or above threshold {threshold}")]
+-    UncompressedAboveThreshold { actual: usize, threshold: usize },
+-
+     #[error("compressed zlib stream did not reach its end marker")]
+     IncompleteCompressedStream,
+ 
+@@ -224,10 +221,13 @@ pub fn try_decode_frame_plan(
+             }
+             let data_length = data_length_signed as usize;
+             if data_length == 0 {
+-                let actual = body.len();
+-                if actual >= threshold {
+-                    return Err(FramingError::UncompressedAboveThreshold { actual, threshold });
+-                }
++                // Vanilla's `CompressionDecoder.decode` passes a frame with
++                // `dataLength == 0` through unchanged at any size and applies the
++                // threshold check only to compressed frames
++                // (receipts/ProtocolWikiCheck/REPORT.md, javap of the 26.3 and
++                // 26.1.2 server jars). Stock vanilla encodes everything at or
++                // above the threshold compressed, but a third-party peer that
++                // relies on the decoder's leniency must not be disconnected.
+                 let id = body.read_varint()?;
+                 FrameDecodePlan::Ready(RawFrame { id, body })
+             } else {

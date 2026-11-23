@@ -9,3 +9,4 @@ source = "receipts/ArchDesign/RESIDENCY-CONSUMERS.md appendices [R10]-[R11] (rea
 regression = ["cargo:mc-core:copper::tests::copper_waxing_and_scraping_wait_for_a_resident_cell_and_spare_a_cold_partner"]
 failing_first = "not recorded"
 ingress_proof = ["crates/mc-core/src/copper.rs:225 a non-resident use cell is refused before any read or debit", "crates/mc-core/src/copper.rs:306 a cold double-chest partner keeps its overlay state"]
+fix_commit = "c7bd44dd06"
