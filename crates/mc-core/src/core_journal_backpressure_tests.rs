@@ -63,7 +63,8 @@ fn stalled_journal_receiver_applies_backpressure_and_drains_fifo() {
                     assert_eq!((tick_lo, tick_hi), (index as u64, index as u64));
                 }
                 JournalWork::Checkpoint(_)
-                | JournalWork::RequireGenerated(_)
+                | JournalWork::RequireGenerated { .. }
+                | JournalWork::BaselineDurable { .. }
                 | JournalWork::Backup(_)
                 | JournalWork::Shutdown => panic!("journal FIFO order broken"),
             }
@@ -366,7 +367,10 @@ fn refused_required_generated_baseline_withholds_dependent_wal_and_closes_admiss
     let invalid = state.world.capture_dirty(&Default::default());
     let (work_tx, work_rx) = journal_work_channel();
     work_tx
-        .send(JournalWork::RequireGenerated(Box::new(invalid)))
+        .send(JournalWork::RequireGenerated {
+            capture: Box::new(invalid),
+            wake: work_tx.clone(),
+        })
         .unwrap();
     let budget = JournalBudget::new(1 << 20);
     send_append(
@@ -475,5 +479,287 @@ fn same_tick_generated_baseline_is_durable_before_its_dependent_wal_append() {
         observed.try_iter().collect::<Vec<_>>(),
         vec![(tick, true)],
         "the dependent WAL batch was appended before its generated baseline was durable"
+    );
+}
+
+/// Real symptom (checkpoint-join-stall M1): the native writer is held inside a
+/// checkpoint (after its commit, before its ACK) and a tick that generated a
+/// chunk queues its baseline behind it. The journal owner must keep draining
+/// the tick's queue while that baseline waits: later batches are held in
+/// arrival order and published only once the baseline is durable, so a tick
+/// never parks its admission on a multi-second checkpoint.
+#[test]
+fn baseline_behind_held_checkpoint_keeps_tick_admission_draining() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_owned(), 42);
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let mut registry = CoreRegistry::load(None).unwrap();
+    crate::plugin_startup::apply(
+        &mut registry,
+        &mc_plugin_host::DeploymentContribution::default(),
+        None,
+        &[],
+    )
+    .unwrap();
+    let registry = Arc::new(registry);
+    let (mut state, manifest, _) =
+        recover_tick_state(&config, &registry, &store, false, None, None).unwrap();
+    let (entered_tx, entered) = std::sync::mpsc::channel::<()>();
+    let (release, released) = std::sync::mpsc::channel::<()>();
+    let released = parking_lot::Mutex::new(released);
+    journal::CHECKPOINT_STAGE_OBSERVERS.lock().push((
+        directory.path().to_owned(),
+        Box::new(move |stage| {
+            if stage == "before_ack" {
+                entered_tx.send(()).unwrap();
+                released.lock().recv().unwrap();
+            }
+        }),
+    ));
+    let budget = Arc::new(JournalBudget::new(JOURNAL_QUEUE_BYTES));
+    let (work_tx, work_rx) = journal_work_channel();
+    let tick = manifest.tick + 1;
+    let journal = {
+        let root = directory.path().to_owned();
+        let store = Arc::clone(&store);
+        let budget = Arc::clone(&budget);
+        std::thread::spawn(move || {
+            journal::journal_loop(
+                &root,
+                store,
+                work_rx,
+                JournalWriter::open_test(&root, 1).unwrap(),
+                &budget,
+                manifest,
+                crate::plugin::PluginState::default(),
+            );
+        })
+    };
+    state.tick = tick;
+    send_append(&work_tx, &budget, tick, Vec::new(), None).unwrap();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    assert!(start_checkpoint(&mut state, &work_tx, &done_tx, tick));
+    entered.recv().unwrap();
+    // The native writer now holds checkpoint `tick`. The next tick generates a
+    // chunk: its baseline goes ahead of its WAL batch.
+    let pos = crate::boundary::ChunkPos { x: 3, z: -2 };
+    let source = state.world.chunk_source();
+    assert!(source.load_native(pos).unwrap().is_none());
+    assert_eq!(
+        state
+            .world
+            .ensure_blocking(&[(pos, 0)].into_iter().collect()),
+        vec![pos]
+    );
+    state.tick = tick + 1;
+    let (appended, observed) = std::sync::mpsc::channel();
+    *crate::core::JOURNAL_APPEND_OBSERVER.lock().unwrap() = Some((
+        directory.path().to_owned(),
+        Box::new(move |tick, _| {
+            appended
+                .send((tick, source.load_native(pos).unwrap().is_some()))
+                .unwrap();
+        }),
+    ));
+    send_tick_journal(&mut state, &work_tx, &budget, tick + 1, Vec::new(), None).unwrap();
+    // The real symptom: a tick's blocking sends keep completing while the
+    // baseline waits behind the held checkpoint. A transient full queue is
+    // expected (the producer outruns the owner); what must not happen is the
+    // permanent stall of the old owner, which drained nothing until `release`.
+    // The timeout below is a failure deadline for that stall, never a poll.
+    let (sent_tx, sent) = std::sync::mpsc::channel();
+    let parked = {
+        let work_tx = work_tx.clone();
+        let budget = Arc::clone(&budget);
+        std::thread::spawn(move || {
+            for admitted in 0..513u64 {
+                send_append(&work_tx, &budget, tick + 2 + admitted, Vec::new(), None).unwrap();
+            }
+            sent_tx.send(()).unwrap();
+        })
+    };
+    sent.recv_timeout(std::time::Duration::from_secs(5))
+        .expect("tick sends must not park behind the held checkpoint");
+    parked.join().unwrap();
+    release.send(()).unwrap();
+    work_tx.send(JournalWork::Shutdown).unwrap();
+    join_before_deadline(
+        journal,
+        "the journal owner never released a held batch after its baseline became durable",
+    );
+    journal::CHECKPOINT_STAGE_OBSERVERS
+        .lock()
+        .retain(|(path, _)| path != directory.path());
+    *crate::core::JOURNAL_APPEND_OBSERVER.lock().unwrap() = None;
+    assert!(done_rx.recv().unwrap().is_some());
+    let seen: Vec<(u64, bool)> = observed.try_iter().collect();
+    assert_eq!(
+        seen.first(),
+        Some(&(tick + 1, true)),
+        "the dependent WAL batch published before its generated baseline was durable"
+    );
+    assert_eq!(seen.len(), 514, "every held batch published exactly once");
+    assert!(
+        seen.iter().all(|&(_, durable)| durable),
+        "a later WAL batch published before its generated baseline was durable"
+    );
+}
+
+/// Joins `journal` and fails (rather than hanging the whole binary) when the
+/// owner never returns: the deadline is a failure bound, never a poll.
+fn join_before_deadline(
+    journal: std::thread::JoinHandle<()>,
+    what: &str,
+) {
+    let (finished, done) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        journal.join().unwrap();
+        let _ = finished.send(());
+    });
+    done.recv_timeout(std::time::Duration::from_secs(10))
+        .unwrap_or_else(|_| panic!("{what}"));
+}
+
+/// The journal owner must not keep a sender of its own work queue alive: when
+/// the tick closes the queue while a baseline is still held behind a
+/// checkpoint, the owner has to finish (closing admission) instead of waiting
+/// for work that can no longer arrive.
+#[test]
+fn closed_tick_queue_releases_a_held_baseline_wait() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_owned(), 42);
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let mut registry = CoreRegistry::load(None).unwrap();
+    crate::plugin_startup::apply(
+        &mut registry,
+        &mc_plugin_host::DeploymentContribution::default(),
+        None,
+        &[],
+    )
+    .unwrap();
+    let registry = Arc::new(registry);
+    let (mut state, manifest, _) =
+        recover_tick_state(&config, &registry, &store, false, None, None).unwrap();
+    let (entered_tx, entered) = std::sync::mpsc::channel::<()>();
+    let (release, released) = std::sync::mpsc::channel::<()>();
+    let released = parking_lot::Mutex::new(released);
+    journal::CHECKPOINT_STAGE_OBSERVERS.lock().push((
+        directory.path().to_owned(),
+        Box::new(move |stage| {
+            if stage == "before_ack" {
+                entered_tx.send(()).unwrap();
+                released.lock().recv().unwrap();
+            }
+        }),
+    ));
+    let budget = Arc::new(JournalBudget::new(JOURNAL_QUEUE_BYTES));
+    let (work_tx, work_rx) = journal_work_channel();
+    let tick = manifest.tick + 1;
+    let journal = {
+        let root = directory.path().to_owned();
+        let store = Arc::clone(&store);
+        let budget = Arc::clone(&budget);
+        std::thread::spawn(move || {
+            journal::journal_loop(
+                &root,
+                store,
+                work_rx,
+                JournalWriter::open_test(&root, 1).unwrap(),
+                &budget,
+                manifest,
+                crate::plugin::PluginState::default(),
+            );
+        })
+    };
+    state.tick = tick;
+    send_append(&work_tx, &budget, tick, Vec::new(), None).unwrap();
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    assert!(start_checkpoint(&mut state, &work_tx, &done_tx, tick));
+    entered.recv().unwrap();
+    let pos = crate::boundary::ChunkPos { x: 3, z: -2 };
+    assert_eq!(
+        state
+            .world
+            .ensure_blocking(&[(pos, 0)].into_iter().collect()),
+        vec![pos]
+    );
+    state.tick = tick + 1;
+    send_tick_journal(&mut state, &work_tx, &budget, tick + 1, Vec::new(), None).unwrap();
+    // Only the writer's answer and the close can arrive from here on: every
+    // tick-side sender goes away while the hold is still waiting.
+    drop(work_tx);
+    release.send(()).unwrap();
+    join_before_deadline(
+        journal,
+        "the journal owner kept waiting after the tick closed its queue",
+    );
+    journal::CHECKPOINT_STAGE_OBSERVERS
+        .lock()
+        .retain(|(path, _)| path != directory.path());
+    assert!(done_rx.recv().unwrap().is_some());
+}
+
+/// A refused baseline must release the owner's hold from the writer's own
+/// answer, with no further tick work and the queue still open.
+#[test]
+fn refused_baseline_releases_the_hold_without_further_tick_work() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_owned(), 42);
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let mut registry = CoreRegistry::load(None).unwrap();
+    crate::plugin_startup::apply(
+        &mut registry,
+        &mc_plugin_host::DeploymentContribution::default(),
+        None,
+        &[],
+    )
+    .unwrap();
+    let registry = Arc::new(registry);
+    let (mut state, manifest, _) =
+        recover_tick_state(&config, &registry, &store, false, None, None).unwrap();
+    // A regular dirty capture cannot be accepted as an immutable baseline, so
+    // the real native worker refuses it.
+    let invalid = state.world.capture_dirty(&Default::default());
+    let budget = Arc::new(JournalBudget::new(JOURNAL_QUEUE_BYTES));
+    let (work_tx, work_rx) = journal_work_channel();
+    let journal = {
+        let root = directory.path().to_owned();
+        let store = Arc::clone(&store);
+        let budget = Arc::clone(&budget);
+        std::thread::spawn(move || {
+            journal::journal_loop(
+                &root,
+                store,
+                work_rx,
+                JournalWriter::open_test(&root, 1).unwrap(),
+                &budget,
+                manifest,
+                crate::plugin::PluginState::default(),
+            );
+        })
+    };
+    work_tx
+        .send(JournalWork::RequireGenerated {
+            capture: Box::new(invalid),
+            wake: work_tx.clone(),
+        })
+        .unwrap();
+    join_before_deadline(
+        journal,
+        "the refused baseline never released the journal owner's hold",
+    );
+    assert!(matches!(
+        work_tx.try_send(JournalWork::Shutdown),
+        Err(std::sync::mpsc::TrySendError::Disconnected(_))
+    ));
+    assert!(
+        std::fs::read_dir(directory.path().join("journal"))
+            .unwrap()
+            .all(|entry| entry
+                .unwrap()
+                .path()
+                .extension()
+                .is_none_or(|ext| ext != "bin")),
+        "a refused baseline must not publish dependent WAL"
     );
 }

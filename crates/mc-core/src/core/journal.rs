@@ -671,10 +671,14 @@ pub(super) enum NativeWork {
         plugins: Result<Box<crate::plugin::PluginState>, CoreError>,
     },
     /// Commit generated baselines (Immediate); `done` reports durability to
-    /// the journal owner, which withholds later `Append`s until it arrives.
+    /// the journal owner, which withholds later `Append`s until it arrives, and
+    /// `signal` repeats the answer through the work queue so that owner wakes
+    /// on it without polling.
     RequireGenerated {
         chunks: Box<crate::world::ChunkCapture>,
         done: std::sync::mpsc::Sender<Result<(), CoreError>>,
+        signal: std::sync::mpsc::SyncSender<JournalWork>,
+        serial: u64,
     },
     /// Copy the last committed checkpoint and the WAL after it (hot backup).
     Backup { job: BackupJob, through: u64 },
@@ -682,15 +686,46 @@ pub(super) enum NativeWork {
     Shutdown,
 }
 
+/// Wakes the journal owner when a baseline handoff finishes, whether it was
+/// committed, refused or unwound: the answer itself travels on the job's own
+/// `done` channel, so this only has to make the owner's queue receive return.
+struct BaselineWake {
+    signal: Option<std::sync::mpsc::SyncSender<JournalWork>>,
+    serial: u64,
+}
+
+impl Drop for BaselineWake {
+    fn drop(&mut self) {
+        let Some(signal) = self.signal.take() else {
+            return;
+        };
+        // A full queue means the owner is draining it (its next receive checks
+        // the answer directly) or is parked on `done` (which already holds it),
+        // so a failed wake is always recovered without polling.
+        let _ = signal.try_send(JournalWork::BaselineDurable {
+            serial: self.serial,
+        });
+    }
+}
+
+/// Longest hold of the owner's tick queue while a generated baseline waits
+/// behind an in-flight checkpoint: work received meanwhile keeps its arrival
+/// order and is published only after that baseline is durable. Past this many
+/// held items the original blocking wait applies, so the hold's memory stays
+/// bounded even for payload-free batches.
+const JOURNAL_HOLD_LIMIT: usize = 4096;
+
 /// Journal thread: owns WAL appends and their fsyncs, and gates each
 /// checkpoint's WAL coverage. Checkpoint jobs arrive FIFO behind the appends of
 /// every tick they cover, so the gate only has to confirm coverage (see
 /// [`write_checkpoint`]). The multi-second redb commit runs on a second thread
 /// ([`native_writer_loop`]), so `Append`s are not parked behind it unless a
-/// generated baseline queued ahead of them is: the journal owner waits for each
-/// `RequireGenerated` commit, which the FIFO native writer runs after any
-/// earlier checkpoint. The function returns only after that thread has
-/// drained, so a shutdown still completes the final checkpoint.
+/// generated baseline arrives while it is committing: the owner then keeps
+/// draining the tick queue into a bounded hold and publishes nothing from it
+/// until the baseline is durable, so crash ordering is unchanged while the tick
+/// keeps enqueueing. That wait is the writer's own answer arriving in the same
+/// queue, so nothing here polls or sleeps. The function returns only after that
+/// thread has drained, so a shutdown still completes the final checkpoint.
 pub(super) fn journal_loop(
     world_dir: &std::path::Path,
     store: Arc<mc_world::native::NativeStore>,
@@ -742,7 +777,19 @@ pub(super) fn journal_loop(
         // failure to the tick owner, which halts (no more commits, no more
         // publishes, Disconnect to all). No retry worker: the hole is
         // unfillable.
-        while let Ok(work) = work_rx.recv() {
+        let mut pending: std::collections::VecDeque<JournalWork> =
+            std::collections::VecDeque::new();
+        // Identifies each baseline handoff so its durability wake is matched to
+        // the hold that waits for it.
+        let mut next_baseline_serial: u64 = 0;
+        loop {
+            let work = match pending.pop_front() {
+                Some(work) => work,
+                None => match work_rx.recv() {
+                    Ok(work) => work,
+                    Err(_) => break,
+                },
+            };
             if native_failed.load(std::sync::atomic::Ordering::Acquire) {
                 tracing::error!("native checkpoint writer died; world halting (fail closed)");
                 return;
@@ -854,17 +901,88 @@ pub(super) fn journal_loop(
                         return;
                     }
                 },
-                JournalWork::RequireGenerated(chunks) => {
+                JournalWork::RequireGenerated { capture, wake } => {
                     let (done, durable) = std::sync::mpsc::channel();
+                    let serial = next_baseline_serial;
+                    next_baseline_serial += 1;
                     if native_tx
-                        .send(NativeWork::RequireGenerated { chunks, done })
+                        .send(NativeWork::RequireGenerated {
+                            chunks: capture,
+                            done,
+                            signal: wake,
+                            serial,
+                        })
                         .is_err()
                     {
                         tracing::error!("required baseline handoff failed; world halting");
                         return;
                     }
-                    match durable.recv() {
-                        Ok(Ok(())) => {}
+                    // The sole native writer may still be committing an earlier
+                    // checkpoint, so this baseline can take seconds. Keep the
+                    // tick's queue draining into `pending` instead of parking it:
+                    // every held job was queued after the baseline, keeps its
+                    // arrival order, and is published only after the baseline is
+                    // durable, so the crash ordering (baseline before dependent
+                    // WAL) is unchanged. Held appends keep their budget
+                    // reservations, and the hold itself is bounded by
+                    // JOURNAL_HOLD_LIMIT items; past it the original blocking wait
+                    // applies. The wait itself is the writer's own answer: it
+                    // lands in this queue as `BaselineDurable`, so there is no
+                    // polling interval anywhere.
+                    let mut outcome: Option<Result<(), CoreError>> = None;
+                    loop {
+                        if pending.len() >= JOURNAL_HOLD_LIMIT {
+                            outcome = durable.recv().ok();
+                            break;
+                        }
+                        match work_rx.recv() {
+                            Ok(JournalWork::BaselineDurable { serial: answer })
+                                if answer == serial =>
+                            {
+                                // The writer sends the result on `done` first, so
+                                // this receive cannot block on it.
+                                outcome = durable.recv().ok();
+                                break;
+                            }
+                            Ok(work) => {
+                                match durable.try_recv() {
+                                    // The answer is already in: an earlier hold
+                                    // released by the item limit left this wake
+                                    // queued. Publish `work` after the baseline.
+                                    Ok(result) => {
+                                        pending.push_back(work);
+                                        outcome = Some(result);
+                                        break;
+                                    }
+                                    Err(std::sync::mpsc::TryRecvError::Empty) => {
+                                        if native_failed
+                                            .load(std::sync::atomic::Ordering::Acquire)
+                                        {
+                                            tracing::error!(
+                                                "native checkpoint writer died; world halting (fail closed)"
+                                            );
+                                            return;
+                                        }
+                                        pending.push_back(work);
+                                    }
+                                    // The writer died without answering: halt with
+                                    // the baseline withheld, as before.
+                                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                                        pending.push_back(work);
+                                        break;
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                // The tick's queue closed: finish the original
+                                // wait, then report a missing answer as failure.
+                                outcome = durable.recv().ok();
+                                break;
+                            }
+                        }
+                    }
+                    match outcome {
+                        Some(Ok(())) => {}
                         outcome => {
                             tracing::error!(
                                 ?outcome,
@@ -873,6 +991,12 @@ pub(super) fn journal_loop(
                             return;
                         }
                     }
+                }
+                JournalWork::BaselineDurable { serial } => {
+                    // A wake whose own hold already took the direct channel
+                    // answer (item limit) or a writer answer for an earlier
+                    // batch: its result travelled on that job's channel.
+                    tracing::trace!(serial, "baseline durability wake after its hold ended");
                 }
                 JournalWork::Shutdown => {
                     if let Err(error) = writer.flush() {
@@ -1111,9 +1235,21 @@ pub(super) fn run_native_work(
                 return std::ops::ControlFlow::Break("checkpoint marker not durable");
             }
         }
-        NativeWork::RequireGenerated { chunks, done } => {
+        NativeWork::RequireGenerated {
+            chunks,
+            done,
+            signal,
+            serial,
+        } => {
             // The same sole native writer performs an Immediate baseline
             // commit before the journal owner can append its dependent edits.
+            // The wake is armed before the fallible commit and fires from this
+            // guard's drop, so the owner is unblocked by a refusal and by a
+            // panic alike; the result itself travels on `done` first.
+            let _wake = BaselineWake {
+                signal: Some(signal),
+                serial,
+            };
             let _ = done.send(chunks.fill_generated());
         }
         NativeWork::Backup { job, through } => {

@@ -13,8 +13,10 @@
 //! tick thread) and only fixed-size records get a flat allowance; `Identifier`
 //! spare capacity is not exposed, so it is priced by text length plus an
 //! allowance. Scope: queued `Append` payload only. `Checkpoint` jobs are
-//! bounded by the single-in-flight checkpoint rule and `RequireGenerated` by
-//! the journal owner waiting for each baseline commit, not by this budget.
+//! bounded by the single-in-flight checkpoint rule, and `RequireGenerated` by
+//! the journal owner's hold of at most `JOURNAL_HOLD_LIMIT` queued jobs while
+//! the baseline commit waits (held `Append`s keep the reservations they were
+//! admitted with), not by this budget.
 
 use std::sync::{Condvar, Mutex};
 

@@ -676,7 +676,10 @@ pub(super) fn send_tick_journal(
     let generated_start = std::time::Instant::now();
     while let Some(batch) = crate::dimensions::checkpoint::take_generated(state) {
         work_tx
-            .send(JournalWork::RequireGenerated(Box::new(batch)))
+            .send(JournalWork::RequireGenerated {
+                capture: Box::new(batch),
+                wake: work_tx.clone(),
+            })
             .map_err(|_| JOURNAL_HALT)?;
     }
     let generated_time = generated_start.elapsed();
@@ -696,7 +699,10 @@ pub(super) fn send_shutdown(
     );
     while let Some(batch) = crate::dimensions::checkpoint::take_generated(state) {
         if work_tx
-            .send(JournalWork::RequireGenerated(Box::new(batch)))
+            .send(JournalWork::RequireGenerated {
+                capture: Box::new(batch),
+                wake: work_tx.clone(),
+            })
             .is_err()
         {
             tracing::error!(

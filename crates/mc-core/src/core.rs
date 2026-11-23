@@ -311,10 +311,22 @@ enum JournalWork {
     /// on `done` still only reports disk durability, never queue admission.
     Checkpoint(Box<CheckpointJob>),
     /// Freeze this tick's generated baselines before its dependent WAL: the
-    /// journal thread waits for the native writer's Immediate commit of every
+    /// journal owner waits for the native writer's Immediate commit of every
     /// such batch before it handles the next item, so on a tick that generated
     /// chunks each later `Append` waits behind one native commit per batch.
-    RequireGenerated(Box<crate::world::ChunkCapture>),
+    /// `wake` is the tick's own queue sender, carried only for that wait: the
+    /// writer uses it to queue the batch's answer (`BaselineDurable`), and drops
+    /// it with the job, so no owner-held sender can mask producer close.
+    RequireGenerated {
+        capture: Box<crate::world::ChunkCapture>,
+        wake: std::sync::mpsc::SyncSender<JournalWork>,
+    },
+    /// The native writer's answer to one `RequireGenerated` handoff: it arrives
+    /// through this queue after the batch's Immediate commit, so the journal
+    /// owner wakes on the batch without polling. `serial` identifies the
+    /// handoff, so a wake for a batch whose hold already took the direct
+    /// channel answer is ignored. Never sent by the tick thread.
+    BaselineDurable { serial: u64 },
     /// Stop the thread.
     Shutdown,
     /// Copy the native database and WAL after the last committed checkpoint into
