@@ -10,22 +10,55 @@
       "wait_play": true
     },
     {
-      "shot": "toast-0"
+      "cmd": "gamerule send_command_feedback false"
     },
     {
-      "wait_ticks": 10
+      "cmd": "gamerule spawn_mobs false"
     },
     {
-      "shot": "toast-10"
+      "cmd": "gamerule advance_time false"
     },
     {
-      "wait_ticks": 30
+      "cmd": "time set 6000"
     },
     {
-      "shot": "toast-40"
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
     },
     {
-      "wait_ticks": 140
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 995 159 995 1005 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 995 160 995 1005 165 1010 minecraft:air"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "shot": "toast-early"
+    },
+    {
+      "wait_ticks": 320
     },
     {
       "shot": "toast-late"

@@ -669,10 +669,10 @@ class ToastTests(unittest.TestCase):
         shots = root / "screenshots"
         shots.mkdir(exist_ok=True)
         frame = {"gpu_completion": True, "camera_position": [1000.5, 161.62, 1000.5], "yaw": 0, "pitch": 0}
-        for name in ("toast-0", "toast-10", "toast-40", "toast-late"):
+        for name in ("toast-early", "toast-late"):
             image = Image.new("RGB", scene_shot.WINDOW, (120, 170, 240))
             draw = ImageDraw.Draw(image)
-            if name == "toast-10" and toast:
+            if name == "toast-early" and toast:
                 draw.rectangle((950, 8, 1270, 140), fill=(20, 20, 20))
                 draw.rectangle((980, 30, 1200, 44), fill=(240, 240, 240))
             image.save(shots / f"{name}.png")
@@ -684,9 +684,9 @@ class ToastTests(unittest.TestCase):
             self.store_frames(root)
             probe = self.Probe()
             scene_shot.check_toasts(probe, root)
-            self.assertGreater(probe.report["toast_pixels"]["toast-10"]["panel"], 1500)
+            self.assertGreater(probe.report["toast_pixels"]["changed"], 3000)
             self.store_frames(root, toast=False)
-            with self.assertRaisesRegex(AssertionError, "toast_visible_after_join"):
+            with self.assertRaisesRegex(AssertionError, "toast_panel_appeared"):
                 scene_shot.check_toasts(self.Probe(), root)
 
 
