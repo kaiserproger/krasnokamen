@@ -961,6 +961,16 @@ impl ChunkWorld {
         {
             return Some(*state);
         }
+        self.stored_block_at(x, y, z)
+    }
+
+    /// Read one stored block state id, ignoring pending overlay edits.
+    ///
+    /// The overlay holds new states until [`Self::fold_overlay`]; the resident
+    /// chunk still holds the state before the current write boundary. Redstone
+    /// neighbour propagation uses this as the pre-write state of a changed cell.
+    #[must_use]
+    pub(crate) fn stored_block_at(&self, x: i32, y: i32, z: i32) -> Option<u32> {
         let chunk = self.chunks.get(&ChunkPos {
             x: x.div_euclid(16),
             z: z.div_euclid(16),

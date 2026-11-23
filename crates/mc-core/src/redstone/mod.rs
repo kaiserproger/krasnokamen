@@ -143,6 +143,12 @@ fn weak_output(state: &TickState, source: BlockPos, target: BlockPos) -> u8 {
     let Some(block) = at(state, source) else {
         return 0;
     };
+    weak_output_of(state, block, source, target)
+}
+
+/// Weak output of one explicit block state, independent of the world's current
+/// state at `source` (the pre-write state may no longer be resident there).
+fn weak_output_of(state: &TickState, block: &BlockState, source: BlockPos, target: BlockPos) -> u8 {
     let path = block.block.id.path();
     match path {
         "redstone_block" => 15,
@@ -160,7 +166,9 @@ fn weak_output(state: &TickState, source: BlockPos, target: BlockPos) -> u8 {
                 0
             }
         }
-        "sculk_sensor" | "calibrated_sculk_sensor" => crate::sculk::signal(state, source, target),
+        "sculk_sensor" | "calibrated_sculk_sensor" => {
+            crate::sculk::signal_of(block, source, target)
+        }
         "redstone_wire" => signal::dust(block, source, target),
         "daylight_detector" => prop(block, "power")
             .and_then(|p| p.parse().ok())
@@ -296,9 +304,58 @@ fn change(
     };
     set(state, writes, pos, new.0);
 }
+
+/// Whether a write can change the directional strong power the written cell
+/// sends into the adjacent conductor `cell`. When it can, consumers around that
+/// conductor must re-evaluate; ordinary stone, air and redstone-block writes
+/// leave the output at zero, while a component change or removal still relays.
+fn strong_relay(
+    state: &TickState,
+    pos: BlockPos,
+    written: u32,
+    previous: Option<u32>,
+    cell: BlockPos,
+) -> bool {
+    let Some(previous) = previous else {
+        // Pre-image is unavailable (write into an unadmitted chunk): keep the
+        // previous conservative relay instead of dropping a component update.
+        return true;
+    };
+    let blocks = &state.registry.blocks;
+    let (Some(old), Some(new)) = (
+        blocks.by_id(BlockStateId(previous)),
+        blocks.by_id(BlockStateId(written)),
+    ) else {
+        return true;
+    };
+    // A world-backed output (comparator signal, trapped-chest viewers) cannot be
+    // recomputed for the old block after the write. Its direction still tells
+    // which conductor it powered, so keep the support update on exactly that
+    // conductor. A sculk sensor is not world-backed: its power lives in the
+    // block state, so a 0->0 phase change compares equal and relays nothing.
+    let old_path = old.block.id.path();
+    let new_path = new.block.id.path();
+    if (signal::strong_directed(old, pos, cell, true) && signal::output_world_backed(old_path))
+        || (signal::strong_directed(new, pos, cell, true) && signal::output_world_backed(new_path))
+    {
+        return true;
+    }
+    signal::strong_of(state, old, pos, cell, true) != signal::strong_of(state, new, pos, cell, true)
+}
+
 pub(crate) fn neighbours(state: &mut TickState, writes: &[(BlockPos, u32)]) {
-    for (pos, _) in writes {
+    for (pos, written) in writes {
         rails::wake_diagonals(state, *pos);
+        // The extra hop through a conducting neighbour models vanilla's
+        // component update of its support's neighbours; it is gated on a
+        // directional strong-power change from the written cell (qc-piston-bud
+        // stayed retracted in vanilla when a passive block was written above
+        // the block in front of a quasi-powered sticky piston).
+        let previous = state.world.stored_block_at(pos.x, pos.y, pos.z);
+        let current = state
+            .world
+            .block_at(pos.x, pos.y, pos.z)
+            .unwrap_or(*written);
         for d in std::iter::once((0, 0, 0)).chain(NEIGHBOURS) {
             let Some(cell) = offset(*pos, d) else {
                 continue;
@@ -310,10 +367,28 @@ pub(crate) fn neighbours(state: &mut TickState, writes: &[(BlockPos, u32)]) {
             crate::command_blocks::changed(state, cell);
             crate::enchantment_locations::changed(state, cell);
             if at(state, cell).is_some_and(conducts) {
+                let relay = cell == *pos || strong_relay(state, *pos, current, previous, cell);
                 for direction in NEIGHBOURS {
                     let Some(consumer) = offset(cell, direction) else {
                         continue;
                     };
+                    if !relay {
+                        // Analog inputs and item frames can change without
+                        // emitting strong power. Wake only the comparator
+                        // looking through this conductor at the changed cell.
+                        if at(state, consumer).is_some_and(|block| {
+                            block.block.id.path() == "comparator"
+                                && prop(block, "facing")
+                                    .and_then(facing_delta)
+                                    .is_some_and(|d| {
+                                        offset(consumer, d) == Some(cell)
+                                            && offset(cell, d) == Some(*pos)
+                                    })
+                        }) {
+                            schedule_cell(state, consumer, 1, 0);
+                        }
+                        continue;
+                    }
                     crate::tnt::changed(state, consumer);
                     big_dripleaf::changed(state, consumer);
                     if at(state, consumer).is_some_and(|block| {

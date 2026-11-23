@@ -47,33 +47,74 @@ fn gap_dust_direction_and_weak_conductor_do_not_feed_back() {
     assert_eq!(value(&s, wire, "power"), "0");
 }
 
+/// A conductor next to a strongly powered component wakes the lamp behind it on
+/// the ordinary player hand-use path: `PlayerInput::UseItemOn` ->
+/// `tick::input::interact::use_item_on` -> `use_interactive_block` ->
+/// `placement::use_block`, then the merged `UseBlock` write reaches the block
+/// phase before the overlay folds, so `neighbours` sees the pre-toggle lever and
+/// relays through its support. The same toggle must also relay on the off
+/// transition; the removal covered by
+/// `component_support_relay_survives_toggle_and_removal` is a different path.
 #[test]
 fn gap_conductor_neighbor_updates_wake_lamp() {
-    let mut s = state();
-    let lever = place(
-        &mut s,
-        2,
-        200,
-        2,
-        "lever",
-        &[("face", "wall"), ("facing", "west"), ("powered", "true")],
-    );
-    place(&mut s, 3, 200, 2, "stone", &[]);
-    let lamp = place(&mut s, 4, 200, 2, "redstone_lamp", &[]);
-    super::super::wake(&mut s, lever);
-    advance(&mut s, 3);
-    assert_eq!(value(&s, lamp, "lit"), "true");
-    place(
-        &mut s,
-        2,
-        200,
-        2,
+    let (mut s, player) = crate::farming_tests::setup();
+    let y = crate::farming_tests::Y;
+    // Stand the player two cells south of the lever, as the fixture's other
+    // hand-use tests do before clicking, so both clicks pass the reach gate.
+    let slot = s.entities.slot_of(player).expect("joined player");
+    s.entities.set_pos(slot, [2.5, f64::from(y) + 1.0, 4.5]);
+    // Settle hydration before the circuit exists, so only the hand-use relay can
+    // schedule the lamp; the residency scan must not pre-tick it.
+    let _ = crate::tick::run_tick(&mut s, &[]);
+    let support = crate::farming_tests::block(&s, "stone", &[]);
+    crate::farming_tests::put(&mut s, 3, y, 2, support);
+    let dark = crate::farming_tests::block(&s, "redstone_lamp", &[("lit", "false")]);
+    crate::farming_tests::put(&mut s, 4, y, 2, dark);
+    let off = crate::farming_tests::block(
+        &s,
         "lever",
         &[("face", "wall"), ("facing", "west"), ("powered", "false")],
     );
-    super::super::wake(&mut s, lever);
-    advance(&mut s, 8);
+    let lever = BlockPos { x: 2, y, z: 2 };
+    crate::farming_tests::put(&mut s, lever.x, lever.y, lever.z, off);
+    let lamp = BlockPos { x: 4, y, z: 2 };
+    assert_eq!(value(&s, lever, "powered"), "false");
+    hand_use(&mut s, lever);
+    for _ in 0..2 {
+        let _ = crate::tick::run_tick(&mut s, &[]);
+    }
+    assert_eq!(
+        value(&s, lever, "powered"),
+        "true",
+        "hand use flips the lever"
+    );
+    assert_eq!(value(&s, lamp, "lit"), "true");
+    hand_use(&mut s, lever);
+    for _ in 0..8 {
+        let _ = crate::tick::run_tick(&mut s, &[]);
+    }
+    assert_eq!(
+        value(&s, lever, "powered"),
+        "false",
+        "hand use flips it back"
+    );
     assert_eq!(value(&s, lamp, "lit"), "false");
+}
+
+/// One authoritative hand-use click through the real tick: input admission,
+/// intent merge and block phase exactly as a connected player produces them.
+fn hand_use(state: &mut crate::tick::TickState, position: BlockPos) {
+    let _ = crate::tick::run_tick(
+        state,
+        &[crate::boundary::PlayerInput::UseItemOn {
+            connection: crate::boundary::ConnectionId(1),
+            hand: crate::boundary::Hand::Main,
+            position,
+            face: 1,
+            cursor: [0.5, 0.5, 0.5],
+            sequence: 1,
+        }],
+    );
 }
 
 #[test]

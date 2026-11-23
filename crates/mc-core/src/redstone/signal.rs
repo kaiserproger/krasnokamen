@@ -58,10 +58,43 @@ fn strong(state: &TickState, source: BlockPos, target: BlockPos, wires: bool) ->
     let Some(block) = at(state, source) else {
         return 0;
     };
+    strong_of(state, block, source, target, wires)
+}
+
+/// Directional strong power of one explicit block state toward `target`.
+///
+/// Takes the block so a write's pre-image can be evaluated after the world has
+/// already moved to the post-write state.
+pub(super) fn strong_of(
+    state: &TickState,
+    block: &BlockState,
+    source: BlockPos,
+    target: BlockPos,
+    wires: bool,
+) -> u8 {
+    if strong_directed(block, source, target, wires) {
+        super::weak_output_of(state, block, source, target)
+    } else {
+        0
+    }
+}
+
+/// Whether a block kind directs strong power into `target` (ignoring the value).
+pub(super) fn strong_directed(
+    block: &BlockState,
+    source: BlockPos,
+    target: BlockPos,
+    wires: bool,
+) -> bool {
     let path = block.block.id.path();
-    let directed = match path {
+    match path {
         "redstone_wire" => wires,
-        "repeater" | "comparator" | "observer" => true,
+        "repeater" | "comparator" | "observer" => {
+            prop(block, "facing")
+                .and_then(blocks::facing_delta)
+                .and_then(|d| offset(source, (-d.0, -d.1, -d.2)))
+                == Some(target)
+        }
         "redstone_torch" | "redstone_wall_torch" => offset(source, (0, 1, 0)) == Some(target),
         "lever" => support(source, block) == Some(target),
         "detector_rail"
@@ -74,12 +107,15 @@ fn strong(state: &TickState, source: BlockPos, target: BlockPos, wires: bool) ->
         }
         _ if path.ends_with("_pressure_plate") => offset(source, (0, -1, 0)) == Some(target),
         _ => false,
-    };
-    if directed {
-        weak_output(state, source, target)
-    } else {
-        0
     }
+}
+
+/// Blocks whose strong output is stored outside the block state (a block entity
+/// or derived container state), so the pre-write value cannot be recomputed
+/// after the write replaced it. A sculk sensor's power lives in its block state
+/// and is evaluated from the explicit state on both sides of a write.
+pub(super) fn output_world_backed(path: &str) -> bool {
+    matches!(path, "comparator" | "trapped_chest")
 }
 
 pub(super) fn received(state: &TickState, source: BlockPos, target: BlockPos, wires: bool) -> u8 {

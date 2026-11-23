@@ -597,10 +597,9 @@ pub(crate) fn comparator(state: &TickState, pos: BlockPos) -> Option<u8> {
     Some(0)
 }
 
-pub(crate) fn signal(state: &TickState, source: BlockPos, target: BlockPos) -> u8 {
-    let Some(b) = block(state, source) else {
-        return 0;
-    };
+/// Signal of one explicit block state, so a write's pre-image can be evaluated
+/// after the world already moved to the post-write state.
+pub(crate) fn signal_of(b: &mc_world::BlockState, source: BlockPos, target: BlockPos) -> u8 {
     if b.block.id.path() == "calibrated_sculk_sensor" {
         let (dx, dz) = match property(b, "facing") {
             Some("north") => (0, 1),

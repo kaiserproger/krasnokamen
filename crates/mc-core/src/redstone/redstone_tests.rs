@@ -100,6 +100,23 @@ fn place(
     state.world.fold_overlay();
     pos
 }
+
+/// Apply a block write without folding the overlay, matching the tick/command
+/// boundary that calls `neighbours` before `fold_overlay`, so neighbour
+/// propagation can read the pre-write state.
+fn pending_write(
+    state: &mut TickState,
+    x: i32,
+    y: i32,
+    z: i32,
+    name: &str,
+    props: &[(&str, &str)],
+) -> (BlockPos, u32) {
+    let pos = BlockPos { x, y, z };
+    let id = block(state, name, props);
+    state.world.set_block(x, y, z, id);
+    (pos, id)
+}
 fn value<'a>(state: &'a TickState, pos: BlockPos, key: &str) -> &'a str {
     prop(at(state, pos).unwrap(), key).unwrap()
 }
@@ -1028,6 +1045,213 @@ fn pistons_ignore_power_arriving_through_their_own_face() {
     wake(&mut s, piston);
     advance(&mut s, 6);
     assert_eq!(value(&s, piston, "extended"), "false");
+}
+
+#[test]
+fn non_component_writes_do_not_wake_a_quasi_connected_sticky_piston() {
+    let mut s = state();
+    let piston = place(&mut s, 6, 200, 4, "sticky_piston", &[("facing", "east")]);
+    place(&mut s, 7, 200, 4, "cobblestone", &[]);
+    // The quasi source touches the air cell above the piston, so this write has
+    // no conducting neighbour to relay through.
+    let (source, id) = pending_write(&mut s, 6, 202, 4, "redstone_block", &[]);
+    neighbours(&mut s, &[(source, id)]);
+    advance(&mut s, 6);
+    assert_eq!(value(&s, piston, "extended"), "false");
+    // PISTON-QC-STICKY-EXTENDS-BEFORE-UPDATE: a passive block above the block in
+    // front of the piston must not relay a neighbour update through that
+    // conductor. Vanilla leaves the quasi-powered sticky piston retracted in
+    // the qc-piston-bud idle phase.
+    let (front_source, id) = pending_write(&mut s, 7, 201, 4, "redstone_block", &[]);
+    neighbours(&mut s, &[(front_source, id)]);
+    advance(&mut s, 6);
+    assert_eq!(
+        value(&s, piston, "extended"),
+        "false",
+        "a passive redstone block is not a relay update source"
+    );
+    // Any ordinary non-component write in the same cell is equally passive.
+    let (stone, id) = pending_write(&mut s, 7, 201, 4, "stone", &[]);
+    neighbours(&mut s, &[(stone, id)]);
+    advance(&mut s, 6);
+    assert_eq!(
+        value(&s, piston, "extended"),
+        "false",
+        "stone is not a relay"
+    );
+    // Removing an ordinary block must not relay either.
+    let (removed, id) = pending_write(&mut s, 7, 201, 4, "air", &[]);
+    neighbours(&mut s, &[(removed, id)]);
+    advance(&mut s, 6);
+    assert_eq!(
+        value(&s, piston, "extended"),
+        "false",
+        "ordinary removal is not a relay"
+    );
+    // The declared bud phase's direct neighbour write still updates the piston.
+    let (bud, id) = pending_write(&mut s, 6, 200, 3, "stone", &[]);
+    neighbours(&mut s, &[(bud, id)]);
+    advance(&mut s, 6);
+    assert_eq!(value(&s, piston, "extended"), "true");
+}
+
+#[test]
+fn intermediate_component_write_does_not_wake_quasi_connected_piston() {
+    let mut s = state();
+    let piston = place(&mut s, 6, 200, 4, "sticky_piston", &[("facing", "east")]);
+    place(&mut s, 7, 200, 4, "cobblestone", &[]);
+    place(&mut s, 6, 202, 4, "redstone_block", &[]);
+    let props_off = [("face", "floor"), ("facing", "north"), ("powered", "false")];
+    let props_on = [("face", "floor"), ("facing", "north"), ("powered", "true")];
+    place(&mut s, 7, 201, 4, "lever", &props_off);
+    advance(&mut s, 6);
+    assert_eq!(value(&s, piston, "extended"), "false");
+
+    let on = pending_write(&mut s, 7, 201, 4, "lever", &props_on);
+    let off = pending_write(&mut s, 7, 201, 4, "lever", &props_off);
+    neighbours(&mut s, &[on, off]);
+    advance(&mut s, 6);
+    assert_eq!(value(&s, piston, "extended"), "false");
+}
+
+#[test]
+fn sculk_cooldown_to_inactive_does_not_wake_a_quasi_connected_piston() {
+    let mut s = state();
+    let piston = place(&mut s, 6, 200, 4, "sticky_piston", &[("facing", "east")]);
+    place(&mut s, 7, 200, 4, "cobblestone", &[]);
+    place(&mut s, 6, 202, 4, "redstone_block", &[]);
+    place(
+        &mut s,
+        7,
+        201,
+        4,
+        "sculk_sensor",
+        &[("power", "0"), ("sculk_sensor_phase", "cooldown")],
+    );
+    advance(&mut s, 6);
+    assert_eq!(value(&s, piston, "extended"), "false");
+    // sculk::run's reachable cooldown -> inactive transition writes only the
+    // phase (sculk.rs:816-838), so the sensor's strong output stays 0 -> 0 and
+    // must not relay through the block below it into the piston's update set.
+    let (sensor, id) = pending_write(
+        &mut s,
+        7,
+        201,
+        4,
+        "sculk_sensor",
+        &[("power", "0"), ("sculk_sensor_phase", "inactive")],
+    );
+    neighbours(&mut s, &[(sensor, id)]);
+    advance(&mut s, 6);
+    assert_eq!(
+        value(&s, piston, "extended"),
+        "false",
+        "a 0->0 sculk phase change is not a signal release"
+    );
+    // The same piston still reacts to a direct neighbour update.
+    let (update, id) = pending_write(&mut s, 6, 200, 3, "stone", &[]);
+    neighbours(&mut s, &[(update, id)]);
+    advance(&mut s, 6);
+    assert_eq!(value(&s, piston, "extended"), "true");
+}
+
+#[test]
+fn sculk_power_loss_still_notifies_consumers_around_its_support() {
+    let mut s = state();
+    place(&mut s, 7, 200, 4, "cobblestone", &[]);
+    let lamp = place(&mut s, 8, 200, 4, "redstone_lamp", &[("lit", "false")]);
+    place(
+        &mut s,
+        7,
+        201,
+        4,
+        "sculk_sensor",
+        &[("power", "0"), ("sculk_sensor_phase", "inactive")],
+    );
+    advance(&mut s, 2);
+    let lamp_id = at(&s, lamp).unwrap().block.id.clone();
+    assert_eq!(value(&s, lamp, "lit"), "false");
+    assert!(!s.block_ticks.contains(lamp, &lamp_id, 0));
+    assert!(!s.block_ticks.contains(lamp, &lamp_id, 6));
+    // Activation: inactive(0) -> active(15) relays through the support. The
+    // queued lamp tick is observable before the lamp reacts, so a missing relay
+    // fails here and not only at the final end state.
+    let (sensor, id) = pending_write(
+        &mut s,
+        7,
+        201,
+        4,
+        "sculk_sensor",
+        &[("power", "15"), ("sculk_sensor_phase", "active")],
+    );
+    neighbours(&mut s, &[(sensor, id)]);
+    assert!(
+        s.block_ticks.contains(lamp, &lamp_id, 0),
+        "activation must relay through the support"
+    );
+    // Drain every queued lamp tick while the sensor is still power=15: a stale
+    // priority-0 tick would otherwise see power=0 after the release write and
+    // schedule the shutoff even with the release relay disabled.
+    advance(&mut s, 3);
+    assert_eq!(value(&s, lamp, "lit"), "true");
+    assert!(!s.block_ticks.contains(lamp, &lamp_id, 0));
+    assert!(
+        !s.block_ticks.contains(lamp, &lamp_id, 6),
+        "a powered lamp must not be waiting to shut off"
+    );
+    // Release: active(15) -> cooldown(0) is a real power loss. No lamp tick is
+    // queued here, so only the relay can schedule the shutoff.
+    let (sensor, id) = pending_write(
+        &mut s,
+        7,
+        201,
+        4,
+        "sculk_sensor",
+        &[("power", "0"), ("sculk_sensor_phase", "cooldown")],
+    );
+    neighbours(&mut s, &[(sensor, id)]);
+    assert!(
+        s.block_ticks.contains(lamp, &lamp_id, 0),
+        "release must relay through the support"
+    );
+    advance(&mut s, 6);
+    assert_eq!(
+        value(&s, lamp, "lit"),
+        "false",
+        "a real 15->0 release must unlight the lamp behind the support"
+    );
+}
+
+#[test]
+fn component_support_relay_survives_toggle_and_removal() {
+    let mut s = state();
+    place(&mut s, 3, 200, 2, "stone", &[]);
+    let lamp = place(&mut s, 4, 200, 2, "redstone_lamp", &[("lit", "false")]);
+    place(
+        &mut s,
+        2,
+        200,
+        2,
+        "lever",
+        &[("face", "wall"), ("facing", "west"), ("powered", "false")],
+    );
+    // Toggle on at the same write boundary, as the hand-use path does.
+    let (lever, id) = pending_write(
+        &mut s,
+        2,
+        200,
+        2,
+        "lever",
+        &[("face", "wall"), ("facing", "west"), ("powered", "true")],
+    );
+    neighbours(&mut s, &[(lever, id)]);
+    advance(&mut s, 2);
+    assert_eq!(value(&s, lamp, "lit"), "true");
+    // Removing the component must still relay its support's neighbours.
+    let (removed, id) = pending_write(&mut s, 2, 200, 2, "air", &[]);
+    neighbours(&mut s, &[(removed, id)]);
+    advance(&mut s, 6);
+    assert_eq!(value(&s, lamp, "lit"), "false");
 }
 
 #[test]
