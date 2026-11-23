@@ -6,6 +6,11 @@
 # mem-run scope started while <command> runs, then give them back. A command
 # that should use the reserved CPUs (the Spain trial servers) runs mem-run with
 # KRASNOKAMEN_RESERVED_CPUS=use. Scopes already running keep their placement.
+#
+# The file is two lines: the CPU list, then the owner's `pid starttime` (field 22
+# of /proc/<pid>/stat). A killed run leaves the file behind; mem-run and this
+# script read the owner to tell a live reservation from a corpse (pid gone or
+# reused), so a stale file cannot silently pin every later scope (#G4, CS341).
 set -euo pipefail
 dir=/tmp/solaris-mem-slots
 file=$dir/reserved-cpus
@@ -17,8 +22,23 @@ for part in ${cpus//,/ }; do
   [ "${part#*-}" -lt "$ncpu" ] && [ "${part%-*}" -lt "$ncpu" ] || { echo "reserve-cpus: CPU in '$part' is not below $ncpu" >&2; exit 2; }
 done
 mkdir -p "$dir"
+# A reservation whose owner is gone (SIGKILL, OOM, a wrapper kill) is a corpse: name it and
+# clear it instead of refusing every future reservation behind it.
+stale_reservation() {
+  local owner pid start live
+  owner=$(sed -n '2p' "$file" 2>/dev/null || true)
+  [ -n "$owner" ] || return 1          # one-line file: an older writer, cannot be judged
+  pid=${owner%% *}; start=${owner##* }
+  live=$(awk '{print $22}' "/proc/$pid/stat" 2>/dev/null || true)
+  [ -z "$live" ] || [ "$live" != "$start" ]
+}
+if [ -e "$file" ] && stale_reservation; then
+  echo "reserve-cpus: clearing stale reservation $(head -n1 "$file" 2>/dev/null || true) (owner $(sed -n '2p' "$file") is gone)" >&2
+  rm -f "$file"
+fi
+starttime=$(awk '{print $22}' "/proc/$$/stat")
 # noclobber makes the create atomic: a second reservation is refused, not merged.
-if ! (set -o noclobber; printf '%s\n' "$cpus" > "$file") 2>/dev/null; then
+if ! (set -o noclobber; printf '%s\n%s %s\n' "$cpus" "$$" "$starttime" > "$file") 2>/dev/null; then
   echo "reserve-cpus: CPUs already reserved: $(cat "$file" 2>/dev/null)" >&2
   exit 75
 fi

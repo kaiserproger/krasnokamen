@@ -111,17 +111,22 @@ def _spawn_split(argv: list[str], env: dict[str, str],
 def run_split(ctx: ProfileContext, profile: str, parts: list[SplitPart]) -> list[dict[str, Any]]:
     """Run every part as its own `tools.harness run <profile>` child, then judge them.
 
-    All children start before any is awaited, so the parts run concurrently, each
-    with its own artifact root (therefore its own server, client and Xvfb
-    display). The combined verdict is the whole point: a part that fails, exits
-    nonzero, writes no receipt or writes more than one fails the split gate.
+    Parts run one at a time: the parent starts the next child only after the previous
+    one's receipt is read. Each part is a complete leg (release server, client and Xvfb
+    display), and two overlapping legs exceeded one 12 GiB mem-run scope and were
+    OOM-killed before any verdict (HARNESS-SCREENS-VOICE-PARTS-OOM), so concurrency is
+    not worth the memory. Each child still has its own artifact root, server, client and
+    display. The combined verdict is the whole point: a part that fails, exits nonzero,
+    writes no receipt or writes more than one fails the split gate.
     """
     if not parts:
         raise ValueError("a split gate needs at least one part")
     parts_root = ctx.artifact_dir / "parts"
     parts_root.mkdir(parents=True, exist_ok=True)
     base_argv = [sys.executable, "-m", "tools.harness", "run", profile, *profile_argv(ctx)]
-    children = []
+    deadline = time.monotonic() + (ctx.timeout_seconds or 3600.0)
+    blocks: list[dict[str, Any]] = []
+    failures: list[str] = []
     for part in parts:
         root = parts_root / part.label
         root.mkdir(parents=True, exist_ok=True)
@@ -130,11 +135,7 @@ def run_split(ctx: ProfileContext, profile: str, parts: list[SplitPart]) -> list
         env[SPLIT_PART_ENV] = part.label
         env["KRASNOKAMEN_VALIDATION_ROOT"] = str(root)
         log_path = parts_root / (part.label + ".log")
-        children.append((part, root, log_path, _spawn_split(base_argv, env, log_path)))
-    deadline = time.monotonic() + (ctx.timeout_seconds or 3600.0)
-    blocks: list[dict[str, Any]] = []
-    failures: list[str] = []
-    for part, root, log_path, proc in children:
+        proc = _spawn_split(base_argv, env, log_path)
         remaining = max(1.0, deadline - time.monotonic())
         try:
             exit_code = proc.wait(timeout=remaining)

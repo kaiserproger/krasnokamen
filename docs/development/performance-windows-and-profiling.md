@@ -99,6 +99,16 @@ exponents and CPU/wall, not profiled capacity.
 
 ## Profiling recipes
 
+- **Maintained window:** `tools/dev/perf-window.sh <pid> [seconds] [outdir]` is the
+  script a capture uses (do not re-invent it in `receipts/`). It records with
+  `--call-graph fp --per-thread` (inclusive callers: `perf report -g
+  "graph,0.5,caller,0.5"`, plus `self.txt` and `script.txt` for flame graphs), runs
+  `perf stat -M PipelineL1 --per-thread` for the top-down verdict and
+  `perf stat -x,` over the explicit AMD events `ls_dmnd_fills_from_sys.all`,
+  `l2_request_g1.all`, `l2_misses.all`, `cycles`, `instructions` (the CSV's last
+  column is the enabled/running ratio). `cache-references`/`cache-misses` alias to
+  L2 on AMD64: never quote them as a last-level number. The call graph needs the
+  frame-pointer pin above; the script refuses a capture without caller frames.
 - **Pin:** `CARGO_TARGET_DIR=<work>/targets/fp RUSTFLAGS="-C force-frame-pointers=yes"
   CARGO_PROFILE_RELEASE_DEBUG=line-tables-only <work>/solaris/tools/dev/pin-release
   <tree> --no-incremental`. Instrumentation is part of fingerprint; `--bots`

@@ -93,6 +93,33 @@ class SplitPartsTests(unittest.TestCase):
                          [os.sys.executable, "-m", "tools.harness", "run", "buildings-qa"])
         self.assertTrue((root / "parts").is_dir())
 
+    def test_parts_run_one_at_a_time_so_two_full_legs_never_share_a_scope(self):
+        """Negative control for HARNESS-SCREENS-VOICE-PARTS-OOM: overlap means OOM, not a verdict."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        events: list[str] = []
+        receipts = {"a": passed(), "b": passed()}
+
+        def spawn(_argv, env, log_path):
+            label = env[profiles.SPLIT_PART_ENV]
+            events.append(f"spawn:{label}")
+            root = Path(env["KRASNOKAMEN_VALIDATION_ROOT"])
+            artifact = root / ("20260101T000000-" + label)
+            artifact.mkdir(parents=True, exist_ok=True)
+            (artifact / "result.json").write_text(json.dumps(receipts[label]))
+            log_path.write_bytes(b"child log\n")
+            def wait(timeout=None):
+                events.append(f"wait:{label}")
+                return 0
+            return SimpleNamespace(wait=wait)
+
+        with patch.object(profiles, "_spawn_split", spawn):
+            blocks = profiles.run_split(context(directory.name), "screens-voice-qa",
+                                        [profiles.SplitPart("a"), profiles.SplitPart("b")])
+        # Concurrent code would start both legs first: spawn:a, spawn:b, wait:a, wait:b.
+        self.assertEqual(events, ["spawn:a", "wait:a", "spawn:b", "wait:b"])
+        self.assertEqual([block["status"] for block in blocks], ["passed", "passed"])
+
     def test_the_cli_refuses_parts_for_a_profile_without_independent_parts(self):
         from tools.harness import __main__ as cli
         with patch("sys.stderr", new_callable=io.StringIO) as error, \

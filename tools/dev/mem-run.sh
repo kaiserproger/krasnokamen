@@ -373,15 +373,37 @@ fi
 [ "$exclusive" = 1 ] && { niceness=0; cpu_pin=(); preemptible=0; }
 # CPUs held by tools/dev/reserve-cpus (owner 2026-11-16, Spain trials) stay out of every
 # new scope except one started with KRASNOKAMEN_RESERVED_CPUS=use; running scopes keep
-# their placement, and the reservation ends with the command that holds it.
-reserved=$(cat "$dir/reserved-cpus" 2>/dev/null || true)
+# their placement, and the reservation ends with the command that holds it. A reservation
+# whose owner died (SIGKILL, OOM, a wrapper kill) is a corpse: say so and clear it, never
+# silently pin every later scope away from those CPUs (or drop the restriction when the
+# stale list covers a whole pool) — #G4, CS341. A one-line file from an older writer has no
+# owner and is honoured as-is (mixed-version compatibility).
+reserved=
+if [ -r "$dir/reserved-cpus" ]; then
+  read -r reserved _ < "$dir/reserved-cpus" || true
+  owner=$(sed -n '2p' "$dir/reserved-cpus" 2>/dev/null || true)
+  if [ -n "$reserved" ] && [ -n "$owner" ]; then
+    owner_pid=${owner%% *}; owner_start=${owner##* }
+    owner_live=$(awk '{print $22}' "/proc/$owner_pid/stat" 2>/dev/null || true)
+    if [ "$owner_live" != "$owner_start" ]; then
+      echo "mem-run: ignoring stale CPU reservation '$reserved' (owner $owner is gone or its pid was reused); removing $dir/reserved-cpus" >&2
+      rm -f "$dir/reserved-cpus"
+      reserved=
+    fi
+  fi
+fi
 if [ -n "$reserved" ] && [ "${KRASNOKAMEN_RESERVED_CPUS:-}" != use ] && [ "$exclusive" = 0 ]; then
   declare -A held=()
   for part in ${reserved//,/ }; do for ((c = ${part%-*}; c <= ${part#*-}; c++)); do held[$c]=1; done; done
   pool=0-$((ncpu - 1)); [ "$perf" = 1 ] && pool=$perf_cpus
   allowed=
   for part in ${pool//,/ }; do for ((c = ${part%-*}; c <= ${part#*-}; c++)); do [ -n "${held[$c]:-}" ] || allowed+=${allowed:+,}$c; done; done
-  [ -n "$allowed" ] && cpu_pin=(taskset -c "$allowed")
+  if [ -n "$allowed" ]; then
+    cpu_pin=(taskset -c "$allowed")
+    echo "mem-run: reserved CPUs $reserved are excluded from this scope (cpus=$allowed)" >&2
+  else
+    echo "mem-run: reserved CPUs $reserved cover this whole pool; the reservation cannot restrict it, so the scope keeps cpus=$pool" >&2
+  fi
 fi
 [ "$preemptible" = 1 ] && props=("${props[@]/CPUWeight=50/CPUWeight=10}")
 [ -n "${KRASNOKAMEN_SCENE_SLOT:-}" ] && [ "$perf" = 0 ] && props=("${props[@]/CPUWeight=*/CPUWeight=500}")

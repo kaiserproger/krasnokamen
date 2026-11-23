@@ -1240,6 +1240,9 @@ def host_receipt(out: Path) -> dict[str, Any]:
     def capture(command: list[str]) -> str:
         return subprocess.check_output(command, text=True).strip()
     return {"cpu": json.loads(capture(["lscpu", "--json"])),
+            "cpu_scaling": cpu_scaling(),
+            "cgroup_cpu": cgroup_cpu_stat(),
+            "memory_pressure": memory_pressure(),
             "memory": Path("/proc/meminfo").read_text(), "os": platform.freedesktop_os_release(),
             "kernel": platform.uname()._asdict(),
             "disks": json.loads(capture(["lsblk", "--json", "-o", "NAME,MODEL,SIZE,ROTA,FSTYPE,MOUNTPOINTS"])),
