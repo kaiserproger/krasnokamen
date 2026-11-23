@@ -6,4 +6,6 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "Split from DATAPACK-WORLDGEN-ZIP. Since the A10 baseline-custody work the experimental jigsaw inputs apply on restart and every other worldgen/dimension resource fails closed by name (docs/OPERATING.md Datapacks and command blocks, docs/COMPATIBILITY.md); general custom terrain remains the open gap."
-regression = []
+regression = ["cargo:mc-core:datapacks::worldgen::tests::unsupported_worldgen_refusal_names_every_entry_and_supported_packs_load", "cargo:mc-core:datapacks::worldgen::tests::start_skips_a_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest", "harness:datapack-reload:native-datapack-reload"]
+fix_commit = "1d8e57dd8943e8d41797c0edd04cf6f674b27950"
+repro_check = "Guard older than the finding (README patch-mode rule 5): the fail-closed behaviour landed with 1d8e57dd8, whose non-test hunks reverse-apply cleanly on HEAD. Control: the pre-guard validate_resource returns a raw Unsupported error and a new pack with unsupported worldgen is not skipped, so the two cargo refs go red at their own expectations (the selected pack loads instead of refusing; the start warning lacks the skip line); restore green. Promotion awaits the graphical ref receipt: python3 -m tools.harness run scenario native-datapack-reload --client native --windowed on a pin-release binary of this head, then ledger promote DATAPACK-WORLDGEN-OVERRIDES --client-receipt <result.json>."
