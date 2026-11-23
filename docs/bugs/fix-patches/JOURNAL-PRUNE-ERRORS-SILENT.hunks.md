@@ -38,7 +38,7 @@ None.
 ## Proving ref
 
 `cargo:mc-core:journal_tests::prune_reports_and_counts_a_refused_removal` — red at
-`crates/mc-core/src/journal_tests.rs:2036`
+`crates/mc-core/src/journal_tests.rs:2037`
 (`assert_eq!(report.failed, 1)` — left 0, right 1 measured). The ref also asserts
 `report.error.is_some()` and the dashboard counter at `:2046`; the first
 assertion is the row's symptom (a refusal nobody reports).
