@@ -1,7 +1,7 @@
 # WINDOWS-BACKUP-CONVERSION — patch-mode fix identity (bespoke HEAD form)
 
 Fix: `docs/bugs/fix-patches/WINDOWS-BACKUP-CONVERSION.patch`
-(`fix_commit = "patch:2e9076cdbfbf189d5a33f8f56d63b521cb3bb99e6dd6ad1242240b8d275fb599"`).
+(`fix_commit = "patch:fc097871f3f8c19708b10aa196876030dfce190de3c29264181f05131fc35744"`).
 Re-audit:
 `python3 -m tools.harness ledger promote WINDOWS-BACKUP-CONVERSION --fix-patch docs/bugs/fix-patches/WINDOWS-BACKUP-CONVERSION.patch --dry-run`
 
@@ -38,12 +38,14 @@ and test hunks are kept by `non_test_patch` as usual.
   (`hot_backup_tests` call it) and ignores it on the a/-side (`let _ =
   database;`).
 - `NativeStore::snapshot_reader()` keeps its signature (`mc-world` backup
-  tests and `core/journal.rs` call it) and returns a second file handle on the
-  a/-side. A `path: PathBuf` field replaces the owned `file` handle there, the
-  only added field.
-- The `NativeFile` backend and `NativeSnapshotReader` stay defined on the a/-
-  side (unused, warnings only), so the diff stays a behaviour reversal rather
-  than a rewrite of the type.
+  tests and `core/journal.rs` call it); on the a/-side it returns a duplicated
+  second handle (`self.file.try_clone()`), the pre-fix shape the Windows
+  `LockFileEx` sharing check refuses. The `file: Arc<File>` field and the
+  `NativeFile` backend stay on both sides because the kept
+  `checkpoint_drill_tests.rs:226` constructs `NativeStore { file, .. }` with a
+  struct literal (reason (b): adding or removing a field stops the control from
+  building — observed as E0063 with a `path` field and E0560/E0609 when the
+  field was removed).
 
 ## Proving refs
 
