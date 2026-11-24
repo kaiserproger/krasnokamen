@@ -248,24 +248,28 @@ def _wait_certified_origin_here(probe: ProbeSteps, sub: dict[str, Any], tag: str
     return None
 
 
-def _menu_click_named(probe: ProbeSteps, title: str, name: str) -> None:
-    """Find an icon across container pages and click its exact name."""
-    page = probe.wait(lambda s: _container_titled(s, title), f"{title}_menu_open",
-                      timeout_seconds=60)
+def _click_row(probe: ProbeSteps, page: Callable[[dict[str, Any]], bool], name: str,
+               label: str) -> None:
+    """Find an icon across the pages of the screen `page` matches and click its exact name."""
+    state = probe.wait(page, label, timeout_seconds=60)
     while True:
-        slots = page["container"]["slots"]
+        slots = state["container"]["slots"]
         match = next((row for row in slots if row.get("name") == name), None)
         if match is not None:
             probe.call("minecraft_click_container_slot", {"slot": int(match["slot"]), "button": "primary",
                                                           "timeout_seconds": probe.remaining()})
             return
         if not any(row.get("slot") == 50 and row.get("name") == "Next page" for row in slots):
-            raise RuntimeError(f"buildings-qa: {name!r} missing from {title} menu")
+            raise RuntimeError(f"buildings-qa: {name!r} missing from {label}")
         probe.call("minecraft_click_container_slot", {"slot": 50, "button": "primary",
                                                       "timeout_seconds": probe.remaining()})
-        page = probe.wait(lambda s: _container_titled(s, title)
-                          and s["container"]["slots"] != slots,
-                          f"{title}_next_page", timeout_seconds=60)
+        state = probe.wait(lambda s: page(s) and s["container"]["slots"] != slots,
+                           f"{label}_next_page", timeout_seconds=60)
+
+
+def _menu_click_named(probe: ProbeSteps, title: str, name: str) -> None:
+    """Find an icon across container pages and click its exact name."""
+    _click_row(probe, lambda s: _container_titled(s, title), name, f"{title}_menu_open")
 
 
 def _confirm_project(probe: ProbeSteps, label: str) -> str:
@@ -287,9 +291,15 @@ def _confirm_project(probe: ProbeSteps, label: str) -> str:
 
 def _order_via_dialog(probe: ProbeSteps, sub: dict[str, Any], tag: str,
                       bp: str, level: int, settlement: str) -> str:
+    """Order through the player's Construction catalogue (D63 dialog set).
+
+    `settlement menu projects` opens the blueprint catalogue under the Construction title
+    (`ui_text::Projects`), rows named `<label> L1`; the old wait for a page titled `Projects`
+    timed out on every attempt and the order was never issued
+    (20261124T183657-buildings-qa-6odkzjcy, `buildings_house_L1_project`)."""
     _qa._send(probe, "settlement menu projects")
     label = PROJECT_LABEL.get(bp, bp.capitalize())
-    _qa._menu_click_named(probe, "Projects", f"{label} L1")
+    _qa._click_row(probe, _qa._catalogue_page, f"{label} L1", "projects_menu_open")
     result = _qa._confirm_project(probe, f"Order: {label}")
     sub[f"L{level}_dialog_order"] = result
     return result

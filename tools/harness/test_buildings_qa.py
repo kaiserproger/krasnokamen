@@ -130,15 +130,23 @@ class BarracksFunctionTest(unittest.TestCase):
 
 
 class ProjectMenuTest(unittest.TestCase):
-    def test_order_uses_container_icon_then_real_confirmation(self):
+    def test_order_uses_the_construction_catalogue_then_real_confirmation(self):
+        # D63: `settlement menu projects` opens the catalogue under the Construction title; the
+        # retired page was titled Projects, so the old wait never matched (20261124T183657).
         probe, sub = mock.Mock(), {}
-        probe.wait.return_value = {"screen": {"title": "Projects"}}
         with mock.patch.object(buildings_qa, "_send") as send, \
-                mock.patch.object(buildings_qa, "_menu_click_named") as click, \
+                mock.patch.object(buildings_qa, "_click_row") as click, \
                 mock.patch.object(buildings_qa, "_confirm_project") as confirm:
             buildings_qa._order_via_dialog(probe, sub, "buildings_house", "house", 1, "town")
         send.assert_called_once_with(probe, "settlement menu projects")
-        click.assert_called_once_with(probe, "Projects", "House L1")
+        predicate = click.call_args.args[1]
+        self.assertTrue(predicate({"screen": {"class": buildings_qa.CONTAINER_CLASS,
+                                              "title": "Construction"},
+                                   "container": {"slots": [{"slot": 0, "name": "House L1"}]}}))
+        self.assertFalse(predicate({"screen": {"class": buildings_qa.CONTAINER_CLASS,
+                                               "title": "Projects"},
+                                    "container": {"slots": [{"slot": 0, "name": "House L1"}]}}))
+        self.assertEqual(click.call_args.args[2:], ("House L1", "projects_menu_open"))
         confirm.assert_called_once_with(probe, "Order: House")
 
     def test_upgrade_selects_exact_building_and_confirms_its_level(self):
@@ -624,6 +632,66 @@ class SequentialFlowTest(unittest.TestCase):
                 self.run_flow("gate", 3, order_admitted=True, cert_after_order=False)
         self.assertEqual(send.call_args.args[1], "settlement build gate")
         self.assertIs(probe.report["assertions"]["buildings_gate_L1_order_available"], False)
+
+
+class OrderDialogTest(unittest.TestCase):
+    """The player's order goes through the D63 Construction catalogue.
+
+    `settlement menu projects` opens the blueprint catalogue under the Construction title and
+    names its rows `<label> L1`; the retired chest page was titled `Projects`, so the old wait
+    timed out on every attempt and no order was issued
+    (`20261124T183657-buildings-qa-6odkzjcy`, `buildings_house_L1_project`)."""
+
+    @staticmethod
+    def _page(title, names):
+        return {"screen": {"class": buildings_qa.CONTAINER_CLASS, "title": title},
+                "container": {"slot_count": 90,
+                              "slots": [{"slot": i, "name": name} for i, name in enumerate(names)]}}
+
+    def _order(self, page):
+        calls = []
+
+        class Probe:
+            deadline = 1e12
+
+            def wait(self, predicate, label, timeout_seconds=None):
+                if predicate(page):
+                    return page
+                raise TimeoutError(f"buildings-qa timed out waiting for {label}")
+
+            def call(self, name, arguments=None):
+                calls.append((name, arguments or {}))
+                return {}
+
+            def remaining(self):
+                return 30.0
+
+        from tools.harness.backends import buildings_qa_project as project
+        sub = {}
+        with mock.patch.object(buildings_qa, "_send", return_value={}), \
+                mock.patch.object(project, "_confirm_project", return_value="Order: House") as confirm:
+            project._order_via_dialog(Probe(), sub, "buildings_house", "house", 1, "qa")
+        return calls, confirm, sub
+
+    def test_the_house_row_is_clicked_on_the_construction_catalogue(self):
+        page = self._page("Construction", ["Farm L1", "House L1"])
+        self.assertTrue(buildings_qa_project_catalogue(page))
+        calls, confirm, sub = self._order(page)
+        self.assertIn(("minecraft_click_container_slot",
+                       {"slot": 1, "button": "primary", "timeout_seconds": 30.0}), calls)
+        confirm.assert_called_once_with(mock.ANY, "Order: House")
+        self.assertEqual(sub["L1_dialog_order"], "Order: House")
+
+    def test_the_retired_projects_title_is_not_required_and_fails(self):
+        page = self._page("Projects", ["House L1"])
+        self.assertFalse(buildings_qa_project_catalogue(page))
+        with self.assertRaisesRegex(TimeoutError, "projects_menu_open"):
+            self._order(page)
+
+
+def buildings_qa_project_catalogue(state):
+    from tools.harness.backends import buildings_qa_project as project
+    return project._catalogue_page(state)
 
 
 if __name__ == "__main__":
