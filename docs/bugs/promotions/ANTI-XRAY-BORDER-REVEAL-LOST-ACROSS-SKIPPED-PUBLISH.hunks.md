@@ -43,7 +43,9 @@ constructor line:
 
    `_chunk_cache` is unused on that side; no field, no capture, no branch the pre-image never ran.
    The pre-image imports nothing extra: `viewer.rs` uses `use super::*;`, so `ChunkPacketCache`
-   resolves on both sides.
+   resolves on both sides. Its two-line a/- doc comment ("The pump skipped an output: the pre-image
+   skip flag; every chunk whose own revision moved is sent again by the next plan.") is an added
+   line, named here (review B2, 2026-11-24).
 2. Nothing else: `skip_base`, `previous()`, `side_reveals` and `side_moved` are absent from the
    a/-side, and the doc comment of `skipped` is the pre-image sentence.
 
@@ -87,3 +89,9 @@ The row's source notes a real client cannot discriminate this repair (the plain 
 delivers the held chunk's mask in both trees); `docs/development/real-client-gates.md` records that the
 row keeps frame-level unit tests and a packet/frame-level witness is backlog. This promotion is that
 frame-level witness.
+
+## Conservative behaviour to keep in mind
+
+With the chunk delta log disabled (`ChunkDeltaLog::enabled == false`), `previous()` returns `None`, so
+`side_moved` reports every side as moved and, under anti-xray, a skip re-sends every held chunk —
+conservative (no reveal is lost), just more frames. Recorded as a known, intended bound.

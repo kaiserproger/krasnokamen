@@ -2,7 +2,7 @@
 
 The production patch `ENTITY-CROWD-PUSH-INTO-WALL.patch` is the fix's non-test hunks,
 `patch:ad7b2e86f3610630cc57e5f052180737aeab7b831e1c884ac370893568838529`. It reverse-applies on the
-candidate (`git apply -R --check`, clean tree at `4aadc22cf`+34af8faf86).
+candidate (`git apply -R --check`, clean tree at `4aadc22c`+34af8faf86).
 
 ## The fix, in two commits (one path)
 
@@ -19,13 +19,20 @@ functions for other rows (`clip_y` tolerance, the sub-epsilon early return); the
 | hunk | a/-side |
 |---|---|
 | `resolve_horizontal_sweep` comment | the pre-image had no comment between `remaining` and the passes |
-| `contact_entry` | the pre-image body `gap / movement.abs()`; the function is kept (README (b)) because `physics_tests.rs:2394,2396,2399` call it |
+| `contact_entry` | the a/-side body is `gap / movement.abs()`. `contact_entry` did **not** exist before `fe6e7d36f`, so this is a (b) kept-API adaptation, behaviourally equal to the pre-fix `sweep_axis_interval` arithmetic (each direction divided the raw signed face gap by `movement.abs()`; sign checked for `movement < 0` against `wt/A10Main` lib.rs:1745-1765). The function is kept because `physics_tests.rs:2394,2396,2399` call it. Its a/- doc comment ("The pre-image entry time, kept for the registered tests…") is an added line, named here |
 | `clip_x` loop | the pre-`e282a959b` loop (`if dx > 0.0 && body.max_x <= obstacle.min_x { dx = dx.min(..) } ...`) with HEAD's sub-epsilon early return kept above it (that return is `f3cdf12a4`'s, another row's) |
 | `clip_z` loop | same for `dz` |
 
 `clip_y` and the three `dx/dz/dy.abs() < COLLISION_EPSILON` early returns are identical on both
 sides: they are `PHYSICS-CLIP-Y-PARITY` / `PHYSICS-CLIP-MISSING-VANILLA-EPSILON-EARLY-RETURN`
 behaviour (reason (a), left in place).
+
+**Named a/- difference (review B2, 2026-11-24):** the `clip_x`/`clip_z` doc comment added by
+`e282a959b` (HEAD `lib.rs:1609-1614`, "A side up to `COLLISION_EPSILON` past the face is snapped back
+out") is **not** reverted, and on the a/-side it is false: the pre-`e282a959b` loop does not snap an
+outward side back. It is left because it is a comment of another commit's hunk (the loop body is
+reverted, the comment is not part of this row's reversal); a future regeneration should drop it from
+the a/-side and change the digest.
 
 ## Why every other hunk of the two commits stays out
 
@@ -60,3 +67,18 @@ names that `file:line` in `proving_assertions`. The promotion run's own control/
 Superseded attempt: a patch with only `fe6e7d36f`'s kernel hunk stayed **green** on the control
 (`20261124T095201-ledger-promote-cirofgca`) because `e282a959b`'s clip tolerance independently closes
 the band — the reason this patch carries both commits.
+
+## Refs that are green on both sides (not evidence)
+
+- `cargo:mc-core:blueprint_tests::body_sizes_come_from_the_vanilla_entity_contract`,
+  `…::a_summoned_villager_keeps_the_contract_body_through_the_appearance_refresh`,
+  `cargo:mc-core:sleep::tests::a_woken_player_carries_the_player_contract_body`,
+  `cargo:mc-core:tick_tests::elytra_tests::an_unsolvable_reported_move_is_refused_instead_of_teleporting_the_player`
+  — the body-size sourcing of `7cca1476d` is not reversed (reason (c)/(b) above), so these stay
+  green on the control. They are regression guards, not the control's red.
+- `cargo:mc-physics:tests::a_contact_never_grows_deeper_than_the_tolerance_behind_a_face` and
+  `cargo:mc-physics:tests::wall_face_snap_never_lets_a_body_cross_the_face` did red on the control at
+  `physics_tests.rs:2321`/`:2474`, but the promote JSON classifies them `unproven-panic` (the failing
+  macros are multi-line, so the panic line is not the macro's own line). They are real reds on the
+  row's own kernel invariants but are recorded here as **not the proving ref**: the proving ref is
+  `crowd_pen_tests.rs:155`, named in `proving_assertions`.
