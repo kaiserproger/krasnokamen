@@ -741,6 +741,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the pot's side band changes when the block entity carries bare-id sherds, so the renderer accepts the component shape 26.3 sends",
         limits="one pot, one camera, the block surface only; the item/pot-in-hand surface is unit-covered by decorated_pot_item_bakes_all_sides_and_received_sherds, and the exact vanilla pattern placement is not asserted",
     ),
+    "native-pig-saddle": _entry(
+        id="native-pig-saddle", summary="A saddled pig draws its saddle layer",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-pig-saddle", requires=("xvfb",),
+        sources=("tools/harness/pig_saddle_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, one pig summoned at a fixed position and camera, replaced by the same pig carrying a saddle in equipment slot 7",
+        proves="the saddled pig changes the frame region the plain pig occupies, so the animal overlay table resolves the pig's mount slot",
+        limits="one species, one camera and the saddle only; saddles/carpets/harnesses on the other species and the saddle's exact vanilla shape stay unit-covered",
+    ),
     "native-gait-spider": _entry(
         id="native-gait-spider", summary="The gait spider capture is not occluded by the dying zombie",
         owner="core:harness", evidence="graphical", profile="scene-shot",

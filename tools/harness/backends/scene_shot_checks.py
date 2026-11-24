@@ -294,6 +294,39 @@ def check_decorated_pot(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("pot_side_pattern_changed", changed > 300)
 
 
+def check_pig_saddle(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-3: a pig with a saddle in equipment slot 7 draws its saddle layer.
+
+    The server sends the saddle as its own equipment slot (`equipment:{saddle:{…}}` on
+    `minecraft:pig` is the mount slot 7, which `command_summon` accepts and
+    `entity_appearance` forwards), so the fixture needs no second client: one pig stands at a
+    fixed position and camera, is captured plain, then is replaced by the same pig with the
+    saddle. A client that resolves only the horse/wolf animal overlays draws two identical
+    pigs (the row's symptom); one whose animal overlay table carries the pig draws the saddle
+    in the second frame. Both frames must show the pig, so a missing entity cannot pass.
+    """
+    shots = _qa._load_shots(probe, artifact, ("pig-plain", "pig-saddled"))
+    plain_f, saddled_f = shots["pig-plain"][0], shots["pig-saddled"][0]
+    probe.check("pig_camera_at_fixture", all(
+        abs(a - b) < 0.01 for a, b in zip(plain_f["camera_position"], (1000.5, 161.62, 1002.0))
+    ) and abs(plain_f["yaw"]) < 0.01 and abs(plain_f["pitch"] - 20.0) < 0.01)
+    probe.check("pig_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(plain_f["camera_position"], saddled_f["camera_position"])
+    ) and abs(plain_f["yaw"] - saddled_f["yaw"]) < 0.01
+      and abs(plain_f["pitch"] - saddled_f["pitch"]) < 0.01)
+    # The body against the stone floor and sky: pig skin is a desaturated pink.
+    box = (500, 260, 780, 560)
+    pig = lambda r, g, b: r > 120 and r > g + 25 and r > b + 25
+    bodies = [sum(1 for pixel in shots[name][1].crop(box).getdata() if pig(*pixel))
+              for name in ("pig-plain", "pig-saddled")]
+    changed = _changed(shots["pig-plain"][1], shots["pig-saddled"][1], box)
+    probe.report["pig_saddle_roi"] = list(box)
+    probe.report["pig_visible_pixels"] = bodies
+    probe.report["pig_saddle_changed_pixels"] = changed
+    probe.check("pig_visible_both_frames", all(count > 1500 for count in bodies))
+    probe.check("pig_saddle_changed", changed > 200)
+
+
 def player_head_skin_pack(artifact: Path) -> Path:
     """An authored offline Steve skin: cyan base, opaque magenta hat with a face window."""
     from PIL import Image, ImageDraw
@@ -437,12 +470,16 @@ def check_player_head_registry(probe: ProbeSteps, artifact: Path) -> None:
     offline name (default skin) and `flood-valid` the public Notch texture property. A client whose
     head registry keeps failed keys at its cap refuses the valid key and renders the same default
     skin; the fixed client evicts a failed entry and publishes Notch, changing the avatar's head.
-    The retained frames measure 327 changed pixels on the pre-fix client (mean colour unchanged:
-    the same default skin) against 6712 on the fixed one, so the threshold sits between them.
+    The promotion receipts measure 51 changed pixels on the pre-fix client (mean colour unchanged:
+    the same default skin) against 6765 on the fixed one, so the threshold sits between them.
+
+    The texture fetch is a real network read, so the same run demands a **second** valid key
+    (`pre-valid`, the same document re-serialized) before the flood: a broken fetch reds
+    `pre_flood_valid_head_renders` instead of leaving the row's red ambiguous.
     """
-    shots = _qa._load_shots(probe, artifact, ("empty", "flood-steve", "flood-valid"))
+    shots = _qa._load_shots(probe, artifact, ("empty", "pre-valid", "flood-steve", "flood-valid"))
     ref = shots["empty"][0]
-    for name in ("flood-steve", "flood-valid"):
+    for name in ("pre-valid", "flood-steve", "flood-valid"):
         frame = shots[name][0]
         probe.check(f"{name}_camera_unchanged", all(
             abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
@@ -450,13 +487,16 @@ def check_player_head_registry(probe: ProbeSteps, artifact: Path) -> None:
     # The avatar's worn head at the fixed third-person camera; the same ROI `check_player_head`
     # samples for `worn_head_renders`.
     head_box = (600, 280, 680, 375)
+    pre = _changed(shots["pre-valid"][1], shots["empty"][1], head_box)
     steve = _changed(shots["flood-steve"][1], shots["empty"][1], head_box)
     valid = _changed(shots["flood-valid"][1], shots["empty"][1], head_box)
     profile = _changed(shots["flood-valid"][1], shots["flood-steve"][1], head_box)
     probe.report["flood_head_roi"] = list(head_box)
+    probe.report["pre_flood_valid_changed_pixels"] = pre
     probe.report["flood_steve_changed_pixels"] = steve
     probe.report["flood_valid_changed_pixels"] = valid
     probe.report["flood_profile_changed_pixels"] = profile
+    probe.check("pre_flood_valid_head_renders", pre > 2000)
     probe.check("flood_steve_head_renders", steve > 100)
     probe.check("flood_valid_head_renders", valid > 100)
     probe.check("valid_head_after_flood", profile > 2000)
