@@ -568,16 +568,19 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             kinds = [entry if isinstance(entry, str) else entry["id"] for entry in value["types"]]
             measurement = mob_motion_oracle.measure(samples, kinds)
             (artifact / f"{value['name']}.json").write_text(json.dumps(measurement, indent=2) + "\n")
+            # A scene that measures two windows of one kind (a fixture teleport and a real chase)
+            # keeps both verdicts apart through its own prefix.
+            prefix = value.get("assertion_prefix", "")
             for entry in value["types"]:
                 kind = entry if isinstance(entry, str) else entry["id"]
                 slug = kind.split(":")[1]
                 row = measurement[kind]
-                probe.check("mob_moved_" + slug, row["total_displacement_blocks"] > 0.1)
+                probe.check(prefix + "mob_moved_" + slug, row["total_displacement_blocks"] > 0.1)
                 if isinstance(entry, dict):
                     # A displacement alone passes a frozen or wrongly paced gait: every
                     # segment's client-visible rate must sit inside the declared range.
                     rates = [segment["blocks_per_client_tick"] for segment in row["segments"]]
-                    probe.check("mob_speed_" + slug,
+                    probe.check(prefix + "mob_speed_" + slug,
                                 all(entry["min_speed"] <= rate <= entry["max_speed"] for rate in rates))
         elif kind == "assert_block":
             result = probe.call("minecraft_read_block", value["args"])

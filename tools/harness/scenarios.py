@@ -908,9 +908,9 @@ SCENARIOS: dict[str, Scenario] = {
         owner="core:harness", evidence="graphical", profile="scene-shot",
         scenario_id="issue1-19-hostile-motion", requires=("xvfb",),
         sources=("tools/harness/issue1_19_hostile_motion_scene.json",),
-        fixture="private native client on a grass pad, frozen day, one NoAI zombie and one NoAI spider stepped by fixture teleports, side camera on the zombie",
-        proves="each declared kind moves more than 0.1 blocks and every segment's client-visible rate sits inside its declared blocks-per-client-tick range, and a pixel window over the zombie's raised-arm anchor counts the rendered sleeve, so a frozen animation or a wrong pace fails",
-        limits="tp-driven NoAI mobs on a flat pad, one speed range per kind measured against that trajectory rather than an AI walk; the spider's moving leg swing has no pose anchor and is covered by its motion rate only",
+        fixture="private native client on a grass pad, frozen day, one NoAI zombie and one NoAI spider stepped by fixture teleports, then a chasing zombie with AI after the player drops to survival, side camera on the first zombie",
+        proves="each declared kind moves more than 0.1 blocks and every segment's client-visible rate sits inside its declared blocks-per-client-tick range, a pixel window over the zombie's raised-arm anchor counts the rendered sleeve, and the AI chase's own window (`zombie_chase_speed`) keeps the zombie's client-observed pace inside the Java 26.3 interval (0.09..0.14 blocks per client tick), so a frozen animation, a fixture teleport or the historical 3.8 chase speed fails",
+        limits="tp-driven NoAI mobs for the fixture windows and one straight AI chase over a flat pad; one speed range per kind; the spider's moving leg swing has no pose anchor and is covered by its motion rate only; the client-observed rate is a net displacement, a lower bound on a curved path",
     ),
     "native-village-idle-stroll": _entry(
         id="native-village-idle-stroll", summary="Idle residents stay bound to the village and swim up out of deep water",

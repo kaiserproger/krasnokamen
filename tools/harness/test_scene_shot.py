@@ -446,6 +446,44 @@ class SceneShotTests(unittest.TestCase):
             }}])
             self.assertEqual(probe.checks, {"mob_moved_zombie": True, "mob_speed_zombie": False})
 
+    def test_mob_motion_assertion_prefix_keeps_two_windows_apart(self):
+        """ISSUE-1-19: the scene measures a fixture teleport and an AI chase of the
+        same kind; each window needs its own verdict, not one overwritten name."""
+        class Probe:
+            def __init__(self):
+                self.checks = {}
+            def check(self, name, value):
+                self.checks[name] = value
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name, tick, x in zip(("a", "b", "c"), (100, 105, 110), (0., 0.6, 1.2)):
+                (root / f"{name}.json").write_text(json.dumps({
+                    "game_time": tick,
+                    "snapshot": {"entities": [
+                        {"entity_type": "minecraft:zombie", "entity_uuid": "z", "x": x, "z": 0},
+                    ]},
+                }))
+            probe = Probe()
+            scene_shot.execute(probe, root, [{"mob_motion": {
+                "name": "chase", "assertion_prefix": "zombie_chase_",
+                "samples": ["a", "b", "c"],
+                "types": [{"id": "minecraft:zombie", "min_speed": 0.09, "max_speed": 0.14}],
+            }}])
+        self.assertEqual(probe.checks, {"zombie_chase_mob_moved_zombie": True,
+                                        "zombie_chase_mob_speed_zombie": True})
+        scene_shot.validate_steps([{"mob_motion": {
+            "name": "chase", "assertion_prefix": "",
+            "samples": ["a", "b", "c"],
+            "types": [{"id": "minecraft:zombie", "min_speed": 0.09, "max_speed": 0.14}],
+        }}], "native")
+        for bad in ("zombie chase ", "zombie:", 3):
+            with self.subTest(prefix=bad), self.assertRaises(ValueError):
+                scene_shot.validate_steps([{"mob_motion": {
+                    "name": "chase", "assertion_prefix": bad,
+                    "samples": ["a", "b", "c"],
+                    "types": [{"id": "minecraft:zombie", "min_speed": 0.09, "max_speed": 0.14}],
+                }}], "native")
+
     def test_mob_motion_gate_requires_the_kinds_it_measures(self):
         step = {"mob_motion": {"samples": ["a", "b", "c"], "name": "motion"}}
         with self.assertRaises(ValueError):

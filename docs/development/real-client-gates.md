@@ -846,25 +846,16 @@ the Settings dialog or the map territory.
   must retain their identities and move; observed game time must advance. These
   are client-observed rates, not authoritative server-clock speeds: client time
   can be corrected by server packets, and curved paths make net displacement a
-  lower bound on traveled distance.
+  lower bound on traveled distance. An optional `assertion_prefix` keeps two
+  windows of one kind apart, so `issue1-19-hostile-motion` records the fixture
+  teleports (`mob_speed_zombie`) and an actual AI chase (`zombie_chase_speed`,
+  0.09..0.14 blocks per client tick from the Java 26.3 moving interval) as
+  separate verdicts.
 - Zombie-family chase uses a blueprint capability to send the aggressive-arms
   mob flag. It is cleared when the target is lost or on the first hostile
   evaluation after restart, because targets are runtime-only; the changed
   appearance is journaled. The focused metadata and WAL tests do not substitute
   for a matched animated visual comparison.
-
-- `timed_entities` takes the same `name` and `args` as `list_entities` and retains
-  its same-client-thread `game_time` and entity positions. Missing timestamps fail.
-- `mob_motion` reads three named `timed_entities` receipts and records horizontal
-  displacement and blocks per client tick for one zombie and one spider. Both
-  must retain their identities and move; observed game time must advance. These
-  are client-observed rates, not authoritative server-clock speeds: client time
-  can be corrected by server packets, and curved paths make net displacement a
-  lower bound on traveled distance.
-- Zombie chase uses a server-sent aggressive mob flag to drive the client arm
-  pose. It is cleared when the target is lost and on recovery because targets
-  are runtime-only; the changed appearance is journaled. The focused metadata
-  and WAL tests do not substitute for a matched animated visual comparison.
 
 - With a client supporting held MCP input,
   `{"shot":"tab","hold_keys":["key.keyboard.tab"]}` captures the visible player

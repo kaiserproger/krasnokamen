@@ -264,7 +264,11 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
         elif kind == "falling_block_capture":
             valid = client == "native" and isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value)
         elif kind == "mob_motion":
-            valid = (isinstance(value, dict) and set(value) == {"samples", "name", "types"}
+            valid = (isinstance(value, dict)
+                     and set(value) in ({"samples", "name", "types"},
+                                        {"samples", "name", "types", "assertion_prefix"})
+                     and isinstance(value.get("assertion_prefix", ""), str)
+                     and re.fullmatch(r"[A-Za-z0-9_-]*", value.get("assertion_prefix", ""))
                      and isinstance(value["name"], str) and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
                      and isinstance(value["samples"], list) and len(value["samples"]) == 3
                      and all(isinstance(item, str) and re.fullmatch(r"[A-Za-z0-9_-]+", item)
