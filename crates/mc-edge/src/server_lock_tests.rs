@@ -76,6 +76,9 @@ async fn join_waiter_observes_join_stashed_between_check_and_registration() {
 }
 
 #[test]
+// The base update is what keeps this literal identical in a tree whose `PumpTick` still carries
+// the close-cause map and one that reads it on request; in the second it names no extra field.
+#[allow(clippy::needless_update)]
 fn batched_dashboard_record_updates_counters_and_retains_unchanged_roster() {
     let state = dashboard_state(&EdgeConfig::default());
     state.record_pump_tick(crate::dashboard::PumpTick {
