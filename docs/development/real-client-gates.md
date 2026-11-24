@@ -551,7 +551,12 @@ requires a `hover` (and `click`) event with the given `action` whose rendered
 `value` contains the given text. It proves what the chat component carries —
 `/datapack list` links, for example — where `assert_chat` only sees the
 flattened line; a plain listing has the same text and no event. That is a
-payload check, not a hover check.
+payload check, not a hover check. The projection itself is bounded: the newest
+20 lines, each with at most 512 text characters, 64 distinct events and 4096
+event characters; `truncated` is set whenever a cap cut something, and a payload
+the client cannot name is `unreadable` with a null value instead of serialised
+JSON. An event inherited from an outer style is converted once, not once per
+run.
 
 `hover_chat_component` (`name`, `line`, `contains`, `shot`) is the hover check:
 with the chat screen open (`open_chat`, the ordinary T path), it moves

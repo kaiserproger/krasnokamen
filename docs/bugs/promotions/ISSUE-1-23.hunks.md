@@ -41,7 +41,7 @@ The pair carries four model hunks while `aa20d301` changes three. Blob ids prove
 | `villager.json` | `55c54747..03ac3ff7` | `@@ -5,7 +5,7` — `"left_leg": ["left_leg"], "crossed_arms": ["arms"]` | the real fix, byte-identical |
 | `wandering_trader.json` | `b373ee54..301ac325` | `@@ -5,7 +5,7` — the same line | the real fix, byte-identical |
 | `witch.json` | `c5b04c60..d7fff456` | `@@ -5,7 +5,7` — `"left_leg": ["left_leg"], "crossed_arms": ["arms"], "nose": ["nose"]` | the real fix, byte-identical |
-| `villager_baby.json` | `2e999927..20f1e53c` | none — `aa20d301` never touches the baby | **second origin**: the b-side blob `20f1e53c` is exactly `adf5153c`'s product blob for this file (`git show adf5153c` model hunk `assets/solaris/models/entity/villager_baby.json` lines 1137-1160, the `+    "crossed_arms": ["arms"]` line). The a-side `2e999927` is the rebranded file where the old `right_arm`/`left_arm` roles were already dropped by the merge, so this hunk re-applies adf5153c's role line to that state rather than reversing `adf5153c`'s whole hunk |
+| `villager_baby.json` | `2e999927..20f1e53c` | none — `aa20d301` never touches the baby | **second origin**: the pair's b-side blob `20f1e53c` is exactly `adf5153c`'s product blob for this file (`git show adf5153c` model hunk `assets/solaris/models/entity/villager_baby.json` lines 1137-1160; `adf5153c` replaced the baby's `right_arm`/`left_arm` roles with `+    "crossed_arms": ["arms"]`). The pair therefore deletes and re-adds exactly that one role line: the a-side `2e999927` is that same product blob with only the `crossed_arms` line removed, and the merge took `adf5153c`'s baby model at HEAD |
 
 The baby model is included because the pair's product must be the integrated HEAD model set (the
 `Issue1Client` WIP also fixed the baby). It renders nothing in this scenario — the fixture spawns an
@@ -91,4 +91,20 @@ witch with `minecraft:potion` in the main hand, one frame, `potion_nose_pixels` 
 window. Both pins run it, so the original complaint (a witch holding a potion with nothing drawn) has
 its own green and its own red.
 
-POTION_MEASUREMENTS_PLACEHOLDER
+### Measurements on both pins
+
+Re-measured at core `0899c87f0f` (server pin `2fd119e3d576…`) with the pair's own client pins:
+
+| pin | `emerald_held_pixels` | `redstone_held_pixels` | `potion_nose_pixels` (held-items scene) | `potion_nose_pixels` (`issue1-23-witch-potion`) |
+|---|---|---|---|---|
+| candidate `586b2d07d2` | 1998 px PASS | 2147 px PASS | 535 px PASS | 491 px PASS |
+| control `27a3806c61` | 0 px **FAIL** | not reached (the run aborts) | not reached (the run aborts) | 0 px **FAIL** |
+
+Receipts: candidate `.analysis/validation/20261124T182502-issue1-23-held-items-krqmsj6i` and
+`.analysis/validation/20261124T182732-issue1-23-witch-potion-l6edrb4t`; control
+`.analysis/validation/20261124T183006-issue1-23-held-items-10ixonb2` and
+`.analysis/validation/20261124T182848-issue1-23-witch-potion-he34l0o3`. The pair-tree receipts cited
+above measured 2011/2148 and 0 px on the same scene before the potion frame was appended; the small
+per-run pixel difference is rasterisation, not a different fixture. The candidate's potion frame
+contains 535 potion-coloured pixels at the nose and the control's contains 0, which is the original
+complaint (a witch holding a potion with nothing drawn) measured on both pins.

@@ -1,19 +1,7 @@
-diff --git a/crates/mc-edge/src/plan.rs b/crates/mc-edge/src/plan.rs
-index bc8fb9976..71a0e28e0 100644
---- a/crates/mc-edge/src/plan.rs
-+++ b/crates/mc-edge/src/plan.rs
-@@ -314,8 +314,8 @@ pub struct PlannedPacket {
-     pub chunk_dimension: mc_core::dimensions::Dimension,
- }
- 
--/// Last sent `(position, yaw, pitch, head_yaw)` of an entity: the client's
--/// state relative moves are encoded against.
-+/// Last sent authoritative `(position, yaw, pitch, head_yaw)` of an entity.
-+/// Relative positions subtract quantized endpoints; thresholds use raw ones.
- type MoveBaseline = ([f64; 3], f32, f32, f32);
- 
- /// One publish's world-queue room ([`crate::server::WorldSender`]): free
-@@ -2107,7 +2107,15 @@ fn entity_movement(
+diff --git a/crates/mc-edge/src/plan/entity_motion.rs b/crates/mc-edge/src/plan/entity_motion.rs
+--- a/crates/mc-edge/src/plan/entity_motion.rs
++++ b/crates/mc-edge/src/plan/entity_motion.rs
+@@ -57,7 +57,15 @@ pub(super) fn entity_movement(
      if !moved && !rotated {
          return None;
      }
@@ -30,7 +18,7 @@ index bc8fb9976..71a0e28e0 100644
      let fits = rel.0.is_some() && rel.1.is_some() && rel.2.is_some();
      let packet = match (moved, rotated, fits) {
          (true, false, true) => MovePacket::Pos(MoveEntityPos {
-@@ -2144,9 +2152,9 @@ fn entity_movement(
+@@ -94,9 +102,9 @@ pub(super) fn entity_movement(
              on_ground: entity.on_ground,
          }),
      };
@@ -43,7 +31,7 @@ index bc8fb9976..71a0e28e0 100644
      let synced = moved && !fits;
      let position = if moved { entity.position } else { last_pos };
      let (yaw, pitch) = if rotated || synced {
-@@ -2843,10 +2851,18 @@ fn pack_degrees(degrees: f32) -> u8 {
+@@ -143,8 +151,16 @@ pub(super) fn pack_degrees(degrees: f32) -> u8 {
      floor_f32_i32(degrees * 256.0 / 360.0) as u8
  }
  
@@ -64,5 +52,17 @@ index bc8fb9976..71a0e28e0 100644
 +    };
 +    i16::try_from(quantize(position).checked_sub(quantize(baseline))?).ok()
  }
+diff --git a/crates/mc-edge/src/plan.rs b/crates/mc-edge/src/plan.rs
+--- a/crates/mc-edge/src/plan.rs
++++ b/crates/mc-edge/src/plan.rs
+@@ -124,8 +124,8 @@ pub struct PlannedPacket {
+     pub chunk_dimension: mc_core::dimensions::Dimension,
+ }
  
- /// Frame `body` once (threshold-256 compression) and push it; nothing is
+-/// Last sent `(position, yaw, pitch, head_yaw)` of an entity: the client's
+-/// state relative moves are encoded against.
++/// Last sent authoritative `(position, yaw, pitch, head_yaw)` of an entity.
++/// Relative positions subtract quantized endpoints; thresholds use raw ones.
+ type MoveBaseline = ([f64; 3], f32, f32, f32);
+ 
+ /// Plan-time chunk encoding inputs (biomes/blocks/items/block-entity

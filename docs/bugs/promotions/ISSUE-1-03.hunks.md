@@ -97,4 +97,22 @@ Control receipt `.analysis/validation/20261124T162521-issue1-03-drawn-index-pq3n
 `render_drawn_index_bounded` (the aggregate check aborts there, so `render_repeat_view_stable` is not
 reached). The pre-image therefore reproduces the reported symptom on the real client.
 
-DOWN_LOOK_MEASUREMENTS_PLACEHOLDER
+### Horizon → down → horizon, re-measured on both pins
+
+Core `0899c87f0f`, server pin `2fd119e3d576…`, the pair's client pins, and 20-tick waits per view
+(the software renderer runs at 3–12 fps, so a 3-tick gap could read a stale frame id):
+
+| pin | ten yaw samples, min..max | horizon first | 60° down | horizon return | submitted frames |
+|---|---|---|---|---|---|
+| candidate `dad387e689` | 139434..178338 | 175026 | 63318 | 175008 | 140 → 285, every sample newer |
+| control `67a2e0f5` | 6944124..28483872 | 31108866 | 32360340 | 34173786 | 166 → 343, every sample newer |
+
+Every sample reports the requested yaw **and** pitch and a `submitted_frame_id` newer than the
+previous sample, so the three looks are three fresh renders. The down look is its own
+(yaw, pitch) = (0, −60) view; the return to the horizon is judged against the first horizon sample
+(175008 vs 175026), not against the much smaller down count. The candidate's F3 frames show
+`indices: 63318` on the down look and `indices: 175026` at the horizon (`XYZ: 1000.500 / 76.000 / …`),
+while the control accumulates to 34.2M over the same sequence and fails at the first
+`render_drawn_index_bounded`. Receipts: candidate
+`.analysis/validation/20261124T183106-issue1-03-drawn-index-59uox7mh`, control
+`.analysis/validation/20261124T183158-issue1-03-drawn-index-1udqq14n`.

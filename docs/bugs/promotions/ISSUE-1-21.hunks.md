@@ -13,10 +13,12 @@ tree exactly: `src/api.rs` `c093a860..4d07ddb7`, `src/player/visual.rs` `10d8f18
 `src/render/residency.rs` `a91c10b6..8cf95e3a` — that is `adf5153c` ("wip(stage0): Issue1Client
 uncommitted work at the 21:00 stop"), so `adf5153c` is the fix's *product* commit, not its pre-image.
 
-The 26.3 renderer keeps the same separation at HEAD (`Scene.first_person`, `Renderer.first_person`,
-`targets.first_person_depth_view`, the `first person, independent world depth` pass), so the control
-is a committed reversal at HEAD whose a/-side is the patch's own pre-image lines, not a hand-written
-re-break:
+**The pre-image is `2edbb590` (`adf5153c^`)**: there `append_first_person` submits the bare arm and
+the held-item quads to `scene.dynamic` (the a/-side of the patch's two `visual.rs` hunks), so the hand
+is world geometry and the wall tests its depth. The first version of this map named `adf5153c` itself
+as the pre-image; that was wrong — `adf5153c`'s public patch already *adds* the field and the two
+submission changes (`clip-fix-product.patch:5-14` adds `pub hand: DynamicGeometry`, `:23` and
+`:32` move the arm and the item quads), and `scene.dynamic` exists in its parent.
 
 At HEAD the same separation lives under the integrated names: `Scene.first_person`
 (`src/api.rs:460`), `Renderer.first_person` (`src/render.rs:422`), `targets.first_person_depth_view`
@@ -31,6 +33,39 @@ attachment (`first_person_depth_view`, `StoreOp::Discard`) instead of clearing t
 `62adc12f` ("merge(stage0): Issue1Client") reconciled the duplicate to `first_person`, and HEAD has
 no `hand`. Both `43362918` and `adf5153c` are ancestors of the pair, which is why the control is a
 committed reversal at HEAD rather than a checkout.
+
+## The pair, line by line
+
+`git diff e4a470fb7c 3c3d9fba9a` is exactly seven lines in `src/player/visual.rs` and nothing else.
+Every line, its source and its class (a *moved* line is the fix's own a/-side text at a call site a
+later commit restructured; a *later* line belongs to `43362918`'s extension of the same change):
+
+| HEAD line | a/-side (reversal) | b/-side (re-land) | source of the line | class |
+|---|---|---|---|---|
+| 518 | `&mut scene.dynamic` | `&mut scene.first_person` | the Stage3 arm submission (`clip-fix-product.patch:19-27`; `append_local_arm … &mut scene.dynamic` at `2edbb590:src/player/visual.rs:401`) | moved: `43362918` turned the single arm call into the held-map `[true, false]` arms loop, and `9a645aa99` (2026-11-14 formatting carrier) split the call across lines |
+| 531 | `&mut scene.dynamic` | `&mut scene.first_person` | the same Stage3 arm submission | later: the `else` arm of `43362918`'s map pose; it already submitted to `first_person`, and the pair restores that same stream for the same arm geometry |
+| 539 | `&mut scene.dynamic` | `&mut scene.first_person` | `43362918:src/player/visual.rs:443` (`append_held_map`) | later: no Stage3 a/-side, the held map did not exist in the Stage3 patch |
+| 585 | `&mut scene.dynamic` | `&mut scene.first_person` | the Stage3 arm submission (`clip-fix-product.patch:19-27`) | moved: the bare-arm fallback; `9a645aa99` reformatted the call, the target is the patch's own a/-side |
+| 606 | `scene.dynamic.vertices.len()` | `scene.first_person.vertices.len()` | `43362918:src/player/visual.rs:503` | later: the foil-coverage start; no Stage3 a/-side |
+| 622 | `&mut scene.dynamic` | `&mut scene.first_person` | the Stage3 item submission (`clip-fix-product.patch:28-36`; `presentation_emit … &mut scene.dynamic` at `2edbb590:src/player/visual.rs:430`) | moved: `9a645aa99` split the four-quad call, the target is the patch's own a/-side |
+| 631 | `&mut scene.dynamic.vertices[first..]` | `&mut scene.first_person.vertices[first..]` | `43362918:src/player/visual.rs:523` (`mark_foil`) | later: marks the same item quads line 622 submits, so it must follow their stream |
+
+No line is invented: the three arm/item sites restore the Stage3 patch's own a/-side text, the held
+map and the two foil lines restore the world-geometry submission their introducing commit `43362918`
+had already replaced with `first_person`. Read right to left, the pair is the forward-ported fix at
+HEAD — the Stage3 patch's two submission places plus the three later submissions of the same
+integrated change, nothing else.
+
+## The hand-geometry reset stays on both sides
+
+The Stage3 patch also clears the hand geometry together with the world geometry (`git show
+adf5153c` lines 2125-2131, and the scene-wide reset at `:2086`: `self.scene.hand.vertices.clear()` and every
+`self.scene.hand.indices` cleared beside `scene.dynamic`). At HEAD the same reset is
+`self.scene.first_person.vertices.clear()` plus the per-family indices inside `if dynamic`
+(`src/session/observation.rs:869-872`, from `dd36acd57`, 2026-11-13), and the scene-wide
+`self.scene.first_person = Default::default()` on disconnect/dimension change (`src/session.rs:773`,
+from `43362918`). The reversal keeps both: an uncleared stream would grow instead of testing
+clipping, and they are identical on both pins, so they are not part of the pair.
 
 ## Every other hunk of the real fix and why it stays on both sides
 
