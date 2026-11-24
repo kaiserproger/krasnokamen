@@ -29,10 +29,18 @@ is unchanged, so `git apply -R` yields the historical pre-image and
 `git diff 365939accb 2635fc2ac5` is exactly that patch
 (patch-id `85a41c27706bb941c596535ec061566b15dc80f2`).
 
-## Proving ref
+## Proving ref (and why the row is still open)
 
 `harness:entities:native-v2-lease-navigation` → `replacement_input_retained`: after controller A's
-sneak action is cancelled, controller B holds forward; B's lease must stay active and the next
-observation must still report `forward` in `inputs.held`. The client unit ref
+sneak action is cancelled, controller B's accepted forward hold must still be in `inputs.held`.
+
+The control client passed that assertion **3/3** (receipts `20261124T114355…-kncl5zo`,
+`…114642…-miqu459j`, `…114914…-lkwpj5r5`), so the scene does not discriminate for this row: nothing in
+it forces the UI synchronisation that replays `UiState::release_pending`. The attempted fix was a
+step that opened and closed the inventory (`UiState::execute` consumes the pending release), but a
+screen change releases gameplay input on **both** clients by design — the re-landed client failed
+the new `replacement_input_survives_ui_sync` too (`20261124T131141-native-v2-lease-navigation-oelqyuq9`),
+so the step was removed instead of shipping a non-discriminating assertion. A real-client path that
+runs a UI synchronisation **without** changing the screen is the missing piece; the client unit ref
 `session::observation::debug_tests::synchronous_release_does_not_clear_replacement_input_on_ui_sync`
-stays as the fast oracle.
+remains the fast oracle.

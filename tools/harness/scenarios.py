@@ -504,7 +504,7 @@ SCENARIOS: dict[str, Scenario] = {
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_lease_navigation.py",
                  "tools/harness/backends/client_probes.py"),
         fixture="private operator platform, airborne stand, two MCP sessions, support edge and open-door corridor",
-        proves="bounded 120-second action retains writer; cancelled old writer leaves replacement, its held input and that input across a UI synchronisation; grounded edge and open-door routes arrive",
+        proves="bounded 120-second action retains writer; cancelled old writer leaves replacement and its held input; grounded edge and open-door routes arrive",
         limits="single Linux native fixture; cancellation scheduling is nondeterministic",
     ),
     "native-v2-end-restart": _entry(

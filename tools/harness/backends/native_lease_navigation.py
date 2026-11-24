@@ -121,14 +121,11 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         steps.check("replacement_writer_retained", current.get("active") is True
                     and current.get("controller") == replacement.get("controller"))
         steps.check("replacement_input_retained", "forward" in b.call_tool("minecraft_observe")["inputs"]["held"])
-        # A UI intent consumes the UI state's pending release (`UiState::execute`), which the
-        # pre-fix client left set when `ReleaseAll` had already cleared gameplay input; the next
-        # synchronisation then replays it over the replacement writer's keys. Opening and closing
-        # the inventory is that synchronisation, and the held key must survive it.
-        b.call_tool("minecraft_open_inventory", {})
-        b.call_tool("minecraft_close_screen", {})
-        steps.check("replacement_input_survives_ui_sync",
-                    "forward" in b.call_tool("minecraft_observe")["inputs"]["held"])
+        # A UI intent consumes the UI state's pending release (`UiState::execute`), but opening a
+        # screen releases gameplay input on BOTH clients by design (restore receipt
+        # 20261124T131141-native-v2-lease-navigation-oelqyuq9: the held key is gone on the fixed
+        # client too), so an open/close pair cannot carry this row's control. The step was removed
+        # again; the row stays open with that finding instead of a non-discriminating assertion.
         b.call_tool("minecraft_press_inputs", {"keys": ["forward"], "ticks": 1, "hold": False})
     finally:
         b.close()
