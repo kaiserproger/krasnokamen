@@ -113,6 +113,7 @@ fn spectator_index_matches_the_roster_scan_and_is_built_once_per_publish() {
             }
         };
     let before = tick_index::SPECTATOR_INDEX_BUILDS.load(std::sync::atomic::Ordering::Relaxed);
+    let scans_before = entity_interest::ROSTER_SCANS.load(std::sync::atomic::Ordering::Relaxed);
     for (recipient_mode, subject_mode) in [(0, 0), (3, 0), (0, 3), (3, 3)] {
         let mut out = scene();
         {
@@ -139,6 +140,11 @@ fn spectator_index_matches_the_roster_scan_and_is_built_once_per_publish() {
     assert_eq!(
         builds, 4,
         "one spectator index per publish, not one scan per viewer and entity"
+    );
+    assert_eq!(
+        entity_interest::ROSTER_SCANS.load(std::sync::atomic::Ordering::Relaxed),
+        scans_before,
+        "broadcast_to answers from the publish set, not from a roster scan"
     );
 }
 
