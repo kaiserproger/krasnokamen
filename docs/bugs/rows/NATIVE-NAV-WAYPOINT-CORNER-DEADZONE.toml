@@ -9,5 +9,5 @@ source = "Seed-24 bed route (166,75,-282) stayed outside an ordinarily opened do
 regression = ["harness:entities:native-v2-lease-navigation", "client:krasnokamen-client:minecraft::navigation::tests::open_door_requires_centering_before_the_next_path_segment"]
 proving_assertions = { "harness:entities:native-v2-lease-navigation" = "open_door_navigation_arrived" }
 failing_first = "reported"
-fix_commit = "client:895c63f3"
-repro_check = "candidate: 895c63f3's centering hunk reverse-applies but its companion `self.movement(...)` call was re-wrapped by rustfmt and no longer matches, and reverting the centering hunk alone does not compile (`cannot find value center_before_turn`) - receipts/XClientControl/negctl/drifted-real-hunks.log; repro=client, stage-3 real client anyway"
+fix_commit = "client:00da7b10df"
+repro_check = "Committed reversal pair client:8c7ece043a (reverses 895c63f3's two navigation hunks; the movement call is restored to its pre-fix single line after a later rustfmt wrap) -> client:00da7b10df (re-land, the row's fix_commit); git diff 8c7ece043a 00da7b10df is exactly the fix patch (patch-id 1b07f639240eeac9). Stage-3 control/restore: harness:entities:native-v2-lease-navigation on the reversed and the re-landed client; hunks map promotions/NATIVE-NAV-WAYPOINT-CORNER-DEADZONE.hunks.md"
