@@ -80,9 +80,9 @@ assertion:
 
 | ref | assertion |
 |---|---|
-| `cargo:mc-core:command_locate::tests::a_metadata_error_releases_a_map_loot_callback_so_the_container_opens_again` | `command_locate_tests.rs:1022` — `a metadata error must release the pending loot/trade plan` |
-| `cargo:mc-core:command_locate::tests::a_wrong_dimension_reply_releases_a_map_loot_callback_so_the_container_opens_again` | `command_locate_tests.rs:1070` — `a wrong-dimension reply must release the pending loot/trade plan` |
-| `cargo:mc-core:command_locate::tests::worker_loss_releases_a_map_loot_callback_so_the_container_opens_again` | `command_locate_tests.rs:953` — `worker loss must release the pending loot/trade plan` |
+| `cargo:mc-core:command_locate::tests::a_metadata_error_releases_a_map_loot_callback_so_the_container_opens_again` | `command_locate_tests.rs:1020` — `a metadata error must release the pending loot/trade plan` |
+| `cargo:mc-core:command_locate::tests::a_wrong_dimension_reply_releases_a_map_loot_callback_so_the_container_opens_again` | `command_locate_tests.rs:1068` — `a wrong-dimension reply must release the pending loot/trade plan` |
+| `cargo:mc-core:command_locate::tests::worker_loss_releases_a_map_loot_callback_so_the_container_opens_again` | `command_locate_tests.rs:951` — `worker loss must release the pending loot/trade plan` |
 
 The metadata-error ref sends `LocateDone { error: Some(..) }` through `drain` (the worker's own
 answer), the wrong-dimension ref queues a callback plan whose dimension differs from
@@ -90,6 +90,22 @@ answer), the wrong-dimension ref queues a callback plan whose dimension differs 
 `cargo:mc-core:tick_tests::maps_tests::a_released_locate_plan_lets_the_container_open_again`, is
 **not evidence**: it drives `take_pending_callback_release` directly, so it is green on both sides;
 it guards that a released plan leaves `pending_loot` and a reopen re-plans.
+
+## Observed control and restore
+
+`python3 -m tools.harness ledger promote MAPS-PENDING-LEAK-ON-LOCATE-FAILURE --fix-patch
+docs/bugs/promotions/MAPS-PENDING-LEAK-ON-LOCATE-FAILURE.patch`, receipt
+`20261124T053858-ledger-promote-yl4bphf3` on `6930c32408` (`tree_dirty: false`,
+`control_tree: head`, `reversed_files` = `crates/mc-core/src/command_locate.rs`); the receipt is
+`MAPS-PENDING-LEAK-ON-LOCATE-FAILURE.json` beside this file.
+
+- Control (`ledger-1-run.log`) — all three claimed terminal paths fail at their own release
+  assertion, so the red covers the whole claim, not only worker loss:
+  - `command_locate_tests.rs:1020` — `a metadata error must release the pending loot/trade plan`;
+  - `command_locate_tests.rs:1068` — `a wrong-dimension reply must release the pending loot/trade plan`;
+  - `command_locate_tests.rs:951` — `worker loss must release the pending loot/trade plan`;
+  the maps ref is green in the control as expected (it is not evidence).
+- Restore (`ledger-3-run.log`) — all four refs green on `6930c32408`.
 
 ## What stays out of the row
 
