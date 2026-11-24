@@ -223,6 +223,23 @@ SCENARIOS: dict[str, Scenario] = {
                "profile-command refs.",
     ),
 
+    "native-v2-ledger-donkey-cargo": _entry(
+        id="native-v2-ledger-donkey-cargo",
+        summary="A chested donkey's cargo menu opens, takes seven diamonds and gives them back",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-donkey-cargo",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_donkey_cargo.py"),
+        fixture="operator pad; one tamed NoAI donkey, one chest in hand, seven diamonds given to the player",
+        proves="the client's own interaction attaches the chest and debits it, sneak+use receives "
+               "HorseInventoryMenu with 53 slots, and a quick move puts exactly seven diamonds in the first "
+               "cargo slot and brings them back",
+        limits="One tamed NoAI donkey and one chest; mule comparison, death drop and llama columns rest on "
+               "the cargo test. No offline export/reimport: the registered custody scenario needs a client "
+               "hook (`promotion_mount_export_reimport`) that the client does not implement.",
+    ),
+
     "native-world-first-start-interrupted": _entry(
         id="native-world-first-start-interrupted",
         summary="Recover a singleplayer world interrupted during its first start",
