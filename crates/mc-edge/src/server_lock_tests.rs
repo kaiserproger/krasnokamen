@@ -84,7 +84,6 @@ fn batched_dashboard_record_updates_counters_and_retains_unchanged_roster() {
         publish_us: 20,
         bytes_written: 123,
         reliable_drops: 2,
-        close_causes: Default::default(),
         chunks: DashboardChunks { loaded_total: 3 },
         entities: DashboardEntities { total: 5 },
         players: Some(crate::dashboard::DashboardPlayers {
@@ -92,6 +91,7 @@ fn batched_dashboard_record_updates_counters_and_retains_unchanged_roster() {
             max: 20,
             names: vec!["Alex".into()],
         }),
+        ..Default::default()
     });
     let sample = state.snapshot();
     assert_eq!(sample.simulation_tick, 4);

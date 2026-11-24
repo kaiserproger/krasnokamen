@@ -380,3 +380,20 @@ async fn task_cancellation_releases_admission_admin_and_writer() {
             .is_none()
     );
 }
+
+/// PERF-RECEIPT-HAS-NO-ERROR-COUNTER-ROLLUP: a session that ends normally is not an
+/// error. Only a cause recorded where it is known (a delivery-policy close, a write
+/// failure, a protocol fault) enters the rollup; the lifecycle's own removal does not.
+#[test]
+fn an_ordinary_lifecycle_drop_records_no_close_cause() {
+    let dir = tempfile::tempdir().unwrap();
+    let admin = crate::admin::Admin::open(dir.path()).unwrap();
+    let registry = ConnectionRegistry::new();
+    let id = registry.joining_id();
+    drop(ConnectionLifecycle::new(&registry, &admin, id));
+    let causes = registry.close_causes();
+    assert!(
+        causes.is_empty(),
+        "a normal connection end is not an abnormal close: {causes:?}"
+    );
+}

@@ -112,7 +112,6 @@ pub(crate) struct PumpTick {
     pub publish_us: u64,
     pub bytes_written: u64,
     pub reliable_drops: u64,
-    pub close_causes: BTreeMap<String, u64>,
     pub chunks: DashboardChunks,
     pub entities: DashboardEntities,
     pub players: Option<DashboardPlayers>,
@@ -161,8 +160,11 @@ pub struct DashboardNetwork {
     /// gone: the server corrects the client, so the symptom is rubber-banding.
     pub input_drops: u64,
     /// Abnormal connection closes by cause since start (`reliable-overflow`, a
-    /// `*-write-failed` socket drop, …): the per-window error rollup.
-    pub close_causes: BTreeMap<String, u64>,
+    /// `*-write-failed` socket drop, `*-reliable-full`, …), read from the
+    /// connection registry when the payload is built. A normal end (a client's
+    /// EOF, a core-ordered kick) never appears; that is the per-window error
+    /// rollup.
+    pub close_causes: BTreeMap<&'static str, u64>,
 }
 
 /// Actual production component execution counters, not submissions or bot writes.

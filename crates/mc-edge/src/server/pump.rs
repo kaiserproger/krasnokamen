@@ -284,7 +284,6 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                     publish_us,
                     bytes_written: server.net_counters.bytes_written.load(Ordering::Relaxed),
                     reliable_drops: server.net_counters.reliable_drops.load(Ordering::Relaxed),
-                    close_causes: server.connections.close_causes(),
                     chunks: DashboardChunks {
                         loaded_total: out.snapshot.chunks.len(),
                     },
@@ -775,7 +774,7 @@ fn route_planned_packets(
 /// to every connection. That is one reliable-queue slot per interval per
 /// connection, not one slot per other connection per keepalive reply: the
 /// per-reply fan-out filled the 512-slot reliable queue of a slow reader in
-/// seconds and the delivery policy disconnected it.
+/// seconds and the delivery policy disconnected it (`roster-reliable-full`).
 pub(super) fn broadcast_latencies(
     registry: &ConnectionRegistry,
     net_counters: &NetCounters,
@@ -826,7 +825,7 @@ pub(super) fn broadcast_latencies(
     let frame = frame.freeze();
     for (id, handles) in connections.iter() {
         if handles.reliable_tx.try_send(frame.clone()).is_err() {
-            registry.remove(*id);
+            registry.close(*id, "roster-reliable-full");
             net_counters.reliable_drops.fetch_add(1, Ordering::Relaxed);
         }
     }

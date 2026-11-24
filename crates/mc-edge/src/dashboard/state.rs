@@ -345,7 +345,6 @@ impl DashboardState {
         push_window(&mut inner.publish_us, sample.publish_us);
         inner.network.bytes_written = sample.bytes_written;
         inner.network.reliable_drops = sample.reliable_drops;
-        inner.network.close_causes = sample.close_causes;
         inner.chunks = sample.chunks;
         inner.entities = sample.entities;
         if let Some(players) = sample.players {
@@ -409,6 +408,13 @@ impl DashboardState {
         // Request-time counter, read before the state lock: the source is one
         // atomic load in its owner and must never run under this mutex.
         let input_drops = self.input_source.get().map_or(0, |source| source());
+        // Same rule for the abnormal-close rollup: the registry owns the map, and
+        // the pump never builds one per tick.
+        let close_causes = self
+            .queue_source
+            .get()
+            .map(|registry| registry.close_causes())
+            .unwrap_or_default();
         let inner = self.inner.lock();
         let tick = summarize(&inner.tick_us, inner.simulation_tick);
         let publish = summarize(&inner.publish_us, inner.simulation_tick);
@@ -430,6 +436,7 @@ impl DashboardState {
             coreperf_visibility_proof: inner.coreperf_visibility_proof.clone(),
             network: DashboardNetwork {
                 input_drops,
+                close_causes,
                 ..inner.network.clone()
             },
             journal: {

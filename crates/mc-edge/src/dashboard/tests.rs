@@ -848,16 +848,21 @@ fn input_drops_are_polled_on_request_and_exported() {
 #[test]
 fn stats_carry_wal_write_cost_and_close_causes() {
     let state = test_state();
-    let mut causes = std::collections::BTreeMap::new();
-    causes.insert("reliable-overflow".to_owned(), 2);
-    causes.insert("world-write-failed".to_owned(), 1);
-    state.record_pump_tick(PumpTick {
-        tick: 7,
-        close_causes: causes.clone(),
-        ..Default::default()
-    });
+    let registry = Arc::new(ConnectionRegistry::new());
+    state.set_queue_source(Arc::clone(&registry));
+    registry.close(mc_core::boundary::ConnectionId(3), "reliable-overflow");
+    registry.close(mc_core::boundary::ConnectionId(3), "reliable-overflow");
+    registry.close(mc_core::boundary::ConnectionId(4), "world-write-failed");
     let snapshot = state.snapshot();
-    assert_eq!(snapshot.network.close_causes, causes);
+    assert_eq!(
+        snapshot.network.close_causes.get("reliable-overflow"),
+        Some(&2),
+        "the rollup is read from the registry when the payload is built"
+    );
+    assert_eq!(
+        snapshot.network.close_causes.get("world-write-failed"),
+        Some(&1)
+    );
     let value = serde_json::to_value(&snapshot).unwrap();
     assert_eq!(
         value["network"]["close_causes"]["world-write-failed"], 1,
@@ -897,15 +902,19 @@ fn stats_carry_wal_write_cost_and_close_causes() {
     }
 }
 
-/// The close-cause counter is what a real disconnect records, not a test-only path:
-/// `ConnectionRegistry::close` is the only abnormal-close entry point.
+/// The rollup counts session ends that are errors, once, and nothing else: a
+/// delivery-policy close counts, the lifecycle's ordinary end does not.
 #[test]
 fn an_abnormal_close_is_counted_by_cause() {
     let registry = crate::server::ConnectionRegistry::new();
+    let ordinary = registry.joining_id();
     registry.close(mc_core::boundary::ConnectionId(3), "reliable-overflow");
-    registry.close(mc_core::boundary::ConnectionId(3), "reliable-overflow");
-    registry.close(mc_core::boundary::ConnectionId(4), "world-write-failed");
+    registry.remove(ordinary);
     let causes = registry.close_causes();
-    assert_eq!(causes["reliable-overflow"], 2);
-    assert_eq!(causes["world-write-failed"], 1);
+    assert_eq!(causes.get("reliable-overflow"), Some(&1));
+    assert_eq!(
+        causes.get("removed"),
+        None,
+        "a normal end is not an error: {causes:?}"
+    );
 }

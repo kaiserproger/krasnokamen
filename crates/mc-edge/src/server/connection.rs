@@ -641,16 +641,23 @@ async fn run_connection(
     )));
     let writer_task = lifecycle.writer.as_mut().expect("one writer owner");
     let mut writer_finished = false;
+    // The writer records its own terminal stage; the loop records only a stage it
+    // produced, so one session counts its end exactly once.
+    let mut writer_recorded = false;
     let exit_stage: &'static str = 'play_loop: loop {
         tokio::select! {
             ended = &mut *writer_task => {
                 writer_finished = true;
                 match ended {
                     Ok((stage, Some(reason))) => {
+                        writer_recorded = true;
                         warn!(%peer, connection = id.0, stage = "play", name = %outcome.name, reason = %reason, "core-ordered disconnect flushed; connection closed");
                         break 'play_loop stage;
                     }
-                    Ok((stage, None)) => break 'play_loop stage,
+                    Ok((stage, None)) => {
+                        writer_recorded = true;
+                        break 'play_loop stage;
+                    }
                     Err(_) => break 'play_loop "writer-panicked",
                 }
             }
@@ -861,7 +868,10 @@ async fn run_connection(
                             ended = &mut *writer_task => {
                                 writer_finished = true;
                                 match ended {
-                                    Ok((stage, _)) => break 'play_loop stage,
+                                    Ok((stage, _)) => {
+                                        writer_recorded = true;
+                                        break 'play_loop stage;
+                                    }
                                     Err(_) => break 'play_loop "writer-panicked",
                                 }
                             }
@@ -934,6 +944,9 @@ async fn run_connection(
         let _ = writer_task.await;
     }
     lifecycle.writer.take();
+    if !writer_recorded {
+        server.connections.record_close_cause(exit_stage);
+    }
     warn!(%peer, connection = id.0, stage = "play", exit = exit_stage, name = %outcome.name, "connection closed");
 
     Ok(())
@@ -1039,6 +1052,31 @@ pub(super) fn smooth_latency(previous: i32, rtt: i32) -> i32 {
 /// taken in the same priority order and bounded by [`WRITE_BATCH_BYTES`].
 /// Returns the exit stage and, for a core-ordered kick, its reason.
 pub(super) async fn play_writer(
+    writer: crate::connection::PlayWriter,
+    net_counters: Arc<NetCounters>,
+    connections: Arc<ConnectionRegistry>,
+    id: ConnectionId,
+    profile_id: uuid::Uuid,
+    receivers: PlayReceivers,
+) -> (&'static str, Option<String>) {
+    let ended = write_play(
+        writer,
+        net_counters,
+        Arc::clone(&connections),
+        id,
+        profile_id,
+        receivers,
+    )
+    .await;
+    // A socket write failure is known here and nowhere else: record it before
+    // the stage becomes a log line (PERF-RECEIPT-HAS-NO-ERROR-COUNTER-ROLLUP).
+    // The play loop reads this stage from the join handle and does not count it
+    // again.
+    connections.record_close_cause(ended.0);
+    ended
+}
+
+async fn write_play(
     mut writer: crate::connection::PlayWriter,
     net_counters: Arc<NetCounters>,
     connections: Arc<ConnectionRegistry>,

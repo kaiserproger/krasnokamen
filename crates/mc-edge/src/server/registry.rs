@@ -12,8 +12,15 @@ pub struct ConnectionRegistry {
     pub(super) setup_fences_pending: AtomicBool,
     /// Abnormal closes by cause since start: the per-window error rollup the
     /// receipt cites (a socket drop, a reliable overflow, a failed write).
+    /// Bare `&'static str` keys: the dashboard clones this map on request.
     close_causes: parking_lot::Mutex<std::collections::BTreeMap<&'static str, u64>>,
 }
+
+/// Session-ending causes that are not errors: the lifecycle's own removal
+/// (`remove`), a client's ordinary EOF (`read-frame`), a writer stopped by a
+/// delivery-policy close that was already counted (`pump-closed`), and a
+/// core-ordered kick (`core-disconnect`).
+const NORMAL_CLOSE_CAUSES: [&str; 4] = ["removed", "read-frame", "pump-closed", "core-disconnect"];
 
 #[derive(Default)]
 pub(super) struct RegistryInner {
@@ -93,13 +100,21 @@ impl ConnectionRegistry {
         }
     }
 
-    /// Every abnormal close since start by cause, in cause order.
-    pub fn close_causes(&self) -> std::collections::BTreeMap<String, u64> {
-        self.close_causes
-            .lock()
-            .iter()
-            .map(|(cause, count)| ((*cause).to_owned(), *count))
-            .collect()
+    /// Every abnormal close since start by cause, in cause order. The map is
+    /// cloned whole: the dashboard reads it on request, never on the tick path.
+    pub fn close_causes(&self) -> std::collections::BTreeMap<&'static str, u64> {
+        self.close_causes.lock().clone()
+    }
+
+    /// Count one session-ending cause, once, where it is known: a delivery-policy
+    /// [`close`](Self::close), the play writer's own terminal stage, or the play
+    /// loop's exit stage. A normal end (see [`NORMAL_CLOSE_CAUSES`]) is not an
+    /// error and never enters the rollup.
+    pub(crate) fn record_close_cause(&self, cause: &'static str) {
+        if NORMAL_CLOSE_CAUSES.contains(&cause) {
+            return;
+        }
+        *self.close_causes.lock().entry(cause).or_insert(0) += 1;
     }
 
     /// Allocate the next connection id.
@@ -330,9 +345,11 @@ impl ConnectionRegistry {
         self.close(id, "removed");
     }
 
-    /// [`Self::remove`] naming why: the connection owner logs `cause`.
+    /// [`Self::remove`] naming why: the connection owner logs `cause`, and an
+    /// abnormal cause counts once in [`close_causes`](Self::close_causes). A
+    /// normal end (`removed`) counts nothing.
     pub fn close(&self, id: ConnectionId, cause: &'static str) {
-        *self.close_causes.lock().entry(cause).or_insert(0) += 1;
+        self.record_close_cause(cause);
         crate::vanilla_items::unmark(id);
         let closer = {
             let mut inner = self.inner.lock();
@@ -366,6 +383,9 @@ impl ConnectionRegistry {
         }
     }
 
+    /// The lifecycle's final cleanup: drop the entry and release admission. The
+    /// session's own end was already recorded where it was known, so this removal
+    /// counts nothing.
     pub(super) fn finish(&self, id: ConnectionId) {
         self.remove(id);
         self.inner.lock().admitted.remove(&id);
