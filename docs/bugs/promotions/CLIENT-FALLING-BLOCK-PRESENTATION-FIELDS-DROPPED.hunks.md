@@ -6,8 +6,8 @@ The stage0 merge-drift repair `54b79f73` deleted that block; the wave-2 re-land 
 current file's shape.
 
 Reversal route (`docs/bugs/README.md`, "Client rows whose real fix predates the client rename"): the
-committed reversal `client:a8cf7f70a06939218704f202594c8901879dcbe9` removes the presentation
-contract, and `client:6a5dbb67` re-lands it as the row's `fix_commit`. `git diff a8cf7f70 6a5dbb67`
+committed reversal `client:f8c6eef376cf7258d23c6af202ec0f8bad14a2fa` removes the presentation
+contract, and `client:89f2223e` re-lands it as the row's `fix_commit`. `git diff f8c6eef3 89f2223e`
 is the ten lines below, byte for byte.
 
 ## Hunk 1 — `src/minecraft/entities.rs`, `@@ -252,6 +252,12 @@` in `13f1f28b`
@@ -23,7 +23,7 @@ is the ten lines below, byte for byte.
 +    }
 ```
 
-HEAD equivalent (what the pair adds back, `6a5dbb67`):
+HEAD equivalent (what the pair adds back, `89f2223e`):
 
 ```
 +    // The falling-block automation contract (restored from 13f1f28b, which the stage0 merge-drift
@@ -56,7 +56,7 @@ Adaptations, per the (a)/(b)/(c) classes:
   commit for the same reason (it documents why the block exists) and is removed by the reversal,
   so it is part of the ten-line pair.
 - The `predicted_velocity` assignment between the two poses is deliberately untouched: it belongs
-  to the other row and its own reversal (`client:f1168d66` → `client:bf54c241`).
+  to the other row and its own reversal (`client:593f7957` → `client:e541641c`).
 
 ## Omitted hunks of `13f1f28b`
 

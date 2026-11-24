@@ -5,9 +5,9 @@ Real fix: `client:d03374260edf8d738f23daf8dd148beecd8e0873`. After review
 commit really closes: the automation contract had no `predicted_velocity`, so no consumer could
 model the prediction the client runs between position packets.
 
-Reversal route: the committed reversal `client:f1168d66f87a22c36ca200b16a9f3f538196a9a2` removes
-the field and `client:bf54c2417480ebf56dfbf228d6f3fcbd1b38129a` re-lands it as the row's
-`fix_commit`. `git diff f1168d66 bf54c241` is the four lines below, and the reversed blob is
+Reversal route: the committed reversal `client:593f7957134733579e67515ff9a1cf3e47a83534` removes
+the field and `client:e541641c53a0c2cf452e6f5f694e3758e8550519` re-lands it as the row's
+`fix_commit`. `git diff 593f7957 e541641c` is the four lines below, and the reversed blob is
 `ffe8a4c1`, the exact pre-image `d0337426` started from.
 
 ## Hunk 1 — `src/minecraft/entities.rs`, `@@ -265,6 +265,10 @@` in `d0337426`
@@ -30,7 +30,7 @@ between belong to CLIENT-FALLING-BLOCK-PRESENTATION-FIELDS-DROPPED and stay in b
 velocity with no drag. The server (`crates/mc-core/src/falling.rs`: the gravity term is zeroed, the
 `* 0.98` drag is applied on every branch) does keep integrating, and the stale-velocity cause it
 described cannot occur on the packet path (`SET_ENTITY_MOTION` and `move_to` with a velocity both
-already cleared `falling_velocity`). `client:a5769870` removes that hunk and restores
+already cleared `falling_velocity`). `client:f7483f34` removes that hunk and restores
 `falling_velocity.unwrap_or(velocity)` for every block, with the 0.98 drag pinned by
 `falling_block_no_gravity_keeps_air_drag_without_gravity`, and the freeze fence now feeds its stop
 through `SET_ENTITY_MOTION` instead of writing `entity.velocity` directly.
