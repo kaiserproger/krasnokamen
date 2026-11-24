@@ -848,6 +848,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the camera is unchanged and the hand region (right half above the hotbar) keeps the same pixels across three frames; the pre-fix idle sway moves it",
         limits="one tool, one still pose, one rasterizer; a zero/2-pixel threshold is calibrated on the fixed and pre-fix clients",
     ),
+    "issue1-03-drawn-index": _entry(
+        id="issue1-03-drawn-index", summary="The drawn-index count stays bounded while the camera turns (ISSUE-1-03)",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="issue1-03-drawn-index", requires=("xvfb",),
+        sources=("tools/harness/issue1_03_drawn_index_scene.json", "tools/harness/backends/scene_shot_steps.py"),
+        fixture="private native client on a frozen-tick stone pad turning through eight yaws, observing data.render",
+        proves="render_drawn_index_bounded at each yaw: the drawn index count stays under the absolute bound and within max_growth of the first sample; the dropped per-frame FrameStats reset accumulates indices and fails",
+        limits="one small scene at low preset; the bounds are calibrated on the fixed and reversal clients",
+    ),
     "issue1-18-sheep-goat": _entry(
         id="issue1-18-sheep-goat", summary="Goat horns and sheep wyther rigs render upright and aligned (ISSUE-1-18)",
         owner="core:harness", evidence="graphical", profile="scene-shot",

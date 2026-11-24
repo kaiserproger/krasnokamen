@@ -1,0 +1,172 @@
+{
+  "seed": 103,
+  "client_settings": {
+    "render_distance": 6,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 990 159 990 1010 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 990 160 990 1010 165 1010 minecraft:air"
+    },
+    {
+      "wait_terrain": true
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "look": [
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "assert_render_bounded": {
+        "max_index_count": 1000000000,
+        "max_growth": 1000000000
+      }
+    },
+    {
+      "look": [
+        45,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "assert_render_bounded": {
+        "max_index_count": 1000000000,
+        "max_growth": 1000000000
+      }
+    },
+    {
+      "look": [
+        90,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "assert_render_bounded": {
+        "max_index_count": 1000000000,
+        "max_growth": 1000000000
+      }
+    },
+    {
+      "look": [
+        135,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "assert_render_bounded": {
+        "max_index_count": 1000000000,
+        "max_growth": 1000000000
+      }
+    },
+    {
+      "look": [
+        180,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "assert_render_bounded": {
+        "max_index_count": 1000000000,
+        "max_growth": 1000000000
+      }
+    },
+    {
+      "look": [
+        225,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "assert_render_bounded": {
+        "max_index_count": 1000000000,
+        "max_growth": 1000000000
+      }
+    },
+    {
+      "look": [
+        270,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "assert_render_bounded": {
+        "max_index_count": 1000000000,
+        "max_growth": 1000000000
+      }
+    },
+    {
+      "look": [
+        315,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "assert_render_bounded": {
+        "max_index_count": 1000000000,
+        "max_growth": 1000000000
+      }
+    }
+  ]
+}
