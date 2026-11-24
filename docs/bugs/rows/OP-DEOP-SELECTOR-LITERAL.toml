@@ -11,6 +11,7 @@ regression = [
   "cargo:mc-edge:server::admin_tests::profile_selectors_empty_targets_use_vanilla_error_without_fake_profiles",
   "cargo:mc-edge:admin::whitelist_tests::whitelist_removal_does_not_remove_another_uuid_with_the_same_name",
   "cargo:mc-edge:server::admin_tests::profile_selectors_keep_quoted_spaces_for_op_deop_and_whitelist",
+  "harness:entities:native-v2-ledger-op-selector",
 ]
 fix_commit = "patch:b69e31e85a2d333c95235b2cef5bedc8a6489fb6fee306cea9f0632eddea0c0e"
 failing_first = "reported"

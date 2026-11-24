@@ -6,5 +6,6 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-002"
-regression = ["cargo:mc-core:tick::book_actions::tests::lectern_insert_read_turn_take_preserves_exact_book"]
+regression = ["cargo:mc-core:tick::book_actions::tests::lectern_insert_read_turn_take_preserves_exact_book", "harness:entities:native-v2-ledger-lectern"]
 repro_check = "candidate: lectern.rs is created by 2ccf8cc1a and `git log -S'button == 3' -- lectern.rs` shows the take branch was never touched since, so reversing means deleting the module; module 7/7 green, only a synthetic mutation was red and is not counted (receipts/XCoreItems)"
+fix_commit = "patch:d769f8ec9dad1aa2b956a395b8a4fa01e0a5951066e50b80e6fc719f53a4eb1c"

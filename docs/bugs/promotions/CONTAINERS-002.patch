@@ -1,0 +1,39 @@
+diff --git a/crates/mc-core/src/tick/containers.rs b/crates/mc-core/src/tick/containers.rs
+--- a/crates/mc-core/src/tick/containers.rs
++++ b/crates/mc-core/src/tick/containers.rs
+@@ -466,6 +466,7 @@
+             "Crafting Table".to_owned(),
+             // Grid/result custody belongs to this player's Menu, not the block.
+             0,
+         )),
+         "minecraft:beacon" => Some((crate::inventory::MenuKind::Beacon, "Beacon".into(), 0)),
++        "minecraft:lectern" => Some((crate::inventory::MenuKind::Lectern, "Lectern".into(), 1)),
+         "minecraft:enchanting_table" => Some((
+             crate::inventory::MenuKind::EnchantingTable,
+             "Enchant".into(),
+diff --git a/crates/mc-core/src/tick/input/interact.rs b/crates/mc-core/src/tick/input/interact.rs
+--- a/crates/mc-core/src/tick/input/interact.rs
++++ b/crates/mc-core/src/tick/input/interact.rs
+@@ -198,6 +198,9 @@
+     if crate::shelf::use_on(state, entity, *hand, *position, *face, *cursor) {
+         return;
+     }
++    if crate::lectern::use_on(state, entity, *hand, *position, changes) {
++        return;
++    }
+     if crate::ender_chest::open(state, entity, *connection, *position, changes) {
+         return;
+     }
+diff --git a/crates/mc-core/src/tick/input/inventory.rs b/crates/mc-core/src/tick/input/inventory.rs
+--- a/crates/mc-core/src/tick/input/inventory.rs
++++ b/crates/mc-core/src/tick/input/inventory.rs
+@@ -505,6 +505,9 @@
+         crate::tick::close_player_menu(state, *connection);
+         return;
+     }
++    if crate::lectern::button(state, entity, *window, *button, changes) {
++        return;
++    }
+     let bookshelves = stations::bookshelves_for_player(state, entity);
+     let registry = Arc::clone(&state.registry);
+     let native = |player: &mut crate::player::PlayerState, _: &mut [mc_data::ItemStack]| {
