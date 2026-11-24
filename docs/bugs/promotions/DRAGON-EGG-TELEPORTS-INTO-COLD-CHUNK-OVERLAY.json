@@ -1,0 +1,44 @@
+{
+  "id": "DRAGON-EGG-TELEPORTS-INTO-COLD-CHUNK-OVERLAY",
+  "verdict": "promoted",
+  "fix_commit": "patch:fe7e45fa5d7e03c8463fd0da3b11e298ca7b167fdbb4efe9921bdc1412a24221",
+  "fix_commit_full": "patch:fe7e45fa5d7e03c8463fd0da3b11e298ca7b167fdbb4efe9921bdc1412a24221",
+  "promoted_at": "2026-11-24T05:07:33+00:00",
+  "tree_head": "5da40b7524bea7caf2d05873466481d65c2eb8e1",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "fe7e45fa5d7e03c8463fd0da3b11e298ca7b167fdbb4efe9921bdc1412a24221",
+  "reversed_files": [
+    "crates/mc-core/src/vanilla_interact.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_never_teleports_into_a_cold_overlay": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-ledger-dragon-egg": {
+      "state": "unrunnable",
+      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/5da40b7524be-server-x86_64-unknown-linux-gnu-incr/krasnokamen: [Errno 2] No such file or directory: '/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/ledger-builds/d743f92efcede44e08aec37b845d438fd2965a8005876709f87e0f9ee541797d.json'. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_never_teleports_into_a_cold_overlay": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T045150-native-v2-ledger-dragon-egg-zohyzqtz/result.json",
+    "tree_head": "5da40b7524bea7caf2d05873466481d65c2eb8e1",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "d743f92efcede44e08aec37b845d438fd2965a8005876709f87e0f9ee541797d",
+    "covers": [
+      "harness:entities:native-v2-ledger-dragon-egg"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T050217-ledger-promote-b9sp88my"
+}

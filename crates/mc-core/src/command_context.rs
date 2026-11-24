@@ -269,6 +269,19 @@ fn score(
         .and_then(|scores| scores.get(objective))
         .map(|score| score.value))
 }
+/// Separates a translation key from its arguments inside the `Err(String)` channel.
+const ERROR_ARGS: char = '\u{1f}';
+
+/// A translation key with its `with` arguments, encoded for the `Err(String)` channel.
+fn translated_error(key: &str, arguments: &[&str]) -> String {
+    let mut message = String::from(key);
+    for argument in arguments {
+        message.push(ERROR_ARGS);
+        message.push_str(argument);
+    }
+    message
+}
+
 fn condition(state: &TickState, context: Context, text: &mut &str) -> Result<i32, String> {
     match word(text)? {
         "entity" => Ok(select(state, context, word(text)?)?.len() as i32),
@@ -448,7 +461,10 @@ fn condition(state: &TickState, context: Context, text: &mut &str) -> Result<i32
             let id = mc_data::Identifier::parse(raw)
                 .map_err(|_| "argument.resource_or_id.invalid".to_owned())?;
             let Some(predicate) = state.datapacks.packs().predicates.get(id.as_str()) else {
-                return Err("argument.resource_or_id.no_such_element".into());
+                return Err(translated_error(
+                    "argument.resource_or_id.no_such_element",
+                    &[raw, "minecraft:predicate"],
+                ));
             };
             let location =
                 crate::advancements::location_at(state, context.dimension, context.position);
@@ -762,7 +778,24 @@ fn execute_branches(
         let outcome = match result {
             Ok(outcome) => outcome,
             Err(message) => {
-                error(state, context, message);
+                // A `condition`/argument refusal may be a translation key that needs
+                // its arguments (vanilla `argument.resource_or_id.no_such_element`
+                // renders the id and the registry); the `Err(String)` channel carries
+                // them after ERROR_ARGS so the client never sees the raw template.
+                if let Some((key, rest)) = message
+                    .split_once(ERROR_ARGS)
+                    .filter(|(key, _)| crate::command_feedback::is_translation_key(key))
+                {
+                    let arguments = rest.split(ERROR_ARGS).map(crate::command_feedback::text).collect();
+                    state.push_player(
+                        context.connection,
+                        crate::boundary::PlayerChange::StyledChat {
+                            content: crate::command_feedback::translated(key, arguments),
+                        },
+                    );
+                } else {
+                    error(state, context, message);
+                }
                 Some((false, 0))
             }
         };

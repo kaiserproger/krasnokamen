@@ -59,12 +59,20 @@ tree refuses the fields in `supports()` and creates no body, which is the shape 
 
 ## Proving refs (file:line of the failing assertion)
 
-- `harness:entities:native-v2-summon-nbt` — with the patch reversed the `fuse` summon is refused
-  (`Unknown or unsupported summon NBT field fuse`), the scenario settles on that refusal and reds
-  `tnt_summon_accepts_fuse` (`tools/harness/backends/native_v2.py`, `_ledger_summon_nbt`). The candidate
-  run must be `passed` and carry this tree's fingerprint.
+- `harness:entities:native-v2-summon-nbt` — the gate settles on either the two bodies or the refusal line
+  and asserts acceptance (`tnt_summon_accepts_fuse`, `falling_block_summon_accepts_block_state`,
+  `tools/harness/backends/native_v2.py::_ledger_summon_nbt`), so a reversed server would red an
+  **assertion**, not a wait. In the recorded control (`20261124T031554-ledger-promote-evc_j_f4`) this ref
+  was **unrunnable**, not red: a promote controls a worktree without a release pin of its own and refuses
+  to reuse the candidate's (`ledger-control-candidate/...ledger-builds/<sha>.json` missing). The red that
+  carried the promotion came from the two cargo refs below; the client half is green on the candidate
+  (`20261124T031405-native-v2-summon-nbt-9pbmsgbg`, tree `6fd3089969`).
 - `cargo:mc-core:command_summon::tests::summon_tnt_accepts_fuse_and_explosion_power_and_applies_them` and
   `cargo:mc-core:command_summon::tests::summon_falling_block_accepts_block_state_and_time_and_defaults_to_sand`
-  (`crates/mc-core/src/command_summon_tests.rs`) — the same refusal reds them in the control.
+  (`crates/mc-core/src/command_summon_tests.rs`) — the same refusal reds them in the control (observed
+  `FAIL`).
 - `cargo:mc-core:command_summon::tests::summon_rejects_tnt_and_falling_block_fields_on_wrong_entities_and_bad_values`
   stays green with the patch reversed (it asserts refusals) and is **not evidence**.
+- The gate's fuse assertion is `500 < fuse <= 1000` because the fuse ticks down between the summon and the
+  read (first candidate run read `801s`); it is timing-dependent, so the scene needs ≥3 runs before it is
+  used as a red half (see `PROGRESS.md` run log).
