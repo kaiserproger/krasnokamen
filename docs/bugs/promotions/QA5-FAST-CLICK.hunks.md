@@ -44,6 +44,13 @@ the production hunks above (patch-id `c9f3c8a7c5fd…`, `paths`
 `src/player.rs`, `src/player/interaction.rs`, `src/session/actions.rs`), and no line outside the
 original pre-image is introduced.
 
+Because the hand-port sits in the tip's context (the files have drifted since `a2d0c81d`, so the
+`@@` headers and context lines differ and the patch-id cannot be compared with the original), the
+pair was verified by its changed-line sets instead: every `+` line of `diff 2e56cf16 530556e8` also
+appears in `a2d0c81d`'s diff, the only `a2d0c81d` `+` lines the re-land does not carry are the inline
+test module's, and the two `-` line sets are identical. So the pair deletes and re-adds exactly the
+original fix's production lines.
+
 ## Proving ref
 
 `harness:entities:native-v2-input-menus` → `physical_short_click_breaks_block`
