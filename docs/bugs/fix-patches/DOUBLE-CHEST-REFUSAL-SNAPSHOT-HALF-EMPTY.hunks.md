@@ -1,7 +1,7 @@
 # DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY — patch-mode fix identity (third form)
 
 Fix: `docs/bugs/fix-patches/DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY.patch`
-(`fix_commit = "patch:0377bd2ac02a94a8b3d767f050439bb3a8e8d11d37851ae5ddcbcfb64b42a3a3"`).
+(`fix_commit = "patch:cbeff2bfde11f4413fdf2125fefebec45c04e494b634036030ca2441b064ebf7"`).
 Re-audit:
 `python3 -m tools.harness ledger promote DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY --fix-patch docs/bugs/fix-patches/DOUBLE-CHEST-REFUSAL-SNAPSHOT-HALF-EMPTY.patch --dry-run`
 
@@ -34,11 +34,12 @@ rejected).
 
 ## a/-side
 
-None. The a/-side is the pre-fix function text exactly as it stood in
-`ac8c352a3` (`state: &TickState`, `player.inventory_transition_refused(...)`
-for vehicles and the tail): `&mut` callers coerce to `&`, so neither the
-call sites nor the kept tests need an adaptation. No text outside the original
-pre-image is constructed.
+None. The a/-side blob is the pre-image `97b06181d` verbatim (the new-side
+blob is `af941f920`): the old signature `state: &TickState`, the
+`player.inventory_transition_refused(...)` form for vehicles and the tail.
+`&mut` callers coerce to `&`, so neither the call sites nor the kept tests need
+an adaptation, and there is no text outside the pre-image (an earlier revision
+repeated the doc comment; `patch:cbeff2bf` removes that).
 
 ## Proving refs (crates/mc-core/src/chests_tests.rs)
 

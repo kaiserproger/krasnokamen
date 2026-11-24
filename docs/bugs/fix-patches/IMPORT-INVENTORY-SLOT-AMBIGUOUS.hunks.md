@@ -56,11 +56,20 @@ their HEAD paths above.
 None. The pre-fix `Inventory`/`equipment` decode is the historical text of
 `1e13fffe5`, kept verbatim; `stack_from_fields` (which it calls) stays in the
 file; the moved definition and message are reversed at their HEAD paths, and
-the `use` line drops the deleted name (a plain pre-image, not an adaptation).
+the `use` line in `crates/mc-world-conversion/src/import.rs:33` drops the
+deleted name — the one adaptation the post-fix split forces, because the
+pre-image's single `import.rs` had no separate `use players::{..}` line.
 
 ## Proving refs
 
-The control goes red by assertion on `player_slot_import_tests` — e.g.
+The control goes red by assertion on `player_slot_import_tests` and on the
+mc-core custody tests (`promote` receipt
+`.analysis/validation/20261123T235118-ledger-promote-70x6am7i`):
+`native_player_custody_tests.rs:425` (duplicate recipe book),
+`:137` (long/short WAL inventory), `:301` (duplicate crafting grid / carried
+before first match), `:347` (missing item id with payload), `:112` (duplicate
+carried / crafting grid in WAL opaque). For example, in
+`player_slot_import_tests`, e.g.
 `missing_inventory_slot_refuses_import_before_load_save` reaches
 `refused()`'s `expect_err("ambiguous custody must refuse import before load/save")`
 (`crates/mc-world-conversion/src/player_slot_import_tests.rs:57`) because the

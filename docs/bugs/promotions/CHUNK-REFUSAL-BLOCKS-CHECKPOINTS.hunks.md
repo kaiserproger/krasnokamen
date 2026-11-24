@@ -31,44 +31,42 @@ Carried (13 of the commit's 23 non-test hunks):
 | capture.rs -211,11 dirty_absent failure + second quarantine | capture.rs:297-311 |
 | capture.rs -227,6 debt skips failed | capture.rs:323-325 |
 | capture.rs -276,6 metadata of quarantined chunk not written | capture.rs:375-379 |
-| capture.rs -341,6 `block_entity_dirty` cleared on flush | capture.rs:461 |
+| capture.rs -341,6 `block_entity_dirty` cleared on flush | capture.rs:393-394 |
 | world.rs -724,8 `defer_checkpoint_chunk` counts instead of load_error | world.rs:758-767 |
 | residency.rs -282,7 doc | residency.rs:285 |
 | residency.rs -298,9 reject keeps dirty_sections, clears dirty_absent | residency.rs:301-306 |
 | journal.rs -106,16 declined/skipped logging | journal.rs:204-234 |
 | mc-world chunk_nbt.rs -369,6 importer: the block owns its record | chunk_nbt.rs:372-395 |
 
-Not carried (10 of 23): world.rs -1375,6 (`RefusedChunk` + Display), world.rs
--1382,10 (`ChunkCapture.refused` field + `refused()`), residency.rs -406,6
-(`refused: Vec::new()` in the generated capture): (b) the kept chunk_loader
-tests call `capture.refused()[0].unsaved/.scheduled`; reversing them is why the
-`fix_commit` tree does not compile. Adaptation that follows: the reversed
-capture start initialises the kept field as `refused: Vec::new()`
-(capture.rs:228-249 a/ side; the only a/ line that is not in the original
-pre-image), so `refused()` stays empty in the control.
+Not carried (10 of 23), all reason (b) — one list:
 
-The a/-side compiles on the tip: plain
-`cargo check -p mc-core --tests` on the reversed tree, log kept at
-`receipts/D123/D123Persist/review/CHUNK-aside-cargo-check.log` (no harness
-profile wraps a bare check).
+1. `world.rs` -1375,6 (`RefusedChunk` + Display), -1382,10
+   (`ChunkCapture.refused` field + `refused()`) and `residency.rs` -406,6
+   (`refused: Vec::new()` in the generated capture): the kept chunk_loader
+   tests call `capture.refused()[0].unsaved/.scheduled`. Adaptation that
+   follows: the reversed capture start initialises the kept field as
+   `refused: Vec::new()` (capture.rs:228-249 a/ side; the only a/ line that is
+   not in the original pre-image), so `refused()` stays empty in the control.
+2. `Box<ChunkCapture>` in `core.rs` (`JournalWork::RequireGenerated.capture`),
+   `core/journal.rs` (`NativeWork::RequireGenerated.chunks`) and the two boxing
+   sites in `core/tick_loop.rs`: the kept tests construct the boxed form —
+   `core_journal_backpressure_tests.rs:413` and `:839` send
+   `JournalWork::RequireGenerated { capture: Box::new(invalid), .. }`.
+3. `world.rs` `block_entity_dirty` (field, initializer, insert in
+   `mark_block_entity_dirty`): the kept `world_capture_tests.rs:354` reads
+   `world.block_entity_dirty`.
 
-Not carried (7 hunks, all reason (b)):
+The compile evidence: reversing any of them fails the control build
+(E0308 at the two backpressure lines, E0609 at the world_capture line;
+observed during this revision) and HEAD keeps both shapes, so these are
+kept-API exclusions, not missing HEAD equivalents.
 
-- `Box<ChunkCapture>` in `core.rs` (`JournalWork::RequireGenerated.capture`),
-  `core/journal.rs` (`NativeWork::RequireGenerated.chunks`) and the two boxing
-  sites in `core/tick_loop.rs`: the kept tests construct the boxed form —
-  `core_journal_backpressure_tests.rs:413` and `:839` send
-  `JournalWork::RequireGenerated { capture: Box::new(invalid), .. }`.
-- `world.rs` `block_entity_dirty` (field, initializer, insert in
-  `mark_block_entity_dirty`): the kept `world_capture_tests.rs:354` reads
-  `world.block_entity_dirty`.
-
-Both were observed as compile failures when reversed
-(E0308 at the two backpressure lines, E0609 at the world_capture line), so the
-control could not build; HEAD does keep `Box<ChunkCapture>` (`core.rs:323`,
-`core/journal.rs:693`) and the field, so this is a kept-API exclusion, not a
-missing HEAD equivalent, and the row's custody behaviour does not depend on
-either.
+The a/-side compiles on the tip: plain `cargo check -p mc-core --tests` on the
+reversed tree at `HEAD 5fd0d7dd04` (a-side blobs from `patch:7b7f5f55`),
+command `git apply -R docs/bugs/promotions/CHUNK-REFUSAL-BLOCKS-CHECKPOINTS.patch
+&& cargo check -p mc-core --tests`; log (with its reconciliation header) at
+`receipts/D123/D123Persist/review/CHUNK-aside-cargo-check.log`. No harness
+profile wraps a bare check.
 
 ## a/-side adaptation
 

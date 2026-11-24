@@ -1,13 +1,11 @@
 diff --git a/crates/mc-core/src/tick/containers.rs b/crates/mc-core/src/tick/containers.rs
-index c288d0f88..af941f920 100644
+index 97b06181d..af941f920 100644
 --- a/crates/mc-core/src/tick/containers.rs
 +++ b/crates/mc-core/src/tick/containers.rs
-@@ -261,29 +261,54 @@ pub(crate) fn debug_menu_snapshot(
+@@ -261,27 +261,54 @@ pub(crate) fn debug_menu_snapshot(
  
  /// Resync the real current menu after refusing a native inventory transition.
  /// A vehicle or block menu must never be imaged with placeholder empty cargo.
--/// Resync the real current menu after refusing a native inventory transition.
--/// A vehicle or block menu must never be imaged with placeholder empty cargo.
 +/// Every caller is a live player's own input path (pick item, swap hands,
 +/// creative slot, drop, book edit, interact), so `players[&entity]` is an
 +/// invariant here rather than a checked precondition.
