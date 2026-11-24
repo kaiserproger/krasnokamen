@@ -1,0 +1,67 @@
+{
+  "id": "NATIVE-UNLOADED-EYE-SESSION-END",
+  "verdict": "promoted",
+  "fix_commit": "client:6048e4756e",
+  "fix_commit_full": "6048e4756e5fdfb2dbf626282bb4599dca501e31",
+  "promoted_at": "2026-11-24T12:15:18+00:00",
+  "tree_head": "889f4346fb7f77708bf6007a593cd36cc2a4a482",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T114037-native-unloaded-eye-k4hw1yn_/result.json",
+    "client_head": "390a7659af8253c7c8449443ef863ba9c73dac63",
+    "server_binary_sha256": "4d5b613b4da97e0fbcbdc612eea417d4ca392c6c2478fc9f34c42e91d5f5b00a",
+    "red": [
+      "harness:scene-shot:native-unloaded-eye"
+    ],
+    "states": {
+      "harness:scene-shot:native-unloaded-eye": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T114014-native-unloaded-eye-ytnx7_qi/result.json",
+    "client_head": "6048e4756e5fdfb2dbf626282bb4599dca501e31",
+    "server_binary_sha256": "4d5b613b4da97e0fbcbdc612eea417d4ca392c6c2478fc9f34c42e91d5f5b00a",
+    "green": [
+      "harness:scene-shot:native-unloaded-eye"
+    ],
+    "states": {
+      "harness:scene-shot:native-unloaded-eye": "green"
+    },
+    "tree_head": "889f4346fb7f77708bf6007a593cd36cc2a4a482",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T114014-native-unloaded-eye-ytnx7_qi/result.json",
+    "client_head": "6048e4756e5fdfb2dbf626282bb4599dca501e31",
+    "server_binary_sha256": "4d5b613b4da97e0fbcbdc612eea417d4ca392c6c2478fc9f34c42e91d5f5b00a",
+    "green": [
+      "harness:scene-shot:native-unloaded-eye"
+    ],
+    "states": {
+      "harness:scene-shot:native-unloaded-eye": "green"
+    },
+    "tree_head": "889f4346fb7f77708bf6007a593cd36cc2a4a482",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "6c61c8634efc22abb38de0065919ed6b37c1b78c",
+    "paths": [
+      "src/player.rs",
+      "src/player/movement.rs",
+      "src/session/observation.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:session::observation::destruction_tests::unloaded_eye_keeps_play_frames_and_waits_for_terrain": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T121415-ledger-promote-5rv32m09"
+}

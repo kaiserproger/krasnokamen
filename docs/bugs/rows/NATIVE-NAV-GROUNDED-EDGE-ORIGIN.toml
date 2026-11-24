@@ -4,10 +4,11 @@ title = "Native navigation refuses a grounded edge pose whose support lies in a 
 area = "client"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Seed-24 civilization return to (131,76,-216) refused without movement from (143.865930,75,-203.841109). Received terrain shows air below the center and grass support in the overlapping neighboring footprint. Original planner considers only its center column. Reproduced on original client 75755212b117; the four-cardinal regression failed before the fix. Corrected native pin 75755212b117-345e4b64 passed 20 navigation tests and three original saved-world windowed returns with actual grounded arrival. The correction and grounded_edge_pose_can_enter_a_supported_neighbor_column are in solaris-client commit 895c63f3444e81087913d363c4dfc3feed09a4da, included in client base 5d3868fa. Fresh civilization acceptance remains 0/3; independent acceptance and formal ledger promotion remain pending."
 regression = ["harness:entities:native-v2-lease-navigation", "client:krasnokamen-client:minecraft::navigation::planner::tests::grounded_edge_pose_can_enter_a_supported_neighbor_column"]
 proving_assertions = { "harness:entities:native-v2-lease-navigation" = "edge_navigation_arrived" }
 failing_first = "reported"
-fix_commit = "client:895c63f3"
-repro_check = "real-hunk control receipts/XClientControl/negctl/negctl-real-B-grounded-edge.log (reversing the planner anchor hunk reds the ref on the grounded edge origin); repro=client, so candidate: real-client check required"
+fix_commit = "client:62de38d313"
+repro_check = "Committed reversal pair client:520f524b1b (reverses 895c63f3's planner anchor hunk; the pre-fix center-column loop is the historical text) -> client:62de38d313 (re-land, the row's fix_commit); git diff 520f524b1b 62de38d313 is exactly the fix patch (patch-id 0912994e12200a52). Stage-3 control/restore: harness:entities:native-v2-lease-navigation on the reversed and the re-landed client; hunks map promotions/NATIVE-NAV-GROUNDED-EDGE-ORIGIN.hunks.md"
+promotion = "docs/bugs/promotions/NATIVE-NAV-GROUNDED-EDGE-ORIGIN.json"

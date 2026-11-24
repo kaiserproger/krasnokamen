@@ -4,9 +4,11 @@ title = "/team add disconnects the native client: it decodes set_player_team (Pl
 area = "client"
 repro = "client"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F2, 2/2): server encodes the 26.3 layout (receipts/BreakJoinRows/javap/SetPlayerTeamParameters.txt: display name, prefix, suffix, visibility, collision, Optional<color>, options); solaris-client src/ui/hud.rs:304-318 decodes the old order. Fixed in solaris-client ef4dc465 (client gate line wt/ClientGateLine d5f25569 = f4bd26d4 + ef4dc465 + census fix 04f3e0f9, pin pins/d5f25569b785-client-x86_64-unknown-linux-gnu-incr, receipts/ClientGateLine/pin.log; 3/3 team scene receipts/ClientTeamPacket/run-team{1,2,3}.log, negative control with the old client receipts/ClientTeamPacket/run-oldctl.log). Status stays open: client-repo rows wait for the owner's promotion-rule decision."
-regression = ["client:krasnokamen-client:session::hud_packet_tests::rc1_team_packet_decodes_the_26_3_parameter_order"]
+regression = ["harness:entities:native-v2-team-deaths", "client:krasnokamen-client:session::hud_packet_tests::rc1_team_packet_decodes_the_26_3_parameter_order"]
 failing_first = "reported"
-fix_commit = "client:ef4dc465"
-repro_check = "real-hunk control: reversing ef4dc465's src/ui/hud.rs hunk reds the ref ('unknown NBT type 116'); real-client gate for stage 3 is harness:entities:native-v2-team-deaths; area=client, candidate"
+fix_commit = "client:5aca2e4a1c"
+repro_check = "Committed reversal pair client:07dd26cce6 (reverses ef4dc465's src/ui/hud.rs hunk, the historical pre-image text) -> client:5aca2e4a1c (re-land, the row's fix_commit); git diff 07dd26cce6 5aca2e4a1c is exactly the fix patch (patch-id 9809f73b444a1ce2). The stage-3 control is harness:entities:native-v2-team-deaths on the reversed client (session lost at the first team command), restore on the re-landed client; hunks map promotions/NATIVE-SET-PLAYER-TEAM-26-3-LAYOUT.hunks.md"
+proving_assertions = { "harness:entities:native-v2-team-deaths" = "client_in_play_after_team_packet" }
+promotion = "docs/bugs/promotions/NATIVE-SET-PLAYER-TEAM-26-3-LAYOUT.json"

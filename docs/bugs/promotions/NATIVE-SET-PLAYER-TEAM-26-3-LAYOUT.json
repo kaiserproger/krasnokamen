@@ -1,0 +1,65 @@
+{
+  "id": "NATIVE-SET-PLAYER-TEAM-26-3-LAYOUT",
+  "verdict": "promoted",
+  "fix_commit": "client:5aca2e4a1c",
+  "fix_commit_full": "5aca2e4a1c02e196365c35cba006c01aab932f84",
+  "promoted_at": "2026-11-24T12:12:53+00:00",
+  "tree_head": "889f4346fb7f77708bf6007a593cd36cc2a4a482",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T113947-native-v2-team-deaths-5ewxs4q5/result.json",
+    "client_head": "07dd26cce65680da4f15ad73538fc9113af23b88",
+    "server_binary_sha256": "4d5b613b4da97e0fbcbdc612eea417d4ca392c6c2478fc9f34c42e91d5f5b00a",
+    "red": [
+      "harness:entities:native-v2-team-deaths"
+    ],
+    "states": {
+      "harness:entities:native-v2-team-deaths": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T113809-native-v2-team-deaths-a0mm0h_3/result.json",
+    "client_head": "5aca2e4a1c02e196365c35cba006c01aab932f84",
+    "server_binary_sha256": "4d5b613b4da97e0fbcbdc612eea417d4ca392c6c2478fc9f34c42e91d5f5b00a",
+    "green": [
+      "harness:entities:native-v2-team-deaths"
+    ],
+    "states": {
+      "harness:entities:native-v2-team-deaths": "green"
+    },
+    "tree_head": "889f4346fb7f77708bf6007a593cd36cc2a4a482",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T113809-native-v2-team-deaths-a0mm0h_3/result.json",
+    "client_head": "5aca2e4a1c02e196365c35cba006c01aab932f84",
+    "server_binary_sha256": "4d5b613b4da97e0fbcbdc612eea417d4ca392c6c2478fc9f34c42e91d5f5b00a",
+    "green": [
+      "harness:entities:native-v2-team-deaths"
+    ],
+    "states": {
+      "harness:entities:native-v2-team-deaths": "green"
+    },
+    "tree_head": "889f4346fb7f77708bf6007a593cd36cc2a4a482",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "9809f73b444a1ce22ec6e8d2c5b6517ada2410f7",
+    "paths": [
+      "src/ui/hud.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:session::hud_packet_tests::rc1_team_packet_decodes_the_26_3_parameter_order": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T121145-ledger-promote-2ex_givm"
+}
