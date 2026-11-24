@@ -1,7 +1,7 @@
 # SUFFOCATION-CELL-IS-NOT-VANILLA-EYE-BOX — fix patch
 
-The row had no fix commit of its own (the finding is a missing vanilla rule). The fix is this production
-change, promoted in patch mode from
+The row had no fix commit before this work (the finding is a missing vanilla rule). The fix is this
+production change, promoted in patch mode from
 `docs/bugs/promotions/SUFFOCATION-CELL-IS-NOT-VANILLA-EYE-BOX.patch`; SHA-256 of its non-test hunks is
 recorded on the row as `fix_commit`. It was revised after the round-7 review: the first version used
 `0.4 * half_width` for the eye box's half size (0.12 for a player instead of vanilla's 0.24) and looked the
@@ -13,7 +13,8 @@ Fix commits on `wt/D123Battle` (all in the patch):
 |---|---|
 | `505deb2f5` | the eye box + per-type eye height + `ContactStamp<3>` |
 | `58e411e55` | rustfmt of the probe |
-| the commit carrying this revision | `* 0.8` half-size, `wire_type_id` contract lookup, and the discriminating test position |
+| `e984a1118` | `* 0.8` half-size, `wire_type_id` contract lookup, and the discriminating test position |
+| `dde2bd0ed` | rustfmt of the probe (part of the b-side; file hashes 60c8a6519 → f6915c6d3) |
 
 
 One production file (`crates/mc-core/src/contact_hazards.rs`); no hunks are omitted. The kept regression

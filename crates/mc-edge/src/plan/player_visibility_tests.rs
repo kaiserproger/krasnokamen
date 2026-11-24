@@ -112,6 +112,8 @@ fn spectator_index_matches_the_roster_scan_and_is_built_once_per_publish() {
                     .any(|player| player.entity == entity.id && player.game_mode == 3)
             }
         };
+    // Both counters are process-global; the exact deltas below hold because
+    // nextest gives this test its own process (like the admission counter).
     let before = tick_index::SPECTATOR_INDEX_BUILDS.load(std::sync::atomic::Ordering::Relaxed);
     let scans_before = entity_interest::ROSTER_SCANS.load(std::sync::atomic::Ordering::Relaxed);
     for (recipient_mode, subject_mode) in [(0, 0), (3, 0), (0, 3), (3, 3)] {

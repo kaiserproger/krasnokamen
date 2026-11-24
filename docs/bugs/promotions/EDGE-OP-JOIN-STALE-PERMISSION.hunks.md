@@ -35,12 +35,15 @@ body, the burst's op level and the post-burst registration are the pre-fix code.
 
 ## Kept caller behaviour on the a/-side
 
-The pre-fix admission path rejected a connection without a remote IP at `connection.rs:389-392`
-(`cannot admit player … remote IP unavailable`) and then admitted it through `join_session` **without
-registering** it; `admin.register` ran only after the join burst. The a/-side keeps that shape: the caller
-still builds `ip` (the retained `admit_native_session` signature needs it — rule (b)), the function's body
-ignores it (`let _ = ip;`) and does not register, and the post-burst `admin.register` returns. The kept refs
-call `admit_native_session` directly, so they are unaffected by the caller's IP handling.
+Pre-fix, `server/connection.rs` had **no** IP check at all: `server.hub.join_session(…)` ran for every
+connection and registration sat behind the join result, not behind an IP (`0504a280^` lines 219-230 and
+330-334 of `server/connection.rs`; the commit `0504a280` changes `server/connection.rs`, not
+`server.rs`). The `remote IP unavailable` rejection at `connection.rs:389-392` is a **later** caller
+change (the pre-join `admit_native_session(…, ip, …)` call needs a remote address), not part of the
+0504a280 fix, and it sits on both sides of the patch. The a/-side keeps it because the retained
+`admit_native_session` signature takes `ip` (rule (b)); the function's body ignores the address
+(`let _ = ip;`) and does not register — pre-fix registration behaviour. The kept refs call
+`admit_native_session` directly, so they are unaffected by the caller's IP handling.
 
 ## Control reds and which are evidence
 
@@ -65,5 +68,7 @@ the observed evidence red is `:491`.
 | `docs/bugs/ledger.toml` | documentation. |
 
 Note: the `operator_updates` lock around `op`/`deop` (`server.rs:1030`, `:1135`) is **not** part of
-`0504a280` (its stat has no `server.rs`); it belongs to the later op/deop batch and stays on both sides
-(reason (a) for `EDGE-QUEUED-OP-AFTER-DEOP`).
+`0504a280` (git: the commit holds `crates/mc-edge/src/server.rs` but does not modify it — its stat lists
+`server/connection.rs` only; `git log -S operator_updates -- crates/mc-edge/src/server.rs` reaches
+`d0ae64284` and older). It belongs to the later op/deop batch and stays on both sides (reason (a) for
+`EDGE-QUEUED-OP-AFTER-DEOP`).
