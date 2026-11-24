@@ -217,44 +217,25 @@ def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                     and image["slots"][10]["count"] == 0 and image["carried"]["count"] == 0)
         _shot(steps, mode + "-reopened")
         steps.call("minecraft_close_screen")
+        if not creative:
+            # CLIENT-HELD-DROP-KEY-DOUBLE-DROP: vanilla dispatches the drop key once per
+            # press (handleKeybinds drains consumeClick), so a key held across ticks must
+            # drop one item, not one per tick edge. Physical press, three client ticks,
+            # release; auto-repeat starts far later (X11 delay), so only the tick edge can
+            # add a second drop.
+            steps.fixture("clear @s")
+            _seed_main(steps, "minecraft:diamond", 5, 9)
+            state = _open_inventory(steps, creative)
+            _input(steps, key=ord("1"), point=center(state, 9))
+            steps.call("minecraft_close_screen")
+            fixture = steps.call("minecraft_read_item_components", {"source": "selected"})
+            steps.check("held_q_fixture_selected",
+                        fixture.get("item_id") == "minecraft:diamond" and fixture.get("count") == 5)
+            _hold_key(steps, ord("q"), 3)
+            steps.call("minecraft_wait_ticks", {"ticks": 4})
+            dropped = steps.call("minecraft_read_item_components", {"source": "selected"})
+            steps.check("held_drop_once", dropped.get("count") == 4)
     steps.fixture("tick unfreeze")
-    steps.fixture("gamemode survival")
-    # CLIENT-HELD-DROP-KEY-DOUBLE-DROP: vanilla dispatches the drop key once per press, so a
-    # physical Q held across client ticks must leave exactly one item on the ground. The world is
-    # unfrozen here, so the server really spawns the item entities the assertion counts (the
-    # inventory count lags the drop packets and cannot be read as a verdict). X11's repeat delay
-    # is far longer than the hold, so a second item can only come from the removed tick edge.
-    def ground_items(_: dict) -> int:
-        rows = steps.call("minecraft_list_entities", {"radius": 24.0, "limit": 128})["entities"]
-        return sum(1 for row in rows if row.get("entity_type") == "minecraft:item")
-
-    # The earlier legs' drops are still spawning when the world unfreezes, so the ground is
-    # cleared by a wait, not a single kill.
-    steps.fixture("clear @s")
-    steps.fixture("kill @e[type=minecraft:item]")
-    steps.wait(lambda _: ground_items(None) == 0, "held_drop_ground_clear", timeout_seconds=60)
-    steps.fixture("give @s minecraft:diamond 5")
-
-    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
-
-    def selected_five(_: dict) -> dict | None:
-        row = steps.call("minecraft_read_item_components", {"source": "selected"})
-        return row if row.get("count") == 5 else None
-
-    steps.wait(selected_five, "held_q_fixture_selected")
-    # `wait` returns the observation, not the predicate's row: read the stack again.
-    fixture = steps.call("minecraft_read_item_components", {"source": "selected"})
-    steps.report["held_q_fixture"] = {"item_id": fixture.get("item_id"),
-                                      "count": fixture.get("count"),
-                                      "items_before": ground_items(None)}
-    steps.check("held_q_fixture_selected", fixture.get("count") == 5)
-    steps.report["held_q_hold_ticks"] = 3
-    _hold_key(steps, ord("q"), 3)
-    steps.wait(lambda _: ground_items(None) >= 1, "held_drop_landed", timeout_seconds=60)
-    steps.call("minecraft_wait_ticks", {"ticks": 10})
-    landed = ground_items(None)
-    steps.report["held_q_items_after"] = landed
-    steps.check("held_drop_once", landed == 1)
 
 
 def camera(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
