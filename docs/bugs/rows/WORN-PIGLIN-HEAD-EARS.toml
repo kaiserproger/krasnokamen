@@ -3,7 +3,7 @@ id = "WORN-PIGLIN-HEAD-EARS"
 title = "A worn piglin head on the native client shows horizontal ears instead of vanilla's downward-angled ears"
 area = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "Stage3 HeadBreaker paired 26.3 oracle: native client 8a7817c8 piglin head ears horizontal vs vanilla Java angled down (same scenes as WORN-DRAGON-HEAD-GEOMETRY: 20261115T023515-scene-shot-jdztmngj vs 20261115T023735-scene-shot-abxywun8); reproduced 2/2 (20261115T023910-scene-shot-xjj2t0vh)"
 repro = "client"
 regression = ["harness:scene-shot:native-worn-head"]
@@ -11,3 +11,4 @@ failing_first = "reported"
 repro_check = "Scene native-worn-head (two stationary zombies, one per shot, front camera each, HUD hidden): the piglin frame counts brown ear pixels in the two strips of air beside the head cube between the eye line and the jaw (boxes (450,300,560,380) and (720,300,830,380)). Measured: control client 8a7817c8 542 px (the pre-fix horizontal ear boxes end at the head mid-line), fix client 78fb611f 3859 px (the 26.3 flaps hang to the jaw); floor 1500 leaves a 2.6x band each way. The fix is a model change: the pre-fix rig had separate right_ear/left_ear bones with 3x5x1 horizontal cubes, the fix folds the flaps into the head bone with the 10-wide head cube and the 2x2x4 nostril cubes."
 fix_commit = "client:78fb611f"
 proving_assertions = { "harness:scene-shot:native-worn-head" = "worn_piglin_ears_angle_down" }
+promotion = "docs/bugs/promotions/WORN-PIGLIN-HEAD-EARS.json"
