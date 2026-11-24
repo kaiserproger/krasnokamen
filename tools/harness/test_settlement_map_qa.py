@@ -442,6 +442,31 @@ def production_names(language):
             "production_order_listed", "production_order_exists", "production_order_resident_crafted"]
 
 
+class LayoutMirrorTests(unittest.TestCase):
+    def test_mirrored_layout_constants_match_the_rust_source(self):
+        from pathlib import Path as P
+        root = P(__file__).resolve().parents[2]
+        layout = (root / "crates/mc-core/src/settlements/layout.rs").read_text()
+        blueprints = (root / "crates/mc-core/src/settlements/blueprints.rs").read_text()
+        self.assertIn("const LOT_FRONT: i32 = 3;", layout)
+        self.assertIn("const PLAZA: i32 = 4;", layout)
+        self.assertIn("const RING: i32 = PERIOD + 2;", layout)
+        self.assertIn("const LOT_DEPTH: i32 = blueprints::MAX_SIZE[2] as i32;", layout)
+        self.assertIn("pub const MAX_SIZE: [u8; 3] = [13, 11, 11];", blueprints)
+        self.assertEqual(gate.LAYOUT_PERIOD, 2 * (3 + 11))
+        self.assertEqual(gate.LAYOUT_PLAZA, 4)
+        self.assertEqual(gate.LAYOUT_RING, gate.LAYOUT_PERIOD + 2)
+        anchor = [0, 201, 0]
+        self.assertEqual(gate.layout_cell(anchor, 0, 5), "road")
+        self.assertEqual(gate.layout_cell(anchor, 2, 8), "verge")
+        self.assertEqual(gate.layout_cell(anchor, 5, 5), "lot")
+        self.assertEqual(gate.layout_cell(anchor, 19, 19), "lot")
+        self.assertEqual(gate.layout_cell(anchor, 28, 19), "road")
+        self.assertEqual(gate.layout_cell(anchor, 30, 19), "wall")
+        self.assertEqual(gate.layout_cell(anchor, -2, 5), "verge")
+        self.assertEqual(gate.layout_cell(anchor, -5, 5), "lot")
+
+
 class SelectedCardScenarioTests(unittest.TestCase):
     def test_selected_card_is_a_boolean_verdict_of_this_profile(self):
         from tools.harness import regressions

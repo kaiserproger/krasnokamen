@@ -226,6 +226,20 @@ class Gui:
         finally:
             self.input._key("Shift_L", False)
 
+    def slot_named(self, pattern: str, label: str) -> int:
+        """Click the visible chest slot whose observed item name matches `pattern`."""
+        state = self.probe.observe()
+        container = state.get("container") or {}
+        candidates = [row for row in container.get("slots", [])
+                      if 0 <= int(row.get("slot", 99)) < 54
+                      and re.search(pattern, str(row.get("name") or ""), re.IGNORECASE)]
+        if not candidates:
+            names = [str(row.get("name")) for row in container.get("slots", []) if row.get("name")][:16]
+            raise RuntimeError(f"no visible slot matches {pattern!r} ({label}); names={names}")
+        slot = min(int(row["slot"]) for row in candidates)
+        self.slot(slot)
+        return slot
+
     def escape(self) -> None:
         self.input.tap("Escape")
         self.probe.wait(lambda state: not (state.get("screen") or {}).get("open"), "GUI closed")
@@ -279,7 +293,34 @@ PAGES = {
 # The verdicts a receipt publishes in `details.verdicts` (registered as
 # `regressions._BOOLEAN_PROFILE_VERDICTS["settlement-map-qa"]`): one per GUI stage the run
 # walks, `localized_text` (every Russian title and text check, ru_ru runs only) and `all`.
+# Mirrors `settlements::layout` so a fixture can name a lot, its verge and its road without
+# asking the server. `test_settlement_map_qa` pins these literals against the Rust source.
+LAYOUT_PERIOD = 28      # 2 * (LOT_FRONT 3 + LOT_DEPTH = blueprints::MAX_SIZE[2] 11)
+LAYOUT_PLAZA = 4
+LAYOUT_RING = 30        # PERIOD + 2
+
+
+def layout_signed(value: int, anchor: int) -> int:
+    offset = (value - anchor) % LAYOUT_PERIOD
+    return offset - LAYOUT_PERIOD if offset > LAYOUT_PERIOD // 2 else offset
+
+
+def layout_cell(anchor: list[int], x: int, z: int) -> str:
+    dx, dz = layout_signed(x, anchor[0]), layout_signed(z, anchor[2])
+    if abs(dx) <= 1 or abs(dz) <= 1:
+        return "road"
+    if max(abs(x - anchor[0]), abs(z - anchor[2])) <= LAYOUT_PLAZA:
+        return "plaza"
+    if max(abs(x - anchor[0]), abs(z - anchor[2])) == LAYOUT_RING:
+        return "wall"
+    if abs(dx) == 2 or abs(dz) == 2:
+        return "verge"
+    return "lot"
+
+
 # Assertions the `--scenario selected-card` run must record true for its verdict.
+# Assertions the `--scenario verge` run must record true for its verdict.
+VERGE_ASSERTIONS = ("verge_project_admitted_on_the_status_page", "verge_obstacle_stands")
 SELECTED_CARD_ASSERTIONS = ("map_features_house_and_site", "selected_card_site_only",
                             "selected_card_back_returns_map", "selected_card_building_only")
 STAGES = ("bell_opens_hub", "dashboard", "map", "building_order", "shortage_icons",
@@ -376,7 +417,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     parser.add_argument("--size", choices=("1280x720", "1920x1080"), default="1280x720")
     parser.add_argument("--wrong-click", action="store_true",
                         help="negative control: click Help instead of Settlement")
-    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race", "stage2", "stage2op", "blueprints", "selected-card"), default="civil",
+    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race", "stage2", "stage2op", "blueprints", "selected-card", "verge"), default="civil",
                         help="quickwins: the owner-path acceptance of the D63 quick wins (native, ru_ru); "
                              "quickwins-c1-race: the starter chest (C1) founded under block churn in its chunk")
     parser.add_argument("--survey", action="store_true",
@@ -394,6 +435,21 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         return settlement_quickwins_qa.run(ctx, args)
     if args.survey:
         raise ValueError("--survey belongs to --scenario quickwins")
+    if args.scenario == "verge":
+        settings = {"gui_scale": args.gui_scale, "language": args.language,
+                    "screen_size": list(map(int, args.size.split("x")))} if ctx.client == "java" else {}
+
+        def verge_script(probe, artifact, steps, client):
+            try:
+                return _verge_script(probe, artifact, steps, client, args)
+            finally:
+                checks = probe.report["assertions"]
+                ok = all(checks.get(name) is True for name in VERGE_ASSERTIONS)
+                published = {"verge_connected": ok, "all": ok}
+                probe.report["verdicts"] = published
+                ctx.client_evidence["verdicts"] = published
+        return scene_shot.run(ctx, scenario={"steps": [], "java_plain": ctx.client == "java",
+                                             "client_settings": settings}, script=verge_script)
     if args.scenario == "selected-card":
         # One live construction site and the storage; the site marker must open that project alone.
         settings = {"gui_scale": args.gui_scale, "language": args.language,
@@ -1055,6 +1111,144 @@ def _selected_card_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[s
                     label("Storage", "Склад") in storage_text
                     and not re.search(label("Order construction", "Заказать стройку"), storage_text))
         return [frame]
+    finally:
+        gui.close()
+
+
+def _verge_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
+                  args: argparse.Namespace) -> list[str]:
+    """`--scenario verge` (CIVILIZATION-STREET-VERGE): one legally fronting lot stays usable when a
+    stone wall spans its street's road band and only the walkable verge is free.
+
+    The fixture buries every other lot column to the sky (as the unit test's `street_plateau` does,
+    so a low hill the builder would level cannot count), keeps the storage's own eleven-block lot
+    square open, funds a Mine and walls its street at the storage's z. The fix routes the site's
+    frontage over the verge, so the order is admitted; without it the frontage is hidden, no site is
+    offered, and the Status page lists nothing. The wall must still stand afterwards."""
+    from .buildings_qa import _chunked_fills
+
+    size = tuple(map(int, args.size.split("x")))
+    scene_shot.resize_window(probe.client.p4_window, size)
+    gui = Gui(probe, artifact, client, args.gui_scale, size)
+    ru = args.language == "ru_ru"
+    label = lambda en, russian: russian if ru else en
+
+    def shot(name: str) -> str:
+        probe.call("minecraft_wait_ticks", {"ticks": 2})
+        path = gui.capture(probe, artifact, name)
+        probe.check(f"{name}_dimensions", scene_shot.png_size(path) == size)
+        return path
+
+    try:
+        for command in ("gamemode creative @s", "gamerule advance_time false",
+                        "gamerule spawn_mobs false", "time set 6000", "weather clear", "clear @s"):
+            probe.fixture(command)
+        me = probe.observe(wait_for_play=True)["player"]
+        x, z = (math.floor(float(me[axis])) for axis in ("x", "z"))
+        y = 201
+        probe.fixture(f"tp @s {x + .5} {y} {z - 2.0}")
+        for command in _chunked_fills(x - 64, y - 2, z - 64, x + 64, y - 2, z + 64, "minecraft:dirt"):
+            probe.fixture(command)
+        for command in _chunked_fills(x - 64, y - 1, z - 64, x + 64, y - 1, z + 64, "minecraft:grass_block"):
+            probe.fixture(command)
+        for command in _chunked_fills(x - 64, y, z - 64, x + 64, y + 40, z + 64, "minecraft:air"):
+            probe.fixture(command)
+        probe.fixture(f"tp @s {x + .5} {y} {z + .5}")
+        probe.wait(lambda state: all(state.get("player", {}).get(axis) == expected
+                                     for axis, expected in (("x", x + .5), ("y", y), ("z", z + .5))),
+                   "fixture_founder_at_anchor", timeout_seconds=30)
+        probe.fixture("gamemode survival @s")
+        _command(probe, f"settlement create {NAME} {RADIUS}", f"Founded {NAME}")
+        probe.fixture(f"setblock {x} {y} {z} minecraft:bell")
+        chest = [x + 20, y, z + 20]
+        probe.fixture(f"setblock {chest[0]} {chest[1]} {chest[2]} minecraft:chest")
+        _command(probe, f"settlement building certify storage {x + 19} {y - 1} {z + 19} {x + 21} {y + 2} {z + 21}",
+                 "Certified storage #")
+        taken: set[str] = set()
+        candidates: list[dict[str, Any]] = []
+
+        def arrived(_state: dict[str, Any]) -> bool:
+            nonlocal candidates
+            entities = probe.call("minecraft_list_entities", {"radius": 64})
+            candidates = [entity for entity in entities.get("entities", entities.get("visible_entities", []))
+                          if "villager" in str(entity.get("entity_type", entity.get("type", "")))
+                          and entity.get("entity_uuid") not in taken]
+            return bool(candidates)
+
+        for index in range(3):
+            probe.fixture(f"summon minecraft:villager {x + 5.5 + index} {y} {z + 5.5}")
+            probe.wait(arrived, f"fixture_villager_{index}_received", timeout_seconds=30)
+            worker = str(candidates[0]["entity_uuid"])
+            taken.add(worker)
+            probe.fixture(f"settlement bind {NAME} {worker}")
+        # Every lot column but the storage's own eleven-block square is stone to the sky, so the
+        # planner's only legal lot is the one the storage already stands in.
+        # Lot bands are |signed| 3..13: world offsets 3..13 and 15..25 (and their negative-period
+        # twins); offset 2 and 26 are verges and stay walkable.
+        target = (15, 25)
+        for x0 in (-25, -13, 3, 15):
+            for z0 in (-25, -13, 3, 15):
+                if (x0, z0) == target:
+                    continue
+                probe.fixture(f"fill {x + x0} {y + 1} {z + z0} {x + x0 + 10} {y + 40} {z + z0 + 10} "
+                              f"minecraft:stone")
+        # A stone wall spans the street's road band (offset 27..29) at the storage's z; the verge at
+        # offset 26 stays walkable, which is the route the fix must find.
+        wall = (x + 27, y + 1, z + 19, x + 29, y + 3, z + 19)
+        probe.fixture(f"fill {wall[0]} {wall[1]} {wall[2]} {wall[3]} {wall[4]} {wall[5]} minecraft:stone")
+        _fund_chest(probe, chest, "mine")
+        probe.fixture("settlement build mine")
+        # Admission is the product's own outcome line: an order that finds no site stays "waiting
+        # for a site", so the bounded wait refuses rather than counting a queued order as a pass.
+        deadline_ticks = 0
+        chat = ""
+        started = False
+        while deadline_ticks <= 1200:
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
+            chat = "\n".join(str(line) for line in probe.observe().get("recent_chat", []))
+            if re.search(r"Started mine construction", chat, re.IGNORECASE):
+                started = True
+                break
+            deadline_ticks += 20
+        probe.report.setdefault("verge", {})["admitted_chat"] = started
+        probe.report["verge"]["admission_chat"] = chat[-400:]
+        probe.fixture(f"tp @s {x + .5} {y} {z - 2.0}")
+        probe.wait(lambda state: all(state.get("player", {}).get(axis) == expected
+                                     for axis, expected in (("x", x + .5), ("y", y), ("z", z - 2.0))),
+                   "fixture_bell_approach_received", timeout_seconds=30)
+        _enter_hub(probe, gui, [x, y, z], label(f"Settlement {NAME}", f"Поселение {NAME}"))
+        _enter_dashboard(probe, gui, label("Management", "Управление"), label("Management", "Управление"))
+        shot("verge-dashboard")
+        gui.slot_named(r"^Construction$", "dashboard Construction")
+        blueprints = probe.wait(lambda s: (s.get("screen") or {}).get("class") == CONTAINER
+                                and (s.get("container") or {}).get("slot_count") == 90,
+                                "verge_blueprints_GUI", timeout_seconds=30)
+        probe.report["verge"] = {"blueprint_slots": [str(row.get("name")) for row in
+                                                     (blueprints.get("container") or {}).get("slots", [])
+                                                     if row.get("name")][:16]}
+        gui.slot_named(r"^Status$|^Статус$", "blueprints Status")
+
+        def project_page(state: dict[str, Any]) -> bool:
+            # The active-project page, not the blueprint catalogue: it carries the project counter.
+            names = [str(row.get("name")) for row in (state.get("container") or {}).get("slots", [])
+                     if row.get("name")]
+            return ((state.get("screen") or {}).get("class") == CONTAINER
+                    and (state.get("container") or {}).get("slot_count") == 90
+                    and any(label("Active projects", "Активные проекты") in name for name in names))
+
+        status = probe.wait(project_page, "verge_status_GUI", timeout_seconds=30)
+        names = [str(row.get("name")) for row in (status.get("container") or {}).get("slots", [])
+                 if row.get("name")]
+        probe.report["verge"]["status_names"] = names[:16]
+        shot("verge-status")
+        text = "\n".join(names)
+        probe.check("verge_project_admitted_on_the_status_page",
+                    label("Mine", "Шахта") in text
+                    and not re.search(r"Active projects:\s*0\b|Активные проекты:\s*0\b", text))
+        wall_block = probe.call("minecraft_read_block", {"x": wall[0], "y": wall[1] + 1, "z": wall[2]})
+        probe.check("verge_obstacle_stands", wall_block.get("block_id") == "minecraft:stone")
+        shot("verge-final")
+        return []
     finally:
         gui.close()
 
