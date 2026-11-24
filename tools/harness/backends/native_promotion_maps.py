@@ -19,9 +19,10 @@ SCENARIO_KINDS = ("frame-waypoint", "banner-removal", "locked-banners", "pumpkin
 # marker is drawn) while never holding the chat overlay (which reaches x≈560 over the map), the
 # top-right message box (y<160) or the held-item name tooltip (y>560).
 HELD_MAP_REGIONS = ((620, 170, 930, 560),)
-# The frame-marker icon is ~12x15 drawn pixels (measured on the fixed client: see the hunks map);
-# 0 on a client that receives the decoration and never draws it.
-FRAME_MARKER_MIN_PIXELS = 20
+# Measured 2026-11-25: 395 changed pixels on the fixed client (55b8374ed7), 0 on the pre-fix control
+# (864a757fe9), both with a locked map, the chat faded out and no command between the captures. 150 is
+# well above any residual drift and well below the marker's own footprint.
+FRAME_MARKER_MIN_PIXELS = 150
 
 
 def _shot_path(steps: ProbeSteps, name: str) -> Path:
