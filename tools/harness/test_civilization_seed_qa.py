@@ -431,12 +431,15 @@ class CivilizationEvidenceTests(unittest.TestCase):
     def test_remote_building_loads_each_chunk_and_returns_observer(self):
         building = {"natural": False, "min": [234, 72, -213], "max": [240, 76, -207]}
         probe = Mock()
-        probe.remaining.return_value = 120.0
+        probe.remaining.side_effect = lambda limit=None: min(120.0, limit or 120.0)
         probe.call.return_value = {"blocks": [{"block_id": "minecraft:red_bed"}], "truncated": False}
         server = Mock()
         moves: list[str] = []
+        # The tp lands the observer outside the footprint (lo[0] - 4, review M1:
+        # a creative observer inside the bounds tramples crops), so the mock
+        # reports that stand after the first console move.
         probe.observe.side_effect = lambda: {"player":
-            {"x": 237.0, "y": 79.0, "z": -210.0} if len(moves) == 1
+            {"x": 230.0, "y": 79.0, "z": -210.0} if len(moves) == 1
             else {"x": 131.5, "y": 78.0, "z": -217.5}}
         with patch.object(qa.village, "_listed_buildings", return_value=[building]), \
              patch.object(qa.item_merge, "_console", side_effect=lambda _s, command: moves.append(command)) as console:
@@ -454,6 +457,9 @@ class CivilizationEvidenceTests(unittest.TestCase):
             "minecraft_scan_blocks", "minecraft_wait_for_loaded_block",
             "minecraft_close_screen"])
         self.assertEqual(console.call_count, 2)
+        landed_x = float(moves[0].split()[2])
+        self.assertLess(landed_x, 234, "the observer must land outside the scanned bounds")
+        self.assertGreaterEqual(landed_x, 228.0)
 
     def test_iron_capture_opens_furnace_and_requires_visible_output(self):
         probe = Mock()

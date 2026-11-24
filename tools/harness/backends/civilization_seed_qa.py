@@ -17,6 +17,7 @@ MAX_TICKS = 96000
 # A console teleport of the observer is scaffolding for the block scan, never
 # evidence: it may cost this long, not the rest of the scenario deadline.
 OBSERVER_MOVE_TIMEOUT = 30.0
+OBSERVER_STAND_MARGIN = 4.0
 FOUNDING_STOCK = {"minecraft:oak_log": 32, "minecraft:bread": 16,
                   "minecraft:raw_iron": 8, "minecraft:coal": 8,
                   "minecraft:cobblestone": 32}
@@ -704,7 +705,13 @@ def building_blocks(probe: ProbeSteps, lines: list[str], server: Any) -> list[di
                 # A menu holds the observer where it stands: close it before the
                 # teleport, as the founding transfer and the furnace capture do.
                 probe.call("minecraft_close_screen", {})
-                destination = {"x": (lo[0] + hi[0]) / 2, "y": hi[1] + 3, "z": (lo[2] + hi[2]) / 2}
+                # Land outside the footprint: a creative observer dropped inside
+                # the bounds mutates the world under observation (tramples crops
+                # on a farm, review M1), and the scan is a read that needs only
+                # loaded chunks, not line of sight.
+                destination = {"x": lo[0] - OBSERVER_STAND_MARGIN if initial["x"] <= (lo[0] + hi[0]) / 2
+                               else hi[0] + OBSERVER_STAND_MARGIN,
+                               "y": hi[1] + 3, "z": (lo[2] + hi[2]) / 2}
                 item_merge._console(server, f"tp {village.USERNAME} {destination['x']} {destination['y']} {destination['z']}")
                 moved = move_observer(probe, destination)
                 for x in range(lo[0] // 16, hi[0] // 16 + 1):
