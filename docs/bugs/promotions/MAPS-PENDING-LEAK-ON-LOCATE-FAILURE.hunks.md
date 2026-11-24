@@ -1,53 +1,98 @@
 # MAPS-PENDING-LEAK-ON-LOCATE-FAILURE — fix-hunk map
 
-The production-only patch `MAPS-PENDING-LEAK-ON-LOCATE-FAILURE.patch` is one hunk set, SHA-256
-`patch:e469b131c4a80a7c1f26daa02370320b07747b15db41fd6dd03de60098d73fc5`. Reverse-applies on the
-candidate (`git apply -R --check` on `bb01751d9d`, clean tree).
+The production-only patch `MAPS-PENDING-LEAK-ON-LOCATE-FAILURE.patch` has the non-test hunk identity
+`patch:a064694411dbc13f1fadf9d2baef581413e3994bfb96e81c5441511059f223a2` (SHA-256 of its non-test
+hunks as `ledger promote` splits them). It reverse-applies on the promotion candidate
+(`git apply -R --check`, clean tree) and its forward direction restores the candidate byte-for-byte.
 
-## The fix and the hunks the patch carries
+## The two original commits and the part of the row's path each closes
 
-The behaviour fix is `8499f457a`: the three terminal `LocateCompletion::Callback` paths (metadata
-error, wrong dimension, worker loss) call the caller's `on_failure` continuation, which clears the
-container's `pending_loot`/`pending_trades`. The patch reverses exactly the three
-`if let Some(release) = on_failure { release(state); }` calls and leaves every other line (including
-the patterns, which only drop the unused binding) as HEAD's.
+- `8499f457a` (the behaviour fix) adds the failure continuation: the `StructureLookupFailure` alias,
+  `StructureLookupRequest.on_failure`, the `LocateCompletion::Callback { reply, on_failure }` struct
+  variant, the `submit_structure_lookup` pass-through, the three terminal invocations in `deliver`
+  (metadata error), `terminal_wrong_dimension` (wrong dimension) and `fail_worker` (worker loss), and
+  the two caller closures in `maps/loot.rs` / `maps/trades.rs` that remove `pending_loot` /
+  `pending_trades`. It also rustfmt-normalizes unrelated lines in `command_locate.rs`.
+- `94410e6d4` (test reachability) widens `LocateCompletion` to `pub(crate)`, adds the
+  `#[cfg(test)] take_pending_callback_release` hook, the `maps/tests.rs` release test, and the row's
+  first field set. It closes no production path of its own.
 
-## The a/-side against the pre-image
+## Hunk map: everything the patch carries, and every hunk left out
 
-Neither real-commit control builds, which is why the patch exists:
+`8499f457a` — `crates/mc-core/src/command_locate.rs`:
 
-- reversing `8499f457a` removes the `on_failure`/`reply` fields the kept tests use
-  (`variant LocateCompletion::Callback has no field named on_failure`, receipt
-  `20261124T051238-ledger-promote-ryvf34zi`);
-- reversing `94410e6d4` (the test-hook + test commit) removes
-  `command_locate::take_pending_callback_release`, which the kept tests call
-  (`cannot find function take_pending_callback_release`, receipt
-  `20261124T050849-ledger-promote-fblm3xz0`).
+| original hunk | content | disposition |
+|---|---|---|
+| `@@ -695,9` (`LocateState::busy`) | rustfmt: joins the `Entity` arm | carried; the a/-side is the pre-image's two-line arm |
+| `@@ -1168,6` | adds the `StructureLookupFailure` alias | **(b)** left out: the kept `StructureLookupRequest.on_failure` field and the kept test hook name the alias; reversing leaves the type unresolved |
+| `@@ -1179,12` | adds `on_failure` to the request and turns `Callback(reply)` into the struct variant | **(b)** left out: the kept tests construct `Callback { reply, on_failure }` and the kept `take_pending_callback_release` matches the struct variant |
+| `@@ -1220,7` (`submit_structure_lookup`) | forwards `request.on_failure` into the struct variant | **(b)** left out: reversing it builds the removed tuple variant |
+| `@@ -1265,9`, `@@ -1287,14`, `@@ -1303,9`, `@@ -1335,9`, `@@ -1365,9`, `@@ -1379,9` (`submit` error arms) | rustfmt only | carried; the a/-side is the pre-image's wrapping |
+| `@@ -1439,12` (`deliver`) | metadata error releases the plan | carried; the a/-side is the pre-image text (comment, warn line) with the struct pattern `Callback { reply, .. }` |
+| `@@ -1498,7` (`deliver`, `Command` arm) | rustfmt only | carried |
+| `@@ -1521,7` (`command_result`) | rustfmt only | carried |
+| `@@ -1579,8` (`terminal_wrong_dimension`) | wrong dimension releases the plan | carried; the a/-side is the pre-image text with the struct pattern `Callback { .. }` |
+| `@@ -1614,9` (`fail_worker`) | worker loss releases the plan | carried; the a/-side is the pre-image text with the struct pattern `Callback { .. }` |
 
-The a/-side therefore keeps the enum fields, the test hook and both tests, and differs from HEAD only
-in the three calls (plus the doc comment lines next to them, which describe the removed behaviour).
+`8499f457a` — other files:
 
-## Why this control is honest
+- `crates/mc-core/src/command_locate_tests.rs`: test file, kept in the candidate (the splitter never
+  carries test hunks).
+- `crates/mc-core/src/maps/loot.rs` and `crates/mc-core/src/maps/trades.rs`: **(b)** left out. Their
+  one production change each is `on_failure: Some(Box::new(move |state| { state.maps.pending_* .remove(&key); }))`
+  in the `StructureLookupRequest` literal. Reversing them omits a field the kept struct still
+  requires, so the control would not compile; the kept closures are stored, never invoked, on the
+  a/-side.
 
-The registered refs are
-`cargo:mc-core:command_locate::tests::worker_loss_releases_a_map_loot_callback_so_the_container_opens_again`
-and `cargo:mc-core:tick_tests::maps_tests::a_released_locate_plan_lets_the_container_open_again`. With
-the release calls gone the plan stays pending, so the first test fails at its own
-`worker loss must release the pending loot/trade plan` assertion (receipt below), and the second stays
-green (it drives the release hook directly) — the red is the row's symptom, not a counter or a
-precondition.
+`94410e6d4` — `crates/mc-core/src/command_locate.rs`:
 
-## Observed control and restore
+| original hunk | content | disposition |
+|---|---|---|
+| `@@ -1187,7` | `enum LocateCompletion` → `pub(crate) enum LocateCompletion` | carried; the pre-image's private enum, no behaviour change (nothing outside the module names the type; the hook beside it still compiles) |
+| `@@ -1608,6` | adds `#[cfg(test)] take_pending_callback_release` | **(b)** left out: the kept `maps/tests.rs` ref calls it; reversing it stops the control from compiling |
 
-`ledger promote MAPS-PENDING-LEAK-ON-LOCATE-FAILURE --fix-patch …`, receipt
-`20261124T051510-ledger-promote-ck54oi3x` on `bb01751d9d` (`tree_dirty: false`, `reversed_files` =
-`command_locate.rs`):
+`94410e6d4` — `crates/mc-core/src/maps/tests.rs` (kept test file) and
+`docs/bugs/rows/MAPS-PENDING-LEAK-ON-LOCATE-FAILURE.toml` (docs, skipped by the splitter).
 
-- control (`ledger-1-run.log`) **FAIL** — `worker loss must release the pending loot/trade plan` at
-  `command_locate_tests.rs:951`;
-- restore green (`ledger-3-run.log`).
+## The a/-side against the real pre-image `8499f457a^`
+
+The a/-side is `8499f457a^`'s text for every region the two commits touched, including the pre-image
+comments, warn lines, line wrapping and private enum. The complete list of differences:
+
+1. `deliver`: the pattern is `Callback { reply, .. }` instead of `Callback(reply)`.
+2. `terminal_wrong_dimension`: the pattern is `Callback { .. }` instead of `Callback(_)`.
+3. `fail_worker`: the pattern is `Callback { .. }` instead of `Callback(_)`.
+4. The (b) API the kept tests, hook and callers need is HEAD's, not the pre-image's: the
+   `StructureLookupFailure` alias, `StructureLookupRequest.on_failure`, the
+   `LocateCompletion::Callback { reply, on_failure }` variant, the `submit_structure_lookup`
+   forward, the `maps/loot.rs` and `maps/trades.rs` closures, and `take_pending_callback_release`
+   (whose own `match` uses `Callback { on_failure, .. }`).
+
+None of these changes behaviour: the three pattern lines only stop binding the kept `on_failure`
+field, and on the a/-side nothing ever calls a stored closure — the three release calls are absent,
+which is the row's bug. The unused field produces one dead-code warning in the control build; no
+test reads it there.
+
+## Why this control is honest: the proving refs
+
+Every claimed terminal path has its own registered ref, and each red is that test's own release-flag
+assertion:
+
+| ref | assertion |
+|---|---|
+| `cargo:mc-core:command_locate::tests::a_metadata_error_releases_a_map_loot_callback_so_the_container_opens_again` | `command_locate_tests.rs:1022` — `a metadata error must release the pending loot/trade plan` |
+| `cargo:mc-core:command_locate::tests::a_wrong_dimension_reply_releases_a_map_loot_callback_so_the_container_opens_again` | `command_locate_tests.rs:1070` — `a wrong-dimension reply must release the pending loot/trade plan` |
+| `cargo:mc-core:command_locate::tests::worker_loss_releases_a_map_loot_callback_so_the_container_opens_again` | `command_locate_tests.rs:953` — `worker loss must release the pending loot/trade plan` |
+
+The metadata-error ref sends `LocateDone { error: Some(..) }` through `drain` (the worker's own
+answer), the wrong-dimension ref queues a callback plan whose dimension differs from
+`state.dimension`, and the worker-loss ref drops the done channel. The fourth ref,
+`cargo:mc-core:tick_tests::maps_tests::a_released_locate_plan_lets_the_container_open_again`, is
+**not evidence**: it drives `take_pending_callback_release` directly, so it is green on both sides;
+it guards that a released plan leaves `pending_loot` and a reopen re-plans.
 
 ## What stays out of the row
 
-The `LocateCompletion` fields, the test hook and `maps/tests.rs` are untouched; the fix changes only
-which terminal paths release the plan. No wall-clock claim is made.
+No wall-clock or counter claim is made; the patch changes only which terminal paths invoke the
+caller's stored release. `maps/loot.rs`, `maps/trades.rs` and the test hook are kept as API, not
+reversed.

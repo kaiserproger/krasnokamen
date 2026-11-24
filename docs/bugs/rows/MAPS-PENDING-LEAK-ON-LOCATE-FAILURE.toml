@@ -7,18 +7,24 @@
 # tests call (receipt 20261124T050849-ledger-promote-fblm3xz0). The patch therefore reverses only
 # the three `release(state)` calls, keeping the fields, the hook and the tests, so the red is the
 # tests' own release assertion.
+# Review ReviewD123Battle11 asked for two changes, both applied here: the patch's a/-side is now the
+# real pre-image text (comments and warn lines from 8499f457a^; only the struct-variant patterns
+# adapt to the kept fields) and every remaining difference is listed in the .hunks.md; and the row
+# now registers a ref per claimed terminal path (metadata error, wrong dimension, lost worker), so
+# the control reddens on all three instead of only worker loss.
 [[bug]]
 id = "MAPS-PENDING-LEAK-ON-LOCATE-FAILURE"
 title = "A failed locate search left the exploration-map container's pending loot/trade plan in place forever, so reopening the container never re-planned"
 area = "gameplay"
 severity = "major"
-status = "fixed"
+status = "open"
 source = "D123Battle pack 2 (independent review of the locate callback work, 2026-11-23): the Callback completion had a reply but no failure continuation, so a metadata error, a wrong-dimension reply or a lost worker dropped the queued search and left `maps.pending_loot`/`pending_trades` populated; `before_open` then treated the container as waiting on a search that would never answer."
 repro = "source"
 regression = [
+  "cargo:mc-core:command_locate::tests::a_metadata_error_releases_a_map_loot_callback_so_the_container_opens_again",
+  "cargo:mc-core:command_locate::tests::a_wrong_dimension_reply_releases_a_map_loot_callback_so_the_container_opens_again",
   "cargo:mc-core:command_locate::tests::worker_loss_releases_a_map_loot_callback_so_the_container_opens_again",
   "cargo:mc-core:tick_tests::maps_tests::a_released_locate_plan_lets_the_container_open_again",
 ]
 failing_first = "not recorded"
-fix_commit = "patch:e469b131c4a80a7c1f26daa02370320b07747b15db41fd6dd03de60098d73fc5"
-promotion = "docs/bugs/promotions/MAPS-PENDING-LEAK-ON-LOCATE-FAILURE.json"
+fix_commit = "patch:a064694411dbc13f1fadf9d2baef581413e3994bfb96e81c5441511059f223a2"
