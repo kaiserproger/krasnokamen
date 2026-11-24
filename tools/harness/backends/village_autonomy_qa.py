@@ -2323,7 +2323,12 @@ def _planner_status(
         status["projects"] = _project_progress(observed, clipped_ok=True)
         status["project_ui"] = observed.get("ui_nodes", [])
     except Exception as exc:
-        status["projects_error"] = str(exc)[:300]
+        # Keep the raw dialog next to the failure: the label the parser refused is the
+        # only client-side trace of a project whose blueprint id no name table knows
+        # (2026-11-24: an unnamed one-cell project at [132, 82, -219]).
+        body = "\n".join(node.get("label", "") for node in observed.get("ui_nodes", [])) \
+            if isinstance(observed, dict) else ""
+        status["projects_error"] = (str(exc) + (" · dialog: " + body[:600] if body else ""))[:900]
     status["buildings_now"] = _recent_chat(_send(probe, "settlement building list"), 25)
     try:
         status["storage_now"] = _settlement_stock(
