@@ -2131,11 +2131,16 @@ def _gradle_junit(module_dir, selector):
     timeout cannot stand as a control."""
     import xml.etree.ElementTree as ET
 
-    results = module_dir / 'build' / 'test-results' / 'test'
-    if not results.is_dir():
-        return UNRUNNABLE, 'no Gradle test report (build or launch error)', None
+    # A Loader that sets its build directory per Minecraft version writes
+    # `<module>/build/<version>/test-results/test/TEST-*.xml`; the plain path is the default layout.
     class_name = selector.rsplit('.', 1)[-1]
-    suites = [path for path in sorted(results.glob('TEST-*.xml')) if class_name in path.name]
+    results = module_dir / 'build' / 'test-results' / 'test'
+    found = sorted(results.glob('TEST-*.xml')) if results.is_dir() else []
+    for versioned in sorted((module_dir / 'build').glob('*/test-results/test')):
+        found.extend(versioned.glob('TEST-*.xml'))
+    if not found:
+        return UNRUNNABLE, 'no Gradle test report (build or launch error)', None
+    suites = [path for path in found if class_name in path.name]
     if not suites:
         return UNRUNNABLE, f'no JUnit report for {class_name}', None
     passed = failed = 0
