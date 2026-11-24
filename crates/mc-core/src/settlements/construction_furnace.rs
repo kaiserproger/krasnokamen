@@ -49,6 +49,18 @@ pub(super) fn plan(state: &mut TickState, id: SettlementId) -> bool {
                 let Some(y) = surface_y(state, chest[1], x, z) else {
                     continue;
                 };
+                // The store is served at its own level. `surface_y` takes the
+                // highest standable surface in its band, which can be another
+                // structure above the store: the gate's furnace landed on a
+                // floating platform five blocks above the plaza
+                // (`20261124T131853`, furnace `[132,82,-219]`, plaza `y=76`),
+                // where no tender could ever stand, so the town owned a furnace
+                // it could not load and the iron chain stopped. A column more
+                // than two blocks from the chest's level is not this store's
+                // yard; the search moves on to the next column.
+                if (y - chest[1]).abs() > 2 {
+                    continue;
+                }
                 let at = [x, y + 1, z];
                 if at
                     .into_iter()

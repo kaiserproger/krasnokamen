@@ -520,6 +520,49 @@ fn pending_house_allows_only_its_own_furnace_prerequisite() {
     assert_eq!(record.orders[0].blueprint, "house");
 }
 
+/// The gate's furnace landed on a floating platform five blocks above the plaza
+/// (`20261124T131853`: furnace `[132,82,-219]`, plaza `y=76`) where no tender
+/// could ever stand, so the town owned a furnace it could never load and the
+/// iron chain (shears -> wool -> the house's bed) stopped. `surface_y` takes the
+/// highest standable surface in its band, so a furnace site must stay at the
+/// store's own level.
+#[test]
+fn a_furnace_site_stays_at_the_store_level_not_on_a_platform_above_it() {
+    let (mut state, id, _) = smelting_house_stock();
+    for stack in &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots {
+        if state
+            .registry
+            .items
+            .name_of(stack.item_id)
+            .is_some_and(|name| name.path().ends_with("_bed") || name.path().ends_with("_wool"))
+        {
+            *stack = mc_data::ItemStack::EMPTY;
+        }
+    }
+    // A one-block platform five above the chest's level on the first site the
+    // search tries (distance 2 on +x), with headroom: the gate's shape.
+    let stone = crate::settlements::allocator::tests::block(&state, "minecraft:cobblestone", &[]);
+    state.world.set_block(3, 205, 1, stone);
+    request_build(&mut state, id, "house").unwrap();
+    plan(&mut state, id);
+    let record = state.settlements.get(id).unwrap();
+    let project = record
+        .projects
+        .iter()
+        .find(|project| project.blueprint == furnace::NAME)
+        .expect("the house's furnace prerequisite");
+    assert_ne!(
+        project.origin,
+        [3, 206, 1],
+        "the furnace must not stand on the platform above the store"
+    );
+    assert_eq!(
+        project.origin[1], 201,
+        "the furnace stands at the store's level: {:?}",
+        project.origin
+    );
+}
+
 #[test]
 fn pending_noniron_order_blocks_unrelated_furnaces_and_funded_houses() {
     let (mut state, id, _) = smelting_house_stock();
