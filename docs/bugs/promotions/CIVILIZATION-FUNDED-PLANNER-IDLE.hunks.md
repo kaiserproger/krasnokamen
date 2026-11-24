@@ -19,3 +19,21 @@ HEAD moved `assign_builder` into `construction_builders.rs` and generalized the 
 `git apply -R --check docs/bugs/promotions/CIVILIZATION-FUNDED-PLANNER-IDLE.patch` on `6ef75a905`
 succeeds (clean tree); the real-client red is the later integrated sweep's
 control run, not claimed here.
+
+## a/-side audit (B5, 2026-11-24)
+
+`git show 384e83f69^` vs the file after `git apply -R` on HEAD, per hunk:
+
+- `construction.rs` `plan_pass`: the restored `return false;` in the priority
+  worker's arm is the pre-image early return, placed in HEAD's newer arm; the
+  meadow scan stays on both sides.
+- `construction_builders.rs` `protected_gatherer`: the origin commit changed
+  `construction.rs`; HEAD's function is a later refactor (`10ed5b28c`) of the same
+  fix. Its a/-side rebuilds the pre-fix body. Two a/-side names are outside the
+  origin's text and change no behaviour, and both are named here: the parameter is
+  `_ordered: bool` because the pre-fix body never read it (no unused-variable
+  warning), and the guard is `let _record = state.settlements.get(id)?;` — HEAD
+  binds `record` for the fix's `gatherer_demand(state, record, &images)` call;
+  with that call gone the binding is unused, so it keeps its `?` (still fails
+  closed on a missing settlement) and is renamed. The origin's text has no
+  `_record` binding at all. Nothing else differs.

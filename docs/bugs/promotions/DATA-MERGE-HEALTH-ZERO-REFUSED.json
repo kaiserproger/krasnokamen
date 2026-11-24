@@ -1,0 +1,31 @@
+{
+  "id": "DATA-MERGE-HEALTH-ZERO-REFUSED",
+  "verdict": "promoted",
+  "fix_commit": "patch:0b46b19b558dc97069cd360ddc1a6a5c2b2da6d7784015c59b6c49a47520eb12",
+  "fix_commit_full": "patch:0b46b19b558dc97069cd360ddc1a6a5c2b2da6d7784015c59b6c49a47520eb12",
+  "promoted_at": "2026-11-24T05:36:48+00:00",
+  "tree_head": "bff53a280813e6905d8feed4ef690c07b524a1ed",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "0b46b19b558dc97069cd360ddc1a6a5c2b2da6d7784015c59b6c49a47520eb12",
+  "reversed_files": [
+    "crates/mc-core/src/command_summon.rs",
+    "crates/mc-core/src/command_data/entity.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:command_data::tests::mutation_tests::data_merge_health_zero_kills_a_living_mob_like_vanilla": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_data::tests::mutation_tests::data_merge_health_zero_kills_a_living_mob_like_vanilla": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T053443-ledger-promote-vyj4favn"
+}

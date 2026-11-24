@@ -68,23 +68,24 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
     // These three carry a `VillagerState` row, whose own persistence image (`Brain`,
     // `Inventory`, `Offers`, `Gossips`, `Xp`, …) `data` reads and writes; every other
     // kind only has summon NBT.
-    let villager = matches!(
-        name,
-        "minecraft:villager" | "minecraft:zombie_villager" | "minecraft:wandering_trader"
-    );
+    let villager = crate::command_summon::carries_villager_row(name);
     let mut image = crate::command_data::entity_image(world, id)?;
-    let previous = crate::command_data::entity(world, id)?;
-    let mut edited = previous.clone();
+    // The merge base is the entity's own native image, not what `data get` prints: an
+    // engine-private field (`krasnokamen:VillagerRuntime`) is absent from the printed
+    // compound, so merging on that would both re-add the key on every repeated edit and
+    // replace the rest of the runtime image with only the authored fields.
+    let base = Tag::Compound(image.clone());
+    let mut edited = base.clone();
     crate::command_storage::mutate(state, context, action, &mut edited, &mut input, |source| {
         if let Tag::Compound(fields) = source {
             crate::command_tag::validate_fields(fields)?;
         }
         Ok(())
     })?;
-    if edited == previous {
+    if edited == base {
         return Err("Nothing changed. The specified properties already have these values".into());
     }
-    let (Tag::Compound(old), Tag::Compound(new)) = (&previous, edited) else {
+    let (Tag::Compound(old), Tag::Compound(new)) = (&base, edited) else {
         return Err("Entity data must be a compound".into());
     };
     crate::command_tag::validate_fields(&new)?;
@@ -163,8 +164,10 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
                 position,
                 image,
                 &changed,
-                keep_villager,
-                live_villager.as_deref(),
+                crate::command_summon::LiveVillager {
+                    state: live_villager.as_deref(),
+                    keep: keep_villager,
+                },
             )
             .map_err(|error| error.message())?,
         );
@@ -201,12 +204,23 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
             .map(Box::as_mut)
             .ok_or("Entity dimension unavailable")?
     };
+    let lethal = match &prepared {
+        Prepared::Mob(image, _) => image.lethal,
+        Prepared::Item(_) => false,
+    };
     match prepared {
         Prepared::Mob(image, custody) => {
             crate::command_summon::apply(world, id, *image);
             crate::plugin_inventories::apply_entity_custody(world, custody);
         }
         Prepared::Item(payload) => crate::command_summon::apply_item(world, id, payload),
+    }
+    if lethal {
+        world.entities.row_mut(slot).health = 0.0;
+        if world.entities.body(slot).alive {
+            world.entities.body_mut(slot).alive = false;
+            world.entities.begin_dying(slot);
+        }
     }
     if let Some(tags) = retained_tags {
         world.entities.row_mut(slot).opaque_entity_fields = tags;

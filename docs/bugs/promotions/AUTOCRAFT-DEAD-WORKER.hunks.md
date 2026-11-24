@@ -41,3 +41,25 @@ other row's behaviour is touched.
 
 With the patch reversed the order stays bound to the dead worker (the resume
 call returns `NotFound`), which both assertions reject.
+
+## a/-side audit (B5, 2026-11-24)
+
+Mechanical check: `git show <origin>^:<file>` vs the file after `git apply -R`
+of this patch at the audit head; script and full output in
+`receipts/D123/D123CivGates/a-side-audit.md`. Every line outside the origin
+commit's own change, with the commit that last changed it and whether the
+line is in `origin^:file`:
+
+- `crates/mc-core/src/settlements/production.rs` `@@ -1482,10 +1489,13 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut` (adapted; origin `b620e3333`, discovered origin):
+  - HEAD `return (park(job, MISSING_WORKER, tick_now.saturating_add(RETRY_TICKS))` — d28a29172 feat(settlements): reconcile offscreen production and daily food demand; in origin^: no
+  - a/-side `return (park(job, "missing worker", tick_now.saturating_add(RETRY_TICKS))` — no commit; in origin^: no
+- `crates/mc-core/src/settlements/production.rs` `@@ -1514,7 +1524,69 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut` (adapted; origin `b620e3333`, discovered origin):
+  - HEAD `changed || consumed || retaken || !finished.is_empty()` — d28a29172 feat(settlements): reconcile offscreen production and daily food demand; in origin^: no
+  - HEAD `job.retry_at = 0;` — d28a29172 feat(settlements): reconcile offscreen production and daily food demand; in origin^: no
+  - a/-side `changed || consumed || !finished.is_empty()` — no commit; in origin^: no
+
+HEAD-side lines whose last change is another commit are that later commit's
+form: reversing them is the HEAD drift a control must reverse to reach the
+pre-fix decision (rule (c)), not part of the fix. An a/-side line that is not
+in `origin^` is an adaptation this control relies on; each such line is named
+in the list above and changes no behaviour beyond the pre-fix decision.

@@ -38,3 +38,20 @@ centre while falling, which flips the yaw the assertion holds fixed
 (`motion_tests.rs`, the "no yaw flip" assertion). The second registered ref
 (`an_idle_resident_descends_a_ledge_at_every_start_phase_without_livelock`) is
 red for the same reversal.
+
+## a/-side audit (B5, 2026-11-24)
+
+Mechanical check: `git show <origin>^:<file>` vs the file after `git apply -R`
+of this patch at the audit head; script and full output in
+`receipts/D123/D123CivGates/a-side-audit.md`. Every line outside the origin
+commit's own change, with the commit that last changed it and whether the
+line is in `origin^:file`:
+
+- `crates/mc-core/src/villager/brain/motion.rs` `@@ -704,6 +704,9 @@` (adapted; origin `c5bb7877b`, discovered origin):
+  - HEAD `// A lower waypoint remains committed until its vertical arrival.` — 5f7cf3525 docs(villager): word the step-cap comment by vertical arrival; in origin^: no
+
+HEAD-side lines whose last change is another commit are that later commit's
+form: reversing them is the HEAD drift a control must reverse to reach the
+pre-fix decision (rule (c)), not part of the fix. An a/-side line that is not
+in `origin^` is an adaptation this control relies on; each such line is named
+in the list above and changes no behaviour beyond the pre-fix decision.

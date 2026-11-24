@@ -682,3 +682,49 @@ fn data_mutation_catalyst_updates_live_cursors_without_resetting_bloom() {
         Some(&Tag::Long(90))
     );
 }
+
+/// Vanilla's `data merge entity {Health:0}` kills a living mob: the merge is accepted (the
+/// summon path refuses zero health because a summon must be alive), the row keeps health 0
+/// and the mob enters the corpse clock rather than lingering alive at zero health.
+#[test]
+fn data_merge_health_zero_kills_a_living_mob_like_vanilla() {
+    let (mut state, _, context) = fixture();
+    run(
+        &mut state,
+        context,
+        "summon minecraft:cow 4 60 4 {Health:9f}",
+    );
+    let cow = "@e[type=minecraft:cow,limit=1]";
+    let slot = state
+        .entities
+        .slots()
+        .find(|slot| matches!(state.entities.body(*slot).kind, EntityKind::Mob { .. }))
+        .expect("the summoned cow");
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {cow} {{Health:0f}}")
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    let id = state.entities.body(slot).id;
+    assert_eq!(state.entities.row(slot).health, 0.0);
+    assert!(!state.entities.body(slot).alive, "zero health is a death");
+    assert!(
+        state.entities.is_dying(id),
+        "the mob enters the corpse clock"
+    );
+    // A dead mob is not a data target any more: the same merge on the corpse is refused.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {cow} {{Health:5f}}")
+        ),
+        -1
+    );
+    assert!(reported(&mut state));
+}

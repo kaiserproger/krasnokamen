@@ -1,32 +1,29 @@
-# CIVILIZATION-STREET-VERGE — narrowed compiling control (attempted 2026-11-24)
+# CIVILIZATION-STREET-VERGE — the recorded control (narrowed), row still open
 
-Row fix identity stays `patch:9c2f9605dd3e676f…` (`promotions/CIVILIZATION-STREET-VERGE.patch`);
-this file records the *narrowed* reversal tried for the real-client control and why the row is
-still open.
+Row fix identity `patch:55ef8747f4ea750339d9214de19f019521d57d94bca47c8a173af0dfa5e86009`
+(`promotions/CIVILIZATION-STREET-VERGE.patch`). One patch only: the earlier full-slice patch
+was deleted (it removed `Network::street_index`, which a later commit's call site still uses, so
+it could never build a control at HEAD); this narrowed reversal is the one the row keeps.
 
-## Why the recorded patch cannot be the control
+## Why the narrowed hunk is the whole control
 
-`promotions/CIVILIZATION-STREET-VERGE.patch` reversed at HEAD `3cf141664` does not compile:
-it removes `Network::street_index` (layout.rs:992) and two of its call sites, but a later
-commit's use at layout.rs:951 survives — `error[E0599]: no method named street_index found …
-layout.rs:951` on the control pin (2026-11-24, `wt/D123CivGatesMapCtl`).
+One hunk: the walk's expansion filter at `layout.rs` goes back to
+`Cell::Road | Cell::Plaza`, i.e. roads and the plaza again without walkable verges. Its only
+a/-side text is `Cell::Road | Cell::Plaza` (identical to the real pre-fix blob from
+`898af4725`); its only post-image line is the same with `| Cell::Verge`.
 
-- `street_index` and the call at layout.rs:951 — **(c) later commit's use**: the guard's body
-  at HEAD (`matches!(cell(...), Cell::Road | Cell::Plaza).then(|| self.index.get(...))`,
-  layout.rs:993-995) and the caller `construction_access` (layout.rs:951) are HEAD code a later
-  commit added/changed; no HEAD equivalent of the original removal exists, and reversing them
-  cannot build. Kept identical on both sides of the narrowed control.
-- Every other hunk of the original patch is layout.rs. There is **no a/-side text** in the
-  narrowed patch: its only pre-image line is `                        Cell::Road | Cell::Plaza`
-  (layout.rs:833, identical to the real pre-fix blob) and its only post-image line adds
-  `| Cell::Verge`.
+- `street_index` and the caller at layout.rs:951 — **(c) later commit's use**: the guard body at
+  HEAD (`matches!(cell(...), Cell::Road | Cell::Plaza).then(|| self.index.get(...))`) and the
+  caller are HEAD code a later commit added; the original patch's removal of them has no HEAD
+  equivalent that builds, so they are identical on both sides here.
+- The slice's other production files are other rows — **(a)**: `construction.rs` =
+  STREET-BUILDER-RETENTION, `shepherd.rs`/`brain` = EMPLOYED-SHEARING,
+  `construction_availability.rs` = INACTIVE-SHEEP-TARGET.
 
-## The narrowed reversal (`CIVILIZATION-STREET-VERGE.narrowed.patch`)
+## Reverse-apply evidence
 
-One hunk: the walk's expansion filter at layout.rs:833 goes back to
-`Cell::Road | Cell::Plaza`, i.e. roads and the plaza again without walkable verges. It applies
-in reverse on the candidate (`git apply -R --check`), builds, and pins
-(`pins/a8667a74ae84-c6c9232c-server-x86_64-unknown-linux-gnu-incr`).
+`git apply -R --check docs/bugs/promotions/CIVILIZATION-STREET-VERGE.patch` on the committed
+tree succeeds, and the reversed tree builds (`pins/a8667a74ae84-c6c9232c-server-…`).
 
 ## Result: the narrowed control is GREEN, so this scene does not discriminate
 

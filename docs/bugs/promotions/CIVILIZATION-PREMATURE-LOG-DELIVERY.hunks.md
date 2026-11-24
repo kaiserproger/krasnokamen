@@ -31,3 +31,24 @@ No a/-side adaptation was needed: the pre-image is the same function with the
 `cargo:mc-core:settlements::construction::planner_tests::an_already_funded_candidate_does_not_send_each_harvested_log_home`
 — with the early funded probe reversed, each harvested log is sent home despite
 an already funded candidate, which the test's delivery count rejects.
+
+## a/-side audit (B5, 2026-11-24)
+
+Mechanical check: `git show <origin>^:<file>` vs the file after `git apply -R`
+of this patch at the audit head; script and full output in
+`receipts/D123/D123CivGates/a-side-audit.md`. Every line outside the origin
+commit's own change, with the commit that last changed it and whether the
+line is in `origin^:file`:
+
+- `crates/mc-core/src/settlements/construction.rs` `@@ -803,16 +803,24 @@` (adapted; origin `a946fa286`, discovered origin):
+  - HEAD `if access::projects(record).next().is_some() {` — ab417a937 refactor(settlements)!: store construction projects and orders as vectors; in origin^: no
+  - a/-side `if access::projects(record).next().is_some() {` — 57c150f44 settlements: several funded projects build in parallel (D8 S2); in origin^: no
+  - a/-side `active_bill` — a946fa286 fix(settlements): keep harvesting when construction is already funded; in origin^: no
+  - a/-side `.as_ref()` — 24de2c2ef settlements: D8 review round 2 (SOL-2..6, incumbent liveness, per-project lookups); in origin^: yes
+  - a/-side `.is_some_and(|bill| super::construction_crafting::can_fund(state, bill, &images))` — no commit; in origin^: no
+
+HEAD-side lines whose last change is another commit are that later commit's
+form: reversing them is the HEAD drift a control must reverse to reach the
+pre-fix decision (rule (c)), not part of the fix. An a/-side line that is not
+in `origin^` is an adaptation this control relies on; each such line is named
+in the list above and changes no behaviour beyond the pre-fix decision.

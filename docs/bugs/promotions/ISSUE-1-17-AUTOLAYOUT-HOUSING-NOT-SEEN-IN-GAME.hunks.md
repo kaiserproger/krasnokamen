@@ -5,7 +5,7 @@ Patch: `docs/bugs/promotions/ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME.patc
 committed tree at `b67e1b0612` (`git apply -R --check`, plain context) and is
 what a promotion passes as `--fix-patch`.
 
-## What the fix is (origin `patch:5f50f42f…`)
+## What the fix is (origin `patch:5f50f42f…`, kept whole in `promotions/ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME.origin.patch`)
 
 The settlement planned storage, workshops, roads and lamps by itself but never
 completed a new house or grew: the first Farm billed 30 dirt while the quarry
@@ -73,3 +73,28 @@ Control runs (reversed tree, then restored):
 The first receipt was taken before the un-called `meadow_site` function was
 deleted; deleting an uncalled function cannot change admission, and the second
 and third receipts were taken on the final control tree (which compiles).
+
+## a/-side audit (B5, 2026-11-24)
+
+Mechanical check: `git show <origin>^:<file>` vs the file after `git apply -R`
+of this patch at the audit head; script and full output in
+`receipts/D123/D123CivGates/a-side-audit.md`. Every line outside the origin
+commit's own change, with the commit that last changed it and whether the
+line is in `origin^:file`:
+
+- `crates/mc-core/assets/blueprints/farm.json` `@@ -314,7 +314,6 @@` (adapted; origin `18f715367`, discovered origin):
+  - HEAD `"W": "wheat[age=0]"` — 18f715367 feat(settlements): Millénaire-style construction, autonomy, army and village fixes (issue #1); in origin^: no
+  - a/-side `"W": "wheat[age=0]",` — 491844f77 settlements: the first Farm bills no dirt (farmland is hoed in place, border dirt dropped); in origin^: no
+  - a/-side `"g": "dirt"` — 491844f77 settlements: the first Farm bills no dirt (farmland is hoed in place, border dirt dropped); in origin^: no
+- `crates/mc-core/src/settlements/construction.rs` `@@ -1868,6 +1868,9 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si` (adapted; origin `5701e7159`, discovered origin):
+  - HEAD `if let Some(site) = meadow_site(state, record, residents, &images) {` — 7f89f04c5 settlements: seed meadow runs while a priority material worker is out; in origin^: yes
+- `crates/mc-core/src/settlements/construction.rs` `@@ -1931,6 +1934,64 @@ fn fortification_site(` (adapted; origin `8b1477f78`, discovered origin):
+  - HEAD `let mut catalog = catalog(state, record);` — 23aad8f43 feat(settlements): build Spanish owner culture and extract run chronicles; in origin^: no
+  - HEAD `builder: None,` — 68052755a feat(settlements): PrepRollover R1 fixes + D27 territory rule in the upgrade fence; in origin^: no
+  - HEAD `order_seq: None,` — 68052755a feat(settlements): PrepRollover R1 fixes + D27 territory rule in the upgrade fence; in origin^: no
+
+HEAD-side lines whose last change is another commit are that later commit's
+form: reversing them is the HEAD drift a control must reverse to reach the
+pre-fix decision (rule (c)), not part of the fix. An a/-side line that is not
+in `origin^` is an adaptation this control relies on; each such line is named
+in the list above and changes no behaviour beyond the pre-fix decision.

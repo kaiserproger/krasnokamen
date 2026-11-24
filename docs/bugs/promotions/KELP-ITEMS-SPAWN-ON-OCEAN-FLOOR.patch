@@ -35,3 +35,61 @@ index 37aa8ed33..084dbc942 100644
  }
  
  /// Write `new` into `pos`, washing away whatever stood there.
+diff --git a/crates/mc-core/src/registry.rs b/crates/mc-core/src/registry.rs
+index e497cca96..9cd6b124f 100644
+--- a/crates/mc-core/src/registry.rs
++++ b/crates/mc-core/src/registry.rs
+@@ -161,6 +161,12 @@ pub struct RegistryTables {
+     /// registry modes carry the tag. Shared (`Arc`) so world constructors clone
+     /// without copying the table.
+     pub(crate) mob_interactable_doors: Arc<[bool]>,
++    /// Dense per-state flag, indexed by global state id: flowing fluid washes
++    /// the block away (pops its loot). Vanilla 26.3 `FlowingFluid.canHoldFluid`:
++    /// the `washed_away_by_fluids` block tag, minus every `LiquidBlockContainer`
++    /// (kelp, kelp_plant, seagrass, tall_seagrass refuse a fluid; waterloggable
++    /// blocks only take a source, never a flow). Empty without that tag.
++    pub(crate) washed_by_fluids: Arc<[bool]>,
+     /// Dense vanilla log/soil tag membership for bounded whole-tree proof.
+     /// Shared immutable startup tables; no tag lookup or copy during selection.
+     pub(crate) tree_logs: Arc<[bool]>,
+@@ -476,6 +482,16 @@ impl CoreRegistry {
+             .map(|state| state.id.0 as usize + 1)
+             .max()
+             .unwrap_or(0);
++        let washed_away: std::collections::HashSet<i32> = tags
++            .raw_ids(
++                mc_data::tags::BLOCK_REGISTRY,
++                "minecraft:washed_away_by_fluids",
++            )
++            .unwrap_or_default()
++            .iter()
++            .copied()
++            .collect();
++        let mut washed_by_fluids = vec![false; state_count];
+         let mut hazard_flags = vec![0u8; state_count];
+         let mut mob_interactable_doors = vec![false; state_count];
+         let door_blocks = tags
+@@ -529,8 +545,15 @@ impl CoreRegistry {
+             tree_logs[state.id.0 as usize] = log_blocks.contains(&state.block.raw_id);
+             tree_soil[state.id.0 as usize] =
+                 soil_blocks.contains(&state.block.raw_id) || farming.is_farmland(state.id.0);
++            washed_by_fluids[state.id.0 as usize] = washed_away.contains(&state.block.raw_id)
++                && !matches!(
++                    state.block.id.path(),
++                    "kelp" | "kelp_plant" | "seagrass" | "tall_seagrass"
++                )
++                && state.properties.iter().all(|(key, _)| key != "waterlogged");
+         }
+         let mob_interactable_doors: Arc<[bool]> = mob_interactable_doors.into();
++        let washed_by_fluids: Arc<[bool]> = washed_by_fluids.into();
+         let tree_logs: Arc<[bool]> = tree_logs.into();
+         let tree_soil: Arc<[bool]> = tree_soil.into();
+         let mut collision_boxes = vec![Box::default(); state_count];
+@@ -651,6 +674,7 @@ impl CoreRegistry {
+                 farming,
+                 hazard_flags,
+                 mob_interactable_doors,
++                washed_by_fluids,
+                 tree_logs,
+                 tree_soil,
+                 fire_states,
