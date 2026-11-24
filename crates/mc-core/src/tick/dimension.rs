@@ -270,6 +270,12 @@ fn run_dimension_tick_inner<'a>(
     }
     let entity_tail_time = entity_tail_start.elapsed();
 
+    // Beds follow their sleeper (vanilla `LivingEntity.startSleeping`): derived
+    // after the phases that can start or end a sleep this tick and before the
+    // merge, so the write lands in this tick's block phase and a break staged by
+    // the same tick is applied after it.
+    crate::sleep::mirror_occupied_beds(state);
+
     // 3. Merge (deterministic, fixed order, whole-intent rejection).
     let merge_start = std::time::Instant::now();
     state.merge(&mut intents);

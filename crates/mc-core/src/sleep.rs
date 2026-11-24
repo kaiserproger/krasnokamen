@@ -301,8 +301,10 @@ pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
 /// [`TickState::sleepers`] and a resident whose brain set `sleeping` both own
 /// their bed's cell, and a bed that lost its sleeper is cleared again. Doing it
 /// here covers every wake path (leave-bed, morning, hit, death, resident
-/// reassignment, dimension travel), not just [`wake`].
-fn mirror_occupied_beds(state: &mut TickState) {
+/// reassignment, dimension travel), not just [`wake`]. The tick calls it after
+/// the phases that can start or end a sleep and before the merge, so its writes
+/// land in the same block phase and a block break staged by the same tick wins.
+pub(crate) fn mirror_occupied_beds(state: &mut TickState) {
     let dimension = state.dimension.name();
     let previous = std::mem::take(&mut state.occupied_beds);
     let mut wanted: rustc_hash::FxHashSet<BlockPos> =
@@ -349,7 +351,6 @@ fn set_bed_occupied(state: &mut TickState, head: BlockPos, occupied: bool) {
 /// night is over or who were hurt, and skip the night when the gamerule's
 /// percentage of active non-spectator players sleeps soundly.
 pub(crate) fn run(state: &mut TickState) {
-    mirror_occupied_beds(state);
     cat::run(state);
     if state.sleepers.is_empty() {
         return;
