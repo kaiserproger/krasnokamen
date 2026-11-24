@@ -236,24 +236,9 @@ SCENARIOS: dict[str, Scenario] = {
                "HorseInventoryMenu with 53 slots, and a quick move puts exactly seven diamonds in the first "
                "cargo slot and brings them back",
         limits="One tamed NoAI donkey and one chest; mule comparison, death drop and llama columns rest on "
-               "the cargo test. No offline export/reimport: the registered custody scenario needs a client "
-               "hook (`promotion_mount_export_reimport`) that the client does not implement.",
-    ),
-
-    "native-v2-ledger-hopper-vehicle": _entry(
-        id="native-v2-ledger-hopper-vehicle",
-        summary="A hopper pulling from a chest minecart refreshes its already-open menu",
-        owner="core:harness", evidence="graphical", profile="entities",
-        scenario_id="native-v2-ledger-hopper-vehicle",
-        requires=("xvfb",),
-        sources=("tools/harness/backends/native_v2.py",
-                 "tools/harness/backends/native_ledger_hopper_vehicle.py"),
-        fixture="operator pad; one down-facing hopper with its menu opened first, one chest minecart "
-                "summoned above it afterwards with one diamond",
-        proves="the open HopperMenu with 41 slots starts empty, the hopper pulls the diamond out of the "
-               "vehicle above and the client's received menu slot shows that diamond without a reopen",
-        limits="One chest minecart above one hopper, one diamond and an already-open menu; no hopper "
-               "chains, deposit path or restart.",
+               "the cargo test. No offline export/reimport here: that half belongs to "
+               "native-v2-custody-mount-export, which does run (its export/reimport hook is supplied by "
+               "tools/harness/backends/client_probes.py), and it costs two world conversions.",
     ),
 
     "native-v2-ledger-copper-chest-open": _entry(

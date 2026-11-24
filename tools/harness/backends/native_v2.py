@@ -1177,12 +1177,6 @@ def _ledger_donkey_cargo(steps: ProbeSteps, origin: tuple[int, int, int]) -> Non
     run(steps, origin)
 
 
-def _ledger_hopper_vehicle(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
-    from .native_ledger_hopper_vehicle import run
-
-    run(steps, origin)
-
-
 def _ledger_copper_chest(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from .native_ledger_copper_chest import run
 
@@ -1212,7 +1206,6 @@ RUNNERS = {
     "native-v2-ledger-lectern": _ledger_lectern,
     "native-v2-ledger-op-selector": _ledger_op_selector,
     "native-v2-ledger-donkey-cargo": _ledger_donkey_cargo,
-    "native-v2-ledger-hopper-vehicle": _ledger_hopper_vehicle,
     "native-v2-ledger-copper-chest-open": _ledger_copper_chest,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,

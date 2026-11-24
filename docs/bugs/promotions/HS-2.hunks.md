@@ -33,7 +33,11 @@ Re-audit:
   (`crates/mc-core/src/vehicles_tests.rs:1650`). The neighbouring
   `assert_eq!(block_entities[..].slots[0].item_id, apple)` stays green in the control: it proves the
   transfer, not the stale-menu symptom.
-- `harness:entities:native-v2-ledger-hopper-vehicle` — a real client opens the hopper's menu first, the
-  chest minecart above is summoned afterwards, and the received `HopperMenu` slot 0 shows the pulled diamond
-  without a reopen (`tools/harness/backends/native_ledger_hopper_vehicle.py`). Passed receipt: see the
-  promotion JSON.
+- **Missing real-client ref.** The row is `repro = manual`, so a real client must show the stale menu; no
+  fixture can today. `summon` refuses `Items` for a container vehicle (`command_summon::supports` has no
+  vehicle container field, observed as a cart that never appeared in
+  `20261124T120607-native-v2-ledger-hopper-vehicle-kua__3jb`), and
+  `/item replace entity <vehicle> container.N` is refused at `command_item_replace.rs:256-258`
+  (`Invalid entity slot`). Vanilla accepts both; until one exists here, or a world fixture ships a looted
+  chest minecart, the graphical half cannot be produced. The scenario was withdrawn rather than registered
+  as a permanent red.
