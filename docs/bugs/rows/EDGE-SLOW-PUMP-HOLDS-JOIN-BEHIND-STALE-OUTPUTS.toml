@@ -3,7 +3,7 @@ id = "EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS"
 title = "An edge pump slower than the tick sits at the oldest retained broadcast output and drains the reliable outbox only through that tick, so every reliable change, a `Joined` too, waits a whole broadcast window of tick periods: below about 3 TPS a join times out at the 10 s deadline"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Latent; candidate mechanism for Perf1M R3k-4 leg c (receipts/Perf1M/LAPTOP-R3k-4-REPORT.md: four joins admitted at 18:47:41.6 closed with `timed out waiting for join` at 18:47:51.6), whose cause stays open: that run has no pump or per-tick telemetry and its TPS in the window is unknown. CheckpointJoinStall 2026-11-20, from code and a synthetic repro with the real core and pump: crates/mc-edge/src/server/pump.rs routes the outbox only through the output it publishes (core.rs `try_drain_outbox_through`, core/outbox.rs); after `Lagged` the pump resumes at the oldest retained output, so a pump slower than the tick stays `broadcast_cap - 1` outputs behind. Base dc670b3bd repros: 20 TPS, window 256, pump 64 outputs behind at half rate -> `Joined` after 132 ticks (6.6 s); `/tick rate 3`, window 32 -> 34 ticks (11.3 s, past the 10 s deadline). Receipts: receipts/CheckpointJoinStall/repro/m2-repro-base-20tps-and-stallhalt.log and m2-repro-base-3tps.log.\n\nNegative control: none at client level yet. In the join-lag-gate control scenario (control pin 224c5d6d1f35, 3 TPS, KRASNOKAMEN_PUMP_LAG_TICKS=8) the 10 s stall watch and the 10 s join deadline race and row 2's fail-closed halt fires first, so the harness judges row 1 null (receipts 025204, 031229-nele3q6h, 031310-cjq5tijk, 031310-jz2okzn6). The shared stale-skip fix (bfdc23f1c) changes no watchdog, so there is no separate row-1 hunk to revert. Laptop R3k-4 on pre-fix 7e421d34c saw four join-wait timeouts without a preceding halt, cause unknown; they are not a negative control for this row. Its only negative controls are the cargo NCs above; by QA_AGENT_PROTOCOL gate hygiene 1 the row stays fixed-unproven until a client-level red at its own assertion exists. Positive: harness:join-lag-gate:join_behind_slow_pump on the gate pin 5b632151a099 (×3 passed)."
 repro = "cargo"
 regression = [
@@ -18,3 +18,4 @@ regression = [
 ]
 failing_first = "reported"
 fix_commit = "patch:223a8c4f1a290df07e9613f2e3b969ff3683701df7091905583e1bdab2b36aff"
+promotion = "docs/bugs/promotions/EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS.json"
