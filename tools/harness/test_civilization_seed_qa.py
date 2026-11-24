@@ -494,7 +494,7 @@ class CivilizationEvidenceTests(unittest.TestCase):
             nonlocal census
             if name == "minecraft_list_entities":
                 census += 1
-                if census == 2:
+                if census == 3:
                     raise RuntimeError("observation begins")
                 return {"entities": [], "visible_count": 0, "truncated": False, "next_cursor": None}
             return {}
@@ -521,6 +521,46 @@ class CivilizationEvidenceTests(unittest.TestCase):
         self.assertEqual(events, ["stock", f"gamemode creative {qa.village.USERNAME}"])
         self.assertEqual(detail["fixture_commands"],
                          [f"console: gamemode creative {qa.village.USERNAME}"])
+
+
+class GatedCensusTests(unittest.TestCase):
+    """Seed 24 (2026-11-24): the 128-block all-entity census never stabilised over a
+    village that harvests into the world, so the gate refused before its milestones."""
+
+    def test_items_that_churn_between_pages_no_longer_refuse_the_census(self):
+        villager = {"entity_id": 1, "entity_uuid": "v1", "entity_type": "minecraft:villager",
+                    "x": 130.5, "y": 78.0, "z": -216.5}
+        sheep = {"entity_id": 2, "entity_uuid": "s1", "entity_type": "minecraft:sheep",
+                 "x": 140.5, "y": 70.0, "z": -220.5}
+        pages = 0
+
+        def call(name, arguments):
+            nonlocal pages
+            if name != "minecraft_list_entities":
+                return {}
+            kind = arguments.get("entity_type")
+            if kind is None:
+                # Unfiltered: an item dropped between the two pages moves the count.
+                pages += 1
+                first = pages % 2 == 1
+                row = {"entity_id": 900 + pages, "entity_uuid": f"i{pages}",
+                       "entity_type": "minecraft:item", "x": 131.5, "y": 77.0, "z": -216.5}
+                return {"entities": [row] if first else [row, {**row, "entity_id": 950}],
+                        "visible_count": 100 if first else 101,
+                        "truncated": first, "next_cursor": "1" if first else None}
+            rows = [villager] if kind == "minecraft:villager" else [sheep]
+            return {"entities": rows, "visible_count": len(rows),
+                    "truncated": False, "next_cursor": None}
+
+        probe = Mock()
+        probe.call.side_effect = call
+        with self.assertRaisesRegex(RuntimeError, "membership changed"):
+            qa.entity_census(probe)
+        census = qa.gated_census(probe)
+        self.assertEqual([row["entity_type"] for row in census["entities"]],
+                         ["minecraft:villager", "minecraft:sheep"])
+        self.assertFalse(census["truncated"])
+        self.assertEqual(census["census_types"], ["minecraft:villager", "minecraft:sheep"])
 
 
 if __name__ == "__main__":
