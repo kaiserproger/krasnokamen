@@ -3,7 +3,7 @@ id = "COMMAND-FILL-SUCCESS-FEEDBACK"
 title = "Successful fill replies with generic Changed feedback instead of vanilla fill success"
 area = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "HzClientQA consume-1/2 fail the unchanged filled assertion; consume-2.log captures Changed 1230 block(s). Local vanilla 26.3 commands.fill.success is Successfully filled %s block(s)."
 repro = "client"
 regression = ["harness:scene-shot:native-command-feedback"]
@@ -11,3 +11,4 @@ fix_commit = "patch:67b9f371ec9f30fba375acd1d22a174c8cd9031d88bd42fee5bb84abf911
 failing_first = "reported"
 proving_assertions = { "harness:scene-shot:native-command-feedback" = "fill-success" }
 repro_check = "Real pre-image: the in-tree fix (3d4893773, the commands.fill.success feedback path) regenerated as a git-format patch docs/bugs/fix-patches/COMMAND-FILL-SUCCESS-FEEDBACK.patch (reverse-applies at HEAD); promote reverses exactly that hunk. Scene step: native-command-feedback sends `fill ~2 ~2 ~2 ~3 ~2 ~3 minecraft:stone` and asserts the chat reads Successfully filled 4 block(s) (excludes Changed 4 block(s)); on the reversed tree the client shows Changed and the assertion fails. Old repro note: receipts/HzClientQA/consume-2.log captured Changed 1230 block(s) because bd7a05a64 had not yet routed fill success through commands.fill.success."
+promotion = "docs/bugs/promotions/COMMAND-FILL-SUCCESS-FEEDBACK.json"
