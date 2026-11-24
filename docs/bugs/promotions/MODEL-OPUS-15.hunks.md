@@ -80,5 +80,13 @@ ROI by more than 4000 px against the same player with an empty chest slot, with 
 (< 2500 px). That is the row's symptom (no worn back layer). `chestplate_back_roi` and
 `idle_back_motion_bounded` only bound the comparison and stay green on both sides.
 
-Control and restore receipts, with the observed pixel values, are recorded in
-`promotions/MODEL-OPUS-15.json`.
+Control and restore receipts (candidate core `c2cab51e74`, server pin `c2cab51e7404`; client pins
+`c290f71b95` sha `dfc4a2920da5` and `b11ca37604` sha `a6b29408adac`):
+
+- control `20261124T003244-native-elytra-ps_wnt_t` — FAIL `worn_elytra_drawn`;
+  `elytra_changed_pixels = {chestplate: 12790, elytra: 336, idle: 835}`. With the guard also
+  reversed the wings draw as a chestplate layer on both frames, so the back ROI barely changes.
+- restore `20261124T003313-native-elytra-cbm2r4i1` — PASSED;
+  `elytra_changed_pixels = {chestplate: 12444, elytra: 9448, idle: 79}`.
+- promote `20261124T003824-ledger-promote-j54ozaac`; pair patch id `ea74507b…`; the client unit ref
+  ran green in `ledger-1-client-player_back_uses_wings_a.log`.

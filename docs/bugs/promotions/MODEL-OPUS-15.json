@@ -1,17 +1,17 @@
 {
   "id": "MODEL-OPUS-15",
   "verdict": "promoted",
-  "fix_commit": "client:10a9c5dee5",
-  "fix_commit_full": "10a9c5dee5d6d146e93024ae48f302568106ae94",
-  "promoted_at": "2026-11-23T20:18:34+00:00",
-  "tree_head": "e9a5cf9e315a7adf379abb427d4bb85918514af7",
+  "fix_commit": "client:b11ca37604",
+  "fix_commit_full": "b11ca376044b05e500f5f95403d5bb098f5aed2f",
+  "promoted_at": "2026-11-24T00:39:22+00:00",
+  "tree_head": "c2cab51e7404a288a02647af9a39a9bde2ae0345",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "client_fix": true,
   "control_tree": "client",
   "negative_control": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T200301-native-elytra-hyenaikk/result.json",
-    "client_head": "e292b8f68e044aa6e1fc225bcbf58dc89c3157da",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T003244-native-elytra-ps_wnt_t/result.json",
+    "client_head": "c290f71b959702819247026c947b59d9c0aef43e",
     "server_binary_sha256": "8ba874991d7bedb574f3ef74493324863f742322dce9b141ef4935738964410f",
     "red": [
       "harness:scene-shot:native-elytra"
@@ -21,8 +21,8 @@
     }
   },
   "restored": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T200412-native-elytra-17wj0uai/result.json",
-    "client_head": "10a9c5dee5d6d146e93024ae48f302568106ae94",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T003313-native-elytra-cbm2r4i1/result.json",
+    "client_head": "b11ca376044b05e500f5f95403d5bb098f5aed2f",
     "server_binary_sha256": "8ba874991d7bedb574f3ef74493324863f742322dce9b141ef4935738964410f",
     "green": [
       "harness:scene-shot:native-elytra"
@@ -30,13 +30,13 @@
     "states": {
       "harness:scene-shot:native-elytra": "green"
     },
-    "tree_head": "e9a5cf9e315a7adf379abb427d4bb85918514af7",
+    "tree_head": "c2cab51e7404a288a02647af9a39a9bde2ae0345",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "client_receipt": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T200412-native-elytra-17wj0uai/result.json",
-    "client_head": "10a9c5dee5d6d146e93024ae48f302568106ae94",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T003313-native-elytra-cbm2r4i1/result.json",
+    "client_head": "b11ca376044b05e500f5f95403d5bb098f5aed2f",
     "server_binary_sha256": "8ba874991d7bedb574f3ef74493324863f742322dce9b141ef4935738964410f",
     "green": [
       "harness:scene-shot:native-elytra"
@@ -44,15 +44,14 @@
     "states": {
       "harness:scene-shot:native-elytra": "green"
     },
-    "tree_head": "e9a5cf9e315a7adf379abb427d4bb85918514af7",
+    "tree_head": "c2cab51e7404a288a02647af9a39a9bde2ae0345",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "client_control_delta": {
-    "fix_patch_id": "5409c6aab77fcb78184568898ef8e51d1e1abbb6",
+    "fix_patch_id": "ea74507bd7449cdb6491b127728d092187b2bce1",
     "paths": [
-      "src/entities/equipment.rs",
-      "src/ui/item_bars.rs"
+      "src/entities/equipment.rs"
     ]
   },
   "candidate_refs": {
@@ -61,5 +60,5 @@
       "detail": ""
     }
   },
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T201732-ledger-promote-act08ya3"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T003824-ledger-promote-j54ozaac"
 }
