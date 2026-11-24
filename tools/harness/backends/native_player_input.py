@@ -224,10 +224,10 @@ def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             # release; auto-repeat starts far later (X11 delay), so only the tick edge can
             # add a second drop.
             steps.fixture("clear @s")
-            _seed_main(steps, "minecraft:diamond", 5, 9)
-            state = _open_inventory(steps, creative)
-            _input(steps, key=ord("1"), point=center(state, 9))
-            steps.call("minecraft_close_screen")
+            # An empty inventory puts `give` in the first hotbar slot, which is the
+            # selected one: no screen exchange stands between the fixture and the key.
+            steps.fixture("give @s minecraft:diamond 5")
+            steps.call("minecraft_set_hotbar_slot", {"slot": 0})
             fixture = steps.call("minecraft_read_item_components", {"source": "selected"})
             steps.check("held_q_fixture_selected",
                         fixture.get("item_id") == "minecraft:diamond" and fixture.get("count") == 5)
