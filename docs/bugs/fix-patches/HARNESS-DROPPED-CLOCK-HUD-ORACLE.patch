@@ -1,0 +1,24 @@
+diff --git a/tools/harness/backends/scene_shot_checks.py b/tools/harness/backends/scene_shot_checks.py
+--- a/tools/harness/backends/scene_shot_checks.py
++++ b/tools/harness/backends/scene_shot_checks.py
+@@ -501,19 +501,7 @@
+         probe.report[f"{name}_blue_pixels"] = [sum(m1), sum(m2)]
+         probe.report[f"{name}_changed"] = changed
+         probe.check(f"{name}_face_changed", changed >= threshold)
+-    # Dropped clock: the dark needle angle must change between received day and night.
+-    dark = lambda r, g, b: max(r, g, b) < 95 and max(r, g, b) - min(r, g, b) < 25
+-    drop_box = (335, 640, 395, 700)
+-    drop_angles = []
+-    for name, image in (("day", day), ("night", night)):
+-        crop = image.crop(drop_box)
+-        w, h = crop.size
+-        px = [(x, y) for y in range(h) for x in range(w) if dark(*crop.getpixel((x, y)))]
+-        probe.report[f"dropped_clock_dark_pixels_{name}"] = len(px)
+-        probe.check(f"dropped_clock_face_{name}", len(px) >= 100)
+-        drop_angles.append(axis_angle(px))
+-    probe.report["dropped_clock_axis_angles"] = [round(a, 1) for a in drop_angles]
+-    probe.check("dropped_clock_face_changed", axis_diff(drop_angles[0], drop_angles[1]) > 30.0)
++    check_clock_face(probe, day, night, "dropped_clock", (300, 260, 460, 420))
+     held_day, held_night = shots["held-day"], shots["held-night"]
+     probe.check("held_camera_unchanged", all(
+         abs(a - b) < 0.01 for a, b in zip(held_day[0]["camera_position"], held_night[0]["camera_position"])

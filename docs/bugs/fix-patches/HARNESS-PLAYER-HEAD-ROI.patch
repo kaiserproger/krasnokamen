@@ -1,0 +1,12 @@
+diff --git a/tools/harness/backends/scene_shot_checks.py b/tools/harness/backends/scene_shot_checks.py
+--- a/tools/harness/backends/scene_shot_checks.py
++++ b/tools/harness/backends/scene_shot_checks.py
+@@ -351,7 +351,7 @@
+     # player_head_scene: head at (1000.5,160.25,1004.5), camera
+     # (1000.5,161.62,1001.5), yaw/pitch 0, vertical FOV 70, 1280x720.
+     # The projected half-block head is x593..687/y534..641 (hat expands it).
+-    head_box = (880, 520, 1080, 680)
++    head_box = (580, 520, 700, 655)
+     placed = _changed(shots["head-block"][1], shots["head-empty"][1], head_box)
+     worn = _changed(shots["head-worn"][1], shots["head-none"][1], (560, 280, 760, 420))
+     probe.report["placed_head_changed_pixels"] = placed
