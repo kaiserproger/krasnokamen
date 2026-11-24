@@ -89,4 +89,17 @@ transient leave of Play is not read as the kick.
 
 ## Gate receipts
 
-Recorded in `../HANDOFF-5.md`, `notes/kick-picks.tsv` and the promotion JSON.
+Promoted at core `0ccfdd946` with server pin
+`pins/0ccfdd946084-server-x86_64-unknown-linux-gnu-incr`; promotion artifact
+`20261124T174449-ledger-promote-e9zcqgs3` (fix patch-id `766b086534bbe0a6…`).
+
+| run | client | `nether_kick.disconnect_reason` | assertion |
+|---|---|---|---|
+| `20261124T173901-native-v2-duplicate-login-ox4g1dzs` | `7c9e84721f` (control) | the reason | passed |
+| `20261124T173938-native-v2-duplicate-login-ne0whc4n` | `7c9e84721f` (control) | the reason | passed |
+| `20261124T174024-native-v2-duplicate-login-4wzjrf_i` | `7c9e84721f` (control) | `Broken pipe (os error 32)` | `kick_reason_preserved` **false** |
+| `20261124T174056-native-v2-duplicate-login-8kja4dw0` | `900da09902` (restore) | the reason | passed |
+
+The first two control runs are why the leg now starts the replacement during the travel burst
+(`d2c6fdf35`): with the destination world settled, the pre-fix client delivered the reason in 5 of 5
+runs and the control stopped discriminating.

@@ -4,10 +4,11 @@ title = "A duplicate-login kick of an incumbent in the Nether can show 'Broken p
 area = "client"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F5, 1/2, BREAK_DL_ATTACK=nether); the server log shows 'You logged in from another location' was sent."
 regression = ["client:krasnokamen-client:protocol::network::tests::kick_reason_survives_a_failed_client_write", "client:krasnokamen-client:protocol::network::tests::kick_published_before_the_writer_ends_is_not_replaced_by_a_queue_error", "harness:entities:native-v2-duplicate-login"]
 failing_first = "reported"
 fix_commit = "client:900da0990290bcde145e00696f26a2126304187c"
 repro_check = "real-hunk control red ('play disconnect packet must be delivered'); real gate harness:entities:native-v2-duplicate-login (BREAK_DL_ATTACK=nether); area=client, candidate"
 proving_assertions = { "harness:entities:native-v2-duplicate-login" = "kick_reason_preserved" }
+promotion = "docs/bugs/promotions/NATIVE-KICK-REASON-BROKEN-PIPE.json"
