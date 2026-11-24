@@ -1714,8 +1714,9 @@ fn all_weathering_families_oxidize_wax_and_scrape() {
         "lightning_rod",
     ];
     for (i, fam) in families.iter().enumerate() {
+        // The fixture only admits chunk (0, 0): plant the families inside it.
         let pos = BlockPos {
-            x: 20 + i as i32,
+            x: 1 + i as i32,
             y: 201,
             z: 1,
         };
