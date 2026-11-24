@@ -1,0 +1,34 @@
+{
+  "id": "EXECUTE-IF-PREDICATE",
+  "verdict": "promoted",
+  "fix_commit": "8e1ea70158edc754b116bf1318ee6a607aa6b969",
+  "fix_commit_full": "8e1ea70158edc754b116bf1318ee6a607aa6b969",
+  "promoted_at": "2026-11-24T02:48:33+00:00",
+  "tree_head": "a6a30c66947cc81aa916096c3fb71c506703dd53",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/advancements.rs",
+    "crates/mc-core/src/command_context.rs",
+    "crates/mc-core/src/command_execution/selectors.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/command_selector_predicate_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:command_execution::tests::selector_predicate_tests::execute_if_predicate_binds_the_datapack_predicate_to_the_command_origin": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_execution::tests::selector_predicate_tests::execute_if_predicate_binds_the_datapack_predicate_to_the_command_origin": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T024304-ledger-promote-4yc_jlh0"
+}
