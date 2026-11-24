@@ -974,13 +974,21 @@ is the pin owner.
 
 ## Promotion with a negative control
 
-A bug row closes only with a registered `harness:<profile>:<scenario>` check that
-fails closed at the row's own assertion on a negative control. Build the negative
-control as the current candidate with only that row's fix reverse-applied. Commits
-from before the 26.3 cutover speak protocol 775 and fail at login, which is not a
-negative control; bundled multi-fix reversals do not count either. A unit or
-synthetic test is a regression guard, never the closing evidence for a
-client-visible bug.
+A bug row closes through `ledger promote` (docs/bugs/README.md rules 3-5), which is the
+authority: the row carries a passed graphical receipt of the candidate tree for every
+client-visible symptom, and the automatic negative control (the fix's non-test hunks
+reverse-applied onto the candidate) must turn at least one registered ref red at the
+row's own assertion; the restore turns every ref green. A graphical
+(`harness:<profile>:<scenario>`) ref runs in the control when a release pin of the
+reversed tree exists (a separate control pin, never the fixed
+`wt/ledger-control-candidate` by hand); when it cannot run (no pin, timeout,
+unreachable play state) the promotion JSON records it `unrunnable` and the row rests on
+the cargo assertion red plus the passed graphical receipt on the candidate. A unit or
+synthetic test alone never closes a client-visible bug: the passed graphical receipt is
+required. Commits from before the 26.3 cutover speak protocol 775 and fail at login,
+which is not a negative control; bundled multi-fix reversals do not count either. A
+graphical control for a row is added whenever a build token allows (owner decision
+POL-1).
 
 ## Client fixes and `ledger promote` (stage 2, 2026-11-15)
 

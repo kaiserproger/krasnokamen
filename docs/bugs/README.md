@@ -291,6 +291,13 @@ worker, runs the negative control.
    reversal promotion without that map is refused. The promotions record the
    re-landing sha, which must reach the client main without squash or rebase so
    `fix_commit` stays resolvable.
+   The same reversal pair is also the route for a fix made AFTER the rename
+   when the ledger cannot compute the fix commit's non-test patch because one
+   hunk straddles a `#[cfg(test)]` boundary (`QA5-FAST-CLICK`, client fix
+   `a2d0c81d`: the `actions.rs` hunk crosses it): the pair splits the fix into
+   its production lines, the map names the real commit and every omitted test
+   hunk, and the pair's diff must equal those production lines verbatim
+   (decided by Main under D123, owner may veto).
 4. Automatic negative control: the fix commit's non-test hunks (test files,
    `docs/` and Rust hunks inside inline `#[cfg(test)]` modules stay) are
    reverse-applied onto the candidate in a temporary worktree; only if
