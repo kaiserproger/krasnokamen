@@ -1,18 +1,8 @@
 diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-index c4843f176..3a1f8564c 100644
+index 93ca256..be64b95 100644
 --- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
 +++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-@@ -331,7 +331,8 @@ pub(crate) fn recover(
-     let record = structure(&ledger, &owner(settlement), handle)?;
-     let paused = record.snapshot.state == ScriptStructureState::Paused
-         && record.snapshot.pause_reason.as_deref() == Some("footprint_changed");
--    if !paused {
-+    let committed = record.snapshot.state == ScriptStructureState::Committed;
-+    if !paused && !committed {
-         return Ok(false);
-     }
-     let retry = (paused
-@@ -383,6 +384,51 @@ pub(crate) fn recover(
+@@ -391,6 +391,54 @@ pub(crate) fn recover(
          return Ok(true);
      }
      let target = world(state, &record.snapshot.dimension)?;
@@ -31,7 +21,10 @@ index c4843f176..3a1f8564c 100644
 +            0
 +        };
 +        for cell in record.cells[index].iter().take(completed).rev() {
-+            if !seen.insert(cell.at) || free_soil_work(target, cell) {
++            if !seen.insert(cell.at)
++                || free_soil_work(target, cell)
++                || harvestable_crop(target, cell)
++            {
 +                continue;
 +            }
 +            let now = target
@@ -64,7 +57,7 @@ index c4843f176..3a1f8564c 100644
      if let Some(proof) = &record.liquid {
          crate::settlements::construction::preparation::liquid::revalidate(
              target,
-@@ -411,6 +457,24 @@ pub(crate) fn recover(
+@@ -419,6 +467,24 @@ pub(crate) fn recover(
              record.snapshot.completed_work_units = 0;
          }
      }
@@ -90,22 +83,10 @@ index c4843f176..3a1f8564c 100644
          inventories::resource_plan_hash(&resource_plan(&record.snapshot.stages));
      record.snapshot.remaining = remaining(&record);
 diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
-index fa1addf02..0d6244542 100644
+index 4fd936d..cc22cbd 100644
 --- a/crates/mc-core/src/settlements/construction.rs
 +++ b/crates/mc-core/src/settlements/construction.rs
-@@ -2837,6 +2837,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
-     else {
-         return false;
-     };
-+    // Certification is not a substitute for matching the placed blueprint:
-+    // the executor may have reached its last cell after a player broke one.
-+    if executor::recover(state, id, &project.structure) != Ok(false) {
-+        return false;
-+    }
-     if !executor::status(state, id, &project.structure)
-         .is_ok_and(|snapshot| snapshot.state == ScriptStructureState::Committed)
-     {
-@@ -2858,6 +2863,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+@@ -2869,6 +2869,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
          record.revision = record.revision.saturating_add(1);
          return true;
      }
