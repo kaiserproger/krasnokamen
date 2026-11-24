@@ -15,14 +15,16 @@ use std::sync::Arc;
 
 const BELL: [i32; 3] = [8, 201, 8];
 
+/// Extra blocks written inside a chunk: (position, block, properties).
+type Furniture = Vec<([i32; 3], &'static str, Vec<(&'static str, &'static str)>)>;
+
 struct VillageGenerator {
     terrain: mc_worldgen::TerrainGenerator,
     registry: Arc<CoreRegistry>,
     bells: Vec<[i32; 3]>,
     villagers: Vec<(String, [f64; 3], String)>,
     logs: Vec<[i32; 2]>,
-    /// Extra blocks written inside a chunk: (position, block, properties).
-    furniture: Vec<([i32; 3], &'static str, Vec<(&'static str, &'static str)>)>,
+    furniture: Furniture,
 }
 
 impl VillageGenerator {
@@ -222,7 +224,7 @@ fn fixture_furnished(
     bells: Vec<[i32; 3]>,
     villagers: Vec<(String, [f64; 3], String)>,
     logs: Vec<[i32; 2]>,
-    furniture: Vec<([i32; 3], &'static str, Vec<(&'static str, &'static str)>)>,
+    furniture: Furniture,
 ) -> (TickState, Vec<ChunkPos>) {
     let registry = Arc::new(CoreRegistry::load(None).unwrap());
     let generator = Arc::new(VillageGenerator {
@@ -280,7 +282,7 @@ fn settle_natural_proofs(state: &mut TickState, kinds: &[BuildingKind]) {
 
 /// A roofed hut inside a claim piece's bounds, the shape a plains house
 /// template has: solid floor, walls, roof, a door and one bed pair.
-fn hut_blocks() -> Vec<([i32; 3], &'static str, Vec<(&'static str, &'static str)>)> {
+fn hut_blocks() -> Furniture {
     let (x0, x1, y0, y1, z0, z1) = (0, 15, 201, 205, 0, 15);
     let mut out = Vec::new();
     for x in x0..=x1 {
