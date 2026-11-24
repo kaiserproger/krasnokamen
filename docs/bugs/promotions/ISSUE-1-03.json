@@ -1,0 +1,65 @@
+{
+  "id": "ISSUE-1-03",
+  "verdict": "promoted",
+  "fix_commit": "client:dad387e689",
+  "fix_commit_full": "dad387e6893ef6049d1391025ce6232bea941040",
+  "promoted_at": "2026-11-24T16:32:07+00:00",
+  "tree_head": "f1e61cb286a2d5273e209f364e0abf521c0e8436",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T162521-issue1-03-drawn-index-pq3nxgxe/result.json",
+    "client_head": "67a2e0f5c55be6c9f4a22c3199a573a8489e3ff5",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "red": [
+      "harness:scene-shot:issue1-03-drawn-index"
+    ],
+    "states": {
+      "harness:scene-shot:issue1-03-drawn-index": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T162443-issue1-03-drawn-index-jk4xbjg_/result.json",
+    "client_head": "dad387e6893ef6049d1391025ce6232bea941040",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "green": [
+      "harness:scene-shot:issue1-03-drawn-index"
+    ],
+    "states": {
+      "harness:scene-shot:issue1-03-drawn-index": "green"
+    },
+    "tree_head": "f1e61cb286a2d5273e209f364e0abf521c0e8436",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T162443-issue1-03-drawn-index-jk4xbjg_/result.json",
+    "client_head": "dad387e6893ef6049d1391025ce6232bea941040",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "green": [
+      "harness:scene-shot:issue1-03-drawn-index"
+    ],
+    "states": {
+      "harness:scene-shot:issue1-03-drawn-index": "green"
+    },
+    "tree_head": "f1e61cb286a2d5273e209f364e0abf521c0e8436",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "5699ee66fc99491a286c45cbf4b59a1a660cc240",
+    "paths": [
+      "src/render.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:render::shader_tests::submitted_index_count_is_per_frame_not_cumulative": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T163037-ledger-promote-81cm6vl7"
+}

@@ -4,8 +4,10 @@ title = "Datapack listing emits joined plain names and discards pack description
 area = "gameplay"
 repro = "manual"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-HOVER Fix patch: reversing it makes the list print plain pack names instead of hover chat links."
-regression = ["cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover"]
+regression = ["cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover", "harness:scene-shot:native-datapack-hover"]
 fix_commit = "patch:61916b68f2759fa892f3eedc6158c06aa19d47274e877ab607e220a850d0593a"
-repro_check = "round 2: patch docs/bugs/fix-patches/DATAPACK-LIST-HOVER.patch (digest verified here). Control negative-control.log: reversed -> red `left: [] right: [vanilla, file/alpha]` (plain names, no link or hover). Needs a graphical harness ref before it can be promoted"
+proving_assertions = { "harness:scene-shot:native-datapack-hover" = "datapack-hover_tooltip" }
+repro_check = "Patch mode: docs/bugs/fix-patches/DATAPACK-LIST-HOVER.patch (sha256 61916b68f2759fa892f3eedc6158c06aa19d47274e877ab607e220a850d0593a, reverse-applies at HEAD) makes present_group build chat_link(id, enabled, description) instead of text(id); the cargo ref asserts the component structure, the automatic control reverses this one hunk and goes red (plain names, no link or hover). Real client: scene-shot native-datapack-hover runs /datapack create hoverprobe HoverProbeDescription and /datapack list available, opens the chat screen (minecraft_open_chat, the T path) and moves client_pointer across the painted chat/line node until the client shows the link tooltip: the tooltip the client then shows and its component/hover/text UI node carry the pack.mcmeta description (proving assertion datapack-hover_tooltip; the tooltip frame is kept). assert_chat_components separately records the link show_text payload; a payload alone is not a hover proof and this row no longer presents it as one. Green receipt .analysis/validation/20261124T182430-native-datapack-hover-ezj7lz47 (tooltip hoverprobe\\nHoverProbeDescription at x=876, shot datapack-hover-tooltip)."
+promotion = "docs/bugs/promotions/DATAPACK-LIST-HOVER.json"

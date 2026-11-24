@@ -4,7 +4,10 @@ title = "Villager and witch held items not rendered"
 area = "client"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
-repro_check = "note only: green PASS on the current client with no discriminating red yet - the two pixel windows (emerald green, redstone red) land with Mistral round 2"
+regression = ["client:krasnokamen-client:entities::animation_tests::crossed_arms_rigs_emit_the_held_item_at_the_source_anchor", "harness:scene-shot:issue1-23-held-items", "harness:scene-shot:issue1-23-witch-potion"]
+fix_commit = "client:586b2d07d2"
+proving_assertions = { "harness:scene-shot:issue1-23-held-items" = "emerald_held_pixels", "harness:scene-shot:issue1-23-witch-potion" = "potion_nose_pixels" }
+repro_check = "Committed-reversal pair at HEAD: client:27a3806c61 removes the crossed-arms role (and the witch nose role) from the villager family models; client:586b2d07d2 re-lands them. The three adult hunks are aa20d301 verbatim (same blob ids); the pair also carries villager_baby.json, whose crossed_arms role is a second origin from adf5153c (its product blob 20f1e53c is the pair b-side). The rig then has no arm/nose attachment bone and append_equipment records 'rig has no matching equipment attachment'. Map docs/bugs/promotions/ISSUE-1-23.hunks.md (the @@ -716 nose hunk is the witch nose tilt with a held item, not a leg-swing edit; the villager half-amplitude gait is 97e988d2). Real client, core 0899c87f0f: scene-shot issue1-23-held-items equips a villager with an emerald and a witch with redstone, then the witch with a potion, and counts the colours at the crossed arms and the nose: candidate 1998/2147/535 px PASS (20261124T182502-issue1-23-held-items-krqmsj6i), control emerald 0 px FAIL (20261124T183006-issue1-23-held-items-10ixonb2). Because the control aborts before the potion frame, scenario issue1-23-witch-potion runs the original complaint alone on both pins: candidate 491 px PASS (20261124T182732-issue1-23-witch-potion-l6edrb4t), control 0 px FAIL at potion_nose_pixels (20261124T182848-issue1-23-witch-potion-he34l0o3)."
+promotion = "docs/bugs/promotions/ISSUE-1-23.json"

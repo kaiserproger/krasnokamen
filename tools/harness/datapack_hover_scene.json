@@ -1,0 +1,49 @@
+{
+  "seed": 104,
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "datapack create hoverprobe HoverProbeDescription"
+    },
+    {
+      "wait_chat": "Created new empty pack"
+    },
+    {
+      "cmd": "datapack list available"
+    },
+    {
+      "wait_chat": "data pack(s) available"
+    },
+    {
+      "open_chat": {
+        "command": false
+      }
+    },
+    {
+      "wait_screen": "ChatScreen"
+    },
+    {
+      "hover_chat_component": {
+        "name": "datapack-hover",
+        "line": "hoverprobe",
+        "contains": "HoverProbeDescription",
+        "shot": "datapack-hover-tooltip"
+      }
+    },
+    {
+      "assert_chat_components": {
+        "name": "datapack-hover-components",
+        "line": "hoverprobe",
+        "hover": {
+          "action": "show_text",
+          "contains": "HoverProbeDescription"
+        }
+      }
+    },
+    {
+      "shot": "datapack-list"
+    }
+  ]
+}

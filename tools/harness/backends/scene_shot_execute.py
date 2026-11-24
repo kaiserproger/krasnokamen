@@ -19,8 +19,8 @@ from . import scene_shot as _qa
 from .scene_shot_checks import _capture_dropped_clock
 from .scene_shot_client import tool_wall_pixels, wait_play
 from .scene_shot_steps import (
-    SCENE_TOOLS, bounded_draw, matching_entities, matching_walk, pixel_window_count,
-    received_sleeping, render_metrics, validate_steps,
+    SCENE_TOOLS, matching_entities, matching_walk, pixel_window_count,
+    received_sleeping, render_index_bounded, render_metrics, repeated_view_stable, validate_steps,
 )
 
 
@@ -241,13 +241,134 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 {"enabled": value, "lines": result.get("lines"), "status": result.get("status")})
             probe.check(f"debug_overlay_{'on' if value else 'off'}",
                         result.get("debug_overlay") is value)
-        elif kind == "assert_render_bounded":
+        elif kind == "assert_chat_components":
+            # The chat renderer flattens a component; the observation keeps its events. Take the
+            # newest line whose plain text holds the marker, then its hover/click event.
+            state = probe.observe()
+            lines = state.get("recent_chat_components")
+            if not isinstance(lines, list) or any(not isinstance(line, dict) for line in lines):
+                raise RuntimeError("client observation omitted recent_chat_components")
+            (artifact / f"{value['name']}.json").write_text(json.dumps(state, indent=2) + "\n")
+            matches = [line for line in lines
+                       if isinstance(line.get("text"), str) and value["line"] in line["text"]]
+            probe.check(f"{value['name']}_line_present", bool(matches))
+
+            def has_event(line, kind_name, spec):
+                events = line.get("events")
+                if not isinstance(events, list):
+                    return False
+                return any(isinstance(event, dict) and event.get("kind") == kind_name
+                           and event.get("action") == spec["action"]
+                           and spec["contains"] in str(event.get("value", ""))
+                           for event in events)
+
+            newest = matches[0]
+            hover = value["hover"]
+            probe.check(f"{value['name']}_hover", has_event(newest, "hover", hover))
+            if "click" in value:
+                click = value["click"]
+                probe.check(f"{value['name']}_click", has_event(newest, "click", click))
+        elif kind == "hover_chat_component":
+            # A real hover, not a payload read: open chat, put `client_pointer` over the painted
+            # line through the ordinary pointer path, and require the tooltip the client then shows
+            # to hold the text. Every candidate line is tried (the plain "created" reply can carry
+            # the same marker without a link); the first tooltip that matches is the evidence, and
+            # all pointer results are kept.
+            state = probe.observe()
+            screen = state.get("screen") or {}
+            if screen.get("open") is not True or screen.get("class") != "net.minecraft.client.gui.screens.ChatScreen":
+                raise RuntimeError(f"hover_chat_component requires the chat screen, got {screen!r}")
+            title = str(screen.get("title") or "")
+            if not title:
+                raise RuntimeError("chat screen reported an empty title; client_pointer requires one")
+            nodes = [node for node in state.get("ui_nodes") or [] if isinstance(node, dict)]
+
+            def sequence(node):
+                match = re.search(r"(\d+)$", str(node.get("id", "")))
+                return int(match.group(1)) if match else -1
+
+            candidates = sorted(
+                (node for node in nodes
+                 if str(node.get("id", "")).startswith("chat/line/")
+                 and isinstance(node.get("label"), str) and value["line"] in node["label"]),
+                key=sequence, reverse=True,
+            )
+            if not candidates:
+                raise RuntimeError(f"chat line {value['line']!r} is not painted")
+            # The hoverable run is usually a link after a plain prefix, so pointing at the line's
+            # left edge lands on text without an event. Scan across the painted node (right to
+            # left: the decorated link is at the end) through the ordinary pointer path until the
+            # client shows a tooltip carrying the text; every attempt is kept.
+            fractions = (0.9, 0.75, 0.6, 0.45, 0.3, 0.15, 0.05)
+            attempts = []
+            tooltip = None
+            for node in candidates:
+                bounds = node.get("bounds")
+                if not (isinstance(bounds, list) and len(bounds) == 4
+                        and all(type(bound) in (int, float) and math.isfinite(bound) for bound in bounds)):
+                    raise RuntimeError(f"chat line node {node.get('id')!r} has no bounds")
+                for fraction in fractions:
+                    x, y = bounds[0] + bounds[2] * fraction, bounds[1] + bounds[3] / 2.
+                    result = probe.call("client_pointer", {
+                        "expected_screen_class": screen["class"], "expected_title": title,
+                        "action": "move", "x": x, "y": y,
+                    })
+                    picture = probe.observe()
+                    hovered = [entry for entry in picture.get("ui_nodes") or [] if isinstance(entry, dict)
+                               and entry.get("id") == "component/hover/text"]
+                    attempts.append({"node": node, "x": x, "y": y, "pointer": result,
+                                     "ui_tooltip": [entry.get("label") for entry in hovered]})
+                    if isinstance(result.get("tooltip"), str) and value["contains"] in result["tooltip"]:
+                        tooltip = result["tooltip"]
+                        break
+                if tooltip is not None:
+                    break
+            (artifact / f"{value['name']}-hover.json").write_text(json.dumps(
+                {"attempts": attempts, "tooltip": tooltip, "screen": screen}, indent=2) + "\n")
+            probe.check(f"{value['name']}_tooltip",
+                        isinstance(tooltip, str) and value["contains"] in tooltip)
+            probe.check(f"{value['name']}_ui_tooltip", any(
+                value["contains"] in str(label or "")
+                for attempt in attempts for label in attempt["ui_tooltip"]))
+            shots.append(capture(probe, artifact, value["shot"]))
+        elif kind == "render_draw_sample":
+            # One fresh observation of the client's draw counters at the requested view. The yaw and
+            # pitch the client reports prove the turn landed before the sample, and the submitted
+            # frame counter must have advanced since the previous sample: a frozen renderer that
+            # keeps reporting one non-zero count is not a view sample (REVIEW-wave2-11 finding 3).
+            state = probe.observe()
+            metrics = render_metrics(state)
+            player = state.get("player") or {}
+            yaw, pitch = player.get("yaw"), player.get("pitch")
+            if type(yaw) not in (int, float) or not math.isfinite(yaw):
+                raise RuntimeError("client observation omitted player.yaw for a render sample")
+            if type(pitch) not in (int, float) or not math.isfinite(pitch):
+                raise RuntimeError("client observation omitted player.pitch for a render sample")
+            pitch_requested = value.get("pitch_deg", 0)
             samples = probe.report.setdefault("render_samples", [])
-            metrics = render_metrics(probe.observe())
-            samples.append({**metrics, "max_index_count": value["max_index_count"],
-                            "max_growth": value["max_growth"]})
+            if samples:
+                probe.check(f"render_sample_{value['name']}_fresh_frame",
+                            metrics["submitted_frame_id"] > samples[-1]["submitted_frame_id"])
+            samples.append({"name": value["name"], "yaw": float(yaw), "yaw_requested": value["yaw_deg"],
+                            "pitch": float(pitch), "pitch_requested": pitch_requested, **metrics})
+            probe.check(f"render_sample_{value['name']}_yaw_observed",
+                        abs((yaw - value["yaw_deg"] + 180) % 360 - 180) <= 1)
+            probe.check(f"render_sample_{value['name']}_pitch_observed",
+                        abs(pitch - pitch_requested) <= 1)
+        elif kind == "assert_render_bounded":
+            # Aggregate verdict over every preceding sample: the count must be per-frame bounded at
+            # every view (yaw and pitch) and must not grow when a view is sampled again or returned to.
+            samples = probe.report.get("render_samples") or []
+            views = {(round(float(sample["yaw"]) % 360, 3), round(float(sample["pitch"]), 3))
+                     for sample in samples}
+            if len(samples) < 3 or len(views) < 2 or len(views) == len(samples):
+                raise RuntimeError("assert_render_bounded needs at least three samples over two views "
+                                   "with one repeated view")
+            (artifact / "render-samples.json").write_text(json.dumps(samples, indent=2) + "\n")
             probe.check("render_drawn_index_bounded",
-                        bounded_draw(metrics, samples[:-1], **{k: value[k] for k in ("max_index_count", "max_growth")}))
+                        render_index_bounded(samples, **{key: value[key] for key in
+                                                         ("max_index_count", "max_growth", "min_index_count")}))
+            probe.check("render_repeat_view_stable", repeated_view_stable(samples, max_growth=value["max_growth"]))
         elif kind == "pixel_window":
             from PIL import Image
 
@@ -274,6 +395,22 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             edges = goat_horn_oracle.side_horn_left_edges(artifact / "screenshots" / f"{value}.png")
             probe.report["goat_side_horn_left_edges"] = edges
             probe.check("goat_side_horn_aligned", goat_horn_oracle.side_horn_aligned(edges))
+        elif kind == "tool_hand_visible":
+            # Away from the wall the pre-image draws the tool too: a control that hides it here is
+            # not a wall-clipping control (review REVIEW-wave2-9 finding 1).
+            state = probe.observe()
+            target = state.get("target") or {}
+            item = state.get("selected_item") or {}
+            player = state.get("player") or {}
+            eye = player.get("camera_position") or []
+            hit = target.get("location") or {}
+            distance = math.dist(eye, [hit.get(axis, math.inf) for axis in ("x", "y", "z")]) if len(eye) == 3 else math.inf
+            tool, wall = tool_wall_pixels(artifact / "screenshots" / f"{value['shot']}.png")
+            probe.report["tool_far_pixels"] = {"tool": tool, "wall": wall, "distance": distance}
+            probe.check("tool_far_fixture", target.get("block_id") == "minecraft:obsidian"
+                        and item.get("item_id") == "minecraft:diamond_pickaxe"
+                        and value["min_distance"] <= distance <= value["max_distance"])
+            probe.check("tool_hand_visible", tool >= 500)
         elif kind == "tool_wall_visible":
             state = probe.observe()
             target = state.get("target") or {}
@@ -365,7 +502,7 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 "loader_block_registered",
             )
             probe.report.setdefault("loader_blocks", {})[value] = state["loader"]
-        elif kind in ("key", "look", "hotbar", "use_item_on", "click_screen_button"):
+        elif kind in ("key", "look", "hotbar", "use_item_on", "click_screen_button", "open_chat"):
             probe.call(SCENE_TOOLS[kind], value)
         elif kind == "wait_terrain":
             name, args = value.get("name"), value.get("args")

@@ -20,6 +20,7 @@ SCENE_TOOLS = {
     "navigate_to_block": "minecraft_navigate_to_block",
     "list_entities": "minecraft_list_entities",
     "wait_terrain": "minecraft_wait_for_terrain",
+    "open_chat": "minecraft_open_chat",
 }
 
 
@@ -30,11 +31,16 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
             yield "minecraft_press_inputs", {"keys": step["hold_keys"], "ticks": 1, "hold": True}
             continue
         kind, value = next(iter(step.items()))
-        if kind in ("key", "look", "hotbar", "use_item_on", "click_screen_button"):
+        if kind in ("key", "look", "hotbar", "use_item_on", "click_screen_button", "open_chat"):
             yield SCENE_TOOLS[kind], value
         elif kind == "assert_block":
             yield "minecraft_read_block", value["args"]
         elif kind == "assert_screen":
+            yield "minecraft_observe", {}
+        elif kind in ("render_draw_sample", "assert_render_bounded", "assert_chat_components",
+                      "hover_chat_component"):
+            # `hover_chat_component` also calls `client_pointer`, whose screen class and title
+            # are read from the observation at run time and cannot be validated before launch.
             yield "minecraft_observe", {}
         elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities", "wait_terrain"):
             yield SCENE_TOOLS[kind], value["args"]
@@ -161,10 +167,70 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                              for k in ("min", "max"))
                      and all(value["color"]["min"][i] <= value["color"]["max"][i] for i in range(3))
                      and type(value["min_pixels"]) is int and value["min_pixels"] > 0)
+        elif kind == "render_draw_sample":
+            # One observation of the client's own draw counters at a named view. The yaw the client
+            # reports must match `yaw_deg` (and `pitch_deg` when given, default horizon), so a
+            # sample taken without the requested turn fails, and a frame counter that did not
+            # advance between samples fails as a stale render.
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) in ({"name", "yaw_deg"}, {"name", "yaw_deg", "pitch_deg"})
+                     and isinstance(value["name"], str)
+                     and bool(re.fullmatch(r"[A-Za-z0-9_-]+", value["name"]))
+                     and type(value["yaw_deg"]) in (int, float) and math.isfinite(value["yaw_deg"])
+                     and -360 <= value["yaw_deg"] <= 360
+                     and ("pitch_deg" not in value
+                          or (type(value["pitch_deg"]) in (int, float)
+                              and math.isfinite(value["pitch_deg"])
+                              and -90 <= value["pitch_deg"] <= 90)))
         elif kind == "assert_render_bounded":
-            valid = (round(value, 12) >= 0) if isinstance(value, float) else True
+            # Aggregate over every preceding render_draw_sample: a strict shape so a typo cannot
+            # silently widen the bound, and every sample must carry a real per-frame count.
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"max_index_count", "max_growth", "min_index_count"}
+                     and type(value["max_index_count"]) is int and value["max_index_count"] > 0
+                     and type(value["max_growth"]) in (int, float)
+                     and math.isfinite(value["max_growth"]) and value["max_growth"] > 1
+                     and type(value["min_index_count"]) is int and value["min_index_count"] >= 0)
+        elif kind == "assert_chat_components":
+            # Reads the newest chat line whose plain text holds `line`, then its hover (and
+            # optionally click) event from `recent_chat_components`. A named action and a
+            # substring of its rendered value, so a flattened line cannot satisfy it.
+            def event_spec(spec):
+                return (isinstance(spec, dict) and set(spec) == {"action", "contains"}
+                        and isinstance(spec["action"], str) and bool(spec["action"])
+                        and isinstance(spec["contains"], str) and bool(spec["contains"]))
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) in ({"name", "line", "hover"}, {"name", "line", "hover", "click"})
+                     and isinstance(value["name"], str)
+                     and bool(re.fullmatch(r"[A-Za-z0-9_-]+", value["name"]))
+                     and isinstance(value["line"], str) and bool(value["line"])
+                     and event_spec(value["hover"])
+                     and ("click" not in value or event_spec(value["click"])))
+        elif kind == "hover_chat_component":
+            # A real hover: the chat screen is open, the pointer moves over the painted line
+            # through `client_pointer`, and the tooltip the client then shows must hold the text.
+            # The shot is the frame with the tooltip; the pointer result and the UI node are kept.
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"name", "line", "contains", "shot"}
+                     and all(isinstance(value[key], str) and bool(value[key])
+                             for key in ("name", "line", "contains", "shot"))
+                     and bool(re.fullmatch(r"[A-Za-z0-9_-]+", value["name"]))
+                     and bool(re.fullmatch(r"[A-Za-z0-9_-]+", value["shot"])))
+        elif kind == "tool_hand_visible":
+            # A frame away from the wall: the held tool must be visible on it (the pre-image, which
+            # draws the hand in world geometry, keeps it visible there and hides it only up close).
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"shot", "min_distance", "max_distance"}
+                     and isinstance(value["shot"], str)
+                     and bool(re.fullmatch(r"[A-Za-z0-9_-]+", value["shot"]))
+                     and all(type(value[key]) in (int, float) and math.isfinite(value[key])
+                             for key in ("min_distance", "max_distance"))
+                     and 0 <= value["min_distance"] < value["max_distance"])
         elif kind == "key":
             valid = isinstance(value, dict) and set(value) == {"keys", "ticks"}
+        elif kind == "open_chat":
+            valid = (client == "native" and isinstance(value, dict) and set(value) == {"command"}
+                     and type(value["command"]) is bool)
         elif kind in ("look", "hotbar", "use_item_on", "click_screen_button"):
             valid = isinstance(value, dict)
         elif kind == "use_phases":
@@ -341,20 +407,43 @@ def render_metrics(observation) -> dict[str, int]:
         if type(value) is not int or value < 0:
             raise RuntimeError(f"client observation render metrics lack a non-negative {name}")
         metrics[name] = value
+    # The renderer publishes its submitted frame counter as a decimal string; a sample whose
+    # counter did not advance between two views read a stale render, not the requested view.
+    frame = render.get("submitted_frame_id")
+    if isinstance(frame, str) and frame.isascii() and frame.isdigit():
+        metrics["submitted_frame_id"] = int(frame)
+    elif type(frame) is int and frame >= 0:
+        metrics["submitted_frame_id"] = frame
+    else:
+        raise RuntimeError("client observation render metrics lack a submitted_frame_id")
     return metrics
 
 
-def bounded_draw(metrics, samples, *, max_index_count, max_growth) -> bool:
-    """True when the drawn index count stays bounded across samples instead of accumulating.
+def render_index_bounded(samples, *, max_index_count, max_growth, min_index_count) -> bool:
+    """True when every sampled draw count is a per-frame submission, not an accumulation.
 
-    `samples` are the earlier render_metrics dicts of the same run: a count that exceeds both the
-    absolute bound and `max_growth` times the first sample means indices accumulate with camera
-    movement (the ISSUE-1-03 symptom) rather than being re-submitted per frame."""
+    Each sample must be a real non-zero count under the absolute bound and within `max_growth` of
+    the first sample: with the per-frame FrameStats reset dropped the count accumulates with camera
+    movement (the ISSUE-1-03 symptom) instead of being re-submitted every frame."""
     if not samples:
-        return metrics["index_count"] <= max_index_count
+        return False
     first = samples[0]["index_count"]
-    return (metrics["index_count"] <= max_index_count
-            and metrics["index_count"] <= max_growth * max(first, 1))
+    return all(min_index_count <= sample["index_count"] <= max_index_count
+               and sample["index_count"] <= max_growth * max(first, 1)
+               for sample in samples)
+
+
+def repeated_view_stable(samples, *, max_growth) -> bool:
+    """True when every repeat at one view (yaw and pitch), and every return to an earlier view,
+    stays within `max_growth` of that view's earlier sample: a stationary camera must not grow
+    the count. Two looks with the same yaw but a different pitch are different views."""
+    seen: dict[tuple[float, float], int] = {}
+    for sample in samples:
+        view = (round(float(sample["yaw"]) % 360, 3), round(float(sample["pitch"]), 3))
+        if view in seen and sample["index_count"] > max_growth * max(seen[view], 1):
+            return False
+        seen[view] = sample["index_count"]
+    return True
 
 
 def matching_entities(entities: list[dict[str, Any]], spec: dict[str, Any]) -> list[dict[str, Any]]:

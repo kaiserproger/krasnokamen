@@ -4,7 +4,10 @@ title = "F3 drawn-index count rises sharply with camera direction; verify it sta
 area = "client"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
-repro_check = "Stage2X SLICES.md:125,151: scene control pin 4403f0b911e5 fails render_drawn_index_bounded (receipts/Stage2Client/run-redr2-03_f3_drawn_index.log), green pin 34a85940 passes (run-green2-03_f3_drawn_index.log). The scene is not registered in this tree and the historical control must be rebuilt as an exact clean reversal before promotion."
+regression = ["client:krasnokamen-client:render::shader_tests::submitted_index_count_is_per_frame_not_cumulative", "client:krasnokamen-client:render::frame::terrain_translucency_tests::frustum_rejection_precedes_instance_and_indirect_submission", "harness:scene-shot:issue1-03-drawn-index"]
+fix_commit = "client:dad387e689"
+proving_assertions = { "harness:scene-shot:issue1-03-drawn-index" = "render_drawn_index_bounded" }
+repro_check = "Guard older than the finding: the per-frame `self.stats = FrameStats::default();` has been in the client since the 26.1.2 import (client:4ccb68fb, src/render.rs:1406 at 67a2e0f5^, git blame -C -C), so the row is a missing-test finding, not a missing fix; 4403f0b9 was an earlier control experiment, not the origin. Committed-reversal pair at HEAD: client:67a2e0f5c5 drops the line, client:dad387e689 re-lands it. Map docs/bugs/promotions/ISSUE-1-03.hunks.md. The direction-dependent count the owner saw is visible geometry (archived owner-host sweep receipts/LaptopArchive/analysis/solaris-client/issue1/idx/SUMMARY.md: pitch -45 45k..67k, horizon 245k..450k, +45 0.87M..1.59M at RD12, streaming bounded); the frustum-test-order change the owner named is client:97e988d2 and its ref is the second client ref, which has no effect on index_count. Real client: scene-shot issue1-03-drawn-index shows F3, samples ten views (yaw 0 twice, eight yaws, return to yaw 0) and then horizon -> 60 degrees down -> horizon; every render_draw_sample must report the requested yaw and pitch and a newer submitted_frame_id, and assert_render_bounded judges per (yaw,pitch) view (render_drawn_index_bounded + render_repeat_view_stable); the reversal accumulates indices and fails. F3 shows Y=76 (the natural surface; the y=159 fill runs while the teleport settles), which does not feed the absolute/growth bounds."
+promotion = "docs/bugs/promotions/ISSUE-1-03.json"
