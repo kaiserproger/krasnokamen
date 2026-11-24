@@ -1,0 +1,21 @@
+diff --git a/crates/mc-core/src/tick/entity_phase/prepare.rs b/crates/mc-core/src/tick/entity_phase/prepare.rs
+index 40c862f..65f8445 100644
+--- a/crates/mc-core/src/tick/entity_phase/prepare.rs
++++ b/crates/mc-core/src/tick/entity_phase/prepare.rs
+@@ -429,7 +429,15 @@ pub(in crate::tick) fn read_row(
+     rare: &RarePrep,
+ ) -> (ReadRow, bool) {
+     let hot = view.entities.hot_row(slot);
+-    let cold = Some(view.entities.row(slot));
++    // The derived column answers only for a clean row that carries nothing the
++    // column leaves out: a row mutated after `prepare_motion_hints` (the dirty
++    // queue) and every `needs_cold` row read the live cold row, exactly as
++    // before the column existed.
++    let cold = if view.entities.motion_dirty(slot) || hot.needs_cold() {
++        Some(view.entities.row(slot))
++    } else {
++        None
++    };
+     read_row_with(view, slot, flags, period, rare, hot, cold)
+ }
+ 
