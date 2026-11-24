@@ -4,9 +4,10 @@ title = "Native5a91f70 permission dialog promised Pictures only, while looking. 
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#NATIVE-SCREEN-AUDIO-CONSENT"
 regression = ["harness:screens-voice-qa:owner_consent_names_app_audio", "harness:screens-voice-qa:owner_deny_sends_no_audio"]
 fix_commit = "client:fa434351c6"
 proving_assertions = { "harness:screens-voice-qa:owner_consent_names_app_audio" = "owner_consent_names_app_audio", "harness:screens-voice-qa:owner_deny_sends_no_audio" = "owner_deny_sends_no_audio" }
 repro_check = "Committed-reversal pair (87967272 predates the rename): reversal client:dc21342f52 restores its a/-side wording verbatim (Pictures only; unit ref red, negctl/consent-unit-control.log), re-land client:fa434351c6 restores the disclosure (negctl/consent-unit-restore.log green). Map docs/bugs/promotions/NATIVE-SCREEN-AUDIO-CONSENT.hunks.md. Real gate: screens-voice-qa leg screens, verdicts owner_consent_names_app_audio (title/body/choice name app audio) and owner_deny_sends_no_audio (Deny starts no capture)."
+promotion = "docs/bugs/promotions/NATIVE-SCREEN-AUDIO-CONSENT.json"

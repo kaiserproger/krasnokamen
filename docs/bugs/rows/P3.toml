@@ -4,9 +4,10 @@ title = "Same-dimension death/respawn clears active-screen catalog; server does 
 area = "client"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P3"
 regression = ["harness:screens-voice-qa:viewer_keeps_screen_after_same_dimension_respawn", "client:krasnokamen-client:session::packets::tests::same_dimension_respawn_keeps_active_screen_catalog"]
 fix_commit = "client:0e0b9d887d"
 proving_assertions = { "harness:screens-voice-qa:viewer_keeps_screen_after_same_dimension_respawn" = "viewer_keeps_screen_after_same_dimension_respawn" }
 repro_check = "Committed-reversal pair on the post-rename tip: reversal client:03419ef4c4 restores a7c504dc's unconditional screen_relay reset in spawn_info (unit ref red at the catalog assertion, negctl/p3-unit-control.log), re-land client:0e0b9d887d restores a35187ca's dimension guard (negctl/p3-unit-restore.log green). Map docs/bugs/promotions/P3.hunks.md. Real gate: screens-voice-qa leg screens, verdict viewer_keeps_screen_after_same_dimension_respawn (len(respawned screens) == 1)."
+promotion = "docs/bugs/promotions/P3.json"
