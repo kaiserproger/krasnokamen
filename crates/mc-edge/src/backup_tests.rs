@@ -106,12 +106,41 @@ fn backup_roundtrip_preserves_real_core_store_wal_and_metadata() {
 
     let restored = root.path().join("restored");
     run_restore(&backup, &restored).unwrap();
+    // A restored copy is the same world on a branch of its own: the marker and
+    // the replayable tail name the new branch, every other byte is the backup's.
+    let source_marker = mc_world::store_marker::read(&world).unwrap().unwrap();
+    let restored_marker = mc_world::store_marker::read(&restored).unwrap().unwrap();
+    assert_eq!(restored_marker.store_uuid, source_marker.store_uuid);
+    assert_eq!(
+        restored_marker.checkpoint_tick,
+        source_marker.checkpoint_tick
+    );
+    assert_ne!(
+        restored_marker.branch, source_marker.branch,
+        "the restore starts a branch"
+    );
+    assert_ne!(restored_marker.branch, mc_world::store_marker::ROOT_BRANCH);
     for name in manifest.files.keys() {
-        assert_eq!(
-            std::fs::read(world.join(name)).unwrap(),
-            std::fs::read(restored.join(name)).unwrap(),
-            "{name} differs after restore",
-        );
+        if name == mc_world::store_marker::MARKER_FILE {
+            continue;
+        }
+        let source = std::fs::read(world.join(name)).unwrap();
+        let mut copy = std::fs::read(restored.join(name)).unwrap();
+        let replayable = name
+            .strip_prefix("journal/batch-")
+            .and_then(|range| range.strip_suffix(".bin"))
+            .and_then(|range| range.split_once('-'))
+            .is_some_and(|(_, hi)| hi.parse::<u64>().unwrap() > source_marker.checkpoint_tick);
+        if replayable {
+            // Bytes 24..32 of the frame header are its branch.
+            assert_eq!(
+                &copy[24..32],
+                &restored_marker.branch,
+                "{name} keeps the old branch"
+            );
+            copy[24..32].copy_from_slice(&source[24..32]);
+        }
+        assert_eq!(source, copy, "{name} differs after restore");
     }
     assert!(!restored.join(BACKUP_MANIFEST).exists());
     #[cfg(not(windows))]
@@ -597,9 +626,12 @@ fn offline_backup_and_restore_keep_the_store_and_its_marker_paired() {
 
     let target = root.path().join("restored");
     run_restore(&backup, &target).unwrap();
+    let restored = mc_world::store_marker::read(&target)
+        .unwrap()
+        .expect("the marker is restored with the store");
     assert_eq!(
-        mc_world::store_marker::read(&target).unwrap(),
-        Some(source),
+        (restored.store_uuid, restored.checkpoint_tick),
+        (source.store_uuid, source.checkpoint_tick),
         "the marker is restored with the store"
     );
     let (store_uuid, store_tick) =
@@ -609,6 +641,60 @@ fn offline_backup_and_restore_keep_the_store_and_its_marker_paired() {
     // The pair is admitted, not merely copied: the restored world serves.
     let recovered = mc_core::Core::open(live_config(target)).unwrap();
     recovered.shutdown();
+}
+
+/// DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY: restore one backup twice and let
+/// one copy run on alone. Its journal next to the other copy's store is refused
+/// by name instead of replayed: the store id is shared by design (a restored
+/// backup is the same world), so only the branch each restore mints tells the
+/// two timelines apart.
+#[test]
+fn a_restored_copy_refuses_the_journal_of_another_copy_of_its_backup() {
+    let root = tempfile::tempdir().unwrap();
+    let world = stopped_core_world(root.path());
+    let backup = root.path().join("backup");
+    run_backup(&world, &backup).unwrap();
+    let left = root.path().join("left");
+    let right = root.path().join("right");
+    run_restore(&backup, &left).unwrap();
+    run_restore(&backup, &right).unwrap();
+
+    // The right copy runs on and publishes a tail of its own timeline, bound
+    // exactly as its serve binds it: store id, marker branch, build palette.
+    let marker = mc_world::store_marker::read(&right).unwrap().unwrap();
+    let registry = mc_core::registry::CoreRegistry::load(Some(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/vanilla")
+            .as_path(),
+    ))
+    .unwrap();
+    let identity =
+        mc_core::journal::WalIdentity::of_world(&right, marker.store_uuid, &registry.blocks)
+            .unwrap();
+    let tick = marker.checkpoint_tick + 1;
+    let mut journal = mc_core::journal::JournalWriter::open(&right, 1, identity).unwrap();
+    journal.append(tick, tick, &[]).unwrap();
+    journal.flush().unwrap();
+    drop(journal);
+
+    // The operator mistake the row names: the right copy's journal ends up next
+    // to the left copy's store, in exactly the tick range that continues it.
+    if left.join("journal").exists() {
+        std::fs::remove_dir_all(left.join("journal")).unwrap();
+    }
+    recopy_tree(&right.join("journal"), &left.join("journal"));
+
+    let opened = mc_core::Core::open(live_config(left));
+    let refusal = opened.as_ref().err().map(ToString::to_string);
+    if let Ok(core) = opened {
+        core.shutdown();
+    }
+    assert!(
+        refusal
+            .as_deref()
+            .is_some_and(|text| text.contains("branch")),
+        "the left copy replayed the right copy's journal: {refusal:?}"
+    );
 }
 
 #[test]

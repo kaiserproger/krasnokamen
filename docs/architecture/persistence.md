@@ -29,8 +29,8 @@ First run base/base in separate processes. Scratch controls reuse
 `--control X1|X2|X3` means respectively: swap `SettlementRecord.owner_name/anchor`,
 swap `VillagerState.mining_progress/lumber_progress`, or swap only their NBT pushes.
 X2 also changes `Transit.Record.members`' embedded villager in checkpoint/live
-transit rows and Entity/Transit WAL. Classifier requires a complete 56-byte WAL-v2
-header (length at offset 48), but compares the **whole frame**.
+transit rows and Entity/Transit WAL. Classifier requires a complete 64-byte WAL-v3
+header (length at offset 56), but compares the **whole frame**.
 Red requires all producers to finish and the exact expected row/WAL/export
 difference; compile/recovery/missing-artifact errors are not red controls.
 Ordinary comparison refuses any byte difference; verdict records each artifact.
@@ -60,22 +60,27 @@ not successful ordinary census.
 ## WAL
 
 `crates/mc-core/src/journal.rs` writes `batch-<lo>-<hi>.bin` containing whole
-ticks. Its little-endian frame is `[magic u32][version u32][store id 16][block
-palette 8][tick_lo u64][tick_hi u64][length u32][crc32 u32][payload]`; the
-payload is JSON lines of absolute post-images and tombstones. Frame version 2
-binds every batch to the store that wrote it and to the block-state palette its
-numeric block ids mean (Books R4-P3, R5-G5): the store id is the native header's
-required random `store_uuid`, and the palette is the first eight bytes of
-SHA-256 over the registry's `(state id, block, properties)` mapping. Recovery
-opens the batch only when both match the opened store and the registry this
-build replays with; a foreign journal directory, a copy of another world's tail
-or a tail written under a changed palette is refused by name, never replayed
-with a warning. Both fields are compared unconditionally: a zero id or digest is
-a value, not a wildcard, because the CRC covers only the payload and the header
-can be rewritten. A format-1 frame is refused too, with the way out in the
-message: start the world once with the build that wrote it, stop it and confirm
-its final checkpoint covers the last published batch (ADR 0013 keeps no
-compatibility surface of our own; `docs/OPERATING.md` has the two upgrade
+ticks. Its little-endian frame is `[magic u32][version u32][store id 16][branch
+8][block palette 8][tick_lo u64][tick_hi u64][length u32][crc32 u32][payload]`;
+the payload is JSON lines of absolute post-images and tombstones. Frame version
+3 binds every batch to the store that wrote it, to the branch of that store and
+to the block-state palette its numeric block ids mean (Books R4-P3, R5-G5,
+`DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY`): the store id is the native
+header's required random `store_uuid`, the branch is the one the
+[checkpoint marker](#checkpoint-marker) records (the root branch for a world as
+created or imported, a fresh random id for every restored copy), and the palette
+is the first eight bytes of SHA-256 over the registry's `(state id, block,
+properties)` mapping. Recovery opens the batch only when all three match the
+opened store, its marker and the registry this build replays with; a foreign
+journal directory, a copy of another world's tail, the tail of another copy of
+the same backup or of the world a copy was restored from, or a tail written
+under a changed palette is refused by name, never replayed with a warning. All
+three fields are compared unconditionally: a zero id, branch or digest is a
+value, not a wildcard, because the CRC covers only the payload and the header
+can be rewritten. A frame of format 1 or 2 is refused too, with the way out in
+the message: start the world once with the build that wrote it, stop it and
+confirm its final checkpoint covers the last published batch (ADR 0013 keeps no
+compatibility surface of our own; `docs/OPERATING.md` has the upgrade
 procedures). A batch at or below a published checkpoint is never replayed, so no
 journal file has to be removed or moved. The writer writes
 `batch-<lo>-<hi>.bin.tmp`, fsyncs that file, renames it to publish the batch, and
@@ -421,14 +426,27 @@ without the core.
 ### Checkpoint marker
 
 `<world>/checkpoint.marker` is a fixed-size file independent of redb. It records
-the store's immutable random `store_uuid` and the tick of the last checkpoint
-whose WAL was acknowledged. The store id is written once into the native header
-when the store is created, by world creation and by the Anvil import
-(`NativeStore::create`); it is a required key, so a store without it refuses to
-open and is never given a fresh identity. The marker cannot be derived from redb
-because redb's unattended repair switches to an older commit when the newest one
-fails its checksum, and the damaged commit leaves no trace inside the store
-(Books R4-P1, `WAL-REDB-REPAIR-ROLLS-BACK-BEHIND-PRUNED-CHECKPOINT`).
+the store's immutable random `store_uuid`, the branch of this copy of the store
+and the tick of the last checkpoint whose WAL was acknowledged. The store id is
+written once into the native header when the store is created, by world creation
+and by the Anvil import (`NativeStore::create`); it is a required key, so a store
+without it refuses to open and is never given a fresh identity. The marker cannot
+be derived from redb because redb's unattended repair switches to an older commit
+when the newest one fails its checksum, and the damaged commit leaves no trace
+inside the store (Books R4-P1, `WAL-REDB-REPAIR-ROLLS-BACK-BEHIND-PRUNED-CHECKPOINT`).
+
+The branch tells copies of one store apart
+(`DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY`). A world as created or imported
+is on the root branch, and its marker keeps the 64-byte format-1 layout
+`[KCMARK 1][store id][tick][SHA-256]`; every `world restore` gives its copy a
+fresh random 8-byte branch, and that marker takes the 72-byte format-2 layout
+with the branch after the store id. Each branch has exactly one encoding (a
+format-2 marker naming the root branch is corrupt), so no marker is converted: a
+world that was never restored writes the same bytes it wrote before branches
+existed. Every checkpoint writes the marker on the writer's own branch, and the
+crash-window rewrite at open keeps the branch it read. The branch lives in the
+marker rather than in redb for the same reason as the tick: a repair that rolled
+the store back behind the restore would drop it without a trace.
 
 Every durable checkpoint, starting with a new world's initial one, writes the
 marker in this order: redb `Durability::Immediate` commit, then a temporary
@@ -456,13 +474,29 @@ committed checkpoint. The offline backup copies it as an ordinary world file and
 covers it by the manifest digest. `world restore` verifies every hash, then the
 restored pair — store id and checkpoint tick read back from the copied store
 against the copied marker — and on a mismatch removes what it copied and reports
-no world. A hot backup is not reported successful until it has been tried: the
-finished copy is opened read-only and the ordinary recovery reader and WAL
-replay run over it, requiring the recovered tick the copy claims
-(`HOT-BACKUP-STATE-DATABASE-COPY-UNVERIFIED`). Every batch of the copied tail is
-bound to the same store id and palette as the world that wrote it, so a
-CRC-clean but unreplayable batch fails the trial restore instead of surfacing
-at disaster time.
+no world. It then starts the copy's own branch: the store id is the world's
+identity and travels with every backup, so without it two copies of one backup,
+or a copy and the world it came from, would replay each other's tails. The
+restore mints a random branch that is neither the root nor the backup's own,
+moves every copied batch above the store's checkpoint onto it
+(`journal::rebind_tail`: each frame is first checked against the copied store
+and branch, its tick range, length and CRC, then only its eight branch bytes are
+rewritten in place and synced; batches at or below the checkpoint never replay
+and stay as copied), and only then writes the marker naming the new branch. An
+interruption before that marker write leaves batches and marker on different
+branches, and the copy refuses to open; a refusal removes what the restore
+created, as for the pair check. Restoring one backup twice therefore yields two
+copies that refuse each other's journals, and a backup of a restored copy carries
+that copy's branch until its own restore branches again. The branch is held by
+the marker alone: a sibling's marker moved together with its journal over another
+copy's store is that sibling as far as the bindings can tell, so a world
+directory is always kept and copied whole. A hot backup is not reported
+successful until it has been tried: the finished copy is opened read-only and
+the ordinary recovery reader and WAL replay run over it, requiring the recovered
+tick the copy claims (`HOT-BACKUP-STATE-DATABASE-COPY-UNVERIFIED`). Every batch
+of the copied tail is bound to the same store id, branch and palette as the world
+that wrote it, so a CRC-clean but unreplayable batch fails the trial restore
+instead of surfacing at disaster time.
 
 Every offline tool that opens a store without `Core::open` goes through the same
 entry (`NativeStore::open_checked`, or `check_marker_file` where the worldgen
@@ -869,8 +903,9 @@ journal coverage gap, so append refuses before reaching the injected ENOSPC.
 ## Backup and restore
 
 Offline backup/restore requires stopped, exclusively leased world; restore
-verifies inventory/hashes. Console hot backup is native-writer checkpoint+WAL
-copy, decoding/CRC-checking every batch (Books R5 G3) and checking store/palette identity.
+verifies inventory/hashes and gives every restored copy its own branch.
+Console hot backup is native-writer checkpoint+WAL copy, decoding/CRC-checking
+every batch (Books R5 G3) and checking store/branch/palette identity.
 Neither reports success until ordinary recovery replays the copy to its claimed
 tick; unreplayable copies are withdrawn ([marker contract](#checkpoint-marker)).
 

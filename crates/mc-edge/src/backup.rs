@@ -481,7 +481,9 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
     .and_then(|(store_uuid, store_tick)| {
         mc_world::store_marker::verify(&target, store_uuid, store_tick)
             .map_err(|error| error.to_string())
-    });
+            .map(|()| store_tick.unwrap_or(0))
+    })
+    .and_then(|store_tick| start_branch(&target, store_tick));
     if let Err(error) = pair {
         // Nothing the restore created survives a refusal: the whole target when
         // this restore made it, otherwise the files it copied and the data
@@ -505,6 +507,25 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
         files.len(),
     );
     Ok(())
+}
+
+/// Give a restored copy its own branch (DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY).
+///
+/// The store id is the world's identity and travels with every backup, so two
+/// copies of one backup — or a copy and the world it came from — would otherwise
+/// replay each other's WAL tails. A fresh branch, neither the root nor the
+/// backup's own, is minted; the copied tail above the store's checkpoint moves
+/// onto it, and only then is the marker naming it written, so an interrupted
+/// restore leaves a copy that refuses to open instead of one on two branches.
+fn start_branch(target: &Path, store_tick: u64) -> Result<(), String> {
+    let copied = mc_world::store_marker::read(target)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "the backup has no checkpoint marker".to_owned())?;
+    let branch = mc_world::store_marker::mint_branch(copied.branch);
+    mc_core::journal::rebind_tail(target, store_tick, copied.store_uuid, copied.branch, branch)
+        .map_err(|error| error.to_string())?;
+    mc_world::store_marker::write(target, copied.store_uuid, branch, copied.checkpoint_tick)
+        .map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

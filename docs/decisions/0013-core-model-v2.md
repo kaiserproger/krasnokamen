@@ -331,10 +331,10 @@ prune, so a committed checkpoint never outruns its WAL and a pruned WAL never
 outruns the durable witness that its checkpoint existed. The checkpoint marker
 is `<world>/checkpoint.marker`: a fixed-size file outside redb with the store's
 immutable random `store_uuid` (a required native header key, minted at store
-creation and import) and the acknowledged checkpoint tick, installed through a
-temporary file, `sync_all`, rename and directory fsync (there is no directory
-fsync on Windows, so the rename there survives a process crash but not a power
-loss). A marker write error
+creation and import), the branch of this copy of the store and the acknowledged
+checkpoint tick, installed through a temporary file, `sync_all`, rename and
+directory fsync (there is no directory fsync on Windows, so the rename there
+survives a process crash but not a power loss). A marker write error
 publishes no ACK, prunes nothing and stops the writer. Before replay, startup
 refuses a missing or corrupt marker next to a store with a checkpoint, a foreign
 store id, or a store tick behind the marker tick — a redb repair rolled the store
@@ -345,15 +345,22 @@ marker is bootstrap proof of a world that never served, and the pair is
 published once from that store; without the first-start file the same state is
 refused. Hot backup copies
 the marker, and `world restore` refuses a restored pair whose store id or tick
-disagrees with it. Every WAL batch frame (format 2) carries that store id and
-the block-state palette digest of the registry that wrote its numeric block
-ids, so replay refuses a journal directory or tail that belongs to another
-world or palette instead of folding foreign post-images; both fields are
-compared unconditionally (a zero id is a value, not a wildcard, since the CRC
-covers only the payload), and a format-1 tail is refused with the upgrade path
-named, never converted. Two independently created stores differ by construction
-(random id); two copies of one backup deliberately share it, which this check
-cannot separate (see DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY). Offline tools that open a store without `Core::open` (prune,
+disagrees with it. Every WAL batch frame (format 3) carries that store id, the
+marker's branch and the block-state palette digest of the registry that wrote
+its numeric block ids, so replay refuses a journal directory or tail that belongs
+to another world, another copy of this world or another palette instead of
+folding foreign post-images; all three fields are compared unconditionally (a
+zero id is a value, not a wildcard, since the CRC covers only the payload), and
+a format-1 or format-2 tail is refused with the upgrade path named, never
+converted. Two independently created stores differ by construction (random id).
+A restored backup is the same world, so its store id is never given a fresh
+identity; instead every `world restore` mints a random branch for its copy
+(DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY), moves the copied tail above the
+checkpoint onto it and then writes the marker naming it, so two copies of one
+backup, or a copy and the world it came from, refuse each other's tails. A
+world as created or imported is on the root branch, whose marker keeps the
+64-byte format-1 layout; only a restored copy's marker carries the branch
+(format 2), so existing markers need no converter. Offline tools that open a store without `Core::open` (prune,
 compact, pregeneration, worldgen upgrade, censuses, probe) run the same check
 before their first write or reported read, and a read-only tool never rewrites
 the marker. There is no converter for worlds written before the store id

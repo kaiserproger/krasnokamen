@@ -1070,13 +1070,15 @@ the new binary before deployment. See [ADR 0013](decisions/0013-core-model-v2.md
 
 ### Upgrading a world whose WAL this build cannot read
 
-A journal frame names the store and block palette that wrote it (format 2). This
-build refuses format-1 frames and refuses to replay a tail from another store or
-another palette, so an upgrade from a build that wrote format 1 needs one of the
-two procedures below. **There is no dual reader and no serving fallback, and no
-procedure asks you to delete or move the `journal/` directory**: a journal file
-at or below a published checkpoint is never replayed, so leaving it in place is
-harmless.
+A journal frame names the store, the branch of that store and the block palette
+that wrote it (format 3). This build refuses format-1 and format-2 frames and
+refuses to replay a tail from another store, another copy of the store or
+another palette, so an upgrade from a build that wrote an older format needs one
+of the two procedures below. **There is no dual reader and no serving fallback,
+and no procedure asks you to delete or move the `journal/` directory**: a journal
+file at or below a published checkpoint is never replayed, so leaving it in
+place is harmless. The checkpoint marker of a world that was never restored
+keeps its layout, so a clean stop is all the upgrade needs.
 
 **A release whose native header predates `store_uuid` (RC5 and older).** This
 build refuses that store outright ("native store id missing"), before any WAL
@@ -1089,7 +1091,7 @@ conversion; the export/import procedure and its losses are described in
 [MIGRATION.md](MIGRATION.md) (see "Exporting and importing a world"). Keep the
 original directory until the imported world has been checked in play.
 
-**A compatible native pin that writes WAL format 1** (same native schema and
+**A compatible native pin that writes WAL format 1 or 2** (same native schema and
 header identity as this build). The checkpoint is readable, only the tail is
 not, so:
 
@@ -1102,7 +1104,7 @@ not, so:
    lower — a refused final checkpoint — start the old binary again and stop it
    again; a world that cannot publish a covering checkpoint must not be upgraded.
 3. Start this build. Batches below the covering checkpoint are ignored and any
-   format-1 batch above it is refused, which means step 2 was not met.
+   older-format batch above it is refused, which means step 2 was not met.
 
 Do not remove, rename or "move aside" journal files to get past a refusal: the
 refusal is the check that keeps a tail from being applied to a world it does not
@@ -1277,11 +1279,18 @@ for verification and reject a malformed one. Only an absent config uses defaults
 
 A backup holds the native database, WAL/journal and other world files with a
 versioned SHA-256 manifest (lease files excluded). A `journal/` directory
-belongs to the store it was written with: every batch carries that store's id
-and block-palette digest, and startup refuses a foreign tail by name instead of
-replaying it into the wrong world. `backup` and
-`restore` always move both together; restoring only `native/state.redb` over an
-existing `journal/` is refused at the next start, not a supported path. Restore verifies the full
+belongs to the store it was written with: every batch carries that store's id,
+the branch of that copy of the store and the block-palette digest, and startup
+refuses a foreign tail by name instead of replaying it into the wrong world.
+`backup` and `restore` always move both together; restoring only
+`native/state.redb` over an existing `journal/` is refused at the next start,
+not a supported path. Every `restore` starts a branch of its own: the copy keeps
+the world's store id, gets a fresh random branch in its `checkpoint.marker`, and
+its copied tail is moved onto that branch. Two copies restored from one backup,
+or a copy and the world it came from, therefore refuse each other's journals; a
+plain filesystem copy of a world or backup directory is not a restore and stays
+on the branch it was copied from, so restore every copy you intend to run next to
+the original. Restore verifies the full
 inventory and hashes before writing; the target must be empty or absent and
 separate from the backup. Missing, changed or extra files, incompatible
 manifests and symlinks are refused. Retain the TOML, plugin artifacts and access
@@ -1324,9 +1333,10 @@ but the next periodic checkpoint and generated-chunk saves wait until the copy
 finishes (WAL appends continue and dirty state stays resident). The copy is
 assembled in a hidden `.backup-<UTC>.partial` directory and renamed only after
 the manifest is durable, so a failed backup leaves nothing behind. Restore with
-`krasnokamen restore --from <backup> --world-dir <new>`, or point `world_dir` at
-a copy of the backup directory: opening replays the WAL to tick `N`, exactly as
-crash recovery does. It covers world state only.
+`krasnokamen restore --from <backup> --world-dir <new>`: opening replays the WAL
+to tick `N`, exactly as crash recovery does. Pointing `world_dir` at a plain copy
+of the backup directory also opens it, but that copy keeps the backup's branch
+(see above). It covers world state only.
 
 Never open a world with an older binary than the one that last wrote it: newer
 manifests and WAL records are forward-only, and an older reader either defaults
