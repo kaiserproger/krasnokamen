@@ -4,10 +4,11 @@ title = "Pressing a container number or F with a stack on the menu cursor swaps 
 area = "client"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Split from HC-2 (review ReviewD123Client4 and this lane's B2 discipline): HC-2's control reverses only the physical-key dispatch hunk of client:5ef71d56, so the swap-while-carrying guard that the same commit added at src/ui/state.rs (`if mode == ClickMode::Swap && cursor is not empty { return Ok(()) }`) stays in place on both sides of the pair and cannot carry that half of the row."
 regression = ["client:krasnokamen-client:ui::inventory_input_tests::inventory_swapping_while_carrying_does_not_change_slots", "harness:entities:native-v2-input-menus"]
 fix_commit = "client:104e654e34"
 failing_first = "not recorded"
 proving_assertions = { "harness:entities:native-v2-input-menus" = "swap_while_carrying_keeps_slot" }
 repro_check = "Committed-reversal pair on the tip (5ef71d56 predates the client rename): reversal client:fba8b0d4a6 deletes the guard at src/ui/state.rs (unit ref red, negctl/swap-unit-control.log) and re-land client:104e654e34 restores it (master ref green, negctl/swap-unit-restore.log). The native-v2-input-menus scene now picks a stack onto the cursor and presses 1/F over an occupied slot, requiring swap_while_carrying_keeps_slot, offhand_swap_while_carrying_keeps_slot and survival_swap_returned. Map: docs/bugs/promotions/HC-2-SWAP-WHILE-CARRYING.hunks.md."
+promotion = "docs/bugs/promotions/HC-2-SWAP-WHILE-CARRYING.json"
