@@ -129,9 +129,10 @@ def _swap_while_carrying(steps: ProbeSteps, state: dict) -> None:
     placed); `ui/state.rs` guards the Swap mode with a non-empty cursor.
     """
     seeded = observe_menu(steps, "survival_swap_seeded")
+    hovered = 11  # second player-inventory slot after the diamond stack
     steps.check("survival_swap_fixture_slots",
                 holds(seeded["slots"][9], "minecraft:diamond", 12)
-                and holds(seeded["slots"][10], "minecraft:emerald", 3))
+                and holds(seeded["slots"][hovered], "minecraft:emerald", 3))
     _input(steps, button=1, point=center(state, 9))
     carrying = observe_menu(steps, "survival_swap_picked")
     steps.check("survival_swap_cursor_holds_the_pickup",
@@ -139,16 +140,18 @@ def _swap_while_carrying(steps: ProbeSteps, state: dict) -> None:
                 and carrying["slots"][9]["count"] == 0)
     for key, name in ((ord("1"), "swap_while_carrying_keeps_slot"),
                       (ord("f"), "offhand_swap_while_carrying_keeps_slot")):
-        _input(steps, key=key, point=center(state, 10))
+        _input(steps, key=key, point=center(state, hovered))
         image = observe_menu(steps, "survival_" + name)
-        steps.check(name, holds(image["slots"][10], "minecraft:emerald", 3)
+        steps.check(name, holds(image["slots"][hovered], "minecraft:emerald", 3)
                     and holds(image["carried"], "minecraft:diamond", 12))
     _input(steps, button=1, point=center(state, 9))
     returned = observe_menu(steps, "survival_swap_returned")
     steps.check("survival_swap_returned",
                 holds(returned["slots"][9], "minecraft:diamond", 12)
                 and returned["carried"]["count"] == 0
-                and holds(returned["slots"][10], "minecraft:emerald", 3))
+                and holds(returned["slots"][hovered], "minecraft:emerald", 3))
+    # The rest of this branch expects an empty hotbar for the number keys.
+    steps.fixture("clear @s minecraft:emerald")
 
 
 def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
@@ -163,8 +166,14 @@ def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         _seed_main(steps, "minecraft:diamond", 12, 9)
         if not creative:
             # HC-2-SWAP-WHILE-CARRYING needs a second occupied slot to hover while the
-            # diamond stack rides the cursor (the first empty player slot after 9).
+            # diamond stack rides the cursor, and it must not be the hotbar slot a number
+            # press swaps with. `give` fills the hotbar first, so fill it and the next
+            # main slot (10) with stone to land the emeralds in main slot 11, then clear.
+            for hotbar in range(9):
+                steps.fixture(f"debug give minecraft:stone 64 {hotbar}")
+            steps.fixture("give @s minecraft:stone 64")
             steps.fixture("give @s minecraft:emerald 3")
+            steps.fixture("clear @s minecraft:stone")
         _echo(steps, mode + "_fixture")
         state = _open_inventory(steps, creative)
         seeded = observe_menu(steps, mode + "_seeded")
