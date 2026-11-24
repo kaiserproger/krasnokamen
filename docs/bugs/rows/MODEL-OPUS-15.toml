@@ -1,10 +1,13 @@
 [[bug]]
 id = "MODEL-OPUS-15"
-title = "Elytra and capes are never drawn."
+title = "A worn elytra's back layer is never drawn."
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:170"
-regression = ["client:krasnokamen-client:entities::equipment::tests::player_back_uses_wings_asset_profile_priority_gliding_and_cape_exclusion"]
-repro_check = "candidate: in-tree code and a passing unit ref, no control; area=client, real-client check required"
+fix_commit = "client:b11ca37604"
+regression = ["harness:scene-shot:native-elytra", "client:krasnokamen-client:entities::equipment::tests::wearables::player_back_uses_wings_asset_profile_priority_gliding_and_cape_exclusion"]
+proving_assertions = { "harness:scene-shot:native-elytra" = "worn_elytra_drawn" }
+repro_check = "The client has drawn the elytra back layer since client:e8fe40c2 (bulk rig/visual commit, not individually pinnable). The row was first promoted with the e292b8f68e -> 10a9c5dee5 pair, whose map wrongly claimed the slot-4 omission guard was reversed; it was present on both sides (review ReviewD123Client4 B2). The pair is now client:c290f71b95 (reversal: the append_player_back body and the slot-4 Worn::Omitted guard in resolve()) -> client:b11ca37604 (re-land, the row fix_commit). Its diff is the two equipment.rs hunks only, and the map promotions/MODEL-OPUS-15.hunks.md gives every e8fe40c2 hunk its @@ header and an (a)/(b)/(c) reason: the use_player_texture fields and their load_asset plumbing are (b), the animal overlays and every other renderer are (a), test hunks are test hunks. Control and restore receipts on the candidate core tree are recorded in promotions/MODEL-OPUS-15.json."
+promotion = "docs/bugs/promotions/MODEL-OPUS-15.json"

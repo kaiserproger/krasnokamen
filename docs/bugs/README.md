@@ -272,6 +272,25 @@ worker, runs the negative control.
    `KRASNOKAMEN_SERVER_BINARY`, or a binary pinned from an older source, proves
    nothing about this source and is refused. A unit test cannot close a client
    failure.
+
+   **Client rows whose real fix predates the client rename** (`f0a6abf6`,
+   2026-11-12) have no buildable pre-fix client, because `pin-release --client`
+   builds the crate name of the tree. Their control is a committed **reversal**
+   on the current tip: one commit removes exactly the guarded behaviour the real
+   fix added - `git apply -R` of that fix's non-test hunks as far as they still
+   apply, and where the code moved, the same deletion hand-ported with the
+   original lines named by `git blame -C -C` - and the next commit re-lands it,
+   becoming the row's `fix_commit`. The reversal must be that deletion, never an
+   invented stub or an early return: the two commits' diff has to equal the
+   forward-ported real fix. **The same `promotions/<ID>.hunks.md` map as patch
+   mode is mandatory here**: the real commit (a bulk one such as
+   `client:e8fe40c2` is usual), every one of its non-test hunks with the file,
+   the `@@` header and its HEAD equivalent or the (a)/(b)/(c) omission reason,
+   and the a/-side adaptation (for example `_`-parameter renames when the
+   reversed function keeps its signature because kept tests call it). A client
+   reversal promotion without that map is refused. The promotions record the
+   re-landing sha, which must reach the client main without squash or rebase so
+   `fix_commit` stays resolvable.
 4. Automatic negative control: the fix commit's non-test hunks (test files,
    `docs/` and Rust hunks inside inline `#[cfg(test)]` modules stay) are
    reverse-applied onto the candidate in a temporary worktree; only if

@@ -178,6 +178,37 @@ def _read_descriptor(
     return descriptor, token
 
 
+def launch_environment(
+    base: dict[str, str],
+    *,
+    windowed: bool,
+    display: str | None,
+    run_dir: Path,
+) -> dict[str, str]:
+    """The environment one native client runs with.
+
+    `DISPLAY` follows the mode. Managed settings are per run: the client
+    persists `client-settings.json` under its data root and reads it back on
+    every start, so an inherited file makes two ids of the same tree disagree
+    about what a physical key does — a saved `hotbar_2` on the middle mouse
+    button left the inventory's `2` press with no action at all while `1` and
+    `3` still swapped. A caller that prepares settings for the run names the
+    file in `KRASNOKAMEN_CLIENT_SETTINGS` (scene-shot writes the fov and render
+    distance there); every other run reads an empty file inside its own
+    directory.
+    """
+    env = dict(base)
+    if windowed:
+        if not display:
+            raise ValueError("windowed native launch requires an explicit display")
+        env["DISPLAY"] = display
+        env.pop("WAYLAND_DISPLAY", None)
+    prepared = env.get("KRASNOKAMEN_CLIENT_SETTINGS")
+    env["KRASNOKAMEN_CLIENT_SETTINGS"] = str(
+        Path(prepared) if prepared else run_dir / "client-settings.json")
+    return env
+
+
 @runtime.in_phase("client_start")
 def start(
     ctx: ProfileContext,
@@ -218,16 +249,21 @@ def start(
             raise RuntimeError(f"native client root is missing: {root}; set KRASNOKAMEN_CLIENT_ROOT")
         binary = binary.expanduser().resolve()
         _record_binary(ctx, binary)
-        env = os.environ.copy()
-        if ctx.windowed:
-            if not display:
-                raise ValueError("windowed native launch requires an explicit display")
-            env["DISPLAY"] = display
-            env.pop("WAYLAND_DISPLAY", None)
-            resource_names = ("KRASNOKAMEN_CLIENT_DATA_DIR", "KRASNOKAMEN_CLIENT_RESOURCE_ROOT",
-                              "KRASNOKAMEN_CLIENT_ASSET_ROOT", "KRASNOKAMEN_CLIENT_ASSET_INDEX")
-        else:
-            resource_names = ("KRASNOKAMEN_CLIENT_DATA_DIR",)
+        ctx.artifact_dir.mkdir(parents=True, exist_ok=True)
+        runs_dir = root / ".analysis" / "harness-runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        run_dir = Path(tempfile.mkdtemp(prefix="native-", dir=runs_dir)).resolve()
+        runtime_dir = run_dir / "runtime"
+        runtime_dir.mkdir(mode=0o700)
+        artifact_dir = run_dir / "artifacts"
+        artifact_dir.mkdir(mode=0o700)
+        log_path = ctx.artifact_dir / "native-client.log"
+        env = launch_environment(os.environ, windowed=ctx.windowed, display=display, run_dir=run_dir)
+        resource_names = (
+            ("KRASNOKAMEN_CLIENT_DATA_DIR", "KRASNOKAMEN_CLIENT_RESOURCE_ROOT",
+             "KRASNOKAMEN_CLIENT_ASSET_ROOT", "KRASNOKAMEN_CLIENT_ASSET_INDEX")
+            if ctx.windowed else ("KRASNOKAMEN_CLIENT_DATA_DIR",)
+        )
         evidence["resource_paths"] = {
             name: env[name] for name in resource_names if env.get(name)
         }
@@ -241,20 +277,12 @@ def start(
             available = path.is_file() if name == "KRASNOKAMEN_CLIENT_ASSET_INDEX" else path.is_dir()
             if not available:
                 raise RuntimeError(f"native client content prerequisite {name} is missing: {path}")
-        ctx.artifact_dir.mkdir(parents=True, exist_ok=True)
-        runs_dir = root / ".analysis" / "harness-runs"
-        runs_dir.mkdir(parents=True, exist_ok=True)
-        run_dir = Path(tempfile.mkdtemp(prefix="native-", dir=runs_dir)).resolve()
-        runtime_dir = run_dir / "runtime"
-        runtime_dir.mkdir(mode=0o700)
-        artifact_dir = run_dir / "artifacts"
-        artifact_dir.mkdir(mode=0o700)
-        log_path = ctx.artifact_dir / "native-client.log"
         evidence.update(
             {
                 "runtime_dir": str(runtime_dir),
                 "artifact_dir": str(artifact_dir),
                 "log": str(log_path),
+                "settings_path": env["KRASNOKAMEN_CLIENT_SETTINGS"],
             }
         )
         # Title-mode launch (server_addr/username both None): omit --server /

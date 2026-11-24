@@ -1,12 +1,11 @@
 [[bug]]
 id = "MODEL-PLACED-HEAD-PROFILE"
-title = "Placed player-head profile appearance remains unverified: the profile reaches block-entity NBT, but the Alex fixture's head is invisible because the native renderer requires a listed player with a verified published skin. A verified listed-profile fixture is required before closing the head portion split from MODEL-BANNER-PLACEMENT."
+title = "Placed player head with a listed, published profile keeps its skin and hat layer in a real client."
 area = "client"
 repro = "client"
 severity = "major"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:29"
-regression = ["cargo:mc-core:block_entity_defaults::tests::placed_head_and_pot_preserve_their_item_components", "client:krasnokamen-client:entities::render_blocks::village_tests::listed_player_head_profile_renders_skin_with_hat_layer", "client:krasnokamen-client:entities::render_blocks::village_tests::static_skulls_render_and_unresolved_player_heads_keep_the_default_skin"]
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:29; the unresolved-profile half is tracked as MODEL-PLACED-HEAD-UNRESOLVED"
+regression = ["cargo:mc-core:block_entity_defaults::tests::placed_head_and_pot_preserve_their_item_components", "client:krasnokamen-client:entities::render_blocks::village_tests::listed_player_head_profile_renders_skin_with_hat_layer"]
 failing_first = "not recorded"
-fix_commit = "client:8347908e"
-repro_check = "candidate-unit: this branch's own hunk reverted (.ok() -> Some(..?)) makes the unresolved-owner head unrendered again, i.e. the ref asserts the symptom (a visible default-skin head instead of nothing), receipts/XClientBlocks/10-negative-control.log; repro=client, placement frames are stage 3"
+repro_check = "SPLIT 2026-11-24 (review): this row keeps the listed-profile appearance, which the scene cannot observe - native-placed-head places an offline name, so the client resolves it through the default skin. The listed-profile path is unit-covered only (entities::render_blocks::village_tests::listed_player_head_profile_renders_skin_with_hat_layer) and needs a real-client fixture with a verified published profile before it can close."

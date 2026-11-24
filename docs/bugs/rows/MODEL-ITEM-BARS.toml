@@ -4,9 +4,10 @@ title = "No item bar (durability or bundle fullness) anywhere in the GUI"
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:86"
 regression = ["harness:scene-shot:native-item-bars", "client:krasnokamen-client:ui::state::item_bar_tests::every_retained_stack_paint_uses_shared_decoration_in_real_renderer", "client:krasnokamen-client:ui::state::item_bar_tests::damaged_stack_emits_shrinking_green_yellow_red_bar_quads", "client:krasnokamen-client:ui::state::item_bar_tests::bundle_fullness_scales_and_changes_blue_to_red_only_when_full"]
-fix_commit = "client:e8fe40c2"
-proving_assertions = { "harness:scene-shot:native-item-bars" = "durability_bar_drawn" }
-repro_check = "Real-hunk control receipts/XClientUi/controls-2.log gives 16 vs 8 vertices on duplicate bars; the scene checks durability and fullness pixels."
+fix_commit = "client:10a9c5dee5"
+proving_assertions = { "harness:scene-shot:native-item-bars" = "pickaxe_slot_bar_changes" }
+repro_check = "REAL FIX: e8fe40c2 (bulk rig/visual commit, not individually pinnable). The tip pair is the committed reversal client:e292b8f68e -> re-land client:10a9c5dee5 (both must reach the client main without squash or rebase so the recorded sha stays resolvable); the hunk map is promotions/MODEL-ITEM-BARS.hunks.md. Control = e292b8f68e on candidate core e9a5cf9e31: native-item-bars FAILS at pickaxe_slot_bar_changes (20261123T200337-native-item-bars-bh16egvi) - the damaged slot looks exactly like a clean one, the row own symptom - and the restore 10a9c5dee5 passes (20261123T200445-native-item-bars-f8hv788m). The reversed body keeps the signature and the state.rs module wiring because the retained item_bar_tests call them (README rule b; the renamed parameters are the only a/-side text). Promoted 20261123T201952."
+promotion = "docs/bugs/promotions/MODEL-ITEM-BARS.json"

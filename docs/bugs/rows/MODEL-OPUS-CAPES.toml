@@ -1,0 +1,11 @@
+[[bug]]
+id = "MODEL-OPUS-CAPES"
+title = "A player cape is never drawn."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "split from MODEL-OPUS-15 2026-11-24 (review): the elytra back layer is MODEL-OPUS-15; capes are not asserted there"
+regression = ["client:krasnokamen-client:entities::equipment::tests::wearables::player_back_uses_wings_asset_profile_priority_gliding_and_cape_exclusion"]
+failing_first = "not recorded"
+repro_check = "The cape branch of append_player_back is unit-covered by the ref above (cape exclusion while wings are worn, cape draw otherwise). No registered scene places a cape: native-elytra only wears an elytra, so there is no observed red for this part yet."

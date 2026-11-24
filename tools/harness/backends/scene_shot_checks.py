@@ -163,6 +163,43 @@ def check_entity_visuals(probe: ProbeSteps, artifact: Path) -> None:
     ]
 
 
+def check_toasts(probe: ProbeSteps, artifact: Path) -> None:
+    """NATIVE-TOASTS-MISSING: the join-time unsecure-server toast is drawn, then clears.
+
+    The client raises it on the Play login packet (10 s visible). The scene teleports, fills the
+    platform, teleports back, waits 40 ticks and shoots `toast-early`, then `toast-late` about
+    16 s later. The player stands still, and the ROI is the panel's own
+    `gui/sprites/toast/system` rectangle - `ToastManager` puts x = gui_width - width and y = 0,
+    which at GUI scale 3 on a 1280x720 frame is x 621..1280, y 0..168 - so a dark navy panel and
+    its yellow title there can only be the toast. Clouds drift between the two frames, so the
+    assertion is the panel's presence and later absence, never a whole-frame diff (calibrated on
+    20261123T215339-native-toast-nmjj7q5f: early panel 89445, late 0; title 3195 vs 0)."""
+    shots = _qa._load_shots(probe, artifact, ("toast-early", "toast-late"))
+    early_f, late_f = shots["toast-early"][0], shots["toast-late"][0]
+    probe.check("toast_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(early_f["camera_position"], late_f["camera_position"])
+    ) and abs(early_f["yaw"] - late_f["yaw"]) < 0.01 and abs(early_f["pitch"] - late_f["pitch"]) < 0.01)
+    box = (621, 0, 1280, 168)
+    panel = lambda r, g, b: max(r, g, b) < 90
+    # `AdvancementToast`/`SystemToast` title ink: 0xffff00 on the navy panel.
+    title = lambda r, g, b: r > 170 and g > 170 and b < 140
+    early, late = shots["toast-early"][1], shots["toast-late"][1]
+    early_panel, late_panel = _count(early, box, panel), _count(late, box, panel)
+    early_title, late_title = _count(early, box, title), _count(late, box, title)
+    probe.report["toast_roi"] = list(box)
+    probe.report["toast_pixels"] = {
+        "early_panel": early_panel,
+        "late_panel": late_panel,
+        "early_title": early_title,
+        "late_title": late_title,
+    }
+    probe.check("toast_panel_appeared", early_panel > 1500 and late_panel < 50)
+    probe.check("toast_title_drawn", early_title > 800 and late_title < 50)
+    probe.report["visual_review_required"] = [
+        "Inspect toast-early/toast-late; the pixels prove a toast panel was drawn, not the vanilla layout."
+    ]
+
+
 def check_item_bars(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-ITEM-BARS: durability bar and bundle fullness bar in the GUI hotbar."""
     shots = _qa._load_shots(probe, artifact, ("bars-damaged", "bars-clean"))
@@ -251,6 +288,53 @@ def check_gait_spider(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["spider_capture_pixels"] = {"body": spider, "zombie": obstruction, "image": image}
     probe.check("spider_body_visible", spider > 1000)
     probe.check("spider_unobstructed", obstruction <= 100)
+
+
+def check_elytra(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-15: a worn elytra draws its wings on the third-person avatar's back."""
+    shots = _qa._load_shots(probe, artifact, ("back-plain", "back-elytra", "back-none", "back-chestplate"))
+    ref = shots["back-plain"][0]
+    for name in ("back-elytra", "back-none", "back-chestplate"):
+        frame = shots[name][0]
+        probe.check(f"{name}_camera_unchanged", all(
+            abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+        ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    # The avatar's upper back at the fixed third-person camera. `back-none` is the same player
+    # with an empty chest slot, so only the worn layer differs; the same comparison against
+    # `back-plain` bounds the idle arm motion (`idle_back_motion_bounded`, under 2500 px).
+    box = (556, 296, 724, 476)
+    elytra = _changed(shots["back-elytra"][1], shots["back-none"][1], box)
+    idle = _changed(shots["back-plain"][1], shots["back-none"][1], box)
+    chestplate = _changed(shots["back-chestplate"][1], shots["back-none"][1], box)
+    probe.report["elytra_back_roi"] = list(box)
+    probe.report["elytra_changed_pixels"] = {"elytra": elytra, "idle": idle, "chestplate": chestplate}
+    probe.check("chestplate_back_roi", chestplate > 4000)
+    probe.check("worn_elytra_drawn", elytra > 4000)
+    probe.check("idle_back_motion_bounded", idle < 2500)
+    probe.report["visual_review_required"] = [
+        "Inspect back-plain/back-elytra/back-chestplate; pixel change proves a layer was drawn, not vanilla wing shape."
+    ]
+
+
+def check_placed_head(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-PLACED-HEAD-PROFILE: an unresolved placed head keeps the default skin.
+
+    The same scene as `native-player-head`, judged only on the placed block: the worn
+    assertions belong to WORN-PLAYER-HEAD-ON-BACK and must not gate this row's restore."""
+    shots = _qa._load_shots(probe, artifact, ("head-empty", "head-block"))
+    empty_f, block_f = shots["head-empty"][0], shots["head-block"][0]
+    probe.check("placed_head_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(empty_f["camera_position"], block_f["camera_position"])
+    ) and abs(empty_f["yaw"] - block_f["yaw"]) < 0.01 and abs(empty_f["pitch"] - block_f["pitch"]) < 0.01)
+    head_box = (580, 520, 700, 655)
+    placed = _changed(shots["head-block"][1], shots["head-empty"][1], head_box)
+    magenta = lambda r, g, b: r > 60 and b > 60 and r > g * 2 and b > g * 2
+    hat = _count(shots["head-block"][1], head_box, magenta)
+    probe.report["placed_head_roi"] = list(head_box)
+    probe.report["placed_head_changed_pixels"] = placed
+    probe.report["placed_head_hat_layer_pixels"] = hat
+    probe.check("placed_head_renders", placed > 100)
+    probe.check("placed_head_hat_layer_pixels", hat > 100)
 
 
 def check_player_head(probe: ProbeSteps, artifact: Path) -> None:

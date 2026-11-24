@@ -27,6 +27,22 @@ def probe_username(kind: str) -> str:
     return {"inventory": "HarnessInventory", "entities": "HarnessEntities",
             "core-client": "HarnessCore", "native-lifecycle": "HarnessLifecycle"}[kind]
 
+def failure_scenario(artifact: Path, scenario_id: str | None, error: BaseException) -> dict[str, Any] | None:
+    """The failed scenario's own report for the failure receipt, or None when it wrote none.
+
+    ProbeSteps writes `<artifact>/<scenario>/scenario.json` before the failure propagates, and a
+    promotion control has to tell a failed assertion from a timeout or a crashed client
+    (`ledger._client_ref_states` reads `details.scenario…assertions`). Without this the entities
+    profile's receipts carried only `details.named_scenario`, so every `client:<sha>` control whose
+    proving ref is an entities scenario read as `unreported` and could not be promoted.
+    """
+    if not scenario_id:
+        return None
+    try:
+        report = json.loads((artifact / scenario_id / "scenario.json").read_text())
+    except (OSError, ValueError):
+        return None
+    return {"scenario": report, "error": str(error)}
 
 def world_dir_toml(artifact: Path) -> str:
     """Quote the absolute world path even when receipts live outside the repository."""
@@ -639,7 +655,12 @@ seed = 81
                         return {"address": address, **evidence["world_conversions"][-1]}
 
                     mcp.promotion_mount_export_reimport = export_reimport
-            result = native_v2.run(mcp, artifact, timeout, ctx.scenario_id)
+            try:
+                result = native_v2.run(mcp, artifact, timeout, ctx.scenario_id)
+            except Exception as error:
+                # Keep the scenario's own assertions in the failure receipt.
+                ctx.failure_scenario = failure_scenario(artifact, ctx.scenario_id, error)
+                raise
         elif p5_scenario:
             from . import java_craft_drag, shift_matrix
 

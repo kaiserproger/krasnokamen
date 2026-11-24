@@ -1,0 +1,65 @@
+{
+  "id": "NATIVE-DEATH-TILT-PIVOT",
+  "verdict": "promoted",
+  "fix_commit": "client:c933f82b68",
+  "fix_commit_full": "c933f82b68ca7247b9e9f2d047fba88c9dde0f3d",
+  "promoted_at": "2026-11-24T00:03:15+00:00",
+  "tree_head": "b446faa8ae86cb68645a4e65d1a15915ca3ac5f1",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T235523-native-death-tilt-4s49urqh/result.json",
+    "client_head": "f2bcb7f2cbd50f9ac7c892c97206cbff09d705e7",
+    "server_binary_sha256": "dbeaf821420d7a0452e04b138274b976971afb6b33b07e7adccf4cc60a349a83",
+    "red": [
+      "harness:scene-shot:native-death-tilt"
+    ],
+    "states": {
+      "harness:scene-shot:native-death-tilt": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T235642-native-death-tilt-_xh297nn/result.json",
+    "client_head": "c933f82b68ca7247b9e9f2d047fba88c9dde0f3d",
+    "server_binary_sha256": "dbeaf821420d7a0452e04b138274b976971afb6b33b07e7adccf4cc60a349a83",
+    "green": [
+      "harness:scene-shot:native-death-tilt"
+    ],
+    "states": {
+      "harness:scene-shot:native-death-tilt": "green"
+    },
+    "tree_head": "b446faa8ae86cb68645a4e65d1a15915ca3ac5f1",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261123T235642-native-death-tilt-_xh297nn/result.json",
+    "client_head": "c933f82b68ca7247b9e9f2d047fba88c9dde0f3d",
+    "server_binary_sha256": "dbeaf821420d7a0452e04b138274b976971afb6b33b07e7adccf4cc60a349a83",
+    "green": [
+      "harness:scene-shot:native-death-tilt"
+    ],
+    "states": {
+      "harness:scene-shot:native-death-tilt": "green"
+    },
+    "tree_head": "b446faa8ae86cb68645a4e65d1a15915ca3ac5f1",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "f31d546f63d4486e20333d4d43e102a6656a8f6f",
+    "paths": [
+      "src/entities/local.rs",
+      "src/entities/presentation.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::animation_tests::death_tilt_turns_about_the_feet_on_the_vanilla_curve": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T000139-ledger-promote-jvd2q60l"
+}

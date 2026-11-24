@@ -1,0 +1,14 @@
+[[bug]]
+id = "MODEL-PLACED-HEAD-UNRESOLVED"
+title = "A placed head whose profile is not a listed player with a published skin is invisible."
+area = "client"
+repro = "client"
+severity = "major"
+status = "fixed"
+source = "split from MODEL-PLACED-HEAD-PROFILE 2026-11-24 (review): the half with an observed real-client control"
+regression = ["harness:scene-shot:native-placed-head", "client:krasnokamen-client:entities::render_blocks::village_tests::static_skulls_render_and_unresolved_player_heads_keep_the_default_skin"]
+proving_assertions = { "harness:scene-shot:native-placed-head" = "placed_head_renders" }
+failing_first = "reported"
+fix_commit = "client:8347908e"
+repro_check = "CONTROL 2026-11-23 on the candidate core tree e9a5cf9e31: with the pre-fix client 9a645aa9982f pinned, native-placed-head FAILS at placed_head_renders (20261123T200154-native-placed-head-rvk8u6f9) - the unresolved-profile head is not drawn at all; the fix client 8347908e2681 renders it (20261123T200228-native-placed-head-r6faszd5). Promoted 20261123T201202. Superseded evidence named below stays historical."
+promotion = "docs/bugs/promotions/MODEL-PLACED-HEAD-UNRESOLVED.json"

@@ -1,0 +1,11 @@
+[[bug]]
+id = "QA5-CREATIVE-HOVERED-Q"
+title = "Hovered Q in the creative inventory did not throw the hovered item."
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "split from QA5-CREATIVE 2026-11-24 (review)"
+regression = ["client:krasnokamen-client:ui::inventory_input_tests::inventory_native_q_and_control_q_throw_hovered_items"]
+failing_first = "not recorded"
+repro_check = "The client unit ref covers native Q and Ctrl+Q on the hovered creative slot. The scene's creative_q_one and creative_control_q_stack assertions are already green on the routing control parent (f4bd26d4), so there is no observed pre-fix red for this part and the row stays open until one exists."

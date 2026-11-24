@@ -9,4 +9,4 @@ source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = ["harness:scene-shot:issue1-18-sheep-goat"]
 fix_commit = "client:b7c48e1c"
 proving_assertions = { "harness:scene-shot:issue1-18-sheep-goat" = "goat_horns_upright" }
-repro_check = "Stage2X SLICES.md:125,144,151: era pin b7c48e1c^ failed goat_horns_upright (receipts/Stage2Client/run-redfix-18_sheep_goat.log), fixed client passed (run-green2-18_sheep_goat.log). The era control is not an exact reversal of the candidate and must be rebuilt for stage 3."
+repro_check = "Stage2X SLICES.md:125,144,151: era pin b7c48e1c^ failed goat_horns_upright (receipts/Stage2Client/run-redfix-18_sheep_goat.log), fixed client passed (run-green2-18_sheep_goat.log). The era control is not an exact reversal of the candidate and must be rebuilt for stage 3. REVERSAL 2026-11-23: reverting b7c48e1c on client f5c929f7 conflicts in assets/krasnokamen/models/entity/goat.json, docs/AGENT_TESTING.md, docs/ENTITY_MODELS.md, src/minecraft/entities.rs, src/session.rs, src/session/observation.rs, src/ui/drag_tests.rs and src/ui/state.rs; the control needs a forward-ported reversal."

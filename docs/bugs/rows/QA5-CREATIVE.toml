@@ -1,12 +1,12 @@
 [[bug]]
 id = "QA5-CREATIVE"
-title = "Original winfix3 creative slot move reverted on close; carried stack was not drawn; hovered Q ineffective."
+title = "Creative carried stack is not drawn while it sits on the menu cursor."
 area = "client"
 repro = "source"
 severity = "major"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-CREATIVE; fixed in client branch wt/LedgerInputB03Client (13f1f28b), gate run with that client"
-regression = ["harness:entities:native-v2-input-menus", "client:krasnokamen-client:inventory::tests::creative_player_menu_moves_and_drops_use_set_slot_without_ui_side_state", "client:krasnokamen-client:ui::inventory_input_tests::inventory_native_q_and_control_q_throw_hovered_items", "client:krasnokamen-client:ui::state::drag_tests::shift_with_carried_stack_dispatches_on_release"]
-proving_assertions = { "harness:entities:native-v2-input-menus" = "creative_move_persists" }
-fix_commit = "client:13f1f28b"
-repro_check = "candidate: only the creative-routing component has a real-hunk control (receipts/XClientControl/negctl/negctl-real-C-creative.log: reverting 13f1f28b sends packet 18 CONTAINER_CLICK instead of 57 SET_CREATIVE_MODE_SLOT); e16a3701 and 5ef71d56 src/ui/state.rs hunks do not apply (negctl/drifted-real-hunks.log) and the carried-stack drawing lives outside that slice's write set"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-CREATIVE; the routing half is tracked as QA5-CREATIVE-ROUTING, the hovered-Q half as QA5-CREATIVE-HOVERED-Q"
+regression = ["harness:entities:native-v2-input-menus", "client:krasnokamen-client:ui::state::drag_tests::shift_with_carried_stack_dispatches_on_release"]
+proving_assertions = { "harness:entities:native-v2-input-menus" = "creative_held_cursor_pixels" }
+failing_first = "not recorded"
+repro_check = "SPLIT 2026-11-24 (review): this row now carries only the carried-stack drawing. The native-v2-input-menus probe stops at the first failed assertion (creative_short_click_exact_pickup), so the later creative_short_pickup / creative_held_cursor_pixels checks were never evaluated against a control; only the client unit ref covers the dispatch. The routed packet swap and the hovered-Q behaviour live in the two rows named in source."

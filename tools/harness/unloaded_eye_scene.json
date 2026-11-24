@@ -44,7 +44,7 @@
       "cmd": "fill 996 175 996 1004 179 1004 minecraft:water"
     },
     {
-      "wait_chat": "Changed 405 block(s)"
+      "wait_chat": "Successfully filled 405 block(s)"
     },
     {
       "tp": [

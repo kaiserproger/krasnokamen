@@ -1,12 +1,13 @@
 [[bug]]
 id = "MODEL-ENTITY-263-RIGS"
-title = "4 entity types new in 26.3 have no rig family: `cushion`, `sulfur_cube`, `poplar_boat`, `poplar_chest_boat` → `material()` errs `no activated rig family` → entity is unrendered (invisible)"
+title = "Four 26.3 entity types (`cushion`, `sulfur_cube`, `poplar_boat`, `poplar_chest_boat`) had no rig family, so `material()` erred `no activated rig family` and the entity was unrendered (invisible)."
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:85"
 regression = ["harness:scene-shot:native-263-entity-rigs", "client:krasnokamen-client:entities::resources::tests::entity_render_263_cushion_activates_colored_rig_above_ground", "client:krasnokamen-client:entities::resources::tests::entity_render_263_sulfur_cube_activates_both_layers_and_sizes", "client:krasnokamen-client:entities::resources::tests::entity_render_263_poplar_boats_use_boat_hulls_and_poplar_textures", "client:krasnokamen-client:entities::resources::tests::regression_263_cushion_and_painting_metadata", "client:krasnokamen-client:entities::asset_model_regression_tests::boat_and_raft_hulls_match_the_vanilla_26_3_layers"]
 proving_assertions = { "harness:scene-shot:native-263-entity-rigs" = "rendered_minecraft:sulfur_cube" }
-repro_check = "Stage3 S3Scenes reproduced invisible sulfur cube and cushion twice at client:12e076e9; client:35df28a0 corrected boat geometry but did not activate these families. FixBatchA/rigs-control-red.log: both received-render tests fail no activated rig family with only the production fix restored to base; 25 resource tests pass on e593fa04. Windowed native-263-entity-rigs on c7786910eaa6: rigs-client-green/result.json passes all four rendered/resolved/visible-pixel assertions on e593fa045cf8; rigs-client-red/result.json fails rendered_minecraft:sulfur_cube on faithful ac1c4a6b1994, whose frame reports both missing families. Candidate/control screenshots reviewed: pale sulfur cube and white cushion are visible only on candidate."
+repro_check = "Stage3 S3Scenes reproduced invisible sulfur cube and cushion twice at client:12e076e9; client:35df28a0 corrected boat geometry but did not activate these families. FixBatchA/rigs-control-red.log: both received-render tests fail no activated rig family with only the production fix restored to base; 25 resource tests pass on e593fa04. Windowed native-263-entity-rigs on c7786910eaa6: rigs-client-green/result.json passes all four rendered/resolved/visible-pixel assertions on e593fa045cf8; rigs-client-red/result.json fails rendered_minecraft:sulfur_cube on faithful ac1c4a6b1994, whose frame reports both missing families. Candidate/control screenshots reviewed: pale sulfur cube and white cushion are visible only on candidate. SCOPE 2026-11-24 (review): the poplar boat and chest-boat hulls were already rendered after client:35df28a0 (its boat-hull re-author produced rigs-client-green/result.json on e593fa045cf8 with the boats drawn); the surviving red on the pre-fix control is rendered_minecraft:sulfur_cube, so the boats are covered but did not regress."
 fix_commit = "client:e593fa04"
+promotion = "docs/bugs/promotions/MODEL-ENTITY-263-RIGS.json"

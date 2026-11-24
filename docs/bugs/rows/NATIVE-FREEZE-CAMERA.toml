@@ -9,4 +9,4 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#NATIVE-FREEZE-CAMERA
 regression = ["harness:entities:native-v2-input-camera", "harness:admin-commands:all"]
 proving_assertions = { "harness:entities:native-v2-input-camera" = "frozen_captured_camera_tracks_teleport" }
 fix_commit = "client:c6a56f1d"
-repro_check = "candidate: the tree already ticks the local player while the world is frozen (in-tree test frozen_world_keeps_local_player_and_teleport_camera_live green) and c6a56f1d removes the frozen presentation lag, but no scoped revert exists (stage-0 wip merge); real gate harness:entities:native-v2-input-camera"
+repro_check = "candidate: the tree already ticks the local player while the world is frozen (in-tree test frozen_world_keeps_local_player_and_teleport_camera_live green) and c6a56f1d removes the frozen presentation lag, but no scoped revert exists (stage-0 wip merge); real gate harness:entities:native-v2-input-camera CONTROL 2026-11-23: native-v2-input-camera PASSES on the pre-fix client 9a645aa9, so the registered scene does not discriminate the presentation-lag fix."
