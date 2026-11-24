@@ -4,10 +4,11 @@ title = "Singleplayer: after a clean quit and reopen the player's position is ke
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F4, 8/8 including the uninterrupted control run); not caused by the WORLD-FIRST-START-INTERRUPTED fix. Root cause found 2026-11-24: the core already journals and restores the player's Rotation (Joined carries yaw/pitch from the saved record, tick/input/session.rs:341), but the edge stashed the spawn as a 4-tuple without it and crates/mc-edge/src/play.rs sent the join SynchronizePlayerPosition with a hardcoded 0/0."
 regression = ["cargo:mc-edge:play::tests::join_burst_syncs_the_restored_player_rotation", "harness:singleplayer-regressions:native-sp-rotation-reopen"]
 failing_first = "reported"
 proving_assertions = { "harness:singleplayer-regressions:native-sp-rotation-reopen" = "reopen_keeps_rotation" }
-repro_check = "Identity patch:4f267ef8 is the two-line join-sync half of the fix in its tip form (docs/bugs/promotions/SP-PLAYER-ROTATION-LOST-ON-REOPEN.{patch,hunks.md}): the a/-side `yaw: 0.0, pitch: 0.0` is the real pre-image at play.rs before the fix. JoinedSpawn's rotation field and the pump/registry plumbing stay on both sides (the kept cargo ref builds JoinBurst with `rotation`), so the control compiles. Control red by assertion: the new singleplayer scenario native-sp-rotation-reopen looks 90/20, saves and quits to title, reopens the world and finds the camera back at 0/0 (reopen_keeps_rotation false); the cargo ref join_burst_syncs_the_restored_player_rotation is red in the same control at play_tests.rs (`(sync.yaw, sync.pitch)` = (0.0, 0.0))."
+repro_check = "Identity patch:4f267ef8 is the join-sync half of the fix in its tip form (docs/bugs/promotions/SP-PLAYER-ROTATION-LOST-ON-REOPEN.patch + .hunks.md): the a/-side (yaw: 0.0, pitch: 0.0) is the real pre-image of play.rs:184-185 before the fix, and JoinedSpawn/JoinBurst rotation plumbing stays on both sides (class (b): the kept refs construct it, so reversing it would not compile). Control at head (artifact .analysis/validation/20261124T074035-ledger-promote-qasivxuv): the new graphical singleplayer scenario red at assertion failed: reopen_keeps_rotation, and play::tests::join_burst_syncs_the_restored_player_rotation red at play_tests.rs:215 (left: (0.0, 0.0), right: (90.0, 20.0)). Restore: both green; the harness ref is covered by receipt 20261124T072009-native-sp-rotation-reopen-wtceysna, the scenario first green run."
 fix_commit = "patch:4f267ef894e374b77995f0b77882a7195e801aaacef8fbf354bad26a602c21b0"
+promotion = "docs/bugs/promotions/SP-PLAYER-ROTATION-LOST-ON-REOPEN.json"

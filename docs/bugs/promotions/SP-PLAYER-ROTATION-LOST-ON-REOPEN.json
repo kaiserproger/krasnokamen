@@ -1,0 +1,50 @@
+{
+  "id": "SP-PLAYER-ROTATION-LOST-ON-REOPEN",
+  "verdict": "promoted",
+  "fix_commit": "patch:4f267ef894e374b77995f0b77882a7195e801aaacef8fbf354bad26a602c21b0",
+  "fix_commit_full": "patch:4f267ef894e374b77995f0b77882a7195e801aaacef8fbf354bad26a602c21b0",
+  "promoted_at": "2026-11-24T07:46:00+00:00",
+  "tree_head": "20928f62ec686f3beac6d0bdb1d8f2aaca5d3837",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "4f267ef894e374b77995f0b77882a7195e801aaacef8fbf354bad26a602c21b0",
+  "reversed_files": [
+    "crates/mc-edge/src/play.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:play::tests::join_burst_syncs_the_restored_player_rotation": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:singleplayer-regressions:native-sp-rotation-reopen": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-sp-rotation-reopen --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T074035-ledger-promote-qasivxuv/regressions-client-2.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T074035-ledger-promote-qasivxuv/client-artifacts/20261124T074355-native-sp-rotation-reopen-gr7fplah/result.json"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:play::tests::join_burst_syncs_the_restored_player_rotation": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:singleplayer-regressions:native-sp-rotation-reopen": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T074035-ledger-promote-qasivxuv/client-artifacts/20261124T074512-native-sp-rotation-reopen-yurhgmy4/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T072009-native-sp-rotation-reopen-wtceysna/result.json",
+    "tree_head": "20928f62ec686f3beac6d0bdb1d8f2aaca5d3837",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "e898e176d574d1d53b69db5b483c83201576ad8fc07c783d2540b4162be91a58",
+    "covers": [
+      "harness:singleplayer-regressions:native-sp-rotation-reopen"
+    ],
+    "profile": "singleplayer-regressions"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T074035-ledger-promote-qasivxuv"
+}

@@ -1,0 +1,67 @@
+{
+  "id": "TICK-FROZEN-GAME-AGE-WIRE",
+  "verdict": "promoted",
+  "fix_commit": "patch:23096ad88864b3a0eb3711e51b76e0ef50820f72cfe7cd1c8e02bfe7c1cb5ac4",
+  "fix_commit_full": "patch:23096ad88864b3a0eb3711e51b76e0ef50820f72cfe7cd1c8e02bfe7c1cb5ac4",
+  "promoted_at": "2026-11-24T07:40:26+00:00",
+  "tree_head": "20928f62ec686f3beac6d0bdb1d8f2aaca5d3837",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "23096ad88864b3a0eb3711e51b76e0ef50820f72cfe7cd1c8e02bfe7c1cb5ac4",
+  "reversed_files": [
+    "crates/mc-edge/src/plan/viewer_plan.rs",
+    "crates/mc-edge/src/play.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:play::tests::join_burst_carries_load_start_before_center": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:tick_control::tests::game_time_stands_still_while_frozen_and_counts_stepped_ticks": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::admin_tests::clock_queue_tests::queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-frozen-game-age": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-frozen-game-age --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T073200-ledger-promote-likvplju/regressions-client-2.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T073200-ledger-promote-likvplju/client-artifacts/20261124T073903-native-frozen-game-age-h72u8zfy/result.json"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:play::tests::join_burst_carries_load_start_before_center": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick_control::tests::game_time_stands_still_while_frozen_and_counts_stepped_ticks": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::admin_tests::clock_queue_tests::queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:scene-shot:native-frozen-game-age": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T073200-ledger-promote-likvplju/client-artifacts/20261124T073954-native-frozen-game-age-db5gb82x/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T071937-native-frozen-game-age-cx7v1bqa/result.json",
+    "tree_head": "20928f62ec686f3beac6d0bdb1d8f2aaca5d3837",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "e898e176d574d1d53b69db5b483c83201576ad8fc07c783d2540b4162be91a58",
+    "covers": [
+      "harness:scene-shot:native-frozen-game-age"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T073200-ledger-promote-likvplju"
+}
