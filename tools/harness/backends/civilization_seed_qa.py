@@ -417,6 +417,19 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
         destination = [math.floor(value) for value in target]
         if building:
             low, high = building["min"], building["max"]
+            remote = max(abs(coord - initial[axis]) for coord, axis in (
+                (low[0], "x"), (high[0], "x"), (low[2], "z"), (high[2], "z"))) > 48
+            if remote and teleport is not None:
+                # A block scan reads only the chunks the client has loaded: from
+                # the bell a certified farm 110 blocks out is not loaded, and the
+                # scan aborts the whole gate ("client chunk is not loaded at
+                # 77, 66, -320", run 20261124T192024). Move the creative
+                # observer beside the building first, bounded like the scan's
+                # own move in building_blocks.
+                beside = {"x": (low[0] + high[0]) / 2, "y": high[1] + 3, "z": (low[2] + high[2]) / 2}
+                teleport(beside["x"], beside["y"], beside["z"])
+                probe.call("minecraft_wait_ticks", {"ticks": 20})
+                teleported = True
             faces = ((low[0] - 1, low[0] - 1, low[2], high[2]),
                      (high[0] + 1, high[0] + 1, low[2], high[2]),
                      (low[0], high[0], low[2] - 1, low[2] - 1),
@@ -428,7 +441,20 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
                           "min_z": min_z, "max_z": max_z, "max_blocks": 4096}
                 offset = 0
                 while True:
-                    scan = probe.call("minecraft_scan_blocks", {**bounds, "offset": offset})
+                    try:
+                        scan = probe.call("minecraft_scan_blocks", {**bounds, "offset": offset})
+                    except RuntimeError as error:
+                        if "client chunk is not loaded" not in str(error):
+                            raise
+                        # The observer did not come close enough for the client to
+                        # hold this face: ask for one loaded cell there, once, and
+                        # let a second refusal name the capture instead of hiding
+                        # every later milestone.
+                        probe.call("minecraft_wait_for_loaded_block", {
+                            "x": max(min_x, low[0]), "y": low[1], "z": max(min_z, low[2]),
+                            "timeout_seconds": min(120.0, probe.remaining()),
+                        })
+                        scan = probe.call("minecraft_scan_blocks", {**bounds, "offset": offset})
                     blocks.extend(scan.get("blocks", []))
                     if not scan.get("truncated"):
                         break

@@ -1,6 +1,7 @@
 """Evidence scanning must not turn generated/natural geometry into stage proof."""
 import copy
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -653,6 +654,37 @@ class ObserverMoveTests(unittest.TestCase):
         with patch.object(qa, "time", SimpleNamespace(monotonic=lambda: clock["t"])):
             self.assertTrue(qa.move_observer(probe, {"x": 82.0, "y": 75.0, "z": -316.0}))
         self.assertEqual(probe.call.call_count, 0)
+
+    def test_a_remote_building_is_observed_after_the_observer_moves_there(self):
+        events = []
+        probe = Mock()
+        probe.remaining.side_effect = lambda *, limit=120.0: min(600.0, limit)
+        probe.observe.return_value = {"player": {"x": 131.0, "y": 78.0, "z": -217.0}}
+
+        stand = [{"x": 77, "y": 66, "z": -316, "collision_empty": False, "is_air": False},
+                 {"x": 77, "y": 67, "z": -316, "collision_empty": True, "is_air": True, "fluid": {"empty": True}},
+                 {"x": 77, "y": 68, "z": -316, "collision_empty": True, "is_air": True, "fluid": {"empty": True}}]
+
+        def call(name, arguments=None):
+            events.append(name)
+            if name == "minecraft_scan_blocks":
+                return {"blocks": stand, "truncated": False}
+            return {}
+
+        def teleport(x, y, z):
+            events.append(("tp", round(x, 1), round(y, 1), round(z, 1)))
+
+        probe.call.side_effect = call
+        building = {"min": [78, 68, -320], "max": [84, 72, -311], "kind": "farm"}
+        seen = {"type": "block", "x": 81, "y": 68, "z": -316}
+        with patch.object(qa, "_aim", return_value=seen), \
+             patch.object(qa.native_client, "capture", return_value={}):
+            qa.capture_target(probe, Path("/tmp"), "civilization-building", (81.0, 68.0, -316.0),
+                              building=building, solid=[], teleport=teleport)
+        teleports = [index for index, event in enumerate(events) if isinstance(event, tuple)]
+        scans = [index for index, event in enumerate(events) if event == "minecraft_scan_blocks"]
+        self.assertTrue(teleports and scans and min(teleports) < min(scans),
+                        f"the observer must move to the site before its faces are scanned: {events}")
 
     def test_an_observer_that_never_lands_stops_at_its_own_timeout(self):
         clock = {"t": 0.0}
