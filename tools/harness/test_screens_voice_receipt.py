@@ -79,5 +79,29 @@ class FailedLegReceiptTests(unittest.TestCase):
                          {'native_voice_resets_on_non_voice_server': False})
 
 
+class ConsentDialogDetectorTests(unittest.TestCase):
+    @staticmethod
+    def state(title: str, body: str, choice: str) -> dict:
+        return {'ui_nodes': [
+            {'id': 'desktop/title', 'label': title},
+            {'id': 'desktop/body/0', 'label': 'SvcSpeaker wants to view your screens.'},
+            {'id': 'desktop/body/1', 'label': body},
+            {'id': 'desktop/choice/0', 'label': 'Deny'},
+            {'id': 'desktop/choice/1', 'label': choice},
+        ]}
+
+    def test_both_wordings_read_as_the_same_dialog(self):
+        fixed = self.state('Allow screen and audio sharing?', 'Includes app audio, only while looking.',
+                           'Allow all my open screens and their app audio')
+        prefix = self.state('Allow desktop viewing?', 'Pictures only, while looking.',
+                            'Allow viewing all my open screens')
+        self.assertTrue(svq.consent_dialog_open(fixed))
+        self.assertTrue(svq.consent_dialog_open(prefix))
+
+    def test_no_dialog_is_not_open(self):
+        self.assertFalse(svq.consent_dialog_open({'ui_nodes': []}))
+        self.assertFalse(svq.consent_dialog_open({'ui_nodes': [{'id': 'desktop/title', 'label': 'x'}]}))
+
+
 if __name__ == '__main__':
     unittest.main()

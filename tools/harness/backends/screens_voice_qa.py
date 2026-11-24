@@ -561,6 +561,17 @@ def native_shot(probe: ProbeSteps, name: str) -> str:
     return native_client.capture(probe.client, probe.artifact_dir.parent, name)["retained_path"]
 
 
+def consent_dialog_open(state: dict[str, Any]) -> bool:
+    """A consent dialog is open by its structure, never by its wording.
+
+    The wording is what the row measures (`owner_consent_names_app_audio`), so a detector that
+    matches the fixed title can never see the pre-fix dialog: the control would wait out its
+    whole deadline instead of observing the old strings.
+    """
+    nodes = dialog_nodes(state)
+    return "desktop/title" in nodes and any(key.startswith("desktop/choice/") for key in nodes)
+
+
 def java_shot(probe: ProbeSteps, name: str) -> str:
     from .java_p5 import capture
     return capture(probe, name)
@@ -618,8 +629,7 @@ def screens_leg(ctx: ProfileContext, binary: Path, timeout: float, verdicts: dic
                 fabric.call("minecraft_use_item_on", {"x": MONITOR[0], "y": MONITOR[1], "z": MONITOR[2], "face": "north"})
             else:
                 click(requester.client.p4_window, WINDOW[0] // 2, WINDOW[1] // 2, button=3)
-            asked = owner.wait(lambda s: dialog_nodes(s).get("desktop/title") == "Allow screen and audio sharing?",
-                               f"{label}_consent_dialog")
+            asked = owner.wait(consent_dialog_open, f"{label}_consent_dialog")
             nodes = dialog_nodes(asked)
             leg.setdefault("consent_dialogs", {})[label] = {"nodes": nodes, "screenshot": native_shot(owner, f"{label}-consent")}
             keys(owner.client.p4_window["display"], *(("Down", "Return") if allow else ("Return",)))
