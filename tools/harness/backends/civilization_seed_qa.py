@@ -100,11 +100,14 @@ def stall_signature(status: dict[str, Any]) -> tuple[Any, ...]:
     # active project and the whole dialog text - including a waiting project's
     # gathered materials - was the signature).
     projects = status.get("projects") or []
-    project = projects[0] if projects else None
     ui = status.get("project_ui") or []
-    if project:
+    if projects:
+        # Every parsed project up to the dialog's MAX_PROJECTS slots counts, not
+        # only the slot holder: a completion may be any of them (review D123Civ6
+        # note a).
         ui = [node for node in ui if node.get("id") == "dialog/body/0"]
-    return project, ui, village._listed_buildings(status["buildings_now"])
+        return tuple(projects[:8]), ui, village._listed_buildings(status["buildings_now"])
+    return None, ui, village._listed_buildings(status["buildings_now"])
 
 
 def population(lines: list[str], name: str) -> int:

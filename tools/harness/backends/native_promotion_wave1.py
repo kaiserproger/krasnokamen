@@ -463,6 +463,27 @@ def _golem_gossip(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                           f'{{value:{tick - 100}L}}}}}},"krasnokamen:VillagerRuntime":'
                           f'{{last_gossip:{tick - 1}L,activity:"meet"}}}}')
 
+    premise: dict[str, Any] = {}
+
+    def read_premise_back() -> None:
+        """Prove the authored memories landed before any golem verdict is read.
+
+        A red at the spawn step must mean the summoning check failed, never that
+        the fixture's merge was refused (review D123Civ6 note f)."""
+        for row in villagers:
+            uuid_ = row["entity_uuid"]
+            marker = f"golem premise {uuid.uuid4().hex[:8]}"
+            steps.call("minecraft_send_chat", {"message": marker, "command": False})
+            steps.wait(lambda s: marker in "\n".join(s.get("recent_chat", [])),
+                       "golem_premise_echo")
+            steps.call("minecraft_send_chat",
+                       {"message": f"data get entity {uuid_} Brain", "command": True})
+            seen = steps.wait(
+                lambda s: any("last_slept" in line for line in s.get("recent_chat", [])),
+                "golem_premise_memories")
+            premise[uuid_] = [line for line in seen.get("recent_chat", [])
+                              if "last_slept" in line][-1:]
+
     def summoned(_state: dict) -> bool:
         return any(row["entity_type"] == "minecraft:iron_golem" for row in _rows(steps, 32))
 
@@ -471,10 +492,15 @@ def _golem_gossip(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     appeared = False
     for _ in range(24):
         author()
+        if not premise:
+            read_premise_back()
         if summoned(steps.observe()):
             appeared = True
             break
         steps.call("minecraft_wait_ticks", {"ticks": 100})
+    steps.report["golem_memory_premise"] = premise
+    steps.check("golem_memory_premise_written",
+                bool(premise) and all(bool(lines) for lines in premise.values()))
     steps.check("five_sleeping_villagers_summoned_golem", appeared)
     _capture(steps, "gossip-golem-summoned")
 

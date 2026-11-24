@@ -20,6 +20,8 @@ use mc_data::ItemStack;
 use mc_script::ScriptWorldBounds;
 
 const PERIOD: u64 = 20;
+/// Zone cells examined for sowing per work attempt (review D123Civ6 blocker 2).
+const PLANT_SCAN_PER_ATTEMPT: u32 = 128;
 /// Simulated tree columns scanned per work attempt; the cursor lives in [`Progress`].
 pub(super) const SEARCH_PER_TICK: u32 = 128;
 /// Inactive columns skipped per work attempt, one lookup each.
@@ -44,6 +46,11 @@ pub struct Progress {
     pub has_target: bool,
     pub returning: bool,
     pub stalled_since: u64,
+    /// The column sweep passed its start again since the last found tree: a full
+    /// cycle saw no mature tree, which is when the camp's zone may be sown.
+    pub swept: bool,
+    /// Next cell of the camp's zone volume to examine for sowing.
+    pub plant_cursor: u32,
 }
 
 /// Stored shape: [`Progress`] plus `vertical`, the search band that older
@@ -67,6 +74,10 @@ struct StoredProgress {
     returning: bool,
     #[serde(default)]
     stalled_since: u64,
+    #[serde(default)]
+    swept: bool,
+    #[serde(default)]
+    plant_cursor: u32,
 }
 
 impl From<StoredProgress> for Progress {
@@ -83,6 +94,8 @@ impl From<StoredProgress> for Progress {
             has_target: stored.has_target,
             returning: stored.returning,
             stalled_since: stored.stalled_since,
+            swept: stored.swept,
+            plant_cursor: stored.plant_cursor,
         }
     }
 }
@@ -312,6 +325,10 @@ fn search(
             continue;
         }
         scanned += 1;
+        if progress.cursor == 0 {
+            // The cursor just passed its start: a whole cycle saw no tree.
+            progress.swept = true;
+        }
         if let Some(tree) = scan_column(
             state,
             anchor,
@@ -321,6 +338,7 @@ fn search(
             wood,
             [x, z],
         ) {
+            progress.swept = false;
             return Some(tree);
         }
     }
@@ -340,9 +358,10 @@ fn drop_target(v: &mut VillagerState) {
 /// Sow one carried sapling on vacant soil inside the camp's own certified zone.
 ///
 /// The cell still needs the ordinary crown/access proof (owner D42 `Replant`):
-/// a `NotYet` or `Refused` verdict skips it this attempt, so a sapling never
-/// takes a lot or the street headroom a house will need. One cell per work
-/// attempt keeps the scan bounded.
+/// a `NotYet` or `Refused` verdict skips it, so a sapling never takes a lot or
+/// the street headroom a house will need. The zone volume is walked with a
+/// cursor (`PLANT_SCAN_PER_ATTEMPT` cells per attempt), never rescanned whole
+/// (review D123Civ6 blocker 2), and the walk restarts after a planting.
 fn plant_zone(
     state: &mut TickState,
     changes: &mut ChangeSet,
@@ -376,38 +395,50 @@ fn plant_zone(
     else {
         return;
     };
-    for x in bounds.min[0]..=bounds.max[0] {
-        for z in bounds.min[2]..=bounds.max[2] {
-            for y in bounds.min[1]..bounds.max[1] {
-                if !block_path(state, x, y, z).is_some_and(is_soil)
-                    || !matches!(
-                        block_path(state, x, y + 1, z),
-                        Some("air" | "cave_air" | "void_air")
-                    )
-                {
-                    continue;
-                }
-                let root = [x, y + 1, z];
-                if crate::settlements::construction::replant_verdict(state, root)
-                    != crate::settlements::construction::Replant::Plant
-                {
-                    continue;
-                }
-                mining::replace(state, changes, BlockPos { x, y: y + 1, z }, planted);
-                if let Some(record) = v.settlement.and_then(|id| state.settlements.get_mut(id))
-                    && record.planted_trees.insert(root)
-                {
-                    record.revision = record.revision.saturating_add(1);
-                }
-                if let Some(stack) = v.inventory[index].as_mut() {
-                    stack.count -= 1;
-                    if stack.count == 0 {
-                        v.inventory[index] = None;
-                    }
-                }
-                return;
+    let dx = i64::from(bounds.max[0]) - i64::from(bounds.min[0]) + 1;
+    let dy = i64::from(bounds.max[1]) - i64::from(bounds.min[1]) + 1;
+    let dz = i64::from(bounds.max[2]) - i64::from(bounds.min[2]) + 1;
+    if dx <= 0 || dy <= 0 || dz <= 0 {
+        return;
+    }
+    let total = dx * dz * dy;
+    let planes = dz * dy;
+    let mut scanned = 0;
+    while i64::from(scanned) < PLANT_SCAN_PER_ATTEMPT as i64 && i64::from(scanned) < total {
+        let cursor = i64::from(v.lumber_progress.plant_cursor) % total;
+        v.lumber_progress.plant_cursor = ((cursor + 1) % total) as u32;
+        scanned += 1;
+        let x = bounds.min[0] + (cursor / planes) as i32;
+        let z = bounds.min[2] + ((cursor / dy) % dz) as i32;
+        let y = bounds.min[1] + (cursor % dy) as i32;
+        if !block_path(state, x, y, z).is_some_and(is_soil)
+            || !matches!(
+                block_path(state, x, y + 1, z),
+                Some("air" | "cave_air" | "void_air")
+            )
+        {
+            continue;
+        }
+        let root = [x, y + 1, z];
+        if crate::settlements::construction::replant_verdict(state, root)
+            != crate::settlements::construction::Replant::Plant
+        {
+            continue;
+        }
+        mining::replace(state, changes, BlockPos { x, y: y + 1, z }, planted);
+        if let Some(record) = v.settlement.and_then(|id| state.settlements.get_mut(id))
+            && record.planted_trees.insert(root)
+        {
+            record.revision = record.revision.saturating_add(1);
+        }
+        if let Some(stack) = v.inventory[index].as_mut() {
+            stack.count -= 1;
+            if stack.count == 0 {
+                v.inventory[index] = None;
             }
         }
+        v.lumber_progress.plant_cursor = 0;
+        return;
     }
 }
 
@@ -461,6 +492,8 @@ fn replant(state: &mut TickState, changes: &mut ChangeSet, v: &mut VillagerState
     drop_target(v);
     v.lumber_progress.search_origin = None;
     v.lumber_progress.cursor = 0;
+    v.lumber_progress.swept = false;
+    v.lumber_progress.plant_cursor = 0;
 }
 
 pub(super) fn work(
@@ -543,13 +576,15 @@ pub(super) fn work(
             &mut v.lumber_progress,
         );
         let Some((base, sapling, height)) = found else {
-            // No mature tree in the sweep: sow the camp's own zone instead of
-            // trekking after the next one. A replanted stump only refills the
-            // tree that was cut, so a zone whose tree was felled once would
-            // otherwise never become the grove its certificate describes
-            // (certify_zone: ">= 4 log blocks (a grove)"). Owner design: a
-            // lumberjack plants and harvests within its zone.
-            plant_zone(state, changes, v, camp_bounds);
+            // A slice with no tree is the normal state while the sweep is still
+            // running; sow only after a whole cycle found none, so the camp's
+            // zone never gets saplings ahead of a tree the sweep would have cut
+            // (review D123Civ6 blocker 1). A replanted stump only refills the
+            // tree that was cut, so without this a zone would never become the
+            // grove its certificate describes (certify_zone: ">= 4 log blocks").
+            if v.lumber_progress.swept {
+                plant_zone(state, changes, v, camp_bounds);
+            }
             return None;
         };
         v.lumber_progress.base = base;
