@@ -8,3 +8,4 @@ source = "Owner-played A1 GO-17c-A live Horizon take: the player avatar is visib
 repro = "manual"
 regression = []
 failing_first = "reported"
+repro_check = "D123BattleD source survey, 2026-11-24: no team-colour lever exists to switch on. The client draws the armour item and its texture; there is no per-faction tint, dyed armour or team marker in mc-core/mc-data/mc-edge (no `team_colour`/`tint` on the entity view; the battle tables carry faction ids only). Making steel armour read as red vs blue therefore needs a rendering decision (faction-tinted armour item or an overlay/marker), an owner call on which accent, a client change, and the live front/rear gate from the source line — so it stays open for the client sweep and cannot be closed by a source-only change."
