@@ -4,7 +4,7 @@ title = "Kelp item entities keep appearing on the ocean floor (y 52-62) without 
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "BlockLogTickO java-matrix run 1, 2026-11-11 (receipts/BlockLogTickO/real-client-runs.txt): new item entity ids 274-278 in one column at x=9.5 z=3.5 about 120 blocks below the arena."
 regression = [
   "cargo:mc-core:fluids_tests::flowing_water_keeps_kelp_and_seagrass_without_loot",
@@ -14,3 +14,4 @@ regression = [
 failing_first = "reported"
 fix_commit = "patch:f4c199c6856deb5d15d4b12c2d4feb007b9aed08b2054167972fac916145104d"
 repro_check = "HEAD re-break control: docs/bugs/promotions/KELP-ITEMS-SPAWN-ON-OCEAN-FLOOR.patch (patch:f4c199c6) reverses on the promotion head (`git apply -R --check`) and restores the whole pre-image: `enter` decides a wash from the collision shape again, and `CoreRegistry`/`RegistryTables` lose the washed_by_fluids table with its tag build and per-state assignment (nothing else reads it, so the control compiles and the table is genuinely absent rather than kept inert). Both kelp cargo refs go red on the reversed tree; the real-client gate remains required for the original report. The 002042 graphical run is one shared reverse of three patches with a tree-identity mismatch (pin 95cccb7d names the dirty tree 5d1b9a9e while the receipt records the clean commit), so it is not this row's per-row proof; the row's own control is its reverted-tree run in the promotion JSON."
+promotion = "docs/bugs/promotions/KELP-ITEMS-SPAWN-ON-OCEAN-FLOOR.json"
