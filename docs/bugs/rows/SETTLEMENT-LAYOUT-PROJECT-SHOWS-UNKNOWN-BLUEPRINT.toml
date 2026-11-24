@@ -8,5 +8,5 @@ source = "D54 retained-world r2 native client result 2315cd2fbc5612e0b23b5557adf
 repro = "client"
 regression = ["cargo:mc-core:settlements::ui_text::tests::every_layout_infrastructure_project_has_a_display_name"]
 failing_first = "reported"
-fix_commit = "patch:cf80f14abbfec36aa8662ed8e93586e9a6edfba6df8c51c1f1459cbd50a6ad95"
-repro_check = "Patch docs/bugs/promotions/SETTLEMENT-LAYOUT-PROJECT-SHOWS-UNKNOWN-BLUEPRINT.patch (patch:cf80f14a); control red .analysis/validation/20261123T155230-test-a40xgdpk. ui_text::blueprint now names perimeter, perimeter_gate and well, so the status card no longer shows Unknown blueprint. Client row: promotion still needs a pinned real-client receipt of the settlement status card."
+fix_commit = "patch:7115b0d628472efc2bc6467230c260f7fbc86ec0bdc14ce5463350d2bbdd5a01"
+repro_check = "Patch docs/bugs/promotions/SETTLEMENT-LAYOUT-PROJECT-SHOWS-UNKNOWN-BLUEPRINT.patch (patch:7115b0d6, map in .hunks.md) is the HEAD re-break of the naming hunk of 49151c3a6: it reverse-applies on HEAD and ui_text::blueprint then answers Unknown blueprint for perimeter, perimeter_gate and well again, so every_layout_infrastructure_project_has_a_display_name fails at its own assert_ne!. Earlier control red .analysis/validation/20261123T155230-test-a40xgdpk used the pre-re-break patch. Client row: promotion still needs a pinned real-client receipt of the settlement status card (no registered graphical verdict covers the status card)."
