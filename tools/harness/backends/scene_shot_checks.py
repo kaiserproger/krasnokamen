@@ -294,6 +294,39 @@ def check_decorated_pot(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("pot_side_pattern_changed", changed > 300)
 
 
+def check_structure_box(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-BLOCK-ENTITY-DRAW: a spectator's structure block draws its received wire box.
+
+    26.3 draws the structure block's transform box only for a viewer allowed to see the game-master
+    overlay (a spectator, or a level-2 creative operator) and only from the block entity's received
+    `mode`/`posX…`/`sizeX…`/`showboundingbox` fields. The fixture holds one structure block at a
+    fixed position and camera, re-set at the same cell in LOAD mode twice: first with
+    `showboundingbox` off (block model only), then with it on (block model plus the 4x3x3 box), so
+    the two frames may differ only by the overlay wireframe.
+    """
+    shots = _qa._load_shots(probe, artifact, ("box-hidden", "box-shown"))
+    hidden_f, shown_f = shots["box-hidden"][0], shots["box-shown"][0]
+    probe.check("structure_camera_at_fixture", all(
+        abs(a - b) < 0.01 for a, b in zip(hidden_f["camera_position"], (1000.5, 161.62, 1002.0))
+    ) and abs(hidden_f["yaw"]) < 0.01 and abs(hidden_f["pitch"]) < 0.01)
+    probe.check("structure_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(hidden_f["camera_position"], shown_f["camera_position"])
+    ) and abs(hidden_f["yaw"] - shown_f["yaw"]) < 0.01
+      and abs(hidden_f["pitch"] - shown_f["pitch"]) < 0.01)
+    # The box's near face projects to roughly x 211..897, y 123..638 at three blocks; the far face
+    # to x 426..768, y 242..499 at six. One ROI over the whole projected box keeps every edge.
+    box = (200, 110, 910, 650)
+    # `wire` draws 0.9-neutral segments: bright grey, not the stone pad or the sky.
+    line = lambda r, g, b: r > 190 and g > 190 and b > 190 and max(r, g, b) - min(r, g, b) <= 16
+    lines = [_count(shots[name][1], box, line) for name in ("box-hidden", "box-shown")]
+    changed = _changed(shots["box-hidden"][1], shots["box-shown"][1], box)
+    probe.report["structure_box_roi"] = list(box)
+    probe.report["structure_box_line_pixels"] = lines
+    probe.report["structure_box_changed_pixels"] = changed
+    probe.check("structure_box_lines_drawn", lines[1] > 300)
+    probe.check("structure_box_changed", changed > 300)
+
+
 def check_element_emission(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-ELEMENT-EMISSION: a model element with `light_emission` draws full-bright at night.
 

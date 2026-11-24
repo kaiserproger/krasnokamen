@@ -759,6 +759,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the trident's use pose raises the arm overhead out of the torso silhouette (`trident_use_pose_raised`), and the drawn-bow and using-spyglass frames differ (`use_poses_differ_by_item`), so per-item use poses replace the single generic raise",
         limits="one avatar, one camera and three items; the remaining actions (crossbow charge/hold, spear, horn, brush) and the rideable variants stay unit-covered by the animation tests",
     ),
+    "native-structure-box": _entry(
+        id="native-structure-box", summary="A spectator's structure block draws its received wire box",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-structure-box", requires=("xvfb",),
+        sources=("tools/harness/structure_box_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client in spectator mode, one structure block set twice at a fixed cell and camera in LOAD mode: `showboundingbox` off (block model only), then on (block model plus the received 4x3x3 box)",
+        proves="the structure block's overlay wireframe appears only when the received block entity asks for it (`structure_box_lines_drawn`, `structure_box_changed`), so a static block-entity scene draws the spectator-only overlay geometry",
+        limits="one block entity, one camera and the wireframe only; the test-instance box and error markers, the `showair` block silhouettes and the box's exact vanilla colour stay unit-covered",
+    ),
     "native-pig-saddle": _entry(
         id="native-pig-saddle", summary="A saddled pig draws its saddle layer",
         owner="core:harness", evidence="graphical", profile="scene-shot",
