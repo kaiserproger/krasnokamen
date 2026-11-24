@@ -49,3 +49,24 @@ Receipt on the promotion tree (pin `660717828dd4`, client `530556e864c2`):
 
 Limits: one cow, one swing; the swing itself is the captured frame, not a pixel oracle. The pre-fix
 control is the reversing patch above (the client is unchanged between the two trees).
+
+## The control patch is the decode half only (`patch:e9197d12…`, 2026-11-25)
+
+The five-file patch (`8ab22ab9…`) reverses cleanly on the production files but its control tree does
+not compile: `crates/mc-data/src/item_components_tests.rs` (a kept test file) reads
+`spear.piercing_weapon` / `spear.attack_range`, which reversing `item_components.rs` removes, and
+`crates/mc-core/src/tick_tests.rs` drives `PlayerInput::Stab` through `players.rs`'s match arm. The
+promotion's control patch is therefore the decode hunk alone:
+
+```
+git diff be976b139^..be976b139 -- crates/mc-edge/src/decode.rs
+```
+
+sha256 `e9197d123ade38000e96734a68fbcbb604f8fa1bf30bce4caa8ad8e31a503903`; a/- side = the real
+pre-image (`PlayerActionKind::Stab => return Ok(())`, the row's "dropped at decode"), b/- side = HEAD.
+`git apply -R --check` passes. Reversing it reds the row's decode ref
+(`cargo:mc-edge:decode::decode_tests::player_action_maps_dig_drop_release_swap`); the other refs stay
+green because they construct `PlayerInput`/item facts directly, which is expected — the row's symptom
+is the decode drop, and the translation/kernel refs are the guards that the rest of the path works.
+The full fix remains documented above and in the row's `source`; this file's `fix_commit` names the
+patch the promotion actually reverses.
