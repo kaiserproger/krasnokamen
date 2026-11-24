@@ -61,5 +61,16 @@ as unasserted evidence.
   tool and at least 500 turquoise tool pixels; the world-geometry control draws the tool behind the
   wall. It is the row's proving assertion.
 
-Measured counts are in `tool_far_pixels`/`tool_wall_pixels` of the receipt and in
-`details.scenario.assertions`.
+Measured on the committed pair (server pin `f1e61cb286a2`, core `f1e61cb286`; both receipts on that
+candidate tree):
+
+| pin | `tool_hand_visible` (2.5 blocks) | `tool_wall_visible` (0.5 blocks) |
+|---|---|---|
+| candidate `3c3d9fba9a` | tool 5526 px, wall 8695, distance 2.5 — PASS | tool 5526 px, wall 15459, distance 0.5 — PASS |
+| control `e4a470fb7c` (pre-image) | tool 5526 px, wall 8695, distance 2.5 — PASS | tool 0 px, wall 16697, distance 0.5 — **FAIL** |
+
+So the pick is visible away from the wall on both pins and only the close frame differs: the control
+draws the tool behind the wall, the fix in front of it. Receipts: candidate
+`.analysis/validation/20261124T162258-issue1-21-tool-clip-ujxwerro`, control
+`.analysis/validation/20261124T162352-issue1-21-tool-clip-gcr1cj_q`.
+

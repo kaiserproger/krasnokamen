@@ -59,3 +59,18 @@ candidate passes with per-view counts in the range below.
 Measured on the promoted pair (see the promotion receipt for artifact paths): candidate
 `render_samples` counts are bounded and the reversal's grow past 260000. Both receipts also record the
 pinned client heads `dad387e689…` and `67a2e0f5…` and one server binary for the candidate core tree.
+
+Candidate receipt `.analysis/validation/20261124T162443-issue1-03-drawn-index-jk4xbjg_` (client pin
+`dad387e689`, core `f1e61cb286`): nine samples, all yaw checks true, counts yaw-0 170676, yaw-0 repeat
+175404, 45° 167340, 90° 178626, 135° 146208, 180° 163830, −135° 148980, −90° 162894, −45° 139560,
+return to yaw 0 175098 — every count non-zero, under 260000 and within 1.5 × the first, and both
+yaw-0 revisits within 1.03 × the first, so `render_drawn_index_bounded` and
+`render_repeat_view_stable` pass with F3 shown. The control receipt is named in the promotion JSON.
+
+Control receipt `.analysis/validation/20261124T162521-issue1-03-drawn-index-pq3nxgxe` (client pin
+`67a2e0f5`, same core tree and server binary): the reset dropped, the counts accumulate — yaw-0
+5289168, yaw-0 repeat 5636880, 45° 6317196, 90° 7023264, 135° 7612080, 180° 8253762, −135° 9512952,
+−90° 10154574, −45° 11021634, return to yaw 0 11690628 — and the only false assertion is
+`render_drawn_index_bounded` (the aggregate check aborts there, so `render_repeat_view_stable` is not
+reached). The pre-image therefore reproduces the reported symptom on the real client, which is what
+`REVIEW-wave2-9` finding 2 asked to prove.
