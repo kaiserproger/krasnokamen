@@ -1,0 +1,119 @@
+{
+  "id": "DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY",
+  "verdict": "promoted",
+  "fix_commit": "patch:0ec63ae44ee635104a5c5cbc5897a7c69ab0566e42f3ee2e06bdb450af38b7ff",
+  "fix_commit_full": "patch:0ec63ae44ee635104a5c5cbc5897a7c69ab0566e42f3ee2e06bdb450af38b7ff",
+  "promoted_at": "2026-11-24T08:31:28+00:00",
+  "tree_head": "e338325d2d17e89d56353982571b93513a07d207",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "0ec63ae44ee635104a5c5cbc5897a7c69ab0566e42f3ee2e06bdb450af38b7ff",
+  "reversed_files": [
+    "crates/mc-core/src/journal.rs",
+    "crates/mc-edge/src/backup.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:backup::tests::a_backup_of_a_restored_copy_with_an_empty_journal_verifies": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world:store_marker_tests::a_minted_branch_uses_all_64_bits": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:journal_tests::recovery_refuses_a_tail_of_another_branch_of_the_same_store": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:backup::tests::a_restore_interrupted_inside_its_tail_rebind_leaves_nothing_that_opens": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:backup::tests::a_restore_interrupted_before_its_first_rebind_leaves_nothing_that_opens": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:backup::tests::a_restore_interrupted_after_publication_leaves_the_complete_world": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:backup::tests::backup_roundtrip_preserves_real_core_store_wal_and_metadata": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:journal_tests::a_missing_journal_is_an_empty_tail_only_on_the_root_branch": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:backup::tests::a_restore_interrupted_before_publication_leaves_the_target_untouched": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-world:store_marker_tests::the_crash_window_rewrite_keeps_the_branch": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:backup::tests::a_restored_copy_refuses_the_journal_of_another_copy_of_its_backup": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:journal_tests::rebind_tail_moves_only_the_copied_branch_above_the_checkpoint": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:backup::tests::a_backup_of_a_restored_copy_with_an_empty_journal_verifies": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world:store_marker_tests::a_minted_branch_uses_all_64_bits": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:journal_tests::recovery_refuses_a_tail_of_another_branch_of_the_same_store": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:backup::tests::a_restore_interrupted_inside_its_tail_rebind_leaves_nothing_that_opens": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:backup::tests::a_restore_interrupted_before_its_first_rebind_leaves_nothing_that_opens": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:backup::tests::a_restore_interrupted_after_publication_leaves_the_complete_world": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:backup::tests::backup_roundtrip_preserves_real_core_store_wal_and_metadata": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:journal_tests::a_missing_journal_is_an_empty_tail_only_on_the_root_branch": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:backup::tests::a_restore_interrupted_before_publication_leaves_the_target_untouched": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world:store_marker_tests::the_crash_window_rewrite_keeps_the_branch": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:backup::tests::a_restored_copy_refuses_the_journal_of_another_copy_of_its_backup": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:journal_tests::rebind_tail_moves_only_the_copied_branch_above_the_checkpoint": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PersistDiv/.analysis/validation/20261124T082825-ledger-promote-nemy9etq"
+}

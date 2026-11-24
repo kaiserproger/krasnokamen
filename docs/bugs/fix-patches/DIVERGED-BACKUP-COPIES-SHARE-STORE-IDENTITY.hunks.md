@@ -56,16 +56,23 @@ sides, so no a/-side text outside the original pre-image):
 ## Proving assertions (red in the control)
 
 - `backup::tests::a_restored_copy_refuses_the_journal_of_another_copy_of_its_backup`, the refusal assertion
-  (`backup_tests.rs` "the left copy replayed the right copy's journal"): with no branch minted the sibling
-  tail replays.
+  (`backup_tests.rs:743`, "the left copy replayed the right copy's journal: None"): with no branch minted
+  the sibling tail replays.
 - `backup::tests::a_restore_interrupted_before_its_first_rebind_leaves_nothing_that_opens`,
-  `assert_no_world_at` ("an interrupted restore left … at the target"): the base restore killed after its
-  last copy leaves the backup's store, marker and tail on the backup's branch in the target.
-- `journal_tests::a_missing_journal_is_an_empty_tail_only_on_the_root_branch`, its `expect_err` ("a restored
-  copy without its journal lost its tail"): the reversed journal hunk reads a missing journal as empty.
+  `assert_no_world_at` (`backup_tests.rs:846`, "an interrupted restore left [native, journal,
+  checkpoint.marker] at the target, marker … branch [0; 8]"): the base restore killed after its last copy
+  leaves the backup's store, marker and tail on the backup's branch in the target.
+- `journal_tests::a_missing_journal_is_an_empty_tail_only_on_the_root_branch`, its `expect_err`
+  (`journal_tests.rs:2445`, "a restored copy without its journal lost its tail: 7"): the reversed journal
+  hunk reads a missing journal as an empty tail.
 
 Not evidence (red only because the control has no such step): `a_restore_interrupted_inside_its_tail_rebind_*`,
 `*_before_publication_*` and `*_after_publication_*` fail at `assert!(interrupted, …)`;
 `backup_roundtrip_preserves_real_core_store_wal_and_metadata` fails at the branch assertion (no branch minted).
-Green in the control and regressions only: `a_backup_of_a_restored_copy_with_an_empty_journal_verifies`, the
-mc-core frame-binding and rebind refs, the mc-world marker refs.
+Red at a `journal/` assertion of the carried staging hunk, not the row's symptom:
+`a_backup_of_a_restored_copy_with_an_empty_journal_verifies` (`backup_tests.rs:1012`, the base restore of a
+backup with an empty journal publishes no `journal/`). Green in the control and regressions only: the
+mc-core frame-binding and rebind refs, the mc-world marker refs (`a_minted_branch_uses_all_64_bits` included).
+
+Promotion run: `.analysis/validation/20261124T082825-ledger-promote-nemy9etq` (tree `e338325d2d`, clean,
+`control_tree: head`); control log `ledger-1-run.log`, restore log `ledger-3-run.log` (all 12 refs green).
