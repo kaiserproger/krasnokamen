@@ -52,17 +52,6 @@ def _differing_pixels(first: Path, second: Path, regions=HELD_MAP_REGIONS) -> di
     return counts
 
 
-def _quiescent(steps: ProbeSteps, map_id: int) -> None:
-    """Wait until the map stops producing wire updates, so a later capture cannot differ by terrain."""
-    before = _updates(steps, map_id)
-    while True:
-        steps.call("minecraft_wait_ticks", {"ticks": 40})
-        now = _updates(steps, map_id)
-        if now == before:
-            return
-        before = now
-
-
 def _snapshot(steps: ProbeSteps) -> dict:
     receipt = getattr(steps.client, "promotion_wire_receipt", None)
     if not callable(receipt):
@@ -207,7 +196,10 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # draws it produces the same frame twice.
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     steps.check("map_unframed_map_has_no_frame_waypoint", _marker_count(steps, map_id, "frame") == 0)
-    _quiescent(steps, map_id)
+    # The server keeps sending empty map updates (the live map's sequence advances every tick), so
+    # `_updates` never settles. The received colour array is what the client renders as terrain: it
+    # is compared across the two captures, and a difference fails here instead of the pixel count.
+    colours_before = _map(steps, map_id)["colors"][:]
     _held_shot(steps, "map-held-without-frame-waypoint")
     steps.fixture("clear @s minecraft:filled_map")
     _frame(steps, origin, map_id)
@@ -216,6 +208,7 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _clone(steps, map_id, 0)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     _held_shot(steps, "map-held-with-frame-waypoint")
+    steps.check("map_pair_identical_terrain", _map(steps, map_id)["colors"] == colours_before)
     changed = _differing_pixels(_shot_path(steps, "map-held-without-frame-waypoint"),
                                 _shot_path(steps, "map-held-with-frame-waypoint"))
     steps.report["frame_marker_pixels"] = changed
