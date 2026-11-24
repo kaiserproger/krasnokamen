@@ -86,6 +86,42 @@ class ClientSettingsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 cli.resolve_client_settings("quilt")
 
+class NativeLaunchEnvironmentTests(unittest.TestCase):
+    def test_a_launch_never_inherits_the_data_roots_managed_settings(self) -> None:
+        # The client reads client-settings.json back on every start, so an inherited
+        # file silently changes what a physical key does (HC-2's hotbar_2 rebind).
+        from .backends.native_client import launch_environment
+
+        with tempfile.TemporaryDirectory(prefix="native-env-") as directory:
+            run = Path(directory)
+            env = launch_environment({"KRASNOKAMEN_CLIENT_DATA_DIR": "/content"},
+                                     windowed=False, display=None, run_dir=run)
+            self.assertEqual(env.get("KRASNOKAMEN_CLIENT_SETTINGS"),
+                             str(run / "client-settings.json"))
+            self.assertNotIn("DISPLAY", env)
+
+    def test_a_prepared_settings_file_names_the_run(self) -> None:
+        from .backends.native_client import launch_environment
+
+        env = launch_environment({"KRASNOKAMEN_CLIENT_SETTINGS": "/prepared/settings.json"},
+                                 windowed=False, display=None, run_dir=Path("/run"))
+        self.assertEqual(env["KRASNOKAMEN_CLIENT_SETTINGS"], "/prepared/settings.json")
+
+    def test_a_windowed_launch_binds_the_run_display(self) -> None:
+        from .backends.native_client import launch_environment
+
+        env = launch_environment({"WAYLAND_DISPLAY": "wayland-0"}, windowed=True,
+                                 display=":99", run_dir=Path("/run"))
+        self.assertEqual(env["DISPLAY"], ":99")
+        self.assertNotIn("WAYLAND_DISPLAY", env)
+
+    def test_a_windowed_launch_requires_a_display(self) -> None:
+        from .backends.native_client import launch_environment
+
+        with self.assertRaises(ValueError):
+            launch_environment({}, windowed=True, display=None, run_dir=Path("/run"))
+
+
 class McpLeaseRetryTests(unittest.TestCase):
     REVOKED = {"isError": True, "structuredContent": {
         "code": "controller_lease_revoked", "retryable": False, "stage": "automation"}}
