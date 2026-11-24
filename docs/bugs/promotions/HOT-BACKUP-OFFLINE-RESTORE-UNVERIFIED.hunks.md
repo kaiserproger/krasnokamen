@@ -61,13 +61,18 @@ runs `hot_backup::verify_restorable`.
 Reversed, `run_restore` verifies the hot copy through the pre-fix second
 read-only open and refuses it. The registered ref
 `cargo:mc-edge:backup::tests::the_restore_command_accepts_a_hot_backup_verified_with_content`
-fails the assertion at `crates/mc-edge/src/backup_tests.rs:668` with
+fails the assertion at `crates/mc-edge/src/backup_tests.rs:668`
+(`.analysis/validation/20261124T105457-ledger-promote-5usus83k/ledger-1-run.log:346-347`)
+with
 
 ```
-assertion failed: the restore command verifies and restores a hot backup: native source: /tmp/.../native/state.redb: world was not shut down cleanly; start and stop the server once to repair it, then retry
+the restore command verifies and restores a hot backup: Some(/tmp/.../backups/backup-20261124T105946Z-tick2/native/state.redb: native source: world was not shut down cleanly; start and stop the server once to repair it, then retry)
 ```
 
-(the assertion was made explicit instead of an `expect` so the control red is an
-assert macro, not an unnamed panic). On the candidate the same ref passes in the
-promotion restore: the restore command accepts the hot backup, keeps the copied
-checkpoint marker, the copied WAL tail and reopens the restored world.
+The test drives the real `restore` command and asserts on its outcome (an
+`assert!`, not an `expect`), so the control red is an assert macro classified from
+its source line; no message prefix is used (the `assertion failed:` text was
+dropped when `_panic_class` learned to read the source line, wave-2 N2). On the
+candidate the same ref passes in the promotion restore: the restore command
+accepts the hot backup, keeps the copied checkpoint marker, the copied WAL tail
+and reopens the restored world.

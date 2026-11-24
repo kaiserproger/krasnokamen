@@ -1181,6 +1181,26 @@ class FixturePanicTests(unittest.TestCase):
             ledger._panic_class(root, ('crates/mc-core/src/core_journal_backpressure_tests.rs', 22),
                                 'queued batches must stay within the budget'), 'assertion')
 
+    def test_the_unwrap_line_rule_pins_both_directions(self):
+        # Wave-2 review N6: an `.expect`/`.unwrap` line is not evidence unless its message is an
+        # assertion, while an assert macro wrapping an unwrap is the assertion itself.
+        root = self.tree()
+        (root / 'crates/mc-core/src/native_chunk_tests.rs').write_text(
+            'fn present(state: &State) {\n'
+            '    let chunk = state.chunk(0, 0).expect("chunk present");\n'
+            '}\n'
+            '\n'
+            '#[test]\n'
+            'fn counts() {\n'
+            '    assert_eq!(state().len().unwrap(), 1);\n'
+            '}\n')
+        self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/native_chunk_tests.rs', 2),
+                                             'chunk present'), 'unknown')
+        self.assertEqual(
+            ledger._panic_class(root, ('crates/mc-core/src/native_chunk_tests.rs', 7),
+                                'assertion `left == right` failed\n  left: 2\n right: 1'),
+            'assertion')
+
     def test_an_unknown_helper_panic_needs_the_row_to_name_it(self):
         root = self.tree()
         location = ('crates/mc-core/src/core_journal_backpressure_tests.rs', 21)

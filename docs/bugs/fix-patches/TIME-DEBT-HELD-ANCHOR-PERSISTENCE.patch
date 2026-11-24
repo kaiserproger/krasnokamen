@@ -16,15 +16,6 @@ diff --git a/crates/mc-core/src/debt.rs b/crates/mc-core/src/debt.rs
 index 0207a0a09..ef57df54d 100644
 --- a/crates/mc-core/src/debt.rs
 +++ b/crates/mc-core/src/debt.rs
-@@ -19,7 +19,7 @@ use mc_world::Chunk;
- 
- /// Root-extra key for the authoritative last-simulated tick.
- pub(crate) const LAST_SIM_KEY: &str = "KrasnokamenSimLastTick";
--/// Root-extra key for the outstanding pre-existing catch-up debt.
-+/// Root-extra key for outstanding pre-existing catch-up debt.
- pub(crate) const REMAINING_KEY: &str = "KrasnokamenSimDebt";
- /// Held-tick prefix at `last_sim`, including an explicitly stored zero.
- pub(crate) const HELD_ANCHOR_KEY: &str = "KrasnokamenSimHeldTicks";
 @@ -66,32 +66,45 @@ pub(crate) fn project(
      chunk: &mut Chunk,
      last_sim: u64,

@@ -1,6 +1,6 @@
 # TIME-DEBT-HELD-ANCHOR-PERSISTENCE: patch-mode fix identity
 
-`fix_commit = "patch:edeb0a8432f96c336ad86e90906f7e4b5105c1e74c97cac48ea0734a6fbbe1ff"`
+`fix_commit = "patch:bc1dfbd2e657c5774818391a0070b4f398e65824ae8c0fc6199c72699d176b8d"`
 (`docs/bugs/fix-patches/TIME-DEBT-HELD-ANCHOR-PERSISTENCE.patch`).
 
 Original fix: `c4d8c0d01` "fix(core): anchor catch-up debt to held time". Its
@@ -18,6 +18,14 @@ Later commits rewrote code that now uses the new API (`journal/replay.rs:698,141
 tests construct the new fields. The patch is therefore the row's real pre-image
 forward-ported to the candidate, with the kept API restored as **named (b)
 constructor lines** and nothing else invented.
+
+Review wave 2, B1: the first form of this patch carried a comment-only hunk
+(`debt.rs @@ -19,7`) whose `a/`-side read "for the outstanding pre-existing
+catch-up debt". That wording is in neither the pre-image nor HEAD
+(`git show c4d8c0d01^:crates/mc-core/src/debt.rs | grep -n 'the outstanding'`
+is empty; both say "for outstanding"), so the hunk was invented by the
+transcription and is removed. The identity changed from `patch:edeb0a84` to
+`patch:bc1dfbd2`; `git apply -R --check` still passes and no code hunk changed.
 
 ## Carried (the real pre-image of the row's five reversible files)
 
@@ -53,7 +61,10 @@ restart) is back. Two refs fail by assertion
   at `debt_game_clock_tests.rs:141` — the projected `HELD_ANCHOR_KEY` / `adopt_native_extras`
   round trip.
 - `cargo:mc-core:debt::game_clock_tests::debt_game_clock_mid_tick_rejection_keeps_both_possible_native_anchors`
-  at `debt_game_clock_tests.rs:122` — the image's two possible native anchors.
+  at `debt_game_clock_tests.rs:122` — **not evidence** (review wave 2, N1): it reds only on the
+  kept-API field `SimDebtImage.held_anchor`, which the `held_anchor: None` constructor emptied
+  and `at()` turns back into `Some(0)`; the README calls such a red non-evidence. The control
+  stands on the `:141` ref.
 
 The row's two replay/world refs
 (`debt_game_clock_held_activation_excludes_its_own_held_tick`,
