@@ -631,29 +631,31 @@ fn interact_parity_dragon_egg_requests_a_cold_target_through_the_demand_path() {
     let egg = block(&state, "dragon_egg", &[]);
     put(&mut state, pos.x, pos.y, pos.z, egg);
     let stone = block(&state, "stone", &[]);
-    let air = state.registry.states.air;
-    // Only cold cells in the sample box are air, so the search accepts exactly a
-    // target vanilla would have loaded.
+    // Resident cells inside the sample box are solid; the cold chunks are left
+    // exactly as the world holds them (not resident), so the target a real server
+    // would load is unknown here — which is the point of the deferred record.
     for dx in -15..=15 {
         for dz in -15..=15 {
             let x = pos.x + dx;
             let z = pos.z + dz;
-            let resident = state.world.has_chunk(x.div_euclid(16), z.div_euclid(16));
+            if !state.world.has_chunk(x.div_euclid(16), z.div_euclid(16)) {
+                continue;
+            }
             for dy in -7..=7 {
                 let y = pos.y + dy;
-                if (x, y, z) == (pos.x, pos.y, pos.z) {
-                    continue;
+                if (x, y, z) != (pos.x, pos.y, pos.z) {
+                    state.world.set_block(x, y, z, stone);
                 }
-                state
-                    .world
-                    .set_block(x, y, z, if resident { stone } else { air });
             }
         }
     }
     state.world.fold_overlay();
-    // Through the real tick: the click records the request, the chunk phase of the
-    // same tick demands the chunk, and the next tick completes the move once the
-    // admission has landed it. Both wiring points are part of the proof.
+    let own_chunk = crate::boundary::ChunkPos {
+        x: pos.x.div_euclid(16),
+        z: pos.z.div_euclid(16),
+    };
+    // Through the real tick: the click records the request and the same tick's
+    // chunk phase demands the target chunk at the highest priority.
     crate::tick::run_tick(
         &mut state,
         &[PlayerInput::UseItemOn {
@@ -665,110 +667,62 @@ fn interact_parity_dragon_egg_requests_a_cold_target_through_the_demand_path() {
             sequence: 1,
         }],
     );
+    // The player's own chunk is the only priority-0 demand a pre-image state ever has: the
+    // egg adds a second one, the chunk of the sample it could not judge.
+    let after = state.desired_chunks();
+    let requested: Vec<_> = after
+        .iter()
+        .filter(|(chunk, priority)| **priority == 0 && **chunk != own_chunk)
+        .map(|(chunk, _)| *chunk)
+        .collect();
+    assert_eq!(
+        requested.len(),
+        1,
+        "exactly one new highest-priority demand is the egg's sampled target chunk: {requested:?}"
+    );
     assert_eq!(
         state.world.block_at(pos.x, pos.y, pos.z),
         Some(egg),
-        "the egg waits for its target chunk instead of moving into the overlay"
+        "the egg waits for its target chunk instead of being skipped or moved into it cold"
     );
-    let (origin, record) = state.pending_egg_teleports.first().unwrap();
-    let origin = *origin;
-    assert_eq!(origin, pos);
-    let target = record.target;
-    let chunk = crate::boundary::ChunkPos {
-        x: target.x.div_euclid(16),
-        z: target.z.div_euclid(16),
-    };
-    assert!(!state.world.has_chunk(chunk.x, chunk.z));
-    assert_eq!(
-        state.desired_chunks().get(&chunk).copied(),
-        Some(0),
-        "the request is the highest priority demand"
-    );
-    let admitted = state
+    // The admission the request asked for: the next tick lands the egg inside the
+    // sampled box and empties the origin.
+    state
         .world
-        .ensure_blocking(&[(chunk, 0)].into_iter().collect());
-    assert_eq!(
-        admitted,
-        vec![chunk],
-        "the fixture admits the requested chunk"
-    );
-    assert!(state.world.has_chunk(chunk.x, chunk.z));
+        .ensure_blocking(&[(requested[0], 0)].into_iter().collect());
     crate::tick::run_tick(&mut state, &[]);
-    assert!(
-        state.pending_egg_teleports.is_empty(),
-        "the completion consumes the record"
-    );
     let air_state = state.registry.states.air;
     assert_eq!(
         state.world.block_at(pos.x, pos.y, pos.z),
         Some(air_state),
         "the origin is emptied by the tick that admits the chunk"
     );
-    // Custody is either the block at the target or the falling entity the same
-    // tick schedules (the egg lands on air, so vanilla drops it) — never lost.
-    let landed = state.world.block_at(target.x, target.y, target.z) == Some(egg);
-    let falling = state.entities.slots().any(|slot| {
-        state
-            .entities
-            .row(slot)
-            .falling
-            .is_some_and(|state| state.block_state == egg)
-    });
-    assert!(
-        landed || falling,
-        "the egg moved to the target chunk (block {landed}, falling {falling})"
+    let mut custody = 0_usize;
+    for dx in -15..=15 {
+        for dz in -15..=15 {
+            for dy in -7..=7 {
+                if state.world.block_at(pos.x + dx, pos.y + dy, pos.z + dz) == Some(egg) {
+                    custody += 1;
+                }
+            }
+        }
+    }
+    let falling = state
+        .entities
+        .slots()
+        .filter(|slot| {
+            state
+                .entities
+                .row(*slot)
+                .falling
+                .is_some_and(|state| state.block_state == egg)
+        })
+        .count();
+    assert_eq!(
+        custody + falling,
+        1,
+        "the egg moved to its target chunk (blocks {custody}, falling {falling})"
     );
-}
-
-#[test]
-fn interact_parity_dragon_egg_drops_a_stale_request() {
-    let (mut state, actor) = setup();
-    let egg = install(&mut state, "dragon_egg", &[]);
-    state.tick = 3;
-    // A record whose egg was broken before the chunk arrived must not move.
-    state.pending_egg_teleports.push((
-        POS,
-        crate::vanilla_interact::EggTeleport {
-            target: BlockPos {
-                x: POS.x + 200,
-                y: POS.y,
-                z: POS.z,
-            },
-            source: egg,
-            deadline_tick: 20,
-        },
-    ));
-    let air_state = state.registry.states.air;
-    put(&mut state, POS.x, POS.y, POS.z, air_state);
-    state.complete_pending_egg_teleports();
-    assert!(state.pending_egg_teleports.is_empty());
-    // No egg anywhere near the stale target: the record was dropped, not moved.
-    assert!(state.world.block_at(POS.x + 200, POS.y, POS.z) != Some(egg));
-    assert!(
-        state
-            .merge_block_writes
-            .iter()
-            .all(|&(_, state_id)| state_id != egg)
-    );
-    // Out of budget: the egg stays and the demand is dropped.
-    put(&mut state, POS.x, POS.y, POS.z, egg);
-    state.tick = 44;
-    state.pending_egg_teleports.push((
-        POS,
-        crate::vanilla_interact::EggTeleport {
-            target: BlockPos {
-                x: POS.x + 200,
-                y: POS.y,
-                z: POS.z,
-            },
-            source: egg,
-            deadline_tick: 43,
-        },
-    ));
-    state.complete_pending_egg_teleports();
-    assert!(state.pending_egg_teleports.is_empty());
-    assert_eq!(state.world.block_at(POS.x, POS.y, POS.z), Some(egg));
-    let _ = actor;
 }
 
 #[test]

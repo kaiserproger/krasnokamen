@@ -225,8 +225,11 @@ def publish_window(log_path: Path, username: str, requested_rate: float) -> dict
                 applied_at = stamp
                 break
         previous = (stamp, tick)
-    candidates = [moment for moment in (admitted, applied_at) if moment is not None]
-    start = max(candidates) if candidates else None
+    # The window needs a publication whose own interval already runs at the requested
+    # rate: with none after the admission the measurement is inconclusive (seconds
+    # None), never "from the admission" — that fallback re-introduced wave2-9 Major-1
+    # (review wave2-13 m3).
+    start = applied_at
     end = rows[-1][0] if rows else None
     seconds = (end - start).total_seconds() if start is not None and end is not None else None
     return {"admitted_at": None if admitted is None else admitted.isoformat(),
@@ -235,6 +238,17 @@ def publish_window(log_path: Path, username: str, requested_rate: float) -> dict
             "end_at": None if end is None else end.isoformat(),
             "end_tick": None if not rows else rows[-1][1],
             "seconds": None if seconds is None else round(seconds, 2)}
+
+
+def gate_window(log_path: Path, bound_rate: float) -> tuple[bool, dict[str, Any]]:
+    """The halt watch's readiness re-evaluated from the log as it stands now.
+
+    The start moves later while the search waits for an applied-rate interval after the
+    admission, so the deadline is recomputed on every event instead of once (review wave2-12
+    Major-2). Public so a test drives the same recompute the gate uses (review wave2-13 m4).
+    """
+    current = publish_window(log_path, JOINER, bound_rate)
+    return window_complete(current) or halt_line(log_path) is not None, current
 
 
 def window_deadline(window: dict[str, Any]) -> datetime | None:
@@ -713,11 +727,7 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: float, 
     if halt is None and window.get("start_at") is not None:
 
         def extended() -> tuple[bool, dict[str, Any]]:
-            # The start moves later while the search waits for an applied-rate interval after the
-            # admission, so the deadline is recomputed on every event instead of once
-            # (review wave2-12 Major-2).
-            current = publish_window(server_log_path, JOINER, bound_rate)
-            return (window_complete(current) or halt_line(server_log_path) is not None), current
+            return gate_window(server_log_path, bound_rate)
 
         try:
             window = runtime.wait_for_path_condition(

@@ -683,10 +683,6 @@ class PlayLostTest(unittest.TestCase):
             self.assertEqual(detail["play_lost"], ["gone"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 MIXED_RATE_LOG = """\
 2026-11-24T18:19:29.600000Z DEBUG mc_edge::server::pump: pump published tick tick=85 viewers=1 elapsed_us=1200
 2026-11-24T18:19:30.000000Z DEBUG mc_edge::server::pump: pump published tick tick=86 viewers=1 elapsed_us=1100
@@ -739,6 +735,24 @@ class PublishWindowTest(unittest.TestCase):
             log.write_text(MIXED_RATE_LOG + "2026-11-24T18:19:51.000000Z DEBUG mc_edge::server::pump: pump published tick tick=330 viewers=2 elapsed_us=2797\n")
             self.assertTrue(join_lag.window_complete(join_lag.publish_window(log, join_lag.JOINER, 3.0)))
 
+    def test_the_gate_recompute_moves_its_deadline_with_the_windows_start(self) -> None:
+        # The gate's own readiness (`gate_window`, called by the extended() closure) is what must
+        # move, not only window_complete() (review wave2-13 m4).
+        with tempfile.TemporaryDirectory() as root:
+            log = Path(root) / "server.log"
+            log.write_text(MIXED_RATE_LOG)
+            ready, window = join_lag.gate_window(log, 3.0)
+            self.assertFalse(ready)
+            self.assertEqual(window["start_at"], "2026-11-24T18:19:38.656790+00:00")
+            log.write_text(MIXED_RATE_LOG + EXTENDED_LINE.replace("18:19:50", "18:19:45"))
+            ready, window = join_lag.gate_window(log, 3.0)
+            self.assertFalse(ready)
+            self.assertEqual(window["start_at"], "2026-11-24T18:19:38.656790+00:00")
+            log.write_text(MIXED_RATE_LOG + EXTENDED_LINE)
+            ready, window = join_lag.gate_window(log, 3.0)
+            self.assertTrue(ready)
+            self.assertGreaterEqual(window["seconds"], join_lag.HALT_WINDOW_SECONDS)
+
     def test_a_rate_where_the_guard_is_blind_is_refused(self) -> None:
         for rate in ("16", "20"):
             with self.subTest(rate=rate):
@@ -765,3 +779,7 @@ class PublishWindowTest(unittest.TestCase):
             self.assertEqual(window["start_at"], "2026-11-24T18:19:50.900000+00:00")
             self.assertAlmostEqual(window["seconds"], 0.0, places=1)
             self.assertFalse(join_lag.window_complete(window))
+
+
+if __name__ == "__main__":
+    unittest.main()
