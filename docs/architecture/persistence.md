@@ -262,6 +262,18 @@ another recovery.
   `krasnokamen_journal_prune_retained_bytes` are on `/metrics` and under
   `journal` in `/stats`. A directory that cannot be written at all still halts
   the world on the next append.
+- Write cost is counted, not timed from outside: `/stats` `journal` (and
+  `/metrics` `krasnokamen_journal_*`) carries `append_bytes_total` and
+  `batch_bytes_last` — bytes written to batch files, which are **not yet
+  published** until the rename and directory fsync of that batch — plus
+  `file_fsyncs_total`, `dir_fsyncs_total`, the cumulative `fsync_nanos_total`
+  and the slowest single fsync since process start `fsync_nanos_max`. Only a
+  successful `sync_all`/`fsync_dir` is counted (an error returns before the
+  counter), and the counters are read-only relaxed atomics beside the existing
+  write order: the format, the order and the error path are unchanged. A
+  receipt reports the delta between two samples, so the max is the process-wide
+  worst, not a window figure.
+
 ### Structure ledger keys
 
 Native plugin domain `@native-structures` stores `structure/<id>`, `survey/<token>`,

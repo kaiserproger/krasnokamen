@@ -1256,6 +1256,16 @@ the directory, the count and the retained bytes, and shows as
 `/stats`). Covered batches stay replay-inert, so the world stays correct while
 the journal grows; the next failed append is what halts the server.
 
+Journal write cost is observable without attaching a profiler: under `/stats`
+`journal` (and on `/metrics` as `krasnokamen_journal_*`) the process reports
+`append_bytes_total`/`batch_bytes_last` (bytes of the batch frames written, not
+yet renamed), `file_fsyncs_total` and `dir_fsyncs_total` with their cumulative
+service time `fsync_nanos_total` and the slowest single fsync since start
+`fsync_nanos_max`. A receipt takes the delta between two samples, so a slow
+fsync shows up as a window figure instead of a hidden stall; see
+[persistence](architecture/persistence.md#write-errors-and-publication-order) for which write
+the counters cover.
+
 `journal_fsync_every_batches` sets only the power-loss window described in
 "What a crash can lose" above; 1 closes it at one directory fsync per tick. The
 process-crash window (the batch being written plus the queued ones) stays.
