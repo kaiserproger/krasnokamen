@@ -854,3 +854,52 @@ fn a_pending_detour_holds_its_corridor_against_a_neighbour_lot() {
         "an unbuilt detour holds its whole corridor"
     );
 }
+
+/// SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE: a structure persisted at the terminal
+/// stage index without a commit (`state = Running`, `current_stage_index == stages.len()`, zero
+/// work — a shape `ScriptStructureSnapshot::validate` accepts) has no next cell, and recovery used
+/// to ignore it, so the House L2 upgrade held its slot with `cause="pending_cell_unavailable"` on
+/// every shift (20261124T204805-buildings-qa-klwqfvj5). Recovery must finish it.
+#[test]
+fn a_terminal_index_running_structure_is_committed_by_recovery() {
+    let (mut state, id, _slot) = crate::settlements::construction::tests::fixture();
+    crate::settlements::construction::tests::start(&mut state, id, "house", 1, None);
+    crate::settlements::construction::tests::fund(&mut state, "house", 1);
+    let handle = state.settlements.get(id).unwrap().projects[0]
+        .structure
+        .clone();
+    let plan: Vec<([i32; 3], u32)> = {
+        let ledger = ledger(&state).unwrap();
+        let record = structure(&ledger, &owner(id), &handle).unwrap();
+        record
+            .cells
+            .iter()
+            .flatten()
+            .map(|cell| (cell.at, cell.state))
+            .collect()
+    };
+    assert!(!plan.is_empty(), "the house plan has cells");
+    for (at, block) in plan {
+        state.world.set_block(at[0], at[1], at[2], block);
+    }
+    {
+        let mut ledger = ledger_mut(&mut state).unwrap();
+        let mut record = take_structure(&mut ledger, &owner(id), &handle).unwrap();
+        record.snapshot.current_stage_index = record.snapshot.stages.len() as u32;
+        record.snapshot.completed_work_units = 0;
+        record.snapshot.state = ScriptStructureState::Running;
+        ledger.insert_structure(handle.clone(), record);
+        save(&mut state, ledger);
+    }
+    assert_eq!(
+        next_cell(&state, id, &handle).unwrap(),
+        None,
+        "a terminal-index structure has no next cell: the stall the real client reported"
+    );
+    assert_eq!(recover(&mut state, id, &handle), Ok(true));
+    assert_eq!(
+        status(&state, id, &handle).unwrap().state,
+        ScriptStructureState::Committed,
+        "recovery finishes a placed terminal-index structure instead of leaving it stalled"
+    );
+}

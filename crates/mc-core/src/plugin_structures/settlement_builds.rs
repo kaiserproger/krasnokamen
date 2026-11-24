@@ -332,7 +332,14 @@ pub(crate) fn recover(
     let paused = record.snapshot.state == ScriptStructureState::Paused
         && record.snapshot.pause_reason.as_deref() == Some("footprint_changed");
     let committed = record.snapshot.state == ScriptStructureState::Committed;
-    if !paused && !committed {
+    // A structure can be persisted at the terminal stage index without the commit — the House L2
+    // upgrade of SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE did (`stage=2 work=0`,
+    // `Running`). It has no next cell, so no builder pass can advance it and the project would hold
+    // its slot forever; recovery is the only pass that can finish it, and the tail below already
+    // writes `Committed` once the index is terminal.
+    let terminal = record.snapshot.current_stage_index as usize == record.cells.len()
+        && record.snapshot.completed_work_units == 0;
+    if !paused && !committed && !terminal {
         return Ok(false);
     }
     let retry = (paused
@@ -399,7 +406,10 @@ pub(crate) fn recover(
             0
         };
         for cell in record.cells[index].iter().take(completed).rev() {
-            if !seen.insert(cell.at) || free_soil_work(target, cell) || harvestable_crop(target, cell) {
+            if !seen.insert(cell.at)
+                || free_soil_work(target, cell)
+                || harvestable_crop(target, cell)
+            {
                 continue;
             }
             let now = target
