@@ -1203,10 +1203,11 @@ fn intact_bed_with_its_whole_exit_ring_sealed_uses_the_vanilla_above_fallback() 
     rig.state.day_time = NIGHT;
     rig.use_bed(1);
     assert_eq!(rig.pose(rig.player), SLEEPING_POSE);
+    // Vanilla `BedBlock.updateShape` copies OCCUPIED to the connected half.
     let foot_state = block(
         &rig.state,
         "minecraft:red_bed",
-        &[("facing", "east"), ("part", "foot")],
+        &[("facing", "east"), ("part", "foot"), ("occupied", "true")],
     );
     // The sleeper owns the head cell: vanilla sets the bed's `occupied` state.
     let head_state = block(
@@ -1331,5 +1332,86 @@ fn a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it() {
     assert!(
         !bed_occupied(&rig.state, rig.head),
         "the bed is free once its resident is up"
+    );
+}
+
+/// A break of a bed targets both halves with a `block_expect`. The mirror runs
+/// after the merge and must not write a cell an accepted write already took:
+/// otherwise the break's expect no longer matches and the whole intent is
+/// rejected (the v1 defect, in the other direction).
+#[test]
+fn a_bed_broken_in_the_tick_its_player_lies_down_is_not_restored() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    let head = rig.head;
+    crate::tick::mining_tests::ready_to_finish(&mut rig.state, ConnectionId(1), head);
+    let air = rig.state.registry.states.air;
+    let _ = run_tick(
+        &mut rig.state,
+        &[
+            PlayerInput::Dig {
+                connection: ConnectionId(1),
+                position: head,
+                action: crate::boundary::DigAction::Finish,
+                sequence: 1,
+            },
+            PlayerInput::UseItemOn {
+                connection: ConnectionId(1),
+                hand: Hand::Main,
+                position: rig.foot,
+                face: 1,
+                cursor: [0.5; 3],
+                sequence: 2,
+            },
+        ],
+    );
+    assert_eq!(
+        rig.state.world.block_at(head.x, head.y, head.z),
+        Some(air),
+        "the break of the bed head is accepted in the tick the player lies down"
+    );
+    rig.run(1);
+    assert_eq!(
+        rig.state.world.block_at(head.x, head.y, head.z),
+        Some(air),
+        "the mirror never restores a broken bed"
+    );
+    assert!(
+        rig.state.sleepers.is_empty(),
+        "a sleeper whose bed is gone is awake"
+    );
+}
+
+/// The same in the tick the property would clear: the player is already up, the
+/// mirror wants to write `occupied=false`, and a break of that bed says no.
+#[test]
+fn a_bed_broken_when_the_property_clears_is_not_restored() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    rig.use_bed(1);
+    let head = rig.head;
+    assert!(bed_occupied(&rig.state, head), "the sleeper's bed is taken");
+    crate::sleep::wake(&mut rig.state, rig.player);
+    crate::tick::mining_tests::ready_to_finish(&mut rig.state, ConnectionId(1), head);
+    let air = rig.state.registry.states.air;
+    let _ = run_tick(
+        &mut rig.state,
+        &[PlayerInput::Dig {
+            connection: ConnectionId(1),
+            position: head,
+            action: crate::boundary::DigAction::Finish,
+            sequence: 1,
+        }],
+    );
+    assert_eq!(
+        rig.state.world.block_at(head.x, head.y, head.z),
+        Some(air),
+        "the break wins over the mirror's clear"
+    );
+    rig.run(1);
+    assert_eq!(
+        rig.state.world.block_at(head.x, head.y, head.z),
+        Some(air),
+        "the bed stays broken"
     );
 }

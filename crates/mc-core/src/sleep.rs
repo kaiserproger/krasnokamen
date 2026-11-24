@@ -335,15 +335,33 @@ pub(crate) fn mirror_occupied_beds(state: &mut TickState) {
     state.occupied_beds = wanted;
 }
 
-/// Write a bed's `occupied` property when it differs; a cell that no longer
-/// holds a bed (or is unloaded) is left alone because `property` finds no such
-/// state.
+/// Write a bed's `occupied` property on both halves when it differs. A cell
+/// that no longer holds a bed (or is unloaded) is left alone, and so is a bed
+/// an accepted write already targets this tick: the merge's write wins, so a
+/// break or a replace is never undone by the mirror.
 fn set_bed_occupied(state: &mut TickState, head: BlockPos, occupied: bool) {
     let value = if occupied { "true" } else { "false" };
-    if let Some(next) = crate::bees::property(state, head, "occupied", value)
-        && state.world.block_at(head.x, head.y, head.z) != Some(next)
-    {
-        state.write_block(head, next);
+    let Some(current) = state.world.block_at(head.x, head.y, head.z) else {
+        return;
+    };
+    // Vanilla `BedBlock.updateShape` copies `OCCUPIED` to the connected half.
+    let other = crate::placement::other_half(&state.registry.blocks, head, current)
+        .map_or(head, |(other, _)| other);
+    let accepted = |pos: &BlockPos| {
+        state
+            .merge_block_writes
+            .iter()
+            .any(|(written, _)| written == pos)
+    };
+    if accepted(&head) || accepted(&other) {
+        return;
+    }
+    for cell in [head, other] {
+        if let Some(next) = crate::bees::property(state, cell, "occupied", value)
+            && state.world.block_at(cell.x, cell.y, cell.z) != Some(next)
+        {
+            state.write_block(cell, next);
+        }
     }
 }
 

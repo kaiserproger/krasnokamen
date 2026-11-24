@@ -270,18 +270,17 @@ fn run_dimension_tick_inner<'a>(
     }
     let entity_tail_time = entity_tail_start.elapsed();
 
-    // Beds follow their sleeper (vanilla `LivingEntity.startSleeping`): derived
-    // after the phases that can start or end a sleep this tick and before the
-    // merge, so the write lands in this tick's block phase and a break staged by
-    // the same tick is applied after it.
-    crate::sleep::mirror_occupied_beds(state);
-
     // 3. Merge (deterministic, fixed order, whole-intent rejection).
     let merge_start = std::time::Instant::now();
     state.merge(&mut intents);
     state.merge_damage.append(&mut state.plugin_damage);
     crate::end_fight::crystal_hits(state);
     let merge_time = merge_start.elapsed();
+    // Beds follow their sleeper (vanilla `LivingEntity.startSleeping`): derived
+    // after the merge, so an accepted write to a bed this tick wins over the
+    // mirror (a broken bed is never re-occupied), and before the block phase,
+    // so the mirror's own write lands in this tick.
+    crate::sleep::mirror_occupied_beds(state);
     let block_prepare_start = std::time::Instant::now();
 
     // 4. Block phase: ordered merge writes, retained falling lifecycle.
