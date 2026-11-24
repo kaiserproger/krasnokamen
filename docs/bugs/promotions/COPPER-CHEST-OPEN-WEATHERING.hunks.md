@@ -45,7 +45,8 @@ The row is a scoped patch:
   half. It reds at its own
   `assert_eq!(family(at(&state, A).block.id.path()).unwrap().1, expected_age, "weathering after opener … died
   and respawned")` with `left: 0, right: 1` (`crates/mc-core/src/copper_tests.rs:629`). Two isolated controls
-  pin both carried hunks to it: reversing the whole patch reds it (with the guard's `:483` ref too), and
+  pin both carried hunks to it: reversing the whole patch reds it (with the guard's `:483` ref too — receipts
+  `20261124T124324-ledger-promote-152tf9re` and the re-promotion `20261124T133132-ledger-promote-sctwmlx3`), and
   reversing **only** the `damage.rs` release hunk reds it at `:629` (`left: 0, right: 1`, second iteration)
   while the `:483` ref stays green
   (`.analysis/validation/20261124T130221-test-_6b8mqn8/test.log`). So `bd7a05a64`'s hunk belongs to this row's
@@ -58,5 +59,6 @@ The row is a scoped patch:
   chests on a fixture pad; the random-tick sampler carries both unopened controls to `oxidized` while the
   opened chest keeps its placed stage and its 63-slot menu, and it advances after the menu closes
   (`tools/harness/backends/native_ledger_copper_chest.py`). Two controls make a guard-free tree pass only when
-  the opened chest's own draws lag all six control advances (about one run in seven), so the gate is repeated.
-  Passed receipts: see the promotion JSON.
+  the opened chest's own draws lag all six control advances (about one run in seven), so the gate is repeated:
+  `20261124T131959-…-a4_4qww9`, `20261124T132126-…-0m6dn9zh` and `20261124T132300-…-r6ai05pm`, the last carried
+  by the re-promotion `20261124T133132-ledger-promote-sctwmlx3`.

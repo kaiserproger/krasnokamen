@@ -520,6 +520,13 @@ refused chunk still creates no unsaved custody.
    tombstones. A gap, invalid identity, truncated header or payload, checksum
    mismatch, trailing bytes or invalid JSON refuses startup, including in the
    final published batch. Recovery does not repair or silently shorten the log.
+   Retained entity and player NBT is additionally canonicalised: a duplicated
+   `Tags` key, non-string or non-list `Tags`, or trailing bytes inside an opaque
+   image refuses startup with a `CoreError::Storage` error naming the image
+   (`native_checkpoint.rs` player/entity hydration, `core/recovery.rs`,
+   `journal/replay.rs`); duplicate *elements* are de-duplicated instead. The
+   on-disk format is unchanged — fix the image (remove the duplicate key/bytes)
+   or restore from a checkpoint/WAL that does not carry it.
 4. Restore world-global Overworld datapack selection from the folded checkpoint
    and WAL metadata before constructing any generator. Discover directory/ZIP
    packs, preserve binary NBT, apply ordered vanilla/pack layers and filters,
