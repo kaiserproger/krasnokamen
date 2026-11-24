@@ -216,6 +216,11 @@ class ServerRegistryTests(unittest.TestCase):
         with patch.object(ledger, 'REPO_ROOT', root):
             ledger._register_server('a' * 64, {'head': 'b' * 40, 'sha256': 'c' * 64})
             ledger._register_server('a' * 64, {'head': 'b' * 40, 'sha256': 'd' * 64})
+            # Two clean trees differ only by their head: both entries must survive (REVIEW-wave2-12 m3).
+            ledger._register_server('a' * 64, {'head': 'f' * 40, 'sha256': 'c' * 64})
+            self.assertEqual(len(list(registry.glob('*.json'))), 3)
+            self.assertEqual(ledger._registration(registry, 'a' * 64, {'head': 'f' * 40, 'sha256': 'c' * 64}),
+                             {'sha256': 'a' * 64, 'tree': {'head': 'f' * 40, 'sha256': 'c' * 64}})
             self.assertEqual(ledger._registration(registry, 'a' * 64, {'head': 'b' * 40, 'sha256': 'c' * 64}),
                              {'sha256': 'a' * 64, 'tree': {'head': 'b' * 40, 'sha256': 'c' * 64}})
             self.assertEqual(ledger._registration(registry, 'a' * 64, {'head': 'b' * 40, 'sha256': 'd' * 64}),

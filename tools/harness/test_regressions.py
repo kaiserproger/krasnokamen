@@ -416,6 +416,24 @@ regression = []
         self.assertFalse(ledger._scenario_assertion_failed(
             {'status': 'failed', 'error': 'native-low-roof-house assertion failed: x', 'details': {}}, 'native-low-roof-house'))
 
+
+    def test_a_harness_red_outside_the_rows_assertion_is_not_the_control(self):
+        """REVIEW-wave2-12 M4: the scenario records the assertion it failed, and a row that names its
+        own assertion cannot be carried by another one's flake."""
+        row = {'id': 'R', 'proving_assertions': {'harness:scene-shot:x': 'chase_speed_zombie'}}
+        right = {'harness:scene-shot:x': {'state': ledger.RED, 'detail': '',
+                                          'assertion': {'name': 'chase_speed_zombie'}}}
+        self.assertEqual(ledger._classify_control('R', right, row, Path('.'))['harness:scene-shot:x']['state'],
+                         ledger.RED)
+        flake = {'harness:scene-shot:x': {'state': ledger.RED, 'detail': '',
+                                          'assertion': {'name': 'in_play'}}}
+        downgraded = ledger._classify_control('R', flake, row, Path('.'))['harness:scene-shot:x']
+        self.assertEqual(downgraded['state'], ledger.UNRUNNABLE)
+        self.assertIn("not the row's 'chase_speed_zombie'", downgraded['detail'])
+        # A row that names nothing keeps the previous behaviour (any recorded assertion failure).
+        unnamed = ledger._classify_control('R', flake, {'id': 'R'}, Path('.'))['harness:scene-shot:x']
+        self.assertEqual(unnamed['state'], ledger.RED)
+
     def test_profile_all_and_blueprint_verdicts_are_red_on_their_own_assertion(self):
         failed = lambda name, **more: {'status': 'failed', 'error': f'autocraft-qa-settlements assertion failed: {name}', **more}
         # `all` of a profile that reports no verdict map: its own assertion failing is the red.

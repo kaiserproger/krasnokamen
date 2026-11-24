@@ -267,7 +267,7 @@
       }
     },
     {
-      "wait_ticks": 10
+      "wait_ticks": 30
     },
     {
       "timed_entities": {
@@ -279,7 +279,7 @@
       }
     },
     {
-      "wait_ticks": 10
+      "wait_ticks": 30
     },
     {
       "timed_entities": {
@@ -291,21 +291,18 @@
       }
     },
     {
-      "mob_motion": {
-        "name": "zombie-chase",
-        "assertion_prefix": "zombie_chase_",
+      "mob_chase": {
         "samples": [
           "chase-1",
           "chase-2",
           "chase-3"
         ],
-        "types": [
-          {
-            "id": "minecraft:zombie",
-            "min_speed": 0.09,
-            "max_speed": 0.14
-          }
-        ]
+        "name": "chase",
+        "kind": "minecraft:zombie",
+        "min_speed": 0.105,
+        "max_speed": 0.128,
+        "min_approach_blocks": 3,
+        "aggressive_bit": 2
       }
     },
     {

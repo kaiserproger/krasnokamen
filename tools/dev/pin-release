@@ -419,13 +419,12 @@ def registers_for_ledger(kind: str) -> bool:
 def ledger_register(top: Path, binary: Path) -> None:
     """Register a server or core-tests pin where tools/harness/ledger.py looks for it.
 
-    ledger.py writes `<candidate>/.analysis/ledger-builds/<binary sha256>.json` as
-    `{"sha256": ..., "tree": {"head": ..., "sha256": ...}}` (tools/harness/ledger.py:585-589,
-    `_register_server`) and `_server_built_from` reads the same directory of its `root` argument
-    (tools/harness/ledger.py:592-611), with `promote`'s default `root=REPO_ROOT`
-    (tools/harness/ledger.py:936). So the candidate tree is the registry root and the entry
-    describes the tree the binary was built from. KRASNOKAMEN_LEDGER_ROOT names the candidate when
-    the pin is built in another tree (a control); it defaults to the pinned tree."""
+    The registry entry is `<candidate>/.analysis/ledger-builds/<binary sha256>-<head>-<diff sha256>.json`
+    as `{"sha256": ..., "tree": {"head": ..., "sha256": ...}}` (`ledger._register_server`) and
+    `ledger._registration` reads the same directory of `promote`'s `root` for a binary and tree
+    fingerprint. So the candidate tree is the registry root and the entry describes the tree the
+    binary was built from. KRASNOKAMEN_LEDGER_ROOT names the candidate when the pin is built in
+    another tree (a control); it defaults to the pinned tree."""
     if not (top / "tools/harness/ledger.py").is_file():
         # A minimal fixture tree (or a client tree) has no bug ledger: nothing can cite this binary.
         say(f"{top} has no tools/harness/ledger.py; not registering the pin for the bug ledger")
@@ -435,7 +434,8 @@ def ledger_register(top: Path, binary: Path) -> None:
     registry = root / ".analysis/ledger-builds"
     registry.mkdir(parents=True, exist_ok=True)
     sha = w.sha256_file(binary)
-    (registry / f"{sha}.json").write_text(json.dumps({"sha256": sha, "tree": {"head": tree["head"], "sha256": tree["sha256"]}}) + "\n")
+    name = f"{sha}-{tree['head']}-{tree['sha256']}.json"
+    (registry / name).write_text(json.dumps({"sha256": sha, "tree": {"head": tree["head"], "sha256": tree["sha256"]}}) + "\n")
 
 
 def main() -> None:

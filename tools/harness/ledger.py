@@ -567,13 +567,14 @@ def _assertion_failure(receipt):
 
 
 def _scenario_assertion_failed(receipt, check):
-    """A named-scenario ref is red when its own receipt (`details.named_scenario.id` is the
-    ref) failed on one of the scenario's assertions."""
+    """The assertion a named-scenario ref failed, or None when it is not this scenario's own red."""
     if not isinstance(receipt, dict):
-        return False
+        return None
     details = receipt.get('details') if isinstance(receipt.get('details'), dict) else {}
     named = details.get('named_scenario')
-    return isinstance(named, dict) and named.get('id') == check and _assertion_failure(receipt) is not None
+    if not (isinstance(named, dict) and named.get('id') == check):
+        return None
+    return _assertion_failure(receipt)
 
 
 def _loader_mc_version(loader_root: Path) -> str | None:
@@ -630,7 +631,7 @@ def _run_harness(ctx, refs, tree):
     try:
         binary = regressions._release_server(ctx, profiles, tree)
     except Exception as error:
-        return {ref: (UNRUNNABLE, f'release server: {error}', None) for ref in refs}
+        return {ref: (UNRUNNABLE, f'release server: {error}', None, None) for ref in refs}
     _register_server(ctx.client_evidence['regressions_server']['sha256'], tree_fingerprint(tree))
     env = regressions._client_env(binary)
     if regressions.is_other_tree(tree):
@@ -652,7 +653,7 @@ def _run_harness(ctx, refs, tree):
         command = list(command)
         if profile == 'loader-live':
             if loader_reason is not None:
-                results.update({ref: (UNRUNNABLE, loader_reason, None) for ref, *_ in group})
+                results.update({ref: (UNRUNNABLE, loader_reason, None, None) for ref, *_ in group})
                 continue
             wrapper = REPO_ROOT / 'tools' / 'harness' / 'screen_audio_graph.sh'
             plugins_dir = ctx.artifact_dir / 'loader-live-plugins'
@@ -668,18 +669,20 @@ def _run_harness(ctx, refs, tree):
                     (is_profile and _failing_verdict(error.receipt, profile, check))
                     or (not is_profile and _scenario_assertion_failed(error.receipt, check))
                 )
-                results[ref] = (RED if red else UNRUNNABLE, str(error), str(error.path) if error.path else None)
+                failed = _scenario_assertion_failed(error.receipt, check) if red and not is_profile else None
+                results[ref] = (RED if red else UNRUNNABLE, str(error),
+                                str(error.path) if error.path else None, failed)
             continue
         except Exception as error:
-            results.update({ref: (UNRUNNABLE, str(error), None) for ref, *_ in group})
+            results.update({ref: (UNRUNNABLE, str(error), None, None) for ref, *_ in group})
             continue
         for ref, profile, check, is_profile in group:
             try:
                 if is_profile:
                     regressions._profile_verdict(receipt, profile, check)
-                results[ref] = (GREEN, '', str(path))
+                results[ref] = (GREEN, '', str(path), None)
             except RuntimeError as error:
-                results[ref] = (RED, str(error), str(path))
+                results[ref] = (RED, str(error), str(path), None)
     return results
 
 
@@ -712,8 +715,9 @@ def run_refs(ctx, refs, tree, client):
                 out[f'cargo:{crate}:{name}'] = {'state': state, 'detail': detail,
                                                **({'assertion': assertion} if assertion else {})}
         if harness:
-            for ref, (state, detail, receipt) in _run_harness(ctx, harness, tree).items():
-                out[ref] = {'state': state, 'detail': detail, **({'receipt': receipt} if receipt else {})}
+            for ref, (state, detail, receipt, failed) in _run_harness(ctx, harness, tree).items():
+                out[ref] = {'state': state, 'detail': detail, **({'receipt': receipt} if receipt else {}),
+                            **({'assertion': {'name': failed}} if failed else {})}
         if python:
             for (module, test), (state, detail, assertion) in _run_python(ctx, python, tree).items():
                 out[f'python:{module}:{test}'] = {'state': state, 'detail': detail,
@@ -1138,6 +1142,16 @@ def _classify_control(ident, control, row, tree):
             out[ref] = entry
             continue
         assertion = entry.get('assertion') or {}
+        if ref.startswith('harness:') and assertion.get('name') is not None:
+            # A named scenario records the assertion it failed: a row that names its own assertion is
+            # red only on that one (REVIEW-wave2-12 M4), so an unrelated flake cannot carry a control.
+            expected = named.get(ref)
+            if expected and assertion['name'] != expected:
+                out[ref] = {**entry, 'state': UNRUNNABLE,
+                            'detail': entry.get('detail', '') + f" | red at {assertion['name']!r}, not the row's {expected!r}"}
+                continue
+            out[ref] = entry
+            continue
         if assertion.get('error') == 'AssertionError' or assertion.get('class') == 'assertion':
             out[ref] = entry
             continue
@@ -1333,10 +1347,13 @@ def _register_server(sha256, tree):
 
     One file per (binary, tree): a harness-only fix leaves the release server byte-identical on the
     candidate and on its reverted control tree, so both fingerprints must be citable at once
-    (FINDINGS-20261124 F1). The legacy `<sha256>.json` name is still read, never written."""
+    (FINDINGS-20261124 F1). The name carries the head as well as the diff hash: two clean trees only
+    differ by their head, and a diff-hash-only name made them overwrite each other (REVIEW-wave2-12
+    m3). The legacy `<sha256>.json` name is still read, never written."""
     registry = REPO_ROOT / '.analysis/ledger-builds'
     registry.mkdir(parents=True, exist_ok=True)
-    (registry / f'{sha256}-{tree["sha256"]}.json').write_text(json.dumps({'sha256': sha256, 'tree': {'head': tree['head'], 'sha256': tree['sha256']}}) + '\n')
+    name = f'{sha256}-{tree["head"]}-{tree["sha256"]}.json'
+    (registry / name).write_text(json.dumps({'sha256': sha256, 'tree': {'head': tree['head'], 'sha256': tree['sha256']}}) + '\n')
 
 
 def _registration(registry, sha256, tree):
@@ -1360,8 +1377,11 @@ def _server_built_from(root, receipt_text, tree):
     registry = root / '.analysis/ledger-builds'
     named = []
     for entry in sorted(registry.glob('*.json')) if registry.is_dir() else []:
-        build = json.loads(entry.read_text())
-        if build['sha256'] in receipt_text:
+        try:
+            build = json.loads(entry.read_text())
+        except (OSError, ValueError):
+            continue
+        if build.get('sha256') in receipt_text:
             named.append(build)
     if not named:
         raise Refused('client receipt names no server binary built from the candidate by the ledger tooling '

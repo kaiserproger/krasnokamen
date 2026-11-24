@@ -68,5 +68,11 @@ produce: measured 756 px on the fixed client and 242 px on the pre-image, thresh
 - control (`6069e262`, receipt `.analysis/validation/20261124T200212-issue1-01-villager-leg-iant1l0o`):
   FAILED at `villager-leg-vanilla_pixels` (242 px).
 
-Caveat recorded in the scenario's `limits`: the box is a lighting-sensitive grey band; a client
-lighting change that darkens it below the threshold needs re-measurement.
+Known limitations (REVIEW-wave2-12 m6):
+
+- The hand-ported `leg_swing` hunks are **not** exercised by this gate: the scene's villager is NoAI,
+  so its walk speed — and therefore the leg amplitude the factor scales — is zero. The pair is a
+  faithful pre-image of those lines, but only the model hunks are checked by pixels.
+- The scene is static and was measured with **one run per side** (candidate 756 px, pre-image 242 px,
+  threshold 500, a roughly twofold margin). Re-measure both pins before changing the window, the
+  colour box or the client lighting.

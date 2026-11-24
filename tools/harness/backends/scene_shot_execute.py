@@ -568,20 +568,35 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             kinds = [entry if isinstance(entry, str) else entry["id"] for entry in value["types"]]
             measurement = mob_motion_oracle.measure(samples, kinds)
             (artifact / f"{value['name']}.json").write_text(json.dumps(measurement, indent=2) + "\n")
-            # A scene that measures two windows of one kind (a fixture teleport and a real chase)
-            # keeps both verdicts apart through its own prefix.
-            prefix = value.get("assertion_prefix", "")
             for entry in value["types"]:
                 kind = entry if isinstance(entry, str) else entry["id"]
                 slug = kind.split(":")[1]
                 row = measurement[kind]
-                probe.check(prefix + "mob_moved_" + slug, row["total_displacement_blocks"] > 0.1)
+                probe.check("mob_moved_" + slug, row["total_displacement_blocks"] > 0.1)
                 if isinstance(entry, dict):
                     # A displacement alone passes a frozen or wrongly paced gait: every
                     # segment's client-visible rate must sit inside the declared range.
                     rates = [segment["blocks_per_client_tick"] for segment in row["segments"]]
-                    probe.check(prefix + "mob_speed_" + slug,
+                    probe.check("mob_speed_" + slug,
                                 all(entry["min_speed"] <= rate <= entry["max_speed"] for rate in rates))
+        elif kind == "mob_chase":
+            from . import mob_chase_oracle
+
+            samples = [json.loads((artifact / f"{item}.json").read_text()) for item in value["samples"]]
+            measurement = mob_chase_oracle.measure(samples, value["kind"])
+            (artifact / f"{value['name']}.json").write_text(json.dumps(measurement, indent=2) + "\n")
+            slug = value["kind"].split(":")[1]
+            bit = 1 << value["aggressive_bit"]
+            # One rate over the whole window: a 3-tick server sample period must not turn into a band.
+            probe.check(f"chase_speed_{slug}",
+                        value["min_speed"] <= measurement["blocks_per_client_tick"] <= value["max_speed"])
+            # A wanderer or a summoned-but-idle mob can hold any pace; a chase closes ground and the
+            # server publishes the aggressive flag on the same client.
+            probe.check(f"chase_approach_{slug}",
+                        measurement["approach_blocks"] >= value["min_approach_blocks"])
+            probe.check(f"chase_aggressive_{slug}",
+                        bool(measurement["flags_first"] & bit) and bool(measurement["flags_last"] & bit))
+            probe.check(f"chase_identity_{slug}", measurement["identity_constant"])
         elif kind == "assert_block":
             result = probe.call("minecraft_read_block", value["args"])
             (artifact / f"{value['name']}.json").write_text(json.dumps(result, indent=2) + "\n")

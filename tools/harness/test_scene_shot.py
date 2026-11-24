@@ -446,44 +446,6 @@ class SceneShotTests(unittest.TestCase):
             }}])
             self.assertEqual(probe.checks, {"mob_moved_zombie": True, "mob_speed_zombie": False})
 
-    def test_mob_motion_assertion_prefix_keeps_two_windows_apart(self):
-        """ISSUE-1-19: the scene measures a fixture teleport and an AI chase of the
-        same kind; each window needs its own verdict, not one overwritten name."""
-        class Probe:
-            def __init__(self):
-                self.checks = {}
-            def check(self, name, value):
-                self.checks[name] = value
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            for name, tick, x in zip(("a", "b", "c"), (100, 105, 110), (0., 0.6, 1.2)):
-                (root / f"{name}.json").write_text(json.dumps({
-                    "game_time": tick,
-                    "snapshot": {"entities": [
-                        {"entity_type": "minecraft:zombie", "entity_uuid": "z", "x": x, "z": 0},
-                    ]},
-                }))
-            probe = Probe()
-            scene_shot.execute(probe, root, [{"mob_motion": {
-                "name": "chase", "assertion_prefix": "zombie_chase_",
-                "samples": ["a", "b", "c"],
-                "types": [{"id": "minecraft:zombie", "min_speed": 0.09, "max_speed": 0.14}],
-            }}])
-        self.assertEqual(probe.checks, {"zombie_chase_mob_moved_zombie": True,
-                                        "zombie_chase_mob_speed_zombie": True})
-        scene_shot.validate_steps([{"mob_motion": {
-            "name": "chase", "assertion_prefix": "",
-            "samples": ["a", "b", "c"],
-            "types": [{"id": "minecraft:zombie", "min_speed": 0.09, "max_speed": 0.14}],
-        }}], "native")
-        for bad in ("zombie chase ", "zombie:", 3):
-            with self.subTest(prefix=bad), self.assertRaises(ValueError):
-                scene_shot.validate_steps([{"mob_motion": {
-                    "name": "chase", "assertion_prefix": bad,
-                    "samples": ["a", "b", "c"],
-                    "types": [{"id": "minecraft:zombie", "min_speed": 0.09, "max_speed": 0.14}],
-                }}], "native")
-
     def test_mob_motion_gate_requires_the_kinds_it_measures(self):
         step = {"mob_motion": {"samples": ["a", "b", "c"], "name": "motion"}}
         with self.assertRaises(ValueError):
@@ -1250,3 +1212,25 @@ class DroppedClockTests(unittest.TestCase):
         self.assertTrue(all({"shot": name} in scene["steps"] for name in ("held-day", "held-night")))
 
 
+
+
+class NamedFixtureClientTests(unittest.TestCase):
+    """The ledger and the fixture must agree on a scene's client (REVIEW-wave2-12 m5).
+
+    Two readers decide it: `regressions._client_command` (the `run scenario` argv) and
+    `scene_shot_scenario`'s registered-fixture rule. A disagreement is fail-closed but silent, so the
+    invariant is checked here for every named fixture instead."""
+
+    def test_every_named_fixture_agrees_with_the_ledger_client(self):
+        from tools.harness import regressions
+        from tools.harness.backends import scene_shot_scenario
+
+        fixtures = scene_shot_scenario.NAMED_FIXTURES
+        self.assertIn("issue1-19-hostile-motion", fixtures)
+        for name in fixtures:
+            with self.subTest(scenario=name):
+                entry = scenarios.SCENARIOS.get(name)
+                self.assertIsNotNone(entry, f"{name} has a fixture but no scenario entry")
+                expected = entry.client or ("java" if name.startswith("java-") else "native")
+                argv = regressions._client_command("scene-shot", name)
+                self.assertEqual(argv[argv.index("--client") + 1], expected)

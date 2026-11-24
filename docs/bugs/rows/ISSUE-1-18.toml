@@ -1,6 +1,6 @@
 [[bug]]
 id = "ISSUE-1-18"
-title = "Sheep and goat models wrong"
+title = "Goat horns lean back instead of standing upright"
 area = "client"
 repro = "manual"
 severity = "major"

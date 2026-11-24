@@ -1,13 +1,13 @@
 [[bug]]
 id = "ISSUE-1-19"
-title = "Spider and zombie movement animation and speed wrong"
+title = "Zombie chase speed runs at the historical 3.8 tuning, not the Java 26.3 interval"
 area = "client"
 repro = "manual"
 severity = "major"
 status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = ["cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval", "cargo:mc-core:hostile_tests::zombie_chase_publishes_and_clears_aggressive_pose_metadata", "cargo:mc-core:journal_touched::tests::zombie_chase_pose_is_journaled_and_repaired_after_recovery", "client:krasnokamen-client:entities::animation_tests::zombie_arm_rotation_matches_the_26_3_animate_zombie_arms_formula", "client:krasnokamen-client:entities::animation_tests::spider_leg_swing_follows_the_26_3_spider_model_pairs", "harness:scene-shot:issue1-19-hostile-motion"]
-proving_assertions = { "harness:scene-shot:issue1-19-hostile-motion" = "zombie_chase_speed" }
+regression = ["cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval", "harness:scene-shot:issue1-19-hostile-motion"]
+proving_assertions = { "harness:scene-shot:issue1-19-hostile-motion" = "chase_speed_zombie", "cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval" = "crates/mc-core/src/hostile_tests.rs:156" }
 fix_commit = "patch:3fc6a9b98fa6edba355f793ae2ff042265b4c616ad1ddbf3d2b8b8ebbaf814eb"
 repro_check = "Real fix: core c0d78c11e (2026-11-07, `speed: 3.8 -> 2.4` from the Java 26.3 integrated-scene chase, plus the aggressive-pose publication) and client ebe56023 (2026-11-12, before the rename f0a6abf6: exact 26.3 `animateZombieArms`/`SpiderModel.setupAnim` formulas). fix_commit is the forward-ported core patch (the only hunk with a HEAD equivalent, crates/mc-core/src/blueprint.rs); the pose hunks are class (c) (3bd6e8f04/1ee87857b rewrote them into `zombie_arms_update`/`set_zombie_arms` and the per-slot sync at tick/entity_phase.rs:611, and recovery no longer carries the clear) and the client half is a cross-repository commit whose rendered rest pose is unchanged (raised-arm window 1776-1878 px on both the fixed and the formula-reverted client). Map: docs/bugs/promotions/ISSUE-1-19.hunks.md. The registered scene now also drives a real AI chase: `zombie_chase_speed` requires both sampled segments inside 0.09..0.14 blocks per client tick (Java 26.3 interval); candidate 20261124T204901 PASSED (0.1000 and 0.1271), the reversed-speed control leaves the band and the cargo speed ref goes red. The ledger also had to learn the scene's client (the scene entry declares the native client): it derived Java from the id, so probe/control runs refused the native fixture in 0.1 s. Earlier history: Stage2X SLICES.md:151-152 and receipts/XIssue1Scenes/report.md ran fixture teleports; control dbd3a20a9528 disabled both pose paths and was not an exact reversal; 9a645aa9 was a clippy/rustfmt carrier."
 promotion = "docs/bugs/promotions/ISSUE-1-19.json"

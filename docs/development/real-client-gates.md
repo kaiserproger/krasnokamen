@@ -846,11 +846,16 @@ the Settings dialog or the map territory.
   must retain their identities and move; observed game time must advance. These
   are client-observed rates, not authoritative server-clock speeds: client time
   can be corrected by server packets, and curved paths make net displacement a
-  lower bound on traveled distance. An optional `assertion_prefix` keeps two
-  windows of one kind apart, so `issue1-19-hostile-motion` records the fixture
-  teleports (`mob_speed_zombie`) and an actual AI chase (`zombie_chase_speed`,
-  0.09..0.14 blocks per client tick from the Java 26.3 moving interval) as
-  separate verdicts.
+  lower bound on traveled distance.
+- `mob_chase` reads the named `timed_entities` samples of one kind (at least two, a window of 60 or
+  more client ticks) and records ONE pace over the whole window, so the server's position sample
+  period cannot become the band: `chase_speed_<kind>` (blocks per client tick inside the declared
+  range), `chase_approach_<kind>` (the received distance to the player fell by at least the declared
+  blocks — a wanderer that keeps pace without closing ground fails), `chase_aggressive_<kind>` (the
+  mob-flags byte carries the declared bit on the first and last samples) and
+  `chase_identity_<kind>` (one entity throughout). `issue1-19-hostile-motion` uses it for the zombie
+  chase (`chase_speed_zombie`, 0.105..0.128 from the Java 26.3 moving interval, approach >= 3 blocks,
+  aggressive bit 2).
 - Zombie-family chase uses a blueprint capability to send the aggressive-arms
   mob flag. It is cleared when the target is lost or on the first hostile
   evaluation after restart, because targets are runtime-only; the changed

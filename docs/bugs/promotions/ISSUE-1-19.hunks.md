@@ -53,11 +53,15 @@ covers the animation as well as the speed:
 
 - The two client unit refs registered on the row are that commit's own tests; they pass on the
   candidate.
-- Its rendered rest pose is unchanged: the scene's raised-arm window (665,295–730,340, ≥800 px) reads
-  **1853 px** on the candidate and **1878 px** on a client pin built with the formulas reverted to
-  their pre-image (pin `184fcf8ce5d3-7c3c198b`, run
-  `20261124T191336-issue1-19-hostile-motion-qyf5wmmq`), so the animation change is a source-level
-  refinement the eye cannot separate at rest and the arm assertion cannot carry a control for it.
+- No pixel claim is made from a reverted client. The pin `184fcf8ce5d3-7c3c198b` named in earlier
+  drafts was a **composite dirty tree** (it also carried ISSUE-1-18's goat pre-image, which is why the
+  goat scene run `20261124T191231` on it showed the leaning horns), and its ISSUE-1-19 run
+  `20261124T191336` FAILED before the arm check was judged (`expected exactly one minecraft:zombie,
+  got 2`, the fixture zombie still listed). What is measured is the fixed client only: the raised-arm
+  window (665,295–730,340, ≥800 px) reads 1776–1878 px across the candidate runs, and that window is a
+  rest pose. The formula change alters the *aggressive* arm terms and the spider leg offsets, which
+  this scene does not drive at that point, so it carries no red control — see
+  `SPIDER-GAIT-AND-ANIMATION-UNPROVEN`.
 - A faithful client reversal of those hunks exists in history (`ebe56023^`) but the call sites were
   rewritten by `ebe85470` (shield-arm exception) and `54b79f73` (stage0 merge drift), so the
   hand-ported pair would test the port rather than the commit; the speed hunk is the row's observable
