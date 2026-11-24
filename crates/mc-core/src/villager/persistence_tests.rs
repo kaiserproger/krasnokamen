@@ -804,6 +804,8 @@ fn lumberjack_progress_persists_through_nbt_and_durable_projection() {
         has_target: true,
         returning: false,
         stalled_since: 777,
+        swept: true,
+        plant_cursor: 9,
     };
     let fields = villager_to_fields(&items, &state, 100).unwrap();
     let Tag::Compound(runtime) = field(&fields, "krasnokamen:VillagerRuntime")
@@ -833,6 +835,8 @@ fn lumberjack_progress_persists_through_nbt_and_durable_projection() {
             "has_target": true,
             "returning": false,
             "stalled_since": 777,
+            "swept": true,
+            "plant_cursor": 9,
         })
     );
     let loaded = villager_from_fields(&items, &fields, 100).unwrap();

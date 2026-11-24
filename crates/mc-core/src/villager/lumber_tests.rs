@@ -185,6 +185,11 @@ fn lumberjack_sows_its_own_zone_when_the_sweep_finds_no_tree() {
     crate::settlements::construction::tests::open_plan(&mut state);
     let settlement = v.settlement.unwrap();
     let record = state.settlements.get_mut(settlement).unwrap();
+    // Radius 7 around the worker at [8, 8] gives a 1..15 column circle: every
+    // column is in the loaded fixture chunk and the circle (225 columns) is larger
+    // than one 128-column slice, so the first slice cannot wrap.
+    record.radius = 7;
+    state.entities.set_pos(slot, [8.5, 201.0, 8.5]);
     let camp = record
         .buildings
         .values_mut()
@@ -201,14 +206,26 @@ fn lumberjack_sows_its_own_zone_when_the_sweep_finds_no_tree() {
         .unwrap();
     v.inventory[0] = Some(ItemStack::new(sapling, 3));
     let mut changes = ChangeSet::default();
-    for tick in 0..8 {
-        state.tick = tick * 20;
+    crate::settlements::construction::tests::fresh_site_budget(&mut state);
+    state.tick = 0;
+    lumber::work(&mut state, slot, &mut v, &mut changes);
+    assert_eq!(
+        path(&state, 2, 201, 2),
+        "air",
+        "the first slice can never sow (review D123Civ6 blocker 1)"
+    );
+    let mut attempts = 1;
+    while path(&state, 2, 201, 2) == "air" && attempts < 8 {
+        state.tick = attempts * 20;
+        attempts += 1;
+        crate::settlements::construction::tests::fresh_site_budget(&mut state);
         lumber::work(&mut state, slot, &mut v, &mut changes);
     }
+    assert!(v.lumber_progress.swept, "the sweep had to wrap first");
     assert_eq!(
         path(&state, 2, 201, 2),
         "oak_sapling",
-        "the camp's zone must be sown when the sweep finds no tree"
+        "the camp's zone must be sown after a full sweep found no tree"
     );
     assert_eq!(count(&v, sapling), 2, "one carried sapling is spent");
     assert!(
@@ -220,6 +237,57 @@ fn lumberjack_sows_its_own_zone_when_the_sweep_finds_no_tree() {
             .contains(&[2, 201, 2]),
         "the sown root is a protected planted tree"
     );
+}
+
+/// With a tree inside the swept slice the worker cuts it and never sows, even
+/// though it carries a sapling and the zone has vacant soil.
+#[test]
+fn a_tree_in_the_sweep_is_cut_instead_of_sowing_the_zone() {
+    let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);
+    crate::settlements::construction::tests::open_plan(&mut state);
+    let settlement = v.settlement.unwrap();
+    let record = state.settlements.get_mut(settlement).unwrap();
+    record.radius = 7;
+    state.entities.set_pos(slot, [8.5, 201.0, 8.5]);
+    let camp = record
+        .buildings
+        .values_mut()
+        .find(|b| b.kind == BuildingKind::LumberCamp)
+        .unwrap();
+    camp.natural_zone = true;
+    camp.bounds = ScriptWorldBounds::new([6, 200, 6], [10, 201, 10]).unwrap();
+    state.world.set_block(7, 200, 7, block(&state, "dirt"));
+    let sapling = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_sapling").unwrap())
+        .unwrap();
+    v.inventory[0] = Some(ItemStack::new(sapling, 3));
+    tree(&mut state, 11, 11, 5);
+    let mut changes = ChangeSet::default();
+    let mut found = None;
+    for tick in 0..8 {
+        state.tick = tick * 20;
+        crate::settlements::construction::tests::fresh_site_budget(&mut state);
+        if let Some(target) = lumber::work(&mut state, slot, &mut v, &mut changes) {
+            found = Some(target);
+            break;
+        }
+        assert_eq!(
+            path(&state, 7, 201, 7),
+            "air",
+            "a tree in the sweep must be cut, not preceded by sowing"
+        );
+    }
+    assert_eq!(
+        found,
+        Some(BlockPos {
+            x: 11,
+            y: 201,
+            z: 11
+        })
+    );
+    assert_eq!(count(&v, sapling), 3, "no sapling was spent on the zone");
 }
 
 #[test]
