@@ -73,9 +73,10 @@ failing_first = "not recorded"
 A ref is `cargo:<crate>:<test>` and `harness:<profile>:<scenario|verdict>` for this repository,
 `python:<dotted module>:<TestClass.test_method>` for a fix in the harness/tooling code itself
 (`ledger promote` runs it with `unittest` in the candidate tree), and
-`loader:python:<dir>:<module>.<TestClass.test_method>` for a test in the Loader repository (run with
-`unittest` from `<loader>/<dir>`, so the module imports its siblings; see [loader
-fixes](#loader-fixes-loadersha)), and
+`loader:python:<dir>:<module>.<TestClass.test_method>` (a Loader python test, run with `unittest` from
+`<loader>/<dir>` so the module imports its siblings) or `loader:gradle:<module>:<Java test class>`
+(one Gradle `:module:test --tests` selector, judged from its JUnit report) for a test in the Loader
+repository; see [loader fixes](#loader-fixes-loadersha). And
 `client:<crate>:<test>` for a fix in the client repository (`ledger promote` uses
 `cargo metadata --no-deps --format-version 1` in `KRASNOKAMEN_CLIENT_ROOT` or the sibling
 `krasnokamen-client` checkout, then runs `cargo test -p <crate> --lib -- <test>` for a
@@ -110,7 +111,7 @@ of those are missing or the scenario is not a registered loader-live entry.
 `<work>/solaris/tools/dev/pin-release <tree>` first: the gate discovers a
 server manifest in `<work>/pins/`, or uses `KRASNOKAMEN_SERVER_BINARY` when
 explicitly supplied. It checks the manifest, executable SHA-256 and that pin's
-`.analysis/ledger-builds/<sha256>.json` registration against the tested tree's
+`.analysis/ledger-builds/<sha256>-<tree sha256>.json` registration against the tested tree's
 `tree_fingerprint`. `KRASNOKAMEN_LEDGER_ROOT` selects the registry root when a
 control pin was registered there. A missing, unregistered or mismatched pin
 fails closed and names the exact `pin-release` command. A negative control
@@ -284,7 +285,8 @@ worker, runs the negative control.
    uncommitted changes is refused: rerun the gate on the candidate, and after
    any later edit. The receipt must also name a release server binary that
    `pin-release` registered for exactly that candidate in
-   `.analysis/ledger-builds/<sha256>.json`. An unregistered or foreign
+   `.analysis/ledger-builds/<sha256>-<tree sha256>.json` (a legacy `<sha256>.json` is still read). An
+   unregistered or foreign
    `KRASNOKAMEN_SERVER_BINARY`, or a binary pinned from an older source, proves
    nothing about this source and is refused. A unit test cannot close a client
    failure.
@@ -441,7 +443,10 @@ A client-repository fix whose guard only a client unit test observes (a `#[cfg(t
 test-build-only guard) has no scene assertion that can flip on it: a scene run reads the client it
 launched, so the same pinned client passes with the guard reverted
 (`CLIENT-SETTINGS-TEST-POLLUTION`, owner decision CL-7 option (a)). Such a row records
-`fix_commit = "client-test:<sha>"` and is proved by a reversal pair in the client repository:
+`fix_commit = "client-test:<sha>"` and is proved by a reversal pair in the client repository. It
+registers no graphical ref, so the row must carry `client_test_reason`: the exact observable no scene
+can flip (or the owner decision that says so), which `regressions` enforces — the exemption is not a
+blanket waiver:
 
 - **Control A (real pre-image).** The fix commit's own non-test hunks are `git apply -R`'d in a
   disposable copy of the client checkout. The copy is the same source as the checkout (a dirty
@@ -451,6 +456,13 @@ launched, so the same pinned client passes with the guard reverted
   red must be an assert macro inside test code — a test file, or an inline `#[cfg(test)]` module of a
   production file, whose path the fix changed (a fixture panic, a production panic or an assert in
   another file refuses).
+  The reversed copy runs in a scratch environment: `HOME`, `XDG_DATA_HOME`, `XDG_CONFIG_HOME`,
+  `XDG_CACHE_HOME`, `APPDATA` and `LOCALAPPDATA` point into `.analysis/client-sandbox/<stamp>` of the
+  candidate, `KRASNOKAMEN_CLIENT_SETTINGS` points at a scratch file and `KRASNOKAMEN_CLIENT_ROOT` is
+  dropped. A reversed test-build guard re-enables the side effect it suppresses, so a control that ran
+  in the operator's environment wrote `hotbar_2` into the owner's real
+  `~/.local/share/krasnokamen-client/client-settings.json` (review B3, 2026-11-24); no control may
+  touch the host.
 - **Restore.** Every ref runs in the client checkout that contains the fix and must be green.
 
 The receipt records `control = client_test_reversal`, the reversed files, the patch digest of the
@@ -464,7 +476,7 @@ reversed hunks and the client checkout head; `regressions` refuses the receipt o
 
 The Loader (`../solaris-loader`, `KRASNOKAMEN_LOADER_ROOT`) is its own repository with its own python
 tests, so a fix there has no core ref kind. Such a row records `fix_commit = "loader:<sha>"`, a
-`loader:python:<dir>:<module>.<test>` ref, and `control_files`: the non-test files of that commit whose
+`loader:python:<dir>:<module>.<test>` or `loader:gradle:<module>:<class>` ref, and `control_files`: the non-test files of that commit whose
 hunks the control reverses. One Loader commit often bundles a Gradle dependency, an agent facade or a
 message-shape change another row owns; reversing the build file can stop the test run and reversing
 another row's behaviour proves the wrong thing, so the row names the production files its own guard
@@ -478,7 +490,9 @@ the loader ref must go **red at an `AssertionError` inside a test file of that c
 import error or a unittest setup error is unrunnable). The restore runs every ref green in the Loader
 checkout. Receipt `control = loader_reversal` with `reversed_files`, the patch digest and the Loader
 head. `loader:` refs run in the client tier (`run regressions-client`), never in the ordinary L2 cargo
-lane, so the Loader source stays in its own repository.
+lane, so the Loader source stays in its own repository. A `loader:gradle:` red counts only when the
+JUnit report says `AssertionError` and names the source line (a compile error, a NullPointerException
+or a missing report is unrunnable), and it is recorded with the test file and line.
 
 ### Recording a graphical control later (backfill)
 
@@ -497,9 +511,15 @@ hunks reversed: the tool checks that reversal by applying the row's patch **forw
 the fix does not apply to is not the control), refuses a tree whose fingerprint is still the
 candidate's, then runs only those refs there and needs the same reverted-tree `pin-release` as a
 promotion (the error names the `pin-release` command). `--receipt` records a failed `result.json` of
-such a run instead: it must have run at the promotion `tree_head` with a different tree fingerprint,
-carry a clean client pin, and be red at the row's proving assertion (a scenario needs
-`proving_assertions`; a profile needs its verdict).
+such a run instead. Either way the tree must be exactly the one the promotion recorded:
+`promote` writes `control_tree_sha256`, the fingerprint of the candidate worktree after `apply -R`
+(read before control B resets it), and a receipt whose `tree.sha256` or a `--control-tree` whose
+`tree_fingerprint` differs refuses — a tree that merely looks reversed, or a run on any other dirty
+tree, is not that control. A receipt must also name a server binary the tooling built from that
+reversed tree (`.analysis/ledger-builds/<sha256>-<tree sha256>.json`), carry a clean client pin, and
+be red at the row's proving assertion (a scenario needs `proving_assertions`; a profile needs its
+verdict). A promotion that predates `control_tree_sha256` cannot be backfilled: re-promote the row
+from a candidate whose promotion records it.
 
 On success it replaces the `unrunnable` record with the red one (receipt path, assertion) and appends
 a `graphical_control_backfill` entry to the promotion receipt; the row's status and `promotion` field

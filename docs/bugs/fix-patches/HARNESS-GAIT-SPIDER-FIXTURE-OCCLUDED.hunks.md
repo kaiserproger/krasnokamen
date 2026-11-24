@@ -18,7 +18,11 @@ involved).
 
 Proving ref: `python:tools.harness.test_scene_shot:SceneShotTests.test_gait_fixture_keeps_previous_subject_outside_spider_view`.
 Control observed 2026-11-24 in a copy with the patch reversed: `AssertionError: -2.0 not greater than
-5.601660305677678` (the zombie lane is inside the spider's view again); green at HEAD.
+5.601660305677678` at `tools/harness/test_scene_shot.py:33` (`assertGreater` on the lateral distance:
+the zombie lane is inside the spider's view again); green at HEAD.
 
-Missing proof for promotion: a passed `harness:scene-shot:native-gait-spider` receipt on the candidate
-plus that scene on the reversed tree.
+Promoted 2026-11-24 on `595f66d98` (`docs/bugs/promotions/HARNESS-GAIT-SPIDER-FIXTURE-OCCLUDED.json`):
+the python ref above is the recorded red control, the passed real-client receipt of
+`harness:scene-shot:native-gait-spider` on the candidate is recorded as `client_receipt`, and that
+scene's own control is `unrunnable` (the tree had no registered pin-release server), so the graphical
+half is not claimed.

@@ -1,7 +1,7 @@
-# WORN-HEAD-ADJACENT-FALSE-POSITIVE — patch map
+# HARNESS-WORN-HEAD-ADJACENT-FALSE-POSITIVE — patch map
 
 Fix: `98900fb5c` "fix(harness): reject skulls adjacent to the actual head" (2026-11-15).
-The committed patch (`docs/bugs/fix-patches/WORN-HEAD-ADJACENT-FALSE-POSITIVE.patch`,
+The committed patch (`docs/bugs/fix-patches/HARNESS-WORN-HEAD-ADJACENT-FALSE-POSITIVE.patch`,
 `patch:964a879c…`) is HEAD's equivalent of that commit's production hunk. The fix predates
 `1cadb5c0a` "refactor(harness): split buildings-qa and scene-shot into owner modules", which moved
 `check_player_head` out of `tools/harness/backends/scene_shot.py`; the ROI statement is byte-identical
@@ -17,5 +17,8 @@ Proving ref and line: `python:tools.harness.test_scene_shot:PlayerHeadTests.test
 at `tools/harness/test_scene_shot.py:662`. Control observed 2026-11-24 in a copy of this tree with the
 patch reversed (`git apply -R`), red before any edit and green at HEAD.
 
-Missing proof for promotion: a passed real-client receipt of `harness:scene-shot:native-player-head` on
-the candidate plus the graphical control on the reversed tree (rule 2/3), i.e. Main's scene sweep.
+Promoted 2026-11-24 on `595f66d98` (`docs/bugs/promotions/HARNESS-WORN-HEAD-ADJACENT-FALSE-POSITIVE.json`):
+the python ref above is the recorded red control, the passed real-client receipt of
+`harness:scene-shot:native-player-head` on the candidate is recorded as `client_receipt`, and that
+scene's own control is `unrunnable` (the tree had no registered pin-release server), so the graphical
+half is not claimed.

@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 
 from . import regressions
@@ -462,18 +463,43 @@ def _client_failure(text):
     return match.group(1), int(match.group(2)), message
 
 
+def _client_control_env(env, scratch):
+    """`env` redirected so nothing a client test writes reaches the operator's host (REVIEW-wave2-1 B3).
+
+    A `client-test` control reverses the test-build guard, which re-enables exactly the side effect
+    the guard suppresses: CLIENT-SETTINGS wrote `hotbar_2` into the operator's real
+    `~/.local/share/krasnokamen-client/client-settings.json`. Every writable root goes to `scratch`,
+    and the checkout override is dropped so nothing falls back to the operator's repository."""
+    env = dict(env)
+    env.pop('KRASNOKAMEN_CLIENT_ROOT', None)
+    scratch = Path(scratch)
+    for key, sub in (('HOME', 'home'), ('XDG_DATA_HOME', 'data'), ('XDG_CONFIG_HOME', 'config'),
+                     ('XDG_CACHE_HOME', 'cache'), ('APPDATA', 'appdata'), ('LOCALAPPDATA', 'localappdata')):
+        path = scratch / sub
+        path.mkdir(parents=True, exist_ok=True)
+        env[key] = str(path)
+    env['KRASNOKAMEN_CLIENT_SETTINGS'] = str(scratch / 'client-settings.json')
+    return env
+
+
 def _run_client(ctx, tests, root, repo=None):
     """Run exact client-crate tests {(crate, name)} in the client checkout -> {(crate, name): (state, detail, assertion)}.
 
     A `client:<crate>:<test>` ref is a fix in the client repository: it never builds here, so the
     checkout is `runtime.sibling_root('client')` (KRASNOKAMEN_CLIENT_ROOT or the sibling repo).
-    `repo` selects another tree of that repository (the reversed client-test control copy)."""
+    `repo` selects another tree of that repository (the reversed client-test control copy); a copy
+    runs in a scratch environment (`_client_control_env`) so its reversed guard cannot touch the host."""
     # Cargo metadata is one JSON line; mem-run can prepend its scope diagnostic.
     repo = Path(repo) if repo is not None else client_repo(root)
     if not repo.is_dir():
         return {test: (UNRUNNABLE, f'no client checkout at {repo} (set KRASNOKAMEN_CLIENT_ROOT)', None) for test in tests}
+    sandbox = None
+    if repo.resolve() != client_repo(root).resolve():
+        sandbox = root / '.analysis/client-sandbox' / time.strftime('%Y%m%dT%H%M%S')
     argv, env = regressions.tree_build_command(
         repo, ['cargo', 'metadata', '--no-deps', '--format-version', '1'])
+    if sandbox is not None:
+        env = _client_control_env(env, sandbox)
     ok, text = _exec(ctx, argv, 'client-metadata', repo, env)
     try:
         metadata = next(json.loads(line) for line in text.splitlines() if line.startswith('{'))
@@ -499,6 +525,8 @@ def _run_client(ctx, tests, root, repo=None):
         # selected test and no failure, so a ref can never pass by selecting nothing.
         argv, env = regressions.tree_build_command(
             repo, ['cargo', 'test', '-p', crate, *targets[crate], '--', name])
+        if sandbox is not None:
+            env = _client_control_env(env, sandbox)
         ok, text = _exec(ctx, argv, f'client-{name.rsplit("::", 1)[-1][:24]}', repo, env)
         summary = re.search(r'test result: (\w+)\. (\d+) passed; (\d+) failed', text)
         if summary is None:
@@ -2110,12 +2138,18 @@ def _run_loader_gradle(ctx, tests, root, repo=None):
 
 
 def _loader_client_jar(repo):
-    """The Minecraft client jar `java-agent` compiles against, resolved from the Loader checkout.
+    """The Minecraft jar `java-agent` compiles against, resolved once for this host.
 
     The build defaults it to `<loader>/../solaris/.analysis/client-automation/versions/<v>/client.jar`
-    (a sibling checkout); a copy of the Loader elsewhere loses it, and a Java control would be
-    unrunnable rather than red. Resolved here and passed as the build's own `-P` override."""
-    properties = Path(repo) / 'gradle.properties'
+    (a sibling checkout, and often a symlink into the loom cache); that path is missing on hosts where
+    only the decompile copy exists, so the Loader's own loom-cache merged jar is the fallback. A copy
+    of the Loader elsewhere loses the sibling path, and a Java control there would be unrunnable
+    rather than red. Resolved here and passed as the build's own `-Pkrasnokamen.clientJar` override."""
+    given = os.environ.get('KRASNOKAMEN_CLIENT_JAR')
+    if given and Path(given).is_file():
+        return given
+    repo = Path(repo).resolve()
+    properties = repo / 'gradle.properties'
     try:
         text = properties.read_text()
     except OSError:
@@ -2123,8 +2157,12 @@ def _loader_client_jar(repo):
     match = re.search(r'^minecraftVersion=(\S+)$', text, re.M)
     if not match:
         return None
-    jar = Path(repo).resolve().parent / 'solaris/.analysis/client-automation/versions' / match.group(1) / 'client.jar'
-    return str(jar) if jar.is_file() else None
+    version = match.group(1)
+    for candidate in (repo.parent / 'solaris/.analysis/client-automation/versions' / version / 'client.jar',
+                      *sorted(repo.glob(f'.gradle/loom-cache/minecraftMaven/**/{version}/minecraft-merged-*.jar'))):
+        if candidate.is_file():
+            return str(candidate)
+    return None
 
 
 def _loader_source_state(root):
@@ -2166,9 +2204,8 @@ def _loader_control_patch(repo, fix_full, control_files):
     for path in control_files:
         if _skipped_doc(path) or _TEST_PATH.search(path):
             raise Refused(f'control_files names {path}, a test or docs path: a control reverses production hunks')
-    missing = sorted(set(control_files) - changed)
-    if missing:
-        raise Refused(f'control_files names {", ".join(missing)}, which the fix commit does not change')
+        if path not in changed:
+            raise Refused(f'control_files names {path}, which the fix commit does not change')
         if any(line.startswith(('+++ /dev/null', '--- /dev/null', 'new file mode', 'deleted file mode'))
                for line in chunks[path].splitlines()[:4]):
             raise Refused(f'control_files names {path}, which the fix commit creates or deletes: a reversal '
@@ -2176,12 +2213,12 @@ def _loader_control_patch(repo, fix_full, control_files):
     return ''.join(chunks[path] for path in control_files), list(control_files)
 
 
-def _loader_assertion(entry, tree):
-    """A loader control red only when the failing unittest frame is inside a test file of the reversed tree.
+def _loader_assertion(entry, tree, ref=''):
+    """A loader control red only when the failing frame is a test file inside the ref's own module.
 
     The test may predate the fix (a guard older than the finding), so it is not required to be one of the
-    fix commit's own files: what proves the control is an AssertionError raised in test code, never a
-    production import error or a unittest setup error."""
+    fix commit's own files: what proves the control is an AssertionError raised in test code of the module
+    the ref names, never a production import error, an unrelated test or a unittest setup error."""
     assertion = entry.get('assertion')
     if not isinstance(assertion, dict) or assertion.get('error') != 'AssertionError':
         return False
@@ -2191,6 +2228,10 @@ def _loader_assertion(entry, tree):
     try:
         relative = Path(path).resolve().relative_to(Path(tree).resolve()).as_posix()
     except ValueError:
+        return False
+    parts = ref.split(':')
+    module = parts[2] if len(parts) > 2 and parts[0] == 'loader' else ''
+    if module and not relative.startswith(module.rstrip('/') + '/'):
         return False
     return bool(_TEST_PATH.search(relative))
 
@@ -2247,10 +2288,10 @@ def _promote_loader_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, loader
         runner = loader_runner or run_refs_here
         control = runner(loader_refs, tree)
         for ref, entry in control.items():
-            if entry.get('state') == RED and not _loader_assertion(entry, tree):
+            if entry.get('state') == RED and not _loader_assertion(entry, tree, ref):
                 entry['state'] = UNPROVEN_PANIC
                 entry['detail'] = (entry.get('detail', '') + ' | the red is not an AssertionError inside a '
-                                   'test file the fix changed').strip(' |')
+                                   "test file of the ref's own module").strip(' |')
         red = {ref for ref, entry in control.items() if entry['state'] == RED}
         if not red:
             raise Refused(f'{ident}: the loader refs stayed green with the fix reversed: '
@@ -2457,6 +2498,10 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         # the reversal, and control B's changed-line ranges are read from that diff (review N-b).
         _git(control_dir, 'add', '-A')
         _git(control_dir, *reverse, stdin=patch.encode(errors='surrogateescape'))
+        # The identity of the tree the control runs on: `graphical-control` binds a later run or receipt
+        # to exactly this fingerprint, so a reverse-applied-looking tree with other edits cannot pass
+        # (review B1). Read before control B resets the tree.
+        control_fingerprint = tree_fingerprint(control_dir)
         control = _classify_control(ident, runner(ctx, refs, control_dir, True), row, control_dir)
         valid_red = {ref for ref, entry in control.items()
                      if entry['state'] == RED and _assertion_in_files(entry, control_dir, reversed_files)} \
@@ -2532,6 +2577,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         'id': ident, 'verdict': 'promoted', 'fix_commit': fix, 'fix_commit_full': full,
         'promoted_at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
         'tree_head': head, 'tree_dirty': tree_now['dirty'], 'tree_sha256': tree_now['sha256'], 'control_tree': control_tree,
+        'control_tree_sha256': control_fingerprint['sha256'], 'control_tree_head': control_fingerprint['head'],
         'control': 'test_hunks' if test_only else 'reversed_fix_hunks',
         'control_b': ({'patch': defect_rel, 'sha256': defect_sha, 'proving': proving,
                        'negative_control': defect_control} if test_only else None),
@@ -2611,6 +2657,11 @@ def graphical_control(ident, *, root=REPO_ROOT, receipt=None, control_tree=None,
     graphical = [ref for ref in row['regression'] if regressions.is_graphical_ref(ref)]
     if not graphical:
         raise Refused(f'{ident}: the row registers no graphical ref, so it has no graphical control')
+    recorded_control = promotion.get('control_tree_sha256')
+    if not isinstance(recorded_control, str) or len(recorded_control) != 64:
+        raise Refused(f'{ident}: {promotion_rel} records no control_tree_sha256, so no tree can be bound to '
+                      'the promotion\'s reversed control (promoted before the fingerprint was recorded): '
+                      're-promote the row from a candidate whose promotion records it')
     entries = dict(promotion.get('negative_control') or {})
     pending = [ref for ref in graphical if (entries.get(ref) or {}).get('state') != RED]
     if not pending:
@@ -2633,6 +2684,11 @@ def graphical_control(ident, *, root=REPO_ROOT, receipt=None, control_tree=None,
         if recorded_tree.get('sha256') == promotion.get('tree_sha256'):
             raise Refused(f'{ident}: receipt {receipt} ran the candidate tree itself, not the reversed control '
                           '(the reversal changes the tree fingerprint)')
+        if recorded_tree.get('sha256') != recorded_control:
+            raise Refused(f"{ident}: receipt {receipt} ran tree {recorded_tree.get('sha256')!r}, not the "
+                          f"promotion's reversed control {recorded_control!r}: only the candidate minus the fix "
+                          'patch is that control, and only a run on it proves the reversal')
+        server_binary = _server_built_from(root, path.read_text(), recorded_tree)
         client_head = _client_pin_of_receipt(root, data, path)
         states = _client_ref_states(data, pending, proving)
         red = [ref for ref in pending if states.get(ref) == RED]
@@ -2644,7 +2700,7 @@ def graphical_control(ident, *, root=REPO_ROOT, receipt=None, control_tree=None,
             assertion = _failed_assertion(data.get('details', {}), proving.get(ref))
             entries[ref] = {'state': 'red', 'detail': f'backfilled from {path}', 'receipt': str(path),
                             **({'assertion': assertion} if assertion else {})}
-        record.update({'receipt': str(path), 'refs': red,
+        record.update({'receipt': str(path), 'refs': red, 'server_binary_sha256': server_binary,
                        'control_tree': {'head': recorded_tree.get('head'), 'sha256': recorded_tree.get('sha256')},
                        'client_head': client_head})
     else:
@@ -2657,6 +2713,9 @@ def graphical_control(ident, *, root=REPO_ROOT, receipt=None, control_tree=None,
                           f"{str(promotion.get('tree_head'))[:12]}")
         if fingerprint['sha256'] == promotion.get('tree_sha256'):
             raise Refused(f'{ident}: control tree {tree} is the candidate itself; the fix has to be reversed in it')
+        if fingerprint['sha256'] != recorded_control:
+            raise Refused(f"{ident}: control tree {tree} fingerprints to {fingerprint['sha256']}, not the "
+                          f"promotion's reversed control {recorded_control}: only that tree carries this control")
         patch = _reversed_patch(root, row, promotion)
         if _git(tree, 'apply', '--check', '--whitespace=nowarn', '-', stdin=patch.encode(errors='surrogateescape'),
                 check=False)[0]:

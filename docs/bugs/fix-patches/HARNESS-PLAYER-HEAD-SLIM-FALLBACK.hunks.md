@@ -13,7 +13,7 @@ commit's one hunk in that file.
 | original hunk (`fad1cef1e`) | HEAD equivalent | note |
 |---|---|---|
 | `tools/harness/backends/scene_shot.py` `@@ -1243,13 +1243,16 @@` — the single `texture = .../wide/steve.png` + `skin.save(texture)` → a `for model in ("slim", "wide")` loop | `tools/harness/backends/scene_shot_checks.py` `@@ -252,13 +252,16 @@` — the same loop | (c) `1cadb5c0a` moved the function; the statements are identical |
-| `check_player_head`/`check_clock_face` hunks of the same commit | not in this patch | (a) they belong to HARNESS-CONTEXT-CLOCK-FIXTURE / HARNESS-DROPPED-CLOCK-HUD-ORACLE and their later rewrites |
+| `check_player_head`/`check_clock_face` hunks of the same commit | not in this patch | (a) `check_player_head` is HARNESS-WORN-HEAD-BACK-FALSE-POSITIVE's (its repro_check predicate is `worn_head_renders`), `check_clock_face` is HARNESS-DROPPED-CLOCK-HUD-ORACLE's; later commits rewrote both |
 | the commit's test and docs hunks | — | tests kept at HEAD; docs never reversed |
 
 Proving ref: `python:tools.harness.test_scene_shot:PlayerHeadTests.test_authored_skin_has_opaque_contrasting_hat_and_base_window`
@@ -21,5 +21,8 @@ at `tools/harness/test_scene_shot.py:673`. Control observed 2026-11-24 in a copy
 patch reversed: `AssertionError: False is not true : slim default skin has no authored hat fixture`;
 green at HEAD.
 
-Missing proof for promotion: a passed `harness:scene-shot:native-player-head` receipt on the candidate
-plus that scene on the reversed tree (rule 2/3).
+Promoted 2026-11-24 on `595f66d98` (`docs/bugs/promotions/HARNESS-PLAYER-HEAD-SLIM-FALLBACK.json`):
+the python ref above is the recorded red control, the passed real-client receipt of
+`harness:scene-shot:native-player-head` on the candidate is recorded as `client_receipt`, and that
+scene's own control is `unrunnable` (the tree had no registered pin-release server), so the graphical
+half is not claimed.

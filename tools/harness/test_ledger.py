@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -381,6 +382,7 @@ class ClientTestPromotionTests(unittest.TestCase):
             f'id = "CLIENT-TEST-ROW"\ntitle = "t"\narea = "client"\nrepro = "source"\nseverity = "major"\n'
             f'status = "fixed"\nsource = "s"\nfix_commit = "{fix}"\n'
             'regression = ["client:krasnokamen-client:tests::a_save_never_writes_when_the_guard_is_present"]\n'
+            'client_test_reason = "the build-only guard is compiled out of the shipped client, so no scene can flip it"\n'
             'promotion = "docs/bugs/promotions/CLIENT-TEST-ROW.json"\n')
         (self.root / 'docs/bugs/promotions').mkdir(parents=True, exist_ok=True)
         (self.root / 'docs/bugs/promotions/CLIENT-TEST-ROW.json').write_text(json.dumps({
@@ -390,6 +392,24 @@ class ClientTestPromotionTests(unittest.TestCase):
              patch.object(regressions, 'BASE_FIXED', frozenset()):
             details = regressions.run(profiles.ProfileContext(self.base / 'artifacts2'))
         self.assertEqual(details['fixed'], 1)
+
+    def test_run_refuses_a_client_test_row_without_a_reason(self):
+        import json
+        fix = f'client-test:{self.fix[:12]}'
+        self.ledger_write(
+            f'id = "CLIENT-TEST-ROW"\ntitle = "t"\narea = "client"\nrepro = "source"\nseverity = "major"\n'
+            f'status = "fixed"\nsource = "s"\nfix_commit = "{fix}"\n'
+            'regression = ["client:krasnokamen-client:tests::a_save_never_writes_when_the_guard_is_present"]\n'
+            'promotion = "docs/bugs/promotions/CLIENT-TEST-ROW.json"\n')
+        (self.root / 'docs/bugs/promotions').mkdir(parents=True, exist_ok=True)
+        (self.root / 'docs/bugs/promotions/CLIENT-TEST-ROW.json').write_text(json.dumps({
+            'id': 'CLIENT-TEST-ROW', 'verdict': 'promoted', 'fix_commit': fix,
+            'control': 'client_test_reversal', 'reversed_files': ['src/lib.rs']}))
+        with patch.object(regressions, 'REPO_ROOT', self.root), \
+             patch.object(regressions, 'BASE_FIXED', frozenset()):
+            with self.assertRaises(ValueError) as refused:
+                regressions.run(profiles.ProfileContext(self.base / 'artifacts3'))
+        self.assertIn('client_test_reason', str(refused.exception))
 
     def test_default_runner_routes_the_refs_into_the_reversed_copy(self):
         # The injected-runner tests bypass the default lambda; this one pins it: a ref must be parsed
@@ -472,6 +492,10 @@ class GraphicalControlBackfillTests(unittest.TestCase):
         if reverse:
             patch, _, _ = ledger.non_test_patch(self.root, self.fix)
             subprocess.run(['git', '-C', str(tree), 'apply', '-R', '-'], input=patch, text=True, check=True)
+        fingerprint = ledger.tree_fingerprint(tree)
+        self.promotion['control_tree_sha256'] = fingerprint['sha256']
+        self.promotion['control_tree_head'] = fingerprint['head']
+        self.write_promotion()
         return tree
 
     def ctx(self):
@@ -515,6 +539,7 @@ class GraphicalControlBackfillTests(unittest.TestCase):
 
     def test_refuses_a_receipt_of_the_candidate_tree(self):
         import json
+        self.control_tree()
         receipt = self.base / 'result.json'
         receipt.write_text(json.dumps({
             'status': 'failed', 'tree': {'head': self.fix, 'sha256': 'a' * 64},
@@ -524,6 +549,55 @@ class GraphicalControlBackfillTests(unittest.TestCase):
             ledger.graphical_control('GRAPHICAL-ROW', root=self.root, receipt=receipt, ctx=self.ctx(),
                                      runner=self.runner())
         self.assertIn('not the reversed control', str(refused.exception))
+
+    def test_refuses_a_receipt_of_another_tree(self):
+        import json
+        self.control_tree()
+        receipt = self.base / 'result.json'
+        receipt.write_text(json.dumps({
+            'status': 'failed', 'tree': {'head': self.fix, 'sha256': 'c' * 64},
+            'details': {'named_scenario': {'id': 'native-dynamic-context', 'assertions': {'animated_face': False}}},
+        }))
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.graphical_control('GRAPHICAL-ROW', root=self.root, receipt=receipt, ctx=self.ctx(),
+                                     runner=self.runner())
+        self.assertIn("not the promotion's reversed control", str(refused.exception))
+
+    def test_refuses_a_promotion_without_a_recorded_control_tree(self):
+        tree = self.control_tree()
+        self.promotion.pop('control_tree_sha256', None)
+        self.write_promotion()
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.graphical_control('GRAPHICAL-ROW', root=self.root, control_tree=tree,
+                                     ctx=self.ctx(), runner=self.runner())
+        self.assertIn('records no control_tree_sha256', str(refused.exception))
+
+    def test_refuses_a_control_tree_that_is_not_the_recorded_one(self):
+        self.control_tree()
+        other = self.base / 'other'
+        import subprocess
+        subprocess.run(['git', '-C', str(self.root), 'worktree', 'add', '--detach', str(other), 'HEAD'],
+                       check=True, capture_output=True)
+        patch, _, _ = ledger.non_test_patch(self.root, self.fix)
+        subprocess.run(['git', '-C', str(other), 'apply', '-R', '-'], input=patch, text=True, check=True)
+        (other / 'f.txt').write_text('old\nhand edit\n')
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.graphical_control('GRAPHICAL-ROW', root=self.root, control_tree=other, ctx=self.ctx(),
+                                     runner=self.runner())
+        self.assertIn("not the promotion's reversed control", str(refused.exception))
+
+    def test_refuses_a_receipt_whose_server_was_not_built_from_the_control(self):
+        import json
+        self.control_tree()
+        receipt = self.base / 'result.json'
+        receipt.write_text(json.dumps({
+            'status': 'failed', 'tree': {'head': self.fix, 'sha256': self.promotion['control_tree_sha256']},
+            'details': {'named_scenario': {'id': 'native-dynamic-context', 'assertions': {'animated_face': False}}},
+        }))
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.graphical_control('GRAPHICAL-ROW', root=self.root, receipt=receipt, ctx=self.ctx(),
+                                     runner=self.runner())
+        self.assertIn('names no server binary built from', str(refused.exception))
 
     def test_refuses_an_open_row(self):
         (self.root / 'docs/bugs/rows/GRAPHICAL-ROW.toml').write_text(
@@ -553,9 +627,17 @@ class GraphicalControlBackfillTests(unittest.TestCase):
         (self.root / 'docs/bugs/rows/GRAPHICAL-ROW.toml').write_text(
             '[[bug]]\n' + self.ROW.format(fix=self.fix)
             + f'proving_assertions = {{ "{self.REF}" = "animated_face" }}\n')
+        tree = self.control_tree()
+        server_sha = 'e' * 64
+        builds = self.root / '.analysis/ledger-builds'
+        builds.mkdir(parents=True)
+        (builds / f'{server_sha}-{self.promotion["control_tree_sha256"]}.json').write_text(json.dumps({
+            'sha256': server_sha,
+            'tree': {'head': self.fix, 'sha256': self.promotion['control_tree_sha256']}}))
         receipt = self.base / 'result.json'
         receipt.write_text(json.dumps({
-            'status': 'failed', 'tree': {'head': self.fix, 'sha256': 'b' * 64},
+            'status': 'failed', 'tree': {'head': self.fix, 'sha256': self.promotion['control_tree_sha256']},
+            'server_binary': {'sha256': server_sha},
             'client_binary': {'path': str(binary), 'sha256': digest,
                               'manifest_path': str(self.base / 'manifest.json'), 'head': client_head,
                               'dirty': False},
@@ -809,6 +891,96 @@ class GradleLoaderReportTests(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as directory:
             self.assertEqual(ledger._gradle_junit(Path(directory), self.SELECTOR)[0], ledger.UNRUNNABLE)
+
+
+class LoaderControlGuardTests(unittest.TestCase):
+    """B2: a control file the fix creates or deletes is not a pre-image."""
+
+    def setUp(self):
+        import subprocess
+        import tempfile
+
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.loader = Path(directory.name) / 'loader'
+        (self.loader / 'tools').mkdir(parents=True)
+        subprocess.run(['git', 'init', '-q', str(self.loader)], check=True)
+        (self.loader / 'tools/battle.py').write_text('old\n')
+        _git(self.loader, 'add', '-A')
+        _commit(self.loader, 'before')
+
+    def test_refuses_a_file_the_fix_creates(self):
+        (self.loader / 'tools/added.py').write_text('new\n')
+        _git(self.loader, 'add', '-A')
+        fix = _commit(self.loader, 'fix: adds a module')
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger._loader_control_patch(self.loader, fix, ['tools/added.py'])
+        self.assertIn('creates or deletes', str(refused.exception))
+
+    def test_refuses_a_file_the_fix_deletes(self):
+        _git(self.loader, 'rm', '-q', 'tools/battle.py')
+        fix = _commit(self.loader, 'fix: deletes the module')
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger._loader_control_patch(self.loader, fix, ['tools/battle.py'])
+        self.assertIn('creates or deletes', str(refused.exception))
+
+    def test_accepts_a_modified_file(self):
+        (self.loader / 'tools/battle.py').write_text('new\n')
+        _git(self.loader, 'add', '-A')
+        fix = _commit(self.loader, 'fix: modifies the module')
+        patch, files = ledger._loader_control_patch(self.loader, fix, ['tools/battle.py'])
+        self.assertEqual(files, ['tools/battle.py'])
+        self.assertIn('+new', patch)
+
+
+class ClientControlSandboxTests(unittest.TestCase):
+    """B3: a control copy runs in a scratch environment so a reversed guard cannot touch the host."""
+
+    def setUp(self):
+        import shutil
+        import tempfile
+
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.base = Path(directory.name)
+        self.root = self.base / 'core'
+        self.root.mkdir()
+        self.real = self.base / 'client'
+        self.real.mkdir()
+        self.copy = self.base / 'control'
+        self.copy.mkdir()
+        self.original = dict(os.environ)
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self.original)
+
+    def _run(self, repo):
+        seen = {}
+
+        def exec_(ctx, argv, name, cwd, env):
+            seen.update(env)
+            return False, ''
+
+        os.environ['KRASNOKAMEN_CLIENT_ROOT'] = str(self.real)
+        os.environ['KRASNOKAMEN_CLIENT_SETTINGS'] = '/home/owner/client-settings.json'
+        with patch.object(ledger, '_exec', exec_), \
+                patch.object(ledger, 'client_repo', lambda root=ledger.REPO_ROOT: self.real):
+            ledger._run_client(None, {('crate', 'module::test')}, self.root, repo)
+        return seen
+
+    def test_a_control_copy_runs_in_a_scratch_environment(self):
+        seen = self._run(self.copy)
+        scratch = str(self.root / '.analysis/client-sandbox')
+        for key in ('HOME', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'APPDATA', 'LOCALAPPDATA'):
+            self.assertTrue(seen[key].startswith(scratch), (key, seen[key]))
+        self.assertTrue(seen['KRASNOKAMEN_CLIENT_SETTINGS'].startswith(scratch), seen['KRASNOKAMEN_CLIENT_SETTINGS'])
+        self.assertNotIn('KRASNOKAMEN_CLIENT_ROOT', seen)
+
+    def test_the_repository_itself_keeps_the_operator_environment(self):
+        seen = self._run(self.real)
+        self.assertEqual(seen['KRASNOKAMEN_CLIENT_SETTINGS'], '/home/owner/client-settings.json')
+        self.assertEqual(seen['HOME'], self.original['HOME'])
 
 
 class RegistryKeyTests(unittest.TestCase):

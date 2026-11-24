@@ -24,6 +24,9 @@ at `tools/harness/test_scene_shot.py:971`. Control observed 2026-11-24 in a copy
 reversed: the right shelf no longer holds the `Slot:0b` clock (the same assertion also covers the tp
 pose and held shots); green at HEAD.
 
-Missing proof for promotion: a passed `harness:scene-shot:native-dynamic-context` receipt on the
-candidate plus its control on the reversed tree. Note the control's scene is unrunnable there (the
-held `_load_shots` names vanish with the block), so the red is the python ref; record it as such.
+Promoted 2026-11-24 on `595f66d98` (`docs/bugs/promotions/HARNESS-CONTEXT-CLOCK-FIXTURE.json`): the
+python ref above is the recorded red control and the passed real-client receipt of
+`harness:scene-shot:native-dynamic-context` on the candidate is recorded as `client_receipt`. The
+graphical control of this row can never go red — with the held/`tp` block reversed the held captures
+vanish and `_load_shots` raises before the oracle asserts — so it is a permanent python-only control,
+recorded `unrunnable` and not pending backfill.

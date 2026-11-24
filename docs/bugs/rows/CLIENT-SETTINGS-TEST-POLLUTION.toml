@@ -10,3 +10,4 @@ regression = ["client:krasnokamen-client:local_config::tests::a_test_build_never
 fix_commit = "client-test:4022844b"
 repro_check = "Promoted 2026-11-24 as client-test:4022844b (artifact 20261124T094908-ledger-promote-07q2qjtu, owner decision CL-7 option (a)): the fix's own production hunk - the #[cfg(test)] save guard in src/local_config.rs - was reversed in a copy of client 530556e8; a_test_build_never_writes_the_data_roots_settings_file went red at src/local_config.rs:399 (an assert inside the inline mod tests) while controls_native_dispatch_uses_rebound_mouse_button stayed green, and both refs are green on the client that contains the fix."
 promotion = "docs/bugs/promotions/CLIENT-SETTINGS-TEST-POLLUTION.json"
+client_test_reason = "The guard is a Rust unit test of the settings writer: a scenario cannot flip it, because the test-build guard this row is about is compiled out of the shipped client, so no scene can observe the write it suppresses."

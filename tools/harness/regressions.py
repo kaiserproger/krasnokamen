@@ -24,7 +24,9 @@ OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_
             # current code, and a committed defect-injection patch must turn the corrected test red.
             'test_only_fix', 'control_b_patch', 'control_b_sha256', 'control_a_files',
             # A loader:<sha> row names the production files whose hunks its control reverses.
-            'control_files'}
+            'control_files',
+            # A client-test:<sha> row registers no graphical ref; this field says why no scene can flip.
+            'client_test_reason'}
 PROMOTION_DIR = 'docs/bugs/promotions'
 
 
@@ -795,9 +797,12 @@ def run(ctx, *, cargo_junit: Path | None = None):
             else:
                 clients[ref].add(ident)
         if (bug.get('status') == 'fixed' and needs_real_client(bug)
-                and not str(bug.get('fix_commit', '')).startswith('client-test:')
                 and not any(is_graphical_ref(ref) for ref in refs)):
-            errors.append(f'{ident}: original or client-surface repro needs a real-client check')
+            if not str(bug.get('fix_commit', '')).startswith('client-test:'):
+                errors.append(f'{ident}: original or client-surface repro needs a real-client check')
+            elif not isinstance(bug.get('client_test_reason'), str) or len(bug['client_test_reason'].strip()) < 20:
+                errors.append(f'{ident}: a client-test:<sha> fix registers no graphical ref, so it needs '
+                              'client_test_reason: the exact observable no scene can flip (or the owner decision)')
         if isinstance(bug.get('fix_commit'), str) and bug['fix_commit'].startswith('client-test:') and not any(
                 ref.startswith('client:') for ref in refs):
             errors.append(f'{ident}: a client-test:<sha> fix needs a client:<crate>:<test> ref to carry its pair')
