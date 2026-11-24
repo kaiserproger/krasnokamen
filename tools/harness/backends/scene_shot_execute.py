@@ -295,6 +295,11 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             )
             if not candidates:
                 raise RuntimeError(f"chat line {value['line']!r} is not painted")
+            # The hoverable run is usually a link after a plain prefix, so pointing at the line's
+            # left edge lands on text without an event. Scan across the painted node (right to
+            # left: the decorated link is at the end) through the ordinary pointer path until the
+            # client shows a tooltip carrying the text; every attempt is kept.
+            fractions = (0.9, 0.75, 0.6, 0.45, 0.3, 0.15, 0.05)
             attempts = []
             tooltip = None
             for node in candidates:
@@ -302,18 +307,21 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 if not (isinstance(bounds, list) and len(bounds) == 4
                         and all(type(bound) in (int, float) and math.isfinite(bound) for bound in bounds)):
                     raise RuntimeError(f"chat line node {node.get('id')!r} has no bounds")
-                x, y = bounds[0] + 3., bounds[1] + bounds[3] / 2.
-                result = probe.call("client_pointer", {
-                    "expected_screen_class": screen["class"], "expected_title": title,
-                    "action": "move", "x": x, "y": y,
-                })
-                picture = probe.observe()
-                hovered = [entry for entry in picture.get("ui_nodes") or [] if isinstance(entry, dict)
-                           and entry.get("id") == "component/hover/text"]
-                attempts.append({"node": node, "x": x, "y": y, "pointer": result,
-                                 "ui_tooltip": [entry.get("label") for entry in hovered]})
-                if isinstance(result.get("tooltip"), str) and value["contains"] in result["tooltip"]:
-                    tooltip = result["tooltip"]
+                for fraction in fractions:
+                    x, y = bounds[0] + bounds[2] * fraction, bounds[1] + bounds[3] / 2.
+                    result = probe.call("client_pointer", {
+                        "expected_screen_class": screen["class"], "expected_title": title,
+                        "action": "move", "x": x, "y": y,
+                    })
+                    picture = probe.observe()
+                    hovered = [entry for entry in picture.get("ui_nodes") or [] if isinstance(entry, dict)
+                               and entry.get("id") == "component/hover/text"]
+                    attempts.append({"node": node, "x": x, "y": y, "pointer": result,
+                                     "ui_tooltip": [entry.get("label") for entry in hovered]})
+                    if isinstance(result.get("tooltip"), str) and value["contains"] in result["tooltip"]:
+                        tooltip = result["tooltip"]
+                        break
+                if tooltip is not None:
                     break
             (artifact / f"{value['name']}-hover.json").write_text(json.dumps(
                 {"attempts": attempts, "tooltip": tooltip, "screen": screen}, indent=2) + "\n")

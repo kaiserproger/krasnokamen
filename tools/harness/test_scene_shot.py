@@ -609,7 +609,7 @@ class SceneShotTests(unittest.TestCase):
 
             def call(self, name, args):
                 self.pointers.append((name, args))
-                self.tooltip = self.tooltips.pop(0)
+                self.tooltip = self.tooltips.pop(0) if self.tooltips else None
                 return {"status": "ok", "tooltip": self.tooltip}
 
             def check(self, name, condition):
@@ -621,9 +621,9 @@ class SceneShotTests(unittest.TestCase):
             root = Path(tmp)
             image = str(root / "tooltip.png")
             with patch.object(scene_shot, "capture_native", return_value=image):
-                # The newest matching line is tried first; a line without a real tooltip does not
-                # satisfy the check, the next candidate is hovered, and the rendered tooltip and
-                # its UI node must both carry the text.
+                # The newest matching line is scanned from its right edge (where the decorated
+                # link sits): the first point shows no tooltip, the next one does, and the rendered
+                # tooltip and its UI node must both carry the text.
                 probe = Probe([None, tip])
                 self.assertEqual(scene_shot.execute(probe, root, [{"hover_chat_component": spec}]), [image])
                 self.assertTrue(probe.checks["datapack-hover_tooltip"])
@@ -634,14 +634,16 @@ class SceneShotTests(unittest.TestCase):
                 self.assertEqual(args["expected_title"], "Chat")
                 self.assertEqual(args["action"], "move")
                 first, second = probe.pointers[0][1], probe.pointers[1][1]
-                self.assertTrue(4 <= first["x"] < 304 and 582 <= first["y"] < 591)
-                self.assertTrue(4 <= second["x"] < 304 and 600 <= second["y"] < 609)
+                self.assertAlmostEqual(first["x"], 4 + 300 * 0.9)
+                self.assertAlmostEqual(second["x"], 4 + 300 * 0.75)
+                self.assertAlmostEqual(first["y"], 586.5)
+                self.assertAlmostEqual(second["y"], 586.5)
                 evidence = json.loads((root / "datapack-hover-hover.json").read_text())
                 self.assertEqual(len(evidence["attempts"]), 2)
                 self.assertIsNone(evidence["attempts"][0]["pointer"]["tooltip"])
                 # A plain listing with the same marker text carries no tooltip: the real hover
                 # cannot be satisfied by the payload or by the line text.
-                plain = Probe([None, None])
+                plain = Probe([None])
                 with self.assertRaisesRegex(AssertionError, "datapack-hover_tooltip"):
                     scene_shot.execute(plain, root, [{"hover_chat_component": spec}])
                 self.assertFalse(plain.checks["datapack-hover_tooltip"])
