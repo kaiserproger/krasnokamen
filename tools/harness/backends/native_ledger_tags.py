@@ -62,9 +62,11 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _command(steps, f"summon {COW} {at} {{Tags:['ok','second'],NoAI:1b}}")
     steps.call("minecraft_wait_ticks", {"ticks": 20})
     steps.check("valid_tagged_cow_accepted", _cows(steps, origin) == before + 1)
-    _command(steps, "data get entity @e[type=minecraft:cow,limit=1,sort=nearest] Tags")
-    _chat(steps, "valid_tags_read_back_from_the_client",
-          "has the following entity data", "'ok'", "'second'")
+    rows = steps.call("minecraft_list_entities", {"radius": 24, "limit": 128})["entities"]
+    nearest = min((row for row in rows if row.get("entity_type") == COW),
+                  key=lambda row: row["distance"])
+    _command(steps, f"tag {nearest['entity_uuid']} list")
+    _chat(steps, "valid_tags_read_back_from_the_client", "tag(s):", "ok", "second")
     steps.report["cows_after"] = _cows(steps, origin)
     steps.check("exactly_one_valid_summon", steps.report["cows_after"] == before + 1)
     steps.fixture("kill @e[type=minecraft:cow]")
