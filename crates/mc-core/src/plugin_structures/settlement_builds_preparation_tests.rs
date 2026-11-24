@@ -903,3 +903,43 @@ fn a_terminal_index_running_structure_is_committed_by_recovery() {
         "recovery finishes a placed terminal-index structure instead of leaving it stalled"
     );
 }
+
+#[test]
+fn a_terminal_index_structure_with_empty_cells_is_not_committed_by_recovery() {
+    let (mut state, id, _slot) = crate::settlements::construction::tests::fixture();
+    crate::settlements::construction::tests::start(&mut state, id, "house", 1, None);
+    crate::settlements::construction::tests::fund(&mut state, "house", 1);
+    let handle = state.settlements.get(id).unwrap().projects[0]
+        .structure
+        .clone();
+    let plan: Vec<([i32; 3], u32)> = {
+        let ledger = ledger(&state).unwrap();
+        let record = structure(&ledger, &owner(id), &handle).unwrap();
+        record
+            .cells
+            .iter()
+            .flatten()
+            .map(|cell| (cell.at, cell.state))
+            .collect()
+    };
+    assert!(!plan.is_empty(), "the house plan has cells");
+    for (at, _block) in plan {
+        state.world.set_block(at[0], at[1], at[2], 0);
+    }
+    {
+        let mut ledger = ledger_mut(&mut state).unwrap();
+        let mut record = take_structure(&mut ledger, &owner(id), &handle).unwrap();
+        record.snapshot.current_stage_index = record.snapshot.stages.len() as u32;
+        record.snapshot.completed_work_units = 0;
+        record.snapshot.state = ScriptStructureState::Running;
+        ledger.insert_structure(handle.clone(), record);
+        save(&mut state, ledger);
+    }
+    assert_eq!(recover(&mut state, id, &handle), Ok(true));
+    assert_ne!(
+        status(&state, id, &handle).unwrap().state,
+        ScriptStructureState::Committed,
+        "an abandoned site whose blocks were never placed must not be committed: the BuildQA \
+         house L1 select of 20261124T221059 lost its project this way"
+    );
+}

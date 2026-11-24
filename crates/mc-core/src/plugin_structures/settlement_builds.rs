@@ -398,7 +398,10 @@ pub(crate) fn recover(
             continue;
         }
         let current = record.snapshot.current_stage_index as usize;
-        let completed = if current > index {
+        // A terminal index has no stage of its own, so every stage is behind it and its cells
+        // count as placed: an abandoned site must still show its empty cells, or the tail below
+        // commits a structure whose blocks were never there (BuildQA house L1, 20261124T221059).
+        let completed = if terminal || current > index {
             record.cells[index].len()
         } else if current == index {
             record.snapshot.completed_work_units as usize
