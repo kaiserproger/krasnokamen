@@ -3,10 +3,12 @@ id = "TAGS-REFUSAL-MESSAGES"
 title = "Invalid tag types and oversized tag strings produce misleading or internal errors"
 area = "gameplay"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "Stage-3 S3FixBreaker finding F4: Tags:[1b] reports a count limit, and a 70000-byte tag reports an internal storage wire-length error"
 repro = "client"
-regression = ["cargo:mc-core:command_summon::tests::scoreboard_tags_tests::tag_refusals_name_element_type_count_and_modified_utf8_limit_before_spawn"]
+regression = ["cargo:mc-core:command_summon::tests::scoreboard_tags_tests::tag_refusals_name_element_type_count_and_modified_utf8_limit_before_spawn", "harness:entities:native-v2-ledger-tag-refusals"]
 fix_commit = "patch:a1dae3762dffce388825c288c8bf9ecf9250f89df7af7882a0feffacbf21c55a"
 failing_first = "reported"
-repro_check = "FixBatchB/F4-red.log fails with only validate_tags behavior reverted; amendments/core-green.log passes element/count/Modified-UTF-8 pre-spawn checks. Count wording is at most 1024 tags, before dedupe. docs/bugs/fix-patches/TAGS-REFUSAL-MESSAGES.patch covers validation behavior from c224df8de and 0c51b3a44, leaving F3's callable API and tag normalization intact. Vanilla StringTag.write delegates to DataOutput.writeUTF, whose 65535-byte limit throws UTFDataFormatException; preflight refuses before creating an unsavable entity."
+repro_check = "Promoted 2026-11-24 on patch:a1dae3762dffce388825c288c8bf9ecf9250f89df7af7882a0feffacbf21c55a (the validate_tags rewrite of c224df8de + 0c51b3a44 at HEAD; map docs/bugs/promotions/TAGS-REFUSAL-MESSAGES.hunks.md). Negative control: reversed -> the registered ref fails at its own `missing specific refusal` assertion (crates/mc-core/src/command_summon_scoreboard_tags_tests.rs:122, named in proving_assertions; .analysis/validation/20261124T110922-ledger-promote-n94b3orp/ledger-1-run.log), restored green (same artifact, ledger-3-run.log). Real-client ref harness:entities:native-v2-ledger-tag-refusals passed on the pinned clean candidate (.analysis/validation/20261124T104654-native-v2-ledger-tag-refusals-i5tmf7zq/result.json, tree 90b9bfbfab; the player's own chat reads the typed element refusal on the mob and experience-orb paths, no entity created, a well-formed list admitted). Limits: a client chat message is capped at 256 characters, so the 1025-element count list and the 70000-byte Modified-UTF-8 class rest on the Cargo ref; `tag <uuid> list` and `data get` answers were observed not to reach the client chat, so admission rests on the body. Vanilla StringTag.write delegates to DataOutput.writeUTF (65535-byte limit), so the preflight refuses before an unsavable entity exists."
+proving_assertions = { "cargo:mc-core:command_summon::tests::scoreboard_tags_tests::tag_refusals_name_element_type_count_and_modified_utf8_limit_before_spawn" = "crates/mc-core/src/command_summon_scoreboard_tags_tests.rs:122" }
+promotion = "docs/bugs/promotions/TAGS-REFUSAL-MESSAGES.json"

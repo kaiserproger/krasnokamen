@@ -4,7 +4,10 @@ title = "Crafting table closes on first inventory pickup before disconnect; back
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-003"
-regression = ["cargo:mc-core:tick_tests::predicted_table_use_waits_for_accepted_placement"]
-repro_check = "Historical commit 2ccf8cc1a397481928c7ac575cf6df177de66fb2 changes the crafting table's backing size from 10 to 0; the earlier claim that no discrete fix existed was wrong. A current-tree reversal of this exact size change is prepared in ../receipts/D79LedgerSprint/queue-batch-06/CONTAINERS-003-crafting-table-size10-control.patch but has not been run. The registered test includes pickup checks; red/restore and the original manual client behavior remain unverified."
+regression = ["cargo:mc-core:tick_tests::predicted_table_use_waits_for_accepted_placement", "harness:entities:native-v2-ledger-crafting-pickup"]
+repro_check = "Promoted 2026-11-24 on patch:0d9f12319f244b46f7f9c31286aaea89f088ad03b40bb0fb13721ec1d177d00c (2ccf8cc1a's crafting-table backing hunk, HEAD equivalent crates/mc-core/src/tick/containers.rs:462-467; hunks map docs/bugs/promotions/CONTAINERS-003.hunks.md). Negative control: reversed -> the registered ref fails at its own assertion `crafting table closed on click 37` (crates/mc-core/src/tick_tests.rs:6337, named in proving_assertions; .analysis/validation/20261124T105802-ledger-promote-iexjt8td/ledger-1-run.log), restored green (.analysis/validation/20261124T105802-ledger-promote-iexjt8td/ledger-3-run.log). Real-client ref harness:entities:native-v2-ledger-crafting-pickup passed on the pinned clean candidate (.analysis/validation/20261124T104621-native-v2-ledger-crafting-pickup-mnpbkfo9/result.json, tree 90b9bfbfab); the graphical ref is unrunnable in the control for lack of a reverted-tree pin (POL-1 practice)."
+fix_commit = "patch:0d9f12319f244b46f7f9c31286aaea89f088ad03b40bb0fb13721ec1d177d00c"
+proving_assertions = { "cargo:mc-core:tick_tests::predicted_table_use_waits_for_accepted_placement" = "crates/mc-core/src/tick_tests.rs:6337" }
+promotion = "docs/bugs/promotions/CONTAINERS-003.json"

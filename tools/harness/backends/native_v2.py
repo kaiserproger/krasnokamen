@@ -1153,6 +1153,30 @@ def _lease_navigation(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     run(steps, origin)
 
 
+def _ledger_tag_refusals(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_ledger_tags import run
+
+    run(steps, origin)
+
+
+def _ledger_lectern(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_ledger_lectern import run
+
+    run(steps, origin)
+
+
+def _ledger_op_selector(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_ledger_op_selector import run
+
+    run(steps, origin)
+
+
+def _ledger_donkey_cargo(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_ledger_donkey_cargo import run
+
+    run(steps, origin)
+
+
 RUNNERS = {
     "native-v2-happy-ghast-harness": _happy_ghast,
     "native-v2-mob-metadata-spot": _mob_metadata,
@@ -1172,6 +1196,10 @@ RUNNERS = {
     "native-v2-ledger-brush": _ledger_brush,
     "native-v2-ledger-infiniburn": _ledger_infiniburn,
     "native-v2-ledger-pot-shelf": _ledger_pot_shelf,
+    "native-v2-ledger-tag-refusals": _ledger_tag_refusals,
+    "native-v2-ledger-lectern": _ledger_lectern,
+    "native-v2-ledger-op-selector": _ledger_op_selector,
+    "native-v2-ledger-donkey-cargo": _ledger_donkey_cargo,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
     "native-v2-map-locked-banners": _promotion_maps,

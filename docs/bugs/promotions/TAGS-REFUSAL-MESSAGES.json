@@ -1,0 +1,52 @@
+{
+  "id": "TAGS-REFUSAL-MESSAGES",
+  "verdict": "promoted",
+  "fix_commit": "patch:a1dae3762dffce388825c288c8bf9ecf9250f89df7af7882a0feffacbf21c55a",
+  "fix_commit_full": "patch:a1dae3762dffce388825c288c8bf9ecf9250f89df7af7882a0feffacbf21c55a",
+  "promoted_at": "2026-11-24T11:13:16+00:00",
+  "tree_head": "90b9bfbfabf2839d7c146082c0e44ff7a5a2b2b7",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "a1dae3762dffce388825c288c8bf9ecf9250f89df7af7882a0feffacbf21c55a",
+  "reversed_files": [
+    "crates/mc-core/src/command_summon.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:command_summon::tests::scoreboard_tags_tests::tag_refusals_name_element_type_count_and_modified_utf8_limit_before_spawn": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/command_summon_scoreboard_tags_tests.rs",
+        "line": 122,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "harness:entities:native-v2-ledger-tag-refusals": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_summon::tests::scoreboard_tags_tests::tag_refusals_name_element_type_count_and_modified_utf8_limit_before_spawn": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T104654-native-v2-ledger-tag-refusals-i5tmf7zq/result.json",
+    "tree_head": "90b9bfbfabf2839d7c146082c0e44ff7a5a2b2b7",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "c11ee2723befd2ee4cd0964936d95ef051179dc502fee5b1f76fe611e9828a38",
+    "covers": [
+      "harness:entities:native-v2-ledger-tag-refusals"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T110922-ledger-promote-n94b3orp"
+}

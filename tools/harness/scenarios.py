@@ -171,6 +171,75 @@ SCENARIOS: dict[str, Scenario] = {
         limits="One insertion per block, proven by data get block; extraction and restart persistence are not probed.",
     ),
 
+    "native-v2-ledger-tag-refusals": _entry(
+        id="native-v2-ledger-tag-refusals",
+        summary="Invalid Tags: element types and an oversized tag list are refused in the player's own chat",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-tag-refusals",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_tags.py"),
+        fixture="operator pad; every command is the player's own chat command and every answer is the "
+                "player's own received chat line",
+        proves="a non-string list element answers `Invalid Tags: every list element must be a string` on "
+               "the mob and the experience-orb spawn paths and creates no entity, while a well-formed tag "
+               "list is accepted without a refusal and its body exists",
+        limits="The client chat tool caps a message at 256 characters, so the 1025-element count list and "
+               "the 70000-Modified-UTF-8-byte string cannot be typed from a client and rest on the Cargo "
+               "ref; one mob and one experience-orb spawn path; the accepted list needs "
+               "`send_command_feedback` on (the fixture sets it), while refusals are errors.",
+    ),
+
+    "native-v2-ledger-lectern": _entry(
+        id="native-v2-ledger-lectern",
+        summary="A held book is inserted onto a lectern, the lectern menu opens and the book is taken back",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-lectern",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_lectern.py"),
+        fixture="operator pad; one fixture lectern and one written book",
+        proves="the client's own block read turns has_book true, a second use receives LecternMenu with "
+               "one slot holding the book, the take-book button returns the same book to the inventory "
+               "and has_book turns false",
+        limits="One written book; page turning is a menu property the client does not expose, so only "
+               "insert/open/take are asserted.",
+    ),
+
+    "native-v2-ledger-op-selector": _entry(
+        id="native-v2-ledger-op-selector",
+        summary="A player's own `/deop @s` removes the operator level; an empty selector is no player",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-op-selector",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_op_selector.py"),
+        fixture="operator pad; the probe player is made an operator by the fixture and is deopped by its own chat command",
+        proves="`/gamemode adventure` answers `Set own game mode to Adventure Mode` while the player is an "
+               "operator, `/deop @a[name=Missing]` answers `No player was found`, `/deop @s` answers its "
+               "completion and `/gamemode creative` is then refused (`Unknown or incomplete command`)",
+        limits="One operator and the self selector; the answer text is the evidence because the harness "
+               "observation exposes no game mode; quoting and multi-target forms rest on the mc-edge "
+               "profile-command refs.",
+    ),
+
+    "native-v2-ledger-donkey-cargo": _entry(
+        id="native-v2-ledger-donkey-cargo",
+        summary="A chested donkey's cargo menu opens, takes seven diamonds and gives them back",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-donkey-cargo",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_donkey_cargo.py"),
+        fixture="operator pad; one tamed NoAI donkey, one chest in hand, seven diamonds given to the player",
+        proves="the client's own interaction attaches the chest and debits it, sneak+use receives "
+               "HorseInventoryMenu with 53 slots, and a quick move puts exactly seven diamonds in the first "
+               "cargo slot and brings them back",
+        limits="One tamed NoAI donkey and one chest; mule comparison, death drop and llama columns rest on "
+               "the cargo test. No offline export/reimport: the registered custody scenario needs a client "
+               "hook (`promotion_mount_export_reimport`) that the client does not implement.",
+    ),
+
     "native-world-first-start-interrupted": _entry(
         id="native-world-first-start-interrupted",
         summary="Recover a singleplayer world interrupted during its first start",

@@ -3,7 +3,7 @@ id = "OP-DEOP-SELECTOR-LITERAL"
 title = "/op and /deop treat a selector such as @s as a literal player name"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Stage3 S3ClientRegress real native run 20261115T011158-native-v2-ledger-spawn-protection-272xiuoa (wt/S3ClientRegress/.analysis/validation/): operator HarnessEntities ran `/deop @s`, stayed in ops.json and still broke stone at [194,77,-447] inside spawn protection. crates/mc-edge/src/server.rs:982 resolves selectors only for kick/ban/pardon; the else-branch at :1154-1166 looks the target up literally and in offline mode synthesises offline_uuid(\"@s\")"
 repro = "client"
 regression = [
@@ -11,7 +11,9 @@ regression = [
   "cargo:mc-edge:server::admin_tests::profile_selectors_empty_targets_use_vanilla_error_without_fake_profiles",
   "cargo:mc-edge:admin::whitelist_tests::whitelist_removal_does_not_remove_another_uuid_with_the_same_name",
   "cargo:mc-edge:server::admin_tests::profile_selectors_keep_quoted_spaces_for_op_deop_and_whitelist",
+  "harness:entities:native-v2-ledger-op-selector",
 ]
 fix_commit = "patch:b69e31e85a2d333c95235b2cef5bedc8a6489fb6fee306cea9f0632eddea0c0e"
 failing_first = "reported"
-repro_check = "FixBatchB/amendments/F5-red.log fails with selector expansion removed: self-deop retains level 4 and an empty selector reports false success. F5-profile-restored.log covers persisted self-deop, multi-target authorization, whitelist selectors and UUID identity. Round3 F5-lexer-red.log removes only balanced argument parsing and fails quoted-space selection; edge-green.log covers all four profile commands with a space inside a quoted selector value. Adjacent .control.diff files identify the exact reverted hunks. Local 26.3 javap confirms GameProfileArgument for OpCommand, DeOpCommands and WhitelistCommand; empty selection reports No player was found. The symptom patch reverses the op/deop target cutover while retaining shared profile and whitelist behavior. Original graphical spawn-protection replay and promotion remain Main-owned."
+repro_check = "Promoted 2026-11-24 on patch:b69e31e85a2d333c95235b2cef5bedc8a6489fb6fee306cea9f0632eddea0c0e (d0ae64284's resolved-profile op/deop branch and profile_targets at HEAD; map docs/bugs/promotions/OP-DEOP-SELECTOR-LITERAL.hunks.md). Negative control: three selector refs fail at their own assertions (crates/mc-edge/src/admin_tests.rs:1382, :1501, :1544, class assertion; .analysis/validation/20261124T111506-ledger-promote-s3xeu961/ledger-1-run.log), restored green (same artifact, ledger-3-run.log); the whitelist-UUID ref stays green in the control as expected. Real-client ref harness:entities:native-v2-ledger-op-selector passed on the pinned clean candidate (.analysis/validation/20261124T104737-native-v2-ledger-op-selector-unwkrwfc/result.json, tree 90b9bfbfab): `/deop @a[name=Missing]` answers `No player was found`, the player's own `/deop @s` answers completion, and `/gamemode creative` is then refused (`Unknown or incomplete command`) while the same command answers before the deop. The graphical ref is unrunnable in the control (POL-1 practice)."
+promotion = "docs/bugs/promotions/OP-DEOP-SELECTOR-LITERAL.json"

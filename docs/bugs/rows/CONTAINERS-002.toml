@@ -4,7 +4,9 @@ title = "Lectern hold/open/page/take-book menu is absent."
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-002"
-regression = ["cargo:mc-core:tick::book_actions::tests::lectern_insert_read_turn_take_preserves_exact_book"]
-repro_check = "candidate: lectern.rs is created by 2ccf8cc1a and `git log -S'button == 3' -- lectern.rs` shows the take branch was never touched since, so reversing means deleting the module; module 7/7 green, only a synthetic mutation was red and is not counted (receipts/XCoreItems)"
+regression = ["cargo:mc-core:tick::book_actions::tests::lectern_insert_read_turn_take_preserves_exact_book", "harness:entities:native-v2-ledger-lectern"]
+repro_check = "Promoted 2026-11-24 on patch:d769f8ec9dad1aa2b956a395b8a4fa01e0a5951066e50b80e6fc719f53a4eb1c (2ccf8cc1a's three lectern dispatch/decision hunks at their HEAD locations; lectern.rs itself is kept API; map docs/bugs/promotions/CONTAINERS-002.hunks.md). Negative control: reversed -> the registered ref fails at its own `inventory.slots[0].is_empty()` assertion (crates/mc-core/src/tick/../books_tests.rs:171, class assertion; .analysis/validation/20261124T110158-ledger-promote-hx79ahr0/ledger-1-run.log), restored green (same artifact, ledger-3-run.log). Real-client ref harness:entities:native-v2-ledger-lectern passed on the pinned clean candidate (.analysis/validation/20261124T104548-native-v2-ledger-lectern-nsix8wxb/result.json, tree 90b9bfbfab: insert/open/take through the client's own block state and menu); the graphical ref is unrunnable in the control (POL-1 practice)."
+fix_commit = "patch:d769f8ec9dad1aa2b956a395b8a4fa01e0a5951066e50b80e6fc719f53a4eb1c"
+promotion = "docs/bugs/promotions/CONTAINERS-002.json"

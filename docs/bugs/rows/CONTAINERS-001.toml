@@ -6,5 +6,6 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-001"
-regression = ["cargo:mc-core:mounts::tests::mount_inventory_opens_for_each_tamed_mount", "cargo:mc-core:mounts::tests::mount_inventory_equipment_cargo_and_ridden_open_share_native_custody"]
+regression = ["cargo:mc-core:mounts::tests::mount_inventory_opens_for_each_tamed_mount", "cargo:mc-core:mounts::tests::mount_inventory_equipment_cargo_and_ridden_open_share_native_custody", "harness:entities:native-v2-ledger-donkey-cargo"]
+fix_commit = "patch:534ed846e3dae342a44edbbf05f95b940d337857d86907feb1b5efb02eb5920b"
 repro_check = "candidate: the cargo-menu code arrives with 2ccf8cc1a, which creates mounts/menus.rs, so reversing its hunks deletes the module and does not build; the green refs and the module run (21 passed / 2 failed, both failures are mount control outside this row) are in receipts/XCoreItems; only a synthetic mutation was red and is not counted"
