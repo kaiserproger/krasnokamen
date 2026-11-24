@@ -273,6 +273,15 @@ both halves of a double chest; copper weathering and trapped-chest power read
 the same counts. Menu projections enumerate only menu viewers, never native
 openers. Removing an entity or leaving a dimension removes its membership.
 
+An external custody change (block log, `/loot`, plugin inventory writes) republishes
+a menu to its viewers only when the retained menu shape matches the reconstructed
+storage and every cell is resident. A cold half — whichever one — closes that
+viewer's menu instead of imaging its real slots beside empty ones, and the close is
+followed by a window-0 resync so predicted stack and cursor edits roll back. The
+click, recipe, refusal and refresh paths share this check; a viewer anchored on a
+half that has already gone cold is not refreshed (no partial image is sent) and its
+menu closes on the first click.
+
 Copper golems retain the existing native item-transfer path and dwell with the
 container open for 60 simulated ticks. Freeze holds that deadline. Expiry runs
 before random block ticks; a single commit-tail emitter publishes final ordinary,

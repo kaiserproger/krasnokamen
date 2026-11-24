@@ -355,7 +355,33 @@ pub(crate) fn refresh_container_viewers(state: &mut TickState, position: BlockPo
         return;
     }
     let contents = container_slots(state, &cells);
+    // The same custody check the click, recipe and refusal paths make: a menu
+    // is only republished when every slot it names is readable. A cold half
+    // would otherwise be imaged as its real slots plus empty ones (or from
+    // overlay records of the cold half), telling the viewer a lie about
+    // custody; the viewer's menu closes instead, with a window-0 resync so
+    // predicted stack and cursor edits roll back.
+    let cold = cells
+        .iter()
+        .any(|&(x, y, z)| state.world.block_at(x, y, z).is_none());
     for (viewer, connection) in viewers {
+        let shape_mismatch = state
+            .players
+            .get(&viewer)
+            .and_then(|player| player.open.as_ref())
+            .is_some_and(|menu| menu.kind.container_size() != contents.len());
+        if cold || shape_mismatch {
+            super::players::close_player_menu(state, connection);
+            let changes = state
+                .players
+                .get(&viewer)
+                .map(|player| player.inventory_transition_refused(&[]).changes)
+                .unwrap_or_default();
+            for change in changes {
+                state.push_player(connection, change);
+            }
+            continue;
+        }
         let Some(player) = state.players.get_mut(&viewer) else {
             continue;
         };

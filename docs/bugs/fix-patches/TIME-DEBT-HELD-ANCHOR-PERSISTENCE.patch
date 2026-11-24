@@ -1,0 +1,192 @@
+diff --git a/crates/mc-core/src/core/recovery.rs b/crates/mc-core/src/core/recovery.rs
+index 68431e595..3ab7aa60f 100644
+--- a/crates/mc-core/src/core/recovery.rs
++++ b/crates/mc-core/src/core/recovery.rs
+@@ -144,6 +144,9 @@ pub(crate) fn load_dimension_state(
+     tick_state.config_view_distance = i32::from(config.view_distance);
+     tick_state.dimension = dimension;
+     tick_state.tick = recovered_tick;
++    if let Some(since) = replay.sim_debt_anchored_since {
++        tick_state.tick_control.restore_debt_anchor(since);
++    }
+     // Settlement registries are per-dimension authorities: every dimension
+     // hydrates its own rows (matched by home dimension) folded with its
+     // dimension-routed WAL tail. Membership columns hydrate with entities below.
+diff --git a/crates/mc-core/src/debt.rs b/crates/mc-core/src/debt.rs
+index 0207a0a09..ef57df54d 100644
+--- a/crates/mc-core/src/debt.rs
++++ b/crates/mc-core/src/debt.rs
+@@ -66,32 +66,45 @@ pub(crate) fn project(
+     chunk: &mut Chunk,
+     last_sim: u64,
+     remaining: u64,
+-    _held_anchor: Option<u64>,
++    held_anchor: Option<u64>,
+ ) -> Result<(), CoreError> {
+     let (last_sim, remaining) = native_values(chunk.pos, last_sim, remaining)?;
++    let held_anchor = held_anchor.map(i64::try_from).transpose().map_err(|_| {
++        CoreError::Storage(format!(
++            "simulation debt at chunk ({}, {}): {HELD_ANCHOR_KEY} exceeds native Long range",
++            chunk.pos.x, chunk.pos.z,
++        ))
++    })?;
+     chunk
+         .extras
+-        .retain(|(key, _)| key != LAST_SIM_KEY && key != REMAINING_KEY);
++        .retain(|(key, _)| key != LAST_SIM_KEY && key != REMAINING_KEY && key != HELD_ANCHOR_KEY);
+     chunk
+         .extras
+         .push((LAST_SIM_KEY.into(), mc_nbt::Tag::Long(last_sim)));
+     chunk
+         .extras
+         .push((REMAINING_KEY.into(), mc_nbt::Tag::Long(remaining)));
++    if let Some(held_anchor) = held_anchor {
++        chunk
++            .extras
++            .push((HELD_ANCHOR_KEY.into(), mc_nbt::Tag::Long(held_anchor)));
++    }
+     chunk.mark_dirty();
+     Ok(())
+ }
+ 
+-/// Validate persisted authority before admission, even if newer WAL authority
+-/// wins. Only an entirely absent pair is a new chunk; malformed or partial
+-/// images refuse admission without mutating either the chunk or live record.
++/// Validate only the winning authority. A manifest/WAL record supersedes the
++/// older native extras, including pre-upgrade anchorless extras.
+ pub(crate) fn adopt_native_extras(
+     pos: mc_world::ChunkPos,
+     chunk: &std::sync::Arc<Chunk>,
+     records: &mut rustc_hash::FxHashMap<mc_world::ChunkPos, SimDebtRecord>,
+-    _tick: u64,
+-    _held_ticks: u64,
++    tick: u64,
++    held_ticks: u64,
+ ) -> Result<(), CoreError> {
++    if records.contains_key(&pos) {
++        return Ok(());
++    }
+     let read = |key: &str| -> Result<Option<u64>, CoreError> {
+         let mut values = chunk.extras.iter().filter(|(name, _)| name == key);
+         let Some((_, tag)) = values.next() else {
+@@ -113,8 +126,9 @@ pub(crate) fn adopt_native_extras(
+             _ => Err(invalid("must be a Long")),
+         }
+     };
++    let held_anchor = read(HELD_ANCHOR_KEY)?;
+     let (last_sim, remaining) = match (read(LAST_SIM_KEY)?, read(REMAINING_KEY)?) {
+-        (None, None) => return Ok(()),
++        (None, None) if held_anchor.is_none() => return Ok(()),
+         (Some(last_sim), Some(remaining)) => (last_sim, remaining),
+         _ => {
+             return Err(CoreError::Storage(format!(
+@@ -123,9 +137,10 @@ pub(crate) fn adopt_native_extras(
+             )));
+         }
+     };
++    validate_anchor(pos, last_sim, held_anchor, tick, held_ticks)?;
+     records.entry(pos).or_insert(SimDebtRecord {
+         last_sim,
+-        held_anchor: None,
++        held_anchor: Some(held_anchor.unwrap_or(0)),
+         remaining,
+         dirty: false,
+         active: false,
+diff --git a/crates/mc-core/src/weather.rs b/crates/mc-core/src/weather.rs
+index 0daa31207..454f0dc7d 100644
+--- a/crates/mc-core/src/weather.rs
++++ b/crates/mc-core/src/weather.rs
+@@ -85,7 +85,7 @@ impl ClimateImage {
+         Self {
+             day_time: state.day_time,
+             game_clock: state.tick_control.clock_image(state.tick),
+-            sim_debt_anchored_since: None,
++            sim_debt_anchored_since: Some(state.tick_control.sim_debt_anchored_since()),
+             weather_kind: match state.weather.0 {
+                 Weather::Clear => 0,
+                 Weather::Rain => 1,
+@@ -128,6 +128,9 @@ impl ClimateImage {
+         state
+             .tick_control
+             .restore_clock(self.game_clock, state.tick)?;
++        if let Some(since) = self.sim_debt_anchored_since {
++            state.tick_control.restore_debt_anchor(since);
++        }
+         state.day_time = self.day_time;
+         state.weather = (kind, self.remaining_ticks);
+         state.thunder_remaining_ticks = self.thunder_remaining_ticks;
+diff --git a/crates/mc-core/src/world/capture.rs b/crates/mc-core/src/world/capture.rs
+index 34892c6fa..843b7c267 100644
+--- a/crates/mc-core/src/world/capture.rs
++++ b/crates/mc-core/src/world/capture.rs
+@@ -326,18 +326,18 @@ impl ChunkWorld {
+                 // Non-resident debt rides the deferred path (frozen image,
+                 // journal-thread application, revision-fenced ACK) — never
+                 // dropped pre-ACK.
+-                let (last_sim, remaining) = self
++                let (last_sim, held_anchor, remaining) = self
+                     .sim_debt
+                     .get(&pos)
+-                    .map(|debt| (debt.last_sim, debt.remaining))
+-                    .unwrap_or((0, 0));
++                    .map(|debt| (debt.last_sim, debt.held_anchor, debt.remaining))
++                    .expect("selected debt authority");
+                 self.dirty.insert(pos);
+                 self.bump_storage_revision(pos);
+                 if let Some(deferred) = self.defer_checkpoint_chunk(pos, &mut capture) {
+                     deferred.debt = Some(crate::journal::SimDebtImage {
+                         chunk: [pos.x, pos.z],
+                         last_sim,
+-                        held_anchor: None,
++                        held_anchor,
+                         remaining,
+                         active: false,
+                         tick: self.inhabited_tick,
+@@ -346,13 +346,13 @@ impl ChunkWorld {
+                 continue;
+             }
+             if let Some(chunk) = self.chunks.get_mut(&pos) {
+-                let (last_sim, remaining) = self
++                let (last_sim, held_anchor, remaining) = self
+                     .sim_debt
+                     .get(&pos)
+-                    .map(|debt| (debt.last_sim, debt.remaining))
+-                    .unwrap_or((0, 0));
++                    .map(|debt| (debt.last_sim, debt.held_anchor, debt.remaining))
++                    .expect("selected debt authority");
+                 if let Err(error) =
+-                    crate::debt::project(Arc::make_mut(chunk), last_sim, remaining, None)
++                    crate::debt::project(Arc::make_mut(chunk), last_sim, remaining, held_anchor)
+                 {
+                     capture.load_error = Some(ChunkLoadError {
+                         dimension: self.source.dimension,
+diff --git a/crates/mc-core/src/world/residency.rs b/crates/mc-core/src/world/residency.rs
+index db92cbfcc..42fd612a9 100644
+--- a/crates/mc-core/src/world/residency.rs
++++ b/crates/mc-core/src/world/residency.rs
+@@ -310,14 +310,14 @@ impl ChunkWorld {
+             let tick = self.sim_tick;
+             let boundary = match self.sim_debt.get_mut(&pos) {
+                 Some(debt) if debt.active => {
+-                    let boundary = (debt.last_sim, debt.remaining);
++                    let boundary = (debt.last_sim, debt.held_anchor, debt.remaining);
+                     debt.active = false;
+                     debt.dirty = true;
+                     Some(boundary)
+                 }
+                 _ => None,
+             };
+-            if let Some((last_sim, remaining)) = boundary {
++            if let Some((last_sim, held_anchor, remaining)) = boundary {
+                 self.next_revision += 1;
+                 self.revisions.insert(pos, self.next_revision);
+                 self.eviction_check.insert(pos);
+@@ -325,7 +325,7 @@ impl ChunkWorld {
+                 let image = crate::journal::SimDebtImage {
+                     chunk: [pos.x, pos.z],
+                     last_sim,
+-                    held_anchor: None,
++                    held_anchor,
+                     remaining,
+                     active: false,
+                     tick,

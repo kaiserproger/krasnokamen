@@ -1,0 +1,86 @@
+{
+  "id": "TIME-DEBT-HELD-ANCHOR-PERSISTENCE",
+  "verdict": "promoted",
+  "fix_commit": "patch:bc1dfbd2e657c5774818391a0070b4f398e65824ae8c0fc6199c72699d176b8d",
+  "fix_commit_full": "patch:bc1dfbd2e657c5774818391a0070b4f398e65824ae8c0fc6199c72699d176b8d",
+  "promoted_at": "2026-11-24T11:31:26+00:00",
+  "tree_head": "97585b6d5bb20e4a37414cd1ad9e90e4c3eb906e",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "bc1dfbd2e657c5774818391a0070b4f398e65824ae8c0fc6199c72699d176b8d",
+  "reversed_files": [
+    "crates/mc-core/src/core/recovery.rs",
+    "crates/mc-core/src/debt.rs",
+    "crates/mc-core/src/weather.rs",
+    "crates/mc-core/src/world/capture.rs",
+    "crates/mc-core/src/world/residency.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:debt::game_clock_tests::debt_game_clock_native_projection_keeps_explicit_zero_and_one_key": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/debt_game_clock_tests.rs",
+        "line": 141,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:debt::game_clock_tests::debt_game_clock_held_activation_excludes_its_own_held_tick": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::game_clock_tests::native_debt_game_clock_cold_unload_multiple_holds_restart_and_reload_are_exact": {
+      "state": "fixture-failure",
+      "detail": "FAIL | fixture panic at crates/mc-core/src/native_checkpoint_crash_tests.rs:6",
+      "assertion": {
+        "file": "crates/mc-core/src/native_checkpoint_crash_tests.rs",
+        "line": 6,
+        "error": "panic",
+        "class": "fixture"
+      }
+    },
+    "cargo:mc-core:debt::game_clock_tests::debt_game_clock_mid_tick_rejection_keeps_both_possible_native_anchors": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/debt_game_clock_tests.rs",
+        "line": 122,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:debt::game_clock_tests::debt_game_clock_shared_projection_reanchors_all_dimensions_and_preserves_remaining": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-core:debt::game_clock_tests::debt_game_clock_native_projection_keeps_explicit_zero_and_one_key": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:debt::game_clock_tests::debt_game_clock_held_activation_excludes_its_own_held_tick": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::game_clock_tests::native_debt_game_clock_cold_unload_multiple_holds_restart_and_reload_are_exact": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:debt::game_clock_tests::debt_game_clock_mid_tick_rejection_keeps_both_possible_native_anchors": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:debt::game_clock_tests::debt_game_clock_shared_projection_reanchors_all_dimensions_and_preserves_remaining": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T112700-ledger-promote-spd3v79c"
+}

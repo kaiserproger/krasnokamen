@@ -1,0 +1,11 @@
+[[bug]]
+id = "HOT-BACKUP-OFFLINE-STATUS-BEFORE-VERIFY"
+title = "The offline `backup` command printed `complete` before the copy had been verified, so a copy that failed verification (and was then withdrawn) had already been announced as complete"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Split from HOT-BACKUP-OFFLINE-RESTORE-UNVERIFIED on the independent review of wave 2 (receipts/D123/D123Persist/review/REVIEW-wave2-1.md B1): that row now covers only the proven defect (the second read-only open refusing a good hot copy), because its control's `a/`-side already calls `hot_backup::verify_restorable`, so the red proves a false refusal, not a missing verification. This row owns the reporting half of 92a28e7186: `run_backup` printing `backup of ... complete: N files` and returning `()` before the caller verifies, and `operator_cli.rs`'s `Command::Backup` arm (`verify_written_backup` withdraws the manifest on failure, but only after the earlier `println!`). The fix replaced that with `Ok(manifest.files.len())` and a single final status printed after verification (or the explicit `NOT verified` form when there is no content cache)."
+regression = []
+failing_first = "not recorded"
+repro_check = "Open: no control yet. The fix hunks are crates/mc-edge/src/backup.rs (the run_backup signature Result<()> -> Result<usize> and the println! replaced by Ok(len)) together with crates/mc-edge/src/operator_cli.rs Command::Backup arm of 92a28e7186; git apply -R --check passes for both at this HEAD. They must be carried together (the CLI consumes the usize). The status text is printed with println!/eprintln! from the in-process CLI, and both the pre-fix and post-fix runs exit with an error when verification fails, so a cargo ref cannot distinguish them without a stdout-capture facility mc-edge does not have (no gag/captured-stdout dev-dependency; the CLI tests parse and call run_offline in process). A control therefore needs either a print-capture harness (a spawn-the-binary integration test or a captured-stdout helper) or an explicit status accessor on operator_cli; not built."

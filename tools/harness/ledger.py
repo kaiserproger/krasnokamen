@@ -335,7 +335,9 @@ def _panic_class(tree, location, message):
     (a) a confirmed fixture/setup panic (registry or world builder, a `#[track_caller]`
     unwrap/expect) is `fixture`: the registered test body never ran its assertion.
     (b) a panic whose source line is an assert macro (or an explicit `panic!`) is `assertion`; a
-    shared helper inside a `*_tests.rs` file counts, so a helper assert is not rejected.
+    shared helper inside a `*_tests.rs` file counts, so a helper assert is not rejected. The macro is
+    recognised from the source line alone: a Rust `assert!(cond, "msg")` panics with exactly `msg`, so
+    a custom message never needs a special prefix.
     (c) anything else is `unknown` and the promotion must name its file:line as the proving
     assertion (ReviewD123Harness, fixture-panic rule)."""
     file, line = location
@@ -356,7 +358,9 @@ def _panic_class(tree, location, message):
     # when the panic message says so (an `assert_eq!` inside `expect(...)`); otherwise it is class (c).
     if _UNWRAP_LINE.search(source) and not _ASSERT_MESSAGE.match(message or ''):
         return 'unknown'
-    if _ASSERT_LINE.search(source) and (_ASSERT_MESSAGE.search(message or '') or _UNWRAP_LINE.search(source)):
+    if _ASSERT_LINE.search(source):
+        # The assert macro at the panicking line is the assertion itself, whatever its custom
+        # message says: `assert!(cond, "msg")` panics with exactly "msg" (wave-2 review N2).
         return 'assertion'
     return 'unknown'
 
