@@ -29,8 +29,11 @@ def _flags(row: dict[str, Any]) -> int:
     return 0
 
 
-def measure(samples: list[dict[str, Any]], kind: str) -> dict[str, Any]:
-    """Horizontal pace over `samples[0] -> samples[-1]`, its approach and mob flags."""
+def measure(samples: list[dict[str, Any]], kind: str, min_distance_last: float = 0.0) -> dict[str, Any]:
+    """Horizontal pace over `samples[0] -> samples[-1]`, its approach and mob flags.
+
+    `min_distance_last` is the cruise guard (REVIEW-wave2-13 M1-res): the window must end with the mob
+    still at range, so a rate measured while it is already brawling on top of the player cannot pass."""
     if len(samples) < 2:
         raise ValueError("a chase window needs at least two samples")
     rows = [_only(sample, kind) for sample in samples]
@@ -56,6 +59,8 @@ def measure(samples: list[dict[str, Any]], kind: str) -> dict[str, Any]:
         "distance_first": float(first["distance"]),
         "distance_last": float(last["distance"]),
         "approach_blocks": float(first["distance"]) - float(last["distance"]),
+        "min_distance_last": min_distance_last,
+        "reach_kept": float(last["distance"]) >= min_distance_last,
         "flags_first": flags[0],
         "flags_last": flags[-1],
     }

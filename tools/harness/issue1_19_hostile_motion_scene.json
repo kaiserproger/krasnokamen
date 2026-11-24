@@ -302,6 +302,7 @@
         "min_speed": 0.105,
         "max_speed": 0.128,
         "min_approach_blocks": 3,
+        "min_distance_last": 5,
         "aggressive_bit": 2
       }
     },

@@ -73,11 +73,12 @@ class MobChaseStepTests(unittest.TestCase):
 
     def test_all_four_verdicts_come_from_one_long_window(self):
         step = {"samples": ["a", "b", "c"], "name": "chase", "kind": "minecraft:zombie",
-                "min_speed": 0.10, "max_speed": 0.13, "min_approach_blocks": 3, "aggressive_bit": 2}
+                "min_speed": 0.10, "max_speed": 0.13, "min_approach_blocks": 3, "min_distance_last": 5, "aggressive_bit": 2}
         good = self.run_step(step, {"a": sample(100, 0., 0., 20.), "b": sample(130, 3.5, 0., 16.5),
                                     "c": sample(160, 7., 0., 13.)})
         self.assertEqual(good, {"chase_speed_zombie": True, "chase_approach_zombie": True,
-                                "chase_aggressive_zombie": True, "chase_identity_zombie": True})
+                                "chase_aggressive_zombie": True, "chase_identity_zombie": True,
+                                "chase_cruise_zombie": True})
         # The historical 3.8 speed: too fast for the band.
         fast = self.run_step(step, {"a": sample(100, 0., 0., 20.), "c": sample(160, 11., 0., 9.)})
         self.assertFalse(fast["chase_speed_zombie"])
@@ -91,7 +92,7 @@ class MobChaseStepTests(unittest.TestCase):
         from tools.harness.backends import scene_shot
 
         good = {"samples": ["a", "b"], "name": "chase", "kind": "minecraft:zombie",
-                "min_speed": 0.10, "max_speed": 0.13, "min_approach_blocks": 3, "aggressive_bit": 2}
+                "min_speed": 0.10, "max_speed": 0.13, "min_approach_blocks": 3, "min_distance_last": 5, "aggressive_bit": 2}
         scene_shot.validate_steps([{"mob_chase": good}], "native")
         for bad in ({**good, "min_speed": 0.14}, {**good, "samples": ["a"]},
                     {**good, "aggressive_bit": 9}, {**good, "kind": "zombie"}, {**good, "extra": 1}):
