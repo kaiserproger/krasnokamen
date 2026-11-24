@@ -1077,6 +1077,179 @@ fn data_entity_edit_of_a_villager_keeps_its_profession_level_and_age() {
         -123
     );
 }
+/// A villager's runtime state is the row's own persistence image, not summon NBT:
+/// `data merge|modify entity` writes `Inventory`, `Brain`, `Offers`, `Gossips`, `Xp`
+/// and `krasnokamen:VillagerRuntime` through `villager::persistence`, which validates
+/// them, while the settlement keeps its membership whoever the edit names.
+#[test]
+fn data_entity_merge_lands_villager_runtime_state_and_keeps_membership() {
+    use crate::settlements::SettlementId;
+    let (mut state, _, context) = fixture();
+    run(
+        &mut state,
+        context,
+        "summon minecraft:villager 4 60 4 {VillagerData:{type:\"minecraft:plains\",profession:\"minecraft:farmer\",level:2}}",
+    );
+    let villager = "@e[type=minecraft:villager,limit=1]";
+    let slot = state
+        .entities
+        .slots()
+        .find(|slot| {
+            crate::command_execution::entity_type_name(&state, state.entities.body(*slot).id)
+                == Some("minecraft:villager")
+        })
+        .expect("the summoned villager");
+    let item = |name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&Identifier::parse(name).unwrap())
+            .unwrap()
+    };
+    let (wheat, iron) = (item("minecraft:wheat"), item("minecraft:iron_ingot"));
+    {
+        let row = state.entities.row_mut(slot).villager.as_mut().unwrap();
+        row.inventory[0] = Some(ItemStack::new(wheat, 5));
+        row.inventory[1] = Some(ItemStack::new(wheat, 1));
+        row.xp = 12;
+        row.settlement = Some(SettlementId(7));
+        row.household = Some("Baker".into());
+    }
+
+    // Inventory: the merged list replaces the stacks, as vanilla does — the old ones are
+    // gone and nothing is created in their place.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {villager} {{Inventory:[{{Slot:0b,id:\"minecraft:iron_ingot\",count:2}}]}}")
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    let merged = state.entities.row(slot).villager.clone().unwrap();
+    assert_eq!(merged.inventory[0].as_ref().unwrap().item_id, iron);
+    assert_eq!(merged.inventory[0].as_ref().unwrap().count, 2);
+    assert_eq!(merged.inventory[1], None, "the replaced stack is not kept");
+
+    // Brain memories, xp and the runtime clock land through the same parser.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {villager} {{Brain:{{memories:{{\"minecraft:last_slept\":{{value:100L}}}}}}}}")
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {villager} {{Xp:7}}")
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    assert_eq!(
+        query(
+            &mut state,
+            context,
+            &format!("data get entity {villager} Xp")
+        )
+        .unwrap(),
+        7
+    );
+    let edited = state.entities.row(slot).villager.clone().unwrap();
+    assert_eq!(edited.last_slept, Some(100));
+    assert_eq!(edited.xp, 7);
+
+    // Membership and lineage are the settlement's: the merge may move the clock, never
+    // the villager between settlements or households.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!(
+                "data merge entity {villager} {{\"krasnokamen:VillagerRuntime\":{{last_gossip:5L,settlement:99L,household:\"Other\"}}}}"
+            )
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    let after = state.entities.row(slot).villager.clone().unwrap();
+    assert_eq!(after.last_gossip, 5, "the runtime clock is editable");
+    assert_eq!(after.settlement, Some(SettlementId(7)));
+    assert_eq!(after.household.as_deref(), Some("Baker"));
+}
+
+/// What a merge still refuses: a field neither summon NBT nor the villager row owns,
+/// the engine's own private bookkeeping, and identity or place.
+#[test]
+fn data_entity_merge_refuses_foreign_and_private_fields_by_name() {
+    let (mut state, _, context) = fixture();
+    run(
+        &mut state,
+        context,
+        "summon minecraft:villager 4 60 4 {VillagerData:{type:\"minecraft:plains\",profession:\"minecraft:farmer\",level:2}}",
+    );
+    let villager = "@e[type=minecraft:villager,limit=1]";
+    let slot = state
+        .entities
+        .slots()
+        .find(|slot| {
+            crate::command_execution::entity_type_name(&state, state.entities.body(*slot).id)
+                == Some("minecraft:villager")
+        })
+        .expect("the summoned villager");
+    let before = state.entities.row(slot).villager.clone().unwrap();
+    for (field, key) in [
+        ("Air", "Air"),
+        ("krasnokamen:WireId", "\"krasnokamen:WireId\""),
+        ("DataVersion", "DataVersion"),
+    ] {
+        assert_eq!(
+            data(
+                &mut state,
+                context,
+                &format!("data merge entity {villager} {{{key}:1}}")
+            ),
+            -1,
+            "{field} must be refused"
+        );
+        let said = said(&mut state);
+        assert!(
+            said.contains(&format!(
+                "Editing {field} of minecraft:villager is not supported"
+            )),
+            "{field} refusal must name the field: {said}"
+        );
+        assert_eq!(
+            state.entities.row(slot).villager.as_ref().unwrap(),
+            &before,
+            "{field} must leave the villager unchanged"
+        );
+    }
+    // A field the parser cannot accept is refused by the parser's own message, and the
+    // row is untouched.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {villager} {{Offers:{{Recipes:[{{buy:1b}}]}}}}")
+        ),
+        -1
+    );
+    assert!(reported(&mut state));
+    assert_eq!(
+        state.entities.row(slot).villager.as_ref().unwrap(),
+        &before
+    );
+}
 
 fn item_entity(state: &TickState) -> crate::entities::EntitySlot {
     state

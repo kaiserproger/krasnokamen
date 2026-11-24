@@ -65,6 +65,13 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
     let item = matches!(world.entities.body(slot).kind, EntityKind::Item { .. });
     let name = crate::command_execution::entity_type_name(world, id)
         .ok_or("Entity has no vanilla data")?;
+    // These three carry a `VillagerState` row, whose own persistence image (`Brain`,
+    // `Inventory`, `Offers`, `Gossips`, `Xp`, …) `data` reads and writes; every other
+    // kind only has summon NBT.
+    let villager = matches!(
+        name,
+        "minecraft:villager" | "minecraft:zombie_villager" | "minecraft:wandering_trader"
+    );
     let mut image = crate::command_data::entity_image(world, id)?;
     let previous = crate::command_data::entity(world, id)?;
     let mut edited = previous.clone();
@@ -112,7 +119,8 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
         }
     }
     for key in &touched {
-        if crate::command_data::private_field(key) {
+        let owned = villager && crate::villager::persistence::owns_field(key);
+        if crate::command_data::private_field(key) && !owned {
             return Err(format!("Editing {key} of {name} is not supported"));
         }
         let authored = if key == "Tags" {
@@ -120,10 +128,11 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
         } else if item {
             ITEM_FIELDS.contains(&key.as_str())
         } else {
-            crate::command_summon::supports(world, type_id, name, key) == Some(true)
+            owned || crate::command_summon::supports(world, type_id, name, key) == Some(true)
         };
         if !authored {
-            // Only what a summon can author is editable; everything else keeps its value.
+            // Only what a summon authors, or the villager row's own persistence image,
+            // is editable; everything else keeps its value.
             return Err(format!("Editing {key} of {name} is not supported"));
         }
     }
@@ -145,6 +154,7 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
         let keep_villager = !touched
             .iter()
             .any(|key| crate::villager::persistence::owns_field(key));
+        let live_villager = world.entities.row(slot).villager.clone();
         let mut image = Box::new(
             crate::command_summon::prepare_edit(
                 world,
@@ -154,6 +164,7 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
                 image,
                 &changed,
                 keep_villager,
+                live_villager.as_deref(),
             )
             .map_err(|error| error.message())?,
         );

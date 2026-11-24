@@ -183,7 +183,8 @@ class C1RaceTests(unittest.TestCase):
         self.assertEqual(command[-8:], ["--client", "java", "--windowed", "--timeout-seconds", "3600",
                                         "--", "--scenario", gate.C1_RACE_SCENARIO])
         self.assertEqual(regressions._BOOLEAN_PROFILE_VERDICTS["settlement-map-qa"],
-                         {*settlement_map_qa.VERDICTS, gate.C1_RACE_VERDICT})
+                         {*settlement_map_qa.VERDICTS, *settlement_map_qa.SCENARIO_VERDICTS,
+                          gate.C1_RACE_VERDICT})
 
     def race_run(self, block=None, setup=None):
         """Run `--scenario quickwins-c1-race` with the client, the GUI and the walk's fixtures replaced."""
