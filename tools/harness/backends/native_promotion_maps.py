@@ -241,6 +241,7 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.call("minecraft_wait_ticks", {"ticks": 255})
     steps.call("minecraft_wait_ticks", {"ticks": 255})
     _held_shot(steps, "map-held-without-frame-waypoint")
+    chat_before = len(steps.observe()["recent_chat"])
     steps.call("minecraft_set_hotbar_slot", {"slot": 1})
     steps.call("minecraft_interact_entity", {**frame, "hand": "main_hand"})
     steps.wait(lambda state: not any(stack["slot"] == 1 and stack.get("item_id") == "minecraft:filled_map"
@@ -253,6 +254,10 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                 steps.call("minecraft_read_item_components", {"source": "selected"}).get("item_id")
                 == "minecraft:filled_map")
     _held_shot(steps, "map-held-with-frame-waypoint")
+    # A line arriving between the captures rewrites the text drawn over the map, which the marker
+    # count would read as pixels: the ring buffer keeps it, so its length is the guard.
+    chat_after = len(steps.observe()["recent_chat"])
+    steps.check("map_captures_same_chat", chat_after == chat_before)
     colours_after = _map(steps, locked)["colors"][:]
     steps.report["map_terrain_changed_pixels"] = sum(
         1 for before, after in zip(colours_before, colours_after) if before != after)

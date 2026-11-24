@@ -236,6 +236,32 @@ def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             dropped = steps.call("minecraft_read_item_components", {"source": "selected"})
             steps.check("held_drop_once", dropped.get("count") == 4)
     steps.fixture("tick unfreeze")
+    steps.fixture("gamemode survival")
+    # CLIENT-HELD-DROP-KEY-DOUBLE-DROP: vanilla dispatches the drop key once per press, so a
+    # physical Q held across client ticks must leave exactly one item on the ground. Unfrozen, so
+    # the server really spawns the item entity the assertion counts; `debug give` writes the stack
+    # into the selected hotbar slot directly, so the fixture does not race the give placement.
+    def ground_items(_: dict) -> int:
+        rows = steps.call("minecraft_list_entities", {"radius": 24.0, "limit": 128})["entities"]
+        return sum(1 for row in rows if row.get("entity_type") == "minecraft:item")
+
+    steps.fixture("clear @s")
+    steps.fixture("kill @e[type=minecraft:item]")
+    steps.wait(lambda _: ground_items(None) == 0, "held_drop_ground_clear", timeout_seconds=90)
+    steps.fixture("debug give minecraft:diamond 5 0")
+    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    steps.call("minecraft_wait_ticks", {"ticks": 5})
+    fixture = steps.call("minecraft_read_item_components", {"source": "selected"})
+    steps.report["held_q_fixture"] = {"item_id": fixture.get("item_id"),
+                                      "count": fixture.get("count")}
+    steps.check("held_q_fixture_selected", fixture.get("count") == 5)
+    steps.report["held_q_hold_ticks"] = 3
+    _hold_key(steps, ord("q"), 3)
+    steps.wait(lambda _: ground_items(None) >= 1, "held_drop_landed", timeout_seconds=90)
+    steps.call("minecraft_wait_ticks", {"ticks": 10})
+    landed = ground_items(None)
+    steps.report["held_q_items_after"] = landed
+    steps.check("held_drop_once", landed == 1)
 
 
 def camera(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:

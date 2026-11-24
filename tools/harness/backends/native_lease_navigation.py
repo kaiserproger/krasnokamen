@@ -77,11 +77,22 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         # a longer action must not be aborted by the transport before the tool's own bound.
         a.request_timeout_seconds = max(a.request_timeout_seconds, hold + 20.0)
         def approach():
+            # One request, no lease-retry: the row's symptom on the pre-fix client is the client's
+            # own `controller_lease_revoked` answer at the ~120 s deadline, and `call_tool` would
+            # re-issue that refused call and turn the evidence into a join timeout.
+            started_call = time.monotonic()
             try:
-                result["approach"] = a.call_tool("minecraft_approach_entity", {
+                reply = a.call_tool_once("minecraft_approach_entity", {
                     "entity_id": target["entity_id"], "timeout_seconds": hold})
+                payload = reply.get("structuredContent") or reply
+                if reply.get("isError"):
+                    result["approach_error"] = json.dumps(payload, ensure_ascii=False)[:400]
+                    result["approach_error_code"] = (payload or {}).get("code")                         if isinstance(payload, dict) else None
+                else:
+                    result["approach"] = payload
             except Exception as error:
                 result["approach_error"] = str(error)
+            result["approach_elapsed_seconds"] = round(time.monotonic() - started_call, 3)
         worker = threading.Thread(target=approach)
         worker.start()
         worker.join(timeout=hold + 15)
@@ -99,6 +110,8 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             "approach_entity_uuid": approach.get("entity_uuid"),
             "target_entity_uuid": target.get("entity_uuid"),
             "approach_error": result.get("approach_error"),
+            "approach_error_code": result.get("approach_error_code"),
+            "approach_elapsed_seconds": result.get("approach_elapsed_seconds"),
             "controller_active": controller_now.get("active"),
             "controller_remaining_ms": controller_now.get("remaining_ms"),
         }
