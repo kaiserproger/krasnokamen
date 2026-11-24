@@ -30,8 +30,8 @@ Carried (13 of the commit's 23 non-test hunks):
 | capture.rs -200,9 homeless materialize no longer sets load_error | capture.rs:287-289 |
 | capture.rs -211,11 dirty_absent failure + second quarantine | capture.rs:297-311 |
 | capture.rs -227,6 debt skips failed | capture.rs:323-325 |
-| capture.rs -276,6 metadata of quarantined chunk not written | capture.rs:375-379 |
-| capture.rs -341,6 `block_entity_dirty` cleared on flush | capture.rs:393-394 |
+| capture.rs -276,6 metadata of quarantined chunk not written | capture.rs:393-394 |
+| capture.rs -341,6 `block_entity_dirty` cleared on flush | capture.rs:461 |
 | world.rs -724,8 `defer_checkpoint_chunk` counts instead of load_error | world.rs:758-767 |
 | residency.rs -282,7 doc | residency.rs:285 |
 | residency.rs -298,9 reject keeps dirty_sections, clears dirty_absent | residency.rs:301-306 |
