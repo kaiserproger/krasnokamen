@@ -79,6 +79,17 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     with ProbeSteps(mcp, steps.artifact_dir / "peer", steps.remaining(), "native-v2-team-deaths-peer") as peer:
         for command in ("team add red", "team add blue", f"team join red {VICTIM}", f"team join blue {PEER}"):
             steps.fixture(command)
+        # A client that decodes Play 0x6f in the pre-26.3 order ends its session on the first team
+        # packet, and an ended session is an assertion here, not a later marker timeout: the check
+        # reads the state the client still reports and records the outcome instead of raising out of
+        # the wait. NATIVE-SET-PLAYER-TEAM-26-3-LAYOUT's control is that state.
+        try:
+            team_state = steps.observe(outside_play=True)
+            team_in_play = team_state.get("in_play") is True
+        except Exception as error:  # the session may be gone entirely
+            steps.report.setdefault("team_packet_observe_error", str(error))
+            team_in_play = False
+        steps.check("client_in_play_after_team_packet", team_in_play)
         _echo(steps, "teams_ready")
         # KILL-TYPE: player /kill is generic_kill ("was killed"), not out_of_world.
         _die(steps, peer, display, actor_pid, "kill", f"kill {VICTIM}", "was killed", True, True)
