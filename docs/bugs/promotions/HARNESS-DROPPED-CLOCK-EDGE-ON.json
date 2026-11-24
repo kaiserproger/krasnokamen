@@ -1,0 +1,75 @@
+{
+  "id": "HARNESS-DROPPED-CLOCK-EDGE-ON",
+  "verdict": "promoted",
+  "fix_commit": "patch:f720ec081235886af3f450f5007872fba4a7fb3e04c519e1df83184feae6e3c1",
+  "fix_commit_full": "patch:f720ec081235886af3f450f5007872fba4a7fb3e04c519e1df83184feae6e3c1",
+  "promoted_at": "2026-11-24T12:43:30+00:00",
+  "tree_head": "302dd7221721e7364f1fc91a559197200b02e027",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "78b6d1d7fb2333648324dfec3b8ed32f8f2f4cac1cbb9946166d5e1928b7daa0",
+  "control_tree_head": "302dd7221721e7364f1fc91a559197200b02e027",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "f720ec081235886af3f450f5007872fba4a7fb3e04c519e1df83184feae6e3c1",
+  "reversed_files": [
+    "tools/harness/dynamic_context_scene.json",
+    "tools/harness/dynamic_context_scene.json",
+    "tools/harness/backends/scene_shot_checks.py",
+    "tools/harness/backends/scene_shot_execute.py",
+    "tools/harness/backends/scene_shot_execute.py",
+    "tools/harness/backends/scene_shot_steps.py",
+    "tools/harness/backends/scene_shot_steps.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "harness:scene-shot:native-dynamic-context": {
+      "state": "unrunnable",
+      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/302dd7221721-server-x86_64-unknown-linux-gnu-incr/krasnokamen: /run/media/kaiserroman/games/solaris-work/pins/302dd7221721-server-x86_64-unknown-linux-gnu-incr/manifest.json pins a different tree (not 302dd7221721/78b6d1d7fb23). Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    },
+    "python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_capture_is_bounded_and_does_not_accept_hud_only": {
+      "state": "unrunnable",
+      "detail": "no executed test or unittest error; see log"
+    },
+    "python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_capture_selects_static_face_but_animation_oracle_rejects_it": {
+      "state": "unrunnable",
+      "detail": "no executed test or unittest error; see log"
+    },
+    "python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_scene_samples_past_edge_on_without_changing_oracle": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/harness/test_scene_shot.py",
+        "line": 825,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_capture_is_bounded_and_does_not_accept_hud_only": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_capture_selects_static_face_but_animation_oracle_rejects_it": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_scene_samples_past_edge_on_without_changing_oracle": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T123324-native-dynamic-context-f4c3_561/result.json",
+    "tree_head": "302dd7221721e7364f1fc91a559197200b02e027",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "52c7e9207e3d2bd4efc22f058d54eda7fcb7a7bb3dbeb8bb1f34f8c459ba9576",
+    "covers": [
+      "harness:scene-shot:native-dynamic-context"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T123909-ledger-promote-pelmo2r9"
+}

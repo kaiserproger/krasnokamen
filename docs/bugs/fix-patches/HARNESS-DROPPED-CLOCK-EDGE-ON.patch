@@ -63,6 +63,17 @@ diff --git a/tools/harness/backends/scene_shot_checks.py b/tools/harness/backend
 diff --git a/tools/harness/backends/scene_shot_execute.py b/tools/harness/backends/scene_shot_execute.py
 --- a/tools/harness/backends/scene_shot_execute.py
 +++ b/tools/harness/backends/scene_shot_execute.py
+@@ -16,6 +16,7 @@
+ 
+ from .probe_steps import ProbeSteps
+ from . import scene_shot as _qa
++from .scene_shot_checks import _capture_dropped_clock
+ from .scene_shot_client import tool_wall_pixels, wait_play
+ from .scene_shot_steps import (
+     SCENE_TOOLS, bounded_draw, matching_entities, matching_walk, pixel_window_count,
+diff --git a/tools/harness/backends/scene_shot_execute.py b/tools/harness/backends/scene_shot_execute.py
+--- a/tools/harness/backends/scene_shot_execute.py
++++ b/tools/harness/backends/scene_shot_execute.py
 @@ -53,6 +53,8 @@
                  shots.append(capture(probe, artifact, value))
              else:
