@@ -19,8 +19,8 @@ from . import scene_shot as _qa
 from .scene_shot_checks import _capture_dropped_clock
 from .scene_shot_client import tool_wall_pixels, wait_play
 from .scene_shot_steps import (
-    SCENE_TOOLS, bounded_draw, matching_entities, matching_walk, pixel_window_count,
-    received_sleeping, render_metrics, validate_steps,
+    SCENE_TOOLS, matching_entities, matching_walk, pixel_window_count,
+    received_sleeping, render_index_bounded, render_metrics, repeated_view_stable, validate_steps,
 )
 
 
@@ -241,13 +241,32 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 {"enabled": value, "lines": result.get("lines"), "status": result.get("status")})
             probe.check(f"debug_overlay_{'on' if value else 'off'}",
                         result.get("debug_overlay") is value)
+        elif kind == "render_draw_sample":
+            # One fresh observation of the client's draw counters at the requested view. The yaw the
+            # client reports proves the turn landed before the sample; a stale sample (same yaw as
+            # the previous view) is not a direction sample.
+            state = probe.observe()
+            metrics = render_metrics(state)
+            yaw = (state.get("player") or {}).get("yaw")
+            if type(yaw) not in (int, float) or not math.isfinite(yaw):
+                raise RuntimeError("client observation omitted player.yaw for a render sample")
+            probe.report.setdefault("render_samples", []).append(
+                {"name": value["name"], "yaw": float(yaw), "yaw_requested": value["yaw_deg"], **metrics})
+            probe.check(f"render_sample_{value['name']}_yaw_observed",
+                        abs((yaw - value["yaw_deg"] + 180) % 360 - 180) <= 1)
         elif kind == "assert_render_bounded":
-            samples = probe.report.setdefault("render_samples", [])
-            metrics = render_metrics(probe.observe())
-            samples.append({**metrics, "max_index_count": value["max_index_count"],
-                            "max_growth": value["max_growth"]})
+            # Aggregate verdict over every preceding sample: the count must be per-frame bounded at
+            # every view and must not grow when a view is sampled again or returned to.
+            samples = probe.report.get("render_samples") or []
+            views = {round(float(sample["yaw"]) % 360, 3) for sample in samples}
+            if len(samples) < 3 or len(views) < 2 or len(views) == len(samples):
+                raise RuntimeError("assert_render_bounded needs at least three samples over two views "
+                                   "with one repeated view")
+            (artifact / "render-samples.json").write_text(json.dumps(samples, indent=2) + "\n")
             probe.check("render_drawn_index_bounded",
-                        bounded_draw(metrics, samples[:-1], **{k: value[k] for k in ("max_index_count", "max_growth")}))
+                        render_index_bounded(samples, **{key: value[key] for key in
+                                                         ("max_index_count", "max_growth", "min_index_count")}))
+            probe.check("render_repeat_view_stable", repeated_view_stable(samples, max_growth=value["max_growth"]))
         elif kind == "pixel_window":
             from PIL import Image
 
@@ -274,6 +293,22 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             edges = goat_horn_oracle.side_horn_left_edges(artifact / "screenshots" / f"{value}.png")
             probe.report["goat_side_horn_left_edges"] = edges
             probe.check("goat_side_horn_aligned", goat_horn_oracle.side_horn_aligned(edges))
+        elif kind == "tool_hand_visible":
+            # Away from the wall the pre-image draws the tool too: a control that hides it here is
+            # not a wall-clipping control (review REVIEW-wave2-9 finding 1).
+            state = probe.observe()
+            target = state.get("target") or {}
+            item = state.get("selected_item") or {}
+            player = state.get("player") or {}
+            eye = player.get("camera_position") or []
+            hit = target.get("location") or {}
+            distance = math.dist(eye, [hit.get(axis, math.inf) for axis in ("x", "y", "z")]) if len(eye) == 3 else math.inf
+            tool, wall = tool_wall_pixels(artifact / "screenshots" / f"{value['shot']}.png")
+            probe.report["tool_far_pixels"] = {"tool": tool, "wall": wall, "distance": distance}
+            probe.check("tool_far_fixture", target.get("block_id") == "minecraft:obsidian"
+                        and item.get("item_id") == "minecraft:diamond_pickaxe"
+                        and value["min_distance"] <= distance <= value["max_distance"])
+            probe.check("tool_hand_visible", tool >= 500)
         elif kind == "tool_wall_visible":
             state = probe.observe()
             target = state.get("target") or {}

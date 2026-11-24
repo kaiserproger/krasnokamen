@@ -72,6 +72,13 @@
       "shot": "tool-far"
     },
     {
+      "tool_hand_visible": {
+        "shot": "tool-far",
+        "min_distance": 2.0,
+        "max_distance": 3.2
+      }
+    },
+    {
       "tp": [
         1000.5,
         160,

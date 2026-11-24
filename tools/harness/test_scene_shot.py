@@ -456,6 +456,73 @@ class SceneShotTests(unittest.TestCase):
         scene_shot.validate_steps(
             [{"mob_motion": {**step["mob_motion"], "types": ["minecraft:zombie"]}}], "native")
 
+    def test_render_samples_are_strict_and_the_bound_is_an_aggregate(self):
+        good = {"assert_render_bounded": {"max_index_count": 260000, "max_growth": 1.5, "min_index_count": 1}}
+        scene_shot.validate_steps([good], "native")
+        for bad in (
+            {"assert_render_bounded": {"max_index_count": 260000, "max_growth": 1.5}},
+            {"assert_render_bounded": {"max_index_count": 0, "max_growth": 1.5, "min_index_count": 1}},
+            {"assert_render_bounded": {"max_index_count": 260000, "max_growth": 1.0, "min_index_count": 1}},
+            {"assert_render_bounded": {"max_index_count": "big", "max_growth": 1.5, "min_index_count": 1}},
+            {"assert_render_bounded": {"max_index_count": 260000, "max_growth": 1.5, "min_index_count": 1,
+                                       "extra": True}},
+        ):
+            with self.subTest(step=bad), self.assertRaises(ValueError):
+                scene_shot.validate_steps([bad], "native")
+        sample = {"render_draw_sample": {"name": "yaw-0", "yaw_deg": 0}}
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([sample], "java")
+        scene_shot.validate_steps([sample], "native")
+        far = {"tool_hand_visible": {"shot": "tool-far", "min_distance": 2.0, "max_distance": 3.2}}
+        scene_shot.validate_steps([far], "native")
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([{"tool_hand_visible": {"shot": "tool-far", "min_distance": 3.2,
+                                                              "max_distance": 2.0}}], "native")
+
+    def test_render_bound_sees_every_sample_and_a_repeated_view(self):
+        class Probe:
+            def __init__(self, states):
+                self.states, self.checks, self.report = states, {}, {"id": "render"}
+
+            def observe(self, **kwargs):
+                return self.states.pop(0)
+
+            def check(self, name, condition):
+                self.checks[name] = bool(condition)
+                if not condition:
+                    raise AssertionError(name)
+
+            def call(self, name, args):
+                return {}
+
+        def view(yaw, indices):
+            return {"player": {"yaw": yaw},
+                    "render": {"draw_calls": 3, "index_count": indices, "entity_submitted_indices": 1}}
+
+        steps = [{"render_draw_sample": {"name": "a", "yaw_deg": 0}},
+                 {"render_draw_sample": {"name": "b", "yaw_deg": 0}},
+                 {"render_draw_sample": {"name": "c", "yaw_deg": 90}},
+                 {"assert_render_bounded": {"max_index_count": 260000, "max_growth": 1.5, "min_index_count": 1}}]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            probe = Probe([view(0, 1000), view(0, 1000), view(90, 1200)])
+            scene_shot.execute(probe, root, steps)
+            self.assertTrue(probe.checks["render_drawn_index_bounded"])
+            self.assertTrue(probe.checks["render_repeat_view_stable"])
+            self.assertEqual(len(json.loads((root / "render-samples.json").read_text())), 3)
+            # One stale sample at the first view would pass a per-sample gate; the aggregate must not.
+            growing = Probe([view(0, 1000), view(0, 500000), view(90, 700000)])
+            with self.assertRaisesRegex(AssertionError, "render_drawn_index_bounded"):
+                scene_shot.execute(growing, root, steps)
+            # An all-zero counter is a missing renderer, not a bounded count.
+            zeros = Probe([view(0, 0), view(0, 0), view(90, 0)])
+            with self.assertRaisesRegex(AssertionError, "render_drawn_index_bounded"):
+                scene_shot.execute(zeros, root, steps)
+            # A yaw that did not land is not a direction sample.
+            stale = Probe([view(0, 1000), view(0, 1000), view(0, 1200)])
+            with self.assertRaisesRegex(AssertionError, "render_sample_c_yaw_observed"):
+                scene_shot.execute(stale, root, steps)
+
     def test_java_options_pin_window_fov_gui_and_distance(self):
         options = dict(line.split(":", 1) for line in scene_shot.java_options(32, 70).splitlines())
         self.assertEqual((options["overrideWidth"], options["overrideHeight"]), ("1280", "720"))

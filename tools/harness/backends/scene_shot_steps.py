@@ -36,6 +36,8 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
             yield "minecraft_read_block", value["args"]
         elif kind == "assert_screen":
             yield "minecraft_observe", {}
+        elif kind in ("render_draw_sample", "assert_render_bounded"):
+            yield "minecraft_observe", {}
         elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities", "wait_terrain"):
             yield SCENE_TOOLS[kind], value["args"]
         elif kind in ("timed_entities", "require_entities", "assert_entities"):
@@ -161,8 +163,34 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                              for k in ("min", "max"))
                      and all(value["color"]["min"][i] <= value["color"]["max"][i] for i in range(3))
                      and type(value["min_pixels"]) is int and value["min_pixels"] > 0)
+        elif kind == "render_draw_sample":
+            # One observation of the client's own draw counters at a named view. The yaw the client
+            # reports must match `yaw_deg`, so a sample taken without the requested turn fails.
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"name", "yaw_deg"}
+                     and isinstance(value["name"], str)
+                     and bool(re.fullmatch(r"[A-Za-z0-9_-]+", value["name"]))
+                     and type(value["yaw_deg"]) in (int, float) and math.isfinite(value["yaw_deg"])
+                     and -360 <= value["yaw_deg"] <= 360)
         elif kind == "assert_render_bounded":
-            valid = (round(value, 12) >= 0) if isinstance(value, float) else True
+            # Aggregate over every preceding render_draw_sample: a strict shape so a typo cannot
+            # silently widen the bound, and every sample must carry a real per-frame count.
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"max_index_count", "max_growth", "min_index_count"}
+                     and type(value["max_index_count"]) is int and value["max_index_count"] > 0
+                     and type(value["max_growth"]) in (int, float)
+                     and math.isfinite(value["max_growth"]) and value["max_growth"] > 1
+                     and type(value["min_index_count"]) is int and value["min_index_count"] >= 0)
+        elif kind == "tool_hand_visible":
+            # A frame away from the wall: the held tool must be visible on it (the pre-image, which
+            # draws the hand in world geometry, keeps it visible there and hides it only up close).
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"shot", "min_distance", "max_distance"}
+                     and isinstance(value["shot"], str)
+                     and bool(re.fullmatch(r"[A-Za-z0-9_-]+", value["shot"]))
+                     and all(type(value[key]) in (int, float) and math.isfinite(value[key])
+                             for key in ("min_distance", "max_distance"))
+                     and 0 <= value["min_distance"] < value["max_distance"])
         elif kind == "key":
             valid = isinstance(value, dict) and set(value) == {"keys", "ticks"}
         elif kind in ("look", "hotbar", "use_item_on", "click_screen_button"):
@@ -336,17 +364,30 @@ def render_metrics(observation) -> dict[str, int]:
     return metrics
 
 
-def bounded_draw(metrics, samples, *, max_index_count, max_growth) -> bool:
-    """True when the drawn index count stays bounded across samples instead of accumulating.
+def render_index_bounded(samples, *, max_index_count, max_growth, min_index_count) -> bool:
+    """True when every sampled draw count is a per-frame submission, not an accumulation.
 
-    `samples` are the earlier render_metrics dicts of the same run: a count that exceeds both the
-    absolute bound and `max_growth` times the first sample means indices accumulate with camera
-    movement (the ISSUE-1-03 symptom) rather than being re-submitted per frame."""
+    Each sample must be a real non-zero count under the absolute bound and within `max_growth` of
+    the first sample: with the per-frame FrameStats reset dropped the count accumulates with camera
+    movement (the ISSUE-1-03 symptom) instead of being re-submitted every frame."""
     if not samples:
-        return metrics["index_count"] <= max_index_count
+        return False
     first = samples[0]["index_count"]
-    return (metrics["index_count"] <= max_index_count
-            and metrics["index_count"] <= max_growth * max(first, 1))
+    return all(min_index_count <= sample["index_count"] <= max_index_count
+               and sample["index_count"] <= max_growth * max(first, 1)
+               for sample in samples)
+
+
+def repeated_view_stable(samples, *, max_growth) -> bool:
+    """True when every repeat at one view, and every return to an earlier view, stays within
+    `max_growth` of that view's earlier sample: a stationary camera must not grow the count."""
+    seen: dict[float, int] = {}
+    for sample in samples:
+        yaw = round(float(sample["yaw"]) % 360, 3)
+        if yaw in seen and sample["index_count"] > max_growth * max(seen[yaw], 1):
+            return False
+        seen[yaw] = sample["index_count"]
+    return True
 
 
 def matching_entities(entities: list[dict[str, Any]], spec: dict[str, Any]) -> list[dict[str, Any]]:

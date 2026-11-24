@@ -518,10 +518,27 @@ queued LOD tile response. PNG paths are
 recorded in `result.json`; settings and world are isolated per run.
 A frame-diff check must start below the horizon: sky and clouds drift between frames even on a frozen tick (`cmd: tick freeze`), so keep the compared box on the hand or terrain (measured on `issue1-02-held-tool`, 2026-11-24).
 `tools/harness/tool_clipping_scene.json` captures the diamond pickaxe against
-obsidian from far and close positions, including held attack frames.
+obsidian from far (2.5 blocks) and close (0.6) positions, including held attack frames.
+`tool_hand_visible` (`shot`, `min_distance`, `max_distance`) requires the received
+obsidian target and the diamond pickaxe at that range, and that the turquoise tool
+pixels are present: the pre-image that draws the hand in world geometry keeps the
+tool visible away from the wall, so a control that hides it everywhere is not a
+wall-clipping control.
 `tool_wall_visible` checks the received target, selected tool and eye distance,
 then requires turquoise tool pixels over a dark wall in the fixed close-view
 frame. Inspect the attack frames separately; the pixel check covers rest only.
+
+`render_draw_sample` (`name`, `yaw_deg`) records the client's own draw counters
+(`data.render`) at the requested view and checks that the client's reported yaw
+is that view, so a sample taken without the turn cannot pass. `assert_render_bounded`
+(`max_index_count`, `max_growth`, `min_index_count`) is an aggregate over every
+earlier sample of the same run: each count must be non-zero, under the absolute
+bound and within `max_growth` of the first sample (`render_drawn_index_bounded`),
+and a view sampled again or returned to must stay within `max_growth` of that
+view's earlier count (`render_repeat_view_stable`). It refuses fewer than three
+samples over two views with one repeated view. Pair it with `toggle_debug_overlay`
+and a `shot` per view: the screenshot is what the player sees, while the counters
+are the same field F3 renders.
 
 `native-player-head` installs an authored offline skin pack in its private run:
 cyan base head, magenta opaque hat and a transparent face window. The fixed

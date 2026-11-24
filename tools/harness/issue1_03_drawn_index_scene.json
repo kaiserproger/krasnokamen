@@ -46,28 +46,7 @@
       "wait_ticks": 40
     },
     {
-      "wait_ticks": 3
-    },
-    {
-      "wait_ticks": 3
-    },
-    {
-      "wait_ticks": 3
-    },
-    {
-      "wait_ticks": 3
-    },
-    {
-      "wait_ticks": 3
-    },
-    {
-      "wait_ticks": 3
-    },
-    {
-      "wait_ticks": 3
-    },
-    {
-      "wait_ticks": 3
+      "toggle_debug_overlay": true
     },
     {
       "look": {
@@ -79,9 +58,21 @@
       "wait_ticks": 3
     },
     {
-      "assert_render_bounded": {
-        "max_index_count": 260000,
-        "max_growth": 1.5
+      "shot": "f3-yaw-0"
+    },
+    {
+      "render_draw_sample": {
+        "name": "yaw-0-first",
+        "yaw_deg": 0
+      }
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "render_draw_sample": {
+        "name": "yaw-0-repeat",
+        "yaw_deg": 0
       }
     },
     {
@@ -94,9 +85,9 @@
       "wait_ticks": 3
     },
     {
-      "assert_render_bounded": {
-        "max_index_count": 260000,
-        "max_growth": 1.5
+      "render_draw_sample": {
+        "name": "yaw-45",
+        "yaw_deg": 45
       }
     },
     {
@@ -109,9 +100,9 @@
       "wait_ticks": 3
     },
     {
-      "assert_render_bounded": {
-        "max_index_count": 260000,
-        "max_growth": 1.5
+      "render_draw_sample": {
+        "name": "yaw-90",
+        "yaw_deg": 90
       }
     },
     {
@@ -124,9 +115,9 @@
       "wait_ticks": 3
     },
     {
-      "assert_render_bounded": {
-        "max_index_count": 260000,
-        "max_growth": 1.5
+      "render_draw_sample": {
+        "name": "yaw-135",
+        "yaw_deg": 135
       }
     },
     {
@@ -139,10 +130,13 @@
       "wait_ticks": 3
     },
     {
-      "assert_render_bounded": {
-        "max_index_count": 260000,
-        "max_growth": 1.5
+      "render_draw_sample": {
+        "name": "yaw-180",
+        "yaw_deg": 180
       }
+    },
+    {
+      "shot": "f3-yaw-180"
     },
     {
       "look": {
@@ -154,9 +148,9 @@
       "wait_ticks": 3
     },
     {
-      "assert_render_bounded": {
-        "max_index_count": 260000,
-        "max_growth": 1.5
+      "render_draw_sample": {
+        "name": "yaw-minus-135",
+        "yaw_deg": -135
       }
     },
     {
@@ -169,9 +163,9 @@
       "wait_ticks": 3
     },
     {
-      "assert_render_bounded": {
-        "max_index_count": 260000,
-        "max_growth": 1.5
+      "render_draw_sample": {
+        "name": "yaw-minus-90",
+        "yaw_deg": -90
       }
     },
     {
@@ -184,10 +178,38 @@
       "wait_ticks": 3
     },
     {
+      "render_draw_sample": {
+        "name": "yaw-minus-45",
+        "yaw_deg": -45
+      }
+    },
+    {
+      "look": {
+        "yaw_deg": 0,
+        "pitch_deg": 0
+      }
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "render_draw_sample": {
+        "name": "yaw-0-return",
+        "yaw_deg": 0
+      }
+    },
+    {
+      "shot": "f3-yaw-0-return"
+    },
+    {
       "assert_render_bounded": {
         "max_index_count": 260000,
-        "max_growth": 1.5
+        "max_growth": 1.5,
+        "min_index_count": 1
       }
+    },
+    {
+      "toggle_debug_overlay": false
     }
   ]
 }
