@@ -1183,6 +1183,12 @@ def _ledger_copper_chest(steps: ProbeSteps, origin: tuple[int, int, int]) -> Non
     run(steps, origin)
 
 
+def _ledger_tag_duplicates(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_ledger_tag_duplicates import run
+
+    run(steps, origin)
+
+
 RUNNERS = {
     "native-v2-happy-ghast-harness": _happy_ghast,
     "native-v2-mob-metadata-spot": _mob_metadata,
@@ -1207,6 +1213,7 @@ RUNNERS = {
     "native-v2-ledger-op-selector": _ledger_op_selector,
     "native-v2-ledger-donkey-cargo": _ledger_donkey_cargo,
     "native-v2-ledger-copper-chest-open": _ledger_copper_chest,
+    "native-v2-ledger-tag-duplicates": _ledger_tag_duplicates,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
     "native-v2-map-locked-banners": _promotion_maps,
