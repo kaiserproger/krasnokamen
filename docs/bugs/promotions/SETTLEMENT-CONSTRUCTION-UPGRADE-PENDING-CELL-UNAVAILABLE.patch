@@ -1,0 +1,51 @@
+diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
+index 52acc954c..be64b95c9 100644
+--- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
++++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
+@@ -332,7 +332,14 @@ pub(crate) fn recover(
+     let paused = record.snapshot.state == ScriptStructureState::Paused
+         && record.snapshot.pause_reason.as_deref() == Some("footprint_changed");
+     let committed = record.snapshot.state == ScriptStructureState::Committed;
+-    if !paused && !committed {
++    // A structure can be persisted at the terminal stage index without the commit — the House L2
++    // upgrade of SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE did (`stage=2 work=0`,
++    // `Running`). It has no next cell, so no builder pass can advance it and the project would hold
++    // its slot forever; recovery is the only pass that can finish it, and the tail below already
++    // writes `Committed` once the index is terminal.
++    let terminal = record.snapshot.current_stage_index as usize == record.cells.len()
++        && record.snapshot.completed_work_units == 0;
++    if !paused && !committed && !terminal {
+         return Ok(false);
+     }
+     let retry = (paused
+@@ -399,7 +406,10 @@ pub(crate) fn recover(
+             0
+         };
+         for cell in record.cells[index].iter().take(completed).rev() {
+-            if !seen.insert(cell.at) || free_soil_work(target, cell) || harvestable_crop(target, cell) {
++            if !seen.insert(cell.at)
++                || free_soil_work(target, cell)
++                || harvestable_crop(target, cell)
++            {
+                 continue;
+             }
+             let now = target
+diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
+index 0d6244542..cc22cbd6f 100644
+--- a/crates/mc-core/src/settlements/construction.rs
++++ b/crates/mc-core/src/settlements/construction.rs
+@@ -2839,7 +2839,13 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+     };
+     // Certification is not a substitute for matching the placed blueprint:
+     // the executor may have reached its last cell after a player broke one.
+-    if executor::recover(state, id, &project.structure) != Ok(false) {
++    // Recovery that opens a repair keeps the project; recovery that finishes a
++    // terminal-index structure in place (SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE)
++    // leaves it completable, so only an uncommitted outcome refuses.
++    if executor::recover(state, id, &project.structure) != Ok(false)
++        && !executor::status(state, id, &project.structure)
++            .is_ok_and(|snapshot| snapshot.state == ScriptStructureState::Committed)
++    {
+         return false;
+     }
+     if !executor::status(state, id, &project.structure)
