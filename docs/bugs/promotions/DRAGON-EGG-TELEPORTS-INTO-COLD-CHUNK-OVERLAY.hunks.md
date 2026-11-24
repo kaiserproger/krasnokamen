@@ -1,47 +1,57 @@
 # DRAGON-EGG-TELEPORTS-INTO-COLD-CHUNK-OVERLAY: patch-mode fix identity
 
-Original fix: the residency guard added to the dragon-egg target search by this lane (`b460f313c`,
-`fix(residency): address the control review — mining frame, uniform menu guards, egg unit guard`). Vanilla
-draws its teleport target inside a +-15 horizontal / +-7 vertical frame; `block_at` answers from the cold
-overlay for a non-resident chunk, so without the guard the egg writes itself into a chunk that is not in
-memory. `fix_commit = "patch:2015e4cf380b0bfd…"` names the HEAD equivalent in
-`docs/bugs/promotions/DRAGON-EGG-TELEPORTS-INTO-COLD-CHUNK-OVERLAY.patch` (a diff from the pre-fix
-`plugin_player::allows_block`-only condition to the candidate; `git apply -R` restores it). Re-audit:
+Original fix: `c7bd44dd06` (`fix(residency): keep cold menu, mining, brush, copper and egg writes off the
+overlay`) — its `vanilla_interact.rs -125,8 +125,11` hunk only ADDS the `has_chunk` term in front of the
+air check that the pre-fix code already had:
+
+```
+         if !state
+             .world
+-            .block_at(target.x, target.y, target.z)
+-            .is_some_and(|id| id == state.registry.states.air)
++            .has_chunk(target.x.div_euclid(16), target.z.div_euclid(16))
++            || !state
++                .world
++                .block_at(target.x, target.y, target.z)
++                .is_some_and(|id| id == state.registry.states.air)
+             || !crate::plugin_player::allows_block(state, actor, target)
+         {
+             continue;
+```
+
+(Rewritten after review 6 B1: the earlier patch's a/-side deleted the vanilla air check and its
+`@@ -123,7 +123,15 @@` header was the hand-built patch's own header, not an original hunk. Both are gone.)
+
+`fix_commit = "patch:fe7e45fa5d7e03c8…"` names this hunk at HEAD
+(`crates/mc-core/src/vanilla_interact.rs:125-137`, context identical, so `git apply -R` applies
+verbatim — checked). Re-audit:
 `python3 -m tools.harness ledger promote DRAGON-EGG-TELEPORTS-INTO-COLD-CHUNK-OVERLAY --fix-patch docs/bugs/promotions/DRAGON-EGG-TELEPORTS-INTO-COLD-CHUNK-OVERLAY.patch --dry-run`.
-Rule (docs/bugs/README.md, step 1): every original non-test hunk is carried unless it is another row's or
-owner's behaviour, API the kept tests call, or code a later commit rewrote.
 
 ## Carried
 
-- `vanilla_interact.rs @@ -123,7 +123,15 @@ fn dragon_egg` — the `has_chunk(target)` + resident-air
-  terms ahead of `plugin_player::allows_block`; HEAD `crates/mc-core/src/vanilla_interact.rs:126-133`.
-  The a/-side is the same condition without the two residency terms (the pre-fix code), not an invented
-  line.
+- `vanilla_interact.rs -125,8 +125,11` — the `has_chunk` term exactly as `c7bd44dd06` writes it. HEAD
+  `:125-137`. The a/-side is the real pre-image (air check + `allows_block` intact, only `has_chunk`
+  absent); there is **no** a/-side adaptation and no invented code.
 
-## Original non-test hunks (complete)
+## Commit roles
 
-```
-## b460f313c: only the dragon-egg guard belongs to this row
-- crates/mc-core/src/vanilla_interact.rs: -123,7 +123,15 (has_chunk + resident-air before allows_block)
-```
+- `c7bd44dd06` — this row's fix (the `has_chunk` admission).
+- `b460f313c` — not this row's fix. It is the earlier residency work that the pre-image already carries
+  (including the `plugin_player::allows_block` guard that stays on both sides of the patch).
 
 ## Not carried
 
-- The rest of `b460f313c` (mining frame, the three menu guards, stations comment) — (a) MINING,
-  ENDER-CHEST-MENU-CLICK-THROUGH-COLD-OVERLAY and ANVIL-DAMAGE-WRITES-AT-COLD-MENU-COORDINATE carry them.
-- `crates/mc-core/src/interact_parity_tests.rs` — (b) kept; the cold-overlay test is this row's control.
+- The rest of `c7bd44dd06` (cold menu, mining, brush and copper hunks, `docs/bugs/rows/*`): (a) other rows'
+  behaviour, each carried by its own control (`review/c7bd44dd0.patch` lists them).
+- Test files: (b) kept.
 
-## Proving refs (file:line of the failing assertion)
+## Proving refs
 
 - `cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_never_teleports_into_a_cold_overlay`
-  (`crates/mc-core/src/interact_parity_tests.rs:602`) — with the guard reversed the egg moves into the
-  cold overlay: `assert_eq!(state.world.block_at(pos…), Some(egg), "the egg must not move into a
-  non-resident chunk's cold overlay")` (`:671-675`) fails, and
-  `assert!(state.merge_block_writes.is_empty(), "no block write is staged for a cold teleport target")`
-  (`:676-679`) fails after it.
-- Client ref `harness:entities:native-v2-ledger-dragon-egg` green receipt on the pinned candidate
-  `b8122ab6e8` (pin `b8122ab6e8e5-server-x86_64-unknown-linux-gnu-incr`):
-  `.analysis/validation/20261124T010528-native-v2-ledger-dragon-egg-fimi0tkj`, repeated
-  `20261124T010621-…-glrm6885` and `20261124T010708-…-ow55yp3v` — `egg_left_original_cell`,
-  `egg_teleported_exactly_once`, `egg_not_consumed` all true. The gate needed its own fix (11x19 pad,
-  gravity, 16^3 scan boxes returned empty); see commit `e560a87189` and the scenario's `limits`.
+  (`crates/mc-core/src/interact_parity_tests.rs:671-675`): the fixture leaves air only in cold chunks
+  (`:638-655`), so without `has_chunk` the egg leaves the sampled pad into the cold overlay and the
+  assertion reds; with the term it stays. This is the row's own loss assertion.
+- `harness:entities:native-v2-ledger-dragon-egg` — **not evidence** for this row. The scene runs at view
+  distance 4, where the whole sampled frame is resident, so it cannot observe the cold overlay; it proves
+  only that the ordinary parity path still teleports the egg. The ledger still requires a passed receipt
+  for the row's registered real-client ref, and this re-promote carries a fresh one on the candidate tree.

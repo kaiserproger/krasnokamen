@@ -90,6 +90,43 @@ fn a_body_standing_on_the_collision_box_is_not_reported() {
 }
 
 #[test]
+fn a_wall_mounted_item_frame_is_not_reported() {
+    let (mut state, _player, centre) = crate::hostile_tests::setup(0.0);
+    let cx = centre[0] as i32;
+    let cy = centre[1] as i32;
+    let cz = centre[2] as i32;
+    // A stone pillar one cell east of the air cell, and the frame against its
+    // west face: the frame body sits 0.03125 in front of the face, so its 0.25
+    // half width enters the support block by 0.21875. Hanging entities cannot
+    // suffocate, so the diagnostic must stay silent.
+    state
+        .world
+        .set_block(cx + 4, cy, cz + 3, state.registry.states.stone);
+    state.world.fold_overlay();
+    let warnings = Warnings::default();
+    tracing::subscriber::with_default(warnings.clone(), || {
+        let frame = crate::item_frame::spawn(
+            &mut state,
+            crate::boundary::BlockPos {
+                x: cx + 3,
+                y: cy,
+                z: cz + 3,
+            },
+            4,
+            false,
+            mc_data::ItemStack::default(),
+        )
+        .expect("supported frame");
+        assert!(state.entities.slot_of(frame).is_some());
+    });
+    assert!(
+        warnings.0.lock().unwrap().is_empty(),
+        "{:?}",
+        warnings.0.lock().unwrap()
+    );
+}
+
+#[test]
 fn a_body_spawned_outside_the_resident_world_is_not_reported() {
     let (mut state, _player, _centre) = crate::hostile_tests::setup(0.0);
     let cow = state.registry.cow_type_id;
