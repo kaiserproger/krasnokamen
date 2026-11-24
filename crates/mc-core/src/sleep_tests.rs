@@ -1263,3 +1263,78 @@ fn intact_bed_with_its_whole_exit_ring_sealed_uses_the_vanilla_above_fallback() 
         ]
     );
 }
+
+/// The bed head's `occupied` property, as a client reads it.
+fn bed_occupied(state: &TickState, pos: BlockPos) -> bool {
+    let id = state
+        .world
+        .block_at(pos.x, pos.y, pos.z)
+        .expect("the bed block is loaded");
+    state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(id))
+        .expect("bed state")
+        .properties
+        .iter()
+        .any(|(name, value)| name == "occupied" && value == "true")
+}
+
+/// Vanilla `LivingEntity.startSleeping` mirrors the bed block's `occupied`
+/// state, so a client sees the owning bed as taken while its player lies in it.
+#[test]
+fn a_sleeping_player_marks_the_bed_occupied_and_a_wake_clears_it() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    assert!(
+        !bed_occupied(&rig.state, rig.head),
+        "the empty bed reads free"
+    );
+    rig.use_bed(1);
+    assert!(
+        rig.state.sleepers.contains_key(&rig.player),
+        "the player lies down"
+    );
+    assert!(
+        bed_occupied(&rig.state, rig.head),
+        "the sleeper's bed must read occupied"
+    );
+    crate::sleep::wake(&mut rig.state, rig.player);
+    rig.run(1);
+    assert!(
+        !bed_occupied(&rig.state, rig.head),
+        "a bed with no sleeper reads free again"
+    );
+}
+
+/// A sleeping resident owns its bed the same way, and the brain's own wake
+/// (a click on the bed, an eviction) frees the property on the next pass.
+#[test]
+fn a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    let (slot, _villager) = sleeping_villager(&mut rig);
+    rig.run(1);
+    assert!(
+        villager_sleeping(&rig, slot),
+        "the resident still sleeps"
+    );
+    assert!(
+        bed_occupied(&rig.state, rig.head),
+        "the resident's bed must read occupied"
+    );
+    // The brain's own wake (a click on the bed, an eviction) clears the flag.
+    assert!(
+        crate::villager::brain::kick_out_of_bed(&mut rig.state, rig.head),
+        "the resident asleep in the bed is woken"
+    );
+    rig.run(1);
+    assert!(
+        !villager_sleeping(&rig, slot),
+        "the resident stays up"
+    );
+    assert!(
+        !bed_occupied(&rig.state, rig.head),
+        "the bed is free once its resident is up"
+    );
+}

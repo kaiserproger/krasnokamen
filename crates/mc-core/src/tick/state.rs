@@ -151,6 +151,7 @@ impl TickState {
             vaults: Default::default(),
             shriekers: Default::default(),
             sleepers: HashMap::default(),
+            occupied_beds: HashSet::default(),
             journaled_players: HashMap::default(),
             journaled_block_entities: HashMap::default(),
             block_log: Default::default(),

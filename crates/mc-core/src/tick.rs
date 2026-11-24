@@ -442,6 +442,10 @@ pub struct TickState {
     pub(crate) shriekers: crate::shrieker::Shriekers,
     /// Players lying in a bed ([`crate::sleep`]).
     pub sleepers: HashMap<EntityId, crate::sleep::Sleeper>,
+    /// Bed head cells whose block `occupied` property this tick mirrored
+    /// ([`crate::sleep::run`]). Derived from the sleepers and sleeping
+    /// residents every tick, never persisted.
+    pub(crate) occupied_beds: HashSet<BlockPos>,
     /// Last journaled player / block-entity post-images. Images are
     /// absolute, so the journal writes one only when it differs from the
     /// last; an unchanged record is still covered by an earlier batch or
