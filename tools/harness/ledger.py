@@ -1148,6 +1148,30 @@ def proving_refs(row):
     return list(named)
 
 
+def _check_proving_choice(ident, row, control):
+    """Refuse a `proving_refs` that shrinks the proof dishonestly.
+
+    (a) a real-client row keeps every graphical ref proving: the scene carries the symptom, so it can
+    never be excluded by naming the one cargo ref that happens to go red; (b) an excluded ref that IS
+    red in the control is a flipping check, so it must be named instead of dropped."""
+    from . import regressions
+
+    proving = set(proving_refs(row))
+    excluded = [ref for ref in row.get('regression') or [] if ref not in proving]
+    if not excluded:
+        return proving
+    if regressions.needs_real_client(row):
+        graphical = [ref for ref in excluded if regressions.is_graphical_ref(ref)]
+        if graphical:
+            raise Refused(f"{ident}: proving_refs excludes the real-client ref(s) {', '.join(graphical)}; "
+                          'the scene carries the symptom and must stay proving')
+    flipping = [ref for ref in excluded if (control.get(ref) or {}).get('state') == RED]
+    if flipping:
+        raise Refused(f"{ident}: proving_refs excludes {', '.join(flipping)}, which went red on the control: "
+                      'a flipping check is proving, name it (or remove it from regression)')
+    return proving
+
+
 def _require_control_red(ident, control, proving):
     """Refuse unless every proving ref is RED in the control.
 
@@ -1754,7 +1778,7 @@ def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client
                                            row.get('proving_assertions', {}))
     restored_info = check_client_restore_receipt(root, client_receipt, graphical, fix_full, tree_now)
     delta = _check_client_control_delta(root, control['client_head'], restored_info['client_head'], fix_full)
-    graphical_proving = [ref for ref in proving_refs(row) if ref in graphical]
+    graphical_proving = [ref for ref in _check_proving_choice(ident, row, control) if ref in graphical]
     if not graphical_proving:
         raise Refused(f'{ident}: proving_refs names no real-client ref, but a client:<sha> fix is proved by a '
                       'real-client receipt')
@@ -1934,7 +1958,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         valid_red = {ref for ref, entry in control.items()
                      if entry['state'] == RED and _assertion_in_files(entry, control_dir, reversed_files)} \
             if test_only else {ref for ref, entry in control.items() if entry['state'] == RED}
-        proving = proving_refs(row)
+        proving = sorted(_check_proving_choice(ident, row, control))
         if test_only:
             # A test-only red outside the reversed files is not control A at all, so the precise
             # control-A message wins; the proving set still has to be covered by it.

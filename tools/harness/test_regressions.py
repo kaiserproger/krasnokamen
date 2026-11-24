@@ -2529,9 +2529,24 @@ class ControlCoversEveryProvingRefTests(unittest.TestCase):
 
     The hole this closes: a promoted row of two refs passed the control because ONE of them was red —
     a scene whose control run crashed (`failed`, no assertion verdict) still counted once the cargo
-    ref flipped, and at e25d40529 that accepted a control which proved nothing about the scene."""
+    ref flipped, and at e25d40529 that accepted a control which proved nothing about the scene.
+    The helpers are looked up defensively so that on a tree without the rule these tests FAIL (an
+    unimportable module or an exception would be unrunnable, and an unrunnable control proves nothing).
+    """
 
     ROW = {'id': 'ROW', 'regression': ['cargo:t::flip', 'harness:scene-shot:scene']}
+
+    def rule(self):
+        fn = getattr(ledger, '_require_control_red', None)
+        if fn is None:
+            raise AssertionError('ledger keeps no rule that a control covers every proving ref')
+        return fn
+
+    def proving(self, row):
+        fn = getattr(ledger, 'proving_refs', None)
+        if fn is None:
+            raise AssertionError('ledger has no proving_refs')
+        return fn(row)
 
     def states(self, **overrides):
         base = {'cargo:t::flip': {'state': 'red', 'detail': 'FAIL'},
@@ -2540,36 +2555,57 @@ class ControlCoversEveryProvingRefTests(unittest.TestCase):
         return base
 
     def test_every_ref_red_passes_without_a_proving_list(self):
-        ledger._require_control_red('ROW', self.states(), ledger.proving_refs(self.ROW))
+        self.rule()('ROW', self.states(), self.proving(self.ROW))
 
     def test_an_unrunnable_run_never_counts_as_red(self):
         for state in ('unrunnable', 'needs-real-client', 'unproven-panic', 'fixture-failure'):
             with self.subTest(state=state):
                 with self.assertRaisesRegex(ledger.Refused, 'not red on every proving ref'):
-                    ledger._require_control_red('ROW', self.states(**{'harness:scene-shot:scene': {'state': state}}),
-                                                ledger.proving_refs(self.ROW))
+                    self.rule()('ROW', self.states(**{'harness:scene-shot:scene': {'state': state}}),
+                                self.proving(self.ROW))
 
     def test_a_missing_entry_is_not_red(self):
         with self.assertRaisesRegex(ledger.Refused, 'no result for this ref'):
-            ledger._require_control_red('ROW', {'cargo:t::flip': {'state': 'red'}}, ledger.proving_refs(self.ROW))
+            self.rule()('ROW', {'cargo:t::flip': {'state': 'red'}}, self.proving(self.ROW))
 
     def test_a_row_may_name_the_refs_that_prove_it(self):
         row = {**self.ROW, 'proving_refs': ['harness:scene-shot:scene']}
         control = self.states(**{'harness:scene-shot:scene': {'state': 'red', 'detail': 'assertion failed: speed'},
                                  'cargo:t::flip': {'state': 'green', 'detail': ''}})
-        ledger._require_control_red('ROW', control, ledger.proving_refs(row))
+        self.assertEqual(list(self.proving(row)), ['harness:scene-shot:scene'])
+        self.rule()('ROW', control, self.proving(row))
 
     def test_a_named_ref_still_has_to_be_red(self):
         row = {**self.ROW, 'proving_refs': ['harness:scene-shot:scene']}
         with self.assertRaisesRegex(ledger.Refused, 'harness:scene-shot:scene=unrunnable'):
-            ledger._require_control_red('ROW', self.states(**{'harness:scene-shot:scene': {'state': 'unrunnable'}}),
-                                        ledger.proving_refs(row))
+            self.rule()('ROW', self.states(**{'harness:scene-shot:scene': {'state': 'unrunnable'}}),
+                        self.proving(row))
 
     def test_proving_refs_must_name_registered_refs(self):
         for named in (['harness:scene-shot:other'], [], 'harness:scene-shot:scene'):
             with self.subTest(named=named):
                 with self.assertRaisesRegex(ledger.Refused, 'proving_refs'):
-                    ledger.proving_refs({**self.ROW, 'proving_refs': named})
+                    self.proving({**self.ROW, 'proving_refs': named})
 
     def test_the_default_is_every_ref(self):
-        self.assertEqual(ledger.proving_refs(self.ROW), self.ROW['regression'])
+        self.assertEqual(list(self.proving(self.ROW)), self.ROW['regression'])
+
+    def test_a_real_client_row_cannot_drop_its_scene(self):
+        row = {'id': 'ROW', 'area': 'client', 'repro': 'client',
+               'regression': ['cargo:t::flip', 'harness:scene-shot:issue1-19-hostile-motion'],
+               'proving_refs': ['cargo:t::flip']}
+        control = {'cargo:t::flip': {'state': 'red', 'detail': 'FAIL'},
+                   'harness:scene-shot:issue1-19-hostile-motion': {'state': 'green', 'detail': ''}}
+        with self.assertRaisesRegex(ledger.Refused, 'must stay proving'):
+            self.rule_choice()('ROW', row, control)
+
+    def test_an_excluded_ref_that_flips_must_be_named(self):
+        row = {**self.ROW, 'proving_refs': ['harness:scene-shot:scene']}
+        with self.assertRaisesRegex(ledger.Refused, 'which went red on the control'):
+            self.rule_choice()('ROW', row, self.states())
+
+    def rule_choice(self):
+        fn = getattr(ledger, '_check_proving_choice', None)
+        if fn is None:
+            raise AssertionError('ledger lets proving_refs drop a ref that flips')
+        return fn
