@@ -91,28 +91,27 @@ fn spectator_index_matches_the_roster_scan_and_is_built_once_per_publish() {
     // publish-wide set built once, not from two roster scans per visible
     // player per viewer. This compares the indexed answer with the roster
     // scan for every (entity, recipient) pair of the mixed-mode fixture.
-    let scan = |snapshot: &mc_core::boundary::WorldSnapshot,
-                entity: &EntityView,
-                recipient: EntityId| {
-        if entity.id == recipient || entity.type_id != player_entity_type_id() {
-            return true;
-        }
-        let spectator_viewer = snapshot
-            .player_roster
-            .iter()
-            .any(|player| player.entity == recipient && player.game_mode == 3);
-        if spectator_viewer {
-            snapshot
-                .cameras
-                .get(&entity.id)
-                .is_none_or(|target| *target == entity.id)
-        } else {
-            !snapshot
+    let scan =
+        |snapshot: &mc_core::boundary::WorldSnapshot, entity: &EntityView, recipient: EntityId| {
+            if entity.id == recipient || entity.type_id != player_entity_type_id() {
+                return true;
+            }
+            let spectator_viewer = snapshot
                 .player_roster
                 .iter()
-                .any(|player| player.entity == entity.id && player.game_mode == 3)
-        }
-    };
+                .any(|player| player.entity == recipient && player.game_mode == 3);
+            if spectator_viewer {
+                snapshot
+                    .cameras
+                    .get(&entity.id)
+                    .is_none_or(|target| *target == entity.id)
+            } else {
+                !snapshot
+                    .player_roster
+                    .iter()
+                    .any(|player| player.entity == entity.id && player.game_mode == 3)
+            }
+        };
     let before = tick_index::SPECTATOR_INDEX_BUILDS.load(std::sync::atomic::Ordering::Relaxed);
     for (recipient_mode, subject_mode) in [(0, 0), (3, 0), (0, 3), (3, 3)] {
         let mut out = scene();

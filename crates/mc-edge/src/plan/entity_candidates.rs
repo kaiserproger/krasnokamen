@@ -55,7 +55,12 @@ pub(super) fn collect(
                     scratch.tracking_ranges.insert(range);
                 }
                 if !super::entity_trackable(entity, &*viewer, view_distance)
-                    || !entity_interest::broadcast_to(snapshot, entity, viewer.entity_id, spectators)
+                    || !entity_interest::broadcast_to(
+                        snapshot,
+                        entity,
+                        viewer.entity_id,
+                        spectators,
+                    )
                 {
                     continue;
                 }

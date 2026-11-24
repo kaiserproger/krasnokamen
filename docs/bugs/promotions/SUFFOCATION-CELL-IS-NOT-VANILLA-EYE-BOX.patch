@@ -1,5 +1,5 @@
 diff --git a/crates/mc-core/src/contact_hazards.rs b/crates/mc-core/src/contact_hazards.rs
-index f6915c6d3..1439be2a7 100644
+index f6915c6d3..60c8a6519 100644
 --- a/crates/mc-core/src/contact_hazards.rs
 +++ b/crates/mc-core/src/contact_hazards.rs
 @@ -45,7 +45,7 @@ pub(crate) fn take_work_counts() -> [usize; 5] {
@@ -42,13 +42,13 @@ index f6915c6d3..1439be2a7 100644
 +                crate::blueprint::wire_type_id(type_id),
 +            )
 +            .map(mc_data::entity_types::canonical_dimensions)
-+                .filter(|dimensions| dimensions.height > 0.0)
-+                .and_then(|dimensions| {
-+                    dimensions
-+                        .eye_height
-+                        .map(|eye| eye * height / dimensions.height)
-+                })
-+                .unwrap_or(0.9 * height)
++            .filter(|dimensions| dimensions.height > 0.0)
++            .and_then(|dimensions| {
++                dimensions
++                    .eye_height
++                    .map(|eye| eye * height / dimensions.height)
++            })
++            .unwrap_or(0.9 * height)
 +        }
 +    }
 +}

@@ -171,13 +171,13 @@ fn eye_height(kind: crate::entities::EntityKind, pose: u8, height: f64) -> f64 {
                 crate::blueprint::wire_type_id(type_id),
             )
             .map(mc_data::entity_types::canonical_dimensions)
-                .filter(|dimensions| dimensions.height > 0.0)
-                .and_then(|dimensions| {
-                    dimensions
-                        .eye_height
-                        .map(|eye| eye * height / dimensions.height)
-                })
-                .unwrap_or(0.9 * height)
+            .filter(|dimensions| dimensions.height > 0.0)
+            .and_then(|dimensions| {
+                dimensions
+                    .eye_height
+                    .map(|eye| eye * height / dimensions.height)
+            })
+            .unwrap_or(0.9 * height)
         }
     }
 }
