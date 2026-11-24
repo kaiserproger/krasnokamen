@@ -1,3 +1,31 @@
+diff --git a/crates/mc-core/src/core.rs b/crates/mc-core/src/core.rs
+index de151e83ef66dfb76992224c76976f4c40b70448..6d3fe5d2eddf839313a264d039e1bea5c5c2eb52 100644
+--- a/crates/mc-core/src/core.rs
++++ b/crates/mc-core/src/core.rs
+@@ -899,18 +899,11 @@ impl Core {
+             .test_acceleration
+             .startup()
+             .map_err(CoreError::Config)?;
+-        let is_stage = |path: &std::path::Path| {
+-            path.file_name()
+-                .and_then(std::ffi::OsStr::to_str)
+-                .is_some_and(|name| name.starts_with(".krasnokamen-conversion-"))
+-        };
+-        if is_stage(&config.world_dir)
+-            || std::fs::canonicalize(&config.world_dir).is_ok_and(|path| is_stage(&path))
+-        {
+-            return Err(CoreError::Storage(
+-                "unpublished conversion staging directory cannot be opened by the runtime".into(),
+-            ));
+-        }
++        // A restore or conversion staging directory may already hold a store
++        // and a valid marker; it is refused by name before anything is created
++        // or leased there.
++        mc_world::store_marker::refuse_unpublished(&config.world_dir)
++            .map_err(|error| CoreError::Storage(format!("{error}; the runtime refuses it")))?;
+         // R4-P2: creating the world directory must persist its own entry, or a
+         // power loss after the first durable store/ journal publication can
+         // remove the whole world (Books R4-P2).
 diff --git a/crates/mc-core/src/journal.rs b/crates/mc-core/src/journal.rs
 index 3bb11b5f1ddc435d42a1b20f424c34fdf0579955..dbb24d5a161bdd7e9bc41ded9d2f0dd6ba148c1e 100644
 --- a/crates/mc-core/src/journal.rs
@@ -56,7 +84,7 @@ index 3bb11b5f1ddc435d42a1b20f424c34fdf0579955..dbb24d5a161bdd7e9bc41ded9d2f0dd6
      world_dir: &Path,
      checkpoint_tick: u64,
 diff --git a/crates/mc-edge/src/backup.rs b/crates/mc-edge/src/backup.rs
-index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..23df3d135605644c328710a74e936b62195b659f 100644
+index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..be120415fa4b01375a8476466fe574ee5255311d 100644
 --- a/crates/mc-edge/src/backup.rs
 +++ b/crates/mc-edge/src/backup.rs
 @@ -1,6 +1,8 @@
@@ -69,7 +97,37 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..23df3d135605644c328710a74e936b62
  
  use std::collections::BTreeMap;
  use std::fs::File;
-@@ -257,6 +259,11 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<usize> {
+@@ -234,6 +236,10 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<usize> {
+     if !world.is_dir() {
+         bail!("backup source is not a directory: {}", world.display());
+     }
++    // A staging directory is no world, even with a valid marker; refuse it
++    // before a lease file or redb repair can touch it.
++    mc_world::store_marker::refuse_unpublished(&world)
++        .map_err(|error| anyhow::anyhow!("backup refused: {error}"))?;
+     let out = resolve_destination(out)?;
+     refuse_overlap(&world, &out)?;
+     let _world_lease = ExclusiveLease::acquire(&world)?;
+@@ -252,11 +258,30 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<usize> {
+             .map_err(|error| anyhow::anyhow!("backup source store: {error}"))?;
+     mc_world::store_marker::verify(&world, store_uuid, store_tick)
+         .map_err(|error| anyhow::anyhow!("backup refused: {error}"))?;
++    // A restored copy always has `journal/` and replay refuses one without it,
++    // its tail being lost. Copying such a copy would hand restore a backup it
++    // republishes with a fresh empty journal, so refuse it here, independent of
++    // the content check that may or may not follow.
++    let branch = mc_world::store_marker::branch(&world)
++        .map_err(|error| anyhow::anyhow!("backup refused: {error}"))?;
++    if branch != mc_world::store_marker::ROOT_BRANCH && !world.join("journal").is_dir() {
++        bail!(
++            "backup refused: {} is a restored copy on branch {:016x} without its journal/ \
++             directory; its WAL tail is lost, so it is not backed up as a valid world",
++            world.display(),
++            u64::from_be_bytes(branch),
++        );
++    }
+     let mut database_lease = ExclusiveLease::acquire(&world.join(NATIVE_DATABASE))?;
+     require_empty(&out)?;
      std::fs::create_dir_all(&out)?;
      let _output_lease = ExclusiveLease::acquire(&out)?;
      require_empty(&out)?;
@@ -81,7 +139,7 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..23df3d135605644c328710a74e936b62
      let mut manifest = BackupManifest::current();
      for (name, source) in files {
          // Windows byte-range locks also deny reads through a second handle in
-@@ -409,13 +416,18 @@ fn read_manifest(from: &Path) -> Result<BackupManifest> {
+@@ -409,13 +434,27 @@ fn read_manifest(from: &Path) -> Result<BackupManifest> {
      Ok(manifest)
  }
  
@@ -92,17 +150,26 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..23df3d135605644c328710a74e936b62
 +/// and publish it with one rename ([`publish`]): an interrupted restore leaves
 +/// the target as it was, or the complete restored world, never a partial one.
 +/// Restore never merges into a nonempty target, follows links, or overlaps its
-+/// source.
++/// source, and it runs on Unix only (see [`publish`]).
  pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
++    if cfg!(not(unix)) {
++        bail!(
++            "restore runs on Unix (Linux, macOS) only: it publishes the restored world by \
++             renaming it over the empty target it keeps leased, which this platform cannot do; \
++             restore on Linux or macOS and move the finished world directory whole"
++        );
++    }
      let from = std::fs::canonicalize(from)
          .with_context(|| format!("resolving backup {}", from.display()))?;
      let target = resolve_destination(world_dir)?;
      refuse_overlap(&from, &target)?;
++    mc_world::store_marker::refuse_unpublished(&target)
++        .map_err(|error| anyhow::anyhow!("restore target refused: {error}"))?;
 +    let staging = staging_path(&target)?;
      let _source_lease = ExclusiveLease::acquire(&from)?;
      let manifest = read_manifest(&from)?;
      let files = collect_files(&from, true)?;
-@@ -431,6 +443,10 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+@@ -431,6 +470,10 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
          None
      };
      require_empty(&target)?;
@@ -113,7 +180,7 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..23df3d135605644c328710a74e936b62
      for (name, source) in &files {
          let actual = if name == NATIVE_DATABASE {
              digest_reader(&mut database_lease.0)?
-@@ -444,62 +460,50 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+@@ -444,62 +487,52 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
              );
          }
      }
@@ -172,20 +239,23 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..23df3d135605644c328710a74e936b62
 -        // Nothing the restore created survives a refusal: the whole target when
 -        // this restore made it, otherwise the files it copied and the data
 -        // directories it created under an existing empty target.
++    // The staging directory is created under the target lease: it is this
++    // restore's own until the lease drops, after cleanup.
 +    std::fs::create_dir(&staging).with_context(|| format!("creating {}", staging.display()))?;
 +    let published = stage_world(&from, &staging, &files, &manifest, &mut database_lease.0)
 +        .and_then(|()| {
 +            #[cfg(test)]
 +            tests::interruption_point(&tests::Step::Publishing);
-+            publish(&staging, &target, target_lease)
++            publish(&staging, &target, &target_lease)
 +        });
 +    if let Err(error) = published {
-+        // Nothing the restore created survives a refusal: the staging directory,
-+        // and the target when this restore made it. An existing empty target
-+        // stays (Windows removes it just before the rename; it is put back).
++        // Cleanup still holds the target lease and removes only what this
++        // restore owns: its staging directory, and the target only if this
++        // restore created it and it is still empty (`remove_dir` refuses
++        // anything else). Whatever else is at the target stays as found.
 +        let _ = std::fs::remove_dir_all(&staging);
          if created_target {
-             let _ = std::fs::remove_dir_all(&target);
+-            let _ = std::fs::remove_dir_all(&target);
 -        } else {
 -            for name in files.keys() {
 -                let _ = std::fs::remove_file(target.join(name));
@@ -193,10 +263,10 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..23df3d135605644c328710a74e936b62
 -            for directory in ["native", "journal"] {
 -                let _ = std::fs::remove_dir(target.join(directory));
 -            }
-+        } else if !target.exists() {
-+            let _ = std::fs::create_dir(&target);
++            let _ = std::fs::remove_dir(&target);
          }
 -        bail!("restored world is inconsistent: {error}; nothing was kept");
++        drop(target_lease);
 +        return Err(error);
      }
 +    #[cfg(test)]
@@ -210,18 +280,19 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..23df3d135605644c328710a74e936b62
      println!(
          "restore of {} into {} complete: {} files verified",
          from.display(),
-@@ -509,6 +513,172 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+@@ -509,6 +542,181 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
      Ok(())
  }
  
 +/// `<target>.restore-staging`: beside the target, so on its filesystem and one
-+/// rename away from it, and never a name a world is configured with.
++/// rename away from it. The name is reserved: every open refuses it
++/// (`store_marker::refuse_unpublished`), whatever marker the copy holds.
 +fn staging_path(target: &Path) -> Result<PathBuf> {
 +    let mut name = target
 +        .file_name()
 +        .context("destination has no file name")?
 +        .to_os_string();
-+    name.push(".restore-staging");
++    name.push(mc_world::store_marker::RESTORE_STAGING_SUFFIX);
 +    Ok(target.with_file_name(name))
 +}
 +
@@ -243,10 +314,11 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..23df3d135605644c328710a74e936b62
 +/// Build the restored world in `staging` (Books R4-P1 pair check, then the
 +/// copy's own branch) and make every name in it durable.
 +///
-+/// The staging directory never opens as a world: the backup's marker is
-+/// verified from memory and not copied, so until the copy's own marker is
-+/// written as the last step the staged store has a checkpoint and no marker,
-+/// which every open refuses (`store_marker::check`/`verify`).
++/// The staging directory never opens as a world: its name is reserved
++/// ([`staging_path`]), so every open refuses it even once the copy's own marker
++/// is written. The backup's marker is also verified from memory and never
++/// copied, so until that marker is written as the last step the staged store
++/// has a checkpoint and no marker, which every open refuses on its own.
 +fn stage_world(
 +    from: &Path,
 +    staging: &Path,
@@ -301,6 +373,18 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..23df3d135605644c328710a74e936b62
 +            copied
 +                .admits(&marker_path, store_uuid, store_tick)
 +                .map_err(|error| error.to_string())?;
++            // A backup of a restored copy carries that copy's `journal/`, an
++            // empty one included; without it the copy's tail was lost before
++            // the backup, and a fresh empty journal must not stand in for it.
++            if copied.branch != mc_world::store_marker::ROOT_BRANCH
++                && !from.join("journal").is_dir()
++            {
++                return Err(format!(
++                    "the backup is of a restored copy on branch {:016x} and has no journal/ \
++                     directory: that copy's WAL tail was lost",
++                    u64::from_be_bytes(copied.branch)
++                ));
++            }
 +            start_branch(staging, copied, store_tick.unwrap_or(0))
 +        });
 +    if let Err(error) = paired {
@@ -356,14 +440,14 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..23df3d135605644c328710a74e936b62
 +}
 +
 +/// Publish the staged world at `target` with one rename. The target is an
-+/// empty directory this restore leases (lease files at most): Unix renames a
-+/// directory over an empty one atomically, so the leased empty target stands
-+/// until the rename. Windows renames no directory over another and keeps the
-+/// lease in a file inside it, so there the empty target is removed first and is
-+/// absent, never partial, until the rename.
-+fn publish(staging: &Path, target: &Path, lease: ExclusiveLease) -> Result<()> {
-+    #[cfg(windows)]
-+    drop(lease);
++/// empty directory this restore leases (lease files at most), and `_lease` is
++/// that lease: Unix renames a directory over an empty one atomically, so the
++/// leased empty target stands until the rename and nobody else can take it in
++/// between. The caller keeps the lease until it is done with the target. No
++/// Windows variant exists: there the lease is a file inside the target and no
++/// directory is renamed over another, so the target would have to be released
++/// and removed first, and another process could take it in that gap.
++fn publish(staging: &Path, target: &Path, _lease: &ExclusiveLease) -> Result<()> {
 +    for entry in std::fs::read_dir(target)? {
 +        let path = entry?.path();
 +        if !is_lease_file(&path) {
@@ -371,15 +455,94 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..23df3d135605644c328710a74e936b62
 +        }
 +        std::fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
 +    }
-+    #[cfg(windows)]
-+    std::fs::remove_dir(target).with_context(|| format!("removing {}", target.display()))?;
 +    std::fs::rename(staging, target)
-+        .with_context(|| format!("publishing the restored world at {}", target.display()))?;
-+    #[cfg(not(windows))]
-+    drop(lease);
-+    Ok(())
++        .with_context(|| format!("publishing the restored world at {}", target.display()))
 +}
 +
  #[cfg(test)]
  #[path = "backup_tests.rs"]
  mod tests;
+diff --git a/crates/mc-world-conversion/src/lib.rs b/crates/mc-world-conversion/src/lib.rs
+index b771410e5c3b54d6bc195df3d6fd67874b06cc3a..06d1f1be403ef8f21ccea11cd07533af69bb4117 100644
+--- a/crates/mc-world-conversion/src/lib.rs
++++ b/crates/mc-world-conversion/src/lib.rs
+@@ -292,14 +292,8 @@ fn convert(
+                 .file_name()
+                 .ok_or_else(|| fail("destination has no filename"))?,
+         );
+-        if destination.file_name().is_some_and(|name| {
+-            name.to_string_lossy()
+-                .starts_with(".krasnokamen-conversion-")
+-        }) {
+-            return Err(fail(
+-                "destination uses reserved unpublished conversion staging name",
+-            ));
+-        }
++        // A destination with a staging name would publish a world no open admits.
++        mc_world::store_marker::refuse_unpublished(&destination).map_err(fail)?;
+         if destination.starts_with(&source) {
+             return Err(fail("destination must not be inside source"));
+         }
+@@ -317,7 +311,11 @@ fn convert(
+             return Err(fail("receipt must be outside source and destination"));
+         }
+         receipt.input_hashes = hashes(&source)?;
+-        let stage = parent.join(format!(".krasnokamen-conversion-{}", uuid::Uuid::new_v4()));
++        let stage = parent.join(format!(
++            "{}{}",
++            mc_world::store_marker::CONVERSION_STAGING_PREFIX,
++            uuid::Uuid::new_v4()
++        ));
+         fs::create_dir(&stage).map_err(fail)?;
+         staging = Some(stage.clone());
+         let stats = adapter(config, &source, &stage)?;
+diff --git a/crates/mc-world/src/native.rs b/crates/mc-world/src/native.rs
+index 487f7fa2f97c85024e2b95b94eefba649d437ee5..96cbcde4395d0729b3554e01448fca931c247e41 100644
+--- a/crates/mc-world/src/native.rs
++++ b/crates/mc-world/src/native.rs
+@@ -544,8 +544,11 @@ impl NativeStore {
+     /// Open a world's store for writing outside `Core::open` (world tools,
+     /// maintenance, offline censuses) and run [`verify_marker`] before the
+     /// caller's first write or reported read. One entry so no tool path can
+-    /// skip the pair check; none of them rewrites the marker.
++    /// skip the pair check; none of them rewrites the marker. A restore or
++    /// conversion staging directory is refused before its store is opened.
+     pub fn open_checked(world_dir: &Path, identity: [u8; 32]) -> Result<Self, NativeError> {
++        crate::store_marker::refuse_unpublished(world_dir)
++            .map_err(|error| NativeError::Marker(error.to_string()))?;
+         let store = Self::open(&world_dir.join(NATIVE_DATABASE), identity)?;
+         store.verify_marker(world_dir)?;
+         Ok(store)
+@@ -554,8 +557,11 @@ impl NativeStore {
+     /// Marker check for a store whose identity cannot be compared yet (the
+     /// worldgen-revision upgrade rewrites it). Repairs the store first if redb
+     /// requires it, exactly as the first serve would, then refuses a store that
+-    /// disagrees with its marker, without touching the marker file.
++    /// disagrees with its marker, without touching the marker file. A staging
++    /// directory is refused before the store is opened or repaired.
+     pub fn check_marker_file(world_dir: &Path, path: &Path) -> Result<(), NativeError> {
++        crate::store_marker::refuse_unpublished(world_dir)
++            .map_err(|error| NativeError::Marker(error.to_string()))?;
+         let (store_uuid, tick) = Self::read_marker_fields(path)?;
+         crate::store_marker::verify(world_dir, store_uuid, tick)
+             .map_err(|error| NativeError::Marker(error.to_string()))
+diff --git a/crates/mc-world/src/store_marker.rs b/crates/mc-world/src/store_marker.rs
+index 12d55e2fbaf0cdc821a80dd3b1465dd78851e8d5..526ed868bce72933dce065e730f5331d50846d6b 100644
+--- a/crates/mc-world/src/store_marker.rs
++++ b/crates/mc-world/src/store_marker.rs
+@@ -341,12 +341,14 @@ pub fn refuse_unpublished(world_dir: &Path) -> Result<(), MarkerError> {
+ 
+ /// The same refusal rules as [`check`], without writing: a store ahead of the
+ /// marker is accepted and the marker is left byte-identical. Read-only tools
+-/// (`world census`, `world probe`, backups) must use this one.
++/// (`world census`, `world probe`, backups) must use this one. A staging
++/// directory is refused first ([`refuse_unpublished`]), whatever its marker.
+ pub fn verify(
+     world_dir: &Path,
+     store_uuid: [u8; 16],
+     store_tick: Option<u64>,
+ ) -> Result<(), MarkerError> {
++    refuse_unpublished(world_dir)?;
+     let target = path(world_dir);
+     let Some(marker) = read(world_dir)? else {
+         return match store_tick {

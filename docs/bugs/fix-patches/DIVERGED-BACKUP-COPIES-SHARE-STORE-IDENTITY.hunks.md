@@ -1,12 +1,12 @@
 # DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY — negative-control patch
 
 Fix: `docs/bugs/fix-patches/DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY.patch`
-(`fix_commit = "patch:0ec63ae44ee635104a5c5cbc5897a7c69ab0566e42f3ee2e06bdb450af38b7ff"`, sha256 of its
+(`fix_commit = "patch:c1165a63ef16ef9f120c7d5f50c235d2d2069ac818faf97b56ee2f88033674eb"`, sha256 of its
 non-test hunks, here the whole file). It is a diff from the pre-fix form to the candidate; `git apply -R`
-restores the pre-fix form. The row was promoted once on `01ac685ba7` alone; the persistence review
-(`receipts/D123PersistDiv/review/REVIEW-ReviewD123Diverged-Sol1.md`, blockers 1-2) showed that an
-interrupted restore of that commit can leave a copy that opens on the backup's own branch, the row's
-symptom by another path, so the row was reopened with the completed fix.
+restores the pre-fix form. The row was promoted on `01ac685ba7` alone, then on `01ac685ba7` + `cee142f323`
+(patch `0ec63ae4…`). Two persistence reviews (`receipts/D123PersistDiv/review/REVIEW-ReviewD123Diverged-Sol1.md`
+and `-Sol2.md`) found paths to the row's symptom that those commits left open, so the row was reopened each
+time with the completed fix.
 
 ## Commits covered
 
@@ -15,12 +15,21 @@ symptom by another path, so the row was reopened with the completed fix.
   (`journal::rebind_tail`) and writes the marker naming it. Closes the row's main path: two copies of one
   backup, or a copy and its source, refuse each other's tails.
 - `cee142f323` "persist: publish a restored world from an unpublished staging directory" — the same steps
-  run in `<target>.restore-staging`, which no open admits (the backup's marker is verified from memory and
-  never copied; the copy's own marker is written last), every directory is fsynced and one rename
-  publishes the finished copy; every restored copy has `journal/` and replay refuses a restored copy
-  without one; an offline backup keeps an empty `journal/`. Closes the interrupted-restore path: before
-  it, a restore killed between its copies and its marker write left the backup's store, marker and tail
-  on the backup's branch at the target, and a lost `journal/` read as an empty tail.
+  run in `<target>.restore-staging` (the backup's marker is verified from memory and never copied; the
+  copy's own marker is written last), every directory is fsynced and one rename publishes the finished copy;
+  every restored copy has `journal/` and replay refuses a restored copy without one; an offline backup keeps
+  an empty `journal/`. Closes the interrupted-restore path: before it, a restore killed between its copies
+  and its marker write left the backup's store, marker and tail on the backup's branch at the target, and a
+  lost `journal/` read as an empty tail.
+- `f0d7f039d` "persist: refuse restore staging by name, keep the target lease through cleanup, refuse lost
+  journals" — closes the three paths of the second review: (1) the staged copy, once its own marker is
+  written, opened as a world before publication (`store_marker::refuse_unpublished` in `verify`/`check`,
+  `Core::open`, `NativeStore::open_checked`/`check_marker_file`, `run_backup`; restore and conversion refuse
+  a staging-named target); (2) a failed publication's cleanup could recursively delete a target another
+  process had taken (the target lease is kept through publication and cleanup, which removes only the
+  restore's own staging directory and a target it created with `remove_dir`; the Windows
+  release-remove-rename publication is gone and restore refuses on non-Unix hosts); (3) backup and restore
+  without a content cache turned a restored copy's lost `journal/` into a fresh empty one (both refuse it).
 
 ## Carried hunks
 
@@ -29,13 +38,16 @@ symptom by another path, so the row was reopened with the completed fix.
 sides, so no a/-side text outside the original pre-image):
 
 - module doc (`cee142f323`): "builds the world in a staging directory … one rename";
-- `run_backup` keeps an empty `journal/` (`cee142f323`);
-- `run_restore` (`01ac685ba7` call of `start_branch`, rewritten by `cee142f323`): a/ = the base in-place
-  copy, pair check against the copied marker and cleanup; b/ = staging path, mount-point refusal,
-  leftover-staging refusal, `stage_world`, `publish`, cleanup, post-rename parent fsync and the
+- `run_backup` (`cee142f323`, `f0d7f039d`): staging-name refusal, the non-root `journal/` refusal, keeps an
+  empty `journal/`;
+- `run_restore` (`01ac685ba7` call of `start_branch`, rewritten by `cee142f323` and `f0d7f039d`): a/ = the
+  base in-place copy, pair check against the copied marker and cleanup; b/ = non-Unix refusal, staging-name
+  target refusal, staging path, mount-point refusal, leftover-staging refusal, `stage_world`, `publish`
+  under the kept target lease, ownership-safe cleanup, post-rename parent fsync and the
   `Publishing`/`Published` interruption points;
-- `staging_path`, `refuse_mount_point`, `stage_world`, `start_branch` (`01ac685ba7`, rewritten to take the
-  backup's marker from memory and run in the staging directory), `sync_tree`, `publish` (a/: absent).
+- `staging_path`, `refuse_mount_point`, `stage_world` (incl. the non-root `journal/` refusal of `f0d7f039d`),
+  `start_branch` (`01ac685ba7`, rewritten to take the backup's marker from memory and run in the staging
+  directory), `sync_tree`, `publish` (a/: absent).
 
 `crates/mc-core/src/journal.rs`, a/-side = the blob at `742550fb0f` (no a/-side adaptation):
 
@@ -43,12 +55,24 @@ sides, so no a/-side text outside the original pre-image):
   (`cee142f323`; a/: always an empty tail) and its doc;
 - the `rebind_tail` doc sentence on where restore runs it (`cee142f323`).
 
+`f0d7f039d`, a/-side = each file at its parent `6815b1b153` (no a/-side adaptation):
+
+- `crates/mc-core/src/core.rs` `Core::open`: the shared refusal (a/: the closure that knew only
+  `.krasnokamen-conversion-*`);
+- `crates/mc-world/src/native.rs` `open_checked`, `check_marker_file`: refuse a staging directory before the
+  store is opened or repaired;
+- `crates/mc-world/src/store_marker.rs` `verify` (and so `check`): the `refuse_unpublished` call and its doc
+  sentence;
+- `crates/mc-world-conversion/src/lib.rs` `convert`: the destination refusal through `refuse_unpublished`
+  and the stage name from `CONVERSION_STAGING_PREFIX` (a/: the literal prefix check).
+
 ## Not carried, with the ground (docs/bugs/README.md classes)
 
 - (b) API the kept tests call: `rebind_tail`'s `before_batch` hook and `StoreMarker::admits`
-  (`742550fb0f`, not a fix commit) and the `backup_tests.rs` interruption machinery (`Step`,
-  `interruption_point`) stay; the hook call sites inside `start_branch`, `run_restore` and `publish` are
-  part of the carried hunks and disappear with them.
+  (`742550fb0f`, not a fix commit), the `backup_tests.rs` interruption machinery (`Step`,
+  `interruption_point`, `observed_restore`), and from `f0d7f039d` `store_marker::RESTORE_STAGING_SUFFIX`,
+  `CONVERSION_STAGING_PREFIX`, `MarkerError::Unpublished` and the `refuse_unpublished` function itself
+  (`store_marker_tests` names them); every call site of that function is carried.
 - Not a fix commit: `be1ab01c71` (64-bit `mint_branch`, docs) and the format-3 frame of `49d3f0d53e`
   (infrastructure the refs need to compile and the base restore never touches).
 - Docs only: persistence.md, ADR 0013, OPERATING.md, MIGRATION.md.
@@ -56,23 +80,48 @@ sides, so no a/-side text outside the original pre-image):
 ## Proving assertions (red in the control)
 
 - `backup::tests::a_restored_copy_refuses_the_journal_of_another_copy_of_its_backup`, the refusal assertion
-  (`backup_tests.rs:743`, "the left copy replayed the right copy's journal: None"): with no branch minted
+  (`backup_tests.rs:762`, "the left copy replayed the right copy's journal: None"): with no branch minted
   the sibling tail replays.
 - `backup::tests::a_restore_interrupted_before_its_first_rebind_leaves_nothing_that_opens`,
-  `assert_no_world_at` (`backup_tests.rs:846`, "an interrupted restore left [native, journal,
+  `assert_no_world_at` (`backup_tests.rs:865`, "an interrupted restore left [native, journal,
   checkpoint.marker] at the target, marker … branch [0; 8]"): the base restore killed after its last copy
   leaves the backup's store, marker and tail on the backup's branch in the target.
 - `journal_tests::a_missing_journal_is_an_empty_tail_only_on_the_root_branch`, its `expect_err`
   (`journal_tests.rs:2445`, "a restored copy without its journal lost its tail: 7"): the reversed journal
   hunk reads a missing journal as an empty tail.
+- `store_marker_tests::a_staging_directory_is_refused_even_with_a_valid_marker` (`store_marker_tests.rs:238`,
+  `unwrap_err` on `Ok`): the reversed `verify` admits a staging-named directory with a valid marker.
 
 Not evidence (red only because the control has no such step): `a_restore_interrupted_inside_its_tail_rebind_*`,
 `*_before_publication_*` and `*_after_publication_*` fail at `assert!(interrupted, …)`;
-`backup_roundtrip_preserves_real_core_store_wal_and_metadata` fails at the branch assertion (no branch minted).
-Red at a `journal/` assertion of the carried staging hunk, not the row's symptom:
-`a_backup_of_a_restored_copy_with_an_empty_journal_verifies` (`backup_tests.rs:1012`, the base restore of a
-backup with an empty journal publishes no `journal/`). Green in the control and regressions only: the
-mc-core frame-binding and rebind refs, the mc-world marker refs (`a_minted_branch_uses_all_64_bits` included).
+`a_staged_copy_with_its_own_marker_is_refused_by_every_open_at_publication` and
+`a_failed_publication_removes_only_the_restores_own_staging` find no publication step in the base restore;
+`backup_roundtrip_preserves_real_core_store_wal_and_metadata` fails at the branch assertion (no branch
+minted). Red at a `journal/` assertion of the carried staging hunk, not the row's symptom:
+`a_backup_of_a_restored_copy_with_an_empty_journal_verifies` (`backup_tests.rs:1141`) and
+`a_restore_refuses_a_backup_of_a_restored_copy_without_its_journal` (the base backup keeps no empty
+`journal/`); `a_backup_refuses_a_restored_copy_that_lost_its_journal` is red because the base backup accepts
+the journal-less copy, which the base restore left on the root branch. Green in the control and regressions
+only: the mc-core frame-binding and rebind refs, the other mc-world marker refs.
 
-Promotion run: `.analysis/validation/20261124T082825-ledger-promote-nemy9etq` (tree `e338325d2d`, clean,
-`control_tree: head`); control log `ledger-1-run.log`, restore log `ledger-3-run.log` (all 12 refs green).
+## Control of `f0d7f039d` reversed on its own
+
+Its production hunks reversed on its own tests (everything else at `f0d7f039d`; the kept API above stays):
+`receipts/D123PersistDiv/rework2/rework-control.patch`, run `.analysis/validation/20261124T090343-test-eg3mzj_4`
+(log copied to `receipts/D123PersistDiv/rework2/rework-control-test.log`), 8 of 47 red:
+
+- `a_staged_copy_with_its_own_marker_is_refused_by_every_open_at_publication` (`backup_tests.rs:879`, at the
+  `Publishing` point: "Core::open … : None", the staged copy opened) and
+  `a_restore_interrupted_before_publication_leaves_the_target_untouched` (same assertion on the leftover) —
+  review blocker 1;
+- `a_failed_publication_removes_only_the_restores_own_staging` (`backup_tests.rs:1096`, "the failed restore's
+  cleanup removed data it does not own", left `None`) — blocker 2;
+- `a_backup_refuses_a_restored_copy_that_lost_its_journal` (`:1162`, backup returned `Ok(2)`) and
+  `a_restore_refuses_a_backup_of_a_restored_copy_without_its_journal` (`:1183`, restore returned `Ok`) —
+  blocker 3;
+- `store_marker_tests::a_staging_directory_is_refused_even_with_a_valid_marker` (`:238`) — blocker 1 at the
+  marker check;
+- not evidence: `a_restore_interrupted_before_its_first_rebind_*` and `*_inside_its_tail_rebind_*` at
+  `:879`, refused there by the missing marker instead of the reserved name.
+
+Promotion run: see `docs/bugs/promotions/DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY.json`.
