@@ -349,7 +349,7 @@ class CivilizationEvidenceTests(unittest.TestCase):
 
         def planner(probe, detail, chest, read_container, capture):
             capture()
-            return {"buildings_now": [], "project": road, "project_ui": [
+            return {"buildings_now": [], "projects": [road], "project_ui": [
                 {"id": "dialog/body/0", "role": "text", "label": "Road L1 · Building\n0/33\n158 71 -257"},
                 {"id": "dialog/body/1", "role": "text",
                  "label": f"Farm:\nDirt {next(dirt)}/30 — awaiting production"}]}
@@ -363,11 +363,33 @@ class CivilizationEvidenceTests(unittest.TestCase):
 
         def planner(probe, detail, chest, read_container, capture):
             capture()
-            return {"buildings_now": [], "project": None, "project_ui": [
+            return {"buildings_now": [], "projects": [], "project_ui": [
                 {"id": "dialog/body/0", "role": "text",
                  "label": f"Farm:\nDirt {next(dirt)}/30 — awaiting production"}]}
 
         self.observe(lambda *_: "", "bounded observation limit", planner=planner)
+
+    def test_a_visible_project_reaches_the_completion_match(self):
+        # `_planner_status` reports `projects` (a list), never `project`; the loop
+        # read the latter, so no project was ever recorded and `completed_project`
+        # could not match a new building: new_house and second_building were
+        # unreachable for any village behaviour (2026-11-24 review N1).
+        house = {"blueprint": "house", "level": 1, "done": 3, "total": 9, "origin": [1, 70, 1]}
+        lamp = {"blueprint": "lamp", "level": 1, "done": 0, "total": 3, "origin": [2, 70, 2]}
+
+        def planner(probe, detail, chest, read_container, capture):
+            capture()
+            return {"buildings_now": [], "projects": [house, lamp], "project_ui": []}
+
+        detail = self.observe(lambda *_: "", "sustained unchanged project status and buildings "
+                            "for one full game day", planner=planner)
+        # Only authored blueprints can be matched to a certificate; the street
+        # project is recorded as visible but never becomes a completion candidate.
+        self.assertEqual(detail["projects_observed"], [house])
+        # The slot holder is the first project on the dialog; a waiting project's
+        # gathered materials never own the stall signature while it holds the slot.
+        self.assertEqual(qa.stall_signature(
+            {"projects": [house, lamp], "project_ui": [], "buildings_now": []})[0], house)
 
     def test_civilization_sprint_wait_can_outlast_one_mcp_request(self):
         def sprint(server, log, ticks, timeout):

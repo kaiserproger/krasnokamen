@@ -616,6 +616,11 @@ def server_config_text(source: str, *, port: int, world_dir: str, plugins_dir: s
     )
     if civilization:
         # The village's mine must tick beyond the four-chunk presentation window.
+        # Known limitation (review N6): the civilization gate's primary player is an
+        # operator level 4 for the whole run, because the founding fixture certifies the
+        # chest's storage with explicit bounds (`settlement building certify storage
+        # <bounds>`), an operator-only capability. The ordinary in-game "Проверить здесь"
+        # path (certify the room the player stands in) is not exercised by this fixture.
         replacements += (("simulation_distance = 4", "simulation_distance = 6"),)
     for old_tok, new_tok in replacements:
         if source.count(old_tok) != 1:
@@ -2301,19 +2306,29 @@ def _planner_status(
     read_container: Callable[[tuple[int, int, int]], dict[str, int]],
     capture: Callable[[], Any] | None = None,
 ) -> dict[str, Any]:
-    """Non-gating read of what the autonomous planner is doing right now."""
+    """Read what the autonomous planner is doing right now.
+
+    A failed read lands in `projects_error`/`storage_error` instead of raising here:
+    the owner-order checks only record the status, while the civilization gate raises
+    on either key (civilization_seed_qa.scenario) because its milestones and its stall
+    oracle both read these fields - so this read gates that profile."""
     status: dict[str, Any] = {}
     try:
         observed = _project_status(probe, capture)
         # The live Construction dialog clips its body to the client viewport: a settlement
         # with four projects showed three and "Active projects: 4/8"
-        # (20261123T223724-civilization-seed-qa-wyc2jdia). This read is a diagnostic, so a
-        # body the client cut at the viewport edge is accepted; the stage checks that need
-        # every project use `_project_progress` without this flag.
+        # (20261123T223724-civilization-seed-qa-wyc2jdia). The visible projects are what the
+        # caller can act on, so a body the client cut at the viewport edge is accepted here;
+        # `_project_progress` without the flag (the checks that need every project) refuses it.
         status["projects"] = _project_progress(observed, clipped_ok=True)
         status["project_ui"] = observed.get("ui_nodes", [])
     except Exception as exc:
-        status["projects_error"] = str(exc)[:300]
+        # Keep the raw dialog next to the failure: the label the parser refused is the
+        # only client-side trace of a project whose blueprint id no name table knows
+        # (2026-11-24: an unnamed one-cell project at [132, 82, -219]).
+        body = "\n".join(node.get("label", "") for node in observed.get("ui_nodes", [])) \
+            if isinstance(observed, dict) else ""
+        status["projects_error"] = (str(exc) + (" · dialog: " + body[:600] if body else ""))[:900]
     status["buildings_now"] = _recent_chat(_send(probe, "settlement building list"), 25)
     try:
         status["storage_now"] = _settlement_stock(

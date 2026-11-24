@@ -1,0 +1,10 @@
+[[bug]]
+id = "BED-OCCUPIED-PROPERTY-NOT-MIRRORED"
+title = "A sleeping resident never sets its bed block's occupied=true"
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "receipts/BreakVillageParity/FINDINGS.md ('Noticed (not filed)'): every bed reads FREE while its owner sleeps, in all scenes and in the baseline; vanilla LivingEntity.startSleeping sets the bed's OCCUPIED block state. Solaris derives bed occupancy from its sleepers and never mirrors the property. Also stated in docs/bugs/rows/VILLAGER-BED-USE-SLEEPS-PLAYER-OVER-VILLAGER.toml source: 'The bed block's occupied property is still not mirrored for any sleeper'. Filed as its own row on 2026-11-24 (review N5) so the parity gap is tracked outside the bed-use row."
+regression = []
+failing_first = "not recorded"
