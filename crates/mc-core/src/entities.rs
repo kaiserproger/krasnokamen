@@ -12,8 +12,11 @@ use uuid::Uuid;
 
 use crate::blueprint::MovementClass;
 use crate::boundary::{ChunkPos, EntityAppearance, EntityId, EntityView};
-use crate::entity_hot::HotRow;
+pub(crate) use hot::HotRow;
+#[cfg(test)]
+pub(crate) use hot::take_cold_row_reads;
 
+mod hot;
 mod motion_gate;
 
 /// Dense entity index: position in every column.
@@ -271,18 +274,6 @@ pub(crate) const MOTION_ITEM_COLLECTOR: u16 = 1 << 14;
 pub(crate) struct MotionHint {
     pub(crate) special: Option<crate::hostile::Special>,
     pub(crate) swell_metadata_neutral: bool,
-}
-
-/// Test-only: cold rows read through [`EntityStore::row`]. The derived column
-/// answers a clean plain row, so a prepare reads none of them.
-#[cfg(test)]
-pub(crate) static COLD_ROW_READS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
-
-/// Test-only: cold reads since the last call.
-#[cfg(test)]
-pub(crate) fn take_cold_row_reads() -> usize {
-    COLD_ROW_READS.swap(0, std::sync::atomic::Ordering::Relaxed)
 }
 
 /// One entity-step result for [`EntityStore::apply_motion_result`]. Rotation is
@@ -1288,29 +1279,8 @@ impl EntityStore {
 
     pub fn row(&self, slot: EntitySlot) -> &ColdRow {
         #[cfg(test)]
-        COLD_ROW_READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        hot::COLD_ROW_READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         &self.cold[slot.0 as usize]
-    }
-
-    /// Whether the slot was mutated after `prepare_motion_hints` refreshed the
-    /// derived columns; such a row's `flags`/`hints`/`hot` are stale on purpose
-    /// and its read goes to the live cold row.
-    pub(crate) fn motion_dirty(&self, slot: EntitySlot) -> bool {
-        self.dirty_flag[slot.0 as usize]
-    }
-
-    /// Derived cold scalars of one slot. A clean slot's column must equal its
-    /// cold projection: only `prepare_motion_hints` writes it, and every writer
-    /// that can change a projected field marks the slot dirty.
-    pub(crate) fn hot_row(&self, slot: EntitySlot) -> &HotRow {
-        let index = slot.0 as usize;
-        debug_assert!(
-            self.dirty_flag[index]
-                || self.hot[index]
-                    == HotRow::of(&self.cold[index], &self.bodies[index], self.flags[index]),
-            "a clean slot's hot row diverges from its cold projection"
-        );
-        &self.hot[index]
     }
 
     pub fn body(&self, slot: EntitySlot) -> &Body {
@@ -2059,50 +2029,6 @@ impl EntityStore {
                 .next()
                 .copied(),
         }
-    }
-
-    /// Refresh motion flags for dirty slots only. Resolves each queued
-    /// stable id to its current slot through `id_index` (removed ids are
-    /// ignored) and retains the queue capacity across ticks.
-    pub(crate) fn prepare_motion_hints(&mut self, registry: &crate::registry::CoreRegistry) {
-        if self.dirty_ids.is_empty() {
-            return;
-        }
-        static CHICKEN: std::sync::LazyLock<mc_data::Identifier> = std::sync::LazyLock::new(|| {
-            mc_data::Identifier::parse("minecraft:chicken").expect("static identifier parses")
-        });
-        static TADPOLE: std::sync::LazyLock<mc_data::Identifier> = std::sync::LazyLock::new(|| {
-            mc_data::Identifier::parse("minecraft:tadpole").expect("static identifier parses")
-        });
-        let chicken = registry.entity_types.id_of(&CHICKEN);
-        let tadpole = registry.entity_types.id_of(&TADPOLE);
-        let dirty = std::mem::take(&mut self.dirty_ids);
-        for id in &dirty {
-            let Some(slot) = self.id_index.get(id).copied() else {
-                continue;
-            };
-            let index = slot.0 as usize;
-            let Some(body) = self.bodies.get(index) else {
-                continue;
-            };
-            if body.id != *id {
-                continue;
-            }
-            self.dirty_flag[index] = false;
-            let special = motion_gate::effective_special(registry, body, &self.cold[index]);
-            let flags =
-                motion_gate::motion_flags_for(registry, self, slot, special, chicken, tadpole);
-            let hot = HotRow::of(&self.cold[index], body, flags);
-            self.flags[index] = flags;
-            self.hints[index] = MotionHint {
-                special,
-                swell_metadata_neutral: crate::hostile::swell_metadata_neutral(&self.cold[index]),
-            };
-            self.hot[index] = hot;
-        }
-        let mut dirty = dirty;
-        dirty.clear();
-        self.dirty_ids = dirty;
     }
 
     #[cfg(test)]

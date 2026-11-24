@@ -444,7 +444,7 @@ pub(in crate::tick) fn read_row(
 /// Cold-row inputs of one `ReadRow`. `cold` is the live row when it must be
 /// read (dirty or `HotRow::needs_cold`); otherwise `hot` is the only source.
 struct RowFields<'a> {
-    hot: &'a crate::entity_hot::HotRow,
+    hot: &'a crate::entities::HotRow,
     cold: Option<&'a crate::entities::ColdRow>,
 }
 
@@ -516,7 +516,7 @@ fn read_row_with(
     flags: u16,
     period: u8,
     rare: &RarePrep,
-    hot: &crate::entity_hot::HotRow,
+    hot: &crate::entities::HotRow,
     cold: Option<&crate::entities::ColdRow>,
 ) -> (ReadRow, bool) {
     let fields = RowFields { hot, cold };
