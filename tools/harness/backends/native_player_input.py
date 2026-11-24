@@ -294,8 +294,16 @@ _FALL_DRAG = c.c_float(.98).value
 
 
 def _vanilla_fall(row: dict, ticks: int) -> float:
-    """Open-air 26.3 FallingBlockEntity.tick: 0.04 gravity, move, then air drag."""
-    y, velocity = row["predicted_position"][1], row["velocity"]["y"]
+    """Open-air 26.3 FallingBlockEntity.tick: 0.04 gravity, move, then air drag.
+
+    The integrator starts from the client's own predicted velocity when the row exposes one
+    (`predicted_velocity`): between position packets the received `velocity` is the stale base, so
+    consuming it would model a different tick sequence than the client actually ran."""
+    y = row["predicted_position"][1]
+    # `predicted_velocity` is the client's integrator state as a [x, y, z] array (like
+    # predicted_position); older rows only carry the received `velocity` object.
+    predicted = row.get("predicted_velocity") or row["velocity"]
+    velocity = predicted["y"] if isinstance(predicted, dict) else predicted[1]
     for _ in range(ticks):
         velocity -= .04
         y += velocity

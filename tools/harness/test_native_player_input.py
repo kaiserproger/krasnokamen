@@ -27,8 +27,10 @@ class FrozenFall:
     observations are the native client's `recent_chat`: the last 20 lines, newest first.
     """
 
-    def __init__(self, latency: float, phase: int, holds: bool = True, fields: bool = True) -> None:
+    def __init__(self, latency: float, phase: int, holds: bool = True, fields: bool = True,
+                 stale: bool = False) -> None:
         self.latency, self.phase, self.holds, self.fields = latency, phase, holds, fields
+        self.stale = stale
         self.now = self.next_tick = 0.
         self.rate, self.loop = 20., 0
         self.commands: list[str] = []
@@ -82,10 +84,13 @@ class FrozenFall:
         self.loop += 1
 
     def row(self) -> dict:
-        row = {"entity_uuid": "sand", "y": self.received, "velocity": {"y": self.client[1]}}
+        # `stale` models a client whose received velocity is older than its own integrator state.
+        received = self.client[1] + (1. if self.stale else 0.)
+        row = {"entity_uuid": "sand", "y": self.received, "velocity": {"y": received}}
         if self.fields:
-            # The falling-block automation contract (predicted/presented pose + presentation tick).
+            # The falling-block automation contract (predicted pose/velocity + presentation tick).
             row.update({"presentation_tick": self.tick, "predicted_position": [0., self.client[0], 0.],
+                        "predicted_velocity": [0., self.client[1], 0.],
                         "presented_position": [0., self.presented, 0.]})
         return row
 
@@ -134,8 +139,8 @@ def fall(body: list[float]) -> None:
 
 class SandGateTests(unittest.TestCase):
     def run_gate(self, latency: float, phase: int, holds: bool = True,
-                 fields: bool = True) -> FrozenFall:
-        world = FrozenFall(latency, phase, holds, fields)
+                 fields: bool = True, stale: bool = False) -> FrozenFall:
+        world = FrozenFall(latency, phase, holds, fields, stale)
         with tempfile.TemporaryDirectory() as directory:
             frames = []
             for color in ("red", "blue"):
@@ -172,6 +177,14 @@ class SandGateTests(unittest.TestCase):
         # name its own assertion instead.
         with self.assertRaisesRegex(RuntimeError, "falling_block_presentation_fields"):
             self.run_gate(.05, 0, fields=False)
+
+    def test_a_stale_received_velocity_does_not_change_the_prediction_model(self) -> None:
+        # Between position packets the received velocity is the stale base; the client integrates its
+        # own. The gate must model the integrator (`predicted_velocity`), not the received base.
+        for latency in (.05, .25):
+            with self.subTest(latency=latency):
+                world = self.run_gate(latency, 7, stale=True)
+                self.assertTrue(all(world.report["assertions"].values()))
 
     def test_prediction_check_is_vanilla_falling_block_integration(self) -> None:
         # Receipt 20261111T163719-native-v2-input-sand-2gazssgv: two client-predicted ticks.
