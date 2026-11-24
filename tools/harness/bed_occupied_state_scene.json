@@ -63,7 +63,16 @@
       "cmd": "execute if block 1002 200 1001 minecraft:red_bed[part=head,occupied=false] run say bed_head_free_before"
     },
     {
-      "wait_chat": "bed_head_free_before"
+      "wait_ticks": 10
+    },
+    {
+      "assert_chat": {
+        "name": "bed_head_free_before",
+        "contains": [
+          "bed_head_free_before"
+        ],
+        "excludes": []
+      }
     },
     {
       "read_block": {
@@ -109,13 +118,31 @@
       "cmd": "execute if block 1002 200 1001 minecraft:red_bed[part=head,occupied=true] run say bed_head_occupied"
     },
     {
-      "wait_chat": "bed_head_occupied"
+      "wait_ticks": 10
+    },
+    {
+      "assert_chat": {
+        "name": "bed_head_occupied",
+        "contains": [
+          "bed_head_occupied"
+        ],
+        "excludes": []
+      }
     },
     {
       "cmd": "execute if block 1001 200 1001 minecraft:red_bed[part=foot,occupied=true] run say bed_foot_occupied"
     },
     {
-      "wait_chat": "bed_foot_occupied"
+      "wait_ticks": 10
+    },
+    {
+      "assert_chat": {
+        "name": "bed_foot_occupied",
+        "contains": [
+          "bed_foot_occupied"
+        ],
+        "excludes": []
+      }
     },
     {
       "shot": "bed-occupied"
@@ -146,13 +173,31 @@
       "cmd": "execute if block 1002 200 1001 minecraft:red_bed[part=head,occupied=false] run say bed_head_free_after"
     },
     {
-      "wait_chat": "bed_head_free_after"
+      "wait_ticks": 10
+    },
+    {
+      "assert_chat": {
+        "name": "bed_head_free_after",
+        "contains": [
+          "bed_head_free_after"
+        ],
+        "excludes": []
+      }
     },
     {
       "cmd": "execute if block 1001 200 1001 minecraft:red_bed[part=foot,occupied=false] run say bed_foot_free_after"
     },
     {
-      "wait_chat": "bed_foot_free_after"
+      "wait_ticks": 10
+    },
+    {
+      "assert_chat": {
+        "name": "bed_foot_free_after",
+        "contains": [
+          "bed_foot_free_after"
+        ],
+        "excludes": []
+      }
     },
     {
       "shot": "bed-free-after"
