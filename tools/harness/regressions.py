@@ -19,6 +19,10 @@ from .runtime import REPO_ROOT
 
 REQUIRED = {'id', 'title', 'area', 'repro', 'severity', 'status', 'source', 'regression'}
 OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_proof', 'proving_assertions',
+            # The refs whose red must prove the fix when the row also carries a check that cannot flip
+            # (a metadata fence, an elided client test); every ref is proving when the list is absent
+            # (LEDGER-CONTROL-COVERS-ONE-REF).
+            'proving_refs',
             # A fix whose every hunk is in test files: the corrected oracle IS the guard. The promotion
             # runs two controls (docs/bugs/README.md): the pre-fix test hunks restored must go red on
             # current code, and a committed defect-injection patch must turn the corrected test red.
@@ -227,12 +231,14 @@ def _client_command(profile, scenario):
     if profile == 'battle-crash-recovery':
         # Its own Horizon clients and inputs (KRASNOKAMEN_BATTLE_*); no Java/native client selection.
         return argv
-    if scenario.startswith('native-'):
-        argv.extend(['--client', 'native', '--windowed'])
-    else:
-        argv.extend(['--client', 'java'])
-        if profile == 'scene-shot':
-            argv.append('--windowed')
+    # A scene whose fixture is the native client's own tool surface declares it; the rest keep the
+    # id convention (`native-*` is the native client, everything else Java).
+    client = entry.client or ('native' if scenario.startswith('native-') else 'java')
+    argv.extend(['--client', client])
+    if client == 'java' and profile == 'scene-shot':
+        argv.append('--windowed')
+    elif client == 'native':
+        argv.append('--windowed')
     if profile == 'java-battle-functional':
         argv.extend(['--platform', 'neoforge', '--timeout-seconds', '1800'])
     return argv
@@ -269,6 +275,7 @@ _BOOLEAN_PROFILE_VERDICTS = {
         'bell_opens_hub', 'dashboard', 'map', 'building_order', 'shortage_icons',
         'storage_transfer', 'project_progress', 'residents', 'resources', 'production_order',
         'localized_text', 'all', 'starter_chest_race', 'selected_card', 'verge_connected',
+        'blueprints',
     }),
 }
 # Run arguments of a profile ref: (client, args after `--`) per verdict that needs another client
@@ -287,6 +294,9 @@ _PROFILE_VERDICT_RUN = {
     ('settlement-map-qa', 'bell_opens_hub'): ('native', ['--', '--scenario', 'bell-hub']),
     # A road-spanning obstruction must not hide a legally fronting lot (row CIVILIZATION-STREET-VERGE).
     ('settlement-map-qa', 'verge_connected'): ('native', ['--', '--scenario', 'verge']),
+    # The Construction page's blueprint list must show localized names only (row
+    # SETTLEMENT-BLUEPRINT-LIST-SHOWS-RAW-SPANISH-IDS); the quickwins setup founds the settlement.
+    ('settlement-map-qa', 'blueprints'): ('native', ['--', '--scenario', 'blueprints']),
     # The chisel resource-pack admission is a vanilla-Java client behaviour; the native client
     # never asks for the optional pack.
     ('chisel', 'vanilla_optional_admission'): ('java', []),

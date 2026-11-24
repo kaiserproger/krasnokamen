@@ -1,12 +1,14 @@
 [[bug]]
 id = "ISSUE-1-19"
-title = "Spider and zombie movement animation and speed wrong"
+title = "Zombie chase speed runs at the historical 3.8 tuning, not the Java 26.3 interval"
 area = "client"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = ["cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval", "cargo:mc-core:hostile_tests::zombie_chase_publishes_and_clears_aggressive_pose_metadata", "cargo:mc-core:journal_touched::tests::zombie_chase_pose_is_journaled_and_repaired_after_recovery", "harness:scene-shot:issue1-19-hostile-motion"]
-proving_assertions = { "harness:scene-shot:issue1-19-hostile-motion" = "zombie_arm_raised_pixels" }
-repro_check = "Stage2X SLICES.md:151-152 and receipts/XIssue1Scenes/report.md: fixture teleports drive each kind and check per-segment speed and zombie arm pixels; three green runs, control dbd3a20a9528 red at zombie_arm_raised_pixels, and wrong-speed probe red at mob_speed_zombie. This does not prove AI gait; client gait/pose observation or fixed-speed server walk remains needed. Registered scene bound in 6ce0940b8. The control forcibly disables both pose paths and is not an exact reversal; 9a645aa9 was only a provisional clippy/rustfmt carrier, not a demonstrated fix. Identify the actual fix and rebuild a clean exact-reversal control for stage 3."
-failing_first = "reported"
+regression = ["cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval", "harness:scene-shot:issue1-19-hostile-motion"]
+proving_refs = ["cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval", "harness:scene-shot:issue1-19-hostile-motion"]
+proving_assertions = { "harness:scene-shot:issue1-19-hostile-motion" = "chase_speed_zombie", "cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval" = "crates/mc-core/src/hostile_tests.rs:156" }
+fix_commit = "patch:3fc6a9b98fa6edba355f793ae2ff042265b4c616ad1ddbf3d2b8b8ebbaf814eb"
+repro_check = "Fixed by core c0d78c11e (`minecraft:zombie` `speed: 3.8 -> 2.4`, the Java 26.3 integrated-scene chase) and client ebe56023 (26.3 `animateZombieArms`/`SpiderModel.setupAnim` formulas); this row now claims the **zombie chase speed** only — the spider pace and the pose formulas moved to SPIDER-GAIT-AND-ANIMATION-UNPROVEN. Evidence at core ca398831a: three real-client chase windows (61-69 client ticks) read 0.1200/0.1200/0.1182 blocks per client tick, closing 7.6-8.3 blocks with the aggressive bit set (receipts 20261124T221450-f0r_70x4, 20261124T221613-2w7sgs15, 20261124T221712-uk0v9ty0); the same tree with `speed: 3.8` reads 0.1807/0.1814/0.1807 and fails `chase_speed_zombie` in three of three runs (20261124T221822-6tzipx6a, 20261124T221923-3s0ps2g2, 20261124T222033-wtf181vm); the full audit is .analysis/validation/20261124T222831-ledger-promote-9b4ctk2m/promote.json (control red on both refs, restore green). The sentinel is the scene receipt."
+promotion = "docs/bugs/promotions/ISSUE-1-19.json"

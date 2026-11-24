@@ -1,0 +1,62 @@
+{
+  "id": "ISSUE-1-18",
+  "verdict": "promoted",
+  "fix_commit": "client:83eef0ba",
+  "fix_commit_full": "83eef0ba67590efbfb4e871ec8591fbadc4bdbb2",
+  "promoted_at": "2026-11-24T19:51:09+00:00",
+  "tree_head": "bbd66034c88ba511476c4b8d193c49a6f5e4c1c0",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T194605-issue1-18-sheep-goat-j_yewyf8/result.json",
+    "client_head": "b6f3177ca1c8c9c4a8e7ba79b70ac447ee0e7128",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "red": [
+      "harness:scene-shot:issue1-18-sheep-goat"
+    ],
+    "states": {
+      "harness:scene-shot:issue1-18-sheep-goat": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T194645-issue1-18-sheep-goat-yccom7p7/result.json",
+    "client_head": "83eef0ba67590efbfb4e871ec8591fbadc4bdbb2",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "green": [
+      "harness:scene-shot:issue1-18-sheep-goat"
+    ],
+    "states": {
+      "harness:scene-shot:issue1-18-sheep-goat": "green"
+    },
+    "tree_head": "bbd66034c88ba511476c4b8d193c49a6f5e4c1c0",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T194645-issue1-18-sheep-goat-yccom7p7/result.json",
+    "client_head": "83eef0ba67590efbfb4e871ec8591fbadc4bdbb2",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "green": [
+      "harness:scene-shot:issue1-18-sheep-goat"
+    ],
+    "states": {
+      "harness:scene-shot:issue1-18-sheep-goat": "green"
+    },
+    "tree_head": "bbd66034c88ba511476c4b8d193c49a6f5e4c1c0",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "8713ea1de7d8c7fa6c74b63b20f0e9cb94953915",
+    "paths": [
+      "assets/krasnokamen/models/entity/goat.json",
+      "assets/krasnokamen/models/entity/spider.json",
+      "tools/entity_models.py"
+    ]
+  },
+  "candidate_refs": {},
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T195108-ledger-promote-idm6ghwm"
+}

@@ -1,12 +1,13 @@
 [[bug]]
 id = "ISSUE-1-18"
-title = "Sheep and goat models wrong"
+title = "Goat horns lean back instead of standing upright"
 area = "client"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = ["harness:scene-shot:issue1-18-sheep-goat"]
-fix_commit = "client:b7c48e1c"
+fix_commit = "client:83eef0ba"
 proving_assertions = { "harness:scene-shot:issue1-18-sheep-goat" = "goat_horns_upright" }
-repro_check = "Stage2X SLICES.md:125,144,151: era pin b7c48e1c^ failed goat_horns_upright (receipts/Stage2Client/run-redfix-18_sheep_goat.log), fixed client passed (run-green2-18_sheep_goat.log). The era control is not an exact reversal of the candidate and must be rebuilt for stage 3. REVERSAL 2026-11-23: reverting b7c48e1c on client f5c929f7 conflicts in assets/krasnokamen/models/entity/goat.json, docs/AGENT_TESTING.md, docs/ENTITY_MODELS.md, src/minecraft/entities.rs, src/session.rs, src/session/observation.rs, src/ui/drag_tests.rs and src/ui/state.rs; the control needs a forward-ported reversal."
+repro_check = "Pre-image control: the bulk fix b7c48e1c (2026-11-08, before the rename f0a6abf6) authored the goat and spider rigs; the follow-up b9f2a96e moved each horn pivot one sixteenth deeper. Committed-reversal pair at HEAD: client:b6f3177c restores the real pre-image files (goat.json = 43362918's 94-line model with the leaning horns, spider.json = b7c48e1c^'s 81-line model, tools/entity_models.py = b7c48e1c^'s x=0 symmetry rule) and client:83eef0ba re-lands them; map docs/bugs/promotions/ISSUE-1-18.hunks.md. Scene receipt: candidate 20261124T194645 PASSED (goat_horns_upright, horn edges 468/0-span), control 20261124T194605 FAILED at goat_horns_upright (edges 465..462, 3-pixel lean) on the candidate core tree bbd66034c with server pin bbd66034c88b-2d648d04. Earlier history: the era pin b7c48e1c^ failed goat_horns_upright (receipts/Stage2Client/run-redfix-18_sheep_goat.log) and client 34a85940 passed (run-green2-18_sheep_goat.log), but that era control was not an exact reversal. The row claims the **goat horns** only: the scene's sheep assertion is a presence check with no sheep hunk or control, and that half is SHEEP-MODEL-UNPROVEN (REVIEW-wave2-12 M3)."
+promotion = "docs/bugs/promotions/ISSUE-1-18.json"

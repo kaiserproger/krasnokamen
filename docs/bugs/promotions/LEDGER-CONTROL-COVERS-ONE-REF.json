@@ -1,0 +1,38 @@
+{
+  "id": "LEDGER-CONTROL-COVERS-ONE-REF",
+  "verdict": "promoted",
+  "fix_commit": "patch:609f07ef3570808b8413c8e9ea1b4be35142b5bdc212ab9821d152b841050d8d",
+  "fix_commit_full": "patch:609f07ef3570808b8413c8e9ea1b4be35142b5bdc212ab9821d152b841050d8d",
+  "promoted_at": "2026-11-24T22:50:22+00:00",
+  "tree_head": "71f7b487fe96384fb437270e85680b87e2643f61",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "609f07ef3570808b8413c8e9ea1b4be35142b5bdc212ab9821d152b841050d8d",
+  "reversed_files": [
+    "tools/harness/ledger.py",
+    "tools/harness/regressions.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.harness.test_regressions:ControlCoversEveryProvingRefTests": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/harness/test_regressions.py",
+        "line": 2548,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_regressions:ControlCoversEveryProvingRefTests": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T225014-ledger-promote-kpjynxik"
+}

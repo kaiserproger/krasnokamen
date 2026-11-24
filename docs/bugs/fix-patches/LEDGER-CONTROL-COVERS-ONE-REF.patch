@@ -1,0 +1,135 @@
+diff --git a/tools/harness/ledger.py b/tools/harness/ledger.py
+index 9139dfc27..0a56f6fbc 100644
+--- a/tools/harness/ledger.py
++++ b/tools/harness/ledger.py
+@@ -1129,6 +1129,65 @@ def _assertion_in_ranges(entry, ranges, control_dir):
+     return any(first <= line <= last for first, last in ranges.get(path, []))
+ 
+ 
++def proving_refs(row):
++    """The refs whose red has to prove the fix: `proving_refs` when the row names them, else every ref.
++
++    A row that carries a second check which passes with and without the fix (a metadata fence, an
++    elided client unit test) names its proving refs and says in its map why the others cannot flip;
++    every other row must go red on all of its refs (LEDGER-CONTROL-COVERS-ONE-REF)."""
++    refs = list(row.get('regression') or [])
++    named = row.get('proving_refs')
++    if named is None:
++        return refs
++    ident = row.get('id', '?')
++    if not isinstance(named, list) or not named or not all(isinstance(ref, str) for ref in named):
++        raise Refused(f'{ident}: proving_refs must be a non-empty list of registered refs')
++    unknown = [ref for ref in named if ref not in refs]
++    if unknown:
++        raise Refused(f"{ident}: proving_refs names {', '.join(unknown)}, which is not in regression")
++    return list(named)
++
++
++def _check_proving_choice(ident, row, control):
++    """Refuse a `proving_refs` that shrinks the proof dishonestly.
++
++    (a) a real-client row keeps every graphical ref proving: the scene carries the symptom, so it can
++    never be excluded by naming the one cargo ref that happens to go red; (b) an excluded ref that IS
++    red in the control is a flipping check, so it must be named instead of dropped."""
++    from . import regressions
++
++    proving = set(proving_refs(row))
++    excluded = [ref for ref in row.get('regression') or [] if ref not in proving]
++    if not excluded:
++        return proving
++    if regressions.needs_real_client(row):
++        graphical = [ref for ref in excluded if regressions.is_graphical_ref(ref)]
++        if graphical:
++            raise Refused(f"{ident}: proving_refs excludes the real-client ref(s) {', '.join(graphical)}; "
++                          'the scene carries the symptom and must stay proving')
++    flipping = [ref for ref in excluded if (control.get(ref) or {}).get('state') == RED]
++    if flipping:
++        raise Refused(f"{ident}: proving_refs excludes {', '.join(flipping)}, which went red on the control: "
++                      'a flipping check is proving, name it (or remove it from regression)')
++    return proving
++
++
++def _require_control_red(ident, control, proving):
++    """Refuse unless every proving ref is RED in the control.
++
++    A crashed, aborted, timed-out or unrunnable run never counts as red: only an explicit failing
++    verdict for that ref's own check does (LEDGER-CONTROL-COVERS-ONE-REF)."""
++    short = {ref: control.get(ref) or {'state': UNRUNNABLE, 'detail': 'no result for this ref'}
++             for ref in proving}
++    short = {ref: entry for ref, entry in short.items() if entry.get('state') != RED}
++    if short:
++        detail = '; '.join(f"{ref}={entry['state']}" + (f" ({entry['detail']})" if entry.get('detail') else '')
++                           for ref, entry in short.items())
++        raise Refused(f"{ident}: the control is not red on every proving ref: {detail} "
++                      '(a row that carries a non-flipping check names `proving_refs`; a crashed, aborted or '
++                      'unrunnable run never counts as red)')
++
++
+ def _classify_control(ident, control, row, tree):
+     """Rewrite a control's entries so a fixture panic or an unnamed panic cannot pass as red.
+ 
+@@ -1719,6 +1778,14 @@ def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client
+                                            row.get('proving_assertions', {}))
+     restored_info = check_client_restore_receipt(root, client_receipt, graphical, fix_full, tree_now)
+     delta = _check_client_control_delta(root, control['client_head'], restored_info['client_head'], fix_full)
++    graphical_proving = [ref for ref in _check_proving_choice(ident, row, control) if ref in graphical]
++    if not graphical_proving:
++        raise Refused(f'{ident}: proving_refs names no real-client ref, but a client:<sha> fix is proved by a '
++                      'real-client receipt')
++    lacking = [ref for ref in graphical_proving if ref not in control['red']]
++    if lacking:
++        raise Refused(f"{ident}: the control receipt is not red on every proving real-client ref "
++                      f"({', '.join(lacking)}); a row that carries a non-flipping check names `proving_refs`")
+     if not set(control['red']) & set(restored_info['green']):
+         raise Refused(f"{ident}: the control's red refs {control['red']} and the restore's green refs "
+                       f"{restored_info['green']} do not overlap: the same check has to flip")
+@@ -1891,12 +1958,21 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
+         valid_red = {ref for ref, entry in control.items()
+                      if entry['state'] == RED and _assertion_in_files(entry, control_dir, reversed_files)} \
+             if test_only else {ref for ref, entry in control.items() if entry['state'] == RED}
+-        if not valid_red:
++        proving = sorted(_check_proving_choice(ident, row, control))
++        if test_only:
++            # A test-only red outside the reversed files is not control A at all, so the precise
++            # control-A message wins; the proving set still has to be covered by it.
++            uncovered = [ref for ref in proving if ref not in valid_red]
++        else:
++            _require_control_red(ident, control, proving)
++            uncovered = [ref for ref in proving if ref not in valid_red]
++        if not valid_red or uncovered:
+             raise Refused(f"{ident}: negative control ({control_tree}) did not go red at an assertion with the fix reversed: "
+                           + '; '.join(f"{ref}={entry['state']}" + (f" ({entry['detail']})" if entry['detail'] else '') for ref, entry in control.items())
+                           + (f" (a red outside {', '.join(reversed_files)} is not evidence: a production panic or a build "
+                              'failure is not control A)' if test_only else
+-                             ' (a check that stays green does not test the fix; one that cannot build or run without it cannot show an assertion failing)'))
++                             ' (a check that stays green does not test the fix; one that cannot build or run without it cannot show an assertion failing)')
++                          + (f" [not red on {', '.join(uncovered)}]" if uncovered and not test_only else ''))
+         if test_only:
+             # Control B: restoring the old oracle only shows the old assertion was red, which a wrongly
+             # deleted assertion also gives. Re-introduce the defect the test claims to catch and require
+@@ -1945,6 +2021,10 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
+                 raise Refused(f'{ident}: control A red {sorted(valid_red)} and control B red {sorted(valid_b)} do '
+                               'not overlap: the same test has to flip both ways, so the corrected oracle is '
+                               'proven in its own direction and not merely the old assertion')
++            lacking = [ref for ref in proving_refs(row) if ref not in proving]
++            if lacking:
++                raise Refused(f"{ident}: the declared proving refs {', '.join(lacking)} are not red on both "
++                              'controls: a test-only row proves the refs that flip in each direction')
+             for ref in proving:
+                 if _ref_test_file(candidate, ref, reversed_files) is None:
+                     raise Refused(f'{ident}: proving ref {ref} is not defined in '
+diff --git a/tools/harness/regressions.py b/tools/harness/regressions.py
+index 2b45f78e9..8644809c6 100644
+--- a/tools/harness/regressions.py
++++ b/tools/harness/regressions.py
+@@ -19,6 +19,10 @@ from .runtime import REPO_ROOT
+ 
+ REQUIRED = {'id', 'title', 'area', 'repro', 'severity', 'status', 'source', 'regression'}
+ OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_proof', 'proving_assertions',
++            # The refs whose red must prove the fix when the row also carries a check that cannot flip
++            # (a metadata fence, an elided client test); every ref is proving when the list is absent
++            # (LEDGER-CONTROL-COVERS-ONE-REF).
++            'proving_refs',
+             # A fix whose every hunk is in test files: the corrected oracle IS the guard. The promotion
+             # runs two controls (docs/bugs/README.md): the pre-fix test hunks restored must go red on
+             # current code, and a committed defect-injection patch must turn the corrected test red.

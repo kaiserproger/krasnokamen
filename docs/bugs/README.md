@@ -552,6 +552,13 @@ three classes before `valid_red`/`valid_b` are computed:
   `proving_assertions = { "<ref>" = "path:line" }` and the recorded location must equal that value.
   A red without any panic location on a cargo ref is class (c) too.
 
+**Every ref the row claims as proof must be red on the control.** By default that is every ref in
+`regression`: one red ref cannot carry a second check that stayed green, and a crashed, timed-out or
+otherwise unrunnable run is never red. A row that carries a check which cannot flip (a metadata fence,
+an elided client test that passes with and without the fix) names the refs that do prove it with
+`proving_refs = ["<ref>", ...]`, must keep them a subset of `regression`, and says in its hunk map why
+the others cannot flip (LEDGER-CONTROL-COVERS-ONE-REF).
+
 A test-only row's control B must additionally red **inside a hunk the fix reversed**: the gate reads
 the diff the reversal actually applied (git offsets the hunk once the file has grown) and requires
 the red line, together with the operator starting there, to overlap a changed line; a red elsewhere in

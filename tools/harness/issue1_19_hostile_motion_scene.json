@@ -247,6 +247,69 @@
       }
     },
     {
+      "cmd": "kill @e[type=minecraft:zombie]"
+    },
+    {
+      "cmd": "gamemode survival"
+    },
+    {
+      "wait_ticks": 60
+    },
+    {
+      "cmd": "summon minecraft:zombie 990.5 160 990.5 {PersistenceRequired:1b,Rotation:[0f,0f],equipment:{head:{id:\"minecraft:leather_helmet\",count:1}}}"
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "timed_entities": {
+        "name": "chase-1",
+        "args": {
+          "radius": 24,
+          "limit": 32
+        }
+      }
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "timed_entities": {
+        "name": "chase-2",
+        "args": {
+          "radius": 24,
+          "limit": 32
+        }
+      }
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "timed_entities": {
+        "name": "chase-3",
+        "args": {
+          "radius": 24,
+          "limit": 32
+        }
+      }
+    },
+    {
+      "mob_chase": {
+        "samples": [
+          "chase-1",
+          "chase-2",
+          "chase-3"
+        ],
+        "name": "chase",
+        "kind": "minecraft:zombie",
+        "min_speed": 0.105,
+        "max_speed": 0.128,
+        "min_approach_blocks": 3,
+        "aggressive_bit": 2
+      }
+    },
+    {
       "require_entities": {
         "name": "hostile-present",
         "args": {

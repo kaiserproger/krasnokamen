@@ -901,24 +901,20 @@ the Settings dialog or the map territory.
   are client-observed rates, not authoritative server-clock speeds: client time
   can be corrected by server packets, and curved paths make net displacement a
   lower bound on traveled distance.
+- `mob_chase` reads the named `timed_entities` samples of one kind (at least two, a window of 60 or
+  more client ticks) and records ONE pace over the whole window, so the server's position sample
+  period cannot become the band: `chase_speed_<kind>` (blocks per client tick inside the declared
+  range), `chase_approach_<kind>` (the received distance to the player fell by at least the declared
+  blocks — a wanderer that keeps pace without closing ground fails), `chase_aggressive_<kind>` (the
+  mob-flags byte carries the declared bit on the first and last samples) and
+  `chase_identity_<kind>` (one entity throughout). `issue1-19-hostile-motion` uses it for the zombie
+  chase (`chase_speed_zombie`, 0.105..0.128 from the Java 26.3 moving interval, approach >= 3 blocks,
+  aggressive bit 2).
 - Zombie-family chase uses a blueprint capability to send the aggressive-arms
   mob flag. It is cleared when the target is lost or on the first hostile
   evaluation after restart, because targets are runtime-only; the changed
   appearance is journaled. The focused metadata and WAL tests do not substitute
   for a matched animated visual comparison.
-
-- `timed_entities` takes the same `name` and `args` as `list_entities` and retains
-  its same-client-thread `game_time` and entity positions. Missing timestamps fail.
-- `mob_motion` reads three named `timed_entities` receipts and records horizontal
-  displacement and blocks per client tick for one zombie and one spider. Both
-  must retain their identities and move; observed game time must advance. These
-  are client-observed rates, not authoritative server-clock speeds: client time
-  can be corrected by server packets, and curved paths make net displacement a
-  lower bound on traveled distance.
-- Zombie chase uses a server-sent aggressive mob flag to drive the client arm
-  pose. It is cleared when the target is lost and on recovery because targets
-  are runtime-only; the changed appearance is journaled. The focused metadata
-  and WAL tests do not substitute for a matched animated visual comparison.
 
 - With a client supporting held MCP input,
   `{"shot":"tab","hold_keys":["key.keyboard.tab"]}` captures the visible player
@@ -975,7 +971,10 @@ the Settings dialog or the map territory.
   `harness:settlement-map-qa:localized_text` runs `--client java ... --language ru_ru`
   (the receipt needs the Java prerequisites env, `receipts/BuildHost/java-prereqs.env`);
   `harness:settlement-map-qa:starter_chest_race` runs `--client java ... --scenario quickwins-c1-race`
-  (below); every other verdict runs native with `--timeout-seconds 3600`.
+  (below); `harness:settlement-map-qa:blueprints` runs `--client native ... --scenario blueprints` — the
+  quickwins setup founds the settlement, then the Construction page's list is read page by page
+  (`blueprint_names`: no raw ids, no Unknown, every name in the client language, 26 or more distinct) and
+  published as `blueprints`/`all`; every other verdict runs native with `--timeout-seconds 3600`.
   A Java run whose client could not load the requested language fails before connect
   (`scene_shot_client.check_java_language`, marker `Failed to load translations for
   <locale> from pack vanilla`): such a client still reports the locale to the server but

@@ -296,6 +296,7 @@ _FIXTURE_PANICS = (
     re.compile(r'\btest_registry\('),
     re.compile(r'\bfixture_store\('),
 )
+_ASSERT_MACRO = re.compile(r'\b(?:assert(?:_eq|_ne)?!|debug_assert(?:_eq|_ne)?!)')
 _ASSERT_LINE = re.compile(r'\b(?:assert(?:_eq|_ne)?!|debug_assert(?:_eq|_ne)?!|panic!\s*\()')
 # A source line that *begins* with an assert macro is the assertion itself whatever message it
 # carries: `assert!(cond, "custom text")` panics with that text, not with "assertion failed"
@@ -388,9 +389,13 @@ def _panic_class(tree, location, message):
     # when the panic message says so (an `assert_eq!` inside `expect(...)`); otherwise it is class (c).
     if _UNWRAP_LINE.search(source) and not _ASSERT_MESSAGE.match(message or ''):
         return 'unknown'
-    if _ASSERT_LINE.search(source):
-        # The assert macro at the panicking line is the assertion itself, whatever its custom
+    if _ASSERT_MACRO.search(source):
+        # An assert macro at the panicking line is the assertion itself, whatever its custom
         # message says: `assert!(cond, "msg")` panics with exactly "msg" (wave-2 review N2).
+        return 'assertion'
+    if _ASSERT_LINE.search(source) and _ASSERT_MESSAGE.search(message or ''):
+        # An explicit `panic!` is evidence only when its message says it is an assertion: a setup
+        # `panic!("world fixture missing")` must stay class (c) (REVIEW-wave2-11 minor-6).
         return 'assertion'
     return 'unknown'
 
@@ -647,13 +652,14 @@ def _assertion_failure(receipt):
 
 
 def _scenario_assertion_failed(receipt, check):
-    """A named-scenario ref is red when its own receipt (`details.named_scenario.id` is the
-    ref) failed on one of the scenario's assertions."""
+    """The assertion a named-scenario ref failed, or None when it is not this scenario's own red."""
     if not isinstance(receipt, dict):
-        return False
+        return None
     details = receipt.get('details') if isinstance(receipt.get('details'), dict) else {}
     named = details.get('named_scenario')
-    return isinstance(named, dict) and named.get('id') == check and _assertion_failure(receipt) is not None
+    if not (isinstance(named, dict) and named.get('id') == check):
+        return None
+    return _assertion_failure(receipt)
 
 
 def _loader_mc_version(loader_root: Path) -> str | None:
@@ -710,7 +716,7 @@ def _run_harness(ctx, refs, tree):
     try:
         binary = regressions._release_server(ctx, profiles, tree)
     except Exception as error:
-        return {ref: (UNRUNNABLE, f'release server: {error}', None) for ref in refs}
+        return {ref: (UNRUNNABLE, f'release server: {error}', None, None) for ref in refs}
     _register_server(ctx.client_evidence['regressions_server']['sha256'], tree_fingerprint(tree))
     env = regressions._client_env(binary)
     if regressions.is_other_tree(tree):
@@ -732,7 +738,7 @@ def _run_harness(ctx, refs, tree):
         command = list(command)
         if profile == 'loader-live':
             if loader_reason is not None:
-                results.update({ref: (UNRUNNABLE, loader_reason, None) for ref, *_ in group})
+                results.update({ref: (UNRUNNABLE, loader_reason, None, None) for ref, *_ in group})
                 continue
             wrapper = REPO_ROOT / 'tools' / 'harness' / 'screen_audio_graph.sh'
             plugins_dir = ctx.artifact_dir / 'loader-live-plugins'
@@ -748,18 +754,20 @@ def _run_harness(ctx, refs, tree):
                     (is_profile and _failing_verdict(error.receipt, profile, check))
                     or (not is_profile and _scenario_assertion_failed(error.receipt, check))
                 )
-                results[ref] = (RED if red else UNRUNNABLE, str(error), str(error.path) if error.path else None)
+                failed = _scenario_assertion_failed(error.receipt, check) if red and not is_profile else None
+                results[ref] = (RED if red else UNRUNNABLE, str(error),
+                                str(error.path) if error.path else None, failed)
             continue
         except Exception as error:
-            results.update({ref: (UNRUNNABLE, str(error), None) for ref, *_ in group})
+            results.update({ref: (UNRUNNABLE, str(error), None, None) for ref, *_ in group})
             continue
         for ref, profile, check, is_profile in group:
             try:
                 if is_profile:
                     regressions._profile_verdict(receipt, profile, check)
-                results[ref] = (GREEN, '', str(path))
+                results[ref] = (GREEN, '', str(path), None)
             except RuntimeError as error:
-                results[ref] = (RED, str(error), str(path))
+                results[ref] = (RED, str(error), str(path), None)
     return results
 
 
@@ -795,8 +803,9 @@ def run_refs(ctx, refs, tree, client):
                 out[f'cargo:{crate}:{name}'] = {'state': state, 'detail': detail,
                                                **({'assertion': assertion} if assertion else {})}
         if harness:
-            for ref, (state, detail, receipt) in _run_harness(ctx, harness, tree).items():
-                out[ref] = {'state': state, 'detail': detail, **({'receipt': receipt} if receipt else {})}
+            for ref, (state, detail, receipt, failed) in _run_harness(ctx, harness, tree).items():
+                out[ref] = {'state': state, 'detail': detail, **({'receipt': receipt} if receipt else {}),
+                            **({'assertion': {'name': failed}} if failed else {})}
         if python:
             for (module, test), (state, detail, assertion) in _run_python(ctx, python, tree).items():
                 out[f'python:{module}:{test}'] = {'state': state, 'detail': detail,
@@ -1224,6 +1233,75 @@ def _assertion_in_ranges(entry, ranges, control_dir):
     return any(first <= line <= last for first, last in ranges.get(path, []))
 
 
+def proving_refs(row):
+    """The refs whose red has to prove the fix: `proving_refs` when the row names them, else every ref.
+
+    A row that carries a second check which passes with and without the fix (a metadata fence, an
+    elided client unit test) names its proving refs and says in its map why the others cannot flip;
+    every other row must go red on all of its refs (LEDGER-CONTROL-COVERS-ONE-REF)."""
+    refs = list(row.get('regression') or [])
+    named = row.get('proving_refs')
+    if named is None:
+        return refs
+    ident = row.get('id', '?')
+    if not isinstance(named, list) or not named or not all(isinstance(ref, str) for ref in named):
+        raise Refused(f'{ident}: proving_refs must be a non-empty list of registered refs')
+    unknown = [ref for ref in named if ref not in refs]
+    if unknown:
+        raise Refused(f"{ident}: proving_refs names {', '.join(unknown)}, which is not in regression")
+    return list(named)
+
+
+def _check_proving_choice(ident, row, control):
+    """Refuse a `proving_refs` that shrinks the proof dishonestly.
+
+    Every excluded ref must be GREEN on the control — a check that does not flip with the fix and
+    without it is structurally non-proving, and anything else (unrunnable, fixture failure, unproven
+    panic, needs-real-client, or red) means the row is dropping a check that the control says flips.
+    A real-client row keeps at least one graphical ref proving, and may exclude a graphical one only
+    when it is green (REVIEW-wave2-13 R2/R3). A proving harness ref of a named scenario must name the
+    assertion it fails (M4)."""
+    from . import regressions, scenarios
+
+    proving = set(proving_refs(row))
+    excluded = [ref for ref in row.get('regression') or [] if ref not in proving]
+    if excluded:
+        if regressions.needs_real_client(row):
+            graphical = [ref for ref in proving if regressions.is_graphical_ref(ref)]
+            if not graphical:
+                raise Refused(f"{ident}: proving_refs keeps no real-client ref; the scene carries the "
+                              'symptom, so at least one graphical ref stays proving')
+        bad = {ref: (control.get(ref) or {}).get('state') for ref in excluded}
+        bad = {ref: state for ref, state in bad.items() if state != GREEN}
+        if bad:
+            raise Refused(f"{ident}: proving_refs excludes " + ', '.join(
+                f"{ref}={state or 'no result'}" for ref, state in bad.items())
+                + ': an excluded ref must be green on the control (proving refs red, non-proving green)')
+    named = row.get('proving_assertions') if isinstance(row.get('proving_assertions'), dict) else {}
+    for ref in sorted(proving):
+        _, profile, check = ref.split(':', 2) if ref.count(':') >= 2 else ('', '', '')
+        if profile == 'scene-shot' and check in scenarios.SCENARIOS and not named.get(ref):
+            raise Refused(f"{ident}: proving ref {ref} is a named scenario: name the assertion it must fail "
+                          'in proving_assertions')
+    return proving
+
+
+def _require_control_red(ident, control, proving):
+    """Refuse unless every proving ref is RED in the control.
+
+    A crashed, aborted, timed-out or unrunnable run never counts as red: only an explicit failing
+    verdict for that ref's own check does (LEDGER-CONTROL-COVERS-ONE-REF)."""
+    short = {ref: control.get(ref) or {'state': UNRUNNABLE, 'detail': 'no result for this ref'}
+             for ref in proving}
+    short = {ref: entry for ref, entry in short.items() if entry.get('state') != RED}
+    if short:
+        detail = '; '.join(f"{ref}={entry['state']}" + (f" ({entry['detail']})" if entry.get('detail') else '')
+                           for ref, entry in short.items())
+        raise Refused(f"{ident}: the control is not red on every proving ref: {detail} "
+                      '(a row that carries a non-flipping check names `proving_refs`; a crashed, aborted or '
+                      'unrunnable run never counts as red)')
+
+
 def _classify_control(ident, control, row, tree):
     """Rewrite a control's entries so a fixture panic or an unnamed panic cannot pass as red.
 
@@ -1237,6 +1315,16 @@ def _classify_control(ident, control, row, tree):
             out[ref] = entry
             continue
         assertion = entry.get('assertion') or {}
+        if ref.startswith('harness:') and assertion.get('name') is not None:
+            # A named scenario records the assertion it failed: a row that names its own assertion is
+            # red only on that one (REVIEW-wave2-12 M4), so an unrelated flake cannot carry a control.
+            expected = named.get(ref)
+            if expected and assertion['name'] != expected:
+                out[ref] = {**entry, 'state': UNRUNNABLE,
+                            'detail': entry.get('detail', '') + f" | red at {assertion['name']!r}, not the row's {expected!r}"}
+                continue
+            out[ref] = entry
+            continue
         if assertion.get('error') == 'AssertionError' or assertion.get('class') == 'assertion':
             out[ref] = entry
             continue
@@ -1432,10 +1520,12 @@ def _register_server(sha256, tree):
 
     One file per (binary, tree): a harness-only fix leaves the release server byte-identical on the
     candidate and on its reverted control tree, so both fingerprints must be citable at once
-    (FINDINGS-20261124 F1). The legacy `<sha256>.json` name is still read, never written."""
+    (FINDINGS-20261124 F1). The name carries the head as well as the diff hash: two clean trees only
+    differ by their head, and a diff-hash-only name made them overwrite each other (REVIEW-wave2-12
+    m3). The legacy `<sha256>.json` name is still read, never written."""
     registry = REPO_ROOT / '.analysis/ledger-builds'
     registry.mkdir(parents=True, exist_ok=True)
-    name = f'{sha256}-{tree["sha256"]}.json'
+    name = f'{sha256}-{tree["head"]}-{tree["sha256"]}.json'
     (registry / name).write_text(json.dumps({'sha256': sha256, 'tree': {'head': tree['head'], 'sha256': tree['sha256']}}) + '\n')
 
 
@@ -1853,6 +1943,14 @@ def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client
                                            row.get('proving_assertions', {}))
     restored_info = check_client_restore_receipt(root, client_receipt, graphical, fix_full, tree_now)
     delta = _check_client_control_delta(root, control['client_head'], restored_info['client_head'], fix_full)
+    graphical_proving = [ref for ref in _check_proving_choice(ident, row, control) if ref in graphical]
+    if not graphical_proving:
+        raise Refused(f'{ident}: proving_refs names no real-client ref, but a client:<sha> fix is proved by a '
+                      'real-client receipt')
+    lacking = [ref for ref in graphical_proving if ref not in control['red']]
+    if lacking:
+        raise Refused(f"{ident}: the control receipt is not red on every proving real-client ref "
+                      f"({', '.join(lacking)}); a row that carries a non-flipping check names `proving_refs`")
     if not set(control['red']) & set(restored_info['green']):
         raise Refused(f"{ident}: the control's red refs {control['red']} and the restore's green refs "
                       f"{restored_info['green']} do not overlap: the same check has to flip")
@@ -2576,6 +2674,21 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
                           + (f" (a red outside {', '.join(reversed_files)} is not evidence: a production panic or a build "
                              'failure is not control A)' if test_only else
                              ' (a check that stays green does not test the fix; one that cannot build or run without it cannot show an assertion failing)'))
+        proving = sorted(_check_proving_choice(ident, row, control))
+        if test_only:
+            # A test-only red outside the reversed files is not control A at all, so the precise
+            # control-A message wins; the proving set still has to be covered by it.
+            uncovered = [ref for ref in proving if ref not in valid_red]
+        else:
+            _require_control_red(ident, control, proving)
+            uncovered = [ref for ref in proving if ref not in valid_red]
+        if uncovered:
+            raise Refused(f"{ident}: negative control ({control_tree}) did not go red at an assertion with the fix reversed: "
+                          + '; '.join(f"{ref}={entry['state']}" + (f" ({entry['detail']})" if entry['detail'] else '') for ref, entry in control.items())
+                          + (f" (a red outside {', '.join(reversed_files)} is not evidence: a production panic or a build "
+                             'failure is not control A)' if test_only else
+                             ' (a check that stays green does not test the fix; one that cannot build or run without it cannot show an assertion failing)')
+                          + (f" [not red on {', '.join(uncovered)}]" if uncovered and not test_only else ''))
         if test_only:
             # Control B: restoring the old oracle only shows the old assertion was red, which a wrongly
             # deleted assertion also gives. Re-introduce the defect the test claims to catch and require
@@ -2628,6 +2741,10 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
                 if _ref_test_file(candidate, ref, reversed_files) is None:
                     raise Refused(f'{ident}: proving ref {ref} is not defined in '
                                   f"{', '.join(reversed_files)}: a bare name from another file proves nothing")
+            lacking = [ref for ref in proving_refs(row) if ref not in proving]
+            if lacking:
+                raise Refused(f"{ident}: the declared proving refs {', '.join(lacking)} are not red on both "
+                              'controls: a test-only row proves the refs that flip in each direction')
         _materialize(root, candidate, tree_now)
         # A ref the supplied receipt already passed on this HEAD is not rerun, unless it carried the red
         # control: its restore proves the red was the reversal, not the environment.

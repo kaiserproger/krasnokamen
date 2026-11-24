@@ -1324,3 +1324,25 @@ class DroppedClockTests(unittest.TestCase):
         self.assertTrue(all({"shot": name} in scene["steps"] for name in ("held-day", "held-night")))
 
 
+
+
+class NamedFixtureClientTests(unittest.TestCase):
+    """The ledger and the fixture must agree on a scene's client (REVIEW-wave2-12 m5).
+
+    Two readers decide it: `regressions._client_command` (the `run scenario` argv) and
+    `scene_shot_scenario`'s registered-fixture rule. A disagreement is fail-closed but silent, so the
+    invariant is checked here for every named fixture instead."""
+
+    def test_every_named_fixture_agrees_with_the_ledger_client(self):
+        from tools.harness import regressions
+        from tools.harness.backends import scene_shot_scenario
+
+        fixtures = scene_shot_scenario.NAMED_FIXTURES
+        self.assertIn("issue1-19-hostile-motion", fixtures)
+        for name in fixtures:
+            with self.subTest(scenario=name):
+                entry = scenarios.SCENARIOS.get(name)
+                self.assertIsNotNone(entry, f"{name} has a fixture but no scenario entry")
+                expected = entry.client or ("java" if name.startswith("java-") else "native")
+                argv = regressions._client_command("scene-shot", name)
+                self.assertEqual(argv[argv.index("--client") + 1], expected)

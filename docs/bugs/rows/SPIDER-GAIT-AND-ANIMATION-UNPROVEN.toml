@@ -1,0 +1,11 @@
+[[bug]]
+id = "SPIDER-GAIT-AND-ANIMATION-UNPROVEN"
+title = "Spider chase pace and the zombie/spider pose formulas have no real-client control"
+area = "client"
+severity = "minor"
+status = "open"
+source = "Split out of ISSUE-1-19 by REVIEW-wave2-12 M2. The promoted control (patch 3fc6a9b9, scene issue1-19-hostile-motion) proves the zombie chase speed only: the spider windows step a NoAI spider with fixture teleports, so their mob_speed_spider verdict measures the teleport; the scene's raised-arm window reads 1776-1878 px on both the fixed and a formula-reverted client, so the animateZombieArms/SpiderModel.setupAnim change carries no red control."
+repro = "client"
+regression = ["cargo:mc-core:entity_motion_tests::hostile_flat_ground_chase_distance_matches_tuned_speed", "cargo:mc-core:hostile_tests::zombie_chase_publishes_and_clears_aggressive_pose_metadata", "cargo:mc-core:journal_touched::tests::zombie_chase_pose_is_journaled_and_repaired_after_recovery", "client:krasnokamen-client:entities::animation_tests::zombie_arm_rotation_matches_the_26_3_animate_zombie_arms_formula", "client:krasnokamen-client:entities::animation_tests::spider_leg_swing_follows_the_26_3_spider_model_pairs"]
+failing_first = "reported"
+repro_check = "What exists: the tuned-speed test fences the blueprint value for both kinds (spider speed 5.0 with its 'validate in a real actor scene' comment, vanilla attribute ~0.3); the two client unit tests pass on the fixed and on a reverted client alike, so they are source fences, not a symptom control. What does not exist: a real-client window that drives a spider with AI and bounds its pace, and any client-visible difference for the pose formulas (the rest pose is identical; the aggressiveness-dependent arm terms need an aggressive zombie, and the spider leg offsets need a walking spider’s pose anchor). Missing proof: one AI-spider pace window calibrated over >=3 runs per side, and a pose assertion that separates the formulas (an aggressive zombie frame or a walking-spider leg anchor) with a red control. Owner decision if neither can be built: keep the formulas as source fences only."

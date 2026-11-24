@@ -1084,3 +1084,37 @@ class RegistryKeyTests(unittest.TestCase):
                 with self.assertRaises(ledger.Refused):
                     ledger._server_built_from(root, receipt, {'head': 'd' * 40, 'sha256': 'e' * 64})
 
+
+class ServerRegistryTests(unittest.TestCase):
+    """The release-server registry is keyed per (binary, tree): a harness-only fix leaves the binary
+    identical on the candidate and on its reverted control tree, and both must be citable."""
+
+    def registry(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        (root / '.analysis/ledger-builds').mkdir(parents=True)
+        return root, root / '.analysis/ledger-builds'
+
+    def test_register_server_writes_one_entry_per_tree(self):
+        root, registry = self.registry()
+        with patch.object(ledger, 'REPO_ROOT', root):
+            ledger._register_server('a' * 64, {'head': 'b' * 40, 'sha256': 'c' * 64})
+            ledger._register_server('a' * 64, {'head': 'b' * 40, 'sha256': 'd' * 64})
+            # Two clean trees differ only by their head: both entries must survive (REVIEW-wave2-12 m3).
+            ledger._register_server('a' * 64, {'head': 'f' * 40, 'sha256': 'c' * 64})
+            self.assertEqual(len(list(registry.glob('*.json'))), 3)
+            self.assertEqual(ledger._registration(registry, 'a' * 64, {'head': 'f' * 40, 'sha256': 'c' * 64}),
+                             {'sha256': 'a' * 64, 'tree': {'head': 'f' * 40, 'sha256': 'c' * 64}})
+            self.assertEqual(ledger._registration(registry, 'a' * 64, {'head': 'b' * 40, 'sha256': 'c' * 64}),
+                             {'sha256': 'a' * 64, 'tree': {'head': 'b' * 40, 'sha256': 'c' * 64}})
+            self.assertEqual(ledger._registration(registry, 'a' * 64, {'head': 'b' * 40, 'sha256': 'd' * 64}),
+                             {'sha256': 'a' * 64, 'tree': {'head': 'b' * 40, 'sha256': 'd' * 64}})
+            self.assertIsNone(ledger._registration(registry, 'a' * 64, {'head': 'b' * 40, 'sha256': 'e' * 64}))
+
+    def test_registration_still_reads_a_legacy_binary_named_entry(self):
+        _, registry = self.registry()
+        legacy = {'sha256': 'a' * 64, 'tree': {'head': 'b' * 40, 'sha256': 'e' * 64}}
+        (registry / f'{"a" * 64}.json').write_text(__import__('json').dumps(legacy) + '\n')
+        self.assertEqual(ledger._registration(registry, 'a' * 64, legacy['tree']), legacy)
+        self.assertIsNone(ledger._registration(registry, 'a' * 64, {'head': 'b' * 40, 'sha256': 'f' * 64}))

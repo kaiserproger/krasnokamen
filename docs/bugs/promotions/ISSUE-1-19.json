@@ -1,0 +1,61 @@
+{
+  "id": "ISSUE-1-19",
+  "verdict": "promoted",
+  "fix_commit": "patch:3fc6a9b98fa6edba355f793ae2ff042265b4c616ad1ddbf3d2b8b8ebbaf814eb",
+  "fix_commit_full": "patch:3fc6a9b98fa6edba355f793ae2ff042265b4c616ad1ddbf3d2b8b8ebbaf814eb",
+  "promoted_at": "2026-11-24T22:31:52+00:00",
+  "tree_head": "ca398831afbbf3664a7033137313d2477482532a",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "3fc6a9b98fa6edba355f793ae2ff042265b4c616ad1ddbf3d2b8b8ebbaf814eb",
+  "reversed_files": [
+    "crates/mc-core/src/blueprint.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/hostile_tests.rs",
+        "line": 156,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "harness:scene-shot:issue1-19-hostile-motion": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario issue1-19-hostile-motion --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T222831-ledger-promote-9b4ctk2m/regressions-client-2.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T222831-ledger-promote-9b4ctk2m/client-artifacts/20261124T222928-issue1-19-hostile-motion-53va52fu/result.json",
+      "assertion": {
+        "name": "chase_speed_zombie"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:scene-shot:issue1-19-hostile-motion": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T222831-ledger-promote-9b4ctk2m/client-artifacts/20261124T223058-issue1-19-hostile-motion-g_yl7xnt/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T221450-issue1-19-hostile-motion-f0r_70x4/result.json",
+    "tree_head": "ca398831afbbf3664a7033137313d2477482532a",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "covers": [
+      "harness:scene-shot:issue1-19-hostile-motion"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T222831-ledger-promote-9b4ctk2m"
+}

@@ -264,7 +264,8 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
         elif kind == "falling_block_capture":
             valid = client == "native" and isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value)
         elif kind == "mob_motion":
-            valid = (isinstance(value, dict) and set(value) == {"samples", "name", "types"}
+            valid = (isinstance(value, dict)
+                     and set(value) == {"samples", "name", "types"}
                      and isinstance(value["name"], str) and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
                      and isinstance(value["samples"], list) and len(value["samples"]) == 3
                      and all(isinstance(item, str) and re.fullmatch(r"[A-Za-z0-9_-]+", item)
@@ -288,6 +289,20 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                                  and (("min_blocks" not in item)
                                       or item["min_blocks"] < item["max_blocks"]))
                              for item in value["types"]))
+        elif kind == "mob_chase":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"samples", "name", "kind", "min_speed", "max_speed",
+                                        "min_approach_blocks", "aggressive_bit"}
+                     and isinstance(value["name"], str) and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and isinstance(value["kind"], str)
+                     and re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", value["kind"])
+                     and isinstance(value["samples"], list) and len(value["samples"]) >= 2
+                     and all(isinstance(item, str) and re.fullmatch(r"[A-Za-z0-9_-]+", item)
+                             for item in value["samples"])
+                     and all(type(value[key]) in (int, float) and math.isfinite(value[key]) and value[key] >= 0
+                             for key in ("min_speed", "max_speed", "min_approach_blocks"))
+                     and value["min_speed"] < value["max_speed"]
+                     and type(value["aggressive_bit"]) is int and 0 <= value["aggressive_bit"] <= 7)
         elif kind == "assert_block":
             valid = (client == "native" and isinstance(value, dict)
                      and set(value) == {"name", "args", "expect"}

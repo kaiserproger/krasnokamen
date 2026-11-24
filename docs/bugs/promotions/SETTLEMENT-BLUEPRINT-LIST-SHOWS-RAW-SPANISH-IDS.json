@@ -1,0 +1,72 @@
+{
+  "id": "SETTLEMENT-BLUEPRINT-LIST-SHOWS-RAW-SPANISH-IDS",
+  "verdict": "promoted",
+  "fix_commit": "patch:06a9a6d513a2af87da34363f8ffd52f53b42a7dc857af6a1c9b39b459f04d907",
+  "fix_commit_full": "patch:06a9a6d513a2af87da34363f8ffd52f53b42a7dc857af6a1c9b39b459f04d907",
+  "promoted_at": "2026-11-24T21:57:10+00:00",
+  "tree_head": "afee473c6f8eba22577075299c057f195ffccbc2",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "06a9a6d513a2af87da34363f8ffd52f53b42a7dc857af6a1c9b39b459f04d907",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/ui.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::ui::tests::every_registered_blueprint_has_explicit_russian_and_english_names": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/settlements/ui_tests.rs",
+        "line": 3060,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:settlements::ui::tests::unknown_blueprint_names_never_expose_raw_identifiers": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/settlements/ui_tests.rs",
+        "line": 3081,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "harness:settlement-map-qa:blueprints": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run settlement-map-qa --client native --windowed --timeout-seconds 3600 -- --scenario blueprints exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T214848-ledger-promote-_og5vzln/regressions-client-2.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T214848-ledger-promote-_og5vzln/client-artifacts/20261124T215250-settlement-map-qa-0z6w6ohr/result.json"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::ui::tests::every_registered_blueprint_has_explicit_russian_and_english_names": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::ui::tests::unknown_blueprint_names_never_expose_raw_identifiers": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:settlement-map-qa:blueprints": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T214848-ledger-promote-_og5vzln/client-artifacts/20261124T215643-settlement-map-qa-rb9bc51f/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T213234-settlement-map-qa-fsofbifx/result.json",
+    "tree_head": "afee473c6f8eba22577075299c057f195ffccbc2",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "c11ee2723befd2ee4cd0964936d95ef051179dc502fee5b1f76fe611e9828a38",
+    "covers": [
+      "harness:settlement-map-qa:blueprints"
+    ],
+    "profile": "settlement-map-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T214848-ledger-promote-_og5vzln"
+}

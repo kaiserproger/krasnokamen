@@ -1,0 +1,11 @@
+[[bug]]
+id = "SHEEP-MODEL-UNPROVEN"
+title = "Sheep model renders but no frame checks it"
+area = "client"
+severity = "minor"
+status = "open"
+source = "Split out of ISSUE-1-18 by REVIEW-wave2-12 M3. The promoted pair b6f3177c->83eef0ba and the scene issue1-18-sheep-goat prove the goat's horn lean only: the sheep-side frame is captured but asserted only by presence, and neither the pair's hunks nor its control touch any sheep file."
+repro = "client"
+regression = []
+failing_first = "reported"
+repro_check = "What exists: the goat-horn oracle (upright span <= 1 px, body edge, ear coverage, side horn) on the front and side frames, deterministic over three runs per side (fix 468x7, pre-image 465..462). The sheep is summoned and framed (sheep-side shot) with only require_entities. What does not exist: a sheep assertion and a control — the pre-rename fix b7c48e1c changed no sheep model (its goat/spider hunks are ISSUE-1-18's), so the sheep's 'wrong model' half needs its own matched Java oracle or an owner-captured frame set before a check can be written. Missing proof: one sheep silhouette/geometry assertion derived from a matched 26.3 frame, red on a real pre-image (a sheep model revert that exists in history or a documented absent pre-image)."
