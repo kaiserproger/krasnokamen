@@ -9,4 +9,8 @@ source = "Independent graphical damage QA observed rejection of gamerule natural
 regression = ["harness:entities:native-v2-p4-damage", "python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_gamerule_fixture_requires_supported_rule_and_ack"]
 repro_check = "negative control receipts/XHarnessGates/neg-damage-regeneration.log (ack wait removed -> both rule subtests red); candidate: no exact revert - 4a74eaca's hunks conflict on HEAD and the current form comes from b0fa3d298 whose hunks also conflict (native_p4.py:233); the control is fix-lines-only (ack wait removed), receipts/XHarnessGates/neg-damage-regeneration.log"
 failing_first = "reported"
-fix_commit = "4a74eaca"
+fix_commit = "patch:c09ff7087e87159e21724dfe361b69bb79d7c1139cb204aee890f975851054ce"
+# Pack 13: the commit-mode fix cannot be reversed here (4a74eaca and its successor b0fa3d298 both
+# conflict on HEAD), so the row records the ack-wait hunk as it stands in native_p4.py: reversing
+# it removes the "Game rule ... is now set to false" wait — the row's recorded fix-lines-only
+# control (receipts/XHarnessGates/neg-damage-regeneration.log).
