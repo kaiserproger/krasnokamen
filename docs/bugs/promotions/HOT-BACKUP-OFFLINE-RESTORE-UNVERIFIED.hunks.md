@@ -48,14 +48,13 @@ opened, which redb refuses to repair for.
 Reversed, `run_restore` verifies the hot copy through the pre-fix second
 read-only open and refuses it. The registered ref
 `cargo:mc-edge:backup::tests::the_restore_command_accepts_a_hot_backup_verified_with_content`
-panics at `crates/mc-edge/src/backup_tests.rs:667`
-(`.expect("the restore command verifies and restores a hot backup")`) with
+fails the assertion at `crates/mc-edge/src/backup_tests.rs:668` with
 
 ```
-native source: world was not shut down cleanly; start and stop the server once to repair it, then retry
+the restore command verifies and restores a hot backup: native source: /tmp/.../native/state.redb: world was not shut down cleanly; start and stop the server once to repair it, then retry
 ```
 
-(`.analysis/validation/20261124T093250-test-swaceuhn`, 1 run, 0 passed). On the
-candidate the same ref passes in the promotion restore: the restore command
-accepts the hot backup, keeps the copied checkpoint marker, the copied WAL tail
-and reopens the restored world.
+(the assertion was made explicit instead of an `expect` so the control red is an
+assert macro, not an unnamed panic). On the candidate the same ref passes in the
+promotion restore: the restore command accepts the hot backup, keeps the copied
+checkpoint marker, the copied WAL tail and reopens the restored world.

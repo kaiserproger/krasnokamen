@@ -661,11 +661,14 @@ async fn the_restore_command_accepts_a_hot_backup_verified_with_content() {
     ])
     .unwrap();
     let mut cfg = crate::operator_cli::load_config(&cli).expect("read the operator configuration");
+    // The assertion, not an `expect`, carries the row's symptom: with the
+    // pre-fix second read-only open the copy cannot even be read, and the
+    // message says why (`world was not shut down cleanly ... repair it`).
+    let outcome = crate::operator_cli::run_offline(&cli, &mut cfg).await;
     assert!(
-        crate::operator_cli::run_offline(&cli, &mut cfg)
-            .await
-            .expect("the restore command verifies and restores a hot backup"),
-        "restore is an offline command"
+        outcome.as_ref().is_ok_and(|offline| *offline),
+        "the restore command verifies and restores a hot backup: {:?}",
+        outcome.err()
     );
 
     let marker = mc_world::store_marker::read(&restored)
