@@ -282,6 +282,11 @@ def start(
             if not available:
                 raise RuntimeError(f"native client content prerequisite {name} is missing: {path}")
         settings_path = Path(env["KRASNOKAMEN_CLIENT_SETTINGS"])
+        if not settings_path.exists():
+            # A run always starts from a named file: an absent one would leave the
+            # receipt's settings digest empty and a replay ambiguous.
+            settings_path.parent.mkdir(parents=True, exist_ok=True)
+            settings_path.write_text("{}\n")
         # A receipt must name the settings file and its content: a control and its
         # restore are only comparable when both read the same managed settings.
         evidence.update(
@@ -290,8 +295,7 @@ def start(
                 "artifact_dir": str(artifact_dir),
                 "log": str(log_path),
                 "settings_path": str(settings_path),
-                "settings_sha256": (hashlib.file_digest(settings_path.open("rb"), "sha256").hexdigest()
-                                    if settings_path.is_file() else ""),
+                "settings_sha256": hashlib.file_digest(settings_path.open("rb"), "sha256").hexdigest(),
             }
         )
         # Title-mode launch (server_addr/username both None): omit --server /
