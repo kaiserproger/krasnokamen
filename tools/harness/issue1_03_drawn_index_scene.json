@@ -55,7 +55,7 @@
       }
     },
     {
-      "wait_ticks": 3
+      "wait_ticks": 20
     },
     {
       "shot": "f3-yaw-0"
@@ -68,7 +68,7 @@
       }
     },
     {
-      "wait_ticks": 3
+      "wait_ticks": 20
     },
     {
       "render_draw_sample": {
@@ -84,7 +84,7 @@
       }
     },
     {
-      "wait_ticks": 3
+      "wait_ticks": 20
     },
     {
       "render_draw_sample": {
@@ -100,7 +100,7 @@
       }
     },
     {
-      "wait_ticks": 3
+      "wait_ticks": 20
     },
     {
       "render_draw_sample": {
@@ -116,7 +116,7 @@
       }
     },
     {
-      "wait_ticks": 3
+      "wait_ticks": 20
     },
     {
       "render_draw_sample": {
@@ -132,7 +132,7 @@
       }
     },
     {
-      "wait_ticks": 3
+      "wait_ticks": 20
     },
     {
       "render_draw_sample": {
@@ -151,7 +151,7 @@
       }
     },
     {
-      "wait_ticks": 3
+      "wait_ticks": 20
     },
     {
       "render_draw_sample": {
@@ -167,7 +167,7 @@
       }
     },
     {
-      "wait_ticks": 3
+      "wait_ticks": 20
     },
     {
       "render_draw_sample": {
@@ -183,7 +183,7 @@
       }
     },
     {
-      "wait_ticks": 3
+      "wait_ticks": 20
     },
     {
       "render_draw_sample": {
@@ -199,7 +199,7 @@
       }
     },
     {
-      "wait_ticks": 3
+      "wait_ticks": 20
     },
     {
       "render_draw_sample": {
@@ -218,7 +218,7 @@
       }
     },
     {
-      "wait_ticks": 3
+      "wait_ticks": 20
     },
     {
       "shot": "f3-horizon-down-first"
@@ -237,7 +237,7 @@
       }
     },
     {
-      "wait_ticks": 3
+      "wait_ticks": 20
     },
     {
       "shot": "f3-look-down"
@@ -256,7 +256,7 @@
       }
     },
     {
-      "wait_ticks": 3
+      "wait_ticks": 20
     },
     {
       "shot": "f3-horizon-down-return"
