@@ -166,6 +166,79 @@ class SceneShotTests(unittest.TestCase):
                 scene_shot.execute(probe, root, [step])
                 self.assertTrue(probe.checks["golems_min"] and probe.checks["golems_max"])
 
+    def test_assert_block_compares_the_client_block_read(self):
+        class Probe:
+            def __init__(self, result):
+                self.result = result
+                self.checks = {}
+            def call(self, name, args):
+                self.asserted = (name, args)
+                return self.result
+            def check(self, name, condition):
+                self.checks[name] = bool(condition)
+                if not condition:
+                    raise AssertionError(name)
+
+        step = {"assert_block": {"name": "kelp_stands", "args": {"x": 1, "y": 2, "z": 3},
+                                 "expect": "minecraft:kelp"}}
+        self.assertIn(("minecraft_read_block", {"x": 1, "y": 2, "z": 3}),
+                      list(scene_shot.scene_mcp_calls([step])))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            probe = Probe({"x": 1, "y": 2, "z": 3, "block_id": "minecraft:kelp", "is_air": False})
+            scene_shot.execute(probe, root, [step])
+            self.assertEqual(probe.asserted[0], "minecraft_read_block")
+            self.assertTrue(probe.checks["kelp_stands"])
+            washed = Probe({"x": 1, "y": 2, "z": 3, "block_id": "minecraft:water", "is_air": False})
+            with self.assertRaisesRegex(AssertionError, "kelp_stands"):
+                scene_shot.execute(washed, root, [step])
+            air = {"assert_block": {"name": "headroom", "args": {"x": 4, "y": 5, "z": 6},
+                                    "expect": "minecraft:air"}}
+            cleared = Probe({"x": 4, "y": 5, "z": 6, "block_id": "minecraft:air", "is_air": True})
+            scene_shot.execute(cleared, root, [air])
+            self.assertTrue(cleared.checks["headroom"])
+
+    def test_assert_screen_joins_title_dialog_and_slot_text(self):
+        class Probe:
+            def __init__(self, state):
+                self.state = state
+                self.checks = {}
+            def observe(self):
+                return self.state
+            def check(self, name, condition):
+                self.checks[name] = bool(condition)
+                if not condition:
+                    raise AssertionError(name)
+
+        step = {"assert_screen": {"name": "project_label", "contains": ["Wall section L1"],
+                                  "excludes": ["Unknown blueprint"]}}
+        self.assertIn(("minecraft_observe", {}), list(scene_shot.scene_mcp_calls([step])))
+        state = {"screen": {"title": "Projects", "class": "x.dialog.DialogScreen"},
+                 "ui_nodes": [{"id": "dialog/body/0", "label": "Wall section L1 · Prepared 0/24"}],
+                 "container": {"slots": [{"slot": 0, "name": "Wall section L1"}]}}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            probe = Probe(state)
+            scene_shot.execute(probe, root, [step])
+            self.assertTrue(probe.checks["project_label_contains_0"])
+            self.assertTrue(probe.checks["project_label_excludes_0"])
+            unknown = Probe({"screen": {"title": "Projects"},
+                             "ui_nodes": [{"id": "dialog/body/0", "label": "Unknown blueprint L1"}]})
+            with self.assertRaisesRegex(AssertionError, "project_label_contains_0"):
+                scene_shot.execute(unknown, root, [step])
+
+    def test_new_assertion_steps_are_native_only_and_strict(self):
+        for step in ({"assert_block": {"name": "b", "args": {"x": 1, "y": 2}, "expect": "minecraft:air"}},
+                     {"assert_block": {"name": "b", "args": {"x": 1, "y": 2, "z": 3}, "expect": "air"}},
+                     {"assert_screen": {"name": "s", "contains": [], "excludes": []}},
+                     {"assert_screen": {"name": "s", "contains": ["x"]}}):
+            with self.subTest(step=step):
+                with self.assertRaises(ValueError):
+                    scene_shot.validate_steps([step], "native")
+                with self.assertRaises(ValueError):
+                    scene_shot.validate_steps([{"assert_block": {"name": "b", "args": {"x": 1, "y": 2, "z": 3},
+                                                                 "expect": "minecraft:air"}}], "java")
+
     def test_require_entities_rejects_empty_or_invalid_type_lists(self):
         for types in ([], ["zombie"], [""], [None]):
             step = {"require_entities": {"name": "subjects", "args": {}, "types": types}}

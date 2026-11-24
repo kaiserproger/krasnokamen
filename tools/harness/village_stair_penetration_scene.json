@@ -1,0 +1,167 @@
+{
+  "seed": 100,
+  "server_view_distance": 4,
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "tp": [
+        1000.5,
+        204,
+        1000.5,
+        90,
+        20
+      ]
+    },
+    {
+      "wait_ticks": 60
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule random_tick_speed 0"
+    },
+    {
+      "cmd": "time set 18000"
+    },
+    {
+      "cmd": "fill 994 198 994 1006 199 1006 minecraft:stone"
+    },
+    {
+      "cmd": "fill 994 200 994 1006 206 1006 minecraft:air"
+    },
+    {
+      "cmd": "fill 998 200 999 998 203 1001 minecraft:stone"
+    },
+    {
+      "cmd": "fill 1002 200 999 1002 203 1001 minecraft:glass"
+    },
+    {
+      "cmd": "fill 999 200 999 1001 203 999 minecraft:stone"
+    },
+    {
+      "cmd": "fill 999 200 1001 1001 203 1001 minecraft:stone"
+    },
+    {
+      "cmd": "fill 998 203 999 1002 203 1001 minecraft:stone"
+    },
+    {
+      "cmd": "fill 999 200 1000 1001 202 1000 minecraft:air"
+    },
+    {
+      "cmd": "setblock 1000 200 1000 minecraft:oak_stairs[half=bottom,facing=east]"
+    },
+    {
+      "cmd": "summon minecraft:villager 999.5 200 1000.5"
+    },
+    {
+      "tp": [
+        1004.5,
+        202,
+        1000.5,
+        90,
+        12
+      ]
+    },
+    {
+      "wait_ticks": 120
+    },
+    {
+      "assert_entities": {
+        "name": "resting_resident_reached_the_stair",
+        "args": {
+          "radius": 16,
+          "limit": 32
+        },
+        "entity_type": "minecraft:villager",
+        "box": [
+          999,
+          199.5,
+          1000,
+          1002,
+          202.5,
+          1001
+        ],
+        "min": 1,
+        "max": 1
+      }
+    },
+    {
+      "assert_entities": {
+        "name": "seated_body_not_inside_the_stair",
+        "args": {
+          "radius": 16,
+          "limit": 32
+        },
+        "entity_type": "minecraft:villager",
+        "box": [
+          1000,
+          200.05,
+          1000,
+          1001,
+          200.95,
+          1001
+        ],
+        "min": 0,
+        "max": 0
+      }
+    },
+    {
+      "assert_entities": {
+        "name": "seated_body_stands_on_the_stair_top",
+        "args": {
+          "radius": 16,
+          "limit": 32
+        },
+        "entity_type": "minecraft:villager",
+        "box": [
+          1000,
+          200.99,
+          1000,
+          1001,
+          201.01,
+          1001
+        ],
+        "min": 1,
+        "max": 1
+      }
+    },
+    {
+      "shot": "stair-seat"
+    },
+    {
+      "wait_ticks": 100
+    },
+    {
+      "assert_entities": {
+        "name": "seated_body_stays_out_of_the_stair",
+        "args": {
+          "radius": 16,
+          "limit": 32
+        },
+        "entity_type": "minecraft:villager",
+        "box": [
+          1000,
+          200.05,
+          1000,
+          1001,
+          200.95,
+          1001
+        ],
+        "min": 0,
+        "max": 0
+      }
+    },
+    {
+      "shot": "stair-seat-late"
+    }
+  ]
+}

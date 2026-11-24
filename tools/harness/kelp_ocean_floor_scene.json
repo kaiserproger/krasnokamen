@@ -1,0 +1,131 @@
+{
+  "seed": 100,
+  "server_view_distance": 4,
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "tp": [
+        1000.5,
+        202,
+        1004.5,
+        180,
+        20
+      ]
+    },
+    {
+      "wait_ticks": 60
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule random_tick_speed 0"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "cmd": "fill 994 196 994 1006 197 1006 minecraft:stone"
+    },
+    {
+      "cmd": "fill 994 198 994 1006 203 1006 minecraft:air"
+    },
+    {
+      "cmd": "fill 997 198 997 1003 200 1003 minecraft:stone"
+    },
+    {
+      "cmd": "fill 998 198 998 1002 200 1002 minecraft:water"
+    },
+    {
+      "cmd": "setblock 1000 198 1000 minecraft:kelp[age=25]"
+    },
+    {
+      "tp": [
+        1000.5,
+        202,
+        1004.5,
+        180,
+        45
+      ]
+    },
+    {
+      "wait_ticks": 60
+    },
+    {
+      "assert_block": {
+        "name": "kelp_survives_the_neighbouring_flow",
+        "args": {
+          "x": 1000,
+          "y": 198,
+          "z": 1000
+        },
+        "expect": "minecraft:kelp"
+      }
+    },
+    {
+      "assert_entities": {
+        "name": "flow_washes_no_kelp_item",
+        "args": {
+          "radius": 16,
+          "limit": 32
+        },
+        "entity_type": "minecraft:item",
+        "box": [
+          997,
+          197,
+          997,
+          1004,
+          202,
+          1004
+        ],
+        "min": 0,
+        "max": 0
+      }
+    },
+    {
+      "shot": "kelp-pool"
+    },
+    {
+      "wait_ticks": 60
+    },
+    {
+      "assert_block": {
+        "name": "kelp_still_stands_after_the_flow",
+        "args": {
+          "x": 1000,
+          "y": 198,
+          "z": 1000
+        },
+        "expect": "minecraft:kelp"
+      }
+    },
+    {
+      "assert_entities": {
+        "name": "no_kelp_item_on_the_pool_floor",
+        "args": {
+          "radius": 16,
+          "limit": 32
+        },
+        "entity_type": "minecraft:item",
+        "box": [
+          997,
+          197,
+          997,
+          1004,
+          202,
+          1004
+        ],
+        "min": 0,
+        "max": 0
+      }
+    }
+  ]
+}

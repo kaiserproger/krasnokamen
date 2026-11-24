@@ -442,6 +442,27 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                     rates = [segment["blocks_per_client_tick"] for segment in row["segments"]]
                     probe.check("mob_speed_" + slug,
                                 all(entry["min_speed"] <= rate <= entry["max_speed"] for rate in rates))
+        elif kind == "assert_block":
+            result = probe.call("minecraft_read_block", value["args"])
+            (artifact / f"{value['name']}.json").write_text(json.dumps(result, indent=2) + "\n")
+            expect = value["expect"]
+            matched = (result.get("is_air") is True if expect == "minecraft:air"
+                       else result.get("block_id") == expect)
+            probe.check(value["name"], matched)
+        elif kind == "assert_screen":
+            shown = probe.observe()
+            screen = shown.get("screen") or {}
+            texts = [str(screen.get("title") or "")]
+            texts.extend(str(node["label"]) for node in shown.get("ui_nodes") or [] if node.get("label"))
+            texts.extend(str(row["name"]) for row in (shown.get("container") or {}).get("slots", [])
+                         if row.get("name"))
+            (artifact / f"{value['name']}.json").write_text(json.dumps(
+                {"screen": screen, "texts": texts}, indent=2) + "\n")
+            blob = "\n".join(texts)
+            for index, text in enumerate(value["contains"]):
+                probe.check(f"{value['name']}_contains_{index}", text in blob)
+            for index, text in enumerate(value["excludes"]):
+                probe.check(f"{value['name']}_excludes_{index}", text not in blob)
         elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities"):
             name, args = value.get("name"), value.get("args")
             result = probe.call(SCENE_TOOLS[kind], args)
