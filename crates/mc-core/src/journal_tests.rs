@@ -2353,9 +2353,15 @@ fn recovery_refuses_a_tail_of_another_branch_of_the_same_store() {
     assert!(text.contains("branch 5a5a5a5a5a5a5a5a"), "{text}");
     assert!(text.contains("copy is branch c3c3c3c3c3c3c3c3"), "{text}");
 
-    let moved =
-        crate::journal::rebind_tail(&config.world_dir, 0, store.store_uuid(), sibling, opened)
-            .unwrap();
+    let moved = crate::journal::rebind_tail(
+        &config.world_dir,
+        0,
+        store.store_uuid(),
+        sibling,
+        opened,
+        |_| {},
+    )
+    .unwrap();
     assert_eq!(moved, 1);
     crate::native_checkpoint::recover_with_reader(
         &config,
@@ -2388,9 +2394,18 @@ fn rebind_tail_moves_only_the_copied_branch_above_the_checkpoint() {
     drop(writer);
     let below = std::fs::read(batch_path(root.path(), 1)).unwrap();
 
+    let mut rewritten = Vec::new();
     assert_eq!(
-        crate::journal::rebind_tail(root.path(), 1, store, from, to).unwrap(),
+        crate::journal::rebind_tail(root.path(), 1, store, from, to, |batch| rewritten
+            .push(batch.to_path_buf()))
+        .unwrap(),
         2
+    );
+    rewritten.sort();
+    assert_eq!(
+        rewritten,
+        [batch_path(root.path(), 2), batch_path(root.path(), 3)],
+        "the hook sees every rewrite, and only those"
     );
     assert_eq!(std::fs::read(batch_path(root.path(), 1)).unwrap(), below);
     let tail =
@@ -2402,7 +2417,7 @@ fn rebind_tail_moves_only_the_copied_branch_above_the_checkpoint() {
     foreign.append(4, 4, &[]).unwrap();
     foreign.flush().unwrap();
     drop(foreign);
-    let error = crate::journal::rebind_tail(root.path(), 3, store, to, [0x66; 8])
+    let error = crate::journal::rebind_tail(root.path(), 3, store, to, [0x66; 8], |_| {})
         .expect_err("a batch of another branch is not the copy's own");
     let text = error.to_string();
     assert!(text.contains("branch 5555555555555555"), "{text}");

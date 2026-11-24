@@ -1,6 +1,38 @@
 use super::*;
 use mc_world::native::{NativeReadOnlyStore, NativeStore};
 
+/// A point where an interruption test stops a restore the way a killed process
+/// would: [`interruption_point`] panics there, so unwinding skips every refusal
+/// path's cleanup and only drops the leases, as the kernel drops a dead
+/// process's locks.
+#[derive(Debug)]
+pub(super) enum Step<'a> {
+    /// A file was copied and synced.
+    Copied(&'a Path),
+    /// A batch of the copied tail is about to move to the copy's branch.
+    Rebinding,
+}
+
+type Interruption = Box<dyn FnMut(&Step<'_>) -> bool>;
+
+thread_local! {
+    static INTERRUPTION: std::cell::RefCell<Option<Interruption>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Stop here when the armed interruption says so (once).
+pub(super) fn interruption_point(step: &Step<'_>) {
+    let stop = INTERRUPTION.with(|armed| {
+        let mut armed = armed.borrow_mut();
+        let stop = armed.as_mut().is_some_and(|stops| stops(step));
+        if stop {
+            *armed = None;
+        }
+        stop
+    });
+    assert!(!stop, "interrupted at {step:?}");
+}
+
 fn seed_world(root: &Path) {
     std::fs::create_dir_all(root.join("native")).unwrap();
     let store = NativeStore::create(&root.join(NATIVE_DATABASE), [7; 32]).unwrap();

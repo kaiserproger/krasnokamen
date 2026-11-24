@@ -167,6 +167,33 @@ impl StoreMarker {
             checkpoint_tick: u64::from_be_bytes(tick),
         })
     }
+
+    /// [`verify`]'s rules for a marker already read from `path`: refuse a
+    /// different store id and a store behind the marker. `world restore` checks
+    /// the backup's marker this way before any marker exists in the copy.
+    pub fn admits(
+        &self,
+        path: &Path,
+        store_uuid: [u8; 16],
+        store_tick: Option<u64>,
+    ) -> Result<(), MarkerError> {
+        if self.store_uuid != store_uuid {
+            return Err(MarkerError::Foreign {
+                path: path.to_path_buf(),
+                marker_store: self.store_uuid,
+                store: store_uuid,
+            });
+        }
+        let store_tick = store_tick.unwrap_or(0);
+        if store_tick < self.checkpoint_tick {
+            return Err(MarkerError::Behind {
+                path: path.to_path_buf(),
+                store_tick,
+                marker_tick: self.checkpoint_tick,
+            });
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -289,20 +316,5 @@ pub fn verify(
             None => Ok(()),
         };
     };
-    if marker.store_uuid != store_uuid {
-        return Err(MarkerError::Foreign {
-            path: target,
-            marker_store: marker.store_uuid,
-            store: store_uuid,
-        });
-    }
-    let store_tick = store_tick.unwrap_or(0);
-    if store_tick < marker.checkpoint_tick {
-        return Err(MarkerError::Behind {
-            path: target,
-            store_tick,
-            marker_tick: marker.checkpoint_tick,
-        });
-    }
-    Ok(())
+    marker.admits(&target, store_uuid, store_tick)
 }

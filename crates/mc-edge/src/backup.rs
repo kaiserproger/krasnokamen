@@ -221,6 +221,8 @@ fn copy_reader_durable(input: &mut impl Read, destination: &Path) -> Result<Stri
     }
     output.sync_all()?;
     mc_world::atomic_file::sync_parent_dir(destination)?;
+    #[cfg(test)]
+    tests::interruption_point(&tests::Step::Copied(destination));
     Ok(format!("{:x}", hasher.finalize()))
 }
 
@@ -522,8 +524,18 @@ fn start_branch(target: &Path, store_tick: u64) -> Result<(), String> {
         .map_err(|error| error.to_string())?
         .ok_or_else(|| "the backup has no checkpoint marker".to_owned())?;
     let branch = mc_world::store_marker::mint_branch(copied.branch);
-    mc_core::journal::rebind_tail(target, store_tick, copied.store_uuid, copied.branch, branch)
-        .map_err(|error| error.to_string())?;
+    mc_core::journal::rebind_tail(
+        target,
+        store_tick,
+        copied.store_uuid,
+        copied.branch,
+        branch,
+        |_| {
+            #[cfg(test)]
+            tests::interruption_point(&tests::Step::Rebinding);
+        },
+    )
+    .map_err(|error| error.to_string())?;
     mc_world::store_marker::write(target, copied.store_uuid, branch, copied.checkpoint_tick)
         .map_err(|error| error.to_string())
 }

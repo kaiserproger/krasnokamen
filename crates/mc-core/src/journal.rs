@@ -1740,13 +1740,15 @@ pub fn verify_batch_file(
 /// and the first replay checks it. The copy is not open yet, which makes this the
 /// one rewrite of a published batch: an interrupted run leaves a copy whose
 /// marker still names `from` next to a batch on `to` (or a torn branch), and
-/// that copy refuses to open.
+/// that copy refuses to open. `before_batch` runs before each rewrite; the
+/// restore's interruption tests stop there.
 pub fn rebind_tail(
     world_dir: &Path,
     checkpoint_tick: u64,
     store: [u8; 16],
     from: [u8; 8],
     to: [u8; 8],
+    mut before_batch: impl FnMut(&Path),
 ) -> Result<usize, CoreError> {
     use std::io::{Seek, SeekFrom};
     let journal = world_dir.join("journal");
@@ -1790,6 +1792,7 @@ pub fn rebind_tail(
             )))
         })
         .map_err(|error| error.at_path(&path))?;
+        before_batch(&path);
         let mut file = OpenOptions::new()
             .write(true)
             .open(&path)
