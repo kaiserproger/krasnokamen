@@ -23,8 +23,11 @@ this row's two production hunks at the tip and re-lands them.
 
 ## a/-side adaptation
 
-The second hunk's post-image had been re-wrapped by a later `rustfmt` pass into three lines, so
-`git apply -R` of the historical patch fails on context; the `a/-` side written in
+The second hunk's post-image had been re-wrapped into three lines by
+`client:9a645aa99` "fix(client): clippy-1.95 clean and rustfmt clean across the stage0 union"
+(2026-11-14), which is the commit `git blame -C -C` names for those three lines at the wave-2 tip
+`530556e8` (`src/minecraft/navigation.rs:541-544`; `895c63f3` itself wrote the single 88-column line).
+So `git apply -R` of the historical patch fails on context; the `a/-` side written in
 `8c7ece043a` is still the historical single line from `895c63f3^` (66 columns, unchanged text),
 and every other reversed line is the fix's own added line. `git diff 8c7ece043a 00da7b10df` is
 exactly the two hunks above (patch-id `1b07f639240eeac9e0721eeee0b837b174681ddb`).

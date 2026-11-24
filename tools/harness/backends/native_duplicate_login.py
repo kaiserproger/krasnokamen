@@ -7,6 +7,7 @@ and the first client then logs back in to replace the second (the same rule both
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 from .native_v2 import _click, _echo, _give, _open, _point, _set
@@ -22,6 +23,29 @@ def _left_play(client: Any, steps: ProbeSteps, label: str) -> dict[str, Any]:
             return state
         client.call_tool("minecraft_wait_for_state_change", {
             "observed_version": state["state_version"], "timeout_seconds": steps.remaining()})
+
+
+def _kicked(client: Any, steps: ProbeSteps, label: str, timeout_seconds: float) -> dict[str, Any]:
+    """The state of a client a duplicate login replaced: out of Play with the session's own error.
+
+    `in_play` alone is not the observation: a world reload also leaves Play for a moment, and a
+    transient would both misread the reason and stand as a false control. The kicked session ends in
+    the client's `error` phase, which is what the row's assertion reads."""
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        state = client.call_tool("minecraft_observe")
+        phase = (state.get("loading_readiness") or {}).get("phase")
+        if state.get("in_play") is not True and phase == "error":
+            steps.check(label, True)
+            return state
+        if time.monotonic() >= deadline:
+            steps.report["kick_wait_state"] = {
+                "in_play": state.get("in_play"), "phase": phase,
+                "disconnect_reason": state.get("disconnect_reason")}
+            steps.check(label, False)
+        client.call_tool("minecraft_wait_for_state_change", {
+            "observed_version": state["state_version"],
+            "timeout_seconds": max(1.0, min(deadline - time.monotonic(), steps.remaining()))})
 
 
 def _peer_diamonds(peer: Any, steps: ProbeSteps, label: str, count: int) -> dict[str, Any]:
@@ -411,4 +435,30 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.check("relogin_same_account", back["player"]["entity_uuid"] == steps.report["player_uuid"])
     steps.check("relogin_inventory_moved_not_copied", item_count(back, "minecraft:diamond") == 1)
     _echo(steps, "relogin_ordered_chat")
+    # NATIVE-KICK-REASON-BROKEN-PIPE, the row's own repro: a duplicate-login kick while the incumbent
+    # is in the Nether. The travel is a fresh-dimension burst, so the client is draining a receive
+    # backlog and writing itself to the server (falling from the travel spawn) when the kick lands:
+    # an outbound write fails before the kick packet already in the receive buffer is decoded, and
+    # the reason the server sent must still be what the client shows. The replacement starts as soon
+    # as the dimension flips — waiting for a settled world lets the race finish first, which is why
+    # the first shape delivered the reason on 5 of 5 pre-fix runs.
+    steps.fixture("execute in minecraft:the_nether run tp @s 8 100 8")
+    while True:
+        seen = first.call_tool("minecraft_observe")
+        if seen.get("dimension") == "minecraft:the_nether":
+            break
+        first.call_tool("minecraft_wait_for_state_change", {
+            "observed_version": seen["state_version"], "timeout_seconds": steps.remaining()})
+    nether = start("nether-login")
+    nether.call_tool("minecraft_wait_for_play", {"timeout_seconds": steps.remaining()})
+    kicked = _kicked(first, steps, "nether_session_replaced", min(120.0, steps.remaining()))
+    steps.report["nether_kick"] = {
+        key: kicked.get(key) for key in ("in_play", "disconnect_reason", "disconnected", "state_version")}
+    reason = str(kicked.get("disconnect_reason") or "")
+    steps.check("kick_reason_preserved", "You logged in from another location" in reason)
+    steps.check("kick_reason_not_broken_pipe", "Broken pipe" not in reason)
+    # Leave the scenario on a live incumbent session: the ordered chat echo that closes
+    # `native_v2.run` must run on a client that is in play, on either side of the fix.
+    first.call_tool("minecraft_connect", {"server_addr": address})
+    first.call_tool("minecraft_wait_for_play", {"timeout_seconds": steps.remaining()})
 

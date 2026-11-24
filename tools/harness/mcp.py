@@ -89,6 +89,13 @@ class McpClient:
     def list_tools(self) -> list[dict[str, Any]]:
         return self._request("tools/list", {})["tools"]
 
+    def call_tool_once(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+        """One request, no lease-retry: returns the raw result, refusal included.
+
+        `call_tool` re-issues a call the client refused with `controller_lease_revoked`, which hides a
+        row whose symptom is that refusal (README: a timeout cannot carry a control)."""
+        return self._request("tools/call", {"name": name, "arguments": arguments or {}})
+
     def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         result = self._request(
             "tools/call",

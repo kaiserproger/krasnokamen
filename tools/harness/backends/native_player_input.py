@@ -52,6 +52,24 @@ def _input(steps: ProbeSteps, *, key: int | None = None, button: int | None = No
     steps.wait(lambda s: s["client_tick"] >= before + 2, "physical_input_processed")
 
 
+def _hold_key(steps: ProbeSteps, key: int, ticks: int) -> None:
+    """Press and hold one physical key across client ticks, then release it."""
+    pointer = Pointer(steps.client.p4_window)
+    pointer.x.XKeysymToKeycode.argtypes = [c.c_void_p, c.c_ulong]
+    pointer.x.XKeysymToKeycode.restype = c.c_ubyte
+    pointer.xt.XTestFakeKeyEvent.argtypes = [c.c_void_p, c.c_uint, c.c_int, c.c_ulong]
+    code = pointer.x.XKeysymToKeycode(pointer.display, key)
+    try:
+        if not code or not pointer.xt.XTestFakeKeyEvent(pointer.display, code, 1, 0):
+            raise RuntimeError(f"owned Xvfb refused keycode {key}")
+        pointer.x.XFlush(pointer.display)
+        steps.call("minecraft_wait_ticks", {"ticks": ticks})
+    finally:
+        pointer.xt.XTestFakeKeyEvent(pointer.display, code, 0, 0)
+        pointer.x.XFlush(pointer.display)
+        pointer.close()
+
+
 def _shot(steps: ProbeSteps, label: str) -> dict:
     frame = native_client.capture(steps.client, steps.artifact_dir.parent, label)
     steps.report.setdefault("captures", {})[label] = frame
@@ -242,6 +260,24 @@ def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                     and image["slots"][10]["count"] == 0 and image["carried"]["count"] == 0)
         _shot(steps, mode + "-reopened")
         steps.call("minecraft_close_screen")
+        if not creative:
+            # CLIENT-HELD-DROP-KEY-DOUBLE-DROP: vanilla dispatches the drop key once per
+            # press (handleKeybinds drains consumeClick), so a key held across ticks must
+            # drop one item, not one per tick edge. Physical press, three client ticks,
+            # release; auto-repeat starts far later (X11 delay), so only the tick edge can
+            # add a second drop.
+            steps.fixture("clear @s")
+            _seed_main(steps, "minecraft:diamond", 5, 9)
+            state = _open_inventory(steps, creative)
+            _input(steps, key=ord("1"), point=center(state, 9))
+            steps.call("minecraft_close_screen")
+            fixture = steps.call("minecraft_read_item_components", {"source": "selected"})
+            steps.check("held_q_fixture_selected",
+                        fixture.get("item_id") == "minecraft:diamond" and fixture.get("count") == 5)
+            _hold_key(steps, ord("q"), 3)
+            steps.call("minecraft_wait_ticks", {"ticks": 4})
+            dropped = steps.call("minecraft_read_item_components", {"source": "selected"})
+            steps.check("held_drop_once", dropped.get("count") == 4)
     steps.fixture("tick unfreeze")
 
 
@@ -266,6 +302,30 @@ def camera(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # Same fixed world/camera: only HUD state differs between these frames.
     steps.check("frozen_captured_camera_tracks_teleport",
                 abs(second["camera_position"][0] - x - 3.5) < .05)
+    # NATIVE-FREEZE-CAMERA: vanilla draws a frozen entity at partial tick 1 (its current
+    # tick), so a mob that took one stepped tick must be drawn one step on, not on the
+    # previous tick. Probe first: record the drawn and the received x.
+    steps.fixture(f"summon minecraft:zombie {x + 4.5} {y} {z + 4.5} {{PersistenceRequired:1b}}")
+
+    def witness(state: dict) -> dict | None:
+        return next((row for row in state["entities"]["entities"]
+                     if row.get("type") == "minecraft:zombie"), None)
+
+    summoned = steps.wait(witness, "frozen_witness_summoned")
+    steps.fixture("tick step 3")
+    steps.call("minecraft_wait_ticks", {"ticks": 5})
+    _shot(steps, "frozen-witness-stepped")
+    state = steps.observe()
+    drawn = next((row for row in (state.get("gait_capture") or [])
+                  if row.get("entity_uuid") == summoned["uuid"]), None)
+    received = witness(state) or {}
+    steps.report["frozen_witness"] = {
+        "uuid": summoned["uuid"],
+        "drawn": (drawn or {}).get("position"),
+        "received": received.get("position"),
+        "server_frozen": state.get("minecraft", {}).get("server_frozen"),
+    }
+    steps.fixture("kill @e[type=minecraft:zombie]")
     shown = _shot(steps, "hud-shown")
     steps.call("minecraft_press_inputs", {"keys": ["key.keyboard.f1"], "ticks": 1})
     hidden = _shot(steps, "hud-hidden")

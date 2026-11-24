@@ -6,7 +6,8 @@ repro = "client"
 severity = "minor"
 status = "open"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F5, 1/2, BREAK_DL_ATTACK=nether); the server log shows 'You logged in from another location' was sent."
-regression = ["client:krasnokamen-client:protocol::network::tests::kick_reason_survives_a_failed_client_write"]
+regression = ["client:krasnokamen-client:protocol::network::tests::kick_reason_survives_a_failed_client_write", "client:krasnokamen-client:protocol::network::tests::kick_published_before_the_writer_ends_is_not_replaced_by_a_queue_error", "harness:entities:native-v2-duplicate-login"]
 failing_first = "reported"
-fix_commit = "client:bf55a58f"
-repro_check = "real-hunk control red ('play disconnect packet must be delivered'); real gate harness:entities:native-v2-duplicate-login (BREAK_DL_ATTACK=nether); area=client, candidate"
+fix_commit = "client:900da0990290bcde145e00696f26a2126304187c"
+repro_check = "REOPENED by Main 2026-11-25 (review M1): the scene leg's control is not reproducible. Sampled six control runs (notes/m1-kick.tsv, pin 7c9e84721422) all PASSED and six restore runs (900da0990290) all passed; across nine sampled control runs only 20261124T174024 was red (nether_kick.disconnect_reason = \"Broken pipe (os error 32)\" instead of the server reason). Exact missing proof: a deterministic kick/writer race in which the writer ends on the very packet that carries the kick, so the graphical control reds every run. A unit test cannot close this client-visible failure. fix_commit stays client:900da09902 (the re-land; its pair 7c9e84721422 -> 900da0990290 is byte-comparable with the union of non_test_patch(bf55a58f) and non_test_patch(be484c28), map promotions/NATIVE-KICK-REASON-BROKEN-PIPE.hunks.md). The previous promotion 20261124T174449-ledger-promote-e9zcqgs3 rested on a sampled-until-red pair."
+proving_assertions = { "harness:entities:native-v2-duplicate-login" = "kick_reason_preserved" }
