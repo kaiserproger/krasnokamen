@@ -1,0 +1,52 @@
+{
+  "id": "VILLAGER-STAIR-PENETRATION-STALL",
+  "verdict": "promoted",
+  "fix_commit": "patch:584575b9d287cdaed00702f31bd2a671126d8b497ae70355d4014cacd7a59c90",
+  "fix_commit_full": "patch:584575b9d287cdaed00702f31bd2a671126d8b497ae70355d4014cacd7a59c90",
+  "promoted_at": "2026-11-24T00:40:07+00:00",
+  "tree_head": "de73cffa44db8a2e5907f43c1b7f060e048dffe9",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "584575b9d287cdaed00702f31bd2a671126d8b497ae70355d4014cacd7a59c90",
+  "reversed_files": [
+    "crates/mc-core/src/villager/brain.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:villager::brain::tests::embedded_resident_recovers_to_nearest_free_standing_position": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::resting_villager_moves_onto_nearby_indoor_stair": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-village-stair-penetration": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:villager::brain::tests::embedded_resident_recovers_to_nearest_free_standing_position": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::resting_villager_moves_onto_nearby_indoor_stair": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T002748-native-village-stair-penetration-ej0719h6/result.json",
+    "tree_head": "de73cffa44db8a2e5907f43c1b7f060e048dffe9",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "306e3aef50a056800c9eea8205c274ba406919d67f8dff7f27161ec2cda189b0",
+    "covers": [
+      "harness:scene-shot:native-village-stair-penetration"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T003645-ledger-promote-vjns7k7p"
+}
