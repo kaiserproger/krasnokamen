@@ -50,11 +50,14 @@ The `predicted_velocity` block above is quoted as the pair left it; the client t
 Formatting only: the pair's own commits are unchanged, so the reversal still removes exactly the ten
 lines this map names, and the re-land restores them (now rustfmt-wrapped).
 
+HEAD form, not an adaptation: `presented_position`. The real hunk put
+`presented_transform(...)` on two lines inside `json!`; HEAD's rustfmt shape is the five-line form
+above. Same expression, same value, same call site, so it carries no (a)/(b)/(c) class — the pair's
+diff simply is the HEAD form. The `(a)` classes below are the ones that change the shape of the
+hunk, not its formatting.
+
 Adaptations, per the (a)/(b)/(c) classes:
 
-- (a) **`presented_position` formatting.** The real hunk put `presented_transform(...)` on two
-  lines inside `json!`; HEAD's rustfmt shape is the five-line form above. Same expression, same
-  value, same call site. The pair's diff is the HEAD form.
 - (a) **The `if` opener and its closing brace are not in the pair's diff: a surviving half after
   the (a) split.** They already exist at HEAD for the kept field of the sibling row
   CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED (`predicted_velocity`), which the reversal must not
