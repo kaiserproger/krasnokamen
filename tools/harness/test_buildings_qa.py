@@ -423,17 +423,19 @@ class AdmissionTest(unittest.TestCase):
 
 
 class ForeignBlockTest(unittest.TestCase):
-    def test_the_project_origin_is_the_map_icon_lore(self):
+    def test_the_map_button_is_not_the_origin_source(self):
+        # The map icon at slot 14 is a plain dialog button (`text(Key::Map)` with no lore), so a
+        # page whose only candidate is that button yields no origin; the project card's lore is the
+        # source (ProjectOriginTest).
         class Probe(FakeProbe):
             def call(self, name, arguments=None):
                 if name == "minecraft_read_item_components":
                     return {"components": {"minecraft:lore": [{"text": "122 69 -5"}]}}
                 return super().call(name, arguments)
 
-        page = {"container": {"slots": [{"slot": buildings_qa.PROJECT_MAP_SLOT}]}}
+        page = {"container": {"slots": [{"slot": buildings_qa.PROJECT_MAP_SLOT,
+                                         "name": "Map"}]}}
         with mock.patch.object(buildings_qa, "_project_page", return_value=page):
-            self.assertEqual(buildings_qa._project_origin(Probe()), (122, 69, -5))
-        with mock.patch.object(buildings_qa, "_project_page", return_value={"container": {"slots": []}}):
             self.assertIsNone(buildings_qa._project_origin(Probe()))
 
     def test_the_corner_posts_follow_the_rotation_of_the_placement_frame(self):
@@ -701,6 +703,40 @@ class OrderDialogTest(unittest.TestCase):
         self.assertFalse(predicate({"screen": {"class": buildings_qa.CONTAINER_CLASS,
                                                "title": "Construction"},
                                     "ui_nodes": [{"id": "dialog/body/0", "label": "x"}]}))
+
+
+class ProjectOriginTest(unittest.TestCase):
+    """The origin is the project card's bare coordinate lore line, not the map button."""
+
+    class Probe:
+        def __init__(self, lore):
+            self.lore = lore
+            self.calls = []
+
+        def call(self, name, arguments=None):
+            self.calls.append((name, arguments or {}))
+            if name == "minecraft_read_item_components":
+                return {"components": {"minecraft:lore": self.lore}}
+            return {}
+
+    def test_the_origin_is_the_project_cards_bare_coordinate_line(self):
+        page = {"container": {"slots": [{"slot": 0, "name": "House L1 · Building"},
+                                        {"slot": 14, "name": "Map"}]}}
+        probe = self.Probe(["0/249", "118 69 -11", "Builder: Builder"])
+        with mock.patch.object(buildings_qa, "_project_page", return_value=page):
+            self.assertEqual(buildings_qa._project_origin(probe), (118, 69, -11))
+        components = [args for name, args in probe.calls
+                      if name == "minecraft_read_item_components"]
+        self.assertEqual(components, [{"source": "container", "slot": 0}])
+
+    def test_a_page_without_a_project_card_has_no_origin(self):
+        page = {"container": {"slots": [{"slot": 10, "name": "Active projects: 0/8"},
+                                        {"slot": 14, "name": "Map"}]}}
+        probe = self.Probe([])
+        with mock.patch.object(buildings_qa, "_project_page", return_value=page):
+            self.assertIsNone(buildings_qa._project_origin(probe))
+        self.assertEqual([name for name, _ in probe.calls
+                          if name == "minecraft_read_item_components"], [])
 
 
 def buildings_qa_project_catalogue(state):
