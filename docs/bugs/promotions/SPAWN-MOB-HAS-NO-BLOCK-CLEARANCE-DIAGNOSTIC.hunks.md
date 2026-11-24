@@ -2,7 +2,7 @@
 
 Original fix: `a6a30c6694` (`fix(tick): name the writer when a spawned body already overlaps a
 collision box`) — `TickState::spawn_mob` gained the clearance scan and the warn line.
-`fix_commit = "patch:bf1a0ca535bf1096…"` names the HEAD equivalent of this row's non-test hunk in
+`fix_commit = "patch:c05869f2923c09ae…"` names the HEAD equivalent of this row's non-test hunk in
 `docs/bugs/promotions/SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC.patch` (a diff from the pre-fix form to
 the candidate; `git apply -R` restores the pre-fix code). Re-audit:
 `python3 -m tools.harness ledger promote SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC --fix-patch docs/bugs/promotions/SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC.patch --dry-run`.
@@ -24,10 +24,13 @@ patch below is the production half of that hunk, ported to the candidate.
 
 ## Carried
 
-- `entity_lifecycle.rs @@ -175,7 +175,95 @@ impl TickState` — the whole warn block plus the
-  `body_overlaps_collision` helper. HEAD `crates/mc-core/src/tick/entity_lifecycle.rs:178-194` (the call
-  and the `tracing::warn!`) and `:199-268` (the helper). The a/-side is the exact pre-image
+- `entity_lifecycle.rs @@ -175,7 +175,97 @@ impl TickState` — the whole warn block plus the
+  `body_overlaps_collision` helper. HEAD `crates/mc-core/src/tick/entity_lifecycle.rs:178-197` (the call
+  and the `tracing::warn!`) and `:199-270` (the helper). The a/-side is the exact pre-image
   (`git show a6a30c6694^:crates/mc-core/src/tick/entity_lifecycle.rs`); there is **no** a/-side adaptation.
+  `e1547078ec` applied rustfmt inside the added helper, so the added lines (not the a/- side) carry the
+  formatted `any(...)` predicate; that commit is why the patch digest moved from `bf1a0ca5…` to
+  `c05869f2…` after the style pass.
 
   Verified: the patch's a/-blob is byte-identical to that real pre-image blob
   (`diff /tmp/real_pre_el.rs /tmp/pre_el.rs` → no output), so the only difference between the pre-image and
@@ -60,3 +63,18 @@ patch below is the production half of that hunk, ported to the candidate.
   (`:85`) and `…a_body_spawned_outside_the_resident_world_is_not_reported` (`:103`): they are the
   no-false-positive halves. They stay **green** with the fix reversed (an empty list is what they assert),
   so they are **not evidence** for the control; the row's red is `:59`.
+
+## Re-audit after the style pass
+
+`promotions/SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC.json` records the original promotion
+(`tree_head a00741b366`, patch `bf1a0ca5…`, artifact `20261124T030010-ledger-promote-rg_69oqc`).
+`e1547078ec` then ran `cargo fmt --all`, which reformatted a predicate inside the added helper, so the
+addendum-only patch identity moved to `c05869f2…` while the a/- side stayed the same real pre-image.
+
+The row was re-audited on the post-style tree with
+`python3 -m tools.harness ledger promote SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC --fix-patch
+docs/bugs/promotions/SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC.patch --dry-run`
+(artifact `20261124T032114-ledger-promote-e8idx3j4`, `dry-run ok`, nothing written): the patch reverses on
+the current HEAD, `a_body_spawned_inside_a_block_is_created_and_named` is **red** (`FAIL`), the two
+no-false-positive refs stay green, and all three restore green. The row's `fix_commit` field therefore
+names `patch:c05869f2…`; the promotion record keeps the digest it actually promoted.
