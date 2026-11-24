@@ -13,5 +13,5 @@ regression = [
 ]
 failing_first = "reported"
 fix_commit = "patch:e6fee19a268eeee6a24d95c816b746f6b4209fa70c4e305b8bf85ba368289420"
-repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/nc-interact-kelp.log: reversing the real fluid fix fails both kelp refs; a real-client gate remains required for the original report."
+repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/nc-interact-kelp.log: reversing the real fluid fix fails both kelp refs; a real-client gate remains required for the original report. Graphical control confirmed: on the all-three-patches-reversed tree (pin 95cccb7d) the scene fails at kelp_survives_the_neighbouring_flow (.analysis/validation/20261124T002042-native-kelp-ocean-floor-_7e00i6h), and both promoted cargo refs fail there."
 promotion = "docs/bugs/promotions/KELP-ITEMS-SPAWN-ON-OCEAN-FLOOR.json"
