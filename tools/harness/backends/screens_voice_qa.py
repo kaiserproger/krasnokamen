@@ -223,6 +223,11 @@ def _run_in_private_graph(ctx: ProfileContext, timeout: float) -> dict[str, Any]
     for key in ("commands", "cwds", "exits", "logs"):
         getattr(ctx, key).extend(result[key])
     ctx.client_evidence.update(result["client_evidence"])
+    if isinstance(result.get("details"), dict):
+        # The child records its per-verdict result (a failed leg writes verdicts.json and returns
+        # an error), and the ledger reads a client row's red from those verdicts: adopt them
+        # before raising so a failed control still carries the observation.
+        ctx.client_evidence.update(result["details"])
     if result.get("error"):
         raise RuntimeError(f"private-graph run failed: {result['error']}")
     return result["details"]
@@ -238,6 +243,11 @@ def _main(argv: list[str]) -> int:
         result["details"] = run(ctx)
     except BaseException as error:  # the parent adopts the failure with every receipt
         result["error"] = f"{type(error).__name__}: {error}"
+        # `run` writes the per-verdict result before it refuses a failed leg; keep it in the
+        # child's details so the parent's failure receipt reports which verdict was false.
+        verdicts = artifact / "verdicts.json"
+        if verdicts.is_file():
+            result["details"] = {"verdicts": json.loads(verdicts.read_text())}
     result.update(commands=ctx.commands, cwds=ctx.cwds, exits=ctx.exits, logs=ctx.logs,
                   client_evidence=ctx.client_evidence)
     (artifact / "result.json").write_text(json.dumps(result, indent=2, default=str) + "\n")
