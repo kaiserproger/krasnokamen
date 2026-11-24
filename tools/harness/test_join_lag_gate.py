@@ -127,6 +127,23 @@ class JoinVerdictTest(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("2.5 s", why)
 
+    def test_a_join_record_stores_its_landing_stamp_as_iso_text(self) -> None:
+        # The receipt is JSON: a datetime in `details.join` would fail serialization (the
+        # 20261124T181257 gate run did), so the record carries the ISO form and the verdict parses it.
+        import json
+
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "server.log"
+            log.write_text(
+                "2026-11-24T14:01:24.500000Z  INFO connection: login admitted name=JoinLagJoiner connection=4\n"
+                "2026-11-24T14:01:26.400000Z DEBUG pump: join landed connection=4 "
+                "core_tick_seen_at_wait=Some(400) core_tick_seen=Some(406) pump_tick=380\n")
+            rec = join_lag.join_record(log, "JoinLagJoiner")
+            json.dumps(rec)  # must not raise
+            self.assertEqual(rec["landed_at"], "2026-11-24T14:01:26.400000+00:00")
+            ok, _ = join_lag.join_verdict(rec, True, 3.0, 0)
+            self.assertTrue(ok)
+
     def test_a_join_landed_after_the_halt_was_drained_by_it(self) -> None:
         # The four wave-2 controls: the halt line precedes `join landed`, so the landing is the
         # halt's own queue drain — row 1's deadline was never exercised (review wave2-8 M2).

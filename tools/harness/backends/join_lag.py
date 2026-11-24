@@ -130,7 +130,7 @@ def join_record(log_path: Path, username: str) -> dict[str, Any]:
             landed = stamp(line)
             if landed is not None and admitted_at is not None:
                 record["landed_seconds"] = (landed - admitted_at).total_seconds()
-                record["landed_at"] = landed
+                record["landed_at"] = landed.isoformat()
             core = _int(r"core_tick_seen=Some\((\d+)\)", line)
             pump = _int(r"pump_tick=(\d+)", line)
             if core is not None and pump is not None:
@@ -217,8 +217,8 @@ def join_verdict(record: dict[str, Any], knob_on: bool, applied_rate: float | No
         return None, info
     landing = record.get("landed_seconds")
     if landing is not None:
-        landed_at = record.get("landed_at")
-        if halt_at is not None and isinstance(landed_at, datetime) and landed_at >= halt_at:
+        landed_at = _moment(record.get("landed_at"))
+        if halt_at is not None and landed_at is not None and landed_at >= halt_at:
             # The halt drains the outbox, so the join it "admits" was never served by the pump the
             # row is about: the symptom is row 2's and row 1 has no outcome (review wave2-8 M2).
             return None, (f"the join landed only after the core halt drained the queue "
@@ -304,8 +304,17 @@ def halt_moment(log_path: Path) -> datetime | None:
     line = halt_line(log_path)
     if line is None:
         return None
+    return _moment(line.split(" ", 1)[0])
+
+
+def _moment(value: Any) -> datetime | None:
+    """A stamp as a datetime: the log parser's own ISO text or an already-parsed value."""
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str) or not value:
+        return None
     try:
-        return datetime.fromisoformat(line.split(" ", 1)[0].replace("Z", "+00:00"))
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
 
