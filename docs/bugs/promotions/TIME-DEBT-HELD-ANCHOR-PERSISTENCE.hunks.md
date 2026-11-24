@@ -54,20 +54,31 @@ prefixed unused parameters `_held_anchor`, `_tick`, `_held_ticks` (kept signatur
 Reversed, the durable anchor is never projected into native extras, never adopted
 back, never written into capture or eviction images and never restored from the
 climate epoch — the row's symptom (held frames re-counted as dormant after a
-restart) is back. Two refs fail by assertion
-(`.analysis/validation/20261124T103613-test-41kab_gk`):
+restart) is back. Promotion artifact
+`.analysis/validation/20261124T112700-ledger-promote-spd3v79c` (tree
+`97585b6d5bb2`, five refs; `promote.json` has the classes):
 
-- `cargo:mc-core:debt::game_clock_tests::debt_game_clock_native_projection_keeps_explicit_zero_and_one_key`
-  at `debt_game_clock_tests.rs:141` — the projected `HELD_ANCHOR_KEY` / `adopt_native_extras`
-  round trip.
+- **Proving red** —
+  `cargo:mc-core:debt::game_clock_tests::debt_game_clock_native_projection_keeps_explicit_zero_and_one_key`
+  at `debt_game_clock_tests.rs:141`, class `assertion`: "assertion left == right failed, left: 0, right: 1" — the reversed `project()` writes no `HELD_ANCHOR_KEY`, so the
+  native-extras anchor is gone (ledger-1-run.log:309-315).
+- Outcome-level ref (review wave 2, N7) —
+  `cargo:mc-core:native_checkpoint_crash_tests::persistence_drills::game_clock_tests::native_debt_game_clock_cold_unload_multiple_holds_restart_and_reload_are_exact`
+  reds, but as `fixture-failure`: the recovered world refuses to open with
+  `Storage("world was frozen by an older binary; its catch-up debt cannot be
+  reconstructed; run world upgrade-game-clock --copy <disposable-world-copy>")` and the
+  test's setup `unwrap` panics (ledger-1-run.log:264-266). That corroborates the
+  symptom (a world without the anchor is not reopenable as the same world) but a
+  setup panic is not control evidence; it is green on the candidate.
 - `cargo:mc-core:debt::game_clock_tests::debt_game_clock_mid_tick_rejection_keeps_both_possible_native_anchors`
   at `debt_game_clock_tests.rs:122` — **not evidence** (review wave 2, N1): it reds only on the
   kept-API field `SimDebtImage.held_anchor`, which the `held_anchor: None` constructor emptied
-  and `at()` turns back into `Some(0)`; the README calls such a red non-evidence. The control
-  stands on the `:141` ref.
+  and `at()` turns back into `Some(0)` (`left (11, Some(0))` vs `right (11, Some(1))`); the
+  README calls such a red non-evidence. The control stands on the `:141` ref.
 
 The row's two replay/world refs
 (`debt_game_clock_held_activation_excludes_its_own_held_tick`,
 `debt_game_clock_shared_projection_reanchors_all_dimensions_and_preserves_remaining`)
 stay green in that control because their code lives in the class-(c) files; they
-are recorded as green regressions, not as control evidence.
+are recorded as green regressions, not as control evidence. All five refs are green
+on the candidate in the same run.
