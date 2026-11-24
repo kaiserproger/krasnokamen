@@ -1,0 +1,109 @@
+diff --git a/tools/harness/dynamic_context_scene.json b/tools/harness/dynamic_context_scene.json
+--- a/tools/harness/dynamic_context_scene.json
++++ b/tools/harness/dynamic_context_scene.json
+@@ -79,7 +79,7 @@
+       "wait_ticks": 120
+     },
+     {
+-      "shot": "ctx-day"
++      "dropped_clock_capture": "ctx-day"
+     },
+     {
+       "cmd": "time set 18000"
+diff --git a/tools/harness/dynamic_context_scene.json b/tools/harness/dynamic_context_scene.json
+--- a/tools/harness/dynamic_context_scene.json
++++ b/tools/harness/dynamic_context_scene.json
+@@ -88,7 +88,7 @@
+       "wait_ticks": 120
+     },
+     {
+-      "shot": "ctx-night"
++      "dropped_clock_capture": "ctx-night"
+     },
+     {
+       "cmd": "time set 6000"
+diff --git a/tools/harness/backends/scene_shot_checks.py b/tools/harness/backends/scene_shot_checks.py
+--- a/tools/harness/backends/scene_shot_checks.py
++++ b/tools/harness/backends/scene_shot_checks.py
+@@ -409,6 +409,34 @@
+     return pixels, [sum(cell) / len(cell) if cell else None for cell in cells], blue_pixels, dark_pixels
+ 
+ 
++def _capture_dropped_clock(probe: ProbeSteps, artifact: Path, name: str) -> str:
++    # Item entities spin. Select on face coverage alone, never on animation
++    # success: the unchanged day/night oracle must still reject a static clock.
++    attempts = []
++    selected = None
++    for index in range(32):
++        if index:
++            probe.call("minecraft_wait_ticks", {"ticks": 4})
++        sample = f"{name}-attempt-{index + 1}"
++        image = _qa.capture_native(probe, artifact, sample)
++        _, frame = _qa._load_shots(probe, artifact, (sample,))[sample]
++        pixels, grid, _, _ = _clock_face_samples(frame, (300, 260, 460, 420))
++        occupied = sum(cell is not None for cell in grid)
++        attempts.append({"image": image, "face_pixels": pixels, "sampled_cells": occupied})
++        if pixels >= 100 and occupied == 64:
++            selected = Path(image)
++            break
++    (artifact / f"{name}-clock-capture.json").write_text(
++        json.dumps({"attempts": attempts, "selected": str(selected) if selected else None}, indent=2) + "\n")
++    probe.check(f"{name}_clock_face_captured", selected is not None)
++    # Keep the selected bytes and their original same-frame sidecar; do not
++    # take another screenshot after the item has advanced to a different yaw.
++    target = artifact / f"screenshots/{name}.png"
++    shutil.copyfile(selected, target)
++    shutil.copyfile(selected.with_suffix(".json"), target.with_suffix(".json"))
++    return str(target)
++
++
+ def check_clock_face(probe: ProbeSteps, day: Any, night: Any, name: str, box: tuple[int, ...]) -> None:
+     """Require both changed face cells and a changed blue/dark sky proportion."""
+     grids = []
+diff --git a/tools/harness/backends/scene_shot_execute.py b/tools/harness/backends/scene_shot_execute.py
+--- a/tools/harness/backends/scene_shot_execute.py
++++ b/tools/harness/backends/scene_shot_execute.py
+@@ -16,6 +16,7 @@
+ 
+ from .probe_steps import ProbeSteps
+ from . import scene_shot as _qa
++from .scene_shot_checks import _capture_dropped_clock
+ from .scene_shot_client import tool_wall_pixels, wait_play
+ from .scene_shot_steps import (
+     SCENE_TOOLS, bounded_draw, matching_entities, matching_walk, pixel_window_count,
+diff --git a/tools/harness/backends/scene_shot_execute.py b/tools/harness/backends/scene_shot_execute.py
+--- a/tools/harness/backends/scene_shot_execute.py
++++ b/tools/harness/backends/scene_shot_execute.py
+@@ -53,6 +53,8 @@
+                 shots.append(capture(probe, artifact, value))
+             else:
+                 (artifact / f"{value}.json").write_text(json.dumps(probe.observe(), indent=2) + "\n")
++        elif kind == "dropped_clock_capture":
++            shots.append(_capture_dropped_clock(probe, artifact, value))
+         elif kind == "assert_same_game_time":
+             before = json.loads((artifact / f"{value['before']}.json").read_text())
+             after = json.loads((artifact / f"{value['after']}.json").read_text())
+diff --git a/tools/harness/backends/scene_shot_steps.py b/tools/harness/backends/scene_shot_steps.py
+--- a/tools/harness/backends/scene_shot_steps.py
++++ b/tools/harness/backends/scene_shot_steps.py
+@@ -54,6 +54,8 @@
+         elif kind == "walk_capture":
+             yield "minecraft_list_entities", {"radius": 32, "limit": 128}
+             yield "minecraft_wait_ticks", {"ticks": 1}
++        elif kind == "dropped_clock_capture":
++            yield "minecraft_wait_ticks", {"ticks": 4}
+         elif kind == "falling_block_capture":
+             yield "minecraft_wait_for_visible_entity", {"entity_type": "minecraft:falling_block", "radius": 32, "timeout_seconds": 30}
+             yield "minecraft_wait_ticks", {"ticks": 1}
+diff --git a/tools/harness/backends/scene_shot_steps.py b/tools/harness/backends/scene_shot_steps.py
+--- a/tools/harness/backends/scene_shot_steps.py
++++ b/tools/harness/backends/scene_shot_steps.py
+@@ -193,6 +193,8 @@
+                      and 0 <= value["phase"] < math.tau and 0 < value["tolerance"] < math.pi
+                      and 0 < value["min_speed"] <= 1
+                      and type(value["max_ticks"]) is int and 1 <= value["max_ticks"] <= 300)
++        elif kind == "dropped_clock_capture":
++            valid = client == "native" and value in ("ctx-day", "ctx-night")
+         elif kind == "falling_block_capture":
+             valid = client == "native" and isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value)
+         elif kind == "mob_motion":

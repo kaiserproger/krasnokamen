@@ -1135,7 +1135,7 @@ def _split_non_test(diff, source_of):
             reversed_files.append(path)
         elif path.endswith('.rs'):
             test_files.append(path)
-    return ''.join(patch), reversed_files, test_files
+    return ''.join(patch), list(dict.fromkeys(reversed_files)), test_files
 
 
 _HUNK_HEADER = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
@@ -1575,9 +1575,9 @@ def client_contains(root, client_head, fix_full):
     return code == 0
 
 
-def _failed_assertion(details, proving):
-    """Name of the first assertion a scenario report records as false, or None when it recorded none."""
-    def assertion_maps(node, depth=0):
+def _assertion_maps(details):
+    """Every `assertions` map a scenario report holds (its own and its scenario/named_scenario)."""
+    def walk(node, depth=0):
         if depth > 3 or not isinstance(node, dict):
             return
         assertions = node.get('assertions')
@@ -1585,13 +1585,51 @@ def _failed_assertion(details, proving):
             yield assertions
         for key in ('scenario', 'named_scenario'):
             if key in node:
-                yield from assertion_maps(node[key], depth + 1)
+                yield from walk(node[key], depth + 1)
 
-    for assertions in assertion_maps(details):
+    return walk(details)
+
+
+def _failed_assertion(details, proving):
+    """Name of the assertion `proving` when a scenario report records it false, else None."""
+    for assertions in _assertion_maps(details):
         for name, passed in assertions.items():
             if name == proving and passed is False:
                 return name
     return None
+
+
+def _first_false_assertion(details):
+    """Name of the first assertion a report records false, whichever it is, or None."""
+    for assertions in _assertion_maps(details):
+        for name, passed in assertions.items():
+            if passed is False:
+                return name
+    return None
+
+
+def _detail_assertion(detail):
+    """The assertion name a failure message carries (`… assertion failed: <name>`), or None."""
+    match = re.search(r'assertion failed: (\S+)', detail or '')
+    return match.group(1) if match else None
+
+
+def _run_assertion(entry):
+    """First assertion a graphical run's receipt records false, from its details or its own error line.
+
+    A run's `detail` in a control can be generic ("client receipt is 'failed', not passed"), so the name
+    has to come from the run itself (`entry['receipt']`), which is what the receipt branch of
+    `graphical_control` already reads."""
+    path = entry.get('receipt')
+    if not path:
+        return None
+    try:
+        data = json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return _first_false_assertion(data.get('details') or {}) or _detail_assertion(data.get('error'))
 
 
 def _client_ref_states(receipt, graphical_refs, proving_assertions=None):
@@ -2631,6 +2669,11 @@ def _graphical_backfill(ident, promotion, entries, recorded):
     return new
 
 
+def _cited_by_other_rows(root, ref, ident):
+    """True when another row registers `ref`: a shared scene's failing assertion may be another symptom."""
+    return any(bug['id'] != ident and ref in (bug.get('regression') or []) for bug in load_rows(root))
+
+
 def graphical_control(ident, *, root=REPO_ROOT, receipt=None, control_tree=None, dry_run=False, ctx, runner=run_refs):
     """Record the graphical negative control of an already promoted row (backfill).
 
@@ -2671,6 +2714,12 @@ def graphical_control(ident, *, root=REPO_ROOT, receipt=None, control_tree=None,
     if not pending:
         raise Refused(f'{ident}: every graphical ref already records a red control; nothing to backfill')
     proving = row.get('proving_assertions') if isinstance(row.get('proving_assertions'), dict) else {}
+    shared = [ref for ref in pending if _cited_by_other_rows(root, ref, ident)]
+    unnamed = [ref for ref in shared if not isinstance(proving.get(ref), str) or not proving.get(ref)]
+    if unnamed:
+        raise Refused(f'{ident}: {", ".join(unnamed)} is cited by another row too, so a failing scene alone '
+                      'does not name this row\'s symptom: record '
+                      'proving_assertions = { "<ref>" = "<assertion>" } on the row')
     record = {'at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
               'refs': pending, 'tree_head': promotion.get('tree_head')}
     if receipt:
@@ -2733,11 +2782,15 @@ def graphical_control(ident, *, root=REPO_ROOT, receipt=None, control_tree=None,
                                       f'({ran.get(ref, {}).get("detail")})' for ref in pending))
         for ref in red:
             detail = str(ran[ref].get('detail', ''))
-            assertion = proving.get(ref) or re.search(r'assertion failed: (\S+)', detail)
-            if not isinstance(assertion, str) and assertion is not None:
-                assertion = assertion.group(1)
+            recorded = _run_assertion(ran[ref]) or _detail_assertion(detail)
+            assertion = proving.get(ref) if isinstance(proving.get(ref), str) and proving.get(ref) else None
+            if assertion is not None and recorded != assertion:
+                raise Refused(f'{ident}: the reversed tree failed {ref} on '
+                              f'{recorded or "no recorded assertion"}, not the row\'s {assertion!r}: another '
+                              'assertion of the shared scene is not this row\'s control')
+            named = assertion or recorded
             entries[ref] = {'state': 'red', 'detail': detail, 'receipt': ran[ref].get('receipt'),
-                            **({'assertion': assertion} if isinstance(assertion, str) else {})}
+                            **({'assertion': named} if named else {})}
         record.update({'control_tree': {'head': fingerprint['head'], 'sha256': fingerprint['sha256']},
                        'refs': red, 'artifact_dir': str(ctx.artifact_dir)})
     updated = _graphical_backfill(ident, promotion, entries, record)

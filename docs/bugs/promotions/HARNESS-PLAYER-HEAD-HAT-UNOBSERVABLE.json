@@ -1,0 +1,86 @@
+{
+  "id": "HARNESS-PLAYER-HEAD-HAT-UNOBSERVABLE",
+  "verdict": "promoted",
+  "fix_commit": "patch:cd90d5693074c7609b4c0856de9c703848c458b2118d3985536ff3156acee385",
+  "fix_commit_full": "patch:cd90d5693074c7609b4c0856de9c703848c458b2118d3985536ff3156acee385",
+  "promoted_at": "2026-11-24T12:37:23+00:00",
+  "tree_head": "302dd7221721e7364f1fc91a559197200b02e027",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "8ba13456191e6ad747dc15b56a8804ded41dc37ec79be66d3be68dcf6c4aa7ad",
+  "control_tree_head": "302dd7221721e7364f1fc91a559197200b02e027",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "cd90d5693074c7609b4c0856de9c703848c458b2118d3985536ff3156acee385",
+  "reversed_files": [
+    "tools/harness/backends/scene_shot_checks.py",
+    "tools/harness/backends/scene_shot_checks.py",
+    "tools/harness/backends/scene_shot_scenario.py",
+    "tools/harness/backends/scene_shot_scenario.py",
+    "tools/harness/backends/scene_shot_scenario.py",
+    "tools/harness/player_head_scene.json"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "harness:scene-shot:native-player-head": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-player-head --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T125905-ledger-graphical-control-bq8iqdad/regressions-client-0.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T125905-ledger-graphical-control-bq8iqdad/client-artifacts/20261124T125905-native-player-head-wx4tg3iz/result.json"
+    },
+    "python:tools.harness.test_scene_shot:PlayerHeadTests.test_authored_skin_has_opaque_contrasting_hat_and_base_window": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/harness/test_scene_shot.py",
+        "line": 673,
+        "error": "AssertionError"
+      }
+    },
+    "python:tools.harness.test_scene_shot:PlayerHeadTests.test_placed_head_roi_covers_fixture_and_requires_hat_pixels": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/harness/test_scene_shot.py",
+        "line": 572,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_scene_shot:PlayerHeadTests.test_authored_skin_has_opaque_contrasting_hat_and_base_window": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_scene_shot:PlayerHeadTests.test_placed_head_roi_covers_fixture_and_requires_hat_pixels": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T123409-native-player-head-m2siodqi/result.json",
+    "tree_head": "302dd7221721e7364f1fc91a559197200b02e027",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "52c7e9207e3d2bd4efc22f058d54eda7fcb7a7bb3dbeb8bb1f34f8c459ba9576",
+    "covers": [
+      "harness:scene-shot:native-player-head"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T123718-ledger-promote-pn99pq2w",
+  "graphical_control_backfill": [
+    {
+      "at": "2026-11-24T12:59:05+00:00",
+      "refs": [
+        "harness:scene-shot:native-player-head"
+      ],
+      "tree_head": "302dd7221721e7364f1fc91a559197200b02e027",
+      "control_tree": {
+        "head": "302dd7221721e7364f1fc91a559197200b02e027",
+        "sha256": "8ba13456191e6ad747dc15b56a8804ded41dc37ec79be66d3be68dcf6c4aa7ad"
+      },
+      "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T125905-ledger-graphical-control-bq8iqdad"
+    }
+  ]
+}

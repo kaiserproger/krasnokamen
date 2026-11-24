@@ -1,7 +1,7 @@
-diff --git a/tools/harness/backends/scene_shot.py b/tools/harness/backends/scene_shot.py
---- a/tools/harness/backends/scene_shot.py
-+++ b/tools/harness/backends/scene_shot.py
-@@ -1249,13 +1249,16 @@
+diff --git a/tools/harness/backends/scene_shot_checks.py b/tools/harness/backends/scene_shot_checks.py
+--- a/tools/harness/backends/scene_shot_checks.py
++++ b/tools/harness/backends/scene_shot_checks.py
+@@ -252,13 +252,16 @@
      from PIL import Image, ImageDraw
  
      pack = artifact / "head-skin-pack"
@@ -21,25 +21,36 @@ diff --git a/tools/harness/backends/scene_shot.py b/tools/harness/backends/scene
      (pack / "pack.mcmeta").write_text(json.dumps({
          "pack": {"description": "Authored player-head hat regression skin", "pack_format": 84},
      }) + "\n")
-@@ -1301,7 +1304,8 @@
+diff --git a/tools/harness/backends/scene_shot_checks.py b/tools/harness/backends/scene_shot_checks.py
+--- a/tools/harness/backends/scene_shot_checks.py
++++ b/tools/harness/backends/scene_shot_checks.py
+@@ -376,6 +376,7 @@
      probe.report["bare_head_back_hat_pixels"] = bare_back_hat
      probe.report["worn_head_added_back_hat_pixels"] = added_back_hat
      probe.check("placed_head_renders", placed > 100)
--    probe.check("worn_head_renders", worn > 500)
 +    probe.check("placed_head_hat_layer_pixels", hat > 100)
-+    probe.check("worn_head_renders", worn > 500 and worn_hat > 100)
+     probe.check("worn_head_renders", worn > 500 and worn_hat > 100)
      probe.check("worn_head_back_unchanged", added_back_hat <= 100)
  
- def _clock_face_samples(image: Any, box: tuple[int, ...]) -> tuple[int, list, int, int]:
-@@ -1702,9 +1706,15 @@
+diff --git a/tools/harness/backends/scene_shot_scenario.py b/tools/harness/backends/scene_shot_scenario.py
+--- a/tools/harness/backends/scene_shot_scenario.py
++++ b/tools/harness/backends/scene_shot_scenario.py
+@@ -266,6 +266,7 @@
+         xvfb, display, _ = runtime.start_xvfb(artifact, tuple(settings.get("screen_size", WINDOW)))
          ctx.logs.append(str(artifact / "xvfb.log"))
          old_xdg = os.environ.get("XDG_DATA_HOME")
-         old_settings = os.environ.get("KRASNOKAMEN_CLIENT_SETTINGS")
 +        old_packs = os.environ.get("KRASNOKAMEN_CLIENT_RESOURCE_PACKS")
+         old_language = os.environ.get("KRASNOKAMEN_CLIENT_LANGUAGE")
          try:
              os.environ["XDG_DATA_HOME"] = str(xdg)
-             os.environ["KRASNOKAMEN_CLIENT_SETTINGS"] = str(settings_path)
-+            if ctx.scenario_id == "native-player-head":
+diff --git a/tools/harness/backends/scene_shot_scenario.py b/tools/harness/backends/scene_shot_scenario.py
+--- a/tools/harness/backends/scene_shot_scenario.py
++++ b/tools/harness/backends/scene_shot_scenario.py
+@@ -272,6 +272,11 @@
+             os.environ["XDG_DATA_HOME"] = str(xdg)
+             if ctx.client != "java" and "language" in settings:
+                 os.environ["KRASNOKAMEN_CLIENT_LANGUAGE"] = settings["language"]
++            if ctx.scenario_id in ("native-player-head", "native-placed-head"):
 +                pack = player_head_skin_pack(artifact)
 +                os.environ["KRASNOKAMEN_CLIENT_RESOURCE_PACKS"] = os.pathsep.join(
 +                    [old_packs, str(pack)] if old_packs else [str(pack)])
@@ -47,18 +58,18 @@ diff --git a/tools/harness/backends/scene_shot.py b/tools/harness/backends/scene
              if ctx.client == "java":
                  client, client_log, mcp = start_java(
                      ctx, artifact, f"127.0.0.1:{client_port}", username, timeout, display,
-@@ -1715,7 +1725,8 @@
-             else:
-                 client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f"127.0.0.1:{client_port}", username, timeout, display=display)
+diff --git a/tools/harness/backends/scene_shot_scenario.py b/tools/harness/backends/scene_shot_scenario.py
+--- a/tools/harness/backends/scene_shot_scenario.py
++++ b/tools/harness/backends/scene_shot_scenario.py
+@@ -288,6 +288,7 @@
+                 client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f"127.0.0.1:{client_port}", username, timeout, display=display, settings=settings_path)
          finally:
--            for key, old in (("XDG_DATA_HOME", old_xdg), ("KRASNOKAMEN_CLIENT_SETTINGS", old_settings)):
-+            for key, old in (("XDG_DATA_HOME", old_xdg), ("KRASNOKAMEN_CLIENT_SETTINGS", old_settings),
-+                             ("KRASNOKAMEN_CLIENT_RESOURCE_PACKS", old_packs)):
+             for key, old in (("XDG_DATA_HOME", old_xdg),
++                             ("KRASNOKAMEN_CLIENT_RESOURCE_PACKS", old_packs),
+                              ("KRASNOKAMEN_CLIENT_LANGUAGE", old_language)):
                  if old is None:
                      os.environ.pop(key, None)
-                 else:
 diff --git a/tools/harness/player_head_scene.json b/tools/harness/player_head_scene.json
-index d143301ff..4c405f68a 100644
 --- a/tools/harness/player_head_scene.json
 +++ b/tools/harness/player_head_scene.json
 @@ -61,10 +61,10 @@
