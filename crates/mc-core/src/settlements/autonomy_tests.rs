@@ -688,6 +688,28 @@ fn natural_lumber_camp_certifies_the_grove_not_one_tree_column() {
         camp.bounds.min,
         camp.bounds.max
     );
+    // The grove is a bounded square around the proved trunk, not a log census:
+    // the zone must still cover every column of the fixture stand (x -14..=-9,
+    // z 4..=7) and must stop before the generated house piece, whose bounds
+    // start at x = 0.
+    assert!(
+        camp.bounds.min[0] <= -14 && camp.bounds.max[0] >= -9,
+        "the zone covers the whole stand, not one trunk: x {:?}..{:?}",
+        camp.bounds.min[0],
+        camp.bounds.max[0]
+    );
+    assert!(
+        camp.bounds.min[2] <= 4 && camp.bounds.max[2] >= 7,
+        "the zone covers the whole stand, not one trunk: z {:?}..{:?}",
+        camp.bounds.min[2],
+        camp.bounds.max[2]
+    );
+    assert!(
+        camp.bounds.max[0] < 0,
+        "the generated house piece stays outside the zone: x {:?}..{:?}",
+        camp.bounds.min[0],
+        camp.bounds.max[0]
+    );
 }
 
 #[test]
