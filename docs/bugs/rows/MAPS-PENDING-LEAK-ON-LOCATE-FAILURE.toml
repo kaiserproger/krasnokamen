@@ -1,7 +1,10 @@
 # Reopened by D123BattleD: commit 94410e6d4 carries the code fix and both tests, but the row was
 # flipped to `fixed` by that commit without a promotion receipt, and only `ledger promote` may set
-# fixed. The next executor promotes it (real-commit mode, control = the three guards reverted) or
-# records why the control cannot red.
+# fixed. The real-commit control does NOT work here: reversing 94410e6d4's hunks removes the
+# test-only accessor `command_locate::take_pending_callback_release`, so the control tree does not
+# compile (receipt 20261124T050849-ledger-promote-fblm3xz0: `cannot find function
+# take_pending_callback_release`). A patch-mode control must KEEP that accessor and reverse only the
+# release guard, with the red on one of the two registered tests.
 [[bug]]
 id = "MAPS-PENDING-LEAK-ON-LOCATE-FAILURE"
 title = "A failed locate search left the exploration-map container's pending loot/trade plan in place forever, so reopening the container never re-planned"
