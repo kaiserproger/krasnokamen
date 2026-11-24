@@ -767,8 +767,46 @@ pub(crate) fn prepare_edit(
     mut image: Vec<(String, Tag)>,
     changed: &[(String, Tag)],
     keep_villager: bool,
+    live_villager: Option<&crate::villager::VillagerState>,
 ) -> Result<Image, CommandError> {
-    let (fields, variant) = authored_fields(state, type_id, name, changed)?;
+    // A villager's runtime state is the row's own persistence image, not summon NBT:
+    // `villager_from_fields` (during `decode`) reads it back and validates it. Those
+    // edits go into the image verbatim; the parser is the one that refuses bad data.
+    let owns = |key: &str| {
+        live_villager.is_some() && crate::villager::persistence::owns_field(key)
+    };
+    let mut authored = Vec::with_capacity(changed.len());
+    let mut owned = Vec::new();
+    for (key, value) in changed {
+        if owns(key) {
+            match image.iter_mut().find(|(seen, _)| *seen == *key) {
+                Some((_, old)) => *old = value.clone(),
+                None => image.push((key.clone(), value.clone())),
+            }
+            owned.push(key.as_str());
+        } else {
+            authored.push((key.clone(), value.clone()));
+        }
+    }
+    // The runtime compound repeats two values the author just set in their vanilla place:
+    // `profession` shadows `VillagerData.profession` and `inventory_slots` says where the
+    // old `Inventory` stacks sat. Written first, they would win over the edit.
+    if !owned.is_empty() {
+        for (key, value) in image.iter_mut() {
+            if key != "krasnokamen:VillagerRuntime" {
+                continue;
+            }
+            if let Tag::Compound(runtime) = value {
+                if owned.contains(&"VillagerData") {
+                    runtime.retain(|(field, _)| field != "profession");
+                }
+                if owned.contains(&"Inventory") {
+                    runtime.retain(|(field, _)| field != "inventory_slots");
+                }
+            }
+        }
+    }
+    let (fields, variant) = authored_fields(state, type_id, name, &authored)?;
     for (key, value) in fields {
         match image.iter_mut().find(|(seen, _)| *seen == key) {
             Some((_, old)) => *old = value,
@@ -791,6 +829,16 @@ pub(crate) fn prepare_edit(
     // An edit that leaves every villager field alone leaves the live villager
     // (and the transient brain state a reload would drop) alone too.
     edited.keep_villager = keep_villager;
+    // Membership and lineage belong to the settlement and the allocator, not to NBT a
+    // merge may move: an edit can change what a villager is doing, never who it belongs to.
+    if let (Some(live), Some(merged)) = (live_villager, edited.villager.as_mut()) {
+        merged.settlement = live.settlement;
+        merged.household = live.household.clone();
+        merged.birth_origin = live.birth_origin.clone();
+        merged.birth_sequence = live.birth_sequence;
+        merged.trade_seed = live.trade_seed;
+        merged.courtship_started_tick = live.courtship_started_tick;
+    }
     Ok(edited)
 }
 
