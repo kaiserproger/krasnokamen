@@ -45,10 +45,11 @@ fn interrupted_restore(
     stops: impl FnMut(&Step<'_>) -> bool + 'static,
 ) -> bool {
     INTERRUPTION.with(|armed| *armed.borrow_mut() = Some(Box::new(stops)));
-    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run_restore(backup, target)
-    }));
-    let unfired = INTERRUPTION.with(|armed| armed.borrow_mut().take()).is_some();
+    let outcome =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_restore(backup, target)));
+    let unfired = INTERRUPTION
+        .with(|armed| armed.borrow_mut().take())
+        .is_some();
     outcome.is_err() && !unfired
 }
 
@@ -884,9 +885,11 @@ fn a_restore_interrupted_before_its_first_rebind_leaves_nothing_that_opens() {
         .unwrap();
     let target = root.path().join("restored");
     let staging = root.path().join("restored.restore-staging");
-    let interrupted = interrupted_restore(&backup, &target, move |step| {
-        matches!(step, Step::Copied(path) if path.ends_with(&last))
-    });
+    let interrupted = interrupted_restore(
+        &backup,
+        &target,
+        move |step| matches!(step, Step::Copied(path) if path.ends_with(&last)),
+    );
     assert!(interrupted, "the restore never copied its last file");
     assert_no_world_at(&target, &source);
     assert_staging_does_not_open(&staging);
@@ -954,7 +957,11 @@ fn a_restore_interrupted_before_publication_leaves_the_target_untouched() {
         .map(|entry| entry.unwrap().file_name())
         .filter(|name| name != mc_world::storage::WORLD_LEASE_FILE_NAME)
         .collect();
-    assert_eq!(left, ["session.lock"], "the target changed before publication");
+    assert_eq!(
+        left,
+        ["session.lock"],
+        "the target changed before publication"
+    );
     let staged = mc_world::store_marker::read(&staging).unwrap().unwrap();
     assert_eq!(
         (staged.store_uuid, staged.checkpoint_tick),
@@ -982,8 +989,7 @@ fn a_restore_interrupted_after_publication_leaves_the_complete_world() {
     let root = tempfile::tempdir().unwrap();
     let (backup, source) = backup_with_tail(root.path(), 2);
     let target = root.path().join("restored");
-    let interrupted =
-        interrupted_restore(&backup, &target, |step| matches!(step, Step::Published));
+    let interrupted = interrupted_restore(&backup, &target, |step| matches!(step, Step::Published));
     assert!(interrupted, "the restore never published");
     assert!(!root.path().join("restored.restore-staging").exists());
     assert!(target.join("journal").is_dir());
