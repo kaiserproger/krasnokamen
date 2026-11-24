@@ -21,7 +21,6 @@ import json
 import re
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +35,8 @@ VIEW_DISTANCE = 8
 PRE_STAGE_TICKS = 120
 BATTLE_TICKS_BOUND = 1200
 FALL_TOLERANCE_BLOCKS = 40.0
+# The spectator camera sits about a block behind the followed entity's eye.
+CAMERA_FOLLOW_BLOCKS = 8.0
 RESPAWN_MARKERS = (
     re.compile(rf"Battle live respawned: {HOLDER} .*?at=(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)"),
 )
@@ -74,13 +75,15 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     try:
         root = ctx.artifact_dir / "battle-live"
         root.mkdir(parents=True, exist_ok=True)
+        # The runner creates its run directory itself and refuses an existing one.
+        run_dir = root / "run"
         port, dashboard = runtime.reserve_port(), runtime.reserve_port()
         address = f"127.0.0.1:{port}"
         command = [
             sys.executable, str(REPO_ROOT / "tools" / "battle" / "run-battle.py"),
             "--pin", str(inputs["server"].parent), "--client", str(inputs["recorder"]),
             "--client-data", str(inputs["recorder_data"]), "--cache", str(inputs["cache"]),
-            "--run-dir", str(root), "--world", str(inputs["world"]),
+            "--run-dir", str(run_dir), "--world", str(inputs["world"]),
             "--world-seed", str(inputs["world_seed"]), "--seed", "42", "--scenario", "field-1k",
             "--count", str(PER_SIDE), "--duration", "900", "--view-distance", str(VIEW_DISTANCE),
             "--pre-stage-ticks", str(PRE_STAGE_TICKS), "--port", str(port),
@@ -92,77 +95,74 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         runner, runner_index = battle_recovery._launch(
             ctx, command, ctx.artifact_dir / "battle-live-runner.log", cwd=REPO_ROOT,
             stdout=runner_log, stderr=subprocess.STDOUT)
-        console = battle_recovery.FifoConsole(root)
+        console = battle_recovery.FifoConsole(run_dir)
         battle = battle_recovery._runner_module()
-        battle.watch_ready(root, runner, timeout=180, label="new run directory")
-        runtime.wait_port(port, 300, runner, log_path=root / "server.log")
+        battle.watch_ready(run_dir, runner, timeout=180, label="new run directory")
+        runtime.wait_port(port, 300, runner, log_path=run_dir / "server.log")
         for name in (HOLDER, VIEWER):
-            client = battle_recovery.Horizon(ctx, inputs, root, name, display)
+            client = battle_recovery.Horizon(ctx, inputs, run_dir, name, display)
             clients.append(client)
             client.start(address, "live")
-        console.wait(rf"Battle player online: {HOLDER} entity=(\d+)", 0, timeout=600)
-        console.wait(rf"Battle spectator placed: {VIEWER} .*camera=(\d+)", 0, timeout=600)
+        online = console.wait(rf"Battle player online: {HOLDER} entity=(\d+)", 0, timeout=600)
+        holder_entity = int(online.group(1))
+        console.wait(rf"Battle spectator placed: {VIEWER} .*camera=({holder_entity})\b", 0,
+                     timeout=600)
         console.wait(r"Battle started tick=", 0, timeout=600)
         before = [client.capture("before-death") for client in clients]
-        entity_before = (before[0]["state"].get("player") or {}).get("entity_id")
         camera_before = (before[1]["state"].get("camera") or {}).get("entity_id")
         check(report, "clients_reached_play",
               before[0]["state"].get("screen") == "playing" and before[1]["state"].get("screen") == "playing",
               [data["state"].get("screen") for data in before])
         check(report, "holder_is_the_survival_front_rank",
-              before[0]["state"].get("gamemode") == "survival" and isinstance(entity_before, int),
+              before[0]["state"].get("gamemode") == "survival",
               before[0]["state"].get("gamemode"))
         check(report, "spectator_camera_bound_before_death",
-              isinstance(camera_before, int) and camera_before == entity_before,
-              {"camera": camera_before, "holder": entity_before})
+              camera_before == holder_entity, {"camera": camera_before, "holder": holder_entity})
         # Contact: the telemetry's fighting count is the server's own front-line census.
         strike, rows = _wait_for_fighting(battle, dashboard, report)
-        (root / "before-death-telemetry.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
+        (run_dir / "before-death-telemetry.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
         report.setdefault("observations", {})["fighting"] = (strike.get("battle") or {}).get("fighting")
         mark = console.mark()
         console.send(f"kill {HOLDER}")
         died = console.wait(rf"Battle live died: {HOLDER}", mark, timeout=120)
         report["observations"]["died_line"] = died.group(0)
-        mark = console.mark()
+        # The client drives his own respawn: the server's live respawn answers that
+        # action (battle_recovery's kit does the same on the real client).
+        holder = clients[0]
+        holder.driver("wait_for", condition="screen", value="dead", timeout=120)
+        dead = holder.capture("dead")
+        died_at = _point(dead["state"])
+        holder.driver("respawn")
+        holder.driver("wait_for", condition="screen", value="playing", timeout=120)
         respawned = console.wait(rf"Battle live respawned: {HOLDER}", mark, timeout=120)
         line = respawned.group(0)
         report["observations"]["respawn_line"] = line
         at = _parse_at(line)
         check(report, "holder_respawned", at is not None, line)
         check(report, "respawn_is_in_contact", CONTACT_TRUE.search(line) is not None, line)
-        # The client's own received state after the respawn: alive, in play, and a new entity id.
-        deadline = time.monotonic() + 120
-        after: list[dict[str, Any]] = []
-        while time.monotonic() < deadline:
-            after = [client.capture("after-respawn") for client in clients]
-            player = after[0]["state"].get("player") or {}
-            if after[0]["state"].get("screen") == "playing" and isinstance(player.get("entity_id"), int) \
-                    and player.get("entity_id") != entity_before:
-                break
-            time.sleep(0.5)
-        entity_after = (after[0]["state"].get("player") or {}).get("entity_id")
-        camera_after = (after[1]["state"].get("camera") or {}).get("entity_id")
+        check(report, "respawn_is_not_the_side_centre", "rule=centre" not in line, line)
+        after = [client.capture("after-respawn") for client in clients]
+        camera_after = (after[1]["state"].get("camera") or {})
+        holder_after = after[0]["state"]
         report.setdefault("observations", {}).update(
-            {"entity_before": entity_before, "entity_after": entity_after,
-             "camera_before": camera_before, "camera_after": camera_after,
-             "respawn_at": at})
+            {"camera_before": camera_before, "camera_after": camera_after.get("entity_id"),
+             "respawn_at": at, "died_at": died_at})
         check(report, "holder_back_in_play_after_respawn",
-              after[0]["state"].get("screen") == "playing"
-              and isinstance(entity_after, int) and entity_after != entity_before,
-              {"screen": after[0]["state"].get("screen"), "entity": entity_after})
-        if scenario == "battle-live-spectator-follows-respawn":
-            check(report, "spectator_camera_followed_the_respawn",
-                  isinstance(camera_after, int) and isinstance(entity_after, int)
-                  and camera_after == entity_after,
-                  {"camera": camera_after, "holder": entity_after})
-        # Fall distance, when the clients expose coordinates: the row names a 230-block jump.
-        fall = _fall_distance(before[0]["state"], after[0]["state"])
-        if fall is not None:
+              holder_after.get("screen") == "playing", holder_after.get("screen"))
+        # The row's symptom: the spectator stayed on the old entity. His camera
+        # must now be within a few blocks of the holder he follows.
+        gap = _camera_gap(camera_after, holder_after)
+        report["observations"]["camera_gap_blocks"] = gap
+        check(report, "spectator_camera_followed_the_respawn",
+              gap is not None and gap <= CAMERA_FOLLOW_BLOCKS, {"gap": gap, "camera": camera_after.get("entity_id")})
+        # Where he landed against where he fell: the row names a 230-block jump.
+        if at is not None and died_at is not None:
+            fall = sum((a - b) ** 2 for a, b in zip(at, died_at)) ** 0.5
             report["observations"]["fall_distance_blocks"] = fall
             check(report, "respawn_near_where_he_fell", fall <= FALL_TOLERANCE_BLOCKS, fall)
         else:
             report.setdefault("incomplete", []).append(
-                "client state exposes no player position: the fall distance is only the server line's contact flag")
+                "no client position or server at=: the fall distance cannot be measured")
         report["passed"] = all(report["assertions"].values()) and not report.get("incomplete")
     finally:
         for client in clients:
@@ -202,15 +202,27 @@ def _wait_for_fighting(battle: Any, dashboard: int, report: dict[str, Any],
             seen = seen[-bound:]
 
 
-def _fall_distance(before: dict[str, Any], after: dict[str, Any]) -> float | None:
-    """Distance between the two captures' own player positions, if the client exposes them."""
-    def point(state: dict[str, Any]) -> list[float] | None:
-        player = state.get("player") or {}
-        if all(isinstance(player.get(key), (int, float)) for key in ("x", "y", "z")):
-            return [float(player["x"]), float(player["y"]), float(player["z"])]
-        return None
+def _point(state: dict[str, Any]) -> list[float] | None:
+    """The client's own position, when its state exposes one."""
+    player = state.get("player") or {}
+    block_pos = player.get("block_pos")
+    if isinstance(block_pos, list) and len(block_pos) == 3:
+        return [float(value) for value in block_pos]
+    if all(isinstance(player.get(key), (int, float)) for key in ("x", "y", "z")):
+        return [float(player["x"]), float(player["y"]), float(player["z"])]
+    return None
 
-    first, last = point(before), point(after)
-    if first is None or last is None:
+
+def _camera_gap(camera: dict[str, Any], holder: dict[str, Any]) -> float | None:
+    """Distance from the spectator's camera eye to the holder's own eye."""
+    entity = camera.get("entity") or {}
+    eye = entity.get("position")
+    if not (isinstance(eye, list) and len(eye) == 3):
         return None
-    return sum((a - b) ** 2 for a, b in zip(first, last)) ** 0.5
+    target = (holder.get("player") or {}).get("eye")
+    if not (isinstance(target, list) and len(target) == 3):
+        point = _point(holder)
+        if point is None:
+            return None
+        target = [point[0], point[1] + 1.62, point[2]]
+    return sum((float(a) - float(b)) ** 2 for a, b in zip(eye, target)) ** 0.5

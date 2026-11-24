@@ -25,12 +25,27 @@ class MarkerTest(unittest.TestCase):
         self.assertFalse(bool(battle_live.CONTACT_TRUE.search(LINE.replace("contact=true", "contact=false"))))
         self.assertIsNone(battle_live._parse_at("Battle live respawned: PovRed at=none"))
 
-    def test_fall_distance_needs_both_positions(self) -> None:
-        before = {"player": {"x": 1.0, "y": 64.0, "z": 2.0}}
-        after = {"player": {"x": 4.0, "y": 64.0, "z": 6.0}}
-        self.assertEqual(battle_live._fall_distance(before, after), 5.0)
-        self.assertIsNone(battle_live._fall_distance({"player": {"entity_id": 3}}, after))
-        self.assertIsNone(battle_live._fall_distance(before, {"player": None}))
+    def test_camera_gap_measures_against_the_followed_eye(self) -> None:
+        camera = {"entity": {"position": [4.0, 65.62, 6.0]}}
+        self.assertEqual(battle_live._camera_gap(camera, {"player": {"eye": [4.0, 65.62, 6.0]}}), 0.0)
+        # A camera left on the old body is far behind the holder it should follow.
+        self.assertGreater(battle_live._camera_gap(camera, {"player": {"block_pos": [204.0, 64.0, 6.0]}}),
+                           battle_live.CAMERA_FOLLOW_BLOCKS)
+        self.assertIsNone(battle_live._camera_gap({"entity": {}}, {"player": {"eye": [0.0, 0.0, 0.0]}}))
+        self.assertIsNone(battle_live._camera_gap(camera, {"player": None}))
+
+    def test_point_prefers_the_block_position(self) -> None:
+        self.assertEqual(battle_live._point({"player": {"block_pos": [1, 2, 3], "x": 9.0}}), [1.0, 2.0, 3.0])
+        self.assertEqual(battle_live._point({"player": {"x": 1.0, "y": 64.0, "z": 2.0}}), [1.0, 64.0, 2.0])
+        self.assertIsNone(battle_live._point({"player": {"health": 20.0}}))
+
+    def test_the_respawn_assertions_are_named_for_the_rows(self) -> None:
+        source = Path(battle_live.__file__).read_text()
+        for name in ("respawn_is_in_contact", "respawn_is_not_the_side_centre",
+                     "respawn_near_where_he_fell", "spectator_camera_followed_the_respawn"):
+            self.assertIn(name, source)
+        # The respawn is the client's own action, as in the crash-recovery kit.
+        self.assertIn('holder.driver("respawn")', source)
 
     def test_the_profile_and_scenarios_are_registered(self) -> None:
         self.assertIn("battle-live", PROFILES)
