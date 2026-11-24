@@ -1084,3 +1084,41 @@ class RegistryKeyTests(unittest.TestCase):
                 with self.assertRaises(ledger.Refused):
                     ledger._server_built_from(root, receipt, {'head': 'd' * 40, 'sha256': 'e' * 64})
 
+
+class RestoreBytecodeTests(unittest.TestCase):
+    """A reversed fix and its restore can share a python source's size and second.
+
+    CPython then accepts the control's .pyc for the restored source, so the restore runs the
+    control's code and a valid promotion is refused (SCENARIO-RANDOM-BREAK-NO-PROGRESS,
+    2026-11-25: the two ordinals dicts differ by one digit and the stages ran in one second)."""
+
+    def test_materialize_drops_python_bytecode_caches(self):
+        import tempfile
+        forget = getattr(ledger, '_forget_bytecode', None)
+        self.assertIsNotNone(forget, 'the restore must remove ignored bytecode caches')
+        with tempfile.TemporaryDirectory() as directory:
+            tree = Path(directory)
+            cache = tree / 'tools' / 'harness' / '__pycache__'
+            cache.mkdir(parents=True)
+            (cache / 'protocol_input_verbs.cpython-314.pyc').write_bytes(b'\x00')
+            keep = tree / 'crates' / '__pycache__'
+            keep.mkdir(parents=True)
+            (keep / 'x.pyc').write_bytes(b'\x00')
+            forget(tree)
+            self.assertFalse(cache.exists())
+            self.assertTrue(keep.exists(), 'only the python refs under tools/ are run from this tree')
+
+    def test_python_ref_runs_without_writing_bytecode(self):
+        import tempfile
+        seen = {}
+
+        def fake_exec(ctx, argv, tag, tree, env):
+            seen['env'] = env
+            return True, 'Ran 1 test in 0.1s\n\nOK\n'
+
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(ledger, '_exec', fake_exec):
+            results = ledger._run_python(object(), {('tools.harness.test_x', 'T.test_y')}, Path(directory))
+        self.assertEqual(results[('tools.harness.test_x', 'T.test_y')][0], ledger.GREEN)
+        self.assertEqual((seen.get('env') or {}).get('PYTHONDONTWRITEBYTECODE'), '1',
+                         'a python ref must not leave a .pyc for the control and the restore to share')
