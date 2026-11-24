@@ -212,6 +212,9 @@ pub struct EntityStore {
     /// every column compacts with the dense slot on remove/transfer.
     flags: Vec<u16>,
     hints: Vec<MotionHint>,
+    /// Derived cold scalars, refreshed with `flags`/`hints` from the same dirty
+    /// queue; a clean row that does not need the cold row is answered from here.
+    hot: Vec<HotRow>,
     dirty_flag: Vec<bool>,
     dirty_ids: Vec<EntityId>,
     /// Resident brain bodies, indexed by chunk and stable id, independent of
@@ -267,6 +270,154 @@ pub(crate) const MOTION_ITEM_COLLECTOR: u16 = 1 << 14;
 pub(crate) struct MotionHint {
     pub(crate) special: Option<crate::hostile::Special>,
     pub(crate) swell_metadata_neutral: bool,
+}
+
+/// Bits of [`HotRow`].
+const HOT_NO_AI: u16 = 1 << 0;
+const HOT_NO_GRAVITY: u16 = 1 << 1;
+const HOT_PERSISTENT: u16 = 1 << 2;
+const HOT_VILLAGER: u16 = 1 << 3;
+const HOT_SITTING: u16 = 1 << 4;
+const HOT_TAMED: u16 = 1 << 5;
+const HOT_LEASH: u16 = 1 << 6;
+const HOT_RIDERS: u16 = 1 << 7;
+const HOT_SPECIAL: u16 = 1 << 8;
+const HOT_NEEDS_COLD: u16 = 1 << 9;
+
+/// Derived cold-row scalars of one slot, refreshed only for dirty slots in
+/// [`EntityStore::prepare_motion_hints`]. The cold row stays the authority: the
+/// column is never serialized, and `needs_cold` routes every row whose
+/// `ReadRow` reads retained state outside this list to the live cold row —
+/// `age`, `harvest_ticks`, `no_action_time`, `uuid`, villager internals,
+/// `active_effects`, `appearance` and live seat occupancy are never here.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct HotRow {
+    speed: f32,
+    sight_range: f32,
+    attack_reach: f32,
+    attack_damage: f32,
+    love: u32,
+    breed_cooldown: u32,
+    child_ticks: u32,
+    slime_size: Option<u8>,
+    bits: u16,
+}
+
+impl HotRow {
+    /// Projection of one cold row. `flags` is the motion column refreshed in the
+    /// same pass, so `MOTION_EFFECTS` routes an effect row to the cold row.
+    fn of(row: &ColdRow, body: &Body, flags: u16) -> Self {
+        let special = row.special_mob.is_some();
+        let riders = !row.entity_life.mount.riders.is_empty();
+        let tamed = row.entity_life.tamed;
+        let mut bits = 0;
+        if row.controls.no_ai {
+            bits |= HOT_NO_AI;
+        }
+        if row.controls.no_gravity {
+            bits |= HOT_NO_GRAVITY;
+        }
+        if row.persistent {
+            bits |= HOT_PERSISTENT;
+        }
+        if row.villager.is_some() {
+            bits |= HOT_VILLAGER;
+        }
+        if row.entity_life.sitting {
+            bits |= HOT_SITTING;
+        }
+        if tamed {
+            bits |= HOT_TAMED;
+        }
+        if row.entity_life.leash.is_some() {
+            bits |= HOT_LEASH;
+        }
+        if riders {
+            bits |= HOT_RIDERS;
+        }
+        if special {
+            bits |= HOT_SPECIAL;
+        }
+        if special
+            || riders
+            || tamed
+            || flags & MOTION_EFFECTS != 0
+            || matches!(body.kind, EntityKind::Mob { type_id } if crate::piglin::is_piglin_type(type_id))
+        {
+            bits |= HOT_NEEDS_COLD;
+        }
+        Self {
+            speed: row.speed,
+            sight_range: row.sight_range,
+            attack_reach: row.attack_reach,
+            attack_damage: row.attack_damage,
+            love: row.love,
+            breed_cooldown: row.breed_cooldown,
+            child_ticks: row.entity_life.child_ticks,
+            slime_size: row.loot.slime_size,
+            bits,
+        }
+    }
+
+    pub(crate) fn speed(&self) -> f32 {
+        self.speed
+    }
+    pub(crate) fn sight_range(&self) -> f32 {
+        self.sight_range
+    }
+    pub(crate) fn attack_reach(&self) -> f32 {
+        self.attack_reach
+    }
+    pub(crate) fn attack_damage(&self) -> f32 {
+        self.attack_damage
+    }
+    pub(crate) fn love(&self) -> u32 {
+        self.love
+    }
+    pub(crate) fn breed_cooldown(&self) -> u32 {
+        self.breed_cooldown
+    }
+    pub(crate) fn child_ticks(&self) -> u32 {
+        self.child_ticks
+    }
+    pub(crate) fn slime_size(&self) -> Option<u8> {
+        self.slime_size
+    }
+    pub(crate) fn no_ai(&self) -> bool {
+        self.bits & HOT_NO_AI != 0
+    }
+    pub(crate) fn no_gravity(&self) -> bool {
+        self.bits & HOT_NO_GRAVITY != 0
+    }
+    pub(crate) fn persistent(&self) -> bool {
+        self.bits & HOT_PERSISTENT != 0
+    }
+    pub(crate) fn has_villager(&self) -> bool {
+        self.bits & HOT_VILLAGER != 0
+    }
+    pub(crate) fn sitting(&self) -> bool {
+        self.bits & HOT_SITTING != 0
+    }
+    pub(crate) fn has_leash(&self) -> bool {
+        self.bits & HOT_LEASH != 0
+    }
+    /// The row's `ReadRow` reads retained state the column leaves out; its read
+    /// takes the live cold row.
+    pub(crate) fn needs_cold(&self) -> bool {
+        self.bits & HOT_NEEDS_COLD != 0
+    }
+}
+
+/// Test-only: cold rows read through [`EntityStore::row`]. The derived column
+/// answers a clean plain row, so a prepare reads none of them.
+#[cfg(test)]
+pub(crate) static COLD_ROW_READS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// Test-only: cold reads since the last call.
+#[cfg(test)]
+pub(crate) fn take_cold_row_reads() -> usize {
+    COLD_ROW_READS.swap(0, std::sync::atomic::Ordering::Relaxed)
 }
 
 /// One entity-step result for [`EntityStore::apply_motion_result`]. Rotation is
@@ -544,6 +695,7 @@ impl EntityStore {
         };
         debug_assert_eq!(admitted.len(), self.cold.len());
         debug_assert_eq!(self.bodies.len(), self.cold.len());
+        debug_assert_eq!(self.hot.len(), self.cold.len());
         let hits: Vec<(EntitySlot, u8)> = if self.cold.len() < min_parallel {
             self.cold
                 .iter_mut()
@@ -636,6 +788,7 @@ impl EntityStore {
         };
         debug_assert_eq!(self.flags.len(), self.cold.len());
         debug_assert_eq!(self.bodies.len(), self.cold.len());
+        debug_assert_eq!(self.hot.len(), self.cold.len());
         if self.cold.len() < min_parallel {
             self.cold
                 .iter_mut()
@@ -771,6 +924,7 @@ impl EntityStore {
         let slot = EntitySlot(self.bodies.len() as u32);
         debug_assert_eq!(self.bodies.len(), self.cold.len());
         debug_assert_eq!(self.impulse.len(), self.cold.len());
+        debug_assert_eq!(self.hot.len(), self.cold.len());
         self.max_half_width = self.max_half_width.max(cold.half_width);
         self.pos.push(cold.pos);
         self.vel.push(cold.vel);
@@ -838,6 +992,8 @@ impl EntityStore {
             special: None,
             swell_metadata_neutral: true,
         });
+        self.hot
+            .push(HotRow::of(&self.cold[slot.0 as usize], &self.bodies[slot.0 as usize], 0));
         self.dirty_flag.push(true);
         self.dirty_ids.push(id);
         self.set_next_wire_id(id.0);
@@ -864,6 +1020,7 @@ impl EntityStore {
         }
         debug_assert_eq!(self.bodies.len(), self.cold.len());
         debug_assert_eq!(self.impulse.len(), self.cold.len());
+        debug_assert_eq!(self.hot.len(), self.cold.len());
         let last = self.bodies.len() - 1;
         let removed_id = self.bodies[idx].id;
         let kind = self.bodies[idx].kind;
@@ -901,6 +1058,7 @@ impl EntityStore {
         self.wire_marked.swap_remove(idx);
         self.flags.swap_remove(idx);
         self.hints.swap_remove(idx);
+        self.hot.swap_remove(idx);
         self.dirty_flag.swap_remove(idx);
         self.changed_tick.swap_remove(idx);
         self.log_removal(kind, removed_uuid);
@@ -933,6 +1091,7 @@ impl EntityStore {
         let index = slot.0 as usize;
         debug_assert_eq!(self.bodies.len(), self.cold.len());
         debug_assert_eq!(self.impulse.len(), self.cold.len());
+        debug_assert_eq!(self.hot.len(), self.cold.len());
         let last = self.bodies.len() - 1;
         self.unindex_tick_members(slot, self.bodies[index].kind);
         if index != last {
@@ -960,6 +1119,7 @@ impl EntityStore {
         self.wire_marked.swap_remove(index);
         self.flags.swap_remove(index);
         self.hints.swap_remove(index);
+        self.hot.swap_remove(index);
         self.dirty_flag.swap_remove(index);
         self.changed_tick.swap_remove(index);
         self.log_removal(kind, uuid);
@@ -983,6 +1143,7 @@ impl EntityStore {
         let target = EntitySlot(destination.bodies.len() as u32);
         debug_assert_eq!(destination.bodies.len(), destination.cold.len());
         debug_assert_eq!(destination.impulse.len(), destination.cold.len());
+        debug_assert_eq!(destination.hot.len(), destination.cold.len());
         destination.max_half_width = destination.max_half_width.max(body.half_width);
         destination.pos.push(position);
         destination.vel.push(velocity);
@@ -1004,6 +1165,11 @@ impl EntityStore {
             special: None,
             swell_metadata_neutral: true,
         });
+        destination.hot.push(HotRow::of(
+            &destination.cold[target.0 as usize],
+            &destination.bodies[target.0 as usize],
+            0,
+        ));
         destination.dirty_flag.push(true);
         destination.dirty_ids.push(id);
         destination.id_index.insert(id, target);
@@ -1253,7 +1419,30 @@ impl EntityStore {
     }
 
     pub fn row(&self, slot: EntitySlot) -> &ColdRow {
+        #[cfg(test)]
+        COLD_ROW_READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         &self.cold[slot.0 as usize]
+    }
+
+    /// Whether the slot was mutated after `prepare_motion_hints` refreshed the
+    /// derived columns; such a row's `flags`/`hints`/`hot` are stale on purpose
+    /// and its read goes to the live cold row.
+    pub(crate) fn motion_dirty(&self, slot: EntitySlot) -> bool {
+        self.dirty_flag[slot.0 as usize]
+    }
+
+    /// Derived cold scalars of one slot. A clean slot's column must equal its
+    /// cold projection: only `prepare_motion_hints` writes it, and every writer
+    /// that can change a projected field marks the slot dirty.
+    pub(crate) fn hot_row(&self, slot: EntitySlot) -> &HotRow {
+        let index = slot.0 as usize;
+        debug_assert!(
+            self.dirty_flag[index]
+                || self.hot[index]
+                    == HotRow::of(&self.cold[index], &self.bodies[index], self.flags[index]),
+            "a clean slot's hot row diverges from its cold projection"
+        );
+        &self.hot[index]
     }
 
     pub fn body(&self, slot: EntitySlot) -> &Body {
@@ -1573,6 +1762,7 @@ impl EntityStore {
         self.changed_tick.reserve(additional);
         self.flags.reserve(additional);
         self.hints.reserve(additional);
+        self.hot.reserve(additional);
         self.dirty_flag.reserve(additional);
         self.dirty_ids.reserve(additional);
         self.wire_marked.reserve(additional);
@@ -2034,11 +2224,13 @@ impl EntityStore {
             let special = motion_gate::effective_special(registry, body, &self.cold[index]);
             let flags =
                 motion_gate::motion_flags_for(registry, self, slot, special, chicken, tadpole);
+            let hot = HotRow::of(&self.cold[index], body, flags);
             self.flags[index] = flags;
             self.hints[index] = MotionHint {
                 special,
                 swell_metadata_neutral: crate::hostile::swell_metadata_neutral(&self.cold[index]),
             };
+            self.hot[index] = hot;
         }
         let mut dirty = dirty;
         dirty.clear();

@@ -226,6 +226,27 @@ pub(crate) fn can_breed_in(
     }
 }
 
+/// [`can_breed_in`] for a row with no retained tamed state (the derived-column
+/// path): every `Tamed*` rule needs `tamed` (and `TamedHealthyUnmounted` also
+/// reads health and seat occupancy), so only `Unrestricted` can breed there.
+/// `HotRow::needs_cold` routes every tamed row to the cold path, and
+/// `read_row`'s row-equivalence checks assert the two agree.
+pub(crate) fn can_breed_untamed(
+    registry: &crate::registry::CoreRegistry,
+    body: &crate::entities::Body,
+) -> bool {
+    let EntityKind::Mob { type_id } = body.kind else {
+        return false;
+    };
+    let Some(blueprint) = registry.blueprint(type_id) else {
+        return false;
+    };
+    matches!(
+        blueprint.capabilities.breeding,
+        crate::blueprint::BreedingRule::Unrestricted
+    )
+}
+
 pub fn feed(state: &mut TickState, target: EntityId) {
     let Some(slot) = state.entities.slot_of(target) else {
         return;

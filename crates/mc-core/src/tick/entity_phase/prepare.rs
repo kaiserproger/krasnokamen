@@ -428,10 +428,101 @@ pub(in crate::tick) fn read_row(
     period: u8,
     rare: &RarePrep,
 ) -> (ReadRow, bool) {
+    let hot = view.entities.hot_row(slot);
+    // The derived column answers only for a clean row that carries nothing the
+    // column leaves out: a row mutated after `prepare_motion_hints` (the dirty
+    // queue) and every `needs_cold` row read the live cold row, exactly as
+    // before the column existed.
+    let cold = if view.entities.motion_dirty(slot) || hot.needs_cold() {
+        Some(view.entities.row(slot))
+    } else {
+        None
+    };
+    read_row_with(view, slot, flags, period, rare, hot, cold)
+}
+
+/// Cold-row inputs of one `ReadRow`. `cold` is the live row when it must be
+/// read (dirty or `HotRow::needs_cold`); otherwise `hot` is the only source.
+struct RowFields<'a> {
+    hot: &'a crate::entities::HotRow,
+    cold: Option<&'a crate::entities::ColdRow>,
+}
+
+impl RowFields<'_> {
+    fn no_ai(&self) -> bool {
+        self.cold
+            .map_or_else(|| self.hot.no_ai(), |row| row.controls.no_ai)
+    }
+    fn no_gravity(&self) -> bool {
+        self.cold
+            .map_or_else(|| self.hot.no_gravity(), |row| row.controls.no_gravity)
+    }
+    fn slime_size(&self) -> Option<u8> {
+        self.cold
+            .map_or_else(|| self.hot.slime_size(), |row| row.loot.slime_size)
+    }
+    fn speed(&self) -> f32 {
+        self.cold.map_or_else(|| self.hot.speed(), |row| row.speed)
+    }
+    fn sight_range(&self) -> f32 {
+        self.cold
+            .map_or_else(|| self.hot.sight_range(), |row| row.sight_range)
+    }
+    fn attack_reach(&self) -> f32 {
+        self.cold
+            .map_or_else(|| self.hot.attack_reach(), |row| row.attack_reach)
+    }
+    fn attack_damage(&self) -> f32 {
+        self.cold
+            .map_or_else(|| self.hot.attack_damage(), |row| row.attack_damage)
+    }
+    fn love(&self) -> u32 {
+        self.cold.map_or_else(|| self.hot.love(), |row| row.love)
+    }
+    fn breed_cooldown(&self) -> u32 {
+        self.cold
+            .map_or_else(|| self.hot.breed_cooldown(), |row| row.breed_cooldown)
+    }
+    fn child_ticks(&self) -> u32 {
+        self.cold
+            .map_or_else(|| self.hot.child_ticks(), |row| row.entity_life.child_ticks)
+    }
+    fn persistent(&self) -> bool {
+        self.cold
+            .map_or_else(|| self.hot.persistent(), |row| row.persistent)
+    }
+    fn has_villager(&self) -> bool {
+        self.cold
+            .map_or_else(|| self.hot.has_villager(), |row| row.villager.is_some())
+    }
+    fn sitting(&self) -> bool {
+        self.cold
+            .map_or_else(|| self.hot.sitting(), |row| row.entity_life.sitting)
+    }
+    fn has_leash(&self) -> bool {
+        self.cold.map_or_else(
+            || self.hot.has_leash(),
+            |row| row.entity_life.leash.is_some(),
+        )
+    }
+}
+
+/// `read_row` over an explicit cold-row source: `None` reads the derived hot
+/// column, `Some` the live cold row. Test callers force the cold row to compare
+/// the two paths bit for bit.
+fn read_row_with(
+    view: &PrepView,
+    slot: EntitySlot,
+    flags: u16,
+    period: u8,
+    rare: &RarePrep,
+    hot: &crate::entities::HotRow,
+    cold: Option<&crate::entities::ColdRow>,
+) -> (ReadRow, bool) {
+    let fields = RowFields { hot, cold };
     let body = &view.bodies[slot.0 as usize];
     let battle =
         crate::battle::battle_row(body.faction) && matches!(body.kind, EntityKind::Mob { .. });
-    let row = view.entities.row(slot);
     let observed = rare.observed;
     // Snapshot predicates share one immutable blueprint lookup per mob.
     let blueprint = match body.kind {
@@ -454,16 +545,26 @@ pub(in crate::tick) fn read_row(
     let aggressive = hops
         && has_retained_target
         && blueprint.is_some_and(|blueprint| {
-            blueprint.capabilities.hop_lift_per_size > 0.0 || row.loot.slime_size.unwrap_or(1) > 1
+            blueprint.capabilities.hop_lift_per_size > 0.0 || fields.slime_size().unwrap_or(1) > 1
         });
     let hop_tick = hops
-        && !row.controls.no_ai
+        && !fields.no_ai()
         && crate::entity_motion::hop_due(body.id.0, view.tick, hop_delay_scale, aggressive);
     let think = battle || motion_thinks(view.tick, flags, period) || hop_tick;
-    let needs_rare = crate::enderman::needs_state(row)
-        || crate::plugin_npcs::needs_state(row)
-        || crate::creaking::needs_state(body)
-        || crate::piglin::eligible(body, row);
+    let needs_rare = match cold {
+        Some(row) => {
+            crate::enderman::needs_state(row)
+                || crate::plugin_npcs::needs_state(row)
+                || crate::creaking::needs_state(body)
+                || crate::piglin::eligible(body, row)
+        }
+        // No retained special state and no piglin body (both route to the cold
+        // row), so only the plugin-NPC shape can need a rare input.
+        None => {
+            (fields.no_ai() && fields.persistent() && fields.has_villager())
+                || crate::creaking::needs_state(body)
+        }
+    };
     let (chaser, breeder, item_entity, player, special, dark_aggro) = match body.kind {
         EntityKind::Mob { .. } => {
             let special = blueprint.and_then(crate::hostile::special_of);
@@ -496,18 +597,18 @@ pub(in crate::tick) fn read_row(
         EntityKind::Player { .. } => u32::MAX,
     };
     let is_iron_golem = blueprint.is_some_and(|bp| bp.capabilities.hunts_monsters);
-    let is_slime_size_one = row.loot.slime_size == Some(1)
+    let is_slime_size_one = fields.slime_size() == Some(1)
         && blueprint
             .is_some_and(|bp| bp.capabilities.size_profile == crate::blueprint::SizeProfile::Slime);
     let has_effects = flags & MOTION_EFFECTS != 0;
     let chaser = !battle
         && chaser
-        && !row.controls.no_ai
+        && !fields.no_ai()
         && (!matches!(body.kind, EntityKind::Mob { type_id } if crate::piglin::is_piglin_type(type_id))
-            || crate::entity_life::adult(row))
+            || cold.is_some_and(crate::entity_life::adult))
         && (battle || !is_enderman || rare.enderman_target.is_some());
-    let breeder = !battle && breeder && !row.controls.no_ai;
-    let special = crate::battle::special(body.faction, special).filter(|_| !row.controls.no_ai);
+    let breeder = !battle && breeder && !fields.no_ai();
+    let special = crate::battle::special(body.faction, special).filter(|_| !fields.no_ai());
     let panic_multiplier = if !battle
         && (body.burn_ticks > 0
             || body
@@ -521,18 +622,25 @@ pub(in crate::tick) fn read_row(
         0.0
     };
     let impulse = view.impulses[slot.0 as usize];
-    let (speed, melee_bonus, levitation, slow_falling) = if has_effects {
-        let effects = &row.active_effects;
-        (
-            row.speed
-                * ((1.0 + 0.2 * effects.level(crate::effects::EffectId::Speed))
-                    * (1.0 - 0.15 * effects.level(crate::effects::EffectId::Slowness)).max(0.0)),
-            effects.melee_bonus(),
-            effects.level(crate::effects::EffectId::Levitation),
-            effects.has(crate::effects::EffectId::SlowFalling),
-        )
-    } else {
-        (row.speed, 0.0, 0.0, false)
+    debug_assert!(
+        !has_effects || cold.is_some(),
+        "a row with effects must be read from the cold row"
+    );
+    let (speed, melee_bonus, levitation, slow_falling) = match cold {
+        // `MOTION_EFFECTS` routes a row to the cold path, so an effect row is
+        // always read live.
+        Some(row) if has_effects => {
+            let effects = &row.active_effects;
+            (
+                row.speed
+                    * ((1.0 + 0.2 * effects.level(crate::effects::EffectId::Speed))
+                        * (1.0 - 0.15 * effects.level(crate::effects::EffectId::Slowness)).max(0.0)),
+                effects.melee_bonus(),
+                effects.level(crate::effects::EffectId::Levitation),
+                effects.has(crate::effects::EffectId::SlowFalling),
+            )
+        }
+        _ => (fields.speed(), 0.0, 0.0, false),
     };
     // Panic source stays a rare-branch worker read (see `step_entity`).
     let read = ReadRow {
@@ -559,12 +667,12 @@ pub(in crate::tick) fn read_row(
         ground: view.ground[slot.0 as usize],
         half_width: body.half_width,
         height: body.height,
-        sight_range: row.sight_range,
-        attack_reach: row.attack_reach,
-        attack_damage: row.attack_damage,
+        sight_range: fields.sight_range(),
+        attack_reach: fields.attack_reach(),
+        attack_damage: fields.attack_damage(),
         melee_bonus,
         attack_cooldown: body.attack_cooldown,
-        love: row.love,
+        love: fields.love(),
         is_enderman,
         is_iron_golem,
         hunts_villagers: blueprint.is_some_and(|bp| bp.capabilities.hunts_villagers),
@@ -573,7 +681,7 @@ pub(in crate::tick) fn read_row(
         climbs_walls: blueprint.is_some_and(|blueprint| blueprint.capabilities.climbs_walls),
         head_follows_body: blueprint
             .is_some_and(|blueprint| blueprint.capabilities.head_follows_body),
-        hops: hops && !row.controls.no_ai,
+        hops: hops && !fields.no_ai(),
         hop_aggressive: aggressive,
         avoids_armadillos: blueprint
             .is_some_and(|blueprint| blueprint.capabilities.avoids_armadillos),
@@ -582,10 +690,17 @@ pub(in crate::tick) fn read_row(
         }),
         chaser,
         breed_ready: breeder
-            && crate::entity_life::can_breed_in(view.registry, view.entities, body, row)
-            && row.entity_life.child_ticks == 0
-            && row.breed_cooldown == 0
-            && row.love > 0,
+            && match cold {
+                Some(row) => {
+                    crate::entity_life::can_breed_in(view.registry, view.entities, body, row)
+                }
+                // A tamed row is `needs_cold`, so only an unrestricted rule can
+                // breed here; the column's projection check guards the mapping.
+                None => crate::entity_life::can_breed_untamed(view.registry, body),
+            }
+            && fields.child_ticks() == 0
+            && fields.breed_cooldown() == 0
+            && fields.love() > 0,
         temptable: blueprint.is_some_and(|blueprint| blueprint.capabilities.temptable),
         type_id,
         pickup_ready: item_entity && body.alive && body.pickup_delay == 0,
@@ -594,12 +709,14 @@ pub(in crate::tick) fn read_row(
         speed,
         levitation,
         slow_falling,
-        no_gravity: row.controls.no_gravity,
+        no_gravity: fields.no_gravity(),
         special,
         dark_aggro: !battle && dark_aggro,
         standing: (special == Some(crate::hostile::Special::Swell)
             && view.hostile.fuse(body.id) > 0)
-            || matches!(row.special_mob.as_deref(), Some(crate::special_mobs::Retained::Wither { invulnerable }) if *invulnerable > 0)
+            || cold.is_some_and(|row| {
+                matches!(row.special_mob.as_deref(), Some(crate::special_mobs::Retained::Wither { invulnerable }) if *invulnerable > 0)
+            })
             || (matches!(
                 special,
                 Some(crate::hostile::Special::Native(
@@ -611,19 +728,50 @@ pub(in crate::tick) fn read_row(
                 .attacks
                 .get(&body.id)
                 .is_some_and(|attack| attack.stage > 0))
-            || row.controls.no_ai
-            || crate::axolotl::playing_dead(row)
+            || fields.no_ai()
+            || cold.is_some_and(crate::axolotl::playing_dead)
             || observed
             || blueprint.is_some_and(|blueprint| blueprint.goals.is_empty())
-            || (!battle && crate::taming::suppress_ai(view.entities, row))
-            || crate::warden::suppress_ai(row)
-            || crate::piglin::admiring(row),
-        leash_follow: row.entity_life.leash.is_some()
-            && !row.controls.no_ai
-            && !row.entity_life.sitting
-            && !crate::mounts::occupied(view.entities, &row.entity_life.mount),
+            || (!battle
+                && match cold {
+                    Some(row) => crate::taming::suppress_ai(view.entities, row),
+                    // Riding rows are `needs_cold`, so a clean row's only
+                    // suppression is sitting or a leash (`mounts::occupied` is
+                    // false without riders).
+                    None => fields.sitting() || fields.has_leash(),
+                })
+            || cold.is_some_and(crate::warden::suppress_ai)
+            || cold.is_some_and(crate::piglin::admiring),
+        leash_follow: fields.has_leash()
+            && !fields.no_ai()
+            && !fields.sitting()
+            && !cold.is_some_and(|row| {
+                crate::mounts::occupied(view.entities, &row.entity_life.mount)
+            }),
     };
     (read, needs_rare)
+}
+
+/// The cold path of [`read_row`] for tests: the same function with the live cold
+/// row forced, so a test can compare the derived-column read bit for bit.
+#[cfg(test)]
+pub(in crate::tick) fn read_row_from_cold(
+    view: &PrepView,
+    slot: EntitySlot,
+    flags: u16,
+    period: u8,
+    rare: &RarePrep,
+) -> (ReadRow, bool) {
+    let hot = view.entities.hot_row(slot);
+    read_row_with(
+        view,
+        slot,
+        flags,
+        period,
+        rare,
+        hot,
+        Some(view.entities.row(slot)),
+    )
 }
 
 /// Dense admission of the slots `base..base + marks.len()`: every owned,
