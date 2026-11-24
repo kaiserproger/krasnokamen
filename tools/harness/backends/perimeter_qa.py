@@ -13,7 +13,10 @@ read back through the native client's block scan, never from the server:
 - `gates_built`: four gatehouses, seven columns of four blocks with an oak door in the centre;
 - `wall_built`: every other wall column is three cobblestone blocks;
 - `enclosed`: no column of the 200-column line is open at foot or head height;
-- `gate_door_opens`: a client interaction opens a gate door.
+- `gate_door_opens`: a client interaction opens a gate door;
+- `project_named`: every active project the Construction page showed during the build carries a
+  display name (never `Unknown blueprint`), and at least one of the built-in layout kinds
+  (wall section, gate, well) was among them, so the name row had something to read.
 
 A run that never builds records `FAIL` for the four building verdicts after the deadline, never
 a crash: that is the control the bug ledger needs.
@@ -36,7 +39,7 @@ from .probe_steps import ProbeSteps
 NAME = "perimeter"
 VERDICTS = frozenset({
     "settlement_founded", "walls_absent_before", "well_built", "gates_built", "wall_built",
-    "enclosed", "gate_door_opens",
+    "enclosed", "gate_door_opens", "project_named",
 })
 # Assertion names. The ledger reads a failed `buildings_<name>_*` assertion as a red control, so only
 # the outcome check carries that prefix; a fixture step that fails (no settlement, no residents,
@@ -148,6 +151,17 @@ def complete(counts: dict[str, Any]) -> bool:
     return (counts["gate_columns"]["built"] == 4 * (2 * GATE_HALF + 1)
             and counts["wall_columns"]["empty"] == 0 and counts["wall_columns"]["partial"] == 0
             and counts["open_columns"] == 0 and counts["doors"] == 4 and len(counts["wells"]) == 1)
+
+
+# The display names the built-in layout kinds carry (settlements/ui_text.rs `blueprint`). The
+# perimeter gate is the only real-client run that makes the planner raise these projects.
+LAYOUT_INFRASTRUCTURE = ("Wall section", "Gate", "Well")
+
+
+def project_named(labels: set[str]) -> bool:
+    """The active project labels seen during the wall build never read `Unknown blueprint`, and at
+    least one of the layout kinds this gate builds was observed (otherwise nothing was judged)."""
+    return bool(labels & set(LAYOUT_INFRASTRUCTURE)) and "Unknown blueprint" not in labels
 
 
 def _menu_dump(probe: ProbeSteps, page: str, title: str, click: int | None = None,
@@ -273,6 +287,20 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
             break
     sub["progress"] = samples[-40:]
     sub["after"] = counts
+    # SETTLEMENT-LAYOUT-PROJECT-SHOWS-UNKNOWN-BLUEPRINT: the built-in layout kinds (wall section,
+    # gate, well) are exactly the projects this gate makes the settlement plan, so the live
+    # Construction page is where their display names are readable. Every active project observed
+    # during the build must carry a name — `Unknown blueprint` is the symptom — and at least one
+    # of the fortification kinds must have been observed, or this run never reached the question.
+    from .village_autonomy_qa import PROJECT_LABELS
+    labels = {str(sample["project"][0]) for sample in samples if sample.get("project")}
+    layout = labels & set(LAYOUT_INFRASTRUCTURE)
+    named = project_named(labels)
+    sub["project_labels"] = sorted(labels)
+    probe.check(f"{NAME}_project_named", named)
+    _verdict(sub, "project_named", "PASS" if named else "FAIL",
+             f"active project labels {sorted(labels)} (known kinds: {len(PROJECT_LABELS)}; "
+             f"layout infrastructure seen: {sorted(layout)})")
     wall, gate = counts["wall_columns"], counts["gate_columns"]
     _verdict(sub, "well_built", "PASS" if len(counts["wells"]) == 1 else "FAIL",
              f"standing wells {counts['wells']} (water source ringed by eight cobblestone)")

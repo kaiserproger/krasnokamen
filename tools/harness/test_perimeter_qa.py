@@ -56,10 +56,30 @@ class PerimeterRefs(unittest.TestCase):
     def test_a_perimeter_verdict_runs_that_select(self):
         command = regressions._profile_command("buildings-qa", "perimeter.enclosed")
         self.assertIn("BUILDINGS_QA_SELECT=perimeter", command)
+        self.assertIn("project_named", qa.VERDICTS)
+        self.assertIn("BUILDINGS_QA_SELECT=perimeter",
+                      regressions._profile_command("buildings-qa", "perimeter.project_named"))
 
     def test_an_unknown_perimeter_verdict_is_refused(self):
         with self.assertRaises(ValueError):
             regressions._profile_command("buildings-qa", "perimeter.moat")
+
+
+class PerimeterProjectNames(unittest.TestCase):
+    """SETTLEMENT-LAYOUT-PROJECT-SHOWS-UNKNOWN-BLUEPRINT: the layout kinds carry display names."""
+
+    def test_a_layout_project_named_during_the_build_passes(self):
+        self.assertTrue(qa.project_named({"Wall section", "House"}))
+        self.assertTrue(qa.project_named({"Gate", "Road"}))
+        self.assertTrue(qa.project_named({"Well"}))
+
+    def test_an_unknown_blueprint_label_fails_even_beside_a_named_one(self):
+        self.assertFalse(qa.project_named({"Wall section", "Unknown blueprint"}))
+        self.assertFalse(qa.project_named({"Unknown blueprint"}))
+
+    def test_no_layout_project_observed_never_passes(self):
+        self.assertFalse(qa.project_named(set()))
+        self.assertFalse(qa.project_named({"House", "Road", "Street lamp"}))
 
 
 if __name__ == "__main__":
