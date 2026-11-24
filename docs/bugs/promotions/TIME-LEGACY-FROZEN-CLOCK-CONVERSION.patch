@@ -1,0 +1,60 @@
+diff --git a/crates/mc-core/src/native_checkpoint/game_clock_upgrade.rs b/crates/mc-core/src/native_checkpoint/game_clock_upgrade.rs
+index b25ebc928..e2eeb5877 100644
+--- a/crates/mc-core/src/native_checkpoint/game_clock_upgrade.rs
++++ b/crates/mc-core/src/native_checkpoint/game_clock_upgrade.rs
+@@ -39,10 +39,51 @@ fn normalize_villager(
+     game: u64,
+     report: &mut Conversion,
+ ) -> Result<(), CoreError> {
+-    // The pre-conversion server rewrote nothing: every held memory stayed raw.
+-    let _ = (state, game);
+-    report.work_raw += 1;
+-    report.sleep_raw += 1;
++    if game == 0 || !state.brain_clock || state.wandering || state.conversion_time.is_some() {
++        report.work_raw += 1;
++        report.sleep_raw += 1;
++        return Ok(());
++    }
++    let running = report
++        .tick
++        .checked_sub(1)
++        .ok_or_else(|| storage("hold at tick zero"))?;
++    let lower = game.saturating_sub(1);
++    let work = i64::try_from(running.saturating_sub(1)).map_err(storage)?;
++    if state.activity == crate::villager::Activity::Work {
++        if state.last_work >= 0 && state.last_work as u64 > running {
++            return Err(storage(
++                "eligible last_work exceeds the final persisted running boundary",
++            ));
++        }
++        if state.last_work >= 0 && state.last_work as u64 >= lower {
++            state.last_work = work;
++            report.work_normalized += 1;
++        } else {
++            report.work_raw += 1;
++        }
++    } else {
++        report.work_raw += 1;
++    }
++    let sleep = running.checked_sub(1);
++    if state.sleeping
++        && let Some(value) = state.last_slept
++    {
++        if value > running {
++            return Err(storage(
++                "eligible last_slept exceeds the final persisted running boundary",
++            ));
++        }
++        if value >= lower {
++            state.last_slept = sleep;
++            report.sleep_normalized += 1;
++        } else {
++            report.sleep_raw += 1;
++        }
++    } else {
++        report.sleep_raw += 1;
++    }
++    // panic_until and conversion countdowns deliberately stay raw.
+     Ok(())
+ }
+ 
