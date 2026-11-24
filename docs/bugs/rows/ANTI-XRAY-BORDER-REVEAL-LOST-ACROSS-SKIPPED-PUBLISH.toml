@@ -3,8 +3,8 @@ id = "ANTI-XRAY-BORDER-REVEAL-LOST-ACROSS-SKIPPED-PUBLISH"
 title = "With anti-xray on (the default), a border ore's mask changed by its side neighbour during a publish the edge pump skips stays wrong on the client: a block change, load or unload in the neighbouring chunk (an unloaded side counts as open) leaves the ore chunk's own revision unchanged (no light change), the change lived only in the skipped publication, and skip repair compared only each chunk's own revision"
 area = "gameplay"
 severity = "minor"
-status = "open"
-source = "CheckpointJoinStall code review 2026-11-20 (receipts/CheckpointJoinStall/REVIEW-code-sol.md; neighbour load/unload cases from the follow-up review). Latent at base dc670b3bd under broadcast `Lagged`; the queue-budget skip of EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS makes skips more frequent. crates/mc-edge/src/plan/viewer_plan.rs full walk: after a skip a held chunk is repaired only when its own revision moved; non-skipped publishes deliver border reveals through `TickPlanIndex::reveals`, and the framed chunk cache already keys anti-xray frames by the four side revisions with 0 for an absent side (plan/chunk_frames.rs `chunk_key`; anti_xray.rs `Surroundings::state` reports an unloaded side as OPEN), but a held chunk is not re-sent for a side change. Repro: the three regression tests with the side-repair hunk reverted; the load/unload tests also go red when only the side comparison ignores presence."
+status = "fixed"
+source = "CheckpointJoinStall code review 2026-11-20 (receipts/CheckpointJoinStall/REVIEW-code-sol.md; neighbour load/unload cases from the follow-up review). Latent at base dc670b3bd under broadcast `Lagged`; the queue-budget skip of EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS makes skips more frequent. crates/mc-edge/src/plan/viewer_plan.rs full walk: after a skip a held chunk is repaired only when its own revision moved; non-skipped publishes deliver border reveals through `TickPlanIndex::reveals`, and the framed chunk cache already keys anti-xray frames by the four side revisions with 0 for an absent side (plan/chunk_frames.rs `chunk_key`; anti_xray.rs `Surroundings::state` reports an unloaded side as OPEN), but a held chunk is not re-sent for a side change. Fix: 523b97aa5 (skip base + side repair) and 42b543746 (side load/unload); patch at docs/bugs/promotions/ANTI-XRAY-BORDER-REVEAL-LOST-ACROSS-SKIPPED-PUBLISH.patch, hunk map beside it. Frame-level witness only: a real client cannot discriminate it (real-client-gates.md, \"Edge pump lag on real clients\")."
 repro = "cargo"
 regression = [
   "cargo:mc-edge:anti_xray::anti_xray_tests::a_border_reveal_inside_a_skipped_publish_reaches_the_client",
@@ -12,3 +12,6 @@ regression = [
   "cargo:mc-edge:anti_xray::anti_xray_tests::a_neighbour_loaded_inside_a_skipped_publish_hides_the_border_ore",
 ]
 failing_first = "reported"
+fix_commit = "patch:5aa0532138099cdaa0d3ee6aab7cdce18bae540de4898edecced65b03120f1d6"
+proving_assertions = { "cargo:mc-edge:anti_xray::anti_xray_tests::a_border_reveal_inside_a_skipped_publish_reaches_the_client" = "crates/mc-edge/src/anti_xray_tests.rs:480", "cargo:mc-edge:anti_xray::anti_xray_tests::a_neighbour_unloaded_inside_a_skipped_publish_reveals_the_border_ore" = "crates/mc-edge/src/anti_xray_tests.rs:496", "cargo:mc-edge:anti_xray::anti_xray_tests::a_neighbour_loaded_inside_a_skipped_publish_hides_the_border_ore" = "crates/mc-edge/src/anti_xray_tests.rs:515" }
+promotion = "docs/bugs/promotions/ANTI-XRAY-BORDER-REVEAL-LOST-ACROSS-SKIPPED-PUBLISH.json"

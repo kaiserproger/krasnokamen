@@ -295,6 +295,76 @@ pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
     }
 }
 
+/// Vanilla `LivingEntity#startSleeping` / `stopSleeping` set the bed block's
+/// `occupied` property while a sleeper lies in it. Solaris derives occupancy
+/// from its sleepers, so one pass per tick mirrors it: a player in
+/// [`TickState::sleepers`] and a resident whose brain set `sleeping` both own
+/// their bed's cell, and a bed that lost its sleeper is cleared again. Doing it
+/// here covers every wake path (leave-bed, morning, hit, death, resident
+/// reassignment, dimension travel), not just [`wake`]. The tick calls it after
+/// the phases that can start or end a sleep and before the merge, so its writes
+/// land in the same block phase and a block break staged by the same tick wins.
+pub(crate) fn mirror_occupied_beds(state: &mut TickState) {
+    let dimension = state.dimension.name();
+    let previous = std::mem::take(&mut state.occupied_beds);
+    let mut wanted: rustc_hash::FxHashSet<BlockPos> =
+        state.sleepers.values().map(|sleeper| sleeper.bed).collect();
+    for ids in state.entities.villager_chunks().values() {
+        for &id in ids {
+            let Some(slot) = state.entities.slot_of_any(id) else {
+                continue;
+            };
+            let row = state.entities.row(slot);
+            let Some(resident) = row.villager.as_ref() else {
+                continue;
+            };
+            if resident.sleeping
+                && resident.home_dimension == dimension
+                && let Some(home) = resident.home
+            {
+                wanted.insert(home);
+            }
+        }
+    }
+    for bed in previous.difference(&wanted) {
+        set_bed_occupied(state, *bed, false);
+    }
+    for bed in &wanted {
+        set_bed_occupied(state, *bed, true);
+    }
+    state.occupied_beds = wanted;
+}
+
+/// Write a bed's `occupied` property on both halves when it differs. A cell
+/// that no longer holds a bed (or is unloaded) is left alone, and so is a bed
+/// an accepted write already targets this tick: the merge's write wins, so a
+/// break or a replace is never undone by the mirror.
+fn set_bed_occupied(state: &mut TickState, head: BlockPos, occupied: bool) {
+    let value = if occupied { "true" } else { "false" };
+    let Some(current) = state.world.block_at(head.x, head.y, head.z) else {
+        return;
+    };
+    // Vanilla `BedBlock.updateShape` copies `OCCUPIED` to the connected half.
+    let other = crate::placement::other_half(&state.registry.blocks, head, current)
+        .map_or(head, |(other, _)| other);
+    let accepted = |pos: &BlockPos| {
+        state
+            .merge_block_writes
+            .iter()
+            .any(|(written, _)| written == pos)
+    };
+    if accepted(&head) || accepted(&other) {
+        return;
+    }
+    for cell in [head, other] {
+        if let Some(next) = crate::bees::property(state, cell, "occupied", value)
+            && state.world.block_at(cell.x, cell.y, cell.z) != Some(next)
+        {
+            state.write_block(cell, next);
+        }
+    }
+}
+
 /// Once per tick: count sleep time, wake those whose bed is gone, whose
 /// night is over or who were hurt, and skip the night when the gamerule's
 /// percentage of active non-spectator players sleeps soundly.

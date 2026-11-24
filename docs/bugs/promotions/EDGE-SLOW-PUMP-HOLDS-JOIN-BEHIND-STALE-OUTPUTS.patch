@@ -1,0 +1,42 @@
+diff --git a/crates/mc-edge/src/server/pump.rs b/crates/mc-edge/src/server/pump.rs
+index fe26207..87e524d 100644
+--- a/crates/mc-edge/src/server/pump.rs
++++ b/crates/mc-edge/src/server/pump.rs
+@@ -54,15 +54,19 @@ fn bounded_tracked_union(
+ /// delays delivery, and a socket overflow still closes the connection.
+ pub(super) const PUBLISH_QUEUE_BUDGET: std::time::Duration = std::time::Duration::from_millis(1600);
+ 
+-/// The pre-image pump had no queue-budget skip: an output is never stale, so a
+-/// pump behind the tick sits at the oldest retained output. Kept for the
+-/// registered unit tests, which call it with the same signature.
++/// An output to skip: it waited past [`PUBLISH_QUEUE_BUDGET`] since the tick
++/// owner published it and a newer one is queued. The newest output and
++/// outputs without a publish instant are never stale. `newer_queued` runs
++/// only for an old output: a timely pump takes no broadcast tail lock.
+ pub(super) fn stale(
+-    _out: &TickOutput,
+-    _now: std::time::Instant,
+-    _newer_queued: impl FnOnce() -> bool,
++    out: &TickOutput,
++    now: std::time::Instant,
++    newer_queued: impl FnOnce() -> bool,
+ ) -> bool {
+-    false
++    out.times
++        .published_at
++        .is_some_and(|published| now.saturating_duration_since(published) > PUBLISH_QUEUE_BUDGET)
++        && newer_queued()
+ }
+ 
+ /// Skipped publications reconcile from the next processed snapshot against
+@@ -90,6 +94,10 @@ pub(super) async fn next_publication(
+ ) -> Option<TickOutput> {
+     loop {
+         match rx.recv().await {
++            Ok(out) if stale(&out, std::time::Instant::now(), || !rx.is_empty()) => {
++                server.dashboard.record_pump_stale_skipped(1);
++                skip_publications(server, viewers, chunk_cache, 1);
++            }
+             Ok(out) => return Some(out),
+             Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                 skip_publications(server, viewers, chunk_cache, skipped);

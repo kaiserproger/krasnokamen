@@ -4,7 +4,7 @@ title = "Player spear jab dropped at decode"
 area = "gameplay"
 severity = "major"
 status = "open"
-source = "G2L laptop hit-test: the iron spear sent player action STAB but the server discarded it; zero PovRed hits before the pre-rename fix. See receipts/G2/LAPTOP-NEXT.md history and receipts/G2L/hit-test-diag. The pre-rename server fix 0e0155ce was live-tested in receipts/G2L/hit-test-stab; this main port still needs its own real-client check."
+source = "G2L laptop hit-test: the iron spear sent player action STAB but the server discarded it; zero PovRed hits before the pre-rename fix. See receipts/G2/LAPTOP-NEXT.md history and receipts/G2L/hit-test-diag. The pre-rename server fix 0e0155ce was live-tested in receipts/G2L/hit-test-stab; this main port still needs its own real-client check. Main port in tree: `be976b139` (accept the spear STAB jab and keep it the only spear attack), probe green on all 7 refs (`20261124T092509-ledger-probe-cadi2cru`). Client-visible: promotion needs the G2L real-client stab hit-test on a pinned server (`docs/development/real-client-gates.md`) and a curated patch for the commit hunks."
 repro = "client"
 regression = [
   "cargo:mc-edge:decode::decode_tests::player_action_maps_dig_drop_release_swap",

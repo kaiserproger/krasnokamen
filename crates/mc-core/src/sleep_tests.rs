@@ -1203,15 +1203,17 @@ fn intact_bed_with_its_whole_exit_ring_sealed_uses_the_vanilla_above_fallback() 
     rig.state.day_time = NIGHT;
     rig.use_bed(1);
     assert_eq!(rig.pose(rig.player), SLEEPING_POSE);
+    // Vanilla `BedBlock.updateShape` copies OCCUPIED to the connected half.
     let foot_state = block(
         &rig.state,
         "minecraft:red_bed",
-        &[("facing", "east"), ("part", "foot")],
+        &[("facing", "east"), ("part", "foot"), ("occupied", "true")],
     );
+    // The sleeper owns the head cell: vanilla sets the bed's `occupied` state.
     let head_state = block(
         &rig.state,
         "minecraft:red_bed",
-        &[("facing", "east"), ("part", "head")],
+        &[("facing", "east"), ("part", "head"), ("occupied", "true")],
     );
     let stone = rig.state.registry.states.stone;
     let halves = [
@@ -1261,5 +1263,155 @@ fn intact_bed_with_its_whole_exit_ring_sealed_uses_the_vanilla_above_fallback() 
             f64::from(rig.head.y) + 1.0 + 0.1,
             f64::from(rig.head.z) + 0.5,
         ]
+    );
+}
+
+/// The bed head's `occupied` property, as a client reads it.
+fn bed_occupied(state: &TickState, pos: BlockPos) -> bool {
+    let id = state
+        .world
+        .block_at(pos.x, pos.y, pos.z)
+        .expect("the bed block is loaded");
+    state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(id))
+        .expect("bed state")
+        .properties
+        .iter()
+        .any(|(name, value)| name == "occupied" && value == "true")
+}
+
+/// Vanilla `LivingEntity.startSleeping` mirrors the bed block's `occupied`
+/// state, so a client sees the owning bed as taken while its player lies in it.
+#[test]
+fn a_sleeping_player_marks_the_bed_occupied_and_a_wake_clears_it() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    assert!(
+        !bed_occupied(&rig.state, rig.head),
+        "the empty bed reads free"
+    );
+    rig.use_bed(1);
+    assert!(
+        rig.state.sleepers.contains_key(&rig.player),
+        "the player lies down"
+    );
+    assert!(
+        bed_occupied(&rig.state, rig.head),
+        "the sleeper's bed must read occupied"
+    );
+    crate::sleep::wake(&mut rig.state, rig.player);
+    rig.run(1);
+    assert!(
+        !bed_occupied(&rig.state, rig.head),
+        "a bed with no sleeper reads free again"
+    );
+}
+
+/// A sleeping resident owns its bed the same way, and the brain's own wake
+/// (a click on the bed, an eviction) frees the property on the next pass.
+#[test]
+fn a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    let (slot, _villager) = sleeping_villager(&mut rig);
+    rig.run(1);
+    assert!(villager_sleeping(&rig, slot), "the resident still sleeps");
+    assert!(
+        bed_occupied(&rig.state, rig.head),
+        "the resident's bed must read occupied"
+    );
+    // The brain's own wake (a click on the bed, an eviction) clears the flag.
+    assert!(
+        crate::villager::brain::kick_out_of_bed(&mut rig.state, rig.head),
+        "the resident asleep in the bed is woken"
+    );
+    rig.run(1);
+    assert!(!villager_sleeping(&rig, slot), "the resident stays up");
+    assert!(
+        !bed_occupied(&rig.state, rig.head),
+        "the bed is free once its resident is up"
+    );
+}
+
+/// A break of a bed targets both halves with a `block_expect`. The mirror runs
+/// after the merge and must not write a cell an accepted write already took:
+/// otherwise the break's expect no longer matches and the whole intent is
+/// rejected (the v1 defect, in the other direction).
+#[test]
+fn a_bed_broken_in_the_tick_its_player_lies_down_is_not_restored() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    let head = rig.head;
+    crate::tick::mining_tests::ready_to_finish(&mut rig.state, ConnectionId(1), head);
+    let air = rig.state.registry.states.air;
+    let _ = run_tick(
+        &mut rig.state,
+        &[
+            PlayerInput::Dig {
+                connection: ConnectionId(1),
+                position: head,
+                action: crate::boundary::DigAction::Finish,
+                sequence: 1,
+            },
+            PlayerInput::UseItemOn {
+                connection: ConnectionId(1),
+                hand: Hand::Main,
+                position: rig.foot,
+                face: 1,
+                cursor: [0.5; 3],
+                sequence: 2,
+            },
+        ],
+    );
+    assert_eq!(
+        rig.state.world.block_at(head.x, head.y, head.z),
+        Some(air),
+        "the break of the bed head is accepted in the tick the player lies down"
+    );
+    rig.run(1);
+    assert_eq!(
+        rig.state.world.block_at(head.x, head.y, head.z),
+        Some(air),
+        "the mirror never restores a broken bed"
+    );
+    assert!(
+        rig.state.sleepers.is_empty(),
+        "a sleeper whose bed is gone is awake"
+    );
+}
+
+/// The same in the tick the property would clear: the player is already up, the
+/// mirror wants to write `occupied=false`, and a break of that bed says no.
+#[test]
+fn a_bed_broken_when_the_property_clears_is_not_restored() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    rig.use_bed(1);
+    let head = rig.head;
+    assert!(bed_occupied(&rig.state, head), "the sleeper's bed is taken");
+    crate::sleep::wake(&mut rig.state, rig.player);
+    crate::tick::mining_tests::ready_to_finish(&mut rig.state, ConnectionId(1), head);
+    let air = rig.state.registry.states.air;
+    let _ = run_tick(
+        &mut rig.state,
+        &[PlayerInput::Dig {
+            connection: ConnectionId(1),
+            position: head,
+            action: crate::boundary::DigAction::Finish,
+            sequence: 1,
+        }],
+    );
+    assert_eq!(
+        rig.state.world.block_at(head.x, head.y, head.z),
+        Some(air),
+        "the break wins over the mirror's clear"
+    );
+    rig.run(1);
+    assert_eq!(
+        rig.state.world.block_at(head.x, head.y, head.z),
+        Some(air),
+        "the bed stays broken"
     );
 }
