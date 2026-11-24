@@ -830,6 +830,15 @@ fi
             profiles.validate_scale_sample(recipe, {"tick": 1, "coreperf": {
                 "tick": 1, "resident_entities": 102, "regions": rows}})
 
+    def test_the_region_attribution_wrapper_is_optional(self):
+        # The un-instrumented control leg must not carry the region probe at all
+        # (COREPERF-REGION-ATTRIBUTION-PERTURBS-MEASURED-MEMORY-TRAFFIC).
+        self.assertEqual(profiles.server_wrapper_with_regions("", None), "")
+        self.assertEqual(profiles.server_wrapper_with_regions("env A=1", None), "env A=1")
+        wrapped = profiles.server_wrapper_with_regions("env A=1", Path("/tmp/regions.json"))
+        self.assertTrue(wrapped.startswith("env A=1 env "), wrapped)
+        self.assertIn("KRASNOKAMEN_COREPERF_REGIONS=/tmp/regions.json", wrapped)
+
 
 class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
     async def test_waits_for_first_pushed_tick_instead_of_sampling_an_empty_ring(self):

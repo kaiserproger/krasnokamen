@@ -1666,21 +1666,34 @@ async def cold_visibility_proof(session: Any, url: str, viewers: int, after_tick
     return proof
 
 
+def server_wrapper_with_regions(wrapper: str, region_file: Path | None) -> str:
+    """The server wrapper with the opt-in region attribution, or unchanged without it.
+
+    The control leg for COREPERF-REGION-ATTRIBUTION-PERTURBS-MEASURED-MEMORY-TRAFFIC runs the same
+    population with `KRASNOKAMEN_COREPERF_REGIONS` unset, so no wrapper is added and the core does
+    no per-slot region probe."""
+    if region_file is None:
+        return wrapper
+    return " ".join(filter(None, [
+        wrapper, "env", shlex.quote(f"KRASNOKAMEN_COREPERF_REGIONS={region_file}")]))
+
+
 async def measure(args: argparse.Namespace, directory: Path, world: Path,
                   recipe: dict[str, Any], prepared: dict[str, Any]) -> dict[str, Any]:
     directory.mkdir()
+    attribution = getattr(args, "coreperf_regions", True)
     if "coverage" in recipe:
         if getattr(args, "remote_host", None):
             raise ValueError("scale telemetry currently requires a local server")
-        region_file = directory / "coreperf-regions.json"
-        load.scale.dump(region_file, {"marker": compare.COHORT_NAME,
-                                      "regions": [row["chunks"] for row in recipe["coverage"]],
-                                      "productive_crops": recipe.get("stress", {}).get("worker_cells", [])})
+        region_file = None
         args = copy.copy(args)
-        args.metrics_bearer_token = secrets.token_urlsafe(32)
-        args.server_wrapper = " ".join(filter(None, [
-            args.server_wrapper,
-            "env", shlex.quote(f"KRASNOKAMEN_COREPERF_REGIONS={region_file}")]))
+        if attribution:
+            region_file = directory / "coreperf-regions.json"
+            load.scale.dump(region_file, {"marker": compare.COHORT_NAME,
+                                          "regions": [row["chunks"] for row in recipe["coverage"]],
+                                          "productive_crops": recipe.get("stress", {}).get("worker_cells", [])})
+            args.metrics_bearer_token = secrets.token_urlsafe(32)
+        args.server_wrapper = server_wrapper_with_regions(args.server_wrapper or "", region_file)
     config, url, game = load.config(args, directory, world, args.clients, operators=True)
     # Idle measures simulation, not the default pause-when-empty policy.
     config.write_text(config.read_text().replace("[server]\n", "[server]\npause_when_empty_seconds = -1\n", 1))
