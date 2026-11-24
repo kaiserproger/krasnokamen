@@ -253,6 +253,7 @@ MIN_CELL = 8 * 8
 PAGES = {
     "hub": (f"Settlement {NAME}", f"Поселение {NAME}"),
     "settlement": ("Settlement", "Поселение"),
+    "management": ("Management", "Управление"),
     "help": ("Help", "Помощь"),
     "map": ("Map ·", "Карта ·"),
     "house": ("House", "Дом"),
@@ -926,7 +927,7 @@ def _script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], cli
         _enter_hub(probe, gui, _bell, f"Поселение {NAME}" if ru else f"Settlement {NAME}")
 
     def dashboard() -> None:
-        _enter_dashboard(probe, gui, label("Settlement", "Поселение"), label("Settlement", "Поселение"),
+        _enter_dashboard(probe, gui, label("Management", "Управление"), label("Settlement", "Поселение"),
                          args.wrong_click, label("Help", "Помощь"))
 
     def project() -> dict[str, Any]:
