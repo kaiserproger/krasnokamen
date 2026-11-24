@@ -25,3 +25,20 @@ stay in the control.
 
 `git apply -R --check` on the committed tree succeeds; the graphical red is the
 integrated sweep's control run, not claimed here.
+
+## a/-side audit (B5, 2026-11-24)
+
+Mechanical check: `git show <origin>^:<file>` vs the file after `git apply -R`
+of this patch at the audit head; script and full output in
+`receipts/D123/D123CivGates/a-side-audit.md`. Every line outside the origin
+commit's own change, with the commit that last changed it and whether the
+line is in `origin^:file`:
+
+- `crates/mc-core/src/settlements/blueprints.rs` `@@ -32,7 +32,7 @@ pub type ItemId = u32;` (adapted; origin `23aad8f43`, discovered origin):
+  - a/-side `const SOURCES: [&str; 25] = [` — no commit; in origin^: no
+
+HEAD-side lines whose last change is another commit are that later commit's
+form: reversing them is the HEAD drift a control must reverse to reach the
+pre-fix decision (rule (c)), not part of the fix. An a/-side line that is not
+in `origin^` is an adaptation this control relies on; each such line is named
+in the list above and changes no behaviour beyond the pre-fix decision.

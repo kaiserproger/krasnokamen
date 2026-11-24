@@ -58,3 +58,41 @@ base-to-fixed diff of these two files.
   `house_advanced`; green in both trees.
 - `…::a_refused_materialization_keeps_the_earlier_hold` — covers the
   materialization keep; green in both trees.
+
+## a/-side audit (B5, 2026-11-24)
+
+Mechanical check: `git show <origin>^:<file>` vs the file after `git apply -R`
+of this patch at the audit head; script and full output in
+`receipts/D123/D123CivGates/a-side-audit.md`. Every line outside the origin
+commit's own change, with the commit that last changed it and whether the
+line is in `origin^:file`:
+
+- `crates/mc-core/src/settlements/construction.rs` `@@ -1497,9 +1497,15 @@ struct SitePass {` (adapted; origin `968589107`, discovered origin):
+  - HEAD `/// A kind this pass advanced ran unfinished and already holds a legal` — 396e59f0f refactor(settlements): query a sweep's hold per kind instead of reshaping Advance; in origin^: no
+  - HEAD `/// candidate: its cheapest lot is worth the slot. Another kind's sweep,` — 396e59f0f refactor(settlements): query a sweep's hold per kind instead of reshaping Advance; in origin^: no
+  - HEAD `/// even a now-unfunded one, never blocks other work.` — 396e59f0f refactor(settlements): query a sweep's hold per kind instead of reshaping Advance; in origin^: no
+- `crates/mc-core/src/settlements/construction.rs` `@@ -1533,11 +1539,14 @@ fn site_project<'a>(` (adapted; origin `968589107`, discovered origin):
+  - HEAD `let mut advanced: Vec<&'a str> = Vec::with_capacity(kinds.len());` — 396e59f0f refactor(settlements): query a sweep's hold per kind instead of reshaping Advance; in origin^: no
+- `crates/mc-core/src/settlements/construction.rs` `@@ -1563,6 +1572,12 @@ fn site_project<'a>(` (adapted; origin `968589107`, discovered origin):
+  - HEAD `advanced.push(blueprint.id.as_str());` — 396e59f0f refactor(settlements): query a sweep's hold per kind instead of reshaping Advance; in origin^: no
+- `crates/mc-core/src/settlements/construction.rs` `@@ -1598,12 +1613,15 @@ fn site_project<'a>(` (adapted; origin `968589107`, discovered origin):
+  - HEAD `// kind's unfinished sweep that holds a lot keeps the slot.` — 396e59f0f refactor(settlements): query a sweep's hold per kind instead of reshaping Advance; in origin^: no
+  - HEAD `waiting: sweeps.holding(advanced.iter().copied()),` — 396e59f0f refactor(settlements): query a sweep's hold per kind instead of reshaping Advance; in origin^: no
+- `crates/mc-core/src/settlements/construction.rs` `@@ -1613,7 +1631,9 @@ fn site_project<'a>(` (adapted; origin `396e59f0f`, discovered origin):
+  - HEAD `house_advanced,` — 968589107 fix(settlements): a sweep holds the slot only for the kinds the pass advanced; in origin^: yes
+  - a/-side `waiting: sweeps.waiting(),` — 968589107 fix(settlements): a sweep holds the slot only for the kinds the pass advanced; in origin^: no
+- `crates/mc-core/src/settlements/construction_site_refusals.rs` `@@ -223,9 +223,15 @@ impl Sweeps {` (over-reverted; origin `396e59f0f`, discovered origin):
+  - HEAD `kinds.into_iter().any(|kind| {` — fe7e1a09e style(settlements): rustfmt the per-kind hold query; in origin^: no
+  - HEAD `self.live` — fe7e1a09e style(settlements): rustfmt the per-kind hold query; in origin^: no
+  - HEAD `.get(kind)` — fe7e1a09e style(settlements): rustfmt the per-kind hold query; in origin^: no
+  - HEAD `.is_some_and(|sweep| sweep.best.is_some())` — fe7e1a09e style(settlements): rustfmt the per-kind hold query; in origin^: no
+  - HEAD `})` — fe7e1a09e style(settlements): rustfmt the per-kind hold query; in origin^: no
+  - a/-side `/// Some unfinished sweep already holds a legal candidate.` — 968589107 fix(settlements): a sweep holds the slot only for the kinds the pass advanced; in origin^: no
+  - a/-side `pub(super) fn waiting(&self) -> bool {` — 968589107 fix(settlements): a sweep holds the slot only for the kinds the pass advanced; in origin^: no
+  - a/-side `self.live.values().any(|sweep| sweep.best.is_some())` — 968589107 fix(settlements): a sweep holds the slot only for the kinds the pass advanced; in origin^: no
+
+HEAD-side lines whose last change is another commit are that later commit's
+form: reversing them is the HEAD drift a control must reverse to reach the
+pre-fix decision (rule (c)), not part of the fix. An a/-side line that is not
+in `origin^` is an adaptation this control relies on; each such line is named
+in the list above and changes no behaviour beyond the pre-fix decision.

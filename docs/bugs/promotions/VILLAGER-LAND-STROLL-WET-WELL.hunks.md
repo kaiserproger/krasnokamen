@@ -38,3 +38,22 @@ No a/-side adaptation was needed.
   — reversing the `brain.rs` hunk accepts the wet-foot stroll node again.
 - `cargo:mc-core:villager::brain::tests::stroll_swim_tests::work_route_avoids_roofed_well_and_reaches_the_opposite_rim`
   — reversing the `allocator.rs` hunk makes the work route cross the well's water.
+
+## a/-side audit (B5, 2026-11-24)
+
+Mechanical check: `git show <origin>^:<file>` vs the file after `git apply -R`
+of this patch at the audit head; script and full output in
+`receipts/D123/D123CivGates/a-side-audit.md`. Every line outside the origin
+commit's own change, with the commit that last changed it and whether the
+line is in `origin^:file`:
+
+- `crates/mc-core/src/villager/brain.rs` `@@ -688,8 +688,19 @@` (adapted; origin `7c691bb50`, discovered origin):
+  - HEAD `let foot = state` — 7c691bb50 fix(villagers): keep short land strolls out of water wells; in origin^: no
+  - HEAD `.world` — b4f9aa2d6 fix(settlements): prefer dry work routes around village wells; in origin^: yes
+  - HEAD `.block_at(next.x, end[1].floor() as i32, next.z)?;` — b4f9aa2d6 fix(settlements): prefer dry work routes around village wells; in origin^: no
+
+HEAD-side lines whose last change is another commit are that later commit's
+form: reversing them is the HEAD drift a control must reverse to reach the
+pre-fix decision (rule (c)), not part of the fix. An a/-side line that is not
+in `origin^` is an adaptation this control relies on; each such line is named
+in the list above and changes no behaviour beyond the pre-fix decision.
