@@ -1,29 +1,21 @@
 diff --git a/crates/mc-core/src/villager/brain.rs b/crates/mc-core/src/villager/brain.rs
-index c65cf2dce..3284cb6e1 100644
+index 7114db246..3284cb6e1 100644
 --- a/crates/mc-core/src/villager/brain.rs
 +++ b/crates/mc-core/src/villager/brain.rs
-@@ -366,6 +366,7 @@ pub(crate) fn kick_out_of_bed(state: &mut TickState, head: BlockPos) -> bool {
- /// under a low ceiling or inside a wall is not a seat).
- fn stair_seat(state: &TickState, slot: EntitySlot) -> Option<(BlockPos, [f64; 3])> {
-     let origin = at(state.entities.pos(slot));
-+    let body = state.entities.body(slot);
-     for dx in -1..=1 {
-         for dz in -1..=1 {
-             for dy in -1..=0 {
-@@ -387,15 +388,18 @@ fn stair_seat(state: &TickState, slot: EntitySlot) -> Option<(BlockPos, [f64; 3]
+@@ -388,7 +388,7 @@ fn stair_seat(state: &TickState, slot: EntitySlot) -> Option<(BlockPos, [f64; 3]
                          .iter()
                          .any(|(key, value)| key == "half" && value == "bottom")
                      && roofed(state, seat)
+-                    && standing(
 +                    && let Some(position) = standing(
-+                        &state.world,
-+                        &state.registry,
-+                        BlockPos {
-+                            y: seat.y + 1,
-+                            ..seat
-+                        },
-+                        body.half_width,
-+                        body.height,
-+                    )
+                         &state.world,
+                         &state.registry,
+                         BlockPos {
+@@ -398,16 +398,8 @@ fn stair_seat(state: &TickState, slot: EntitySlot) -> Option<(BlockPos, [f64; 3]
+                         body.half_width,
+                         body.height,
+                     )
+-                    .is_some()
                  {
 -                    return Some((
 -                        seat,
