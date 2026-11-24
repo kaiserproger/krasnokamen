@@ -1052,6 +1052,28 @@ pub(super) struct PlayReceivers {
     pub(super) dh: mpsc::Receiver<crate::dh::Outbound>,
     pub(super) keepalive: mpsc::Receiver<i64>,
 }
+
+/// What one keepalive-channel event means for the writer.
+pub(super) enum KeepaliveReply {
+    /// The session ends with this stage.
+    End(&'static str),
+    /// A reply to the outstanding challenge (its value is the challenge).
+    Reply,
+}
+
+/// Classify one `keepalive_rx.recv()` result against the outstanding challenge.
+///
+/// A dropped sender is the play loop ending (it dropped its half on cancel or after
+/// its own exit): that is a normal session end, never an invalid reply, so a
+/// cancelling session is not counted as a protocol fault. A reply that is not the
+/// outstanding challenge is the protocol fault it always was.
+pub(super) fn keepalive_reply(reply: Option<i64>, pending: Option<i64>) -> KeepaliveReply {
+    match reply {
+        None => KeepaliveReply::End("keepalive-closed"),
+        Some(reply) if Some(reply) != pending => KeepaliveReply::End("keepalive-invalid-reply"),
+        Some(_) => KeepaliveReply::Reply,
+    }
+}
 pub(super) fn smooth_latency(previous: i32, rtt: i32) -> i32 {
     ((i64::from(previous) * 3 + i64::from(rtt)) / 4) as i32
 }
@@ -1122,8 +1144,8 @@ async fn write_play(
                 return ("keepalive-timeout", None);
             }
             reply = keepalive_rx.recv(), if !keepalive_rx.is_closed() => {
-                if reply.is_none() || reply != pending {
-                    return ("keepalive-invalid-reply", None);
+                if let KeepaliveReply::End(stage) = keepalive_reply(reply, pending) {
+                    return (stage, None);
                 }
                 let rtt = i32::try_from(sent_at.elapsed().as_millis()).unwrap_or(i32::MAX);
                 latency = smooth_latency(latency, rtt);

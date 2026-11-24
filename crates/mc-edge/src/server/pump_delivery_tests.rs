@@ -211,3 +211,93 @@ async fn a_full_reliable_receiver_in_the_routing_view_counts_its_cause() {
     assert_eq!(reliable_rx.try_recv().unwrap().as_ref(), b"queued");
     server.hub.shutdown();
 }
+
+/// REVIEW-wave2-11 minor-8: `EdgeServer::send` and `kick` must tell a full queue
+/// (the delivery policy's own end, counted) from a queue whose writer already left
+/// (the session is ending on its own, counted nowhere). Both are reachable without
+/// a socket: only the registry and its queue handles are involved.
+#[tokio::test]
+async fn send_and_kick_report_a_released_queue_without_a_cause() {
+    let root = tempfile::tempdir().unwrap();
+    let server = roster_seed_tests::test_server(root.path());
+    let id = server.connections.joining_id();
+    live_session(&server.connections, id);
+    let (reliable, reliable_rx) = mpsc::channel(1);
+    drop(reliable_rx);
+    let (world, _world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
+    server
+        .connections
+        .register(
+            id,
+            ConnectionHandles::new(reliable, world, crate::plan::CHUNKS_PER_TICK),
+            || 0,
+        )
+        .unwrap();
+    assert!(
+        matches!(
+            server.send(
+                id,
+                &mc_protocol::packets::play::ClientboundKeepAlive { id: 1 }
+            ),
+            Err(SendFailure::Closed)
+        ),
+        "a receiver the writer released is not a full queue"
+    );
+    let error = server
+        .kick(id, serde_json::json!({"text": "bye"}))
+        .unwrap_err();
+    assert!(error.to_string().contains("already closed"), "{error}");
+    assert!(
+        server.connections.close_causes().is_empty(),
+        "neither a released queue nor its kick is a close cause: {:?}",
+        server.connections.close_causes()
+    );
+    server.hub.shutdown();
+}
+
+/// REVIEW-wave2-11 minor-8: the latency broadcast is the third caller that must not
+/// turn a released receiver into a close cause (and must not charge a drop).
+#[tokio::test]
+async fn a_closed_latency_receiver_leaves_the_view_without_a_cause() {
+    let root = tempfile::tempdir().unwrap();
+    let server = roster_seed_tests::test_server(root.path());
+    let id = server.connections.joining_id();
+    live_session(&server.connections, id);
+    let (reliable, reliable_rx) = mpsc::channel(1);
+    drop(reliable_rx);
+    let (world, _world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
+    server
+        .connections
+        .register(
+            id,
+            ConnectionHandles::new(reliable, world, crate::plan::CHUNKS_PER_TICK),
+            || 0,
+        )
+        .unwrap();
+    server.connections.set_latency(id, uuid::Uuid::nil(), 42);
+    let mut connections = HashMap::from([(id, server.connections.get(id).unwrap())]);
+    broadcast_latencies(
+        &server.connections,
+        &server.net_counters,
+        &mut connections,
+        LATENCY_BROADCAST_INTERVAL_TICKS,
+    );
+    assert!(
+        !connections.contains_key(&id),
+        "the ended session leaves the view"
+    );
+    assert_eq!(
+        server
+            .net_counters
+            .reliable_drops
+            .load(std::sync::atomic::Ordering::Relaxed),
+        0,
+        "a session ending on its own is not a reliable drop"
+    );
+    assert!(
+        server.connections.close_causes().is_empty(),
+        "{:?}",
+        server.connections.close_causes()
+    );
+    server.hub.shutdown();
+}

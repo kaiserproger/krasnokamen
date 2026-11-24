@@ -1389,11 +1389,17 @@ count each session's end once, by cause: a reliable-queue overflow
 (`reliable-write-failed`, `world-write-failed`, `keepalive-write-failed`,
 `dh-write-failed`), a keepalive fault (`keepalive-timeout`,
 `keepalive-invalid-reply`) or a protocol/edge fault (a decode or administrative
-stage). A normal end — a client EOF, a keepalive-driven close, a core-ordered
-kick, or the lifecycle's own removal — counts nothing, so a growing total is a
-delivery or socket problem rather than ordinary turnover. The map is read from
-the registry when a payload is built, like the input drops, and is never on the
-tick path; a runner receipt quotes the delta between two samples.
+stage). A normal end counts nothing: a client EOF (`read-frame`), the writer's
+queues closing under it (`pump-closed`), the play loop dropping its keepalive
+sender on cancel (`keepalive-closed`), a core-ordered kick (`core-disconnect`),
+or the lifecycle's own removal (`removed`). A routing site that finds a
+connection's reliable queue already released (`TrySendError::Closed`) treats that
+as the session ending on its own: it leaves the routing view without a close cause
+and without a reliable-drop count, and the registry entry is cleaned up when the
+session's owner finishes. A growing total is therefore a delivery or socket
+problem rather than ordinary turnover. The map is read from the registry when a
+payload is built, like the input drops, and is never on the tick path; a runner
+receipt quotes the delta between two samples.
 
 `/telemetry.jsonl?after_tick=N` (same `wait` and `min_samples` as
 `/load-metrics`) returns one JSON object per retained core tick: the

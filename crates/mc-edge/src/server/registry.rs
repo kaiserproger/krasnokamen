@@ -18,9 +18,16 @@ pub struct ConnectionRegistry {
 
 /// Session-ending causes that are not errors: the lifecycle's own removal
 /// (`remove`), a client's ordinary EOF (`read-frame`), a writer stopped by a
-/// delivery-policy close that was already counted (`pump-closed`), and a
-/// core-ordered kick (`core-disconnect`).
-const NORMAL_CLOSE_CAUSES: [&str; 4] = ["removed", "read-frame", "pump-closed", "core-disconnect"];
+/// delivery-policy close that was already counted (`pump-closed`), a core-ordered
+/// kick (`core-disconnect`), and the play loop dropping its keepalive sender on
+/// cancel (`keepalive-closed`, which must not read as an invalid reply).
+const NORMAL_CLOSE_CAUSES: [&str; 5] = [
+    "removed",
+    "read-frame",
+    "pump-closed",
+    "core-disconnect",
+    "keepalive-closed",
+];
 
 #[derive(Default)]
 pub(super) struct RegistryInner {

@@ -21,3 +21,39 @@ async fn accepted_game_socket_reports_nodelay() {
     // belongs to the accepted stream, not to the connect half.
     let _client = client.await.unwrap();
 }
+
+/// REVIEW-wave2-11 minor-1: a cancelling session drops the play loop's keepalive
+/// sender, so the writer's `recv()` answers `None`. That is the session ending on
+/// its own — a normal stage — not an invalid reply, which would enter the error
+/// rollup for every cancelled connection. A reply that is not the outstanding
+/// challenge stays the protocol fault it always was.
+#[test]
+fn a_dropped_keepalive_sender_ends_the_writer_normally() {
+    use super::connection::{KeepaliveReply, keepalive_reply};
+    assert!(
+        matches!(
+            keepalive_reply(None, None),
+            KeepaliveReply::End("keepalive-closed")
+        ),
+        "no challenge outstanding and the sender gone: a cancel, not a bad reply"
+    );
+    assert!(matches!(
+        keepalive_reply(None, Some(3)),
+        KeepaliveReply::End("keepalive-closed")
+    ));
+    assert!(matches!(
+        keepalive_reply(Some(2), Some(3)),
+        KeepaliveReply::End("keepalive-invalid-reply")
+    ));
+    assert!(matches!(
+        keepalive_reply(Some(3), Some(3)),
+        KeepaliveReply::Reply
+    ));
+    assert!(
+        !ConnectionRegistry::close_cause_counts("keepalive-closed"),
+        "a cancel is not an error"
+    );
+    assert!(ConnectionRegistry::close_cause_counts(
+        "keepalive-invalid-reply"
+    ));
+}
