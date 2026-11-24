@@ -316,8 +316,10 @@ pub struct WireRegistries {
 /// Live connection registry: outbound queue handles keyed by connection,
 /// plus the player-name roster for the dashboard.
 /// Stashed join result: the authoritative spawn the Play burst announces.
+/// Public because `ConnectionRegistry`'s join accessors are; its fields stay
+/// private to this module.
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct JoinedSpawn {
+pub struct JoinedSpawn {
     entity: mc_core::boundary::EntityId,
     position: [f64; 3],
     /// Vanilla `Rotation`: the yaw and pitch the restored player last had, so
