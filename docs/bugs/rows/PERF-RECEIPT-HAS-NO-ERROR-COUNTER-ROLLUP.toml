@@ -4,7 +4,7 @@ title = "No per-resource error-counter rollup reaches the receipt: retried or so
 area = "harness"
 repro = "source"
 severity = "minor"
-status = "fixed"
+status = "open"
 source = "receipts/Books/REPORT-R1.md gap G-12 (Gregg 2.5.9 USE: errors; hygiene). crates/mc-edge/src/fanout.rs (around :268) prints the edge items line without an error field; fsync and rename failures are fatal by design, but soft errors, drops and short writes are not counted. Verified open on main 5bdc02911. Fix: add a per-window error rollup (socket drops and short writes, retried I/O, input drops already on the dashboard) to the rung receipt; pair with the per-socket snapshot idea I-4 in receipts/Perf1M/BOOKS-IDEAS.md."
 failing_first = "not recorded"
 regression = [
@@ -13,4 +13,3 @@ regression = [
 ]
 fix_commit = "2941bc91f88f537c0bf113c43cbac46717ac2b79"
 repro_check = "Implemented in 2941bc91f: ConnectionRegistry::close is the single abnormal-close entry point and now counts every cause (reliable-overflow, the *-write-failed socket drops, route-changes-reliable-full, ...); the dashboard publishes the map as network.close_causes in /stats and as krasnokamen_network_close_causes_total{cause=...} in /metrics, beside the existing reliable_drops and the core input_drops. tools/coreperf/profiles.py summarize adds summary.errors with the window delta of reliable_drops and input_drops, every close cause that moved and the last warnings list, so a rung receipt names a dropped or stalled socket instead of leaving it in a log line. Control: test_receipt_records_the_error_rollup reds at summarize's errors key with the hunks reversed; the registry test is unrunnable under the reversal (the counter it reads is part of the fix) and green at HEAD. The fanout edge-items line is unchanged: the rollup the row asks for is the receipt field, and the cause map covers both its drops and its short writes, which appear as *-write-failed closes."
-promotion = "docs/bugs/promotions/PERF-RECEIPT-HAS-NO-ERROR-COUNTER-ROLLUP.json"
