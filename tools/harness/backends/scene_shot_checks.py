@@ -315,9 +315,11 @@ def check_structure_box(probe: ProbeSteps, artifact: Path) -> None:
         abs(a - b) < 0.01 for a, b in zip(hidden_f["camera_position"], shown_f["camera_position"])
     ) and abs(hidden_f["yaw"] - shown_f["yaw"]) < 0.01
       and abs(hidden_f["pitch"] - shown_f["pitch"]) < 0.01)
-    # The box's near face projects to roughly x 211..897, y 123..638 at three blocks; the far face
-    # to x 426..768, y 242..499 at six. One ROI over the whole projected box keeps every edge.
-    box = (200, 110, 910, 650)
+    # The eye is at 161.60 with pitch 0, so the horizon is the screen centre: below y=361 the frame is
+    # the stone pad. The sky above it scrolls (cloud offset follows ticks even with the day cycle
+    # frozen - two runs of the same tree measured 4318 and 16739 changed sky pixels but the same 5679
+    # below), so the ROI stays under the horizon and measures only the wireframe.
+    box = (200, 361, 910, 650)
     # `wire` draws 0.9-neutral segments: bright grey, not the stone pad or the sky.
     line = lambda r, g, b: r > 190 and g > 190 and b > 190 and max(r, g, b) - min(r, g, b) <= 16
     lines = [_count(shots[name][1], box, line) for name in ("box-hidden", "box-shown")]
@@ -325,9 +327,9 @@ def check_structure_box(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["structure_box_roi"] = list(box)
     probe.report["structure_box_line_pixels"] = lines
     probe.report["structure_box_changed_pixels"] = changed
-    # The hidden frame already holds bright-neutral clouds, so the line count is evidence only;
-    # the hidden-to-shown delta is the wireframe (measured 6890 changed pixels on the re-land).
-    probe.check("structure_box_changed", changed > 300)
+    # The hidden frame's own pad and clouds are unchanged between the two frames, so the
+    # hidden-to-shown delta is the wireframe's lower edges (5679 px measured on the re-land).
+    probe.check("structure_box_changed", changed > 1000)
 
 
 def check_element_emission(probe: ProbeSteps, artifact: Path) -> None:
