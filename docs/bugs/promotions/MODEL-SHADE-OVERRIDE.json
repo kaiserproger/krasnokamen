@@ -1,0 +1,73 @@
+{
+  "id": "MODEL-SHADE-OVERRIDE",
+  "verdict": "promoted",
+  "fix_commit": "client:858518eb7ffa7f9364b6493c8521b33110d79e79",
+  "fix_commit_full": "858518eb7ffa7f9364b6493c8521b33110d79e79",
+  "promoted_at": "2026-11-24T12:37:05+00:00",
+  "tree_head": "f8b9e4b306ae42d80091ac220560312c73d970e1",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T123427-native-shade-override-6fu6v0wg/result.json",
+    "client_head": "da965e30aa0847d72c0f30f9a6500b4a6e0772d1",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "red": [
+      "harness:scene-shot:native-shade-override"
+    ],
+    "states": {
+      "harness:scene-shot:native-shade-override": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T123401-native-shade-override-_nelmlnr/result.json",
+    "client_head": "858518eb7ffa7f9364b6493c8521b33110d79e79",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "green": [
+      "harness:scene-shot:native-shade-override"
+    ],
+    "states": {
+      "harness:scene-shot:native-shade-override": "green"
+    },
+    "tree_head": "f8b9e4b306ae42d80091ac220560312c73d970e1",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T123401-native-shade-override-_nelmlnr/result.json",
+    "client_head": "858518eb7ffa7f9364b6493c8521b33110d79e79",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "green": [
+      "harness:scene-shot:native-shade-override"
+    ],
+    "states": {
+      "harness:scene-shot:native-shade-override": "green"
+    },
+    "tree_head": "f8b9e4b306ae42d80091ac220560312c73d970e1",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "92aada06ad8f1dbcd9c01a6bce2ed616175a9dd8",
+    "paths": [
+      "src/terrain/mesher.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:terrain::border_tests::shade_direction_override_reads_the_dimensions_weights": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:terrain::border_tests::shade_direction_override_replaces_the_faces_cardinal_weight": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:terrain::border_tests::shade_direction_override_wins_over_the_legacy_flat_shade_flag": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T123557-ledger-promote-j9bzykc2"
+}
