@@ -509,9 +509,8 @@ def _release_server(ctx, profiles, tree=None):
                 origin = json.loads((manifest.parent.parent / str(source) / 'manifest.json').read_text())
                 if (origin.get('head'), origin.get('diff_sha256')) != (info['head'], info['diff_sha256']):
                     raise ValueError(f'{manifest} is a relabelled pin of {source}')
-            registration = json.loads((registry / f'{digest}.json').read_text())
-            if (info.get('head') != fingerprint['head'] or registration.get('sha256') != digest
-                    or registration.get('tree') != {key: fingerprint[key] for key in ('head', 'sha256')}):
+            registration = ledger._registration(registry, digest, fingerprint)
+            if info.get('head') != fingerprint['head'] or registration is None:
                 raise ValueError(f'{manifest} pins a different tree (not {fingerprint["head"][:12]}/{fingerprint["sha256"][:12]})')
             if not os.access(binary, os.X_OK):
                 raise ValueError(f'pin is not executable: {binary}')
@@ -659,12 +658,16 @@ def _parse_ref(ref):
         return tuple(parts)
     # A Loader fix's python test lives in the Loader checkout and imports its siblings from the
     # directory it lives in: `loader:python:<dir>:<module>.<TestClass.test_method>`.
-    if (len(parts) == 3 and parts[0] == 'loader' and parts[1] == 'python'
-            and re.fullmatch(r'[A-Za-z0-9_./-]+', parts[2].partition(':')[0])
-            and '..' not in parts[2].partition(':')[0].split('/')
-            and re.fullmatch(r'[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+', parts[2].partition(':')[2])):
-        directory, _, test = parts[2].partition(':')
-        return ('loader', directory, test)
+    if len(parts) == 3 and parts[0] == 'loader':
+        location, _, selector = parts[2].partition(':')
+        if (not re.fullmatch(r'[A-Za-z0-9_./-]+', location) or not selector
+                or '..' in location.split('/')):
+            raise ValueError(f'invalid loader check {ref!r}')
+        if parts[1] == 'python' and re.fullmatch(r'[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+', selector):
+            return ('loader', 'python', parts[2])
+        if parts[1] == 'gradle' and re.fullmatch(r'[A-Za-z0-9_.$]+', selector):
+            return ('loader', 'gradle', parts[2])
+        raise ValueError(f'invalid loader {parts[1]} check {ref!r}')
     # A python fix in tools/** has no cargo check and no windowed profile: its own unittest is the
     # regression guard. `python:<dotted module>:<dotted TestClass.test_method>`.
     if (len(parts) == 3 and parts[0] == 'python'
@@ -695,6 +698,7 @@ def run(ctx, *, cargo_junit: Path | None = None):
     python_refs = defaultdict(set)
     client_tests = defaultdict(set)
     loader_tests = defaultdict(set)
+    loader_gradle = defaultdict(set)
     errors = []
     for bug in bugs:
         ident = bug['id']
@@ -786,7 +790,8 @@ def run(ctx, *, cargo_junit: Path | None = None):
             elif kind == 'client':
                 client_tests[(first, second)].add(ident)
             elif kind == 'loader':
-                loader_tests[(first, second)].add(ident)
+                location, _, selector = second.partition(':')
+                (loader_tests if first == 'python' else loader_gradle)[(location, selector)].add(ident)
             else:
                 clients[ref].add(ident)
         if (bug.get('status') == 'fixed' and needs_real_client(bug)
@@ -829,7 +834,8 @@ def run(ctx, *, cargo_junit: Path | None = None):
     failures = []
     for refs, execute in ((python_refs, ledger_tool._run_python),
                           (client_tests if ctx.include_regression_client else {}, ledger_tool._run_client),
-                          (loader_tests if ctx.include_regression_client else {}, ledger_tool._run_loader)):
+                          (loader_tests if ctx.include_regression_client else {}, ledger_tool._run_loader),
+                          (loader_gradle if ctx.include_regression_client else {}, ledger_tool._run_loader_gradle)):
         if refs:
             results = execute(ctx, set(refs), REPO_ROOT)
             for test, ids in refs.items():

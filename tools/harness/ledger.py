@@ -715,7 +715,8 @@ def run_refs(ctx, refs, tree, client):
     A failed client run is red only when its receipt carries an explicitly failing verdict for the
     referenced profile check. A timeout, a client that never reached play or any other failure
     without a negative verdict is unrunnable: it is not evidence about the check."""
-    out, cargo, harness, python, client_tests, loader_tests = {}, set(), [], set(), set(), set()
+    out, cargo, harness, python, client_tests = {}, set(), [], set(), set()
+    loader_python, loader_gradle = set(), set()
     for ref in refs:
         try:
             kind, first, second = regressions._parse_ref(ref)
@@ -729,7 +730,7 @@ def run_refs(ctx, refs, tree, client):
         elif kind == 'client':
             client_tests.add((first, second))
         elif kind == 'loader':
-            loader_tests.add((first, second))
+            (loader_python if first == 'python' else loader_gradle).add(ref)
         elif client:
             harness.append(ref)
         else:
@@ -746,11 +747,20 @@ def run_refs(ctx, refs, tree, client):
             for (module, test), (state, detail, assertion) in _run_python(ctx, python, tree).items():
                 out[f'python:{module}:{test}'] = {'state': state, 'detail': detail,
                                                   **({'assertion': assertion} if assertion else {})}
-        if loader_tests:
-            for (directory, test), entry in _run_loader(ctx, loader_tests, tree).items():
+        if loader_python:
+            for (directory, test), entry in _run_loader(
+                    ctx, {(r.split(':', 2)[2].partition(':')[0], r.split(':', 2)[2].partition(':')[2])
+                          for r in loader_python}).items():
                 assertion = entry[2] if len(entry) > 2 else None
                 out[f'loader:python:{directory}:{test}'] = {'state': entry[0], 'detail': entry[1],
                                                             **({'assertion': assertion} if assertion else {})}
+        if loader_gradle:
+            for (module, selector), entry in _run_loader_gradle(
+                    ctx, {(r.split(':', 2)[2].partition(':')[0], r.split(':', 2)[2].partition(':')[2])
+                          for r in loader_gradle}).items():
+                assertion = entry[2] if len(entry) > 2 else None
+                out[f'loader:gradle:{module}:{selector}'] = {'state': entry[0], 'detail': entry[1],
+                                                             **({'assertion': assertion} if assertion else {})}
         if client_tests:
             for (crate, name), entry in _run_client(ctx, client_tests, tree).items():
                 assertion = entry[2] if len(entry) > 2 else None
@@ -1364,10 +1374,27 @@ def _materialize(root, tree, expected):
 
 
 def _register_server(sha256, tree):
-    """Record which tree (fingerprint) a release server binary was built from by this tooling."""
+    """Record which tree (fingerprint) a release server binary was built from by this tooling.
+
+    One file per (binary, tree): a harness-only fix leaves the release server byte-identical on the
+    candidate and on its reverted control tree, so both fingerprints must be citable at once
+    (FINDINGS-20261124 F1). The legacy `<sha256>.json` name is still read, never written."""
     registry = REPO_ROOT / '.analysis/ledger-builds'
     registry.mkdir(parents=True, exist_ok=True)
-    (registry / f'{sha256}.json').write_text(json.dumps({'sha256': sha256, 'tree': {'head': tree['head'], 'sha256': tree['sha256']}}) + '\n')
+    name = f'{sha256}-{tree["sha256"]}.json'
+    (registry / name).write_text(json.dumps({'sha256': sha256, 'tree': {'head': tree['head'], 'sha256': tree['sha256']}}) + '\n')
+
+
+def _registration(registry, sha256, tree):
+    """The registry entry for this binary and tree fingerprint, or None (legacy names included)."""
+    for entry in sorted(registry.glob('*.json')) if registry.is_dir() else []:
+        try:
+            build = json.loads(entry.read_text())
+        except (OSError, ValueError):
+            continue
+        if build.get('sha256') == sha256 and build.get('tree') == {'head': tree['head'], 'sha256': tree['sha256']}:
+            return build
+    return None
 
 
 def _server_built_from(root, receipt_text, tree):
@@ -1379,8 +1406,11 @@ def _server_built_from(root, receipt_text, tree):
     registry = root / '.analysis/ledger-builds'
     named = []
     for entry in sorted(registry.glob('*.json')) if registry.is_dir() else []:
-        build = json.loads(entry.read_text())
-        if build['sha256'] in receipt_text:
+        try:
+            build = json.loads(entry.read_text())
+        except (OSError, ValueError):
+            continue
+        if build.get('sha256') in receipt_text:
             named.append(build)
     if not named:
         raise Refused('client receipt names no server binary built from the candidate by the ledger tooling '
@@ -1784,7 +1814,9 @@ def _client_source_state(root):
     return repo, head.strip(), sorted(untracked)
 
 
-_LOADER_COPY_IGNORE = shutil.ignore_patterns('.git', 'build', '.gradle', 'node_modules', '*.log', 'run',
+# The Loader's `.gradle/loom-cache` holds the remapped Minecraft dependency: without it a copy cannot
+# compile offline (a reversed Java control would be unrunnable, not red). `build/` is excluded.
+_LOADER_COPY_IGNORE = shutil.ignore_patterns('.git', 'build', 'node_modules', '*.log', 'run',
                                              'logs', '.idea', '.kotlin')
 
 
@@ -2000,6 +2032,101 @@ def _run_loader(ctx, tests, root, repo=None):
     return results
 
 
+def _gradle_junit(module_dir, selector):
+    """(state, detail, assertion) of one Gradle test selector from its JUnit XML.
+
+    Gradle writes `<module>/build/test-results/test/TEST-*.xml`; a failure counts as red only when the
+    report says `AssertionError` and names the source line, so a compile error, a missing report or a
+    timeout cannot stand as a control."""
+    import xml.etree.ElementTree as ET
+
+    results = module_dir / 'build' / 'test-results' / 'test'
+    if not results.is_dir():
+        return UNRUNNABLE, 'no Gradle test report (build or launch error)', None
+    class_name = selector.rsplit('.', 1)[-1]
+    suites = [path for path in sorted(results.glob('TEST-*.xml')) if class_name in path.name]
+    if not suites:
+        return UNRUNNABLE, f'no JUnit report for {class_name}', None
+    passed = failed = 0
+    for path in suites:
+        try:
+            root = ET.parse(path).getroot()
+        except (OSError, ET.ParseError) as error:
+            return UNRUNNABLE, f'JUnit report {path.name} unreadable: {error}', None
+        for case in root.iter('testcase'):
+            failure = case.find('failure')
+            if failure is None:
+                if case.find('skipped') is None:
+                    passed += 1
+                continue
+            failed += 1
+            kind = failure.get('type') or ''
+            text = failure.text or ''
+            position = re.search(r'\(([\w.$]+)\.java:(\d+)\)', text) or re.search(r'([\w.$]+)\.java:(\d+)', text)
+            if 'AssertionError' not in kind and 'AssertionError' not in text:
+                return UNRUNNABLE, f'{case.get("name")} failed with {kind or "an error"}, not an assertion', None
+            if position is None:
+                continue
+            simple = position.group(1).rsplit('.', 1)[-1]
+            sources = sorted(module_dir.glob(f'**/{simple}.java'))
+            if not sources:
+                continue
+            return RED, f'{case.get("name")} AssertionError', {
+                'file': str(sources[0]), 'line': int(position.group(2)), 'error': 'AssertionError'}
+    if failed:
+        return UNRUNNABLE, 'a failure carried no assertion location', None
+    if passed:
+        return GREEN, '', None
+    return UNRUNNABLE, 'no executed test in the report', None
+
+
+def _run_loader_gradle(ctx, tests, root, repo=None):
+    """Run loader Gradle refs {(module, selector)} -> {(module, selector): (state, detail, assertion)}.
+
+    The guard of a Loader Java fix is a JUnit test, so the control has to run Gradle in the tree it
+    reverses. One invocation per selector keeps the failure attribution exact."""
+    repo = Path(repo) if repo is not None else loader_repo(root)
+    if not repo.is_dir():
+        return {test: (UNRUNNABLE, f'no Loader checkout at {repo} (set KRASNOKAMEN_LOADER_ROOT)', None)
+                for test in tests}
+    gradlew = repo / 'gradlew'
+    if not gradlew.is_file():
+        return {test: (UNRUNNABLE, f'no Gradle wrapper at {gradlew}', None) for test in tests}
+    results = {}
+    client_jar = _loader_client_jar(repo)
+    for module, selector in sorted(tests):
+        module_dir = repo / module
+        if not module_dir.is_dir():
+            results[(module, selector)] = (UNRUNNABLE, f'{module} is not in the Loader checkout', None)
+            continue
+        argv = [str(gradlew), f':{module}:test', '--tests', selector, '--console=plain', '--no-daemon']
+        if client_jar is not None:
+            # `java-agent` defaults the Minecraft jar to `<loader>/../solaris/...`, which is wrong in a
+            # reversal copy; the property is the build's own override.
+            argv.append(f'-Pkrasnokamen.clientJar={client_jar}')
+        _exec(ctx, argv, f'loader-gradle-{selector.rsplit(".", 1)[-1][:20]}', repo, None)
+        results[(module, selector)] = _gradle_junit(module_dir, selector)
+    return results
+
+
+def _loader_client_jar(repo):
+    """The Minecraft client jar `java-agent` compiles against, resolved from the Loader checkout.
+
+    The build defaults it to `<loader>/../solaris/.analysis/client-automation/versions/<v>/client.jar`
+    (a sibling checkout); a copy of the Loader elsewhere loses it, and a Java control would be
+    unrunnable rather than red. Resolved here and passed as the build's own `-P` override."""
+    properties = Path(repo) / 'gradle.properties'
+    try:
+        text = properties.read_text()
+    except OSError:
+        return None
+    match = re.search(r'^minecraftVersion=(\S+)$', text, re.M)
+    if not match:
+        return None
+    jar = Path(repo).resolve().parent / 'solaris/.analysis/client-automation/versions' / match.group(1) / 'client.jar'
+    return str(jar) if jar.is_file() else None
+
+
 def _loader_source_state(root):
     """(repo, head, untracked source files) of the Loader checkout; Refused when its source is dirty."""
     repo = loader_repo(root)
@@ -2080,6 +2207,8 @@ def _promote_loader_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, loader
         except ValueError as error:
             raise Refused(f'{ident}: {error}')
     loader_refs = [ref for ref in refs if ref.startswith('loader:')]
+    loader_python = [ref for ref in loader_refs if ref.split(':', 2)[1] == 'python']
+    loader_gradle = [ref for ref in loader_refs if ref.split(':', 2)[1] == 'gradle']
     if not loader_refs:
         raise Refused(f'{ident}: a {LOADER_FIX_PREFIX}<sha> fix needs a loader:python:<dir>:<module>.<test> ref '
                       'to carry the pair')
@@ -2105,8 +2234,17 @@ def _promote_loader_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, loader
                           'commit the Loader revision that carries their pre-image (a hand-ported re-break is '
                           'not a control)')
         _git(tree, 'apply', '-R', '--whitespace=nowarn', '-', stdin=patch.encode(errors='surrogateescape'))
-        runner = loader_runner or (lambda refs, tree: _loader_ref_states(_run_loader(
-            ctx, {_loader_test(ref) for ref in refs}, root, tree)))
+        def run_refs_here(refs, tree):
+            states = {}
+            if loader_python:
+                states.update(_loader_ref_states(_run_loader(
+                    ctx, {_loader_test(ref) for ref in refs if ref in loader_python}, root, tree), 'python'))
+            if loader_gradle:
+                states.update(_loader_ref_states(_run_loader_gradle(
+                    ctx, {_loader_test(ref) for ref in refs if ref in loader_gradle}, root, tree), 'gradle'))
+            return states
+
+        runner = loader_runner or run_refs_here
         control = runner(loader_refs, tree)
         for ref, entry in control.items():
             if entry.get('state') == RED and not _loader_assertion(entry, tree):
@@ -2117,8 +2255,7 @@ def _promote_loader_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, loader
         if not red:
             raise Refused(f'{ident}: the loader refs stayed green with the fix reversed: '
                           + '; '.join(f"{ref}={entry['state']} ({entry['detail']})" for ref, entry in control.items()))
-        restored = runner(refs, repo) if loader_runner else _loader_ref_states(
-            _run_loader(ctx, {_loader_test(ref) for ref in refs}, root, repo))
+        restored = runner(refs, repo)
         if not loader_runner:
             others = [ref for ref in refs if not ref.startswith('loader:')]
             if others:
@@ -2152,13 +2289,13 @@ def _loader_test(ref):
     return directory, test
 
 
-def _loader_ref_states(results):
-    """{ref: {state, detail, assertion?}} from `_run_loader` results keyed by (directory, test)."""
+def _loader_ref_states(results, runner='python'):
+    """{ref: {state, detail, assertion?}} from `_run_loader`/`_run_loader_gradle` results."""
     out = {}
-    for (directory, test), entry in results.items():
+    for (location, selector), entry in results.items():
         assertion = entry[2] if len(entry) > 2 else None
-        out[f'loader:python:{directory}:{test}'] = {'state': entry[0], 'detail': entry[1],
-                                                    **({'assertion': assertion} if assertion else {})}
+        out[f'loader:{runner}:{location}:{selector}'] = {'state': entry[0], 'detail': entry[1],
+                                                         **({'assertion': assertion} if assertion else {})}
     return out
 
 

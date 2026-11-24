@@ -694,9 +694,12 @@ class LoaderFixTests(unittest.TestCase):
 
     def test_loader_ref_parses_and_rejects_a_traversal(self):
         self.assertEqual(regressions._parse_ref(self.REF),
-                         ('loader', 'tools', 'test_battle.PackTest.test_pair'))
+                         ('loader', 'python', 'tools:test_battle.PackTest.test_pair'))
+        self.assertEqual(regressions._parse_ref(
+            'loader:gradle:java-agent:dev.krasnokamen.agent.javaagent.MinecraftClientObservationTest'),
+            ('loader', 'gradle', 'java-agent:dev.krasnokamen.agent.javaagent.MinecraftClientObservationTest'))
         for bad in ('loader:python:../evil:test_x.Test.test_y', 'loader:python:tools:no_dot',
-                    'loader:gradle:java-agent:Test', 'loader:python:tools'):
+                    'loader:gradle:java-agent:not a selector', 'loader:python:tools'):
             with self.assertRaises(ValueError):
                 regressions._parse_ref(bad)
 
@@ -717,3 +720,120 @@ class LoaderFixTests(unittest.TestCase):
              patch.object(regressions, 'BASE_FIXED', frozenset()):
             details = regressions.run(profiles.ProfileContext(self.base / 'artifacts3'))
         self.assertEqual(details['fixed'], 1)
+
+
+    def test_promotes_a_gradle_loader_ref(self):
+        gradle = 'loader:gradle:java-agent:dev.krasnokamen.agent.javaagent.MinecraftClientObservationTest'
+        (self.root / 'docs/bugs/rows/LOADER-ROW.toml').write_text(
+            '[[bug]]\nid = "LOADER-ROW"\ntitle = "t"\narea = "harness"\nrepro = "source"\n'
+            'severity = "major"\nstatus = "open"\nsource = "s"\n'
+            f'fix_commit = "loader:{self.fix[:12]}"\nregression = ["{gradle}"]\n'
+            'control_files = ["tools/battle.py"]\n')
+        java = self.loader / 'java-agent'
+        observation = java / 'src/main/java/dev/krasnokamen/agent/javaagent/Observation.java'
+        observation.parent.mkdir(parents=True)
+        observation.write_text('class O { int hands; }\n')
+        _git(self.loader, 'add', '-A')
+        _commit(self.loader, 'java base')
+        observation.write_text('class O { int hands; int off; }\n')
+        _git(self.loader, 'add', '-A')
+        _commit(self.loader, 'fix: the observation')
+        fix = _git(self.loader, 'rev-parse', 'HEAD').strip()
+        (self.root / 'docs/bugs/rows/LOADER-ROW.toml').write_text(
+            '[[bug]]\nid = "LOADER-ROW"\ntitle = "t"\narea = "harness"\nrepro = "source"\n'
+            'severity = "major"\nstatus = "open"\nsource = "s"\n'
+            f'fix_commit = "loader:{fix[:12]}"\nregression = ["{gradle}"]\n'
+            'control_files = ["java-agent/src/main/java/dev/krasnokamen/agent/javaagent/Observation.java"]\n')
+        test_file = (java / 'src/test/java/dev/krasnokamen/agent/javaagent/MinecraftClientObservationTest.java')
+        test_file.parent.mkdir(parents=True)
+        test_file.write_text('public class MinecraftClientObservationTest {}\n')
+
+        def run(refs, tree):
+            text = (Path(tree) / 'java-agent/src/main/java/dev/krasnokamen/agent/javaagent/Observation.java').read_text()
+            if 'int off;' in text:
+                return {ref: {'state': ledger.GREEN, 'detail': ''} for ref in refs}
+            return {ref: {'state': ledger.RED, 'detail': 'assert',
+                          'assertion': {'file': str(Path(tree) / 'java-agent/src/test/java/dev/krasnokamen/agent/javaagent/MinecraftClientObservationTest.java'),
+                                        'line': 1, 'error': 'AssertionError'}} for ref in refs}
+
+        receipt = ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=run)
+        self.assertEqual(receipt['control'], 'loader_reversal')
+        self.assertEqual(receipt['reversed_files'],
+                         ['java-agent/src/main/java/dev/krasnokamen/agent/javaagent/Observation.java'])
+
+
+class GradleLoaderReportTests(unittest.TestCase):
+    """`_gradle_junit`: a Loader Java ref's state comes from its JUnit report, assertions only."""
+
+    SELECTOR = 'dev.krasnokamen.agent.javaagent.MinecraftClientObservationTest'
+
+    def report(self, body):
+        import tempfile
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        module = Path(directory.name) / 'java-agent'
+        (module / 'src/test/java/dev/krasnokamen/agent/javaagent').mkdir(parents=True)
+        (module / 'src/test/java/dev/krasnokamen/agent/javaagent/MinecraftClientObservationTest.java').write_text('x\n' * 20)
+        results = module / 'build/test-results/test'
+        results.mkdir(parents=True)
+        (results / 'TEST-dev.krasnokamen.agent.javaagent.MinecraftClientObservationTest.xml').write_text(
+            '<testsuite name="%s">%s</testsuite>' % (self.SELECTOR, body))
+        return module
+
+    def test_assertion_failure_is_red_with_its_source_line(self):
+        module = self.report(
+            '<testcase name="exposesHands"><failure type="java.lang.AssertionError" message="expected">'
+            'java.lang.AssertionError: expected\n\tat dev.krasnokamen.agent.javaagent.'
+            'MinecraftClientObservationTest.exposesHands(MinecraftClientObservationTest.java:42)'
+            '</failure></testcase>')
+        state, detail, assertion = ledger._gradle_junit(module, self.SELECTOR)
+        self.assertEqual(state, ledger.RED)
+        self.assertEqual(assertion['error'], 'AssertionError')
+        self.assertEqual(assertion['line'], 42)
+        self.assertTrue(assertion['file'].endswith('MinecraftClientObservationTest.java'))
+
+    def test_other_exception_is_unrunnable(self):
+        module = self.report(
+            '<testcase name="x"><failure type="java.lang.NullPointerException">'
+            'java.lang.NullPointerException\n\tat dev.krasnokamen.agent.javaagent.'
+            'MinecraftClientObservationTest.x(MinecraftClientObservationTest.java:7)</failure></testcase>')
+        self.assertEqual(ledger._gradle_junit(module, self.SELECTOR)[0], ledger.UNRUNNABLE)
+
+    def test_passing_and_skipped_reports(self):
+        module = self.report('<testcase name="a"/><testcase name="b"><skipped/></testcase>')
+        self.assertEqual(ledger._gradle_junit(module, self.SELECTOR)[0], ledger.GREEN)
+        module = self.report('<testcase name="b"><skipped/></testcase>')
+        self.assertEqual(ledger._gradle_junit(module, self.SELECTOR)[0], ledger.UNRUNNABLE)
+
+    def test_missing_report_is_unrunnable(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(ledger._gradle_junit(Path(directory), self.SELECTOR)[0], ledger.UNRUNNABLE)
+
+
+class RegistryKeyTests(unittest.TestCase):
+    """F1: one binary built from two trees (candidate and its Python-only control) stays citable."""
+
+    def test_two_trees_for_one_binary_are_both_kept(self):
+        import hashlib
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sha = 'a' * 64
+            candidate = {'head': 'b' * 40, 'dirty': False, 'sha256': hashlib.sha256(b'').hexdigest()}
+            control = {'head': 'b' * 40, 'dirty': True, 'sha256': 'c' * 64}
+            with patch.object(ledger, 'REPO_ROOT', root):
+                ledger._register_server(sha, candidate)
+                ledger._register_server(sha, control)
+                registry = root / '.analysis/ledger-builds'
+                self.assertEqual(len(list(registry.glob('*.json'))), 2)
+                self.assertEqual(ledger._registration(registry, sha, candidate)['tree']['sha256'], candidate['sha256'])
+                self.assertEqual(ledger._registration(registry, sha, control)['tree']['sha256'], control['sha256'])
+                self.assertIsNone(ledger._registration(registry, sha, {'head': 'd' * 40, 'sha256': 'e' * 64}))
+                receipt = json.dumps({'server_binary_sha256': sha})
+                self.assertEqual(ledger._server_built_from(root, receipt, candidate), sha)
+                self.assertEqual(ledger._server_built_from(root, receipt, control), sha)
+                with self.assertRaises(ledger.Refused):
+                    ledger._server_built_from(root, receipt, {'head': 'd' * 40, 'sha256': 'e' * 64})
+
