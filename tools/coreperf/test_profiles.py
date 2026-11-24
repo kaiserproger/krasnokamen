@@ -1176,6 +1176,7 @@ class WindowReceiptFieldsTests(unittest.TestCase):
                     "stats": state(1, 2, journal, network)}
 
         samples = [{"wall_start_unix_ns": 1000, "wall_us": 1000},
+                   {"wall_start_unix_ns": 1500, "wall_us": 1000},
                    {"wall_start_unix_ns": 2000, "wall_us": 1000}]
         rows = [
             row(1000,
@@ -1246,6 +1247,43 @@ class WindowReceiptFieldsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "three integer fields"):
             profiles.schedstat_run_queue_wait_ns("100 2\n")
 
+    def test_a_thread_missing_from_one_sample_is_unavailable(self):
+        # A thread read in one sample only would report the whole process lifetime as its window:
+        # named unavailable, and the tick thread refuses instead of reading a negative delta.
+        samples, rows = self.fixture()
+        rows[1]["threads"].pop(profiles.TICK_THREAD)
+        threads = profiles.summarize(samples, rows, 1000, 3000)["threads"]
+        self.assertEqual(threads[profiles.TICK_THREAD]["status"], "unavailable")
+        with self.assertRaisesRegex(ValueError, "run-queue wait"):
+            profiles.require_thread_wait(threads)
+
+    def test_a_remote_session_reads_threads_over_its_connection(self):
+        # A --remote-host session's pid is the MainPID on the remote host; reading the local
+        # /proc for it samples nothing (or an unrelated process).
+        listing = ("@@TASK\n7 (mc-core-tick) S 1 2 3 4 5 6 7 8 9 10 300 100 0 0\n"
+                   "@@SCHED\n0 2500000 5\n"
+                   "@@TASK\n8 (server-console) S 1 2 3 4 5 6 7 8 9 10 5 0 0 0\n"
+                   "@@SCHED\n0 0 1\n")
+
+        class Remote:
+            def __init__(self):
+                self.pids = []
+
+            def thread_listing(self, pid):
+                self.pids.append(pid)
+                return listing
+
+        class Session:
+            processes = {}
+            pid = 4_194_303
+            remote = Remote()
+
+        rows = profiles.server_threads(Session())
+        self.assertIn(profiles.TICK_THREAD, rows)
+        self.assertEqual(Session.remote.pids, [4_194_303])
+        self.assertEqual(rows[profiles.TICK_THREAD]["run_queue_wait_ns"], 2_500_000)
+        self.assertEqual(rows[profiles.TICK_THREAD]["threads"], 1)
+
     def test_receipt_records_wal_fsync_service_time_and_bytes(self):
         # WAL-FSYNC-LATENCY-AND-BYTES-UNMEASURED: service time, count and bytes per source tick.
         samples, rows = self.fixture()
@@ -1255,14 +1293,16 @@ class WindowReceiptFieldsTests(unittest.TestCase):
         self.assertEqual(journal["append_bytes"], 500)
         self.assertEqual(journal["file_fsyncs"], 5)
         self.assertEqual(journal["dir_fsyncs"], 1)
-        self.assertEqual(journal["fsync_ms_mean"], 0.3)
-        self.assertEqual(journal["fsync_ms_max"], 0.9)
+        # 1.5 ms over 5 file + 1 directory fsyncs: the mean divides by both counts.
+        self.assertEqual(journal["fsync_ms_mean"], 0.25)
+        self.assertEqual(journal["fsync_ms_max_since_start"], 0.9)
+        self.assertNotIn("fsync_ms_max", journal)
         self.assertEqual(journal["batch_bytes_last"], 300)
         self.assertEqual(journal["append_bytes_per_tick"], 250.0)
         # A server without the counters yields the named gap, never a silent absence.
         self.assertEqual(profiles.journal_rollup([{"captured_unix_ns": 1000, "stats": {}},
                                                   {"captured_unix_ns": 2000, "stats": {}}],
-                                                 1000, 3000, 2)["status"], "unavailable")
+                                                 1000, 3000, [1000, 2000])["status"], "unavailable")
 
     def test_receipt_records_the_error_rollup(self):
         # PERF-RECEIPT-HAS-NO-ERROR-COUNTER-ROLLUP: drops and short/stalled writes per window.

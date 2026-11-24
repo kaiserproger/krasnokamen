@@ -109,6 +109,17 @@ class Remote:
         values["cpu_seconds"] = (int(fields[11]) + int(fields[12])) / ticks
         return values
 
+    def thread_listing(self, pid: int) -> str:
+        """Every thread's `stat` then `schedstat`, `@@TASK`/`@@SCHED` delimited, in one round trip.
+
+        A remote session's `pid` is the MainPID on THIS host, so the per-thread counters must be
+        read here (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT); `profiles.thread_usage_listing`
+        parses the text with the same rules as the local reader. A thread that exits mid-listing
+        emits an empty block and is skipped."""
+        script = (f'for d in /proc/{pid}/task/*; do echo "@@TASK"; cat "$d/stat" 2>/dev/null; '
+                  'echo "@@SCHED"; cat "$d/schedstat" 2>/dev/null; done')
+        return self.run(script).stdout
+
     def clock_offset_ns(self, samples: int = 9) -> dict[str, Any]:
         """Remote wall clock minus local wall clock (median of midpoint estimates) and the round trip."""
         offsets, trips = [], []

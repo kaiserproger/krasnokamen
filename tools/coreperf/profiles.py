@@ -1358,13 +1358,34 @@ def schedstat_run_queue_wait_ns(text: str) -> int:
     return int(fields[1])
 
 
+def thread_row(stat: str, schedstat: str) -> tuple[str, float, int] | None:
+    """Name, CPU seconds and run-queue wait of one thread, or `None` when either read is unusable.
+
+    `stat` is the `task/<tid>/stat` line and `schedstat` its three-field line. A thread that exits
+    between the two reads is skipped, never reported as zero."""
+    try:
+        wait_ns = schedstat_run_queue_wait_ns(schedstat)
+        fields = stat[stat.rindex(")") + 2:].split()
+        cpu_seconds = (int(fields[11]) + int(fields[12])) / os.sysconf("SC_CLK_TCK")
+        return stat[stat.index("(") + 1:stat.rindex(")")], cpu_seconds, wait_ns
+    except (ValueError, IndexError):
+        return None
+
+
+def add_thread_row(result: dict[str, dict[str, Any]], row: tuple[str, float, int]) -> None:
+    """Sum same-named threads, as `capacity_ladder.thread_cpu` does."""
+    name, cpu_seconds, wait_ns = row
+    summed = result.setdefault(name, {"threads": 0, "cpu_seconds": 0.0, "run_queue_wait_ns": 0})
+    summed["threads"] += 1
+    summed["cpu_seconds"] += cpu_seconds
+    summed["run_queue_wait_ns"] += wait_ns
+
+
 def thread_usage(pid: int, *, proc: Path = Path("/proc")) -> dict[str, dict[str, Any]]:
     """Per thread name: CPU seconds and cumulative run-queue wait, from `task/<tid>/{stat,schedstat}`.
 
-    Same-named threads are summed, as `capacity_ladder.thread_cpu` does. `proc` exists so a test
-    drives the production reader from a fixture tree; a thread that exits between the two reads is
-    skipped, never reported as zero."""
-    ticks = os.sysconf("SC_CLK_TCK")
+    Same-named threads are summed. `proc` exists so a test drives the production reader from a
+    fixture tree; a thread that exits between the two reads is skipped, never reported as zero."""
     try:
         tasks = sorted((proc / str(pid) / "task").iterdir())
     except OSError:
@@ -1373,38 +1394,60 @@ def thread_usage(pid: int, *, proc: Path = Path("/proc")) -> dict[str, dict[str,
     for task in tasks:
         try:
             stat = (task / "stat").read_text()
-            wait_ns = schedstat_run_queue_wait_ns((task / "schedstat").read_text())
-            fields = stat[stat.rindex(")") + 2:].split()
-            cpu_seconds = (int(fields[11]) + int(fields[12])) / ticks
-        except (OSError, ValueError, IndexError):
+            schedstat = (task / "schedstat").read_text()
+        except OSError:
             continue
-        name = stat[stat.index("(") + 1:stat.rindex(")")]
-        row = result.setdefault(name, {"threads": 0, "cpu_seconds": 0.0, "run_queue_wait_ns": 0})
-        row["threads"] += 1
-        row["cpu_seconds"] += cpu_seconds
-        row["run_queue_wait_ns"] += wait_ns
+        row = thread_row(stat, schedstat)
+        if row is not None:
+            add_thread_row(result, row)
     return result
 
 
-def thread_summary(rows: list[dict[str, Any]], start: int, end: int, ticks: int) -> dict[str, Any]:
+def thread_usage_listing(text: str) -> dict[str, dict[str, Any]]:
+    """`thread_usage` rows from one `Remote.thread_listing` text (`@@TASK`/`@@SCHED` blocks).
+
+    A `--remote-host` session's server runs on another host, so its `/proc` is read there; the same
+    MainPID on this host is some unrelated process or nothing at all
+    (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT)."""
+    result: dict[str, dict[str, Any]] = {}
+    for block in text.split("@@TASK")[1:]:
+        stat, _, schedstat = block.partition("@@SCHED")
+        row = thread_row(stat.strip("\n"), schedstat.strip("\n"))
+        if row is not None:
+            add_thread_row(result, row)
+    return result
+
+
+def thread_summary(rows: list[dict[str, Any]], start: int, end: int,
+                   tick_starts: list[int]) -> dict[str, Any]:
     """First-to-last per-thread delta inside the window: CPU seconds and run-queue wait per thread.
 
     `run_queue_wait_ms_per_tick` is what TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT needs: a
     phase's wall time minus this wait is work, the remainder is descheduling. A window with fewer
-    than two samples is named unavailable, never zero."""
+    than two samples is named unavailable, never zero; so is a thread missing from either sample or
+    whose thread count changed, because its delta would then span the whole process lifetime. The
+    per-tick fields divide by the ticks between the two samples (`[first, last)`), not by the whole
+    window, whose edges the samples do not cover."""
     window = [row for row in rows
               if start <= row["captured_unix_ns"] < end and isinstance(row.get("threads"), dict)]
     if len(window) < 2:
         return {"status": "unavailable",
                 "reason": "fewer than two per-thread samples inside the measured window"}
-    before, after = window[0]["threads"], window[-1]["threads"]
+    before, after = window[0], window[-1]
+    ticks = sum(1 for at in tick_starts
+                if before["captured_unix_ns"] <= at < after["captured_unix_ns"])
     summary: dict[str, Any] = {}
-    for name in sorted(set(before) | set(after)):
-        first, last = before.get(name, {}), after.get(name, {})
-        cpu = last.get("cpu_seconds", 0) - first.get("cpu_seconds", 0)
-        wait_ms = (last.get("run_queue_wait_ns", 0) - first.get("run_queue_wait_ns", 0)) / 1e6
-        row = {"threads": last.get("threads", first.get("threads", 0)),
-               "cpu_seconds": round(cpu, 3), "run_queue_wait_ms": round(wait_ms, 3)}
+    for name in sorted(set(before["threads"]) | set(after["threads"])):
+        first, last = before["threads"].get(name), after["threads"].get(name)
+        if (not isinstance(first, dict) or not isinstance(last, dict)
+                or first.get("threads") != last.get("threads")):
+            summary[name] = {"status": "unavailable",
+                             "reason": "thread absent from one sample or its thread count changed"}
+            continue
+        cpu = last["cpu_seconds"] - first["cpu_seconds"]
+        wait_ms = (last["run_queue_wait_ns"] - first["run_queue_wait_ns"]) / 1e6
+        row = {"threads": last["threads"], "cpu_seconds": round(cpu, 3),
+               "run_queue_wait_ms": round(wait_ms, 3)}
         if ticks > 0:
             row["cpu_ms_per_tick"] = round(cpu * 1000 / ticks, 3)
             row["run_queue_wait_ms_per_tick"] = round(wait_ms / ticks, 4)
@@ -1421,17 +1464,30 @@ def require_thread_wait(threads: dict[str, Any]) -> dict[str, Any]:
         reason = threads.get("reason") if isinstance(threads, dict) else threads
         raise ValueError(f"tick phase receipt lacks per-thread schedstat sampling: {reason}")
     tick = threads.get(TICK_THREAD)
-    if not isinstance(tick, dict) or "run_queue_wait_ms" not in tick:
+    if not isinstance(tick, dict) or tick.get("status") == "unavailable":
+        reason = tick.get("reason") if isinstance(tick, dict) else None
+        raise ValueError(f"tick phase receipt lacks a usable {TICK_THREAD} run-queue wait "
+                         f"(unavailable: {reason})")
+    if "run_queue_wait_ms" not in tick:
         raise ValueError(f"tick phase receipt lacks {TICK_THREAD} run-queue wait (schedstat field 2); "
                          "laps are wall time only")
     return tick
 
 
 def server_threads(session: Any) -> dict[str, dict[str, Any]]:
-    """Per-thread CPU and run-queue sample of the process this session runs as the server."""
+    """Per-thread CPU and run-queue sample of the process this session runs as the server.
+
+    A `--remote-host` session runs the server on another host, where `session.pid` is the remote
+    unit's MainPID: that host's `/proc` is read over the session's ssh connection instead of the
+    local one (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT)."""
     process = getattr(session, "processes", {}).get("server")
     pid = getattr(process, "pid", None) or getattr(session, "pid", None)
-    return thread_usage(pid) if isinstance(pid, int) else {}
+    if not isinstance(pid, int):
+        return {}
+    remote = getattr(session, "remote", None)
+    if remote is not None:
+        return thread_usage_listing(remote.thread_listing(pid))
+    return thread_usage(pid)
 
 
 def client_tick_arrival(bots: dict[str, Any]) -> dict[str, Any]:
@@ -1460,7 +1516,8 @@ def client_tick_arrival(bots: dict[str, Any]) -> dict[str, Any]:
             "scope": "client-observed clock-heartbeat arrival at the bots; period = interval / game-time delta"}
 
 
-def journal_rollup(rows: list[dict[str, Any]], start: int, end: int, ticks: int) -> dict[str, Any]:
+def journal_rollup(rows: list[dict[str, Any]], start: int, end: int,
+                   tick_starts: list[int]) -> dict[str, Any]:
     """WAL fsync service time, fsync count and bytes in the window, from `/stats.journal`.
 
     The counters are process-cumulative, so the receipt states the window delta and the bytes per
@@ -1472,21 +1529,30 @@ def journal_rollup(rows: list[dict[str, Any]], start: int, end: int, ticks: int)
     if len(stats) < 2:
         return {"status": "unavailable", "reason": "fewer than two /stats samples inside the window"}
     first, last = stats[0], stats[-1]
+    ticks = sum(1 for at in tick_starts
+                if window[0]["captured_unix_ns"] <= at < window[-1]["captured_unix_ns"])
     counters = ("append_bytes_total", "file_fsyncs_total", "dir_fsyncs_total", "fsync_nanos_total")
     if any(not isinstance(last.get(name), int) or not isinstance(first.get(name), int)
            for name in counters):
         return {"status": "unavailable", "reason": "server /stats carried no WAL write counters"}
     append_bytes = last["append_bytes_total"] - first["append_bytes_total"]
     fsyncs = last["file_fsyncs_total"] - first["file_fsyncs_total"]
+    dir_fsyncs = last["dir_fsyncs_total"] - first["dir_fsyncs_total"]
     nanos = last["fsync_nanos_total"] - first["fsync_nanos_total"]
+    # `fsync_nanos_total` times file AND directory fsyncs, so the mean divides by both counts; a
+    # file-only divisor inflated it by (file + dir) / file, i.e. by every journal flush.
+    service_time = fsyncs + dir_fsyncs
     result: dict[str, Any] = {
         "append_bytes": append_bytes,
         "file_fsyncs": fsyncs,
-        "dir_fsyncs": last["dir_fsyncs_total"] - first["dir_fsyncs_total"],
-        "fsync_ms_mean": round(nanos / 1e6 / fsyncs, 4) if fsyncs else None,
-        "fsync_ms_max": round(last.get("fsync_nanos_max", 0) / 1e6, 4),
+        "dir_fsyncs": dir_fsyncs,
+        "fsync_ms_mean": round(nanos / 1e6 / service_time, 4) if service_time else None,
+        # `fetch_max` since process start, never reset per window: a warm-up stall is not this
+        # window's worst fsync, so the field says which scope it has.
+        "fsync_ms_max_since_start": round(last.get("fsync_nanos_max", 0) / 1e6, 4),
         "batch_bytes_last": last.get("batch_bytes_last"),
-        "scope": "process-cumulative journal counters from /stats; delta over the measured window"}
+        "scope": "process-cumulative journal counters from /stats; counts and mean over the "
+                 "measured window, the max over the whole process lifetime"}
     if ticks:
         result["append_bytes_per_tick"] = round(append_bytes / ticks, 1)
     return result
@@ -1529,6 +1595,7 @@ def summarize(samples: list[dict[str, Any]], processes: list[dict[str, Any]],
         raise ValueError("measurement lacks exact ticks or process samples")
     seconds = (end - start) / 1e9
     tick = load.tick_metrics(ticks)
+    all_tick_starts = [s["wall_start_unix_ns"] for s in samples]
     return {"duration_seconds": seconds, "ticks": len(ticks), "tps": len(ticks) / seconds,
             "mspt": {key: tick[key + "_us"] / 1000 for key in ("p50", "p95", "p99", "max")},
             "rss": {name: {"peak_lifetime_bytes": max(r["processes"][name]["peak_rss_bytes"] for r in rows),
@@ -1539,8 +1606,8 @@ def summarize(samples: list[dict[str, Any]], processes: list[dict[str, Any]],
             "chunk_generation_scope": "not instrumented; resident chunk deltas include reloads/unloads",
             "population_observed": {"first": rows[0]["stats"]["entities"], "last": rows[-1]["stats"]["entities"]},
             "resident_chunks_observed": {"first": rows[0]["stats"]["chunks"], "last": rows[-1]["stats"]["chunks"]},
-            "threads": thread_summary(processes, start, end, len(ticks)),
-            "journal": journal_rollup(processes, start, end, len(ticks)),
+            "threads": thread_summary(processes, start, end, all_tick_starts),
+            "journal": journal_rollup(processes, start, end, all_tick_starts),
             "errors": error_rollup(processes, start, end)}
 
 
