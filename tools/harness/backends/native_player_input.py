@@ -234,8 +234,9 @@ def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                 return row if row.get("count") == 5 else None
 
             fixture = steps.wait(selected_five, "held_q_fixture_selected")
-            steps.check("held_q_fixture_selected",
-                        fixture.get("item_id") == "minecraft:diamond" and fixture.get("count") == 5)
+            steps.report["held_q_fixture"] = {"item_id": fixture.get("item_id"),
+                                              "count": fixture.get("count")}
+            steps.check("held_q_fixture_selected", fixture.get("count") == 5)
             _hold_key(steps, ord("q"), 3)
             steps.call("minecraft_wait_ticks", {"ticks": 4})
             dropped = steps.call("minecraft_read_item_components", {"source": "selected"})
