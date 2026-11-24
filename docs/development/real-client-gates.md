@@ -516,6 +516,7 @@ and `fov` (default 70: the owner's saved fov is never inherited). Set
 `RUST_LOG=mc_edge::lod=debug` to retain a server log line for each successfully
 queued LOD tile response. PNG paths are
 recorded in `result.json`; settings and world are isolated per run.
+A frame-diff check must start below the horizon: sky and clouds drift between frames even on a frozen tick (`cmd: tick freeze`), so keep the compared box on the hand or terrain (measured on `issue1-02-held-tool`, 2026-11-24).
 `tools/harness/tool_clipping_scene.json` captures the diamond pickaxe against
 obsidian from far and close positions, including held attack frames.
 `tool_wall_visible` checks the received target, selected tool and eye distance,
