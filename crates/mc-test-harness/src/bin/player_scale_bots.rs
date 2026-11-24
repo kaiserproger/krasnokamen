@@ -2031,7 +2031,10 @@ impl Bot {
                 && let Some(stats) = self.metrics.windows.get_mut(index)
             {
                 stats.tick_arrival.interval.record(interval);
-                stats.tick_arrival.period.record(Duration::from_micros(period));
+                stats
+                    .tick_arrival
+                    .period
+                    .record(Duration::from_micros(period));
             }
         }
         self.metrics.clock = Some((now, game_time));

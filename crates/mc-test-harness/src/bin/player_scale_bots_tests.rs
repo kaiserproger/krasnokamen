@@ -1666,8 +1666,14 @@ include!("player_scale_bots_mechanic_tests.rs");
 #[test]
 fn tick_period_normalises_a_heartbeat_by_its_game_time_delta() {
     // One heartbeat per 20 ticks: a 1 s arrival is 50 ms per tick, a 1.5 s arrival is 75 ms.
-    assert_eq!(tick_period_us(Duration::from_millis(1000), 20), Some(50_000));
-    assert_eq!(tick_period_us(Duration::from_millis(1500), 20), Some(75_000));
+    assert_eq!(
+        tick_period_us(Duration::from_millis(1000), 20),
+        Some(50_000)
+    );
+    assert_eq!(
+        tick_period_us(Duration::from_millis(1500), 20),
+        Some(75_000)
+    );
     assert_eq!(tick_period_us(Duration::from_micros(1), 1), Some(1));
     // A heartbeat that did not advance the server tick measures nothing.
     assert_eq!(tick_period_us(Duration::from_millis(1000), 0), None);
@@ -1686,13 +1692,21 @@ fn tick_arrival_reports_the_percentiles_of_a_recorded_window() {
     }
     let value = arrival.json();
     assert_eq!(value["interval_us"]["samples"], 4);
-    assert_eq!(value["interval_us"]["max_us"], 1600, "the worst stall is exact");
+    assert_eq!(
+        value["interval_us"]["max_us"], 1600,
+        "the worst stall is exact"
+    );
     assert!(value["interval_us"]["p50_us"].as_u64().unwrap() <= 1100);
     assert!(value["interval_us"]["p95_us"].as_u64().unwrap() >= 1100);
     assert_eq!(value["tick_period_us"]["samples"], 4);
     // 1600 us over a 20-tick heartbeat is 80 us per tick; the worst bucket is capped by the max.
     assert_eq!(value["tick_period_us"]["p99_us"], 80);
-    assert!(value["scope"].as_str().unwrap().contains("ClientboundSetTime"));
+    assert!(
+        value["scope"]
+            .as_str()
+            .unwrap()
+            .contains("ClientboundSetTime")
+    );
     // A second bot merges its own window into the report without losing samples.
     let mut other = TickArrival::default();
     other.interval.record(Duration::from_micros(2000));

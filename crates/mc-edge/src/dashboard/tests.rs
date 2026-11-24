@@ -864,7 +864,10 @@ fn stats_carry_wal_write_cost_and_close_causes() {
         "the rollup is in the JSON receipt: {value}"
     );
     let write = mc_core::journal::journal_write_stats();
-    assert_eq!(snapshot.journal.append_bytes_total, write.append_bytes_total);
+    assert_eq!(
+        snapshot.journal.append_bytes_total,
+        write.append_bytes_total
+    );
     assert_eq!(snapshot.journal.batch_bytes_last, write.batch_bytes_last);
     assert_eq!(snapshot.journal.file_fsyncs_total, write.file_fsyncs_total);
     assert_eq!(snapshot.journal.dir_fsyncs_total, write.dir_fsyncs_total);
@@ -878,7 +881,10 @@ fn stats_carry_wal_write_cost_and_close_causes() {
         "fsync_nanos_total",
         "fsync_nanos_max",
     ] {
-        assert!(value["journal"][key].is_u64(), "missing journal field {key}");
+        assert!(
+            value["journal"][key].is_u64(),
+            "missing journal field {key}"
+        );
     }
     let metrics = prometheus(&state);
     for name in [

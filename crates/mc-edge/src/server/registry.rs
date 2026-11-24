@@ -332,11 +332,7 @@ impl ConnectionRegistry {
 
     /// [`Self::remove`] naming why: the connection owner logs `cause`.
     pub fn close(&self, id: ConnectionId, cause: &'static str) {
-        *self
-            .close_causes
-            .lock()
-            .entry(cause)
-            .or_insert(0) += 1;
+        *self.close_causes.lock().entry(cause).or_insert(0) += 1;
         crate::vanilla_items::unmark(id);
         let closer = {
             let mut inner = self.inner.lock();
