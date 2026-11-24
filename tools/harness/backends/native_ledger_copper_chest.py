@@ -35,7 +35,10 @@ def _menu(state: dict[str, Any]) -> bool:
 
 
 def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
-    opened = _point(origin, dx=1, dz=2)
+    # The Manhattan-4 oxidation scan returns false on a younger neighbour, so the two
+    # chests sit eight blocks apart: one chest can then advance while the other stays
+    # at its placed age.
+    opened = _point(origin, dx=-4, dz=2)
     control = _point(origin, dx=4, dz=2)
     for point in (opened, control):
         steps.fixture(f"setblock {point['x']} {point['y']} {point['z']} {CHEST}")
