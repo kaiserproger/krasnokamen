@@ -41,7 +41,14 @@ stay registered.
 
 ## Observed control and restore
 
-Recorded below once promoted.
+Observed control and restore (`20261124T043035-ledger-promote-wpdt3vov`, `tree_dirty: false`,
+`reversed_files` = `battle/facing.rs`):
+
+- control (`ledger-1-run.log`) **FAIL** — `assertion \`left == right\` failed: tick 0: the drawn body
+  holds through the align delay`, `left: 1106246720` (`30.0_f32` bits), `right: 0`, at
+  `facing_tests.rs:104` — the row's own hold assertion under the defect mechanism, not an invented
+  text; the sibling `virtual_body_trails_the_head_at_the_cone` reds with it;
+- restore green (`ledger-3-run.log`).
 
 ## What stays out of the row
 
