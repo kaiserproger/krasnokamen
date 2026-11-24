@@ -80,8 +80,8 @@
     },
     {
       "assert_render_bounded": {
-        "max_index_count": 1000000000,
-        "max_growth": 1000000000
+        "max_index_count": 260000,
+        "max_growth": 1.5
       }
     },
     {
@@ -95,8 +95,8 @@
     },
     {
       "assert_render_bounded": {
-        "max_index_count": 1000000000,
-        "max_growth": 1000000000
+        "max_index_count": 260000,
+        "max_growth": 1.5
       }
     },
     {
@@ -110,8 +110,8 @@
     },
     {
       "assert_render_bounded": {
-        "max_index_count": 1000000000,
-        "max_growth": 1000000000
+        "max_index_count": 260000,
+        "max_growth": 1.5
       }
     },
     {
@@ -125,8 +125,8 @@
     },
     {
       "assert_render_bounded": {
-        "max_index_count": 1000000000,
-        "max_growth": 1000000000
+        "max_index_count": 260000,
+        "max_growth": 1.5
       }
     },
     {
@@ -140,8 +140,8 @@
     },
     {
       "assert_render_bounded": {
-        "max_index_count": 1000000000,
-        "max_growth": 1000000000
+        "max_index_count": 260000,
+        "max_growth": 1.5
       }
     },
     {
@@ -155,8 +155,8 @@
     },
     {
       "assert_render_bounded": {
-        "max_index_count": 1000000000,
-        "max_growth": 1000000000
+        "max_index_count": 260000,
+        "max_growth": 1.5
       }
     },
     {
@@ -170,8 +170,8 @@
     },
     {
       "assert_render_bounded": {
-        "max_index_count": 1000000000,
-        "max_growth": 1000000000
+        "max_index_count": 260000,
+        "max_growth": 1.5
       }
     },
     {
@@ -185,8 +185,8 @@
     },
     {
       "assert_render_bounded": {
-        "max_index_count": 1000000000,
-        "max_growth": 1000000000
+        "max_index_count": 260000,
+        "max_growth": 1.5
       }
     }
   ]
