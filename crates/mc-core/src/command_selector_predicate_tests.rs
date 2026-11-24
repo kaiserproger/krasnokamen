@@ -238,7 +238,12 @@ fn chain(state: &mut TickState, executor: EntityId, input: &str) -> i32 {
         executor,
         2,
     );
-    crate::command_context::run(state, input, context, &mut crate::boundary::ChangeSet::default())
+    crate::command_context::run(
+        state,
+        input,
+        context,
+        &mut crate::boundary::ChangeSet::default(),
+    )
 }
 
 #[test]
@@ -260,7 +265,11 @@ fn execute_if_predicate_binds_the_datapack_predicate_to_the_command_origin() {
     // alice's body is at x = 0: the predicate matches the executor's own location.
     let start = state.day_time;
     assert_eq!(
-        chain(&mut state, alice, "execute if predicate test:player run time add 1"),
+        chain(
+            &mut state,
+            alice,
+            "execute if predicate test:player run time add 1"
+        ),
         1
     );
     assert_eq!(state.day_time, start + 1);
@@ -285,14 +294,22 @@ fn execute_if_predicate_binds_the_datapack_predicate_to_the_command_origin() {
     assert_eq!(state.day_time, start + 3);
     // `unless` inverts the same condition.
     assert_eq!(
-        chain(&mut state, alice, "execute unless predicate test:east run time add 4"),
+        chain(
+            &mut state,
+            alice,
+            "execute unless predicate test:east run time add 4"
+        ),
         1
     );
     assert_eq!(state.day_time, start + 7);
     // Vanilla resolves the id while parsing, so an unknown id fails the command
     // with `argument.resource_or_id.no_such_element` instead of selecting nothing.
     assert_eq!(
-        chain(&mut state, alice, "execute if predicate test:missing run time add 100"),
+        chain(
+            &mut state,
+            alice,
+            "execute if predicate test:missing run time add 100"
+        ),
         0
     );
     assert_eq!(state.day_time, start + 7);

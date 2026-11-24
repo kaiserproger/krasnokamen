@@ -229,7 +229,9 @@ impl TickState {
         // A spawn body spans a handful of cells; anything larger is not a body
         // this diagnostic can describe, so it is not scanned.
         if cells.iter().any(|&(min, max)| max < min)
-            || cells.iter().any(|&(min, max)| i64::from(max) - i64::from(min) > 8)
+            || cells
+                .iter()
+                .any(|&(min, max)| i64::from(max) - i64::from(min) > 8)
         {
             return false;
         }
