@@ -1307,8 +1307,9 @@ fn data_entity_merge_refuses_foreign_and_private_fields_by_name() {
 }
 
 /// A repeated identical edit of a villager-owned field is a no-op: the merge compares
-/// the edited image with what `data get entity` prints, so the same `Xp` merge says
-/// "Nothing changed" instead of re-authoring the row.
+/// the edited image with the entity's own native image, so the same merge says
+/// "Nothing changed" instead of re-authoring the row — including an engine-private key
+/// that `data get` never prints.
 #[test]
 fn a_repeated_identical_owned_merge_reports_nothing_changed() {
     let (mut state, _, context) = fixture();
@@ -1347,10 +1348,42 @@ fn a_repeated_identical_owned_merge_reports_nothing_changed() {
         -1,
         "the identical second merge must not modify the row"
     );
-    let said = said(&mut state);
+    let message = said(&mut state);
     assert!(
-        said.contains("Nothing changed. The specified properties already have these values"),
-        "the identical merge says nothing changed: {said}"
+        message.contains("Nothing changed. The specified properties already have these values"),
+        "the identical merge says nothing changed: {message}"
+    );
+    assert_eq!(state.entities.row(slot).villager.as_ref().unwrap(), &merged);
+
+    // The runtime image is the case the merge base has to get right: `data get` does not
+    // print engine-private fields, so a merge that added the key to the printed compound
+    // would look new on every repeat and would replace the rest of the runtime image with
+    // only the authored fields.
+    let row = state.entities.row_mut(slot).villager.as_mut().unwrap();
+    row.last_gossip = 11;
+    let line = format!(
+        "data merge entity {villager} {{\"krasnokamen:VillagerRuntime\":{{profession:\"miner\"}}}}"
+    );
+    assert_eq!(data(&mut state, context, &line), 1, "{}", said(&mut state));
+    let merged = state.entities.row(slot).villager.clone().unwrap();
+    assert_eq!(
+        merged.data.profession,
+        crate::villager::VillagerProfession::Miner,
+        "the runtime role lands"
+    );
+    assert_eq!(
+        merged.last_gossip, 11,
+        "a partial runtime merge keeps the native fields it did not name"
+    );
+    assert_eq!(
+        data(&mut state, context, &line),
+        -1,
+        "the identical second merge of the runtime key must not modify the row"
+    );
+    let message = said(&mut state);
+    assert!(
+        message.contains("Nothing changed. The specified properties already have these values"),
+        "the identical runtime merge says nothing changed: {message}"
     );
     assert_eq!(state.entities.row(slot).villager.as_ref().unwrap(), &merged);
 }

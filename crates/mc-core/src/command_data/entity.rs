@@ -70,18 +70,22 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
     // kind only has summon NBT.
     let villager = crate::command_summon::carries_villager_row(name);
     let mut image = crate::command_data::entity_image(world, id)?;
-    let previous = crate::command_data::entity(world, id)?;
-    let mut edited = previous.clone();
+    // The merge base is the entity's own native image, not what `data get` prints: an
+    // engine-private field (`krasnokamen:VillagerRuntime`) is absent from the printed
+    // compound, so merging on that would both re-add the key on every repeated edit and
+    // replace the rest of the runtime image with only the authored fields.
+    let base = Tag::Compound(image.clone());
+    let mut edited = base.clone();
     crate::command_storage::mutate(state, context, action, &mut edited, &mut input, |source| {
         if let Tag::Compound(fields) = source {
             crate::command_tag::validate_fields(fields)?;
         }
         Ok(())
     })?;
-    if edited == previous {
+    if edited == base {
         return Err("Nothing changed. The specified properties already have these values".into());
     }
-    let (Tag::Compound(old), Tag::Compound(new)) = (&previous, edited) else {
+    let (Tag::Compound(old), Tag::Compound(new)) = (&base, edited) else {
         return Err("Entity data must be a compound".into());
     };
     crate::command_tag::validate_fields(&new)?;
