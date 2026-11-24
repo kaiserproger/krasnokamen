@@ -6,7 +6,7 @@ severity = "minor"
 status = "open"
 source = "HzClientQA copper-chest-1 and copper-chest-3-diagnostic.log: open chest becomes exposed while client remains in its container. Distinct from COPPER-WEATHERING family coverage: missing authoritative opener transition guard."
 repro = "client"
-regression = ["cargo:mc-core:copper::tests::copper_weathering_waits_for_last_menu_close_in_its_dimension", "cargo:mc-core:copper::tests::copper_weathering_resumes_after_last_opener_dies_and_respawns"]
-fix_commit = "patch:223a238996cb19e3da9ae0605726f3fae3b06c261356a6e32ecb290facd4d9b3"
+regression = ["cargo:mc-core:copper::tests::copper_weathering_waits_for_last_menu_close_in_its_dimension", "cargo:mc-core:copper::tests::copper_weathering_resumes_after_last_opener_dies_and_respawns", "harness:entities:native-v2-ledger-copper-chest-open"]
+fix_commit = "patch:53d630da1960f99a8ab4a8c8066dd463056cdb6371f16061abc41254301f4f3f"
 failing_first = "reported"
-repro_check = "Work-root receipts/HzClientQA/REPORT.md: original copper-chest assertion, including unopened oxidation control, must pass on Main's integrated pin. ReviewHzCompatA4 additionally requires real death/respawn to release the last opener; see receipts/HzCompatA4/REPORT.md."
+repro_check = "patch mode: two commits close the path - 3d4893773's open-chest oxidation guard, whose tail 9f032e058 rewrote (so the original hunk no longer reverses), and bd7a05a64's death-path menu release. docs/bugs/promotions/COPPER-CHEST-OPEN-WEATHERING.patch carries both at their HEAD form with their real pre-images as a/-sides (the guard block did not exist before 3d4893773; no open_containers.remove call existed before bd7a05a64) and reverse-applies on HEAD. Reverse-applying it reds the stage assertion at copper_tests.rs:483 while the unopened control chest still advances, and reds the death-release assertion at copper_tests.rs:623. repro=client, so the candidate needs the real-client check in the same list (native-v2-ledger-copper-chest-open)."

@@ -240,6 +240,38 @@ SCENARIOS: dict[str, Scenario] = {
                "hook (`promotion_mount_export_reimport`) that the client does not implement.",
     ),
 
+    "native-v2-ledger-hopper-vehicle": _entry(
+        id="native-v2-ledger-hopper-vehicle",
+        summary="A hopper pulling from a chest minecart refreshes its already-open menu",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-hopper-vehicle",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_hopper_vehicle.py"),
+        fixture="operator pad; one down-facing hopper with its menu opened first, one chest minecart "
+                "summoned above it afterwards with one diamond",
+        proves="the open HopperMenu with 41 slots starts empty, the hopper pulls the diamond out of the "
+               "vehicle above and the client's received menu slot shows that diamond without a reopen",
+        limits="One chest minecart above one hopper, one diamond and an already-open menu; no hopper "
+               "chains, deposit path or restart.",
+    ),
+
+    "native-v2-ledger-copper-chest-open": _entry(
+        id="native-v2-ledger-copper-chest-open",
+        summary="An open copper chest does not weather until its menu closes",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-copper-chest-open",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_copper_chest.py"),
+        fixture="operator pad; one opened and one unopened unwaxed copper chest, randomTickSpeed raised so "
+                "the oxidation sampler rolls",
+        proves="the opened chest keeps its placed stage and its 63-slot ChestMenu through two control "
+               "weathering advances, then advances itself after the menu closes",
+        limits="One opened and one unopened single chest on one pad, stages 0..2; no double chest, waxed "
+               "neighbour, death/respawn opener release or restart.",
+    ),
+
     "native-world-first-start-interrupted": _entry(
         id="native-world-first-start-interrupted",
         summary="Recover a singleplayer world interrupted during its first start",
