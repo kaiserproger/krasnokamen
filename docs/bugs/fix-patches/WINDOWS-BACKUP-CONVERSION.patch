@@ -155,22 +155,3 @@ index 60297576b..b771410e5 100644
                  out.push(path);
              } else {
                  return Err(fail(format!(
-diff --git a/crates/mc-world/src/native.rs b/crates/mc-world/src/native.rs
-index 1cf507a10..487f7fa2f 100644
---- a/crates/mc-world/src/native.rs
-+++ b/crates/mc-world/src/native.rs
-@@ -566,10 +566,10 @@ impl NativeStore {
-     /// use it only after an Immediate commit, with no write transaction open.
-     /// Read transactions may continue; each snapshot reader has its own cursor.
-     pub fn snapshot_reader(&self) -> impl std::io::Read + '_ {
--        // Pre-fix (a/-side): a second handle instead of the lease-owning one.
--        self.file
--            .try_clone()
--            .expect("pre-fix: a second handle on the leased database")
-+        NativeSnapshotReader {
-+            file: &self.file,
-+            offset: 0,
-+        }
-     }
- 
-     /// Creates only a new database; the owning prepare operation publishes the

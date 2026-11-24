@@ -1,0 +1,10 @@
+[[bug]]
+id = "WINDOWS-BACKUP-SECOND-HANDLE-ERROR-33"
+title = "On Windows, offline backup/restore fail reading native/state.redb through a second handle while the same process holds an exclusive LockFileEx on it (error 33), so /backup and restore are unusable on that platform until the database is read through the lease-owning handle."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "Split out of WINDOWS-BACKUP-CONVERSION on the final delta review (2026-11-24, B1): the Linux-provable parts (owned-snapshot copy, portable paths, lease-file skip) stay there; this symptom needs a Windows control. The fix c1f387bbcb introduced the lease-holding reads (mc-edge/backup.rs copy_reader_durable/digest_reader, mc-world/native.rs NativeStore::snapshot_reader over the owned Arc<File>, hot_backup for a running core); the offline mc-edge path is recorded as coverage only there because it is green on Linux. See docs/windows-and-macos-client-qa.md:5-41 for the Windows VM lane and receipts/D123/OWNER-DECISIONS-NEEDED.md (item: run the control on the owner's laptop or accept Linux proof)."
+regression = []
+failing_first = "not recorded"
