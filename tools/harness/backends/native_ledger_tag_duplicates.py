@@ -45,9 +45,16 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = (origin[0] + 1.5, origin[1], origin[2] + 2.5)
     # Success feedback is a gamerule; refusals are errors and always arrive.
     steps.fixture("gamerule send_command_feedback true")
+    # The world is regenerated per run, so the summon cell is cleared first: a hill or
+    # water there refuses the summon and the gate would fail in its fixture.
+    for level in (y, y + 1):
+        steps.fixture(f"setblock {int(x)} {level} {int(z)} minecraft:air")
     steps.fixture(f"summon {COW} {x} {y} {z} {{Tags:['{TAG}','{TAG}'],NoAI:1b}}")
-    steps.call("minecraft_wait_for_visible_entity", {
-        "entity_type": COW, "radius": 12, "timeout_seconds": steps.remaining()})
+    # Bounded wait on the client's own entity list: the summon reaches the next tick.
+    for _ in range(10):
+        if _at(steps, x, z) is not None:
+            break
+        steps.call("minecraft_wait_ticks", {"ticks": 5})
     steps.check("duplicate_tag_cow_exists", _at(steps, x, z) is not None)
 
     # 1. The duplicated element list still selects: the tag is present.
