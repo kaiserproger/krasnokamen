@@ -6,5 +6,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
-repro_check = "Stage2X SLICES.md:125,151: scene control pin d4c5a326243c fails tool_wall_visible (receipts/Stage2Client/run-redr2-21_firstperson_clip.log), green pin 34a85940 passes (run-green2-21_firstperson_clip.log). The scene is not registered in this tree; promotion requires a registered symptom assertion and a clean exact reversal."
+regression = ["harness:scene-shot:issue1-21-tool-clip"]
+fix_commit = "client:e7c8a46a5d"
+proving_assertions = { "harness:scene-shot:issue1-21-tool-clip" = "tool_wall_visible" }
+repro_check = "Committed-reversal pair at HEAD: client:3ad35fe519 loads world depth in the first-person pass (the historical d4c5a326 control hunk, unusable as a build after the 26.3 cutover); client:e7c8a46a5d clears it again. Map docs/bugs/promotions/ISSUE-1-21.hunks.md. Real client: scene-shot issue1-21-tool-clip (obsidian wall, diamond pickaxe, far and close frames) asserts tool_wall_visible; the control draws the tool behind the wall, the fix keeps it in front. Receipts in results."
