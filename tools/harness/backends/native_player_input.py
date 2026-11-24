@@ -226,22 +226,23 @@ def camera(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # NATIVE-FREEZE-CAMERA: vanilla draws a frozen entity at partial tick 1 (its current
     # tick), so a mob that took one stepped tick must be drawn one step on, not on the
     # previous tick. Probe first: record the drawn and the received x.
-    steps.fixture(f"summon minecraft:zombie {x + 4.5} {y} {z + 4.5} {{PersistenceRequired:1b}}")
+    witness_uuid = str(uuid.uuid4())
+    steps.fixture(f"summon minecraft:zombie {x + 4.5} {y} {z + 4.5} "
+                  f"{{UUID:'{witness_uuid}',PersistenceRequired:1b}}")
 
-    def witness(state: dict) -> dict | None:
-        return next((row for row in state["entities"]["entities"]
-                     if row.get("type") == "minecraft:zombie"), None)
+    def witness(_: dict) -> dict | None:
+        rows = steps.call("minecraft_list_entities", {"radius": 24.0, "limit": 128})["entities"]
+        return next((row for row in rows if row["entity_uuid"] == witness_uuid), None)
 
-    summoned = steps.wait(witness, "frozen_witness_summoned")
+    steps.wait(witness, "frozen_witness_summoned")
     steps.fixture("tick step 3")
     steps.call("minecraft_wait_ticks", {"ticks": 5})
     _shot(steps, "frozen-witness-stepped")
     state = steps.observe()
     drawn = next((row for row in (state.get("gait_capture") or [])
-                  if row.get("entity_uuid") == summoned["uuid"]), None)
+                  if row.get("entity_uuid") == witness_uuid), None)
     received = witness(state) or {}
     steps.report["frozen_witness"] = {
-        "uuid": summoned["uuid"],
         "drawn": (drawn or {}).get("position"),
         "received": received.get("position"),
         "server_frozen": state.get("minecraft", {}).get("server_frozen"),
