@@ -327,6 +327,7 @@ def capture_house(probe: ProbeSteps, artifact: Path, label: str,
 
 
 BABY_AIM_ATTEMPTS = 6
+BABY_TELEPORT_SIDES = ((1.5, 0.0), (-1.5, 0.0), (0.0, 1.5), (0.0, -1.5))
 
 
 def _aim(probe: ProbeSteps, target: tuple[float, float, float]) -> dict[str, Any]:
@@ -355,6 +356,7 @@ def _aim_at_baby(probe: ProbeSteps, entity: dict[str, Any],
     observation points."""
     observed: dict[str, Any] = {}
     teleported = False
+    teleports = 0
     for _ in range(BABY_AIM_ATTEMPTS):
         try:
             reply = probe.call("minecraft_approach_entity",
@@ -380,9 +382,16 @@ def _aim_at_baby(probe: ProbeSteps, entity: dict[str, Any],
         if current is None or current.get("received_baby") is not True:
             raise RuntimeError("baby no longer visible for milestone capture")
         if reply.get("in_reach") is False and teleport is not None:
-            teleport(current["x"], current["y"], current["z"])
+            # The newborn stays inside its parents' house: put the observer
+            # beside it, never on its own cell. Aiming from the baby's feet
+            # inside a wall lands on the floor and aborts the whole gate
+            # (20261124T205323 hit minecraft:cobblestone at 120,71,-274). One
+            # side per attempt, so a wall on one side is retried on the next.
+            dx, dz = BABY_TELEPORT_SIDES[teleports % len(BABY_TELEPORT_SIDES)]
+            teleport(current["x"] + dx, current["y"], current["z"] + dz)
             probe.call("minecraft_wait_ticks", {"ticks": 20})
             teleported = True
+            teleports += 1
             continue
         observed = _aim(probe, (current["x"], current["y"] + 0.5, current["z"]))
         if observed.get("type") == "entity" and observed.get("entity_uuid") == entity["entity_uuid"]:

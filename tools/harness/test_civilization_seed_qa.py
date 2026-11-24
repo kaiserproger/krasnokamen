@@ -562,6 +562,40 @@ class ApproachRetryTests(unittest.TestCase):
         self.assertFalse(teleported)
 
 
+    def test_a_baby_inside_a_house_is_observed_from_beside_it(self):
+        # 20261124T205323: the observer was teleported onto the baby's own cell
+        # inside its house and the raycast hit cobblestone at 120,71,-274, which
+        # aborted the whole gate before any other milestone was observed.
+        baby = {"entity_id": 7, "entity_uuid": "b7", "entity_type": "minecraft:villager",
+                "received_baby": True, "x": 120.5, "y": 71.0, "z": -274.5}
+        approaches = []
+        teleports = []
+
+        def call(name, arguments):
+            if name == "minecraft_approach_entity":
+                approaches.append(1)
+                return {"in_reach": len(approaches) > 1}
+            if name == "minecraft_list_entities":
+                return {"entities": [baby], "visible_count": 1, "truncated": False,
+                        "next_cursor": None}
+            return {}
+
+        probe = Mock()
+        probe.call.side_effect = call
+        probe.observe.return_value = {"player": {"x": 120.0, "y": 71.0, "z": -272.0}}
+        hit = {"type": "entity", "entity_uuid": "b7"}
+        with patch.object(qa, "_aim", return_value=hit):
+            observed, teleported = qa._aim_at_baby(
+                probe, baby, lambda x, y, z: teleports.append((x, y, z)))
+        self.assertTrue(teleported)
+        self.assertEqual(observed, hit)
+        self.assertTrue(teleports, "the unreachable baby still needs the observer beside it")
+        for x, _y, z in teleports:
+            self.assertGreaterEqual(
+                abs(x - baby["x"]) + abs(z - baby["z"]), 1.0,
+                f"the observer must stand beside the baby, never on its own cell: {teleports}")
+
+
 class GatedCensusTests(unittest.TestCase):
     """Seed 24 (2026-11-24): the 128-block all-entity census never stabilised over a
     village that harvests into the world, so the gate refused before its milestones."""
