@@ -197,7 +197,7 @@ fn duplicate_tags_keys_in_wal_refuse_recovery() {
         // A tree without the fence accepts the duplicate key, so recovery returns Ok
         // and this plain assert! (no message) is the row's own red.
         let refused = recovered_fields(&config, id);
-        assert!(matches!(&refused, Err(_)));
+        assert!(refused.is_err());
         let error = refused.err().unwrap().to_string();
         assert!(error.contains("duplicate Tags field"));
     }
@@ -220,12 +220,12 @@ fn opaque_wal_trailing_bytes_refuse_offline_and_live_recovery() {
     tail_image(&config, id, image);
     for _ in 0..2 {
         let refused = recovered_fields(&config, id);
-        assert!(matches!(&refused, Err(_)));
+        assert!(refused.is_err());
         let error = refused.err().unwrap().to_string();
         assert!(error.contains("trailing NBT bytes"));
         let live =
             crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld);
-        assert!(matches!(&live, Err(_)));
+        assert!(live.is_err());
         let error = live.err().unwrap().to_string();
         assert!(error.contains("trailing NBT bytes"));
     }
@@ -299,12 +299,12 @@ fn duplicate_player_tags_keys_in_wal_refuse_offline_export_and_live_recovery() {
             .and_then(|world| crate::native_checkpoint::encode_checkpoint(&world));
         // A tree without the fence exports the duplicate key happily, so the plain
         // assert! (no message) is the row's own red.
-        assert!(matches!(&exported, Err(_)));
+        assert!(exported.is_err());
         let error = exported.err().unwrap().to_string();
         assert!(error.contains("duplicate Tags field"));
         let live =
             crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld);
-        assert!(matches!(&live, Err(_)));
+        assert!(live.is_err());
         let error = live.err().unwrap().to_string();
         assert!(error.contains("duplicate Tags field"));
     }

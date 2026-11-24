@@ -684,7 +684,7 @@ fn export_refuses_ambiguous_player_tags_from_real_wal_without_publication() {
     // A tree without the fence publishes the duplicate key, so the plain assert!
     // (no message) is the row's own red.
     let exported = export_anvil(&config, &source, &destination, &receipt_path);
-    assert!(matches!(&exported, Err(_)));
+    assert!(exported.is_err());
     let error = exported.err().unwrap();
     assert!(error.to_string().contains("duplicate Tags field"));
     assert!(
