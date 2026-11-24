@@ -1086,7 +1086,10 @@ pub fn read_complete_batches_after(
 /// Decode and consume one published batch at a time. Recovery memory is bounded
 /// by one batch and the latest recovered images, never the complete WAL history.
 /// A batch whose store, branch or palette does not match `identity` is refused
-/// by name (Books R4-P3, R5-G5), as is a frame of an older format.
+/// by name (Books R4-P3, R5-G5), as is a frame of an older format. A missing
+/// journal directory is an empty tail only on the root branch: `world restore`
+/// creates it in every copy it publishes, so a restored copy without one lost
+/// its tail and is refused.
 pub fn visit_complete_batches_after(
     journal_dir: &Path,
     manifest_tick: u64,
@@ -1095,7 +1098,21 @@ pub fn visit_complete_batches_after(
 ) -> Result<u64, CoreError> {
     let entries = match std::fs::read_dir(journal_dir) {
         Ok(entries) => entries,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(manifest_tick),
+        Err(err)
+            if err.kind() == std::io::ErrorKind::NotFound
+                && identity.branch == mc_world::store_marker::ROOT_BRANCH =>
+        {
+            return Ok(manifest_tick);
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(CoreError::Storage(format!(
+                "journal {} is missing, but this world is a restored copy on branch {} and every \
+                 restore creates it: its WAL tail is lost or was not copied with the world; \
+                 restore the backup again",
+                journal_dir.display(),
+                identity_hex(&identity.branch),
+            )));
+        }
         Err(err) => return Err(CoreError::Storage(err.to_string())),
     };
     let mut names = Vec::new();
@@ -1737,11 +1754,12 @@ pub fn verify_batch_file(
 /// name promises, its length and CRC — so a batch that is not the backup's own
 /// refuses the restore instead of joining the copy's branch. Only the eight
 /// branch bytes change (the CRC covers the payload); the palette stays as written
-/// and the first replay checks it. The copy is not open yet, which makes this the
-/// one rewrite of a published batch: an interrupted run leaves a copy whose
-/// marker still names `from` next to a batch on `to` (or a torn branch), and
-/// that copy refuses to open. `before_batch` runs before each rewrite; the
-/// restore's interruption tests stop there.
+/// and the first replay checks it. This is the one rewrite of a published
+/// batch: `world restore` runs it in its staging directory, which no open admits
+/// before the copy's own marker is written after it and which is published only
+/// once complete, so an interrupted run leaves nothing that opens.
+/// `before_batch` runs before each rewrite; the restore's interruption tests
+/// stop there.
 pub fn rebind_tail(
     world_dir: &Path,
     checkpoint_tick: u64,

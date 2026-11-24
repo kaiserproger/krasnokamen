@@ -471,21 +471,32 @@ instead of being rewritten.
 
 Hot backup copies the marker with the store and refuses a marker ahead of the
 committed checkpoint. The offline backup copies it as an ordinary world file and
-covers it by the manifest digest. `world restore` verifies every hash, then the
-restored pair — store id and checkpoint tick read back from the copied store
-against the copied marker — and on a mismatch removes what it copied and reports
-no world. It then starts the copy's own branch: the store id is the world's
-identity and travels with every backup, so without it two copies of one backup,
-or a copy and the world it came from, would replay each other's tails. The
-restore mints a random branch that is neither the root nor the backup's own,
-moves every copied batch above the store's checkpoint onto it
-(`journal::rebind_tail`: each frame is first checked against the copied store
+covers it by the manifest digest. `world restore` verifies every hash and builds
+the copy in a staging directory beside the target, `<target>.restore-staging`,
+never in the target itself. It checks the restored pair — store id and
+checkpoint tick read back from the copied store against the backup's marker,
+which is verified from memory and not copied — and on a mismatch removes the
+staging directory and reports no world. It then starts the copy's own branch:
+the store id is the world's identity and travels with every backup, so without
+it two copies of one backup, or a copy and the world it came from, would replay
+each other's tails. The restore mints a random branch that is neither the root
+nor the backup's own, moves every copied batch above the store's checkpoint onto
+it (`journal::rebind_tail`: each frame is first checked against the copied store
 and branch, its tick range, length and CRC, then only its eight branch bytes are
 rewritten in place and synced; batches at or below the checkpoint never replay
-and stay as copied), and only then writes the marker naming the new branch. An
-interruption before that marker write leaves batches and marker on different
-branches, and the copy refuses to open; a refusal removes what the restore
-created, as for the pair check. Restoring one backup twice therefore yields two
+and stay as copied), and writes the copy's first marker, naming the new branch,
+last. Until then the staged store has a checkpoint and no marker, so no open
+admits the staging directory. The restore then fsyncs every directory of the
+staged tree (each file was synced when written), publishes it with one rename
+over the empty target it leases (Windows, which renames no directory over
+another, removes the empty target just before) and fsyncs the parent. An
+interrupted restore therefore leaves the target as it was or the complete copy,
+never a partial one, plus the staging directory, which the next restore refuses
+until the operator removes it; a refusal removes what the restore created. Every
+copy a restore publishes has a `journal/` directory, an empty one included, and
+an offline backup keeps an empty one: recovery reads a missing journal as an
+empty tail only on the root branch and refuses a restored copy without it,
+whose tail is lost. Restoring one backup twice therefore yields two
 copies that refuse each other's journals, and a backup of a restored copy carries
 that copy's branch until its own restore branches again. The branch is held by
 the marker alone: a sibling's marker moved together with its journal over another
@@ -903,7 +914,8 @@ journal coverage gap, so append refuses before reaching the injected ENOSPC.
 ## Backup and restore
 
 Offline backup/restore requires stopped, exclusively leased world; restore
-verifies inventory/hashes and gives every restored copy its own branch.
+verifies inventory/hashes, gives every restored copy its own branch in an
+unpublished staging directory and publishes the finished copy with one rename.
 Console hot backup is native-writer checkpoint+WAL copy, decoding/CRC-checking
 every batch (Books R5 G3) and checking store/branch/palette identity.
 Neither reports success until ordinary recovery replays the copy to its claimed

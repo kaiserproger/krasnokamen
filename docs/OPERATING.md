@@ -1291,8 +1291,12 @@ or a copy and the world it came from, therefore refuse each other's journals; a
 plain filesystem copy of a world or backup directory is not a restore and stays
 on the branch it was copied from, so restore every copy you intend to run next to
 the original. Restore verifies the full
-inventory and hashes before writing; the target must be empty or absent and
-separate from the backup. Missing, changed or extra files, incompatible
+inventory and hashes before writing; the target must be empty or absent,
+separate from the backup and not a mount point. The copy is built in
+`<target>.restore-staging` beside the target and renamed over it only once it
+is complete and synced, so an interrupted restore leaves the target as it was
+(or the finished world) and the staging directory, which the next restore
+refuses until you delete it. Missing, changed or extra files, incompatible
 manifests and symlinks are refused. Retain the TOML, plugin artifacts and access
 lists separately; backups are never pruned automatically. Before reporting
 success, `backup` restores the copy it just wrote into its own directory and

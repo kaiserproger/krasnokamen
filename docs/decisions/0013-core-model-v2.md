@@ -356,8 +356,13 @@ converted. Two independently created stores differ by construction (random id).
 A restored backup is the same world, so its store id is never given a fresh
 identity; instead every `world restore` mints a random branch for its copy
 (DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY), moves the copied tail above the
-checkpoint onto it and then writes the marker naming it, so two copies of one
-backup, or a copy and the world it came from, refuse each other's tails. A
+checkpoint onto it and then writes the copy's first marker naming it, so two
+copies of one backup, or a copy and the world it came from, refuse each other's
+tails. All of it happens in a staging directory that no open admits (its store
+has no marker until the last step) and that is published with one rename once
+every directory in it is synced, so an interrupted restore never leaves a
+partial or source-branch copy at the target; a restored copy always has a
+`journal/` directory, and replay refuses one without it. A
 world as created or imported is on the root branch, whose marker keeps the
 64-byte format-1 layout; only a restored copy's marker carries the branch
 (format 2), so existing markers need no converter. Offline tools that open a store without `Core::open` (prune,

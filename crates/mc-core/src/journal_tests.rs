@@ -2423,3 +2423,29 @@ fn rebind_tail_moves_only_the_copied_branch_above_the_checkpoint() {
     assert!(text.contains("branch 5555555555555555"), "{text}");
     assert!(text.contains("only the backup's own tail"), "{text}");
 }
+
+/// `world restore` creates the journal directory in every copy it publishes,
+/// so on a restored copy's branch a missing one is a lost tail and is refused
+/// by name; on the root branch it is the empty tail of a world whose journal
+/// was never opened.
+#[test]
+fn a_missing_journal_is_an_empty_tail_only_on_the_root_branch() {
+    let root = tempfile::tempdir().unwrap();
+    let journal = root.path().join("journal");
+    let identity = |branch| crate::journal::WalIdentity {
+        store: [0x11; 16],
+        branch,
+        palette: [0x44; 8],
+    };
+    let visit = |branch| {
+        crate::journal::visit_complete_batches_after(&journal, 7, identity(branch), |_| Ok(()))
+    };
+    assert_eq!(visit(mc_world::store_marker::ROOT_BRANCH).unwrap(), 7);
+    let text = visit([0x33; 8])
+        .expect_err("a restored copy without its journal lost its tail")
+        .to_string();
+    assert!(text.contains("branch 3333333333333333"), "{text}");
+    assert!(text.contains("restore the backup again"), "{text}");
+    std::fs::create_dir(&journal).unwrap();
+    assert_eq!(visit([0x33; 8]).unwrap(), 7);
+}
