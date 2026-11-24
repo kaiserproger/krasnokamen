@@ -1463,7 +1463,8 @@ pub struct CheckpointManifest {
 }
 
 /// Frame one batch payload:
-/// `[magic][version][tick_lo][tick_hi][len][crc32][payload]`.
+/// `[magic][version][store 16][palette 8][tick_lo][tick_hi][len][crc32][payload]` (56-byte header,
+/// little endian; format 2 since the store-identity bump, 2026-11-18).
 ///
 /// [`JournalWriter::append`] is the only production writer; fixtures (the hot
 /// backup tests) use this instead of hand-rolling bytes that would not decode.

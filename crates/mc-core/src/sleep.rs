@@ -327,6 +327,11 @@ pub(crate) fn mirror_occupied_beds(state: &mut TickState) {
             }
         }
     }
+    // No sleeper and no occupied cell: nothing to compare, and the per-tick pass must not build
+    // the written-cell set for every dimension on every tick (review wave2-8 m8).
+    if previous.is_empty() && wanted.is_empty() {
+        return;
+    }
     // One set for the pass: an accepted write to any cell this tick wins.
     let written: rustc_hash::FxHashSet<BlockPos> = state
         .merge_block_writes

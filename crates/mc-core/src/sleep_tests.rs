@@ -1424,3 +1424,19 @@ fn a_bed_broken_when_the_property_clears_is_not_restored() {
         "the bed stays broken"
     );
 }
+
+/// No sleeper and no occupied cell: the mirror returns before building its per-tick set, and it
+/// writes nothing (review wave2-8 m8). Appended at the end so the two proving assertions above
+/// keep the lines the bed row names.
+#[test]
+fn a_world_with_nothing_asleep_writes_no_bed_state() {
+    let mut rig = Rig::new();
+    assert!(rig.state.occupied_beds.is_empty());
+    rig.run(1);
+    assert!(rig.state.occupied_beds.is_empty());
+    assert!(
+        rig.state.merge_block_writes.is_empty(),
+        "no bed write without a sleeper"
+    );
+    assert!(!bed_occupied(&rig.state, rig.head), "the bed stays free");
+}
