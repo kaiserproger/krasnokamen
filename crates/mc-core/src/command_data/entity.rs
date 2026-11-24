@@ -68,10 +68,7 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
     // These three carry a `VillagerState` row, whose own persistence image (`Brain`,
     // `Inventory`, `Offers`, `Gossips`, `Xp`, …) `data` reads and writes; every other
     // kind only has summon NBT.
-    let villager = matches!(
-        name,
-        "minecraft:villager" | "minecraft:zombie_villager" | "minecraft:wandering_trader"
-    );
+    let villager = crate::command_summon::carries_villager_row(name);
     let mut image = crate::command_data::entity_image(world, id)?;
     let previous = crate::command_data::entity(world, id)?;
     let mut edited = previous.clone();
@@ -201,12 +198,23 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
             .map(Box::as_mut)
             .ok_or("Entity dimension unavailable")?
     };
+    let lethal = match &prepared {
+        Prepared::Mob(image, _) => image.lethal,
+        Prepared::Item(_) => false,
+    };
     match prepared {
         Prepared::Mob(image, custody) => {
             crate::command_summon::apply(world, id, *image);
             crate::plugin_inventories::apply_entity_custody(world, custody);
         }
         Prepared::Item(payload) => crate::command_summon::apply_item(world, id, payload),
+    }
+    if lethal {
+        world.entities.row_mut(slot).health = 0.0;
+        if world.entities.body(slot).alive {
+            world.entities.body_mut(slot).alive = false;
+            world.entities.begin_dying(slot);
+        }
     }
     if let Some(tags) = retained_tags {
         world.entities.row_mut(slot).opaque_entity_fields = tags;

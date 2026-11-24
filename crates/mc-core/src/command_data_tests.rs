@@ -1094,24 +1094,23 @@ fn data_entity_merge_lands_villager_runtime_state_and_keeps_membership() {
     let slot = state
         .entities
         .slots()
-        .find(|slot| {
-            crate::command_execution::entity_type_name(&state, state.entities.body(*slot).id)
-                == Some("minecraft:villager")
-        })
+        .find(|slot| state.entities.row(*slot).villager.is_some())
         .expect("the summoned villager");
-    let item = |name: &str| {
-        state
-            .registry
-            .items
-            .id_of(&Identifier::parse(name).unwrap())
-            .unwrap()
-    };
-    let (wheat, iron) = (item("minecraft:wheat"), item("minecraft:iron_ingot"));
+    // Two wheat stacks, seeded through the command the test is about.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!(
+                "data merge entity {villager} {{Inventory:[{{Slot:0b,id:\"minecraft:wheat\",count:5}},{{Slot:1b,id:\"minecraft:wheat\",count:1}}]}}"
+            )
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
     {
         let row = state.entities.row_mut(slot).villager.as_mut().unwrap();
-        row.inventory[0] = Some(ItemStack::new(wheat, 5));
-        row.inventory[1] = Some(ItemStack::new(wheat, 1));
-        row.xp = 12;
         row.settlement = Some(SettlementId(7));
         row.household = Some("Baker".into());
     }
@@ -1122,23 +1121,35 @@ fn data_entity_merge_lands_villager_runtime_state_and_keeps_membership() {
         data(
             &mut state,
             context,
-            &format!("data merge entity {villager} {{Inventory:[{{Slot:0b,id:\"minecraft:iron_ingot\",count:2}}]}}")
+            &format!(
+                "data merge entity {villager} {{Inventory:[{{Slot:0b,id:\"minecraft:stone\",count:2}}]}}"
+            )
         ),
         1,
         "{}",
         said(&mut state)
     );
     let merged = state.entities.row(slot).villager.clone().unwrap();
-    assert_eq!(merged.inventory[0].as_ref().unwrap().item_id, iron);
     assert_eq!(merged.inventory[0].as_ref().unwrap().count, 2);
     assert_eq!(merged.inventory[1], None, "the replaced stack is not kept");
+    // `data get` of a non-numeric path prints the SNBT and reports its length; the printed id
+    // is the one the merge wrote.
+    query(
+        &mut state,
+        context,
+        &format!("data get entity {villager} Inventory[0].id"),
+    )
+    .unwrap();
+    assert!(said(&mut state).contains("minecraft:stone"));
 
     // Brain memories, xp and the runtime clock land through the same parser.
     assert_eq!(
         data(
             &mut state,
             context,
-            &format!("data merge entity {villager} {{Brain:{{memories:{{\"minecraft:last_slept\":{{value:100L}}}}}}}}")
+            &format!(
+                "data merge entity {villager} {{Brain:{{memories:{{\"minecraft:last_slept\":{{value:100L}}}}}}}}"
+            )
         ),
         1,
         "{}",
@@ -1201,10 +1212,7 @@ fn data_entity_merge_refuses_foreign_and_private_fields_by_name() {
     let slot = state
         .entities
         .slots()
-        .find(|slot| {
-            crate::command_execution::entity_type_name(&state, state.entities.body(*slot).id)
-                == Some("minecraft:villager")
-        })
+        .find(|slot| state.entities.row(*slot).villager.is_some())
         .expect("the summoned villager");
     let before = state.entities.row(slot).villager.clone().unwrap();
     for (field, key) in [
@@ -1245,10 +1253,7 @@ fn data_entity_merge_refuses_foreign_and_private_fields_by_name() {
         -1
     );
     assert!(reported(&mut state));
-    assert_eq!(
-        state.entities.row(slot).villager.as_ref().unwrap(),
-        &before
-    );
+    assert_eq!(state.entities.row(slot).villager.as_ref().unwrap(), &before);
 }
 
 fn item_entity(state: &TickState) -> crate::entities::EntitySlot {
