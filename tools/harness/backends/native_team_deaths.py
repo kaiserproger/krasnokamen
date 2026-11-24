@@ -82,6 +82,13 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                 steps.fixture(command)
             except Exception as error:  # the session can end on the first of these
                 steps.report.setdefault("team_command_errors", []).append(f"{command}: {error}")
+        # Wait for the client to have processed the team packets before observing: the ordered chat
+        # marker is that wait (it also proves chat still renders). A dead session fails the marker,
+        # which is recorded and owned by the two checks below rather than raised here.
+        try:
+            _echo(steps, "teams_ready")
+        except Exception as error:
+            steps.report.setdefault("team_marker_error", str(error))
         # A client that decodes Play 0x6f in the pre-26.3 order ends its session on the first team
         # packet, and an ended session is an assertion here, not a later marker timeout: the check
         # reads the state the client still reports and records the outcome instead of raising out of
@@ -93,7 +100,12 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             steps.report.setdefault("team_packet_observe_error", str(error))
             team_in_play = False
         steps.check("client_in_play_after_team_packet", team_in_play)
-        _echo(steps, "teams_ready")
+        # A live session must also have accepted every team command; an ended one is already the
+        # false assertion above and is not asked for this second verdict.
+        if team_in_play:
+            steps.check("team_fixture_commands_accepted",
+                        not steps.report.get("team_command_errors") and
+                        not steps.report.get("team_marker_error"))
         # KILL-TYPE: player /kill is generic_kill ("was killed"), not out_of_world.
         _die(steps, peer, display, actor_pid, "kill", f"kill {VICTIM}", "was killed", True, True)
         # DEATH-COMPONENT: a mob kill names the mob, which only the vanilla translation carries.

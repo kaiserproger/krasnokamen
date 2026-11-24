@@ -1576,7 +1576,7 @@ SCENARIOS: dict[str, Scenario] = {
         requires=("xvfb",),
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_team_deaths.py"),
         fixture="victim in team red, second windowed client in team blue; /kill, a zombie kill and each deathMessageVisibility value",
-        proves="each client's rendered chat shows generic_kill and mob death texts, honours always/never/hideForOtherTeams/hideForOwnTeam, and stays in play through the 26.3 SetPlayerTeam parameters (client_in_play_after_team_packet)",
+        proves="each client's rendered chat shows generic_kill and mob death texts, honours always/never/hideForOtherTeams/hideForOwnTeam, and stays in play through the 26.3 SetPlayerTeam parameters (client_in_play_after_team_packet, team_fixture_commands_accepted)",
         limits="chat text of the received components and the death-screen class; no teammate peer, spectator or dimension-global roster",
     ),
     "native-v2-p4-hopper": _entry(

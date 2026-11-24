@@ -18,13 +18,17 @@ def _controller(client):
 def _arrived(steps, name, arguments):
     """One bounded navigation request; a client that refuses the route is this row's assertion false.
 
-    `minecraft_navigate_to_block` reports an exhausted planner as a tool error, so the row's own
-    `*_navigation_arrived` has to carry the verdict (a tool error would otherwise leave the
-    assertion unreported and unhelpful as a negative control)."""
+    `minecraft_navigate_to_block` reports an exhausted planner as `target is unreachable …` with
+    `retryable: false` (stage `automation`). Only that refusal is the row's observable: a timeout, an
+    MCP drop or any other tool error is re-raised, because it never observed the bug and must not
+    become a red proving assertion."""
     try:
         result = steps.call("minecraft_navigate_to_block", arguments)
-    except Exception as error:
-        steps.report.setdefault("navigation_errors", {})[name] = str(error)
+    except RuntimeError as error:
+        text = str(error)
+        if '"code": "target is unreachable' not in text or '"retryable": false' not in text:
+            raise
+        steps.report.setdefault("navigation_errors", {})[name] = text
         result = {}
     steps.check(name, result.get("arrived") is True)
     return result
@@ -65,10 +69,20 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         # assertion that has to flip, and the generic completion check follows it.
         completed = not worker.is_alive()
         approach = result.get("approach") or {}
+        controller_now = _controller(b)
+        steps.report["idle_deadline"] = {
+            "elapsed_seconds": round(time.monotonic() - started, 3),
+            "completed": completed,
+            "approach_entity_uuid": approach.get("entity_uuid"),
+            "target_entity_uuid": target.get("entity_uuid"),
+            "approach_error": result.get("approach_error"),
+            "controller_active": controller_now.get("active"),
+            "controller_remaining_ms": controller_now.get("remaining_ms"),
+        }
         steps.check("active_writer_survived_idle_deadline",
                     time.monotonic() - started >= 119 and completed
-                    and approach.get("entity_uuid") == target["entity_uuid"]
-                    and _controller(b).get("active") is True)
+                    and approach.get("entity_uuid") == target.get("entity_uuid")
+                    and controller_now.get("active") is True)
         steps.check("long_action_completed", completed)
         steps.check("long_action_released_input", not b.call_tool("minecraft_observe")["inputs"]["held"])
         result.clear()
