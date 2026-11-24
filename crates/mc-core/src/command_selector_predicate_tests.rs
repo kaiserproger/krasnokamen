@@ -325,7 +325,10 @@ fn execute_if_predicate_binds_the_datapack_predicate_to_the_command_origin() {
                 if *content
                     == crate::command_feedback::translated(
                         "argument.resource_or_id.no_such_element",
-                        Vec::new(),
+                        vec![
+                            crate::command_feedback::text("test:missing"),
+                            crate::command_feedback::text("minecraft:predicate"),
+                        ],
                     )
         )),
         "{feedback:?}"
