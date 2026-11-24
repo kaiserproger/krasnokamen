@@ -12,4 +12,4 @@ regression = [
 ]
 repro_check = ["Open: OD-1 option 1 approved; the tick-order design is receipts/D123/D123Battle/DRAGON-EGG-TICK-NOTE.md (a derived pending record on TickState, demand through `desired_chunks`, completion before the entity phase, refusal outside the simulation distance). Missing proof: a cargo test through the real tick with chunk admission (chunk becomes resident without a blocking `world.ensure` from the interaction, the egg lands, the origin becomes air, a mid-flight checkpoint reopens without the move) plus its reverse control. No code written yet."]
 fix_commit = "70d39713e207dc304fb5826971e000c3df2eadbe"
-failing_first = "seen 2026-11-25: the demand-path test reds at the emptied origin when the tick completion call is removed"
+failing_first = "not recorded"
