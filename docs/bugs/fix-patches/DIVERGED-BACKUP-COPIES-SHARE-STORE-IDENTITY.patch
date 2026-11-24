@@ -1,0 +1,385 @@
+diff --git a/crates/mc-core/src/journal.rs b/crates/mc-core/src/journal.rs
+index 3bb11b5f1ddc435d42a1b20f424c34fdf0579955..dbb24d5a161bdd7e9bc41ded9d2f0dd6ba148c1e 100644
+--- a/crates/mc-core/src/journal.rs
++++ b/crates/mc-core/src/journal.rs
+@@ -1086,7 +1086,10 @@ pub fn read_complete_batches_after(
+ /// Decode and consume one published batch at a time. Recovery memory is bounded
+ /// by one batch and the latest recovered images, never the complete WAL history.
+ /// A batch whose store, branch or palette does not match `identity` is refused
+-/// by name (Books R4-P3, R5-G5), as is a frame of an older format.
++/// by name (Books R4-P3, R5-G5), as is a frame of an older format. A missing
++/// journal directory is an empty tail only on the root branch: `world restore`
++/// creates it in every copy it publishes, so a restored copy without one lost
++/// its tail and is refused.
+ pub fn visit_complete_batches_after(
+     journal_dir: &Path,
+     manifest_tick: u64,
+@@ -1095,7 +1098,21 @@ pub fn visit_complete_batches_after(
+ ) -> Result<u64, CoreError> {
+     let entries = match std::fs::read_dir(journal_dir) {
+         Ok(entries) => entries,
+-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(manifest_tick),
++        Err(err)
++            if err.kind() == std::io::ErrorKind::NotFound
++                && identity.branch == mc_world::store_marker::ROOT_BRANCH =>
++        {
++            return Ok(manifest_tick);
++        }
++        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
++            return Err(CoreError::Storage(format!(
++                "journal {} is missing, but this world is a restored copy on branch {} and every \
++                 restore creates it: its WAL tail is lost or was not copied with the world; \
++                 restore the backup again",
++                journal_dir.display(),
++                identity_hex(&identity.branch),
++            )));
++        }
+         Err(err) => return Err(CoreError::Storage(err.to_string())),
+     };
+     let mut names = Vec::new();
+@@ -1737,11 +1754,12 @@ pub fn verify_batch_file(
+ /// name promises, its length and CRC — so a batch that is not the backup's own
+ /// refuses the restore instead of joining the copy's branch. Only the eight
+ /// branch bytes change (the CRC covers the payload); the palette stays as written
+-/// and the first replay checks it. The copy is not open yet, which makes this the
+-/// one rewrite of a published batch: an interrupted run leaves a copy whose
+-/// marker still names `from` next to a batch on `to` (or a torn branch), and
+-/// that copy refuses to open. `before_batch` runs before each rewrite; the
+-/// restore's interruption tests stop there.
++/// and the first replay checks it. This is the one rewrite of a published
++/// batch: `world restore` runs it in its staging directory, which no open admits
++/// before the copy's own marker is written after it and which is published only
++/// once complete, so an interrupted run leaves nothing that opens.
++/// `before_batch` runs before each rewrite; the restore's interruption tests
++/// stop there.
+ pub fn rebind_tail(
+     world_dir: &Path,
+     checkpoint_tick: u64,
+diff --git a/crates/mc-edge/src/backup.rs b/crates/mc-edge/src/backup.rs
+index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..23df3d135605644c328710a74e936b62195b659f 100644
+--- a/crates/mc-edge/src/backup.rs
++++ b/crates/mc-edge/src/backup.rs
+@@ -1,6 +1,8 @@
+ //! Offline native-v2 world backups: one exclusive directory lease, the native
+ //! database's own lock, and a SHA-256 manifest covering the store, WAL and metadata.
+-//! Restore validates the entire backup before creating or writing target data.
++//! Restore validates the entire backup before creating or writing target data,
++//! builds the world in a staging directory beside the target and publishes it
++//! with one rename.
+ 
+ use std::collections::BTreeMap;
+ use std::fs::File;
+@@ -257,6 +259,11 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<usize> {
+     std::fs::create_dir_all(&out)?;
+     let _output_lease = ExclusiveLease::acquire(&out)?;
+     require_empty(&out)?;
++    // The journal directory belongs to the world even when it is empty: replay
++    // refuses a restored copy without one, so a backup of such a copy keeps it.
++    if world.join("journal").is_dir() {
++        std::fs::create_dir(out.join("journal"))?;
++    }
+     let mut manifest = BackupManifest::current();
+     for (name, source) in files {
+         // Windows byte-range locks also deny reads through a second handle in
+@@ -409,13 +416,18 @@ fn read_manifest(from: &Path) -> Result<BackupManifest> {
+     Ok(manifest)
+ }
+ 
+-/// Verify every manifest path and hash before writing any world data. Restore
+-/// never merges into a nonempty target, follows links, or overlaps its source.
++/// Verify every manifest path and hash before writing any world data, then
++/// build the world in a staging directory beside the target ([`stage_world`])
++/// and publish it with one rename ([`publish`]): an interrupted restore leaves
++/// the target as it was, or the complete restored world, never a partial one.
++/// Restore never merges into a nonempty target, follows links, or overlaps its
++/// source.
+ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+     let from = std::fs::canonicalize(from)
+         .with_context(|| format!("resolving backup {}", from.display()))?;
+     let target = resolve_destination(world_dir)?;
+     refuse_overlap(&from, &target)?;
++    let staging = staging_path(&target)?;
+     let _source_lease = ExclusiveLease::acquire(&from)?;
+     let manifest = read_manifest(&from)?;
+     let files = collect_files(&from, true)?;
+@@ -431,6 +443,10 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+         None
+     };
+     require_empty(&target)?;
++    #[cfg(unix)]
++    if target_lease.is_some() {
++        refuse_mount_point(&target)?;
++    }
+     for (name, source) in &files {
+         let actual = if name == NATIVE_DATABASE {
+             digest_reader(&mut database_lease.0)?
+@@ -444,62 +460,50 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+             );
+         }
+     }
+-    std::fs::create_dir_all(&target)?;
++    // A staging directory is never reused or removed silently: it holds what an
++    // interrupted restore copied, which the operator may still want to inspect.
++    if std::fs::symlink_metadata(&staging).is_ok() {
++        bail!(
++            "{} is left by an interrupted restore into {}; remove it and run restore again",
++            staging.display(),
++            target.display()
++        );
++    }
++    mc_world::atomic_file::create_dir_all_durable(&target)?;
+     let created_target = target_lease.is_none();
+-    let _target_lease = match target_lease {
++    let target_lease = match target_lease {
+         Some(lease) => lease,
+         None => ExclusiveLease::acquire(&target)?,
+     };
+     require_empty(&target)?;
+     database_lease.0.rewind()?;
+-    for (name, source) in &files {
+-        let actual = if name == NATIVE_DATABASE {
+-            copy_reader_durable(&mut database_lease.0, &target.join(name))
+-        } else {
+-            copy_file_durable(source, &target.join(name))
+-        }
+-        .with_context(|| format!("restoring {name}"))?;
+-        if actual != manifest.files[name] {
+-            bail!("backup file {name} changed while restoring; restore is incomplete");
+-        }
+-    }
+-    mc_world::atomic_file::sync_parent_dir(&target)?;
+-    // Books R4-P1: the copied marker and the copied store must agree — the same
+-    // store id and a store checkpoint at or after the marker's tick — and the
+-    // marker must be present: every world this build writes has one, so a backup
+-    // without it is not restorable. A backup that pairs one world's marker with
+-    // another's store, or a store rolled back behind its marker, is refused
+-    // instead of restored as a valid world.
+-    let restored_database = target.join(NATIVE_DATABASE);
+-    let pair = match mc_world::store_marker::read(&target) {
+-        Ok(Some(_)) => Ok(()),
+-        Ok(None) => Err("the backup has no checkpoint marker".to_owned()),
+-        Err(error) => Err(error.to_string()),
+-    }
+-    .and_then(|()| {
+-        mc_world::native::NativeStore::read_marker_fields(&restored_database)
+-            .map_err(|error| format!("restored {}: {error}", restored_database.display()))
+-    })
+-    .and_then(|(store_uuid, store_tick)| {
+-        mc_world::store_marker::verify(&target, store_uuid, store_tick)
+-            .map_err(|error| error.to_string())
+-    });
+-    if let Err(error) = pair {
+-        // Nothing the restore created survives a refusal: the whole target when
+-        // this restore made it, otherwise the files it copied and the data
+-        // directories it created under an existing empty target.
++    std::fs::create_dir(&staging).with_context(|| format!("creating {}", staging.display()))?;
++    let published = stage_world(&from, &staging, &files, &manifest, &mut database_lease.0)
++        .and_then(|()| {
++            #[cfg(test)]
++            tests::interruption_point(&tests::Step::Publishing);
++            publish(&staging, &target, target_lease)
++        });
++    if let Err(error) = published {
++        // Nothing the restore created survives a refusal: the staging directory,
++        // and the target when this restore made it. An existing empty target
++        // stays (Windows removes it just before the rename; it is put back).
++        let _ = std::fs::remove_dir_all(&staging);
+         if created_target {
+             let _ = std::fs::remove_dir_all(&target);
+-        } else {
+-            for name in files.keys() {
+-                let _ = std::fs::remove_file(target.join(name));
+-            }
+-            for directory in ["native", "journal"] {
+-                let _ = std::fs::remove_dir(target.join(directory));
+-            }
++        } else if !target.exists() {
++            let _ = std::fs::create_dir(&target);
+         }
+-        bail!("restored world is inconsistent: {error}; nothing was kept");
++        return Err(error);
+     }
++    #[cfg(test)]
++    tests::interruption_point(&tests::Step::Published);
++    mc_world::atomic_file::sync_parent_dir(&target).with_context(|| {
++        format!(
++            "the restored world is published at {}, but its directory entry was not synced",
++            target.display()
++        )
++    })?;
+     println!(
+         "restore of {} into {} complete: {} files verified",
+         from.display(),
+@@ -509,6 +513,172 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+     Ok(())
+ }
+ 
++/// `<target>.restore-staging`: beside the target, so on its filesystem and one
++/// rename away from it, and never a name a world is configured with.
++fn staging_path(target: &Path) -> Result<PathBuf> {
++    let mut name = target
++        .file_name()
++        .context("destination has no file name")?
++        .to_os_string();
++    name.push(".restore-staging");
++    Ok(target.with_file_name(name))
++}
++
++/// The restored world is published by renaming a directory beside the target
++/// over it, which cannot replace a mount point: refuse one before copying.
++#[cfg(unix)]
++fn refuse_mount_point(target: &Path) -> Result<()> {
++    use std::os::unix::fs::MetadataExt;
++    let parent = target.parent().context("destination has no parent")?;
++    if std::fs::metadata(target)?.dev() != std::fs::metadata(parent)?.dev() {
++        bail!(
++            "destination {} is a mount point; restore into a new directory inside it",
++            target.display()
++        );
++    }
++    Ok(())
++}
++
++/// Build the restored world in `staging` (Books R4-P1 pair check, then the
++/// copy's own branch) and make every name in it durable.
++///
++/// The staging directory never opens as a world: the backup's marker is
++/// verified from memory and not copied, so until the copy's own marker is
++/// written as the last step the staged store has a checkpoint and no marker,
++/// which every open refuses (`store_marker::check`/`verify`).
++fn stage_world(
++    from: &Path,
++    staging: &Path,
++    files: &BTreeMap<String, PathBuf>,
++    manifest: &BackupManifest,
++    database: &mut File,
++) -> Result<()> {
++    // A restored copy always has a journal directory, an empty one included:
++    // replay refuses a copy on a branch of its own without one (a lost tail).
++    std::fs::create_dir(staging.join("journal"))?;
++    let mut marker = None;
++    for (name, source) in files {
++        let expected = &manifest.files[name];
++        let actual = if name == mc_world::store_marker::MARKER_FILE {
++            let bytes = std::fs::read(source).with_context(|| format!("restoring {name}"))?;
++            let digest = digest_reader(&mut bytes.as_slice())?;
++            marker = Some(bytes);
++            digest
++        } else if name == NATIVE_DATABASE {
++            copy_reader_durable(database, &staging.join(name))
++                .with_context(|| format!("restoring {name}"))?
++        } else {
++            copy_file_durable(source, &staging.join(name))
++                .with_context(|| format!("restoring {name}"))?
++        };
++        if &actual != expected {
++            bail!("backup file {name} changed while restoring; nothing was restored");
++        }
++    }
++    // The backup's marker and store must agree — the same store id and a store
++    // checkpoint at or after the marker's tick — and the marker must be
++    // present: every world this build writes has one, so a backup without it is
++    // not restorable. A backup that pairs one world's marker with another's
++    // store, or a store rolled back behind its marker, is refused instead of
++    // restored as a valid world.
++    let marker_path = from.join(mc_world::store_marker::MARKER_FILE);
++    let database = staging.join(NATIVE_DATABASE);
++    let paired = marker
++        .ok_or_else(|| "the backup has no checkpoint marker".to_owned())
++        .and_then(|bytes| {
++            mc_world::store_marker::StoreMarker::decode(&bytes).map_err(|error| {
++                format!(
++                    "checkpoint marker {} is corrupt: {error}",
++                    marker_path.display()
++                )
++            })
++        })
++        .and_then(|copied| {
++            let (store_uuid, store_tick) =
++                mc_world::native::NativeStore::read_marker_fields(&database)
++                    .map_err(|error| format!("restored {}: {error}", database.display()))?;
++            copied
++                .admits(&marker_path, store_uuid, store_tick)
++                .map_err(|error| error.to_string())?;
++            start_branch(staging, copied, store_tick.unwrap_or(0))
++        });
++    if let Err(error) = paired {
++        bail!("restored world is inconsistent: {error}; nothing was kept");
++    }
++    sync_tree(staging)?;
++    mc_world::atomic_file::sync_parent_dir(staging)?;
++    Ok(())
++}
++
++/// Give the staged copy its own branch (DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY).
++///
++/// The store id is the world's identity and travels with every backup, so two
++/// copies of one backup — or a copy and the world it came from — would otherwise
++/// replay each other's WAL tails. A random branch that is neither the root nor
++/// the backup's own is minted, the copied tail above the store's checkpoint
++/// moves onto it, and the copy's first marker, naming it, is written last.
++fn start_branch(
++    staging: &Path,
++    copied: mc_world::store_marker::StoreMarker,
++    store_tick: u64,
++) -> Result<(), String> {
++    let branch = mc_world::store_marker::mint_branch(copied.branch);
++    mc_core::journal::rebind_tail(
++        staging,
++        store_tick,
++        copied.store_uuid,
++        copied.branch,
++        branch,
++        |_| {
++            #[cfg(test)]
++            tests::interruption_point(&tests::Step::Rebinding);
++        },
++    )
++    .map_err(|error| error.to_string())?;
++    mc_world::store_marker::write(staging, copied.store_uuid, branch, copied.checkpoint_tick)
++        .map_err(|error| error.to_string())
++}
++
++/// Fsync every directory of the staged tree, `directory` itself last. Each file
++/// was synced by the step that wrote it (copy, rebind, marker), but a copy syncs
++/// only its own parent: the links of `journal/`, `native/` and nested data
++/// directories inside the staging directory are made durable here.
++fn sync_tree(directory: &Path) -> Result<()> {
++    for entry in std::fs::read_dir(directory)? {
++        let entry = entry?;
++        if entry.file_type()?.is_dir() {
++            sync_tree(&entry.path())?;
++        }
++    }
++    mc_core::journal::fsync_dir(directory)
++        .with_context(|| format!("syncing {}", directory.display()))
++}
++
++/// Publish the staged world at `target` with one rename. The target is an
++/// empty directory this restore leases (lease files at most): Unix renames a
++/// directory over an empty one atomically, so the leased empty target stands
++/// until the rename. Windows renames no directory over another and keeps the
++/// lease in a file inside it, so there the empty target is removed first and is
++/// absent, never partial, until the rename.
++fn publish(staging: &Path, target: &Path, lease: ExclusiveLease) -> Result<()> {
++    #[cfg(windows)]
++    drop(lease);
++    for entry in std::fs::read_dir(target)? {
++        let path = entry?.path();
++        if !is_lease_file(&path) {
++            bail!("destination is not empty: {}", target.display());
++        }
++        std::fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
++    }
++    #[cfg(windows)]
++    std::fs::remove_dir(target).with_context(|| format!("removing {}", target.display()))?;
++    std::fs::rename(staging, target)
++        .with_context(|| format!("publishing the restored world at {}", target.display()))?;
++    #[cfg(not(windows))]
++    drop(lease);
++    Ok(())
++}
++
+ #[cfg(test)]
+ #[path = "backup_tests.rs"]
+ mod tests;
