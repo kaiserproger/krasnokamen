@@ -1,0 +1,11 @@
+[[bug]]
+id = "HC-2-SWAP-WHILE-CARRYING"
+title = "Pressing a container number or F with a stack on the menu cursor swaps the hovered slot anyway, instead of leaving the slot untouched until the cursor is placed"
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Split from HC-2 (review ReviewD123Client4 and this lane's B2 discipline): HC-2's control reverses only the physical-key dispatch hunk of client:5ef71d56, so the swap-while-carrying guard that the same commit added at src/ui/state.rs (`if mode == ClickMode::Swap && cursor is not empty { return Ok(()) }`) stays in place on both sides of the pair and cannot carry that half of the row."
+regression = ["client:krasnokamen-client:ui::inventory_input_tests::inventory_swapping_while_carrying_does_not_change_slots", "harness:entities:native-v2-input-menus"]
+failing_first = "not recorded"
+repro_check = "No control yet: the guard's own hunk must be reversed on the tip (the commit's patch no longer reverse-applies, `git apply -R --check --recount` fails in src/lib.rs and src/ui/state.rs, receipts/XClientControl/negctl/hc23-reverse-apply-failures.log) and the native-v2-input-menus scene must gain an assertion that a number/F press with a carried stack leaves the hovered slot unchanged; the existing unit ref asserts the guard's decision, not a frame."
