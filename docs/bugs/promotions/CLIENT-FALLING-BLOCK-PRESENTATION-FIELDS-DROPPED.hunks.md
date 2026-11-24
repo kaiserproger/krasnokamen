@@ -49,19 +49,37 @@ Adaptations, per the (a)/(b)/(c) classes:
 - (a) **`presented_position` formatting.** The real hunk put `presented_transform(...)` on two
   lines inside `json!`; HEAD's rustfmt shape is the five-line form above. Same expression, same
   value, same call site. The pair's diff is the HEAD form.
-- (b) **The `if` opener and its closing brace are not in the pair's diff.** They already exist at
-  HEAD for the kept field of the sibling row CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED
-  (`predicted_velocity`), which the reversal must not remove. Removing the guard while keeping a
-  statement inside it is not a patch. The three-line provenance comment is added by the re-land
-  commit for the same reason (it documents why the block exists) and is removed by the reversal,
-  so it is part of the ten-line pair.
+- (a) **The `if` opener and its closing brace are not in the pair's diff: a surviving half after
+  the (a) split.** They already exist at HEAD for the kept field of the sibling row
+  CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED (`predicted_velocity`), which the reversal must not
+  remove; removing the guard while keeping a statement inside it is not a patch, and reversing the
+  guard would red that row's own assertion. The three-line provenance comment is added by the
+  re-land commit for the same reason (it documents why the block exists) and is removed by the
+  reversal, so it is part of the ten-line pair.
 - The `predicted_velocity` assignment between the two poses is deliberately untouched: it belongs
   to the other row and its own reversal (`client:593f7957` → `client:e541641c`).
 
 ## Omitted hunks of `13f1f28b`
 
-- `src/entities.rs` (6 lines), `src/entities/physical.rs` (53), `src/entities/falling_tests.rs`
-  (95), `src/inventory.rs` (50), `src/inventory/actions.rs` (2), `src/inventory/creative.rs` (8),
-  `docs/AGENT_TESTING.md` (28): (c) other behaviour of that bulk commit (prediction integration,
-  creative routing, its own fences), not the presentation contract this row names. Its
-  `physical.rs` addition still exists at HEAD in evolved form; the row does not depend on it.
+Test and documentation hunks never enter a reversal patch (the split rule keeps test files,
+`docs/` and inline `#[cfg(test)]` modules), so they carry no class:
+
+- `src/entities/falling_tests.rs` `@@ -0,0 +1,95 @@` — the commit's own fences; the reversal's
+  harness, not the contract.
+- `docs/AGENT_TESTING.md` `@@ -1532,3 +1532,31 @@` — prose.
+
+Every remaining hunk is **(a) other behaviour of that bulk commit** (prediction integration,
+creative routing and their own fences); reversing any of them would turn a control red on another
+row's assertion, and none is part of this row's presentation contract. HEAD already carries evolved
+forms of the `physical.rs` and `entities.rs` pieces, so they have a HEAD equivalent and are not (c):
+
+- `src/entities.rs` `@@ -17,6 +17,8 @@`, `@@ -267,6 +269,8 @@`, `@@ -988,6 +992,8 @@` — `mod local;`,
+  the `Store` dirty-tracking fields and their accessors: prediction integration state.
+- `src/entities/physical.rs` `@@ -762,6 +762,9 @@`, `@@ -778,6 +781,7 @@`, `@@ -785,6 +789,55 @@` —
+  the integrator and the no-gravity move; `client:f7483f34` rewrote the last one (see the sibling
+  map's omitted hunk), the first two still exist in evolved form.
+- `src/inventory.rs` `@@ -449,7 +449,6 @@`, `@@ -488,7 +487,6 @@`, `@@ -511,8 +509,9 @@`,
+  `@@ -1271,4 +1270,47 @@` — creative inventory routing and its fences.
+- `src/inventory/actions.rs` `@@ -700,7 +700,7 @@` — creative action routing.
+- `src/inventory/creative.rs` `@@ -2,7 +2,7 @@`, `@@ -14,11 +14,7 @@` — the authoritative
+  creative packet path that gives the commit its title.
