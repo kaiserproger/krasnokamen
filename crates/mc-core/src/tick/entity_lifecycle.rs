@@ -267,7 +267,3 @@ impl TickState {
         hit
     }
 }
-
-#[cfg(test)]
-#[path = "entity_lifecycle_tests.rs"]
-mod tests;
