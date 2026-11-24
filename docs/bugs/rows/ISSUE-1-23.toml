@@ -6,5 +6,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
-repro_check = "note only: green PASS on the current client with no discriminating red yet - the two pixel windows (emerald green, redstone red) land with Mistral round 2"
+regression = ["client:krasnokamen-client:entities::animation_tests::crossed_arms_rigs_emit_the_held_item_at_the_source_anchor", "harness:scene-shot:issue1-23-held-items"]
+fix_commit = "client:586b2d07d2"
+proving_assertions = { "harness:scene-shot:issue1-23-held-items" = "emerald_held_pixels" }
+repro_check = "Committed-reversal pair at HEAD: client:27a3806c61 removes the villager, baby villager, wandering trader and witch crossed-arms role (and the witch nose role) from their model files, which is the aa20d301^ pre-image; the rig then has no arm attachment bone and append_equipment records 'rig has no matching equipment attachment'. client:586b2d07d2 re-lands the roles. Map docs/bugs/promotions/ISSUE-1-23.hunks.md. Real client: scene-shot issue1-23-held-items equips a villager with an emerald and a witch with redstone through /item replace entity and counts the emerald-green and redstone-red pixels in their crossed-arms windows; the client unit ref asserts the same anchoring for the villager, trader, witch arms and the witch potion nose."

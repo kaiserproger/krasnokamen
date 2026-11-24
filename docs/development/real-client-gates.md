@@ -549,6 +549,14 @@ flattened line; a plain listing has the same text and no event. The registered
 scenario `native-datapack-hover` creates a pack with `/datapack create` and
 lists it, so it needs no fixture world.
 
+`issue1-23-held-items` (`tools/harness/issue1_23_held_item_scene.json`) summons
+a `NoAI` villager and witch facing the camera on a grass platform and equips
+them through the ordinary command path (`/item replace entity … weapon.mainhand
+with minecraft:emerald` / `minecraft:redstone`), then requires both received
+entities and counts the item colours inside the fixed crossed-arms windows of
+one frame (`pixel_window`). The pre-image, whose rig has no crossed-arms role,
+finds no attachment bone and draws neither item.
+
 `native-player-head` installs an authored offline skin pack in its private run:
 cyan base head, magenta opaque hat and a transparent face window. The fixed
 camera frames the placed head at x580–700/y520–655; `placed_head_hat_layer_pixels`

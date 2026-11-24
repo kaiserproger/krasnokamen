@@ -876,6 +876,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="assert_chat_components reads the newest chat line holding `hoverprobe` from recent_chat_components: the plain text is the bracketed link and its hover event is show_text whose value carries the pack.mcmeta description. The pre-fix listing prints joined plain ids, so the line exists but carries no hover",
         limits="one created directory pack with a plain description; not a zipped pack, not a translated or compound description",
     ),
+    "issue1-23-held-items": _entry(
+        id="issue1-23-held-items", summary="A villager and a witch render the item in their crossed arms (ISSUE-1-23)",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="issue1-23-held-items", requires=("xvfb",),
+        sources=("tools/harness/issue1_23_held_item_scene.json", "tools/harness/backends/scene_shot_execute.py"),
+        fixture="private native client on a grass platform with the day clock held, one NoAI villager with an emerald and one NoAI witch with redstone in the main hand through /item replace entity",
+        proves="emerald_held_pixels and redstone_held_pixels require the two item colours inside the fixed crossed-arms windows of a received frame; a rig with no crossed-arms/nose role finds no attachment bone and draws neither item, so the pre-image control fails at emerald_held_pixels",
+        limits="one villager and one witch facing the camera; the witch's potion-on-the-nose path is covered by the client unit ref, not by a pixel window",
+    ),
     "issue1-18-sheep-goat": _entry(
         id="issue1-18-sheep-goat", summary="Goat horns and sheep wyther rigs render upright and aligned (ISSUE-1-18)",
         owner="core:harness", evidence="graphical", profile="scene-shot",

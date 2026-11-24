@@ -1,0 +1,153 @@
+{
+  "seed": 123,
+  "server_view_distance": 4,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low"
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "gamerule advance_weather false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "cmd": "weather clear"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "tp": [
+        1000.5,
+        175,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 120
+    },
+    {
+      "cmd": "fill 985 159 985 1015 159 1015 minecraft:grass_block"
+    },
+    {
+      "cmd": "fill 985 160 985 1015 174 1015 minecraft:air"
+    },
+    {
+      "cmd": "summon minecraft:villager 999.5 160 1003.5 {NoAI:1b,PersistenceRequired:1b,Invulnerable:1b,Silent:1b,Rotation:[180f,0f]}"
+    },
+    {
+      "cmd": "summon minecraft:witch 1001.5 160 1003.5 {NoAI:1b,PersistenceRequired:1b,Invulnerable:1b,Silent:1b,Rotation:[180f,0f]}"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 240
+    },
+    {
+      "require_entities": {
+        "name": "villager-present",
+        "args": {
+          "radius": 8,
+          "limit": 16
+        },
+        "types": [
+          "minecraft:villager"
+        ]
+      }
+    },
+    {
+      "require_entities": {
+        "name": "witch-present",
+        "args": {
+          "radius": 8,
+          "limit": 16
+        },
+        "types": [
+          "minecraft:witch"
+        ]
+      }
+    },
+    {
+      "cmd": "item replace entity @e[type=minecraft:villager,limit=1] weapon.mainhand with minecraft:emerald"
+    },
+    {
+      "cmd": "item replace entity @e[type=minecraft:witch,limit=1] weapon.mainhand with minecraft:redstone"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "shot": "held-items"
+    },
+    {
+      "pixel_window": {
+        "name": "emerald_held",
+        "shot": "held-items",
+        "window": [
+          400,
+          420,
+          540,
+          560
+        ],
+        "color": {
+          "min": [
+            0,
+            90,
+            30
+          ],
+          "max": [
+            130,
+            255,
+            220
+          ]
+        },
+        "min_pixels": 6
+      }
+    },
+    {
+      "pixel_window": {
+        "name": "redstone_held",
+        "shot": "held-items",
+        "window": [
+          740,
+          400,
+          880,
+          560
+        ],
+        "color": {
+          "min": [
+            60,
+            0,
+            0
+          ],
+          "max": [
+            230,
+            80,
+            40
+          ]
+        },
+        "min_pixels": 6
+      }
+    }
+  ]
+}
