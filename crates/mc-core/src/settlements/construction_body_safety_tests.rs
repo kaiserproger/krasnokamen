@@ -688,3 +688,38 @@ fn the_measured_body_is_a_straddling_box() {
         "the body spans the cell above its feet"
     );
 }
+
+/// Seed 24 (2026-11-23): the street plan follows the terrain, and a road cell
+/// more than `SITE_BAND` below the bell's level had no stand at all, so its
+/// builder never navigated (`worksite_unreached` with `navigation=None`) and the
+/// road stayed at 0/22 for the whole 96 000-tick observation window. A street
+/// stand is searched around the cell's own level; the perimeter, a gatehouse and
+/// the well keep the anchor's band.
+#[test]
+fn a_street_cell_below_the_anchor_band_still_has_a_stand() {
+    let (mut state, id, _slot) = fixture();
+    let stone = state.registry.states.stone;
+    let air = state.registry.states.air;
+    for x in 5..=9 {
+        for z in 5..=9 {
+            state.world.set_block(x, 191, z, stone);
+            for y in 192..=200 {
+                state.world.set_block(x, y, z, air);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    push_project(&mut state, id, "road-low", "road", [7, 192, 7]);
+    let project = site_project(&state, id, "road-low");
+    // The bell at [8, 201, 8] and its band cover 193..=209: this column's ground
+    // at 191 is invisible to an anchor-anchored search.
+    assert!(
+        layout::stand(&state, &project, [7, 203, 7]).is_none(),
+        "fixture: the anchor's band cannot see this column's ground"
+    );
+    assert_eq!(
+        layout::stand(&state, &project, [7, 192, 7]),
+        Some([7, 192, 7]),
+        "a street cell below the anchor band must keep its own column as its stand"
+    );
+}
