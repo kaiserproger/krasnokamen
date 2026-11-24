@@ -22,6 +22,12 @@ from .probe_steps import ProbeSteps
 
 CORE_TOOLS = frozenset({"minecraft_observe", "minecraft_wait_for_state_change", "minecraft_send_chat"})
 
+def probe_username(kind: str) -> str:
+    """The probe client's player name for one artifact kind (also written to ops.json)."""
+    return {"inventory": "HarnessInventory", "entities": "HarnessEntities",
+            "core-client": "HarnessCore", "native-lifecycle": "HarnessLifecycle"}[kind]
+
+
 def world_dir_toml(artifact: Path) -> str:
     """Quote the absolute world path even when receipts live outside the repository."""
     return json.dumps(str(artifact / "world"))
@@ -151,11 +157,14 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     binary = _server_binary(ctx)
     port = runtime.reserve_port()
     address = f"127.0.0.1:{port}"
-    username = {"inventory": "HarnessInventory", "entities": "HarnessEntities",
-                "core-client": "HarnessCore", "native-lifecycle": "HarnessLifecycle"}[kind]
+    username = probe_username(kind)
     if ctx.scenario_id == "java-v2-p5-towns":
         username = "P5Setup"
     operators = [username] if kind != "core-client" else []
+    if ctx.scenario_id == "native-v2-ledger-spawn-protection":
+        # Spawn protection only applies while some operator exists; the scenario
+        # deops the connected probe player, so a second entry must stay on file.
+        operators.append("SpawnKeeper")
     if ctx.scenario_id == "native-v2-p5-humanoid-armor" or promotion_actor:
         operators.append("P5ArmorActor")
     config = artifact / "server.toml"

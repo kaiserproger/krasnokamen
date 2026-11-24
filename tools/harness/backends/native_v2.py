@@ -286,8 +286,16 @@ def _ledger_spawn_protection(steps: ProbeSteps, origin: tuple[int, int, int]) ->
     _block(steps, target, "minecraft:air")
     steps.check("operator_breaks_inside_spawn_radius", True)
     _set(steps, target, "minecraft:stone")
-    steps.fixture("op LedgerRowsDummy")
-    steps.fixture("deop @s")
+    # The world spawn (seed 81) is far from the probe pad: move it onto the pad
+    # first, else the protected radius never covers the target cell.
+    x, y, z = origin
+    steps.fixture(f"setworldspawn {x} {y} {z}")
+    # Console commands have no `@s`: deop the connected probe player by name,
+    # else the operator snapshot keeps the actor exempt from spawn protection
+    # (the probe config keeps a second operator entry so the list stays non-empty).
+    from .client_probes import probe_username
+
+    steps.fixture(f"deop {probe_username('entities')}")
     steps.call("minecraft_wait_ticks", {"ticks": 10})
     refused = False
     try:
@@ -297,9 +305,14 @@ def _ledger_spawn_protection(steps: ProbeSteps, origin: tuple[int, int, int]) ->
             "expected_drop_count": 0, "timeout_seconds": 20})
     except RuntimeError:
         refused = True
+    # Commands cannot observe the refusal, and the client may predict the break
+    # before the server's resync arrives: wait for the block to settle, then read.
+    steps.call("minecraft_wait_ticks", {"ticks": 10})
     still = steps.call("minecraft_read_block", target)
+    steps.report["nonop_break_read"] = still
+    steps.report["nonop_break_tool_refused"] = refused
     steps.check("nonop_break_refused_inside_spawn_radius",
-                refused and still.get("block_id") == "minecraft:stone")
+                still.get("block_id") == "minecraft:stone")
     steps.call("minecraft_set_hotbar_slot", {"slot": 1})
     _use(steps, target, "up")
     steps.call("minecraft_wait_ticks", {"ticks": 10})
@@ -311,6 +324,13 @@ def _ledger_spawn_protection(steps: ProbeSteps, origin: tuple[int, int, int]) ->
 
 def _ledger_dragon_egg(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     point = _point(origin)
+    # The egg has gravity: a target outside the shared pad would fall out of the
+    # sampled window. Extend the pad over the whole +-15/-13..+17 sample range and
+    # clear the air the egg can land in.
+    x, y, z = origin
+    steps.fixture(f"fill {x - 16} {y - 1} {z - 16} {x + 16} {y - 1} {z + 18} minecraft:obsidian")
+    steps.fixture(f"fill {x - 16} {y} {z - 16} {x + 16} {y + 7} {z + 18} minecraft:air")
+    _block(steps, _point(origin, dy=-1), "minecraft:obsidian")
     _set(steps, point, "minecraft:dragon_egg")
     _use(steps, point)
     moved: dict[str, Any] | None = None
@@ -319,32 +339,41 @@ def _ledger_dragon_egg(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         if moved.get("block_id") != "minecraft:dragon_egg":
             break
         steps.call("minecraft_wait_ticks", {"ticks": 5})
+    steps.report["egg_origin_after_click"] = moved
     steps.check("egg_left_original_cell", moved is not None and moved.get("block_id") != "minecraft:dragon_egg")
 
     def scan_eggs() -> list[dict[str, Any]]:
-        # Vanilla samples offsets in [-16, 16) horizontal and [-8, 8) vertical;
-        # four 16^3 boxes cover every possible target cell (scan caps one box at 4096).
-        x, y, z = origin
+        # The egg teleports within +-15 horizontal and +-7 vertical of its cell
+        # (vanilla draws two bounded samples per axis). Scan 8^3 boxes: an 8^3
+        # box is 512 cells, while a 16^3 box (4096 cells) came back empty for a
+        # block that was there (2026-11-24), so the box size is kept well under
+        # the tool's per-call cell budget.
+        ex, ey, ez = point["x"], point["y"], point["z"]
         found: list[dict[str, Any]] = []
-        for min_x, max_x in ((x - 16, x - 1), (x, x + 15)):
-            for min_z, max_z in ((z - 16, z - 1), (z, z + 15)):
-                scan = steps.call("minecraft_scan_blocks", {
-                    "min_x": min_x, "max_x": max_x, "min_y": y - 8, "max_y": y + 7,
-                    "min_z": min_z, "max_z": max_z, "max_blocks": 4096})
-                found.extend(row for row in scan.get("blocks", [])
-                             if row.get("block_id") == "minecraft:dragon_egg")
+        for bx in range(-16, 16, 8):
+            for by in range(-8, 8, 8):
+                for bz in range(-16, 16, 8):
+                    scan = steps.call("minecraft_scan_blocks", {
+                        "min_x": ex + bx, "max_x": ex + bx + 7,
+                        "min_y": ey + by, "max_y": ey + by + 7,
+                        "min_z": ez + bz, "max_z": ez + bz + 7, "max_blocks": 512})
+                    found.extend(row for row in scan.get("blocks", [])
+                                 if row.get("block_id") == "minecraft:dragon_egg")
         return found
 
     found: list[dict[str, Any]] = []
-    for _ in range(12):
+    scans = 0
+    for _ in range(8):
         steps.call("minecraft_wait_ticks", {"ticks": 10})
+        scans += 1
         found = scan_eggs()
         if len(found) == 1:
             break
+    steps.report["egg_scan_passes"] = scans
     steps.report["egg_targets"] = found
     steps.check("egg_teleported_exactly_once", len(found) == 1)
     steps.check("egg_not_consumed", item_count(steps.observe(), "minecraft:dragon_egg") == 0)
-    steps.report["limits"] = ["One teleport inside the vanilla sample range; not the falling-block path."]
+    steps.report["limits"] = ["One teleport inside the vanilla sample range; not the falling-block path. Scan boxes are 8^3 because a 16^3 box returned an empty result for a present block."]
 
 
 def _ledger_brush(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
