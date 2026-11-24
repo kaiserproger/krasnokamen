@@ -12,5 +12,5 @@ regression = [
   "harness:join-lag-gate:live_pump_does_not_halt",
 ]
 failing_first = "reported"
-fix_commit = "patch:223a8c4f1a290df07e9613f2e3b969ff3683701df7091905583e1bdab2b36aff"
+fix_commit = "patch:a9098920f0a64040d39be8913ab65bcdcf042080bf53ce17b777702144b113dd"
 promotion = "docs/bugs/promotions/EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP.json"

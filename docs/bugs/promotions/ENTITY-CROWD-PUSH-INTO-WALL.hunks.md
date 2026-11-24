@@ -27,12 +27,13 @@ functions for other rows (`clip_y` tolerance, the sub-epsilon early return); the
 sides: they are `PHYSICS-CLIP-Y-PARITY` / `PHYSICS-CLIP-MISSING-VANILLA-EPSILON-EARLY-RETURN`
 behaviour (reason (a), left in place).
 
-**Named a/- difference (review B2, 2026-11-24):** the `clip_x`/`clip_z` doc comment added by
-`e282a959b` (HEAD `lib.rs:1609-1614`, "A side up to `COLLISION_EPSILON` past the face is snapped back
-out") is **not** reverted, and on the a/-side it is false: the pre-`e282a959b` loop does not snap an
-outward side back. It is left because it is a comment of another commit's hunk (the loop body is
-reverted, the comment is not part of this row's reversal); a future regeneration should drop it from
-the a/-side and change the digest.
+**Named a/- difference (review B2/N5, 2026-11-24):** `clip_x` is one of the four hunks this patch
+carries, and its hunk starts inside the function body; the doc comment **above** `fn clip_x` (HEAD
+`lib.rs:1609-1614`, "A side up to `COLLISION_EPSILON` past the face is snapped back out") is context,
+outside the changed lines, so the control keeps it — and on the a/-side it is false, because the
+reverted loop does not snap an outward side back. It is named here as a kept context line that the
+a/-side contradicts; a future regeneration should include it (drop the paragraph) and change the
+digest.
 
 ## Why every other hunk of the two commits stays out
 
@@ -50,7 +51,7 @@ the a/-side and change the digest.
 
 ## Observed control
 
-Reversing this patch on `4aadc22cf`+34af8faf86 makes the row's own assertion red:
+Reversing this patch on `4aadc22c`+34af8faf86 makes the row's own assertion red:
 
 ```
 panicked at crates/mc-core/src/crowd_pen_tests.rs:155:5:
@@ -77,8 +78,9 @@ the band — the reason this patch carries both commits.
   — the body-size sourcing of `7cca1476d` is not reversed (reason (c)/(b) above), so these stay
   green on the control. They are regression guards, not the control's red.
 - `cargo:mc-physics:tests::a_contact_never_grows_deeper_than_the_tolerance_behind_a_face` and
-  `cargo:mc-physics:tests::wall_face_snap_never_lets_a_body_cross_the_face` did red on the control at
-  `physics_tests.rs:2321`/`:2474`, but the promote JSON classifies them `unproven-panic` (the failing
-  macros are multi-line, so the panic line is not the macro's own line). They are real reds on the
-  row's own kernel invariants but are recorded here as **not the proving ref**: the proving ref is
-  `crowd_pen_tests.rs:155`, named in `proving_assertions`.
+  `cargo:mc-physics:tests::wall_face_snap_never_lets_a_body_cross_the_face` red on the control at
+  `physics_tests.rs:2321`/`:2474` — their own kernel assertions. The promote JSON tags them
+  `unproven-panic` only because the failing macros are multi-line (the panic line is the macro's first
+  line), so the row names those two `file:line`s in `proving_assertions` (`rows/ENTITY-CROWD-PUSH-INTO-WALL.toml`).
+  They are evidence at the row's own invariants; `crowd_pen_tests.rs:155` remains the production-path
+  proving ref.
