@@ -1,13 +1,13 @@
 # DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY — negative-control patch
 
 Fix: `docs/bugs/fix-patches/DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY.patch`
-(`fix_commit = "patch:5f4184a9f25813aba9bf2f6d3fcc3fc0604097a8aac77a03a244ca26331d41fe"`, sha256 of its
+(`fix_commit = "patch:6a42e81b3d1527dbbcb8af256657ab163e273b3725bca752c78291907ffe2eef"`, sha256 of its
 non-test hunks, here the whole file). It is a diff from the pre-fix form to the candidate; `git apply -R`
 restores the pre-fix form. The row was promoted on `01ac685ba7` alone, then on `01ac685ba7` + `cee142f323`
-(patch `0ec63ae4…`), then with `f0d7f039d` (patch `c1165a63…`). Three persistence reviews
-(`receipts/D123PersistDiv/review/REVIEW-ReviewD123Diverged-Sol1.md`, `-Sol2.md`, `REVIEW-sol-2.md`) found
-paths to the row's symptom that those commits left open, so the row was reopened each time with the
-completed fix.
+(patch `0ec63ae4…`), then with `f0d7f039d` (patch `c1165a63…`), then with `5ae472035` (patch `5f4184a9…`).
+Four persistence reviews (`receipts/D123PersistDiv/review/REVIEW-ReviewD123Diverged-Sol1.md`, `-Sol2.md`,
+`REVIEW-sol-2.md`, `REVIEW-sol-3.md`) found paths to the row's symptom that those commits left open, so the
+row was reopened each time with the completed fix.
 
 ## Commits covered
 
@@ -36,6 +36,11 @@ completed fix.
   leaving a copy that every open, backup and restore refuses (the `journal/` rule of `cee142f323`); it now
   moves the batch files and keeps the directory. Also: `created_target` comes from restore's own exclusive
   mkdir, and census, probe and the upgrade refuse a staging directory before creating a lease file.
+- `fb408c908` "persist: pin the converted game-clock checkpoint in the marker before archiving the WAL" —
+  closes the fourth review's path: the upgrade archived the WAL while the marker still named the old
+  checkpoint `K`, so a store rolled back from the converted tick `C` to `K` would pass the marker check and
+  open without its tail. The marker is now written at `C` (same store id and branch) before the first move; a
+  failed write leaves the WAL in place.
 
 ## Carried hunks
 
@@ -72,10 +77,11 @@ sides, so no a/-side text outside the original pre-image):
 - `crates/mc-world-conversion/src/lib.rs` `convert`: the destination refusal through `refuse_unpublished`
   and the stage name from `CONVERSION_STAGING_PREFIX` (a/: the literal prefix check).
 
-`5ae472035`, a/-side = each file at its parent `c1f366056` (no a/-side adaptation):
+`5ae472035` and `fb408c908`, a/-side = each file at `c1f366056` (no a/-side adaptation):
 
-- `crates/mc-world-tools/src/game_clock_upgrade.rs`: the early staging refusal and `archive_covered_journal`
-  (a/: rename of the whole `journal/` directory);
+- `crates/mc-world-tools/src/game_clock_upgrade.rs`: the early staging refusal, the marker write at the
+  converted tick (with its `#[cfg(test)]` fault call) and `archive_covered_journal` (a/: no marker write,
+  then a rename of the whole `journal/` directory);
 - `crates/mc-world-conversion/src/census.rs`, `probe.rs`: the early staging refusal before the lease.
 
 ## Not carried, with the ground (docs/bugs/README.md classes)
@@ -149,11 +155,23 @@ Its production hunks reversed on its own tests: `receipts/D123PersistDiv/rework3
   (`game_clock_upgrade_tests.rs:94`, the root copy's `journal/` was renamed away; the test now pins the kept,
   empty directory).
 
-In the full-patch control `a_restored_copy_upgraded_from_a_legacy_clock_keeps_its_journal` is not evidence:
-the base restore mints no branch, so it stops at its setup (`backup_tests.rs:1263`).
+The `backup_tests.rs:1282` above is that run's file; the round-4 marker assertion was inserted before it since.
 
-Promotion run: `.analysis/validation/20261124T093040-ledger-promote-alqbpt01` (tree `8dd72a0e28`, clean,
-`control_tree: head`, nine reversed files); control `ledger-1-run.log` 14 of 18 red (4 green: the two mc-core
-frame/rebind refs, `a_minted_branch_uses_all_64_bits`, `the_crash_window_rewrite_keeps_the_branch`; proving
-reds at `backup_tests.rs:762`, `:865`, `journal_tests.rs:2445`, `store_marker_tests.rs:238`; the new ref at
-its setup `:1263`), restore `ledger-3-run.log` 18 of 18 green.
+## Control of `fb408c908` reversed on its own
+
+Its production hunk reversed on its own tests (the upgrade without the marker write, as at `5ae472035`):
+`receipts/D123PersistDiv/rework4/rework4-control.patch`, run `.analysis/validation/20261124T100511-test-cjqalhn7`
+(log `receipts/D123PersistDiv/rework4/rework4-control-test.log`), 3 of 5 red:
+
+- `a_restored_copy_upgraded_from_a_legacy_clock_keeps_its_journal` (`backup_tests.rs:1280`, "the WAL was
+  archived with the marker still at the old checkpoint": marker tick 1, converted tick 2, same store id and
+  branch) and, root branch, `game_clock_upgrade::tests::copy_command_checkpoints_legacy_tail_then_archives_identical_wal`
+  (`game_clock_upgrade_tests.rs:135`, same message) — the fourth review's blocker, read before any open;
+- `a_failed_marker_write_leaves_the_wal_in_the_journal` (`game_clock_upgrade_tests.rs:178`, the upgrade
+  returned `Ok` and archived the WAL: the pre-image writes no marker, so nothing stops the move).
+
+In the full-patch control `a_restored_copy_upgraded_from_a_legacy_clock_keeps_its_journal` is not evidence:
+the base restore mints no branch, so it stops at its setup (`backup_tests.rs:1264`); nor is
+`a_failed_marker_write_leaves_the_wal_in_the_journal` (the pre-image has no marker write to fail).
+
+Promotion run: see `docs/bugs/promotions/DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY.json`.

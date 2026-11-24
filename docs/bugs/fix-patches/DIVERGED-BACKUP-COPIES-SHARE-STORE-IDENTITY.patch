@@ -540,19 +540,22 @@ index c4b0a7933f089c66f93b5af43119f8fdcac5a3e7..0d84c97eec49186f8efff7c6eeb5ac91
      lease.try_lock().map_err(fail)?;
      receipt.input_hashes = hashes(&source)?;
 diff --git a/crates/mc-world-tools/src/game_clock_upgrade.rs b/crates/mc-world-tools/src/game_clock_upgrade.rs
-index feddf7fcb00897e9c304ea37d4858ce1c40426b5..fc74ef4a04edcdce00d35ac20fd5ee75be163bec 100644
+index feddf7fcb00897e9c304ea37d4858ce1c40426b5..e9f2519b1b8f7e9e9b0b4f1148eafac129f26b6b 100644
 --- a/crates/mc-world-tools/src/game_clock_upgrade.rs
 +++ b/crates/mc-world-tools/src/game_clock_upgrade.rs
-@@ -8,6 +8,8 @@ use mc_world::native::NativeStore;
+@@ -8,6 +8,11 @@ use mc_world::native::NativeStore;
  
  /// The caller must supply a disposable copy, never a live or original world.
  /// Holds the exclusive world lease through recovery, commit and WAL archive.
++/// The converted checkpoint is pinned in the checkpoint marker (same store id
++/// and branch) before any batch leaves `journal/`: once the WAL is archived the
++/// marker is the only witness that the store must not be behind the new tick.
 +/// The archive takes the files of `journal/`, never the directory itself: a
 +/// restored copy (a branch of its own) is refused without `journal/`.
  pub fn upgrade_game_clock(config: &CoreConfig, copy: &Path) -> Result<Conversion, CoreError> {
      let storage = |error: &dyn std::fmt::Display| {
          CoreError::Storage(format!("game-clock upgrade {}: {error}", copy.display()))
-@@ -21,6 +23,7 @@ pub fn upgrade_game_clock(config: &CoreConfig, copy: &Path) -> Result<Conversion
+@@ -21,6 +26,7 @@ pub fn upgrade_game_clock(config: &CoreConfig, copy: &Path) -> Result<Conversion
      }
      let mut config = config.clone();
      config.world_dir = copy.to_path_buf();
@@ -560,10 +563,20 @@ index feddf7fcb00897e9c304ea37d4858ce1c40426b5..fc74ef4a04edcdce00d35ac20fd5ee75
      let lease = mc_world::storage::open_for_lease(copy).map_err(|error| storage(&error))?;
      lease.try_lock().map_err(|error| storage(&error))?;
      let store = Arc::new(
-@@ -40,14 +43,28 @@ pub fn upgrade_game_clock(config: &CoreConfig, copy: &Path) -> Result<Conversion
+@@ -38,16 +44,38 @@ pub fn upgrade_game_clock(config: &CoreConfig, copy: &Path) -> Result<Conversion
+             archive.display()
+         )));
      }
++    let store_uuid = store.store_uuid();
++    let branch = mc_world::store_marker::branch(copy).map_err(|error| storage(&error))?;
      let report =
          mc_core::native_checkpoint::game_clock_upgrade::write_converted_checkpoint(&config, store)?;
++    #[cfg(test)]
++    tests::before_marker(copy);
++    // A store that loses this commit after the WAL is archived would otherwise
++    // open on the old checkpoint without a tail; a failed write keeps the WAL.
++    mc_world::store_marker::write(copy, store_uuid, branch, report.tick)
++        .map_err(|error| storage(&error))?;
 +    archive_covered_journal(copy, &archive).map_err(|error| storage(&error))?;
 +    Ok(report)
 +}
