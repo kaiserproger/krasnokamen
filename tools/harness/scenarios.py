@@ -836,8 +836,8 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="issue1-01-villager-leg", requires=("xvfb",),
         sources=("tools/harness/issue1_01_villager_leg_scene.json",),
         fixture="private native client on a frozen-day fixture with one spawned villager, front camera",
-        proves="a pixel window over the villager's leg columns contains at least the minimum count of leg-coloured opaque pixels, so a translucent or malformed leg fails",
-        limits="one villager, one camera angle; the leg colour box and window come from the matched green frames",
+        proves="a pixel window over the villager's boots/hem band counts the vanilla leg region's grey, so the arm-region (skin) legs of the pre-fix model fail; the window and its threshold come from measured frames on both pins (candidate 754 px, pre-image 234 px)",
+        limits="one villager, one camera angle; the box is the grey boot band of the vanilla leg texture, so a lighting change that darkens the band below the threshold needs re-measurement",
     ),
     "issue1-02-held-tool": _entry(
         id="issue1-02-held-tool", summary="The first-person held tool is perfectly still at rest (ISSUE-1-02)",

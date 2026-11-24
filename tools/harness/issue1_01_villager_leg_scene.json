@@ -74,27 +74,27 @@
     },
     {
       "pixel_window": {
-        "name": "villager-leg-opaque",
+        "name": "villager-leg-vanilla",
         "shot": "villager-leg",
         "window": [
-          560,
-          240,
-          760,
-          470
+          596,
+          322,
+          700,
+          346
         ],
         "color": {
           "min": [
-            40,
-            30,
-            20
+            55,
+            55,
+            55
           ],
           "max": [
-            130,
             100,
-            80
+            100,
+            100
           ]
         },
-        "min_pixels": 8000
+        "min_pixels": 500
       }
     },
     {
