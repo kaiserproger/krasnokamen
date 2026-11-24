@@ -474,21 +474,26 @@ def _golem_gossip(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             uuid_ = row["entity_uuid"]
             marker = f"golem premise {uuid.uuid4().hex[:8]}"
             steps.call("minecraft_send_chat", {"message": marker, "command": False})
-            echoed = steps.wait(lambda s: marker in "\n".join(s.get("recent_chat", [])),
-                                "golem_premise_echo")
-            # The answer must be the line AFTER this marker: a previous villager's
-            # `last_slept` line in the chat history does not prove this merge
-            # (review D123Civ7 note 2).
-            lines = list(echoed.get("recent_chat", []))
-            after = max(index for index, line in enumerate(lines) if marker in line) + 1
+            steps.wait(lambda s: marker in "\n".join(s.get("recent_chat", [])),
+                       "golem_premise_echo", timeout_seconds=60)
+
+            def newer_than_marker(state: dict[str, Any]) -> list[str]:
+                # `recent_chat` is bounded and newest first (docs/development/real-client-gates.md),
+                # so the lines the reply can appear in are those BEFORE this marker. The old
+                # after-the-marker slice looked at older chat: the reply at index 0 was never
+                # read and the wait sat on the scenario deadline (run 20261124T094235).
+                lines = list(state.get("recent_chat", []))
+                marks = [index for index, line in enumerate(lines) if marker in line]
+                return lines[:min(marks)] if marks else []
+
             steps.call("minecraft_send_chat",
                        {"message": f"data get entity {uuid_} Brain", "command": True})
+            # A previous villager's `last_slept` line is older than this marker, so only a
+            # reply newer than it can prove this merge (review D123Civ7 note 2).
             seen = steps.wait(
-                lambda s: any("last_slept" in line
-                              for line in list(s.get("recent_chat", []))[after:]),
-                "golem_premise_memories")
-            premise[uuid_] = [line for line in list(seen.get("recent_chat", []))[after:]
-                              if "last_slept" in line][-1:]
+                lambda s: any("last_slept" in line for line in newer_than_marker(s)),
+                "golem_premise_memories", timeout_seconds=60)
+            premise[uuid_] = [line for line in newer_than_marker(seen) if "last_slept" in line][-1:]
 
     def summoned(_state: dict) -> bool:
         return any(row["entity_type"] == "minecraft:iron_golem" for row in _rows(steps, 32))

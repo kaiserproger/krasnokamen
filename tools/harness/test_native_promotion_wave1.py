@@ -57,6 +57,56 @@ def _row(kind, x, z, **extra):
     return row
 
 
+class GolemChatSteps(Steps):
+    """A native-client double whose `recent_chat` is bounded and newest first, like the real one.
+
+    The merge replies, the premise marker echo and the `data get` answer are appended to the
+    live chat window in that order, so a reply newer than a marker sits at a *smaller* index.
+    """
+
+    def __init__(self, chat=(), reply_newest=True):
+        super().__init__()
+        self.chat = list(chat) or ["HarnessEntities joined the game"]
+        self.time = {"game_time": 5_000}
+        self.reply_newest = reply_newest
+
+    def _say(self, line):
+        self.chat.insert(0, line)
+        del self.chat[100:]
+
+    def fixture(self, command):
+        super().fixture(command)
+        self._say(f"applied {command}")
+
+    def call(self, name, arguments=None):
+        message = str((arguments or {}).get("message", ""))
+        if name == "minecraft_send_chat":
+            if message.startswith("data merge entity "):
+                self._say("Modified entity data of Villager")
+            elif message.startswith("data get entity "):
+                reply = ('Villager has the following entity data: {memories: '
+                         f'{{"minecraft:last_slept": {{value: {self.time["game_time"] - 100}L}}}}}}')
+                if self.reply_newest:
+                    self._say(reply)
+                else:
+                    # The pre-merge shape: the answer is the oldest line in the window.
+                    self.chat.append(reply)
+            elif message.startswith("golem premise "):
+                self._say(f"<HarnessEntities> {message}")
+        return super().call(name, arguments)
+
+    def observe(self, **kwargs):
+        state = super().observe(**kwargs)
+        state["time"] = dict(self.time)
+        return state
+
+    def wait(self, predicate, label, timeout_seconds=None, **kwargs):
+        state = self.observe()
+        if not predicate(state):
+            raise TimeoutError(f"timed out waiting for {label}")
+        return state
+
+
 AGE_KINDS = ("minecraft:squid", "minecraft:glow_squid", "minecraft:skeleton_horse", "minecraft:zombie_horse")
 BABY_KINDS = ("minecraft:zombie", "minecraft:piglin", "minecraft:zoglin")
 
@@ -174,6 +224,61 @@ class Wave1Tests(unittest.TestCase):
                                  _block=mock.Mock(), _use=mock.Mock(), _rows=mock.Mock(return_value=[])):
             with self.assertRaisesRegex(RuntimeError, "spawner_spawned_configured_cow_on_peaceful"):
                 wave1._spawner_egg(steps, (0, 0, 0))
+
+    def test_golem_premise_reads_a_reply_newer_than_its_marker(self):
+        # 20261124T094235: the merges landed ("Modified entity data of Villager" x5) and the
+        # `data get` answer was in the chat, but the old after-the-marker slice looked at the
+        # older half of a newest-first window and the wait sat on the scenario deadline.
+        steps = GolemChatSteps()
+        villagers = [_row("minecraft:villager", .5 + (index % 2) * 2, .5 + (index // 2) * 2)
+                     for index in range(5)]
+        golem = _row("minecraft:iron_golem", .5, 3.5)
+
+        def wanderer(_s, _kind, x, z, exclude=()):
+            return next(v for v in villagers if v["x"] == x and v["z"] == z)
+
+        with mock.patch.multiple(
+                wave1,
+                _set=mock.Mock(),
+                _capture=mock.Mock(),
+                _echo=mock.Mock(side_effect=lambda s, label: s.observe()),
+                _wanderer_at=mock.Mock(side_effect=wanderer),
+                _rows=mock.Mock(side_effect=lambda _s, radius=48: villagers + [golem]),
+        ):
+            wave1._golem_gossip(steps, (0, 0, 0))
+        assertions = steps.report["assertions"]
+        self.assertTrue(assertions["golem_memory_premise_written"])
+        self.assertTrue(assertions["five_sleeping_villagers_summoned_golem"])
+        premise = steps.report["golem_memory_premise"]
+        self.assertEqual(len(premise), 5)
+        for lines in premise.values():
+            self.assertIn("last_slept", lines[0])
+
+    def test_golem_premise_rejects_a_reply_older_than_its_marker(self):
+        # The old after-the-marker slice passed only this shape, which a newest-first window
+        # never produces: the answer older than its marker is not evidence of this merge.
+        steps = GolemChatSteps(reply_newest=False)
+        villagers = [_row("minecraft:villager", .5 + (index % 2) * 2, .5 + (index // 2) * 2)
+                     for index in range(5)]
+
+        def wanderer(_s, _kind, x, z, exclude=()):
+            return next(v for v in villagers if v["x"] == x and v["z"] == z)
+
+        with mock.patch.multiple(
+                wave1,
+                _set=mock.Mock(),
+                _capture=mock.Mock(),
+                _echo=mock.Mock(side_effect=lambda s, label: s.observe()),
+                _wanderer_at=mock.Mock(side_effect=wanderer),
+                # A golem is already in reach, so a code path that accepts the stale reply runs
+                # to a green summon verdict instead of stopping on a later assertion.
+                _rows=mock.Mock(side_effect=lambda _s, radius=48: villagers + [
+                    _row("minecraft:iron_golem", .5, 3.5)]),
+        ):
+            with self.assertRaisesRegex(TimeoutError, "golem_premise_memories"):
+                wave1._golem_gossip(steps, (0, 0, 0))
+        # No premise line was accepted, so no golem verdict could be read on it.
+        self.assertNotIn("golem_memory_premise", steps.report)
 
     def test_dead_player_is_respawned_before_the_next_golem_reading(self):
         dead = Steps(health=0.0, screen_open=True,
