@@ -1,0 +1,84 @@
+{
+  "id": "HC-2",
+  "verdict": "promoted",
+  "fix_commit": "client:45ef47e3cc",
+  "fix_commit_full": "45ef47e3cc238f5adf2cebbd8baf6757e7f4cf54",
+  "promoted_at": "2026-11-24T04:22:21+00:00",
+  "tree_head": "edbe23401a20cf424fddabbcf89306d80e23c009",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T040917-native-v2-input-menus-gt72wr88/result.json",
+    "client_head": "0941d0948f1de3f9f015f4bc97d0038fd99a96cc",
+    "server_binary_sha256": "03cfd4623dd5da42eccbf2f8ba651712374b958d739851599bdb85084d51e48f",
+    "red": [
+      "harness:entities:native-v2-input-menus"
+    ],
+    "states": {
+      "harness:entities:native-v2-input-menus": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T040942-native-v2-input-menus-6u9gpufl/result.json",
+    "client_head": "45ef47e3cc238f5adf2cebbd8baf6757e7f4cf54",
+    "server_binary_sha256": "03cfd4623dd5da42eccbf2f8ba651712374b958d739851599bdb85084d51e48f",
+    "green": [
+      "harness:entities:native-v2-input-menus"
+    ],
+    "states": {
+      "harness:entities:native-v2-input-menus": "green"
+    },
+    "tree_head": "edbe23401a20cf424fddabbcf89306d80e23c009",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T040942-native-v2-input-menus-6u9gpufl/result.json",
+    "client_head": "45ef47e3cc238f5adf2cebbd8baf6757e7f4cf54",
+    "server_binary_sha256": "03cfd4623dd5da42eccbf2f8ba651712374b958d739851599bdb85084d51e48f",
+    "green": [
+      "harness:entities:native-v2-input-menus"
+    ],
+    "states": {
+      "harness:entities:native-v2-input-menus": "green"
+    },
+    "tree_head": "edbe23401a20cf424fddabbcf89306d80e23c009",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "317bd348e80a7950d458f9f4445061cf659d3f21",
+    "paths": [
+      "src/lib.rs"
+    ]
+  },
+  "candidate_refs": {
+    "python:tools.harness.test_harness:NativeLaunchEnvironmentTests.test_a_launch_never_inherits_the_data_roots_managed_settings": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:ui::inventory_input_tests::hovered_hotbar_swap_reconciles_server_rejection": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:ui::inventory_input_tests::inventory_native_number_keys_and_offhand_swap_hovered_stack": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:ui::inventory_input_tests::inventory_native_q_and_control_q_throw_hovered_items": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:ui::inventory_input_tests::inventory_native_shortcuts_preserve_gameplay_and_ignore_releases": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:ui::inventory_input_tests::inventory_swapping_while_carrying_does_not_change_slots": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T042035-ledger-promote-tn9modnw"
+}
