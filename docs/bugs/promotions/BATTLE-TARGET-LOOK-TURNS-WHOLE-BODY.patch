@@ -1,0 +1,25 @@
+diff --git a/crates/mc-core/src/battle/facing.rs b/crates/mc-core/src/battle/facing.rs
+index 08e47a1..56b5d29 100644
+--- a/crates/mc-core/src/battle/facing.rs
++++ b/crates/mc-core/src/battle/facing.rs
+@@ -324,9 +324,17 @@ fn next(
+ /// capped. The cone also holds while the head turns at exactly the
+ /// [`HEAD_STABLE`] rate, which the client sees as larger 3-tick steps.
+ fn body_rule(row: &mut Row, head: f32) -> f32 {
+-    row.stable = 0;
+-    row.last_stable = head;
+-    head
++    if wrap(head - row.last_stable).abs() > HEAD_STABLE {
++        row.stable = 0;
++        row.last_stable = head;
++        return within(row.body, head, CONE);
++    }
++    row.stable = (row.stable + 1).min(ALIGN_DELAY + ALIGN_TICKS);
++    if row.stable <= ALIGN_DELAY {
++        return within(row.body, head, CONE);
++    }
++    let fraction = f32::from(row.stable - ALIGN_DELAY) / f32::from(ALIGN_TICKS);
++    within(row.body, head, CONE * (1.0 - fraction))
+ }
+ 
+ /// The previous rest guard of a row that keeps the old look: its head on its
