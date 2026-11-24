@@ -1,0 +1,51 @@
+{
+  "id": "HARNESS-GAIT-SPIDER-FIXTURE-OCCLUDED",
+  "verdict": "promoted",
+  "fix_commit": "patch:1601243a8f1bbc396bd8dcbb06cb1c30f98fbd13986ffa4524a874badff2e651",
+  "fix_commit_full": "patch:1601243a8f1bbc396bd8dcbb06cb1c30f98fbd13986ffa4524a874badff2e651",
+  "promoted_at": "2026-11-24T11:34:13+00:00",
+  "tree_head": "595f66d98a5ee92a348b98915163c69a1622a2b7",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "1601243a8f1bbc396bd8dcbb06cb1c30f98fbd13986ffa4524a874badff2e651",
+  "reversed_files": [
+    "tools/harness/gait_phase_scene.json"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "harness:scene-shot:native-gait-spider": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    },
+    "python:tools.harness.test_scene_shot:SceneShotTests.test_gait_fixture_keeps_previous_subject_outside_spider_view": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/harness/test_scene_shot.py",
+        "line": 33,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_scene_shot:SceneShotTests.test_gait_fixture_keeps_previous_subject_outside_spider_view": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T112417-native-gait-spider-ixvsjazt/result.json",
+    "tree_head": "595f66d98a5ee92a348b98915163c69a1622a2b7",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "covers": [
+      "harness:scene-shot:native-gait-spider"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T113406-ledger-promote-mzswliqd"
+}

@@ -1,0 +1,46 @@
+diff --git a/tools/harness/dynamic_context_scene.json b/tools/harness/dynamic_context_scene.json
+--- a/tools/harness/dynamic_context_scene.json
++++ b/tools/harness/dynamic_context_scene.json
+@@ -49,7 +49,7 @@
+       "cmd": "setblock 1002 160 1005 minecraft:oak_shelf[facing=north]{Items:[{Slot:1b,id:\"minecraft:clock\",count:1},{Slot:2b,id:\"minecraft:compass\",count:1}]}"
+     },
+     {
+-      "cmd": "setblock 997 160 1005 minecraft:oak_shelf[facing=north]{Items:[{Slot:1b,id:\"minecraft:compass\",count:1}]}"
++      "cmd": "setblock 997 160 1005 minecraft:oak_shelf[facing=north]{Items:[{Slot:0b,id:\"minecraft:clock\",count:1},{Slot:1b,id:\"minecraft:compass\",count:1}]}"
+     },
+     {
+       "cmd": "summon minecraft:item 1001.5 161.4 1003.5 {NoGravity:1b,Item:{id:\"minecraft:clock\",count:1}}"
+@@ -98,6 +98,33 @@
+     },
+     {
+       "shot": "compass-day"
++    },
++    {
++      "cmd": "setblock 1000 161 1001 minecraft:stone"
++    },
++    {
++      "tp": [
++        1000.5,
++        162,
++        1001.5,
++        10,
++        37
++      ]
++    },
++    {
++      "wait_ticks": 30
++    },
++    {
++      "shot": "held-day"
++    },
++    {
++      "cmd": "time set 18000"
++    },
++    {
++      "wait_ticks": 120
++    },
++    {
++      "shot": "held-night"
+     }
+   ]
+ }

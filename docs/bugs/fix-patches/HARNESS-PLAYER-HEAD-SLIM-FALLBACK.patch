@@ -1,0 +1,23 @@
+diff --git a/tools/harness/backends/scene_shot_checks.py b/tools/harness/backends/scene_shot_checks.py
+--- a/tools/harness/backends/scene_shot_checks.py
++++ b/tools/harness/backends/scene_shot_checks.py
+@@ -252,13 +252,16 @@
+     from PIL import Image, ImageDraw
+ 
+     pack = artifact / "head-skin-pack"
+-    texture = pack / "assets/minecraft/textures/entity/player/wide/steve.png"
+-    texture.parent.mkdir(parents=True)
+     skin = Image.new("RGBA", (64, 64), (0, 220, 220, 255))
+     draw = ImageDraw.Draw(skin)
+     draw.rectangle((32, 0, 63, 15), fill=(240, 0, 240, 255))
+     draw.rectangle((42, 10, 45, 13), fill=(0, 0, 0, 0))
+-    skin.save(texture)
++    # The pinned entity facts select slim/steve for unresolved placed heads
++    # (default_skins[6]); the special-item path selects wide/steve.
++    for model in ("slim", "wide"):
++        texture = pack / f"assets/minecraft/textures/entity/player/{model}/steve.png"
++        texture.parent.mkdir(parents=True)
++        skin.save(texture)
+     (pack / "pack.mcmeta").write_text(json.dumps({
+         "pack": {"description": "Authored player-head hat regression skin", "pack_format": 84},
+     }) + "\n")
