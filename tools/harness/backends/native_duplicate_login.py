@@ -411,4 +411,23 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.check("relogin_same_account", back["player"]["entity_uuid"] == steps.report["player_uuid"])
     steps.check("relogin_inventory_moved_not_copied", item_count(back, "minecraft:diamond") == 1)
     _echo(steps, "relogin_ordered_chat")
+    # NATIVE-KICK-REASON-BROKEN-PIPE, the row's own repro: a duplicate-login kick while the incumbent
+    # is in the Nether. The client is falling from the travel spawn and writes itself to the server
+    # every tick, so an outbound write can fail before the kick packet already in the receive buffer
+    # is decoded; the reason the server sent must still be what the client shows.
+    steps.fixture("execute in minecraft:the_nether run tp @s 8 100 8")
+    while True:
+        seen = first.call_tool("minecraft_observe")
+        if seen.get("dimension") == "minecraft:the_nether" and seen.get("in_play") is True:
+            break
+        first.call_tool("minecraft_wait_for_state_change", {
+            "observed_version": seen["state_version"], "timeout_seconds": steps.remaining()})
+    nether = start("nether-login")
+    nether.call_tool("minecraft_wait_for_play", {"timeout_seconds": steps.remaining()})
+    kicked = _left_play(first, steps, "nether_session_replaced")
+    steps.report["nether_kick"] = {
+        key: kicked.get(key) for key in ("in_play", "disconnect_reason", "disconnected", "state_version")}
+    reason = str(kicked.get("disconnect_reason") or "")
+    steps.check("kick_reason_preserved", "You logged in from another location" in reason)
+    steps.check("kick_reason_not_broken_pipe", "Broken pipe" not in reason)
 
