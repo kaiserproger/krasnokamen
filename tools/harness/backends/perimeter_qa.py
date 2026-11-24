@@ -24,6 +24,7 @@ a crash: that is the control the bug ledger needs.
 from __future__ import annotations
 
 import math
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -32,9 +33,11 @@ from ..profiles import ProfileContext
 from . import native_client
 from .buildings_qa import (
     _block_id, _chat_lines, _chest_totals, _deposit_all_at, _echo, _hand_storage_at,
-    _close_any_screen, _container_titled, _open_chest_at, _project_status, _text_plain, _props, _read, _scan_box, _summon_bind, _verdict, _villagers,
+    _open_chest_at, _props, _read, _scan_box, _summon_bind, _verdict, _villagers,
 )
 from .probe_steps import ProbeSteps
+
+CONTAINER = "net.minecraft.client.gui.screens.inventory.ContainerScreen"
 
 NAME = "perimeter"
 VERDICTS = frozenset({
@@ -164,32 +167,49 @@ def project_named(labels: set[str]) -> bool:
     return bool(labels & set(LAYOUT_INFRASTRUCTURE)) and "Unknown blueprint" not in labels
 
 
-def _menu_dump(probe: ProbeSteps, page: str, title: str, click: int | None = None,
-               follow: str | None = None) -> list[str]:
-    """Name and lore of every filled slot of one civil menu page (evidence for a stalled build)."""
-    _close_any_screen(probe)
-    probe.call("minecraft_send_chat", {"message": f"settlement menu {page}", "command": True})
-    state = probe.wait(lambda s: _container_titled(s, title), f"{FIXTURE}_{page}_open",
-                       timeout_seconds=60)
-    if click is not None and follow is not None:
-        probe.call("minecraft_click_container_slot", {"slot": click, "button": "primary",
-                                                      "timeout_seconds": probe.remaining()})
-        state = probe.wait(lambda s: _container_titled(s, follow), f"{FIXTURE}_{page}_follow",
-                           timeout_seconds=60)
-    rows = []
-    for row in state["container"]["slots"]:
-        name = str(row.get("name") or "")
-        if not name or int(row.get("slot", 99)) >= 54:
-            continue
-        try:
-            lore = probe.call("minecraft_read_item_components",
-                              {"source": "container", "slot": int(row["slot"])})["components"]
-            text = " | ".join(_text_plain(line) for line in lore.get("minecraft:lore", []))
-        except Exception:
-            text = ""
-        rows.append(f"{row['slot']}: {name} :: {text}"[:300])
-    probe.call("minecraft_close_screen", {})
-    return rows
+def project_labels_from(names: list[str]) -> set[str]:
+    """Active project labels on the Construction status page, whose slots read `<label> L<n> …`."""
+    labels = set()
+    for name in names:
+        match = re.search(r"(.+?) L\d+", str(name))
+        if match:
+            labels.add(match.group(1).strip())
+    return labels
+
+
+def _page_names(probe: ProbeSteps, marker: str, check: str,
+                timeout_seconds: float = 30.0) -> list[str]:
+    state = probe.wait(lambda s: (s.get("screen") or {}).get("class") == CONTAINER
+                       and (s.get("container") or {}).get("slot_count") == 90
+                       and any(marker in str(row.get("name"))
+                               for row in (s.get("container") or {}).get("slots", [])
+                               if row.get("name")),
+                       check, timeout_seconds=timeout_seconds)
+    return [str(row.get("name")) for row in (state.get("container") or {}).get("slots", [])
+            if row.get("name")]
+
+
+def _status_names(probe: ProbeSteps, artifact: Path, ax: int, ay: int, az: int,
+                  sname: str) -> list[str]:
+    """The Construction status page's slot names through the D63 client UI.
+
+    Hub (bell) -> Management -> Construction catalogue -> Status. The retired
+    `settlement menu projects` chest walk cannot open these pages on the D63 client,
+    so the gate reads them where a player does, and only when it runs windowed.
+    """
+    from . import settlement_map_qa as ui
+
+    probe.fixture(f"tp @s {ax + 0.5} {ay + 1.0} {az - 2.5}")
+    gui = ui.Gui(probe, artifact, "native", 3, (1280, 720))
+    try:
+        ui._enter_hub(probe, gui, [ax, ay, az], f"Settlement {sname}")
+        ui._enter_dashboard(probe, gui, "Management", "Management")
+        gui.slot_named(r"^Construction$", "dashboard Construction")
+        _page_names(probe, "L1", "perimeter_blueprints_GUI")
+        gui.slot_named(r"^Status$", "blueprints Status")
+        return _page_names(probe, "Active projects", "perimeter_status_GUI")
+    finally:
+        gui.close()
 
 
 def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, artifact: Path) -> None:
@@ -265,16 +285,11 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
         roads.update(_scan_box(probe, (ax, ay - 1, az - RING), (ax, ay - 1, az + RING)))
         samples.append({"seconds": round(elapsed), "ring_blocks": counts["ring_blocks"],
                         "well_blocks": counts["well_blocks"], "doors": counts["doors"],
-                        "road_paths": sum(1 for block in roads.values() if block == PATH),
-                        "project": _project_status(probe)})
+                        "road_paths": sum(1 for block in roads.values() if block == PATH)})
         if len(samples) in (1, 4, 12, 30):
             sub.setdefault("villagers", {})[str(len(samples))] = [
                 [round(float(v["x"]), 1), round(float(v["y"]), 1), round(float(v["z"]), 1)]
                 for v in _villagers(probe)]
-        if len(samples) in (3, 25):
-            sub.setdefault("pages", {})[str(len(samples))] = {
-                "construction": _menu_dump(probe, "projects", "Projects", 52, "Construction"),
-                "residents": _menu_dump(probe, "residents", "Residents")}
         if first is None and counts["ring_blocks"] + counts["well_blocks"] > 0:
             first = elapsed
         if complete(counts):
@@ -290,10 +305,20 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
     # SETTLEMENT-LAYOUT-PROJECT-SHOWS-UNKNOWN-BLUEPRINT: the built-in layout kinds (wall section,
     # gate, well) are exactly the projects this gate makes the settlement plan, so the live
     # Construction page is where their display names are readable. Every active project observed
-    # during the build must carry a name — `Unknown blueprint` is the symptom — and at least one
-    # of the fortification kinds must have been observed, or this run never reached the question.
+    # must carry a name — `Unknown blueprint` is the symptom — and at least one of the fortification
+    # kinds must have been observed, or this run never reached the question. The page is opened the
+    # way the D63 client offers it (hub -> Management -> Construction -> Status), never by the
+    # retired `settlement menu projects` command route.
     from .village_autonomy_qa import PROJECT_LABELS
-    labels = {str(sample["project"][0]) for sample in samples if sample.get("project")}
+    labels: set[str] = set()
+    if ctx.windowed:
+        try:
+            names = _status_names(probe, artifact, ax, ay, az, sname)
+            sub["status_slots"] = names[:16]
+            labels = project_labels_from(names)
+            probe.fixture(f"tp @s {ax + 0.5} {ay + 1.0} {az + 0.5}")
+        except Exception as error:  # a GUI the run could not open is recorded, never a false pass
+            sub["status_error"] = str(error)[:300]
     layout = labels & set(LAYOUT_INFRASTRUCTURE)
     named = project_named(labels)
     sub["project_labels"] = sorted(labels)

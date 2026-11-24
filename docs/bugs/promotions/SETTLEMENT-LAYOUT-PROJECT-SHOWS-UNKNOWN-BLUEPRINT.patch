@@ -1,5 +1,4 @@
 diff --git a/crates/mc-core/src/settlements/ui_text.rs b/crates/mc-core/src/settlements/ui_text.rs
-index 4ae45dcbc..db0517b59 100644
 --- a/crates/mc-core/src/settlements/ui_text.rs
 +++ b/crates/mc-core/src/settlements/ui_text.rs
 @@ -794,6 +794,9 @@ pub(crate) fn blueprint(lang: Lang, id: &str) -> &'static str {
@@ -9,28 +8,6 @@ index 4ae45dcbc..db0517b59 100644
 +        "perimeter" => ("Wall section", "Секция стены"),
 +        "perimeter_gate" => ("Gate", "Ворота"),
 +        "well" => ("Well", "Колодец"),
+         "furnace" => ("Furnace", "Печь"),
          "road" => ("Road", "Дорога"),
          "lamp" => ("Street lamp", "Фонарь"),
-         "meadow" => ("Meadow clearing", "Расчистка луга"),
-@@ -984,6 +987,21 @@ mod tests {
-         assert_eq!(Lang::of(None), Lang::En);
-     }
- 
-+    #[test]
-+    fn every_layout_infrastructure_project_has_a_display_name() {
-+        use crate::settlements::layout::{GATE, LAMP, MEADOW, PERIMETER, ROAD, WELL};
-+        for id in [ROAD, LAMP, MEADOW, PERIMETER, GATE, WELL] {
-+            assert_ne!(blueprint(Lang::En, id), "Unknown blueprint", "{id}");
-+            assert_ne!(blueprint(Lang::Ru, id), "Неизвестный чертёж", "{id}");
-+        }
-+        assert_eq!(blueprint(Lang::En, PERIMETER), "Wall section");
-+        assert_eq!(blueprint(Lang::Ru, PERIMETER), "Секция стены");
-+        assert_eq!(blueprint(Lang::En, GATE), "Gate");
-+        assert_eq!(blueprint(Lang::Ru, GATE), "Ворота");
-+        assert_eq!(blueprint(Lang::En, WELL), "Well");
-+        assert_eq!(blueprint(Lang::Ru, WELL), "Колодец");
-+    }
-+
-     #[test]
-     fn fill_replaces_known_placeholders_only() {
-         assert_eq!(

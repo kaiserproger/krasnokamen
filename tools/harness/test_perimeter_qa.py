@@ -81,6 +81,14 @@ class PerimeterProjectNames(unittest.TestCase):
         self.assertFalse(qa.project_named(set()))
         self.assertFalse(qa.project_named({"House", "Road", "Street lamp"}))
 
+    def test_status_slot_names_carry_the_project_label(self):
+        names = ["Active projects: 1/8", "Wall section L1 · Prepared",
+                 "Well L1 · Prepared 0/24", "Медовая поляна"]
+        self.assertEqual(qa.project_labels_from(names), {"Wall section", "Well"})
+        self.assertTrue(qa.project_named(qa.project_labels_from(names)))
+        unknown = qa.project_labels_from(["Unknown blueprint L1 · Prepared 0/24"])
+        self.assertFalse(qa.project_named(unknown))
+
 
 if __name__ == "__main__":
     unittest.main()
