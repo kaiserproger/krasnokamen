@@ -205,7 +205,7 @@ def check(profile: str, ctx, spec: dict) -> frozenset[str]:
         schemas = mcp_schema.loader_schema(loader)
     if schemas is not None:
         if profile == 'scene-shot':
-            for tool, arguments in scene_shot.scene_mcp_calls(scenario['steps']):
+            for tool, arguments in scene_shot.scene_mcp_calls(scenario['steps'], ctx.client):
                 if tool not in schemas:
                     raise ValueError(f'client schema does not offer required tool {tool}')
                 mcp_schema.validate(schemas[tool], arguments, tool)

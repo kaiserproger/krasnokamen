@@ -1346,3 +1346,45 @@ class NamedFixtureClientTests(unittest.TestCase):
                 expected = entry.client or ("java" if name.startswith("java-") else "native")
                 argv = regressions._client_command("scene-shot", name)
                 self.assertEqual(argv[argv.index("--client") + 1], expected)
+
+
+class HeldScreenshotSchemaTests(unittest.TestCase):
+    """A held screenshot is native-only; the Java client's press-inputs schema has no `hold`.
+
+    The preflight validates every literal MCP call in the scanned scene-shot modules against the
+    client's own schema, so a native-only `hold` call there rejected every Java scene-shot run
+    (2026-11-25: `scene_shot_execute.py:48: minecraft_press_inputs: arguments: undeclared hold`).
+    """
+
+    JAVA_PRESS_INPUTS = {
+        'type': 'object',
+        'properties': {'keys': {'type': 'array', 'items': {'type': 'string'}},
+                       'ticks': {'type': 'integer'}},
+        'required': ['keys', 'ticks'],
+        'additionalProperties': False,
+    }
+
+    def test_scanned_scene_shot_sources_pass_the_java_press_inputs_schema(self):
+        from tools.harness import mcp_schema
+
+        backend = Path(__file__).parent / 'backends'
+        schemas = {'minecraft_press_inputs': self.JAVA_PRESS_INPUTS}
+        for name in ('scene_shot_execute.py', 'scene_shot_steps.py', 'scene_shot_checks.py',
+                     'scene_shot_client.py', 'scene_shot_scenario.py'):
+            with self.subTest(module=name):
+                mcp_schema.validate_source(backend / name, schemas)
+
+    def test_hold_step_yields_a_call_for_native_only(self):
+        from tools.harness.backends import scene_shot_steps
+
+        step = {'shot': 'held-tab', 'hold_keys': ['key.keyboard.tab']}
+        self.assertEqual(list(scene_shot_steps.scene_mcp_calls([step], 'java')), [])
+        calls = list(scene_shot_steps.scene_mcp_calls([step], 'native'))
+        self.assertEqual(calls, [('minecraft_press_inputs',
+                                  {'keys': ['key.keyboard.tab'], 'ticks': 1, 'hold': True})])
+
+    def test_java_refuses_a_held_step_before_any_process(self):
+        from tools.harness.backends import scene_shot_steps
+
+        with self.assertRaisesRegex(ValueError, 'hold_keys screenshots unsupported for --client java'):
+            scene_shot_steps.validate_steps([{'shot': 'held-tab', 'hold_keys': ['key.keyboard.tab']}], 'java')
