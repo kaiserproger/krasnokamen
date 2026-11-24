@@ -26,6 +26,17 @@ mod sensor_bench_tests;
 #[path = "../entity_prephase_tests.rs"]
 mod entity_prephase_tests;
 
+/// Rare motion target of one row: a plugin route (villager) or a piglin's gold.
+/// A plugin target needs a villager and a gold target needs a piglin, so the two
+/// never co-occur; one 32-byte field replaces the two `Option<[f64; 3]>` (64 B).
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub(super) enum RareMotion {
+    #[default]
+    None,
+    Plugin([f64; 3]),
+    Gold([f64; 3]),
+}
+
 /// Hot worker snapshot; rare state is read by slot while the store is immutable.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct ReadRow {
@@ -85,9 +96,8 @@ pub(super) struct ReadRow {
     pub(super) dark_aggro: bool,
     /// A lit fuse holds the mob still.
     pub(super) standing: bool,
-    pub(super) plugin_target: Option<[f64; 3]>,
+    pub(super) rare_motion: RareMotion,
     pub(super) leash_follow: bool,
-    pub(super) gold_target: Option<[f64; 3]>,
     pub(super) has_retained_target: bool,
     pub(super) retain_target: bool,
 }
@@ -501,7 +511,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             && row.think
             && !row.breed_ready
             && !row.standing
-            && row.plugin_target.is_none()
+            && !matches!(row.rare_motion, RareMotion::Plugin(_))
             && row.panic_multiplier == 0.0
             && !row.has_retained_target
     });

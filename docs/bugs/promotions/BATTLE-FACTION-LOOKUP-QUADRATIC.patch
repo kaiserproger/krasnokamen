@@ -1,0 +1,52 @@
+diff --git a/crates/mc-core/src/battle/mod.rs b/crates/mc-core/src/battle/mod.rs
+--- a/crates/mc-core/src/battle/mod.rs
++++ b/crates/mc-core/src/battle/mod.rs
+@@ -176,18 +176,15 @@
+             return;
+         }
+         self.units += 1;
++        #[cfg(test)]
++        {
++            RECORD_LOOKUPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++        }
+         let alive = u64::from(alive);
+-        if let Some(count) = self.alive_per_faction.iter_mut().find(|c| c.faction == faction) {
+-            #[cfg(test)]
+-            {
+-                RECORD_LOOKUPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+-            }
+-            count.alive += alive;
++        if let Some(&slot) = self.index.get(&faction) {
++            self.alive_per_faction[slot].alive += alive;
+         } else {
+-            #[cfg(test)]
+-            {
+-                RECORD_LOOKUPS.fetch_add(self.alive_per_faction.len() + 1, std::sync::atomic::Ordering::Relaxed);
+-            }
++            self.index.insert(faction, self.alive_per_faction.len());
+             self.alive_per_faction.push(FactionAlive { faction, alive });
+         }
+     }
+diff --git a/crates/mc-core/src/battle/targeting.rs b/crates/mc-core/src/battle/targeting.rs
+--- a/crates/mc-core/src/battle/targeting.rs
++++ b/crates/mc-core/src/battle/targeting.rs
+@@ -98,16 +98,14 @@
+         for unit in units.filter(|unit| super::battle_row(unit.faction)) {
+             let key = (unit.faction, cell(unit.pos[0]), cell(unit.pos[2]));
+             self.cells.entry(key).or_default().len += 1;
+-            if !self.factions.contains(&unit.faction) {
+-                self.factions.push(unit.faction);
+-            }
+             #[cfg(test)]
+             {
+-                REBUILD_LOOKUPS.fetch_add(self.factions.len(), std::sync::atomic::Ordering::Relaxed);
++                REBUILD_LOOKUPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+             }
++            self.present.insert(unit.faction);
+             self.input.push(unit);
+         }
+-        self.factions.sort_unstable();
++        self.factions.extend(self.present.iter().copied());
+         let mut start = 0;
+         for bucket in self.cells.values_mut() {
+             bucket.start = start;

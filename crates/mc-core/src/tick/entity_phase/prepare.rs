@@ -541,8 +541,11 @@ pub(in crate::tick) fn read_row(
         has_retained_target,
         retain_target: !battle && blueprint.is_some_and(crate::hostile::retains_target),
         enderman_target: rare.enderman_target,
-        plugin_target: rare.plugin_target,
-        gold_target: rare.gold_target,
+        rare_motion: match (rare.plugin_target, rare.gold_target) {
+            (Some(target), _) => RareMotion::Plugin(target),
+            (None, Some(target)) => RareMotion::Gold(target),
+            (None, None) => RareMotion::None,
+        },
         panic_multiplier,
         slot,
         id: body.id,

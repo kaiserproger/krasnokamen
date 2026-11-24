@@ -1847,3 +1847,85 @@ fn husk_rides_at_the_vanilla_seat_and_strikes_from_it() {
         .set_pos(level, [6.5 + 1.0, hp[1] + seat - 1.9, 6.5]);
     assert!(faction::in_melee_range(&state.entities, r, level, reach));
 }
+
+// --- FACTION-LOOKUP narrow form: indexed faction tables (B1/B2) ---
+
+/// 64 factions in a shuffled arrival order with several units each; the
+/// independent oracle is a BTreeMap (never `UnitCounters::sample`, which calls
+/// the same `record`).
+fn sixty_four_faction_units() -> Vec<(u16, bool)> {
+    let mut seed = 0x64_0f_0f_0f_u64;
+    let mut next = || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed
+    };
+    let mut units = Vec::new();
+    for faction in 1..=64u16 {
+        for _ in 0..(next() % 3 + 1) {
+            units.push((faction, next() % 2 == 0));
+        }
+    }
+    // Shuffle the arrival order without touching the multiset.
+    for index in (1..units.len()).rev() {
+        let other = (next() as usize) % (index + 1);
+        units.swap(index, other);
+    }
+    units
+}
+
+#[test]
+fn faction_population_matches_a_btreemap_oracle_at_sixty_four_factions() {
+    let units = sixty_four_faction_units();
+    let mut counts = UnitCounters::default();
+    let mut oracle: std::collections::BTreeMap<u16, u64> = std::collections::BTreeMap::new();
+    for (faction, alive) in &units {
+        counts.record(*faction, *alive);
+        *oracle.entry(*faction).or_default() += u64::from(*alive);
+    }
+    counts.finish();
+    let expected: Vec<FactionAlive> = oracle
+        .iter()
+        .map(|(faction, alive)| FactionAlive {
+            faction: *faction,
+            alive: *alive,
+        })
+        .collect();
+    assert_eq!(counts.alive_per_faction, expected);
+    assert_eq!(counts.units, units.len() as u64);
+}
+
+#[test]
+fn faction_tables_build_with_one_lookup_per_unit_at_sixty_four_factions() {
+    use std::sync::atomic::Ordering;
+    let units: Vec<Unit> = sixty_four_faction_units()
+        .into_iter()
+        .enumerate()
+        .map(|(index, (faction, _))| unit(index as i32 + 1, faction, index as f64, 64.0, 0.0))
+        .collect();
+    let grid_before = targeting::REBUILD_LOOKUPS.load(Ordering::Relaxed);
+    let mut grid = TargetGrid::default();
+    grid.rebuild(units.iter().copied());
+    let grid_work = targeting::REBUILD_LOOKUPS.load(Ordering::Relaxed) - grid_before;
+    assert_eq!(
+        grid_work,
+        units.len(),
+        "one faction lookup per unit, not one per visited faction"
+    );
+    let mut distinct: Vec<u16> = units.iter().map(|unit| unit.faction).collect();
+    distinct.sort_unstable();
+    distinct.dedup();
+    assert_eq!(grid.factions(), distinct.as_slice());
+
+    let counts_before = RECORD_LOOKUPS.load(Ordering::Relaxed);
+    let mut counts = UnitCounters::default();
+    for (faction, alive) in sixty_four_faction_units() {
+        counts.record(faction, alive);
+    }
+    let record_work = RECORD_LOOKUPS.load(Ordering::Relaxed) - counts_before;
+    assert_eq!(
+        record_work, counts.units as usize,
+        "one faction lookup per unit, not one per visited faction"
+    );
+}

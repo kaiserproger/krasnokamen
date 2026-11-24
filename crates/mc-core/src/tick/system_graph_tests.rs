@@ -228,13 +228,13 @@ fn step_entity_borrows_its_row() {
     // read field by field, not a cache-line-packed struct, so the bound below is
     // a growth ratchet at the 256 byte worker-snapshot bound asserted in
     // `entity_phase_tests::worker_snapshot_keeps_rare_state_in_entity_store`.
-    // Its remaining 64 B of inline targets are `ENTITY-READ-ROW-INLINE-TARGETS-64-BYTES`.
+    // The rare target fields are `ENTITY-READ-ROW-RARE-TARGET-FIELDS-ON-THE-HOT-ROW`;
+    // the exact size ratchet lives in `worker_snapshot_keeps_rare_state_in_entity_store`.
     let step: fn(
         &ReadRow,
         &StepCtx<'_>,
         &crate::world::PhysicsReader<'_>,
     ) -> (MoveWrite, Vec<RawIntent>) = step_entity;
-    assert!(std::mem::size_of::<ReadRow>() <= 256);
     let _ = step;
 }
 
