@@ -18,7 +18,7 @@ SCENARIO_KINDS = ("frame-waypoint", "banner-removal", "locked-banners", "pumpkin
 # Region of the 1280x720 retained frame that holds the drawn held map's centre (where the frame
 # marker is drawn) while never holding the chat overlay (which reaches x≈560 over the map), the
 # top-right message box (y<160) or the held-item name tooltip (y>560).
-HELD_MAP_REGIONS = ((590, 170, 930, 560),)
+HELD_MAP_REGIONS = ((620, 170, 930, 560),)
 # The frame-marker icon is ~12x15 drawn pixels (measured on the fixed client: see the hunks map);
 # 0 on a client that receives the decoration and never draws it.
 FRAME_MARKER_MIN_PIXELS = 20
@@ -218,10 +218,12 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                 steps.call("minecraft_read_item_components", {"source": "selected"}).get("item_id")
                 == "minecraft:filled_map")
     colours_before = _map(steps, locked)["colors"][:]
-    # The chat overlay is drawn over the left part of the held map and grows with every fixture line,
-    # so both captures are taken with the HUD hidden (F1); the map rendering itself is unaffected.
-    steps.call("minecraft_press_inputs", {"keys": ["key.keyboard.f1"], "ticks": 1})
-    steps.wait(lambda state: state["client_settings"]["hide_hud"] is True, "map_captures_hud_hidden")
+    # The chat overlay is drawn over the left part of the held map and scrolls up with every new
+    # line, so the read region starts right of the chat's longest line. Command feedback is turned
+    # off for the two captures so only the ordered marker line is added between them (F1 would hide
+    # the held item itself, which is why the HUD stays visible).
+    steps.fixture("gamerule send_command_feedback false")
+    _echo(steps, "map_captures_command_feedback_off")
     _held_shot(steps, "map-held-without-frame-waypoint")
     steps.fixture("clear @s minecraft:filled_map")
     _frame_insert(steps, frame, locked)
@@ -233,9 +235,7 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                 steps.call("minecraft_read_item_components", {"source": "selected"}).get("item_id")
                 == "minecraft:filled_map")
     _held_shot(steps, "map-held-with-frame-waypoint")
-    steps.call("minecraft_press_inputs", {"keys": ["key.keyboard.f1"], "ticks": 1})
-    steps.wait(lambda state: state["client_settings"]["hide_hud"] is False,
-               "map_captures_hud_restored")
+    steps.fixture("gamerule send_command_feedback true")
     colours_after = _map(steps, locked)["colors"][:]
     steps.report["map_terrain_changed_pixels"] = sum(
         1 for before, after in zip(colours_before, colours_after) if before != after)
