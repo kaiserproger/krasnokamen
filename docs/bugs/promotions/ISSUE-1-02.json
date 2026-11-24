@@ -1,0 +1,65 @@
+{
+  "id": "ISSUE-1-02",
+  "verdict": "promoted",
+  "fix_commit": "client:8c392a0ac1",
+  "fix_commit_full": "8c392a0ac14eaa6f74135eb85b33a8c44b27031b",
+  "promoted_at": "2026-11-24T14:16:57+00:00",
+  "tree_head": "23c1aa822ff6bc1d80d4fa6b6e662c87158055e1",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T141412-issue1-02-held-tool-nfqdqwpq/result.json",
+    "client_head": "582a6900489480aa9a884dbb2d3fc7b699329f69",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "red": [
+      "harness:scene-shot:issue1-02-held-tool"
+    ],
+    "states": {
+      "harness:scene-shot:issue1-02-held-tool": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T141326-issue1-02-held-tool-65nfcb7z/result.json",
+    "client_head": "8c392a0ac14eaa6f74135eb85b33a8c44b27031b",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "green": [
+      "harness:scene-shot:issue1-02-held-tool"
+    ],
+    "states": {
+      "harness:scene-shot:issue1-02-held-tool": "green"
+    },
+    "tree_head": "23c1aa822ff6bc1d80d4fa6b6e662c87158055e1",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T141326-issue1-02-held-tool-65nfcb7z/result.json",
+    "client_head": "8c392a0ac14eaa6f74135eb85b33a8c44b27031b",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "green": [
+      "harness:scene-shot:issue1-02-held-tool"
+    ],
+    "states": {
+      "harness:scene-shot:issue1-02-held-tool": "green"
+    },
+    "tree_head": "23c1aa822ff6bc1d80d4fa6b6e662c87158055e1",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "5755286a4209a27f8d25584f147a39440e76e865",
+    "paths": [
+      "src/motion.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:motion::tests::view_motion_hand_is_perfectly_still_at_rest": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T141605-ledger-promote-55s7nrxs"
+}
