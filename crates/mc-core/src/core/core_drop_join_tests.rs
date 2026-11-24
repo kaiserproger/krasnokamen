@@ -366,15 +366,12 @@ fn plain_drop_joins_a_journal_writer_holding_the_world_directory() {
         return;
     }
 
-    let directory = std::env::temp_dir().join(format!(
-        "mc-core-drop-world-{}",
-        uuid::Uuid::new_v4()
-    ));
+    let directory =
+        std::env::temp_dir().join(format!("mc-core-drop-world-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&directory).unwrap();
     let (entered_tx, entered_rx) = mpsc::channel();
     let (release, release_rx) = mpsc::channel::<()>();
-    *super::journal::JOURNAL_EXIT_HOLD.lock() =
-        Some((directory.clone(), entered_tx, release_rx));
+    *super::journal::JOURNAL_EXIT_HOLD.lock() = Some((directory.clone(), entered_tx, release_rx));
     let guard = ExitHoldGuard(directory.clone());
     let core = Core::open(config(&directory)).expect("open the world");
 

@@ -86,18 +86,16 @@ async fn client_view_distance_join_grow_and_shrink() {
     let id = server.connections.joining_id();
     let entity = EntityId(1);
     let spawn = [8.0, 64.0, 8.0];
-    server
-        .connections
-        .stash_join(
-            id,
-            JoinedSpawn {
-                entity,
-                position: spawn,
-                rotation: [0.0, 0.0],
-                game_mode: 0,
-                dimension: Default::default(),
-            },
-        );
+    server.connections.stash_join(
+        id,
+        JoinedSpawn {
+            entity,
+            position: spawn,
+            rotation: [0.0, 0.0],
+            game_mode: 0,
+            dimension: Default::default(),
+        },
+    );
     wait_for_join(
         &server,
         id,
@@ -277,18 +275,16 @@ async fn play_client_information_admits_the_client_locale() {
     let root = tempfile::tempdir().unwrap();
     let server = server(root.path());
     let id = server.connections.joining_id();
-    server
-        .connections
-        .stash_join(
-            id,
-            JoinedSpawn {
-                entity: EntityId(1),
-                position: [8.0, 64.0, 8.0],
-                rotation: [0.0, 0.0],
-                game_mode: 0,
-                dimension: Default::default(),
-            },
-        );
+    server.connections.stash_join(
+        id,
+        JoinedSpawn {
+            entity: EntityId(1),
+            position: [8.0, 64.0, 8.0],
+            rotation: [0.0, 0.0],
+            game_mode: 0,
+            dimension: Default::default(),
+        },
+    );
     wait_for_join(
         &server,
         id,
@@ -429,18 +425,16 @@ async fn client_chat_setting_is_admitted_at_join_and_on_play_changes() {
     let root = tempfile::tempdir().unwrap();
     let server = server(root.path());
     let id = server.connections.joining_id();
-    server
-        .connections
-        .stash_join(
-            id,
-            JoinedSpawn {
-                entity: EntityId(1),
-                position: [8.0, 64.0, 8.0],
-                rotation: [0.0, 0.0],
-                game_mode: 0,
-                dimension: Default::default(),
-            },
-        );
+    server.connections.stash_join(
+        id,
+        JoinedSpawn {
+            entity: EntityId(1),
+            position: [8.0, 64.0, 8.0],
+            rotation: [0.0, 0.0],
+            game_mode: 0,
+            dimension: Default::default(),
+        },
+    );
     wait_for_join(&server, id, false, 4, "en_us", Setting::System)
         .await
         .unwrap();
@@ -477,18 +471,16 @@ async fn edge_sent_feedback_follows_the_clients_chat_setting() {
     let root = tempfile::tempdir().unwrap();
     let server = server(root.path());
     let id = server.connections.joining_id();
-    server
-        .connections
-        .stash_join(
-            id,
-            JoinedSpawn {
-                entity: EntityId(1),
-                position: [8.0, 64.0, 8.0],
-                rotation: [0.0, 0.0],
-                game_mode: 0,
-                dimension: Default::default(),
-            },
-        );
+    server.connections.stash_join(
+        id,
+        JoinedSpawn {
+            entity: EntityId(1),
+            position: [8.0, 64.0, 8.0],
+            rotation: [0.0, 0.0],
+            game_mode: 0,
+            dimension: Default::default(),
+        },
+    );
     wait_for_join(&server, id, false, 4, "en_us", Setting::Full)
         .await
         .unwrap();
@@ -541,18 +533,16 @@ async fn list_obeys_the_send_command_feedback_rule() {
     let root = tempfile::tempdir().unwrap();
     let server = server(root.path());
     let id = server.connections.joining_id();
-    server
-        .connections
-        .stash_join(
-            id,
-            JoinedSpawn {
-                entity: EntityId(1),
-                position: [8.0, 64.0, 8.0],
-                rotation: [0.0, 0.0],
-                game_mode: 0,
-                dimension: Default::default(),
-            },
-        );
+    server.connections.stash_join(
+        id,
+        JoinedSpawn {
+            entity: EntityId(1),
+            position: [8.0, 64.0, 8.0],
+            rotation: [0.0, 0.0],
+            game_mode: 0,
+            dimension: Default::default(),
+        },
+    );
     wait_for_join(&server, id, false, 4, "en_us", Setting::Full)
         .await
         .unwrap();

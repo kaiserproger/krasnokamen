@@ -1,0 +1,15 @@
+diff --git a/crates/mc-edge/src/play.rs b/crates/mc-edge/src/play.rs
+index 251adb11d..c246f4c3b 100644
+--- a/crates/mc-edge/src/play.rs
++++ b/crates/mc-edge/src/play.rs
+@@ -181,8 +181,8 @@ pub async fn send_join_burst(burst: JoinBurst<'_>) -> anyhow::Result<()> {
+         dx: 0.0,
+         dy: 0.0,
+         dz: 0.0,
+-        yaw: 0.0,
+-        pitch: 0.0,
++        yaw: rotation[0],
++        pitch: rotation[1],
+         relative_flags: 0,
+     })
+     .await?;

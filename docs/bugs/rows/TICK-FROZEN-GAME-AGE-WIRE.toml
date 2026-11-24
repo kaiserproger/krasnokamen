@@ -8,4 +8,6 @@ status = "open"
 source = "Native freeze/teleport/local-input scene: the old server advances received game age while daylight holds. The candidate projects TickControl simulated age; actual native repeats and source controls exist, but graphical ledger promotion remains pending."
 regression = ["cargo:mc-core:tick_control::tests::game_time_stands_still_while_frozen_and_counts_stepped_ticks", "cargo:mc-edge:server::admin_tests::clock_queue_tests::queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer", "cargo:mc-edge:play::tests::join_burst_carries_load_start_before_center", "harness:scene-shot:native-frozen-game-age"]
 failing_first = "reported"
-fix_commit = "2a315d20f4d69e82802e1ab1bd9d5a20bf29736d"
+proving_assertions = { "harness:scene-shot:native-frozen-game-age" = "frozen_game_time_holds_across_teleport" }
+repro_check = "Identity patch:23096ad8 is the wire half of 2a315d20f4 in its tip form (docs/bugs/promotions/TICK-FROZEN-GAME-AGE-WIRE.{patch,hunks.md}): the three SET_TIME sites send snapshot.game_time instead of snapshot.tick. The commit's WorldSnapshot.game_time field and its tick.rs initializer are excluded as class (b) (the kept refs read snapshot.game_time), and the field stays on both sides. Control red by assertion: the graphical scene's frozen_game_time_holds_across_teleport (frozen_game_age_scene.json assert_same_game_time) observes the client's game age advancing while frozen; the cargo refs stay green there and are coverage, not control evidence."
+fix_commit = "patch:23096ad88864b3a0eb3711e51b76e0ef50820f72cfe7cd1c8e02bfe7c1cb5ac4"

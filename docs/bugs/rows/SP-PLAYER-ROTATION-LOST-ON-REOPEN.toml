@@ -5,6 +5,9 @@ area = "gameplay"
 repro = "client"
 severity = "minor"
 status = "open"
-source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F4, 8/8 including the uninterrupted control run); not caused by the WORLD-FIRST-START-INTERRUPTED fix."
-regression = []
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F4, 8/8 including the uninterrupted control run); not caused by the WORLD-FIRST-START-INTERRUPTED fix. Root cause found 2026-11-24: the core already journals and restores the player's Rotation (Joined carries yaw/pitch from the saved record, tick/input/session.rs:341), but the edge stashed the spawn as a 4-tuple without it and crates/mc-edge/src/play.rs sent the join SynchronizePlayerPosition with a hardcoded 0/0."
+regression = ["cargo:mc-edge:play::tests::join_burst_syncs_the_restored_player_rotation", "harness:singleplayer-regressions:native-sp-rotation-reopen"]
 failing_first = "reported"
+proving_assertions = { "harness:singleplayer-regressions:native-sp-rotation-reopen" = "reopen_keeps_rotation" }
+repro_check = "Identity patch:4f267ef8 is the two-line join-sync half of the fix in its tip form (docs/bugs/promotions/SP-PLAYER-ROTATION-LOST-ON-REOPEN.{patch,hunks.md}): the a/-side `yaw: 0.0, pitch: 0.0` is the real pre-image at play.rs before the fix. JoinedSpawn's rotation field and the pump/registry plumbing stay on both sides (the kept cargo ref builds JoinBurst with `rotation`), so the control compiles. Control red by assertion: the new singleplayer scenario native-sp-rotation-reopen looks 90/20, saves and quits to title, reopens the world and finds the camera back at 0/0 (reopen_keeps_rotation false); the cargo ref join_burst_syncs_the_restored_player_rotation is red in the same control at play_tests.rs (`(sync.yaw, sync.pitch)` = (0.0, 0.0))."
+fix_commit = "patch:4f267ef894e374b77995f0b77882a7195e801aaacef8fbf354bad26a602c21b0"
