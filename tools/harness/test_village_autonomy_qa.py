@@ -277,9 +277,12 @@ class VillageAutonomyQaTests(unittest.TestCase):
         self.assertFalse(probe.wait.called)
 
     def test_project_status_is_read_from_the_status_dialog_behind_the_construction_page(self) -> None:
-        # Projects menu (chest) -> Status slot -> Construction page (chest) -> clock slot -> status dialog.
-        menu = {"screen": {"class": qa.CONTAINER_CLASS, "title": "Projects"}, "container": {"slot_count": 90}}
-        page = {"screen": {"class": qa.CONTAINER_CLASS, "title": "Construction"}, "container": {"slot_count": 90}}
+        # Projects catalogue (chest) -> Status slot -> project page (chest) -> clock slot -> status dialog.
+        menu = {"screen": {"class": qa.CONTAINER_CLASS, "title": "Construction"},
+                "container": {"slot_count": 90, "slots": [{"slot": 0, "name": "House L1"}]}}
+        page = {"screen": {"class": qa.CONTAINER_CLASS, "title": "Construction"},
+                "container": {"slot_count": 90,
+                              "slots": [{"slot": 10, "name": "Active projects: 1/8\nHead: Storage L1"}]}}
         status = construction_screen("Storage L1 · Building\n3/25\n1 70 2")
         status["screen"] = {"class": qa.DIALOG_CLASS, "title": "Status"}
         probe = Mock()

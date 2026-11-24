@@ -152,8 +152,13 @@ class ProjectMenuTest(unittest.TestCase):
         click.assert_called_once_with(probe, "Buildings", "#7 House L1")
         confirm.assert_called_once_with(probe, "Order construction L2 #7")
 
-    def test_queued_icon_is_not_reported_as_an_active_project(self):
+    def test_queued_order_is_not_reported_as_an_active_project(self):
+        """D63 layout: the summary clock says the counts, a queued order is a book at slot 18 and
+        only an admitted project gets a `<label> L<n> · <phase>` card (slots 0..)."""
         class MenuProbe:
+            def __init__(self, cards=()):
+                self.cards = list(cards)
+
             def call(self, *args):
                 return {}
 
@@ -162,19 +167,44 @@ class ProjectMenuTest(unittest.TestCase):
 
             def wait(self, predicate, label, **kwargs):
                 if label == "projects_menu_open":
-                    state = {"screen": {"class": buildings_qa.CONTAINER_CLASS, "title": "Projects"},
-                             "container": {"slots": [{"slot": 52, "name": "Status"}]}}
+                    state = {"screen": {"class": buildings_qa.CONTAINER_CLASS, "title": "Construction"},
+                             "container": {"slots": [
+                                 {"slot": 0, "name": "House L1"},
+                                 {"slot": 52, "name": "Status"}]}}
                 else:
                     state = {"screen": {"class": buildings_qa.CONTAINER_CLASS, "title": "Construction"},
                              "container": {"slots": [
-                                 {"slot": 4, "name": "Cleric's workshop L1"},
-                                 {"slot": 10, "name": "Queued — site not assigned\nPending: Cleric L1"}]}}
+                                 {"slot": 10, "name": "Active projects: 0/8\nPending orders: 1/8\nHead: Cleric's workshop L1"},
+                                 {"slot": 18, "name": "Cleric's workshop L1"}]
+                                 + [{"slot": index, "name": name} for index, name in enumerate(self.cards)]}}
                 assert predicate(state)
                 return state
 
         with mock.patch.object(buildings_qa, "_close_any_screen"):
-            self.assertEqual(buildings_qa._project_view(MenuProbe()), ("Cleric's workshop", 1, False))
+            self.assertIsNone(buildings_qa._project_view(MenuProbe()))
             self.assertIsNone(buildings_qa._project_status(MenuProbe()))
+            self.assertEqual(buildings_qa._project_view(MenuProbe(["Wall section L1 · Prepared"])),
+                             ("Wall section", 1, True))
+            self.assertEqual(buildings_qa._project_status(MenuProbe(["House L1 · Building"])), ("House", 1))
+
+    def test_the_catalogue_is_recognised_by_its_rows_and_the_renamed_title(self):
+        """`ui_text::Projects` is "Construction"/"Строительство" since D63; a chest still titled
+        "Projects" is the stale page the driver must refuse, and the status page may carry only a
+        card or only the summary clock."""
+        catalogue = {"screen": {"class": buildings_qa.CONTAINER_CLASS, "title": "Construction"},
+                     "container": {"slots": [{"slot": 0, "name": "Cleric's workshop L1"}]}}
+        self.assertTrue(buildings_qa._catalogue_page(catalogue))
+        self.assertFalse(buildings_qa._catalogue_page({**catalogue, "screen": {
+            "class": buildings_qa.CONTAINER_CLASS, "title": "Projects"}}))
+        self.assertTrue(buildings_qa._catalogue_page({**catalogue, "screen": {
+            "class": buildings_qa.CONTAINER_CLASS, "title": "Строительство"}}))
+        summary = {"screen": {"class": buildings_qa.CONTAINER_CLASS, "title": "Construction"},
+                   "container": {"slots": [{"slot": 10, "name": "Active projects: 1/8\nHead: none"}]}}
+        card = {"screen": {"class": buildings_qa.CONTAINER_CLASS, "title": "Construction"},
+                "container": {"slots": [{"slot": 0, "name": "Mine L1 · Prepared"}]}}
+        self.assertTrue(buildings_qa._status_page(summary))
+        self.assertTrue(buildings_qa._status_page(card))
+        self.assertFalse(buildings_qa._status_page({**summary, "container": {"slots": []}}))
 
 
 class ResidentsMenuTest(unittest.TestCase):

@@ -17,8 +17,7 @@ from . import native_client
 from .probe_steps import ProbeSteps
 from . import buildings_qa as _qa
 from .buildings_qa_consts import (
-    DIALOG_CLASS, KIND_LABEL, PROJECT_ICON_SLOT, PROJECT_LABEL, PROJECT_STATUS_LINE_SLOT,
-    PROJECT_STATUS_SLOT, _ORDER_TERMINAL,
+    DIALOG_CLASS, KIND_LABEL, PROJECT_LABEL, PROJECT_STATUS_SLOT, _ORDER_TERMINAL,
 )
 from .buildings_qa_probe import _building_bounds, _container_titled
 
@@ -112,20 +111,50 @@ def _admitted_or_caught(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: st
     return caught
 
 
+# `ui_text::Projects` is "Construction"/"Строительство" since the D63 dialog set, and
+# `ui_menus` renders the blueprint catalogue (`projects_screen`) and the project-status page
+# (`project_screen`) under that one title in one reused window. The driver therefore recognises
+# each page by its rows, never by the page title alone.
+PROJECT_TITLES = ("Construction", "Строительство")
+_CATALOGUE_ROW = re.compile(r"^.+ L1$")
+_PROJECT_CARD = re.compile(r"^(.+?) L(\d+) · ")
+_SUMMARY_LINE = re.compile(r"^(?:Active projects|Активные стройки|Pending orders|Заказы|Заказов)\b")
+
+
+def _page_names(state: dict[str, Any]) -> list[str]:
+    return [str(row.get("name")) for row in (state.get("container") or {}).get("slots", [])
+            if row.get("name")]
+
+
+def _project_titled(state: dict[str, Any]) -> bool:
+    screen = state.get("screen") or {}
+    return screen.get("class") == _qa.CONTAINER_CLASS and str(screen.get("title")) in PROJECT_TITLES
+
+
+def _catalogue_page(state: dict[str, Any]) -> bool:
+    """The blueprint catalogue: `projects_screen` names every orderable blueprint `<label> L1`."""
+    return _project_titled(state) and any(_CATALOGUE_ROW.match(name) for name in _page_names(state))
+
+
+def _status_page(state: dict[str, Any]) -> bool:
+    """The project-status page: the summary clock and/or an admitted project's card."""
+    names = _page_names(state)
+    return _project_titled(state) and (any(_SUMMARY_LINE.match(name) for name in names)
+                                       or any(_PROJECT_CARD.match(name) for name in names))
+
+
 def _project_page(probe: ProbeSteps) -> dict[str, Any]:
-    """The open Construction page of the Projects menu (Projects -> Status icon). The caller
-    closes the screen."""
+    """The open Construction status page of the Projects menu (Projects -> Status icon). The
+    caller closes the screen."""
     _qa._close_any_screen(probe)
     probe.call("minecraft_send_chat", {"message": "settlement menu projects", "command": True})
-    projects = probe.wait(lambda s: _container_titled(s, "Projects"), "projects_menu_open",
-                          timeout_seconds=60)
+    projects = probe.wait(_catalogue_page, "projects_menu_open", timeout_seconds=60)
     action = next((row for row in projects["container"]["slots"] if row.get("slot") == PROJECT_STATUS_SLOT), None)
-    if action is None or action.get("name") != "Status":
-        raise RuntimeError(f"buildings-qa: Projects menu slot {PROJECT_STATUS_SLOT} is {action}, not Status")
+    if action is None or not re.fullmatch(r"Status|Статус", str(action.get("name") or "")):
+        raise RuntimeError(f"buildings-qa: Construction menu slot {PROJECT_STATUS_SLOT} is {action}, not Status")
     probe.call("minecraft_click_container_slot", {"slot": PROJECT_STATUS_SLOT, "button": "primary",
                                                   "timeout_seconds": probe.remaining()})
-    return probe.wait(lambda s: _container_titled(s, "Construction"), "project_status_open",
-                      timeout_seconds=60)
+    return probe.wait(_status_page, "project_status_open", timeout_seconds=60)
 
 
 def _order_refusal(sub: dict[str, Any], level: int) -> str | None:
@@ -142,20 +171,19 @@ def _order_refusal(sub: dict[str, Any], level: int) -> str | None:
 
 
 def _project_view(probe: ProbeSteps) -> tuple[str, int, bool] | None:
-    """Return the project label, level and whether it is active rather than queued.
+    """Return the first admitted project's label and level, or None.
 
-    Read from the civil menus: Projects -> Status icon -> the Construction page, whose slot 4 is
-    the project's `<label> L<level>` icon and slot 10 its status line (ui_menus.rs project_screen)."""
+    `ui_menus::project_screen` puts each admitted project's card at slots 0.. as
+    `<label> L<level> · <phase>`; a queued order is a pending-order book at slots 18.. with no
+    card, so a page without a card has no active project."""
     page = _qa._project_page(probe)
     slots = page["container"]["slots"]
-    icon = next((row for row in slots if row.get("slot") == PROJECT_ICON_SLOT), None)
-    status = next((row for row in slots if row.get("slot") == PROJECT_STATUS_LINE_SLOT), None)
     probe.call("minecraft_close_screen", {})
-    match = re.fullmatch(r"(.+) L(\d+)", str((icon or {}).get("name") or ""))
-    if not match:
-        return None
-    queued = str((status or {}).get("name") or "").startswith("Queued — site not assigned")
-    return match.group(1), int(match.group(2)), not queued
+    for row in slots:
+        match = _PROJECT_CARD.match(str(row.get("name") or ""))
+        if match:
+            return match.group(1), int(match.group(2)), True
+    return None
 
 
 def _project_status(probe: ProbeSteps) -> tuple[str, int] | None:

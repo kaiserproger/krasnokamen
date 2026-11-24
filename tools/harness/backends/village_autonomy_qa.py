@@ -206,22 +206,40 @@ PROJECTS_STATUS_SLOT = 52
 CONSTRUCTION_STATUS_SLOT = 10
 
 
-def _click_menu_slot(probe: ProbeSteps, slot: int, title: str) -> dict[str, Any]:
-    probe.call("minecraft_click_container_slot", {
-        "slot": slot, "button": "primary", "timeout_seconds": probe.remaining()})
-    return probe.wait(
-        lambda state: (state.get("screen") or {}).get("title") == title,
-        f"menu_slot_{slot}_opens_{title}", timeout_seconds=30.0)
+# Since the D63 dialog set `ui_text::Projects` reads "Construction"/"Строительство" and the
+# blueprint catalogue (`projects_screen`) and the project page (`project_screen`) share that title
+# in one reused window. Both pages are therefore identified by their rows: the catalogue names each
+# blueprint `<label> L1`, the project page carries the summary clock or a `<label> L<n> · <phase>`
+# card. A title alone would accept either page (the stale one was titled "Projects").
+_CATALOGUE_ROW = re.compile(r"^.+ L1$")
+_PROJECT_CARD = re.compile(r"^(.+?) L(\d+) · ")
+_SUMMARY_LINE = re.compile(r"^(?:Active projects|Активные стройки|Pending orders|Заказы|Заказов)\b")
+
+
+def _page_names(state: dict[str, Any]) -> list[str]:
+    return [str(row.get("name")) for row in (state.get("container") or {}).get("slots", [])
+            if row.get("name")]
+
+
+def _is_catalogue_page(state: dict[str, Any]) -> bool:
+    return ((state.get("screen") or {}).get("class") == CONTAINER_CLASS
+            and any(_CATALOGUE_ROW.match(name) for name in _page_names(state)))
+
+
+def _is_project_page(state: dict[str, Any]) -> bool:
+    names = _page_names(state)
+    return ((state.get("screen") or {}).get("class") == CONTAINER_CLASS
+            and (any(_SUMMARY_LINE.match(name) for name in names)
+                 or any(_PROJECT_CARD.match(name) for name in names)))
 
 
 def _project_status(probe: ProbeSteps, capture: Callable[[], Any] | None = None) -> dict[str, Any]:
-    """Observe the project status dialog: Projects menu, Status, Construction page, status icon."""
+    """Observe the project status dialog: Projects page, Status, project page, status icon."""
     _send(probe, "settlement menu projects")
-    state = probe.wait(
-        lambda observed: (observed.get("screen") or {}).get("class") == CONTAINER_CLASS
-        and (observed.get("container") or {}).get("slot_count") == 90,
-        "projects_menu_open", timeout_seconds=30.0)
-    construction = _click_menu_slot(probe, PROJECTS_STATUS_SLOT, "Construction")
+    probe.wait(_is_catalogue_page, "projects_menu_open", timeout_seconds=30.0)
+    probe.call("minecraft_click_container_slot", {
+        "slot": PROJECTS_STATUS_SLOT, "button": "primary", "timeout_seconds": probe.remaining()})
+    probe.wait(_is_project_page, "project_status_page", timeout_seconds=30.0)
     probe.call("minecraft_click_container_slot", {
         "slot": CONSTRUCTION_STATUS_SLOT, "button": "primary", "timeout_seconds": probe.remaining()})
     state = probe.wait(
