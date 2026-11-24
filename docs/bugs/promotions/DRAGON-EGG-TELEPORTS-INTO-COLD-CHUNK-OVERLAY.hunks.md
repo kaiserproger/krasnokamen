@@ -35,9 +35,13 @@ verbatim — checked). Re-audit:
 
 ## Commit roles
 
-- `c7bd44dd06` — this row's fix (the `has_chunk` admission).
-- `b460f313c` — not this row's fix. It is the earlier residency work that the pre-image already carries
-  (including the `plugin_player::allows_block` guard that stays on both sides of the patch).
+The `has_chunk` term's chain on this path is `c7bd44dd06` (adds the guard) -> `608f10d002` (reverts it) ->
+`b460f313cc` (re-adds it); `git blame -C -C` on the surviving lines names `b460f313cc` as the origin of
+the hunk now at HEAD, and `c7bd44dd06` is where the row's symptom was first closed. This row's carried
+hunk is the one at HEAD (`vanilla_interact.rs:125-137`); its pre-image is HEAD minus the `has_chunk` term,
+which is exactly the state `608f10d002` left. `b460f313cc`'s other hunks (`inventory.rs`, `stations.rs`,
+`vanilla_interact.rs` outside this term) belong to the other residency rows listed under "Not carried",
+matching the MINING patch's model (`MINING-...hunks.md` "Commit roles").
 
 ## Not carried
 
