@@ -935,8 +935,11 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="native-village-occupied-bed", requires=("xvfb",),
         sources=("tools/harness/backends/scene_shot.py", "tools/harness/village_occupied_bed_scene.json"),
         fixture="a roofed bed; positive vacant-bed use, daylight wake, then a sleeping villager and the same one-tick use input",
-        proves="received player sleeping metadata is false after occupied use, villager wakes and later sleeps again",
-        limits="one bed, one unbound villager; no occupied blockstate parity claim",
+        proves="received player sleeping metadata is false after occupied use, villager wakes and later sleeps again, and the "
+               "server's own block predicate reads occupied=true on both bed halves while the resident sleeps and "
+               "occupied=false after the wake",
+        limits="one bed, one unbound villager; the predicate is the server's state and the resident's own brain drove the "
+               "sleep, not a scripted flag",
     ),
     "native-bed-occupied-state": _entry(
         id="native-bed-occupied-state",

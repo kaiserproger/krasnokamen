@@ -75,6 +75,21 @@
       }
     },
     {
+      "cmd": "execute if block 1001 200 1001 minecraft:red_bed[part=foot,occupied=false] run say bed_foot_free_before"
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "assert_chat": {
+        "name": "bed_foot_free_before",
+        "contains": [
+          "bed_foot_free_before"
+        ],
+        "excludes": []
+      }
+    },
+    {
       "read_block": {
         "name": "bed_head_before",
         "args": {
