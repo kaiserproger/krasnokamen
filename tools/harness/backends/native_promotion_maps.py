@@ -188,9 +188,23 @@ def _frame_place(steps: ProbeSteps, origin: tuple[int, int, int], slot: int = 0)
     return {key: frame[key] for key in ("entity_id", "entity_uuid", "entity_type")}
 
 
+def _clone_quiet(steps: ProbeSteps, map_id: int, slot: int = 0) -> None:
+    """`_clone` without its ordered chat line: a debug give plus a state wait.
+
+    The held-map captures must not add a single chat line between them, or the chat text that lies
+    over the map shifts and every text pixel reads as a change."""
+    steps.fixture(f"debug give minecraft:filled_map[map_id={map_id}] 1 {slot}")
+    steps.wait(lambda state: any(stack["slot"] == slot and stack.get("item_id") == "minecraft:filled_map"
+                                 for stack in state["inventory"]), "map_clone_quiet_received")
+    stack = steps.call("minecraft_read_item_components", {"source": "player", "slot": slot})
+    steps.check("map_clone_quiet_same_id",
+                stack.get("item_id") == "minecraft:filled_map"
+                and stack.get("components", {}).get("minecraft:map_id") == map_id)
+
+
 def _frame_insert(steps: ProbeSteps, identity: dict, map_id: int) -> None:
     """Insert a clone of `map_id` into the frame through ordinary hand interaction."""
-    _clone(steps, map_id, 0)
+    _clone_quiet(steps, map_id)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     steps.call("minecraft_interact_entity", {**identity, "hand": "main_hand"})
     steps.wait(lambda state: item_count(state, "minecraft:filled_map") == 0,
@@ -229,7 +243,7 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _frame_insert(steps, frame, locked)
     steps.check("map_framed_map_has_exactly_one_frame_waypoint",
                 _marker_count(steps, locked, "frame") == 1)
-    _clone(steps, locked, 0)
+    _clone_quiet(steps, locked)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     steps.check("map_capture_with_frame_holds_the_map",
                 steps.call("minecraft_read_item_components", {"source": "selected"}).get("item_id")
