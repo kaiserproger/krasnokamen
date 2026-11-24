@@ -399,7 +399,10 @@ pub(crate) fn recover(
             0
         };
         for cell in record.cells[index].iter().take(completed).rev() {
-            if !seen.insert(cell.at) || free_soil_work(target, cell) || harvestable_crop(target, cell) {
+            if !seen.insert(cell.at)
+                || free_soil_work(target, cell)
+                || harvestable_crop(target, cell)
+            {
                 continue;
             }
             let now = target
