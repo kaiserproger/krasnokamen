@@ -6,6 +6,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = ["client:krasnokamen-client:motion::tests::view_motion_hand_is_perfectly_still_at_rest"]
-fix_commit = "client:db2e7986"
-repro_check = "Stage2X SLICES.md:125,151: the idle-sway unit check detects the sub-pixel defect; the graphical scene remained green on ca63bdf28b3d, so it is not discriminating. That control pin is also not an exact non-test reversal; promotion requires a clean exact reversal and a real-client symptom assertion."
+regression = ["client:krasnokamen-client:motion::tests::view_motion_hand_is_perfectly_still_at_rest", "harness:scene-shot:issue1-02-held-tool"]
+fix_commit = "client:8c392a0ac1"
+proving_assertions = { "harness:scene-shot:issue1-02-held-tool" = "held_tool_at_rest_is_still" }
+repro_check = "Committed-reversal pair: db2e7986's motion.rs hunk reverse-applies at HEAD, so the reversal client:582a690048 restores the native idle hand sway verbatim (unit ref red, negctl/issue102-unit-control.log) and re-land client:8c392a0ac1 removes it again (negctl/issue102-unit-restore.log green). Map docs/bugs/promotions/ISSUE-1-02.hunks.md. Graphical gate: scene-shot issue1-02-held-tool holds a diamond pickaxe on a frozen-tick pad and compares three frames 40 ticks apart (camera must not move; the right half above the hotbar must keep the same pixels, tolerance 2). The pre-fix sway moves the hand between frames; measured counts are in the receipt."

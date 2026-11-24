@@ -839,6 +839,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="a pixel window over the villager's leg columns contains at least the minimum count of leg-coloured opaque pixels, so a translucent or malformed leg fails",
         limits="one villager, one camera angle; the leg colour box and window come from the matched green frames",
     ),
+    "issue1-02-held-tool": _entry(
+        id="issue1-02-held-tool", summary="The first-person held tool is perfectly still at rest (ISSUE-1-02)",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="issue1-02-held-tool", requires=("xvfb",),
+        sources=("tools/harness/held_tool_rest_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client standing still with a diamond pickaxe on a frozen-tick stone pad, three frames 40 ticks apart",
+        proves="the camera is unchanged and the hand region (right half above the hotbar) keeps the same pixels across three frames; the pre-fix idle sway moves it",
+        limits="one tool, one still pose, one rasterizer; a zero/2-pixel threshold is calibrated on the fixed and pre-fix clients",
+    ),
     "issue1-18-sheep-goat": _entry(
         id="issue1-18-sheep-goat", summary="Goat horns and sheep wyther rigs render upright and aligned (ISSUE-1-18)",
         owner="core:harness", evidence="graphical", profile="scene-shot",
