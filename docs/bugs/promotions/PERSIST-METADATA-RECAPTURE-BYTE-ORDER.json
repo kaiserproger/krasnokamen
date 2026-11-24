@@ -1,0 +1,38 @@
+{
+  "id": "PERSIST-METADATA-RECAPTURE-BYTE-ORDER",
+  "verdict": "promoted",
+  "fix_commit": "patch:f03a1064d02a9eb53624b22ec599c74b4517ab1374ce7eb12689f82a1f51d840",
+  "fix_commit_full": "patch:f03a1064d02a9eb53624b22ec599c74b4517ab1374ce7eb12689f82a1f51d840",
+  "promoted_at": "2026-11-24T05:04:56+00:00",
+  "tree_head": "c43e73b849e940567500c8cbb49a21acdda707c2",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "f03a1064d02a9eb53624b22ec599c74b4517ab1374ce7eb12689f82a1f51d840",
+  "reversed_files": [
+    "crates/mc-core/src/level_metadata.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::running_tail_clock_tests::game_clock_running_nonzero_held_prefix_nonempty_tail_matches_live_checkpoint": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::game_clock_tests::native_debt_game_clock_running_nonzero_epoch_capture_load_capture_is_byte_identical": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::running_tail_clock_tests::game_clock_running_nonzero_held_prefix_nonempty_tail_matches_live_checkpoint": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::game_clock_tests::native_debt_game_clock_running_nonzero_epoch_capture_load_capture_is_byte_identical": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T050126-ledger-promote-1_9cka_p"
+}
