@@ -540,6 +540,15 @@ samples over two views with one repeated view. Pair it with `toggle_debug_overla
 and a `shot` per view: the screenshot is what the player sees, while the counters
 are the same field F3 renders.
 
+`assert_chat_components` (`name`, `line`, `hover`, optional `click`) takes the
+newest `recent_chat_components` line whose plain `text` contains `line`, then
+requires a `hover` (and `click`) event with the given `action` whose rendered
+`value` contains the given text. It proves what the chat component carries —
+`/datapack list` links, for example — where `assert_chat` only sees the
+flattened line; a plain listing has the same text and no event. The registered
+scenario `native-datapack-hover` creates a pack with `/datapack create` and
+lists it, so it needs no fixture world.
+
 `native-player-head` installs an authored offline skin pack in its private run:
 cyan base head, magenta opaque hat and a transparent face window. The fixed
 camera frames the placed head at x580–700/y520–655; `placed_head_hat_layer_pixels`

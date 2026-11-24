@@ -867,6 +867,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="tool_hand_visible: the tool is visible 2.5 blocks away, as the pre-image that draws the hand in world geometry renders it; tool_wall_visible: at 0.6 blocks the received target, selected tool and eye distance are the fixture's, the close frame shows a dark wall behind the turquoise tool, and the tool pixels stay in front of the wall, which the world-geometry control draws behind it",
         limits="one wall, one tool, far and close frames (attack frames are captured, not asserted); the colour window comes from the fixed frames",
     ),
+    "native-datapack-hover": _entry(
+        id="native-datapack-hover", summary="A listed datapack's chat link carries its pack.mcmeta description on hover (DATAPACK-LIST-HOVER)",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-datapack-hover", requires=("xvfb",),
+        sources=("tools/harness/datapack_hover_scene.json", "tools/harness/backends/scene_shot_execute.py"),
+        fixture="private native client and operator world: `datapack create hoverprobe HoverProbeDescription`, then `datapack list available`",
+        proves="assert_chat_components reads the newest chat line holding `hoverprobe` from recent_chat_components: the plain text is the bracketed link and its hover event is show_text whose value carries the pack.mcmeta description. The pre-fix listing prints joined plain ids, so the line exists but carries no hover",
+        limits="one created directory pack with a plain description; not a zipped pack, not a translated or compound description",
+    ),
     "issue1-18-sheep-goat": _entry(
         id="issue1-18-sheep-goat", summary="Goat horns and sheep wyther rigs render upright and aligned (ISSUE-1-18)",
         owner="core:harness", evidence="graphical", profile="scene-shot",

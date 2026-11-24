@@ -523,6 +523,53 @@ class SceneShotTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "render_sample_c_yaw_observed"):
                 scene_shot.execute(stale, root, steps)
 
+    def test_chat_component_assertion_needs_the_event_not_the_text(self):
+        spec = {"name": "datapack-hover", "line": "hoverprobe",
+                "hover": {"action": "show_text", "contains": "HoverProbeDescription"}}
+        scene_shot.validate_steps([{"assert_chat_components": spec}], "native")
+        for bad in ({"line": ""},
+                    {"hover": {"action": "show_text"}},
+                    {"extra": True},
+                    {"click": {"action": "run_command"}}):
+            with self.subTest(spec=bad), self.assertRaises(ValueError):
+                scene_shot.validate_steps([{"assert_chat_components": {"name": "x", "line": "y",
+                                                                       "hover": {"action": "show_text",
+                                                                                 "contains": "d"},
+                                                                       **bad}}], "native")
+
+        class Probe:
+            def __init__(self, state):
+                self.state, self.checks = state, {}
+
+            def observe(self, **kwargs):
+                return self.state
+
+            def check(self, name, condition):
+                self.checks[name] = bool(condition)
+                if not condition:
+                    raise AssertionError(name)
+
+        linked = {"recent_chat_components": [
+            {"text": "There are 1 data pack(s) available: [hoverprobe (world)]",
+             "style": {"color": "#55ff55"},
+             "events": [{"kind": "hover", "action": "show_text",
+                         "value": "hoverprobe\nHoverProbeDescription"}]},
+        ]}
+        plain = {"recent_chat_components": [
+            {"text": "There are 1 data pack(s) available: file/hoverprobe",
+             "style": {"color": None}, "events": []},
+        ]}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            probe = Probe(linked)
+            scene_shot.execute(probe, root, [{"assert_chat_components": spec}])
+            self.assertTrue(probe.checks["datapack-hover_hover"])
+            # The pre-fix listing keeps the same marker in plain text but carries no hover.
+            control = Probe(plain)
+            with self.assertRaisesRegex(AssertionError, "datapack-hover_hover"):
+                scene_shot.execute(control, root, [{"assert_chat_components": spec}])
+            self.assertTrue(control.checks["datapack-hover_line_present"])
+
     def test_java_options_pin_window_fov_gui_and_distance(self):
         options = dict(line.split(":", 1) for line in scene_shot.java_options(32, 70).splitlines())
         self.assertEqual((options["overrideWidth"], options["overrideHeight"]), ("1280", "720"))

@@ -36,7 +36,7 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
             yield "minecraft_read_block", value["args"]
         elif kind == "assert_screen":
             yield "minecraft_observe", {}
-        elif kind in ("render_draw_sample", "assert_render_bounded"):
+        elif kind in ("render_draw_sample", "assert_render_bounded", "assert_chat_components"):
             yield "minecraft_observe", {}
         elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities", "wait_terrain"):
             yield SCENE_TOOLS[kind], value["args"]
@@ -181,6 +181,21 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and type(value["max_growth"]) in (int, float)
                      and math.isfinite(value["max_growth"]) and value["max_growth"] > 1
                      and type(value["min_index_count"]) is int and value["min_index_count"] >= 0)
+        elif kind == "assert_chat_components":
+            # Reads the newest chat line whose plain text holds `line`, then its hover (and
+            # optionally click) event from `recent_chat_components`. A named action and a
+            # substring of its rendered value, so a flattened line cannot satisfy it.
+            def event_spec(spec):
+                return (isinstance(spec, dict) and set(spec) == {"action", "contains"}
+                        and isinstance(spec["action"], str) and bool(spec["action"])
+                        and isinstance(spec["contains"], str) and bool(spec["contains"]))
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) in ({"name", "line", "hover"}, {"name", "line", "hover", "click"})
+                     and isinstance(value["name"], str)
+                     and bool(re.fullmatch(r"[A-Za-z0-9_-]+", value["name"]))
+                     and isinstance(value["line"], str) and bool(value["line"])
+                     and event_spec(value["hover"])
+                     and ("click" not in value or event_spec(value["click"])))
         elif kind == "tool_hand_visible":
             # A frame away from the wall: the held tool must be visible on it (the pre-image, which
             # draws the hand in world geometry, keeps it visible there and hides it only up close).

@@ -4,10 +4,9 @@ title = "First-person tool clips through block"
 area = "client"
 repro = "manual"
 severity = "major"
-status = "fixed"
+status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = ["harness:scene-shot:issue1-21-tool-clip"]
-fix_commit = "client:de9fde8dd9"
+fix_commit = "client:3c3d9fba9a"
 proving_assertions = { "harness:scene-shot:issue1-21-tool-clip" = "tool_wall_visible" }
-repro_check = "Committed-reversal pair at HEAD: client:6cd212a514 loads world depth in the first-person pass (the historical d4c5a326 control hunk, unusable as a build after the 26.3 cutover); client:de9fde8dd9 clears it again. Map docs/bugs/promotions/ISSUE-1-21.hunks.md. Real client: scene-shot issue1-21-tool-clip (obsidian wall, diamond pickaxe, far and close frames) asserts tool_wall_visible; the control draws the tool behind the wall, the fix keeps it in front. Receipts in results."
-promotion = "docs/bugs/promotions/ISSUE-1-21.json"
+repro_check = "Committed-reversal pair at HEAD: client:e4a470fb7c appends the arm, held map and held item to scene.dynamic again (the real pre-image of the separate hand pass, receipts/Stage3/S3Issue1/clip-fix-product.patch a/-side at 15-34 and 73-124); client:3c3d9fba9a submits them from scene.first_person again. Map docs/bugs/promotions/ISSUE-1-21.hunks.md. Real client: scene-shot issue1-21-tool-clip requires tool_hand_visible at 2.5 blocks on both pins, so the pick is visible away from the wall, and tool_wall_visible at 0.6 blocks, which the world-geometry control fails and the first-person pass passes."

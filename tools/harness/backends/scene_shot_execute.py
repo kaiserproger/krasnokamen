@@ -241,6 +241,33 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 {"enabled": value, "lines": result.get("lines"), "status": result.get("status")})
             probe.check(f"debug_overlay_{'on' if value else 'off'}",
                         result.get("debug_overlay") is value)
+        elif kind == "assert_chat_components":
+            # The chat renderer flattens a component; the observation keeps its events. Take the
+            # newest line whose plain text holds the marker, then its hover/click event.
+            state = probe.observe()
+            lines = state.get("recent_chat_components")
+            if not isinstance(lines, list) or any(not isinstance(line, dict) for line in lines):
+                raise RuntimeError("client observation omitted recent_chat_components")
+            (artifact / f"{value['name']}.json").write_text(json.dumps(state, indent=2) + "\n")
+            matches = [line for line in lines
+                       if isinstance(line.get("text"), str) and value["line"] in line["text"]]
+            probe.check(f"{value['name']}_line_present", bool(matches))
+
+            def has_event(line, kind_name, spec):
+                events = line.get("events")
+                if not isinstance(events, list):
+                    return False
+                return any(isinstance(event, dict) and event.get("kind") == kind_name
+                           and event.get("action") == spec["action"]
+                           and spec["contains"] in str(event.get("value", ""))
+                           for event in events)
+
+            newest = matches[0]
+            hover = value["hover"]
+            probe.check(f"{value['name']}_hover", has_event(newest, "hover", hover))
+            if "click" in value:
+                click = value["click"]
+                probe.check(f"{value['name']}_click", has_event(newest, "click", click))
         elif kind == "render_draw_sample":
             # One fresh observation of the client's draw counters at the requested view. The yaw the
             # client reports proves the turn landed before the sample; a stale sample (same yaw as

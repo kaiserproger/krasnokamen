@@ -84,6 +84,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "issue1-21-tool-clip": "tool_clipping_scene.json",
         "issue1-18-sheep-goat": "issue1_18_sheep_goat_scene.json",
         "issue1-19-hostile-motion": "issue1_19_hostile_motion_scene.json",
+        "native-datapack-hover": "datapack_hover_scene.json",
     }
     if ctx.scenario_id == "java-gait-sidecar":
         if ctx.client != "java" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):

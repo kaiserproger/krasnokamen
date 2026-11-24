@@ -1,0 +1,36 @@
+{
+  "seed": 104,
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "datapack create hoverprobe HoverProbeDescription"
+    },
+    {
+      "wait_chat": "Created new empty pack"
+    },
+    {
+      "cmd": "datapack list available"
+    },
+    {
+      "wait_chat": "data pack(s) available"
+    },
+    {
+      "assert_chat_components": {
+        "name": "datapack-hover",
+        "line": "hoverprobe",
+        "hover": {
+          "action": "show_text",
+          "contains": "HoverProbeDescription"
+        }
+      }
+    },
+    {
+      "shot": "datapack-list"
+    }
+  ]
+}

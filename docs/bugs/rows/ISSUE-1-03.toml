@@ -4,10 +4,9 @@ title = "F3 drawn-index count rises sharply with camera direction; verify it sta
 area = "client"
 repro = "manual"
 severity = "major"
-status = "fixed"
+status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = ["client:krasnokamen-client:render::shader_tests::submitted_index_count_is_per_frame_not_cumulative", "harness:scene-shot:issue1-03-drawn-index"]
 fix_commit = "client:dad387e689"
 proving_assertions = { "harness:scene-shot:issue1-03-drawn-index" = "render_drawn_index_bounded" }
-repro_check = "Committed-reversal pair at HEAD: client:67a2e0f5c5 drops `self.stats = FrameStats::default();` from the frame path (the historical 4403f0b9 control hunk, which cannot join as a build once more than a line differs); client:dad387e689 re-lands it. Unit ref red on the reversal (negctl/issue103-unit-control.log), green on the re-land (negctl/issue103-unit-restore.log). Map docs/bugs/promotions/ISSUE-1-03.hunks.md. Real client: scene-shot issue1-03-drawn-index turns through eight yaws on a frozen-tick pad and reads data.render; index_count 138534..177288 on the fix (PASS), 7280424 on the reversal (FAIL)."
-promotion = "docs/bugs/promotions/ISSUE-1-03.json"
+repro_check = "Guard older than the finding: the per-frame `self.stats = FrameStats::default();` has been in the client since the 26.1.2 import (client:4ccb68fb, src/render.rs:1406 at 67a2e0f5^, git blame -C -C), so the row is a missing-test finding, not a missing fix; 4403f0b9 was an earlier control experiment, not the origin. Committed-reversal pair at HEAD: client:67a2e0f5c5 drops the line, client:dad387e689 re-lands it. Map docs/bugs/promotions/ISSUE-1-03.hunks.md. Real client: scene-shot issue1-03-drawn-index shows F3, samples yaw 0 twice, then eight views and a return to yaw 0, and asserts render_drawn_index_bounded over every sample plus render_repeat_view_stable; the reversal accumulates indices and fails."

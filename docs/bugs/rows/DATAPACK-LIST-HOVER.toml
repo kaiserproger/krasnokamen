@@ -6,6 +6,7 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-HOVER Fix patch: reversing it makes the list print plain pack names instead of hover chat links."
-regression = ["cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover"]
+regression = ["cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover", "harness:scene-shot:native-datapack-hover"]
 fix_commit = "patch:61916b68f2759fa892f3eedc6158c06aa19d47274e877ab607e220a850d0593a"
-repro_check = "round 2: patch docs/bugs/fix-patches/DATAPACK-LIST-HOVER.patch (digest verified here). Control negative-control.log: reversed -> red `left: [] right: [vanilla, file/alpha]` (plain names, no link or hover). Needs a graphical harness ref before it can be promoted"
+proving_assertions = { "harness:scene-shot:native-datapack-hover" = "datapack-hover_hover" }
+repro_check = "Patch mode: docs/bugs/fix-patches/DATAPACK-LIST-HOVER.patch (sha256 61916b68…, reverse-applies at HEAD) makes present_group build chat_link(id, enabled, description) instead of text(id); the cargo ref asserts the component structure, the automatic control reverses this one hunk and it goes red (plain names, no link or hover). Real client: scene-shot native-datapack-hover runs `/datapack create hoverprobe HoverProbeDescription` and `/datapack list available` in a native windowed client on the operator world, then assert_chat_components reads the newest `hoverprobe` line from the client's new recent_chat_components projection: the bracketed link's hover is show_text with the pack.mcmeta description. The plain listing keeps the same `hoverprobe` text in the line but carries no hover event, so the control's line-present check passes while datapack-hover_hover fails."
