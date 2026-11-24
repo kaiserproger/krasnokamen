@@ -94,6 +94,10 @@ pub struct JoinBurst<'a> {
     pub dimension: mc_core::dimensions::Dimension,
     /// Authoritative spawn.
     pub pos: [f64; 3],
+    /// Vanilla `Rotation` (yaw, pitch) restored with the player; the client
+    /// applies it from the teleport-confirm sync, exactly as vanilla's
+    /// `respawn`/login does.
+    pub rotation: [f32; 2],
     /// View radius sizing the center-chunk window (`LoginPlay.view_distance`,
     /// `SetChunkCacheRadius`).
     pub view_distance: i32,
@@ -121,6 +125,7 @@ pub async fn send_join_burst(burst: JoinBurst<'_>) -> anyhow::Result<()> {
         viewer_entity,
         dimension,
         pos,
+        rotation,
         view_distance,
         simulation_distance,
         game_mode,
@@ -176,8 +181,8 @@ pub async fn send_join_burst(burst: JoinBurst<'_>) -> anyhow::Result<()> {
         dx: 0.0,
         dy: 0.0,
         dz: 0.0,
-        yaw: 0.0,
-        pitch: 0.0,
+        yaw: rotation[0],
+        pitch: rotation[1],
         relative_flags: 0,
     })
     .await?;

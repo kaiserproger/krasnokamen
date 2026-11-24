@@ -241,7 +241,15 @@ worker, runs the negative control.
      hunk after an (a) split; a type annotation that only lets the reversed
      tree compile; and a kept helper whose callers are all among the
      carried hunks. Nothing else is an adaptation: an invented stub or
-     guard is refused.
+     guard is refused. **A hand re-break is not a control**: an a/-side line
+     that invents the assumed pre-fix outcome (a counter, a comment, a branch
+     the original code never ran, or a behaviour the pre-image did not have)
+     proves only the hand edit. Every a/-side line is either the real
+     pre-image (the base blob, or its exact HEAD equivalent) or a named
+     constructor line that changes no behaviour. When no real pre-image
+     exists (the fix created the function or file), the row has no faithful
+     control and stays `open` with the reason recorded, as
+     IMPORT-ANVIL-PRE-RENAME-KEYS-IGNORED does.
    - **Proving ref.** `promote.json` records every red ref as plain `FAIL`.
      So `hunks.md` names the ref and `file:line` whose assertion is the row's
      symptom. A ref that goes red only on an assertion of the kept API

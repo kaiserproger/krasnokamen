@@ -22,6 +22,7 @@ SELECT = "net.minecraft.client.gui.screens.worldselection.SelectWorldScreen"
 CREATE = "net.minecraft.client.gui.screens.worldselection.CreateWorldScreen"
 FIRST = "native-world-first-start-interrupted"
 LEASE = "native-sp-relaunch-lease-race"
+ROTATION = "native-sp-rotation-reopen"
 SLOW = "native-sp-slow-machine"
 WEAK = "native-sp-weak-hardware"
 DISCONNECTED = "net.minecraft.client.gui.screens.DisconnectedScreen"
@@ -79,7 +80,7 @@ def _play(probe, state):
 def validate_args(ctx: ProfileContext) -> float:
     if ctx.client != "native" or not ctx.windowed:
         raise ValueError("singleplayer regressions require --client native --windowed")
-    if ctx.scenario_id not in (FIRST, LEASE, SLOW, WEAK):
+    if ctx.scenario_id not in (FIRST, LEASE, ROTATION, SLOW, WEAK):
         raise ValueError("select a registered singleplayer regression scenario")
     if ctx.extra_args or ctx.platform:
         raise ValueError("singleplayer regressions do not accept extra arguments or platform")
@@ -252,6 +253,34 @@ def run(ctx: ProfileContext) -> dict:
                     state = probe.wait(lambda s: s["screen"].get("class") == SELECT, "reopen_world_list")
                 _select_world(probe, state)
                 _play(probe, state)
+            elif ctx.scenario_id == ROTATION:
+                _play(probe, state)
+                probe.call("minecraft_look", {"yaw_deg": 90, "pitch_deg": 20})
+                looked = probe.wait(
+                    lambda s: abs(s["player"]["yaw"] - 90.0) < 0.1
+                    and abs(s["player"]["pitch"] - 20.0) < 0.1,
+                    "rotation_applied_before_quit")
+                before = looked["player"]
+                probe.report["pose_before_quit"] = [before["x"], before["y"], before["z"],
+                                                    before["yaw"], before["pitch"]]
+                native_client.capture(mcp, artifact, "rotation-before-quit")
+                probe.call("minecraft_press_inputs", {"keys": ["key.keyboard.escape"], "ticks": 1})
+                pause = probe.wait(lambda s: s["screen"].get("class", "").endswith("PauseScreen"), "pause")
+                _click(probe, pause, "Save & Quit to Title")
+                title = probe.wait(lambda s: s["screen"].get("class") == TITLE_CLASS, "save_quit")
+                _click(probe, title, "Singleplayer")
+                state = probe.wait(lambda s: s["screen"].get("class") == SELECT, "reopen_world_list")
+                _select_world(probe, state)
+                _play(probe, state)
+                after = probe.wait(
+                    lambda s: s.get("in_play") is True and s["screen"].get("open") is False,
+                    "reopened_play_view")
+                player = after["player"]
+                probe.report["pose_after_reopen"] = [player["x"], player["y"], player["z"],
+                                                     player["yaw"], player["pitch"]]
+                native_client.capture(mcp, artifact, "rotation-after-reopen")
+                probe.check("reopen_keeps_rotation",
+                            abs(player["yaw"] - 90.0) < 0.5 and abs(player["pitch"] - 20.0) < 0.5)
             else:
                 _play(probe, state)
                 native_client.capture(mcp, artifact, "singleplayer-before-relaunch")

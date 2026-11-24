@@ -402,8 +402,14 @@ async fn run_connection(
     })?);
 
     // --- Wait for our Joined (bounded): the tick loop answers with the
-    // --- entity id + spawn the burst needs.
-    let (entity, spawn, game_mode, dimension) = match wait_for_join(
+    // --- entity id, spawn and rotation the burst needs.
+    let JoinedSpawn {
+        entity,
+        position: spawn,
+        rotation,
+        game_mode,
+        dimension,
+    } = match wait_for_join(
         &server,
         id,
         recorder,
@@ -468,6 +474,7 @@ async fn run_connection(
         viewer_entity: entity,
         dimension,
         pos: spawn,
+        rotation,
         view_distance,
         simulation_distance,
         game_mode,

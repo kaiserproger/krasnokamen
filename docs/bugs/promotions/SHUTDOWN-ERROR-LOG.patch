@@ -1,0 +1,74 @@
+diff --git a/crates/mc-core/src/core/journal.rs b/crates/mc-core/src/core/journal.rs
+index c8784851f..6b61e513a 100644
+--- a/crates/mc-core/src/core/journal.rs
++++ b/crates/mc-core/src/core/journal.rs
+@@ -1054,7 +1054,7 @@ pub(super) fn journal_loop(
+                         );
+                         return;
+                     }
+-                    tracing::error!(cause = "shutdown requested", "core journal owner stopped");
++                    tracing::info!(cause = "shutdown requested", "core journal owner stopped");
+                     return;
+                 }
+             }
+diff --git a/crates/mc-core/src/core/tick_loop.rs b/crates/mc-core/src/core/tick_loop.rs
+index 5286bcfc9..91d9e543b 100644
+--- a/crates/mc-core/src/core/tick_loop.rs
++++ b/crates/mc-core/src/core/tick_loop.rs
+@@ -692,7 +692,7 @@ pub(super) fn send_shutdown(
+     state: &mut TickState,
+     work_tx: &std::sync::mpsc::SyncSender<JournalWork>,
+ ) {
+-    tracing::error!(
++    tracing::info!(
+         tick = state.tick,
+         cause = "shutdown requested",
+         "core tick owner stopping"
+diff --git a/crates/mc-edge/src/bin/krasnokamen.rs b/crates/mc-edge/src/bin/krasnokamen.rs
+index 9718789dc..66f092ed9 100644
+--- a/crates/mc-edge/src/bin/krasnokamen.rs
++++ b/crates/mc-edge/src/bin/krasnokamen.rs
+@@ -86,7 +86,7 @@ async fn run(cli: Cli, mut cfg: mc_edge::config::EdgeConfig) -> anyhow::Result<(
+         result = mc_edge::server::serve_with_console(listener, server, !cli.no_console) => {
+             // Record the edge result before shutdown drops the tick broadcast.
+             match &result {
+-                Ok(()) => tracing::error!(cause = "edge serve loop returned", "server stopping"),
++                Ok(()) => info!(cause = "edge serve loop returned", "server stopping"),
+                 Err(error) => tracing::error!(error = %format_args!("{error:#}"), "edge failed; server stopping"),
+             }
+             spawn_stop_escalation();
+@@ -94,7 +94,7 @@ async fn run(cli: Cli, mut cfg: mc_edge::config::EdgeConfig) -> anyhow::Result<(
+             result
+         }
+         cause = shutdown => {
+-            tracing::error!(cause, "shutdown requested; stopping core");
++            info!(cause, "shutdown requested; stopping core");
+             // The final checkpoint can take minutes on a big dirty set; a
+             // second stop signal must not be swallowed now that the first
+             // listener is gone.
+diff --git a/crates/mc-edge/src/server/pump.rs b/crates/mc-edge/src/server/pump.rs
+index 52bf3d18a..87e524d2e 100644
+--- a/crates/mc-edge/src/server/pump.rs
++++ b/crates/mc-edge/src/server/pump.rs
+@@ -221,10 +221,17 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
+                     None,
+                     &mut latest_roster,
+                 );
+-                tracing::error!(
+-                    connections = connections.len(),
+-                    "core tick broadcast closed; core halted or stopped"
+-                );
++                if server.hub.shutdown_requested() {
++                    tracing::info!(
++                        connections = connections.len(),
++                        "core tick broadcast closed after shutdown request"
++                    );
++                } else {
++                    tracing::error!(
++                        connections = connections.len(),
++                        "core tick broadcast closed unexpectedly; core halted"
++                    );
++                }
+                 break;
+             };
+             server.tick_stats.record(out.tick);

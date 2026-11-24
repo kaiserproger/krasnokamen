@@ -42,8 +42,9 @@ equivalent of each original hunk (README patch-mode step 1).
   red at `hot_backup_tests.rs:107`: the a/-side copies the path instead of the
   owned snapshot, so the bytes differ.
 - `cargo:mc-world-conversion:path_tests::walked_paths_are_portable_metadata_keys_and_exclude_world_lease` —
-  red at `path_tests.rs:22` (`2 != 1`): the lease file is not skipped and the
-  keys use OS separators.
+  red at `path_tests.rs:22` (`2 != 1`): the lease file is not skipped. The
+  platform-separator half of that hunk gives no Linux red and belongs to
+  WINDOWS-BACKUP-SECOND-HANDLE-ERROR-33.
 - `cargo:mc-world-conversion:roundtrip_tests::nested_paths_import_export_and_census_under_world_leases` —
   red at `roundtrip_tests.rs:528` (`.krasnokamen-world.lock: unsupported active
   or unsafe source file`), i.e. the same lease-skip symptom, not the separator.

@@ -319,3 +319,82 @@ fn plain_drop_holds_the_world_lease_until_the_publication_commits() {
          already free and the publication landed after the handle was dropped"
     );
 }
+
+/// Clears the journal exit hold when a test leaves before the owner fires it.
+struct ExitHoldGuard(std::path::PathBuf);
+
+impl Drop for ExitHoldGuard {
+    fn drop(&mut self) {
+        let mut hold = super::journal::JOURNAL_EXIT_HOLD.lock();
+        if hold.as_ref().is_some_and(|(dir, _, _)| dir == &self.0) {
+            hold.take();
+        }
+    }
+}
+
+/// CORE-DROP-LEAVES-WORLD-DIR-WRITER.
+///
+/// The recorded symptom is `remove_dir_all` of the world directory failing with
+/// `DirectoryNotEmpty` right after `drop(core)`: a writer still created a file
+/// there. This test holds a real writer — the journal owner, which owns the
+/// world directory's WAL — on its exit path and drops the core in another
+/// thread. A plain drop must join that owner before it returns, so no writer is
+/// left to create a file afterwards and the directory deletes.
+#[test]
+fn plain_drop_joins_a_journal_writer_holding_the_world_directory() {
+    // The journal exit hold is process-global; isolate it like the lease test so
+    // no unrelated journal in the parent process can ever park on it.
+    const CHILD: &str = "KRASNOKAMEN_CORE_DROP_WORLD_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let full_name = concat!(
+            module_path!(),
+            "::plain_drop_joins_a_journal_writer_holding_the_world_directory"
+        );
+        let test_name = full_name.split_once("::").unwrap().1;
+        let child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", test_name, "--nocapture"])
+            .env(CHILD, "1")
+            .output()
+            .expect("run the isolated world-directory drop test");
+        assert!(
+            child.status.success(),
+            "world-directory drop child failed: stdout={} stderr={}",
+            String::from_utf8_lossy(&child.stdout),
+            String::from_utf8_lossy(&child.stderr)
+        );
+        eprint!("{}", String::from_utf8_lossy(&child.stderr));
+        return;
+    }
+
+    let directory =
+        std::env::temp_dir().join(format!("mc-core-drop-world-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release, release_rx) = mpsc::channel::<()>();
+    *super::journal::JOURNAL_EXIT_HOLD.lock() = Some((directory.clone(), entered_tx, release_rx));
+    let guard = ExitHoldGuard(directory.clone());
+    let core = Core::open(config(&directory)).expect("open the world");
+
+    let (dropped_tx, dropped_rx) = mpsc::channel();
+    let dropping = std::thread::spawn(move || {
+        drop(core);
+        let _ = dropped_tx.send(());
+    });
+    // `entered` is sent from inside the journal owner's exit path, i.e. only
+    // after the drop signalled the owners: the writer is alive and joined.
+    entered_rx
+        .recv_timeout(Duration::from_secs(90))
+        .expect("the journal owner never reached its exit path");
+    assert!(
+        matches!(dropped_rx.try_recv(), Err(mpsc::TryRecvError::Empty)),
+        "the plain drop returned while the journal owner still held the world directory"
+    );
+    drop(release);
+    dropped_rx
+        .recv_timeout(Duration::from_secs(90))
+        .expect("the plain drop never returned after the journal owner exited");
+    dropping.join().expect("drop thread");
+    drop(guard);
+    std::fs::remove_dir_all(&directory)
+        .expect("a writer left in the world directory recreated a file after the drop returned");
+}

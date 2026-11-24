@@ -189,6 +189,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="A relaunched client enters after a logged lease wait and the previous holder exits.",
         limits="One Linux native singleplayer held-lease release; not the timeout branch.",
     ),
+    "native-sp-rotation-reopen": _entry(
+        id="native-sp-rotation-reopen",
+        summary="A clean singleplayer quit and reopen keeps the camera rotation",
+        owner="core:harness", evidence="graphical", profile="singleplayer-regressions",
+        scenario_id="native-sp-rotation-reopen", requires=("xvfb",),
+        sources=("tools/harness/backends/singleplayer_regressions.py",),
+        proves="A player who looks 90/20, saves and quits to title, then reopens the world is back at 90/20 (vanilla persists Rotation), not 0/0.",
+        limits="One Linux native singleplayer reopen; one look direction.",
+    ),
     "native-sp-slow-machine": _entry(
         id="native-sp-slow-machine",
         summary="Start a fresh singleplayer world with a CPU-limited server and software renderer",

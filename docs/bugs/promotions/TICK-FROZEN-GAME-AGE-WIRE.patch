@@ -1,0 +1,35 @@
+diff --git a/crates/mc-edge/src/plan/viewer_plan.rs b/crates/mc-edge/src/plan/viewer_plan.rs
+index d9e885e47..bb6edda77 100644
+--- a/crates/mc-edge/src/plan/viewer_plan.rs
++++ b/crates/mc-edge/src/plan/viewer_plan.rs
+@@ -156,7 +156,7 @@ fn plan_viewer_inner(
+             &mut out,
+             conn,
+             &ClientboundSetTime::overworld(
+-                i64::try_from(snapshot.tick).unwrap_or(i64::MAX),
++                i64::try_from(snapshot.game_time).unwrap_or(i64::MAX),
+                 snapshot.day_time,
+                 snapshot.day_time_rate,
+             ),
+diff --git a/crates/mc-edge/src/play.rs b/crates/mc-edge/src/play.rs
+index c49d812c3..c246f4c3b 100644
+--- a/crates/mc-edge/src/play.rs
++++ b/crates/mc-edge/src/play.rs
+@@ -199,7 +199,7 @@ pub async fn send_join_burst(burst: JoinBurst<'_>) -> anyhow::Result<()> {
+     })
+     .await?;
+     conn.send_packet(&ClientboundSetTime::overworld(
+-        i64::try_from(out.snapshot.tick).unwrap_or(i64::MAX),
++        i64::try_from(out.snapshot.game_time).unwrap_or(i64::MAX),
+         out.snapshot.day_time,
+         out.snapshot.day_time_rate,
+     ))
+@@ -284,7 +284,7 @@ pub async fn send_join_burst(burst: JoinBurst<'_>) -> anyhow::Result<()> {
+     // Closing time sync: the client renders the world clock from the last
+     // one it saw.
+     conn.send_packet(&ClientboundSetTime::overworld(
+-        i64::try_from(out.snapshot.tick).unwrap_or(i64::MAX),
++        i64::try_from(out.snapshot.game_time).unwrap_or(i64::MAX),
+         out.snapshot.day_time,
+         out.snapshot.day_time_rate,
+     ))

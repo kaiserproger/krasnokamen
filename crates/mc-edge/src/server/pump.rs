@@ -443,7 +443,7 @@ pub(super) fn route_outbox_batches(
             let (entity, position, dimension) = server
                 .connections
                 .take_join(id)
-                .map(|(entity, position, _, dimension)| (entity, position, dimension))
+                .map(|joined| (joined.entity, joined.position, joined.dimension))
                 .unwrap_or((
                     mc_core::boundary::EntityId(id.0 as i32),
                     [0.5, 64.0, 0.5],
@@ -515,7 +515,7 @@ pub(super) fn route_outbox_batches(
             let (entity, position, dimension) = server
                 .connections
                 .take_join(connection)
-                .map(|(entity, position, _, dimension)| (entity, position, dimension))
+                .map(|joined| (joined.entity, joined.position, joined.dimension))
                 .unwrap_or((
                     mc_core::boundary::EntityId(connection.0 as i32),
                     [0.5, 64.0, 0.5],

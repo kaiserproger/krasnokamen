@@ -11,9 +11,16 @@ the candidate keeps the first slot and drops duplicate keys. Blob pair
 
 An earlier attempt carried the file's second hunk (the
 `sim_debt_anchored_since` initializer) too; reversing it left E0063 because
-`weather.rs` keeps the field, so only the `put` hunk is recorded.
+`weather.rs` keeps the field, so only the `put` hunk is recorded. That
+excluded initializer is class (a): it is TIME-FROZEN-CATCHUP-DEBT's
+held-anchor behaviour (`ClimateImage::capture` writes
+`sim_debt_anchored_since`, weather.rs:88, read back by the same row's
+restore), owned by TIME-DEBT-HELD-ANCHOR-PERSISTENCE, and reversing it would
+turn that row's assertions red.
 
 Control at head: `native_debt_game_clock_running_nonzero_epoch_capture_load_capture_is_byte_identical`
-red by assertion; the two-output tail ref stays green there (its fixture does
-not refresh an unchanged field) and is a green regression. Restore green.
+red by assertion at `crates/mc-core/src/native_game_clock_drill_tests.rs:402`
+(`assertion left == right failed: native domain level_metadata`); the
+two-output tail ref stays green there (its fixture does not refresh an
+unchanged field) and is a green regression. Restore green.
 Artifact `20261124T050126-ledger-promote-1_9cka_p`.
