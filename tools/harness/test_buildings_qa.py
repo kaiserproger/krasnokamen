@@ -310,32 +310,55 @@ class WorkerSettlementTest(unittest.TestCase):
 
 
 class SummonPlacementTest(unittest.TestCase):
-    """`_summon_bind` must never place a villager in the site's own (possibly solid) cell."""
+    """`_summon_bind` must never place a villager in the site's own (possibly solid) cell, and it
+    must top up a short first pass: the 2026-11-24 perimeter run bound nine of ten residents and
+    failed the fixture before any wall work (20261124T122532)."""
+
+    def _read_pad(self, _probe, pos):
+        x, y, z = pos
+        return {"block": {"block_id": "minecraft:air" if y >= 70 else "minecraft:grass_block"}}
 
     def test_an_empty_shell_search_summons_on_open_pad_cells(self):
+        from tools.harness.backends import buildings_qa_build as build
         probe = FakeProbe()
         summons = []
         probe.fixture = lambda command: summons.append(command) if command.startswith("summon ") else None
-
-        def read(_probe, pos):
-            x, y, z = pos
-            return {"block": {"block_id": "minecraft:air" if y >= 70 else "minecraft:grass_block"}}
-
         sub = {}
         with mock.patch.object(buildings_qa, "_free_summon_cells", return_value=[]), \
-                mock.patch.object(buildings_qa, "_read", side_effect=read), \
-                mock.patch.object(buildings_qa, "_villagers", return_value=[]), \
+                mock.patch.object(buildings_qa, "_read", side_effect=self._read_pad), \
+                mock.patch.object(build, "_villagers", return_value=[]), \
                 mock.patch.object(buildings_qa, "_send", return_value={"recent_chat": []}), \
                 mock.patch.object(buildings_qa, "_chat_lines", return_value=["members=0"]):
             with self.assertRaisesRegex(RuntimeError, "buildings_house_bound"):
                 buildings_qa._summon_bind(probe, sub, "buildings_house", "town", (12, 71, 12), 10)
-        self.assertEqual(len(summons), 10)
+        self.assertGreaterEqual(len(summons), 10)
         cells = {tuple(int(float(part)) for part in line.split()[2:5]) for line in summons}
         self.assertNotIn((12, 72, 12), cells)  # the chest cell the old fallback used ten times
         self.assertEqual(len(cells), 10)
         self.assertTrue(all(cell[1] == 70 for cell in cells))  # the player's pad level
-        self.assertEqual(sorted(sub["buildings_house_summon_cells"]),
-                         sorted([list(cell) for cell in cells]))
+        self.assertEqual({tuple(cell) for cell in sub["buildings_house_summon_cells"]}, cells)
+
+    def test_a_short_first_pass_is_topped_up_to_the_requested_count(self):
+        from tools.harness.backends import buildings_qa_build as build
+        probe = FakeProbe()
+        spawned: set[str] = set()
+        reads = iter([["members=9"]] + [["members=10"]] * 20)
+
+        def villagers(_probe):
+            uuid = f"villager-{len(spawned)}"
+            spawned.add(uuid)
+            return [{"entity_uuid": uuid, "x": 10.0, "z": 10.0}]
+
+        sub = {}
+        with mock.patch.object(buildings_qa, "_free_summon_cells", return_value=[(11, 70, 10)] * 10), \
+                mock.patch.object(buildings_qa, "_read", side_effect=self._read_pad), \
+                mock.patch.object(build, "_villagers", side_effect=villagers), \
+                mock.patch.object(buildings_qa, "_send", return_value={"recent_chat": []}), \
+                mock.patch.object(buildings_qa, "_chat_lines", side_effect=lambda _state: next(reads)):
+            ok = buildings_qa._summon_bind(probe, sub, "buildings_house", "town", (10, 70, 10), 10)
+        self.assertTrue(ok)
+        self.assertEqual(sub["bound_members"], 10)
+        self.assertEqual(sub["bound_attempts"], 11)  # ten planned plus the one that made ten
 
 
 class OrderEchoRetryTest(unittest.TestCase):
