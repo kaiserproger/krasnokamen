@@ -3,7 +3,7 @@ id = "BATTLE-FACTION-LOOKUP-QUADRATIC"
 title = "Battle faction population and target lookups scale quadratically with faction count"
 area = "gameplay"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "Stage2Review/astra-core.md P2-3, static review of a70133113"
 repro = "source"
 regression = ["cargo:mc-core:battle::tests::faction_probes_stay_logarithmic_per_sample_and_per_rebuild", "cargo:mc-core:battle::tests::faction_population_matches_a_btreemap_oracle_at_sixty_four_factions"]
@@ -16,3 +16,4 @@ failing_first = "not recorded"
 # docs/bugs/promotions/BATTLE-FACTION-LOOKUP-QUADRATIC.hunks.md
 fix_commit = "patch:b9c433bd7895940c376ebad7977b3295450639e04cb9dfafe2d42910ebec51be"
 repro_check = "Inspect battle/mod.rs population counting: linear faction lookup per body and PopulationCache::sample over the whole faction population yield N(N-1)/2 comparisons per sample for N distinct factions; targeting.rs nearest_enemy also visits every faction. Faction is u16, not limited to two sides. TPS impact has not been measured. The registered test pins the faction comparisons per sample and per rebuild at F=64 to ceil(log2(len+1))+1 (at most 9 per unit) through the shared faction_cmp; the residual per-faction loop of a retarget stays O(F)."
+promotion = "docs/bugs/promotions/BATTLE-FACTION-LOOKUP-QUADRATIC.json"

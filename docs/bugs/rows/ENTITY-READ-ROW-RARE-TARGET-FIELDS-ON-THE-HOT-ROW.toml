@@ -3,7 +3,7 @@ id = "ENTITY-READ-ROW-RARE-TARGET-FIELDS-ON-THE-HOT-ROW"
 title = "Two Option<[f64; 3]> target fields (32 B each) still sit on the per-entity ReadRow, so every entity's hot snapshot pays 64 bytes for state only a handful of hostile goals read"
 area = "gameplay"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "D123Battle pack 2 review, split out of ENTITY-READ-ROW-248-BYTES-COPIED-PER-ENTITY-TICK part (b): `ReadRow` carries `plugin_target` and `gold_target` (`Option<[f64; 3]>`, 32 B each; the inline `enderman_target` is an `EntityId` and is not part of the 64 B) for every admitted entity per tick, while only the few bodies with a plugin or enderman goal read them. The row is now taken by reference (part (a), landed), so the cost is the 64 bytes of fill per entity per tick and the cache footprint of the prepare output, not a copy. Fix shape: one rare field instead of two and tighten the 256-byte assertion into a real ratchet. Correction (design verdict §2): there is no existing rare side vector to move into — `RarePrep` is a per-call argument and `PrepChunk.rare` is a `Vec<usize>` of row indices — so the landed fix is one `RareMotion` field (`Plugin`/`Gold`, 32 B; they never co-occur because a plugin target needs a villager and a gold target needs a piglin) plus an exact size ratchet."
 repro = "source"
 regression = ["cargo:mc-core:tick::entity_phase::entity_phase_tests::worker_snapshot_keeps_rare_state_in_entity_store"]
@@ -12,3 +12,4 @@ failing_first = "not recorded"
 # (the two 64 B fields and the two `None` constructor lines), map docs/bugs/promotions/ENTITY-READ-ROW-RARE-TARGET-FIELDS-ON-THE-HOT-ROW.hunks.md
 fix_commit = "patch:5aaaeaa28afe08bf33513cff40287b6721319fc7e345cca24264103cf8011f8b"
 repro_check = "The size ratchet is exact: `size_of::<ReadRow>() == 224` on the fixed tree; restoring the two `Option<[f64; 3]>` fields beside the kept `RareMotion` makes the row 288 B and fails the assertion (control_tree: head)."
+promotion = "docs/bugs/promotions/ENTITY-READ-ROW-RARE-TARGET-FIELDS-ON-THE-HOT-ROW.json"

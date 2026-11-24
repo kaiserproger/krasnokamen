@@ -1,17 +1,18 @@
 {
   "id": "ENTITY-READ-ROW-RARE-TARGET-FIELDS-ON-THE-HOT-ROW",
   "verdict": "promoted",
-  "fix_commit": "patch:f1ca3154281b4dffd52d5cd3f47a9344ed7f0d51df7c7d8b5ee06baf1929594c",
-  "fix_commit_full": "patch:f1ca3154281b4dffd52d5cd3f47a9344ed7f0d51df7c7d8b5ee06baf1929594c",
-  "promoted_at": "2026-11-24T01:21:56+00:00",
-  "tree_head": "5f34157699735bb1f292fefc0b1dc6b704baa231",
+  "fix_commit": "patch:5aaaeaa28afe08bf33513cff40287b6721319fc7e345cca24264103cf8011f8b",
+  "fix_commit_full": "patch:5aaaeaa28afe08bf33513cff40287b6721319fc7e345cca24264103cf8011f8b",
+  "promoted_at": "2026-11-24T03:22:12+00:00",
+  "tree_head": "e2e341a2bbe67626a8203791ac05c836af17ee65",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
-  "fix_patch_sha256": "f1ca3154281b4dffd52d5cd3f47a9344ed7f0d51df7c7d8b5ee06baf1929594c",
+  "fix_patch_sha256": "5aaaeaa28afe08bf33513cff40287b6721319fc7e345cca24264103cf8011f8b",
   "reversed_files": [
     "crates/mc-core/src/tick/entity_phase.rs",
-    "crates/mc-core/src/tick/entity_phase/prepare.rs"
+    "crates/mc-core/src/tick/entity_phase/prepare.rs",
+    "crates/mc-core/src/tick/entity_phase/step.rs"
   ],
   "kept_test_files": [],
   "negative_control": {
@@ -27,5 +28,5 @@
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T011809-ledger-promote-vaqetzwm"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T031935-ledger-promote-n1jwq4n8"
 }
