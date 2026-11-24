@@ -58,12 +58,12 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         def approach():
             try:
                 result["approach"] = a.call_tool("minecraft_approach_entity", {
-                    "entity_id": target["entity_id"], "timeout_seconds": 120.0})
+                    "entity_id": target["entity_id"], "timeout_seconds": 150.0})
             except Exception as error:
                 result["approach_error"] = str(error)
         worker = threading.Thread(target=approach)
         worker.start()
-        worker.join(timeout=135)
+        worker.join(timeout=165)
         # The row's own claim comes first: a client that loses the controller at the idle deadline
         # never returns the bounded action, so `active_writer_survived_idle_deadline` is the
         # assertion that has to flip, and the generic completion check follows it.
@@ -80,7 +80,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             "controller_remaining_ms": controller_now.get("remaining_ms"),
         }
         steps.check("active_writer_survived_idle_deadline",
-                    time.monotonic() - started >= 119 and completed
+                    time.monotonic() - started >= 125 and completed
                     and approach.get("entity_uuid") == target.get("entity_uuid")
                     and controller_now.get("active") is True)
         steps.check("long_action_completed", completed)
@@ -130,7 +130,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     finally:
         b.close()
         if worker is not None:
-            worker.join(timeout=140)
+            worker.join(timeout=175)
 
     # The client must receive the hole and adjacent supporting block before the
     # exact straddling pose is imposed by the private operator fixture.
