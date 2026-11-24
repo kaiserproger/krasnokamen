@@ -4,10 +4,11 @@ title = "Native navigation skips required centering at an open door and exhausts
 area = "client"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Seed-24 bed route (166,75,-282) stayed outside an ordinarily opened door while every one of 24 replans found a path. The 0.22 waypoint tolerance skipped required centering, then the 0.12 movement deadzone suppressed the remaining alignment in the 13/16-block opening. The real-session regression failed before correction; the corrected client passed all 21 navigation tests and three windowed saved-world arrivals with the exact bed head visible. Native pin 75755212b117-3902797f and owned patch receipts/CivSimStallFix/native-nav-waypoint-centering.patch retain the evidence. The correction and open_door_requires_centering_before_the_next_path_segment are in solaris-client commit 895c63f3444e81087913d363c4dfc3feed09a4da, included in client base 5d3868fa. Independent acceptance and formal ledger promotion remain pending; saved routes are not fresh civilization acceptance."
 regression = ["harness:entities:native-v2-lease-navigation", "client:krasnokamen-client:minecraft::navigation::tests::open_door_requires_centering_before_the_next_path_segment"]
 proving_assertions = { "harness:entities:native-v2-lease-navigation" = "open_door_navigation_arrived" }
 failing_first = "reported"
 fix_commit = "client:00da7b10df"
 repro_check = "Committed reversal pair client:8c7ece043a (reverses 895c63f3's two navigation hunks; the movement call is restored to its pre-fix single line after a later rustfmt wrap) -> client:00da7b10df (re-land, the row's fix_commit); git diff 8c7ece043a 00da7b10df is exactly the fix patch (patch-id 1b07f639240eeac9). Stage-3 control/restore: harness:entities:native-v2-lease-navigation on the reversed and the re-landed client; hunks map promotions/NATIVE-NAV-WAYPOINT-CORNER-DEADZONE.hunks.md"
+promotion = "docs/bugs/promotions/NATIVE-NAV-WAYPOINT-CORNER-DEADZONE.json"

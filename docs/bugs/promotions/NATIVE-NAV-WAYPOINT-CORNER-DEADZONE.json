@@ -1,0 +1,65 @@
+{
+  "id": "NATIVE-NAV-WAYPOINT-CORNER-DEADZONE",
+  "verdict": "promoted",
+  "fix_commit": "client:00da7b10df",
+  "fix_commit_full": "00da7b10df8e606b17a121cfe00ab82ed133d06e",
+  "promoted_at": "2026-11-24T12:17:26+00:00",
+  "tree_head": "889f4346fb7f77708bf6007a593cd36cc2a4a482",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T115933-native-v2-lease-navigation-ce32k7wy/result.json",
+    "client_head": "8c7ece043ac2eb6e1ff012ae696a149238730c53",
+    "server_binary_sha256": "4d5b613b4da97e0fbcbdc612eea417d4ca392c6c2478fc9f34c42e91d5f5b00a",
+    "red": [
+      "harness:entities:native-v2-lease-navigation"
+    ],
+    "states": {
+      "harness:entities:native-v2-lease-navigation": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T115702-native-v2-lease-navigation-qb4rp4rf/result.json",
+    "client_head": "00da7b10df8e606b17a121cfe00ab82ed133d06e",
+    "server_binary_sha256": "4d5b613b4da97e0fbcbdc612eea417d4ca392c6c2478fc9f34c42e91d5f5b00a",
+    "green": [
+      "harness:entities:native-v2-lease-navigation"
+    ],
+    "states": {
+      "harness:entities:native-v2-lease-navigation": "green"
+    },
+    "tree_head": "889f4346fb7f77708bf6007a593cd36cc2a4a482",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T115702-native-v2-lease-navigation-qb4rp4rf/result.json",
+    "client_head": "00da7b10df8e606b17a121cfe00ab82ed133d06e",
+    "server_binary_sha256": "4d5b613b4da97e0fbcbdc612eea417d4ca392c6c2478fc9f34c42e91d5f5b00a",
+    "green": [
+      "harness:entities:native-v2-lease-navigation"
+    ],
+    "states": {
+      "harness:entities:native-v2-lease-navigation": "green"
+    },
+    "tree_head": "889f4346fb7f77708bf6007a593cd36cc2a4a482",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "1b07f639240eeac9e0721eeee0b837b174681ddb",
+    "paths": [
+      "src/minecraft/navigation.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:minecraft::navigation::tests::open_door_requires_centering_before_the_next_path_segment": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T121723-ledger-promote-hs_t_t14"
+}

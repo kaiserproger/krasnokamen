@@ -4,10 +4,11 @@ title = "A bounded native action loses its controller at the idle lease deadline
 area = "client"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "An isolated actual native approach to an unreachable entity ended at 120.018 seconds with controller_lease_revoked and release reason lease_expired, in the same focused instance. The writer action was still active. A SourceNext candidate retains the existing lease fence during admitted activity and starts the unchanged idle TTL after its final response; three native runs return the bounded out-of-reach result with the controller active and held inputs empty. The correction and active_writer_action_survives_idle_expiry_then_returns_to_idle are in solaris-client commit 895c63f3444e81087913d363c4dfc3feed09a4da, included in client base 5d3868fa. Independent coverage is incomplete, and the original fresh civilization run still fails at a later occluded milestone. No global acceptance or ledger promotion."
 regression = ["harness:entities:native-v2-lease-navigation", "client:krasnokamen-client:automation::tests::active_writer_action_survives_idle_expiry_then_returns_to_idle"]
 proving_assertions = { "harness:entities:native-v2-lease-navigation" = "active_writer_survived_idle_deadline" }
 failing_first = "reported"
-fix_commit = "client:895c63f3"
-repro_check = "real-hunk control receipts/XClientControl/negctl/negctl-real-A-idle-expiry.log (reversing 895c63f3's lease_verdict hunk reds the ref: an admitted owner action is not an idle writer); repro=client and area=client, so candidate: real-client check required (native-v2-lease-navigation at stage 3)"
+fix_commit = "client:88a5f4f0c4"
+repro_check = "Committed reversal pair client:0051108980 (restores the pre-fix lease_verdict arm from 895c63f3^; the active_actions bookkeeping stays) -> client:88a5f4f0c4 (re-land, the row's fix_commit); git diff 0051108980 88a5f4f0c4 is exactly the fix patch. Stage-3 control/restore: harness:entities:native-v2-lease-navigation on the reversed and the re-landed client; hunks map promotions/NATIVE-ACTIVE-WRITER-IDLE-EXPIRY.hunks.md"
+promotion = "docs/bugs/promotions/NATIVE-ACTIVE-WRITER-IDLE-EXPIRY.json"

@@ -3,7 +3,7 @@ id = "NATIVE-UNLOADED-EYE-SESSION-END"
 title = "A far server teleport ends the native client session when the eye's terrain has not arrived yet"
 area = "client"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "Stage3 ScreensVoiceStart: teleport to 1000.5/176/1000.5 → `session failed: unloaded_eye_environment` (client 12e076e9 player.rs:644 eye_medium Err on an unloaded block ended the session). Also hit ordinary gates on 12e076e9 + server c7786910e (S3ClientRegress): native-item-bars 20261115T005013-native-item-bars-eeprrqzp and native-v2-p4-damage 20261115T005042-native-v2-p4-damage-gwindu_y reach Play, then the session ends with the same error"
 repro = "client"
 regression = [
@@ -14,3 +14,4 @@ proving_assertions = { "harness:scene-shot:native-unloaded-eye" = "unloaded_eye_
 fix_commit = "client:6048e4756e"
 failing_first = "reported"
 repro_check = "Committed reversal pair client:390a7659af (reverses ace7a804's three source hunks at the wave-2 tip; the scene json hunk has no pre-image and is not reversed) -> client:6048e4756e (re-land, the row's fix_commit); git diff 390a7659af 6048e4756e is exactly the fix patch (patch-id 6c61c8634efc22ab). Stage-3 control/restore: harness:scene-shot:native-unloaded-eye on the reversed and the re-landed client; hunks map promotions/NATIVE-UNLOADED-EYE-SESSION-END.hunks.md"
+promotion = "docs/bugs/promotions/NATIVE-UNLOADED-EYE-SESSION-END.json"
