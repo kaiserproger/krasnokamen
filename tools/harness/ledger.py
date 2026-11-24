@@ -2123,6 +2123,28 @@ def _run_loader(ctx, tests, root, repo=None):
     return results
 
 
+# Mockito's verification failures extend `MockitoAssertionError`, which extends `AssertionError`:
+# a JUnit report names the concrete subclass, so the classifier must know them by name
+# (NoInteractionsWanted from a guard that must not touch the game mode, 2026-11-25).
+_JUNIT_ASSERTIONS = (
+    'AssertionError',
+    'org.mockito.exceptions.verification.NoInteractionsWanted',
+    'org.mockito.exceptions.verification.WantedButNotInvoked',
+    'org.mockito.exceptions.verification.NeverWantedButInvoked',
+    'org.mockito.exceptions.verification.TooManyActualInvocations',
+    'org.mockito.exceptions.verification.TooFewActualInvocations',
+    'org.mockito.exceptions.verification.ArgumentsAreDifferent',
+    'org.mockito.exceptions.verification.SmartNullPointerException',
+    'org.mockito.exceptions.verification.VerificationInOrderFailure',
+    'org.mockito.exceptions.verification.MockitoAssertionError',
+)
+
+
+def _junit_assertion_failure(kind, text):
+    """Whether a JUnit failure type is an assertion (JUnit's own or a Mockito verification)."""
+    return any(name in kind or name in text for name in _JUNIT_ASSERTIONS)
+
+
 def _gradle_junit(module_dir, selector):
     """(state, detail, assertion) of one Gradle test selector from its JUnit XML.
 
@@ -2159,7 +2181,7 @@ def _gradle_junit(module_dir, selector):
             kind = failure.get('type') or ''
             text = failure.text or ''
             position = re.search(r'\(([\w.$]+)\.java:(\d+)\)', text) or re.search(r'([\w.$]+)\.java:(\d+)', text)
-            if 'AssertionError' not in kind and 'AssertionError' not in text:
+            if not _junit_assertion_failure(kind, text):
                 return UNRUNNABLE, f'{case.get("name")} failed with {kind or "an error"}, not an assertion', None
             if position is None:
                 continue

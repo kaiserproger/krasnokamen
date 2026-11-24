@@ -1170,3 +1170,19 @@ class GradleJUnitLayoutTests(unittest.TestCase):
             state, detail, assertion = ledger._gradle_junit(
                 module, 'dev.krasnokamen.agent.javaagent.MinecraftAttackInputTest')
         self.assertEqual(state, ledger.RED, detail)
+
+    def test_mockito_verification_failure_is_an_assertion(self):
+        report = self.REPORT.replace(
+            'type="java.lang.AssertionError" message="expected true">java.lang.AssertionError: expected true',
+            'type="org.mockito.exceptions.verification.NoInteractionsWanted" message="no interactions">'
+            'org.mockito.exceptions.verification.NoInteractionsWanted: No interactions wanted')
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            module = Path(directory) / 'java-agent'
+            results = module / 'build' / 'test-results' / 'test'
+            results.mkdir(parents=True)
+            (results / 'TEST-dev.krasnokamen.agent.javaagent.MinecraftAttackInputTest.xml').write_text(report)
+            self._source(module)
+            state, detail, assertion = ledger._gradle_junit(
+                module, 'dev.krasnokamen.agent.javaagent.MinecraftAttackInputTest')
+        self.assertEqual(state, ledger.RED, detail)
