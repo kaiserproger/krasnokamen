@@ -294,6 +294,32 @@ def check_decorated_pot(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("pot_side_pattern_changed", changed > 300)
 
 
+def check_element_emission(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-ELEMENT-EMISSION: a model element with `light_emission` draws full-bright at night.
+
+    26.3 `cross_emissive` (the parent of `firefly_bush` and `open_eyeblossom`) carries two extra
+    elements with `light_emission: 15` over a separate emissive texture, so at night the overlay's
+    texels must ignore the world light. `firefly_bush_emissive.png` has 9 texels with every channel
+    above 200 and the base texture has none, so a near-white pixel in the bush's region can only be
+    the emissive overlay: a baker that drops the per-element emission shades those texels with the
+    night light and the frame holds none.
+    """
+    shots = _qa._load_shots(probe, artifact, ("bush-night",))
+    frame = shots["bush-night"][0]
+    probe.check("bush_camera_at_fixture", all(
+        abs(a - b) < 0.01 for a, b in zip(frame["camera_position"], (1000.5, 161.62, 1002.3))
+    ) and abs(frame["yaw"]) < 0.01 and abs(frame["pitch"] - 27.0) < 0.01)
+    probe.check("bush_frame_at_night", frame["environment"]["time_of_day"] == "18000")
+    # The bush's crossed planes against the night floor and sky.
+    box = (520, 240, 760, 480)
+    image = shots["bush-night"][1].crop(box)
+    bright = sum(1 for r, g, b in image.getdata() if min(r, g, b) > 200)
+    probe.report["element_emission_roi"] = list(box)
+    probe.report["element_emission_bright_pixels"] = bright
+    # Measured 441 near-white pixels on the fixed client and 0 on the control.
+    probe.check("emissive_overlay_full_bright", bright > 60)
+
+
 def check_pig_saddle(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-OPUS-3: a pig with a saddle in equipment slot 7 draws its saddle layer.
 

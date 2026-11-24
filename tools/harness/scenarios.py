@@ -741,6 +741,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the pot's side band changes when the block entity carries bare-id sherds, so the renderer accepts the component shape 26.3 sends",
         limits="one pot, one camera, the block surface only; the item/pot-in-hand surface is unit-covered by decorated_pot_item_bakes_all_sides_and_received_sherds, and the exact vanilla pattern placement is not asserted",
     ),
+    "native-element-emission": _entry(
+        id="native-element-emission", summary="A model element's light_emission draws full-bright at night",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-element-emission", requires=("xvfb",),
+        sources=("tools/harness/element_emission_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, one firefly bush on a stone floor at midnight, fixed camera",
+        proves="the bush's emissive overlay keeps near-white texels at night, so the element emission replaced the sampled light",
+        limits="one emissive cross model and one camera; eyeblossom and potted variants and the daytime frame stay unproven",
+    ),
     "native-pig-saddle": _entry(
         id="native-pig-saddle", summary="A saddled pig draws its saddle layer",
         owner="core:harness", evidence="graphical", profile="scene-shot",
