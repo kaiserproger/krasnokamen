@@ -992,8 +992,11 @@ impl EntityStore {
             special: None,
             swell_metadata_neutral: true,
         });
-        self.hot
-            .push(HotRow::of(&self.cold[slot.0 as usize], &self.bodies[slot.0 as usize], 0));
+        self.hot.push(HotRow::of(
+            &self.cold[slot.0 as usize],
+            &self.bodies[slot.0 as usize],
+            0,
+        ));
         self.dirty_flag.push(true);
         self.dirty_ids.push(id);
         self.set_next_wire_id(id.0);

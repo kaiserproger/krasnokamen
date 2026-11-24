@@ -2640,9 +2640,10 @@ fn hot_row_follows_every_writer() {
     assert_hot_read_matches_cold(&mut state, born_slot);
     // Transfer both sides: the source swap-removes and the destination pushes.
     let mut destination = crate::entities::EntityStore::default();
-    let target = state
-        .entities
-        .transfer_to(born_slot, &mut destination, [16.5, 101.0, 8.5], [0.0; 2]);
+    let target =
+        state
+            .entities
+            .transfer_to(born_slot, &mut destination, [16.5, 101.0, 8.5], [0.0; 2]);
     state.entities.prepare_motion_hints(&state.registry);
     destination.prepare_motion_hints(&state.registry);
     destination.hot_row(target);

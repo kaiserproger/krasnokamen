@@ -634,7 +634,8 @@ fn read_row_with(
             (
                 row.speed
                     * ((1.0 + 0.2 * effects.level(crate::effects::EffectId::Speed))
-                        * (1.0 - 0.15 * effects.level(crate::effects::EffectId::Slowness)).max(0.0)),
+                        * (1.0 - 0.15 * effects.level(crate::effects::EffectId::Slowness))
+                            .max(0.0)),
                 effects.melee_bonus(),
                 effects.level(crate::effects::EffectId::Levitation),
                 effects.has(crate::effects::EffectId::SlowFalling),
