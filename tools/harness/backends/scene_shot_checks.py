@@ -316,20 +316,25 @@ def check_structure_box(probe: ProbeSteps, artifact: Path) -> None:
     ) and abs(hidden_f["yaw"] - shown_f["yaw"]) < 0.01
       and abs(hidden_f["pitch"] - shown_f["pitch"]) < 0.01)
     # The eye is at 161.60 with pitch 0, so the horizon is the screen centre: below y=361 the frame is
-    # the stone pad. The sky above it scrolls (cloud offset follows ticks even with the day cycle
-    # frozen - two runs of the same tree measured 4318 and 16739 changed sky pixels but the same 5679
-    # below), so the ROI stays under the horizon and measures only the wireframe.
+    # the stone pad. The pad still moves 3000+ px between frames (drifting cloud shadows), so the
+    # wireframe's pixel counts stay evidence in the report and the row's assertion is the frame's own
+    # block-entity submission: `wire` emits 12 edges = 72 indices, and the entity is only submitted
+    # when the received box asks for it.
     box = (200, 361, 910, 650)
-    # `wire` draws 0.9-neutral segments: bright grey, not the stone pad or the sky.
     line = lambda r, g, b: r > 190 and g > 190 and b > 190 and max(r, g, b) - min(r, g, b) <= 16
     lines = [_count(shots[name][1], box, line) for name in ("box-hidden", "box-shown")]
     changed = _changed(shots["box-hidden"][1], shots["box-shown"][1], box)
     probe.report["structure_box_roi"] = list(box)
     probe.report["structure_box_line_pixels"] = lines
     probe.report["structure_box_changed_pixels"] = changed
-    # The hidden frame's own pad and clouds are unchanged between the two frames, so the
-    # hidden-to-shown delta is the wireframe's lower edges (5679 px measured on the re-land).
-    probe.check("structure_box_changed", changed > 1000)
+    hidden_e, shown_e = hidden_f["entity_extraction"], shown_f["entity_extraction"]
+    probe.report["structure_box_block_entities"] = [hidden_e["block_entities"], shown_e["block_entities"]]
+    probe.report["structure_box_block_entity_indices"] = [
+        hidden_e["block_entity_indices"], shown_e["block_entity_indices"]]
+    probe.check("structure_box_hidden_without_flag",
+                hidden_e["block_entities"] == 0 and hidden_e["block_entity_indices"] == 0)
+    probe.check("structure_block_submitted",
+                shown_e["block_entities"] >= 1 and shown_e["block_entity_indices"] >= 72)
 
 
 def check_element_emission(probe: ProbeSteps, artifact: Path) -> None:

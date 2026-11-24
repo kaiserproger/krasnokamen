@@ -1,0 +1,12 @@
+[[bug]]
+id = "CLIENT-OPERATOR-OVERLAY-HARD-FAIL"
+title = "A spectator's (or a level-2 creative operator's) structure-block overlay and any failed test instance's error marker hard-fail the native client: the overlay wire and box vertices carried texture layer u32::MAX, so `render::mesh::validate` rejected the presentation stream with `invalid_mesh_vertex_or_texture_layer` and the session ended"
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T182722-native-block-entity-draw-z8dyska_/native-client.log"
+regression = ["harness:scene-shot:native-structure-box", "client:krasnokamen-client:entities::render_blocks::village_tests::operator_overlay_geometry_passes_the_presentation_stream_validator"]
+fix_commit = "client:127089bba2"
+repro_check = "Found 2026-11-25 (D123ClientModelI) while building the MODEL-BLOCK-ENTITY-DRAW fixture: with `gamemode spectator` the pinned client 3cf928ed died at spawn in three consecutive runs with `client failed: invalid_mesh_vertex_or_texture_layer: index=17024 layer=4294967295 layers=10 position=[232.0,160.0,236.0] normal=[1.0,0.0,0.0] alpha=1 light=[-1.0,-1.0]` (20261124T182722-native-block-entity-draw-z8dyska_, 20261124T182834-native-block-entity-draw-oavt298o, 20261124T182926-native-block-entity-draw-1sj9p2bb) while native-use-pose passed on the same pin (20261124T183026). Source: the only producers of the u32::MAX sentinel are `wire` (structure/test-instance boxes) and `cube` (test-instance error markers) in src/entities/render_blocks/surfaces.rs; the Lines/DebugFilledBox shaders never sample the atlas, but `render::mesh::validate` requires `texture_layer < layers` for every vertex of the stream. Reachability is wider than spectator mode: `operator_overlay_visible` is also true for game_mode == 1 with permission level >= 2 (src/session/observation.rs:1034), and the test-instance error cube is emitted for `errors` even when the overlay is hidden, so any failed test instance crashes any viewer."
+proving_assertions = { "harness:scene-shot:native-structure-box" = "structure_block_submitted" }
