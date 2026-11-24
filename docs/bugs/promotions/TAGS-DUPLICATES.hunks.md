@@ -58,8 +58,8 @@ relative to this tree (for example `native_checkpoint.rs` `-853` vs HEAD `:1088`
 
 ## Proving refs (file:line of the failing assertion)
 
-Evidence from the promotion receipt `20261124T140410-ledger-promote-3ffesjtc` (all ten refs green on the
-restore).
+Evidence from the re-promotion receipt `20261124T145246-ledger-promote-i3bg7ppf` (all ten refs green on the
+restore; the first promotion was `20261124T140410-ledger-promote-3ffesjtc`).
 
 Red, and the row's own symptom:
 - `cargo:mc-core:command_summon::tests::scoreboard_tags_tests::duplicate_tags_summon_load_add_and_remove_have_set_semantics`
@@ -81,14 +81,15 @@ Green in the control, **not this patch's** evidence:
   (`native checkpoint/NBT/duplicate_field`, `command_summon_scoreboard_tags_disk_tests.rs:179-180`), which is
   outside this patch. "The refusal disappears with the reversed normalisation" was wrong.
 
-Not evidence (control could not run the ref):
-- `…::duplicate_tags_keys_in_wal_refuse_recovery` (`disk_tests.rs:197`),
-  `…::opaque_wal_trailing_bytes_refuse_offline_and_live_recovery` (`disk_tests.rs:218`),
-  `…::duplicate_player_tags_keys_in_wal_refuse_offline_export_and_live_recovery` (`disk_tests.rs:296`) and
-  `cargo:mc-world-conversion:export_tests::export_refuses_ambiguous_player_tags_from_real_wal_without_publication`
-  (`export_tests.rs:684`) all report `fixture-failure` in the reversed control (the fixture world/image cannot
-  build there), and `harness:entities:native-v2-ledger-tag-duplicates` is `unrunnable` in the control for lack
-  of a reverted-tree pin (POL-1 practice). Its passed candidate receipt is the graphical half.
+Refs whose own control was rebuilt (review N2): the four refusal refs below now assert
+`matches!(&result, Err(_))` first (a plain `assert!` with no message) and then the refusal text, so a tree without
+the fence reds at the ref's own line instead of panicking in the fixture. In the re-promotion
+`20261124T145246-ledger-promote-i3bg7ppf` each is red at that assert:
+`command_summon_scoreboard_tags_disk_tests.rs:200` (WAL duplicate key), `:223` (trailing bytes, offline) and
+`:228` (live), and `crates/mc-world-conversion/src/export_tests.rs:687` (export refusal). The player-tags
+normalisation ref also moved to `disk_tests.rs:266` with the same edit.
+`harness:entities:native-v2-ledger-tag-duplicates` stays `unrunnable` in the control for lack of a reverted-tree
+pin (POL-1 practice); its passed candidate receipt is the graphical half.
 
 ## Real-client ref
 
@@ -97,4 +98,5 @@ Not evidence (control could not run the ref):
 (the server answers `Updated tags on 1 entities`), and then
 `execute unless entity @e[type=minecraft:cow,tag=dupx] run say DUP_GONE` prints its marker, which a tree that
 kept the second entry cannot produce (`tools/harness/backends/native_ledger_tag_duplicates.py`). Passed:
-`20261124T135720-native-v2-ledger-tag-duplicates-_3enoigi` on `3dd8ddf19d`.
+`20261124T144815-native-v2-ledger-tag-duplicates-65y71wx0` (and two more greens `…144901-h05bbfxw`,
+`…144936-fhh5zpz0`) on `b26d3ac4f1`, after the fixture fix that clears the summon cell.

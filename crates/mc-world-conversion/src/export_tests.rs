@@ -681,11 +681,12 @@ fn export_refuses_ambiguous_player_tags_from_real_wal_without_publication() {
     writer.flush().unwrap();
     drop(writer);
     let before = hashes(&source).unwrap();
-    let error = export_anvil(&config, &source, &destination, &receipt_path).unwrap_err();
-    assert!(
-        error.to_string().contains("duplicate Tags field"),
-        "{error}"
-    );
+    // A tree without the fence publishes the duplicate key, so the plain assert!
+    // (no message) is the row's own red.
+    let exported = export_anvil(&config, &source, &destination, &receipt_path);
+    assert!(matches!(&exported, Err(_)));
+    let error = exported.err().unwrap();
+    assert!(error.to_string().contains("duplicate Tags field"));
     assert!(
         !destination.exists(),
         "corrupt player image must not be published"

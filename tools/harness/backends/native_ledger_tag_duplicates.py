@@ -33,20 +33,29 @@ def _chat(steps: ProbeSteps, label: str, *needles: str,
     return steps.wait(hit, label, timeout_seconds=timeout_seconds)
 
 
-def _cows(steps: ProbeSteps) -> int:
+def _at(steps: ProbeSteps, x: float, z: float) -> dict[str, Any] | None:
+    """The fixture cow at its summon column; the world's own cows move and drift."""
     rows = steps.call("minecraft_list_entities", {"radius": 24, "limit": 128})["entities"]
-    return sum(1 for row in rows if row.get("entity_type") == COW)
+    return next((row for row in rows
+                 if row.get("entity_type") == COW
+                 and abs(row["x"] - x) < 0.6 and abs(row["z"] - z) < 0.6), None)
 
 
 def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
-    before = _cows(steps)
-    at = f"{origin[0]} {origin[1]} {origin[2] + 2}"
+    x, y, z = (origin[0] + 1.5, origin[1], origin[2] + 2.5)
     # Success feedback is a gamerule; refusals are errors and always arrive.
     steps.fixture("gamerule send_command_feedback true")
-    steps.fixture(f"summon {COW} {at} {{Tags:['{TAG}','{TAG}'],NoAI:1b}}")
-    steps.call("minecraft_wait_for_visible_entity", {
-        "entity_type": COW, "radius": 12, "timeout_seconds": steps.remaining()})
-    steps.check("duplicate_tag_cow_exists", _cows(steps) == before + 1)
+    # The world is regenerated per run, so the summon cell is cleared first: a hill or
+    # water there refuses the summon and the gate would fail in its fixture.
+    for level in (y, y + 1):
+        steps.fixture(f"setblock {int(x)} {level} {int(z)} minecraft:air")
+    steps.fixture(f"summon {COW} {x} {y} {z} {{Tags:['{TAG}','{TAG}'],NoAI:1b}}")
+    # Bounded wait on the client's own entity list: the summon reaches the next tick.
+    for _ in range(10):
+        if _at(steps, x, z) is not None:
+            break
+        steps.call("minecraft_wait_ticks", {"ticks": 5})
+    steps.check("duplicate_tag_cow_exists", _at(steps, x, z) is not None)
 
     # 1. The duplicated element list still selects: the tag is present.
     _command(steps, f"execute if entity @e[type={COW},tag={TAG}] run say {PRESENT}")
@@ -62,7 +71,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _chat(steps, "one_removal_clears_the_duplicate_tag", GONE)
     steps.check("one_removal_leaves_no_duplicate_tag", True)
 
-    steps.fixture(f"kill @e[type={COW}]")
+    steps.fixture(f"kill @e[type={COW},tag={TAG}]")
     steps.report["limits"] = [
         "One cow, one duplicated element and one removal; the effect of the remaining entry is "
         "observed through a selector because `tag <uuid> list` and `data get` answers do not reach "
