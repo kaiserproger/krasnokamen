@@ -224,13 +224,16 @@ def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # unfrozen here, so the server really spawns the item entities the assertion counts (the
     # inventory count lags the drop packets and cannot be read as a verdict). X11's repeat delay
     # is far longer than the hold, so a second item can only come from the removed tick edge.
-    steps.fixture("clear @s")
-    steps.fixture("kill @e[type=minecraft:item]")
-    steps.fixture("give @s minecraft:diamond 5")
-
     def ground_items(_: dict) -> int:
         rows = steps.call("minecraft_list_entities", {"radius": 24.0, "limit": 128})["entities"]
         return sum(1 for row in rows if row.get("entity_type") == "minecraft:item")
+
+    # The earlier legs' drops are still spawning when the world unfreezes, so the ground is
+    # cleared by a wait, not a single kill.
+    steps.fixture("clear @s")
+    steps.fixture("kill @e[type=minecraft:item]")
+    steps.wait(lambda _: ground_items(None) == 0, "held_drop_ground_clear", timeout_seconds=60)
+    steps.fixture("give @s minecraft:diamond 5")
 
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
 
@@ -242,7 +245,7 @@ def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.report["held_q_fixture"] = {"item_id": fixture.get("item_id"),
                                       "count": fixture.get("count"),
                                       "items_before": ground_items(None)}
-    steps.check("held_q_fixture_selected", fixture.get("count") == 5 and ground_items(None) == 0)
+    steps.check("held_q_fixture_selected", fixture.get("count") == 5)
     steps.report["held_q_hold_ticks"] = 3
     _hold_key(steps, ord("q"), 3)
     steps.wait(lambda _: ground_items(None) >= 1, "held_drop_landed", timeout_seconds=60)
