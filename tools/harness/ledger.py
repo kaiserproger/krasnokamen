@@ -585,7 +585,8 @@ def _run_python(ctx, tests, tree):
     results = {}
     for module, test in sorted(tests):
         argv = [sys.executable, '-m', 'unittest', f'{module}.{test}']
-        ok, text = _exec(ctx, argv, f'python-{test.rsplit(".", 1)[-1][:24]}', tree, None)
+        env = {**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'}
+        ok, text = _exec(ctx, argv, f'python-{test.rsplit(".", 1)[-1][:24]}', tree, env)
         summary = re.search(r'(?m)^Ran (\d+) tests? in ', text)
         skipped = re.search(r'\bskipped=(\d+)', text)
         count = int(summary.group(1)) if summary else 0
@@ -1497,11 +1498,24 @@ def tree_fingerprint(root):
     return {'head': head.strip(), 'dirty': bool(diff or others), 'sha256': digest.hexdigest()}
 
 
+def _forget_bytecode(tree):
+    """Drop the ignored `__pycache__` dirs a python ref left in `tree`.
+
+    `git clean -fdq` keeps ignored files, and CPython validates a .pyc by the source mtime in
+    whole seconds plus its size: a fix reversed for control B and the restore that follows often
+    share both (the reversed ordinals `(1,)`/`(2,)` and the fixed `(2,)`/`(3,)` are the same
+    length), so a restored tree would import the control's code and a valid promotion refused
+    (SCENARIO-RANDOM-BREAK-NO-PROGRESS, 2026-11-25)."""
+    for cache in (Path(tree) / 'tools').rglob('__pycache__'):
+        shutil.rmtree(cache, ignore_errors=True)
+
+
 def _materialize(root, tree, expected):
     """Make `tree` (a worktree) exactly the candidate `expected`: its HEAD plus the uncommitted diff and
     untracked files of `root`; Refused when the result does not reproduce the fingerprint."""
     _git(tree, 'reset', '--hard', '--quiet', expected['head'])
     _git(tree, 'clean', '-fdq')
+    _forget_bytecode(tree)
     _provision_data(root, tree)
     diff, others = _dirty_parts(root)
     if diff:

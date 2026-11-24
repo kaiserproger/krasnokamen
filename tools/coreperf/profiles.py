@@ -1512,25 +1512,135 @@ def tick_thread_pid(pid: int, *, proc: Path = Path("/proc"),
     return None
 
 
-def server_threads(session: Any, *, proc: Path = Path("/proc")) -> dict[str, dict[str, Any]]:
-    """Per-thread CPU and run-queue sample of the process this session runs as the server.
+def server_pid(session: Any, *, proc: Path = Path("/proc")) -> int | None:
+    """The pid of the process this session runs as the server: the tick thread's owner.
 
-    A `--server-wrapper` that forks (`perf stat … --`, a launcher) makes the sampled pid the
+    A `--server-wrapper` that forks (`perf stat … --`, a launcher) makes the session's pid the
     wrapper, so the pid that owns the `mc-core-tick` thread is looked up through
-    [`tick_thread_pid`]; a local session with no wrapper keeps the session's own pid.
-    A `--remote-host` session runs the server on another host, where `session.pid` is the remote
-    unit's MainPID (the server itself, `taskset` execs into it): that host's `/proc` and clock
-    ticks are read over the session's ssh connection instead of the local ones
-    (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT)."""
+    [`tick_thread_pid`]; a local session with no wrapper keeps its own pid. A `--remote-host`
+    session's pid is the remote unit's MainPID (the server itself, `taskset` execs into it)."""
     process = getattr(session, "processes", {}).get("server")
     pid = getattr(process, "pid", None) or getattr(session, "pid", None)
     if not isinstance(pid, int):
+        return None
+    if getattr(session, "remote", None) is not None:
+        return pid
+    owner = tick_thread_pid(pid, proc=proc)
+    return owner if owner is not None else pid
+
+
+def server_threads(session: Any, *, proc: Path = Path("/proc")) -> dict[str, dict[str, Any]]:
+    """Per-thread CPU and run-queue sample of the process this session runs as the server.
+
+    The sampled pid is [`server_pid`]: the wrapper's child that owns `mc-core-tick` for a local
+    session, the remote unit's MainPID otherwise. A `--remote-host` session reads that host's
+    `/proc` and clock ticks over its own ssh connection instead of the local ones
+    (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT)."""
+    pid = server_pid(session, proc=proc)
+    if pid is None:
         return {}
     remote = getattr(session, "remote", None)
     if remote is not None:
         return thread_usage_listing(remote.thread_listing(pid), remote.clk_tck())
-    owner = tick_thread_pid(pid, proc=proc)
-    return thread_usage(owner if owner is not None else pid, proc=proc)
+    return thread_usage(pid, proc=proc)
+
+
+PERF_WINDOW_EVENTS = ("ls_dmnd_fills_from_sys.all", "l2_request_g1.all",
+                      "l2_cache_req_stat.ls_rd_blk_c", "cycles", "instructions")
+
+
+def perf_stat_counters(text: str) -> dict[str, dict[str, Any]]:
+    """Counters from one `perf stat -x,` text, without `--per-thread`.
+
+    One line is `<value>,<unit>,<event>,<run_time_ns>,<running_percent>,<metric>,<metric_unit>`
+    (host-verified on the owner host: `11856655,,cycles,2426573,100.00,,`). A value of
+    `<not counted>`, a running percentage below 100 (the counter was multiplexed) or an
+    unparsable line is not a count: the event is named `unavailable` instead of quoted, which is
+    the trap the old wrapper CSV hid (COREPERF-REGION-ATTRIBUTION-PERTURBS-MEASURED-MEMORY-TRAFFIC)."""
+    counters: dict[str, dict[str, Any]] = {}
+    for line in text.splitlines():
+        fields = line.split(",")
+        if len(fields) < 5 or not fields[2].strip():
+            continue
+        event, value, percent = fields[2].strip(), fields[0].strip(), fields[4].strip()
+        try:
+            running = float(percent)
+        except ValueError:
+            counters[event] = {"status": "unavailable",
+                               "reason": f"running percentage {percent or 'missing'!r}"}
+            continue
+        if not value.isdigit():
+            counters[event] = {"status": "unavailable", "reason": f"value {value!r}"}
+            continue
+        if running < 100.0:
+            counters[event] = {"status": "unavailable",
+                               "reason": f"multiplexed: running {running:.2f}% of the window"}
+            continue
+        counters[event] = {"count": int(value), "running_percent": running}
+    return counters
+
+
+def start_perf_window(pid: int, seconds: float,
+                      *, perf: str = "perf") -> subprocess.Popen[str] | dict[str, Any]:
+    """One `perf stat` over exactly the measured window, attached to `pid`.
+
+    Counters only and no `--per-thread` (the process total, one line per event, field 5 the
+    running percentage). `-- sleep <seconds>` ends the capture at the window bound with no signal,
+    so the tool's `killpg` of the server never lands on perf and the CSV is always written. A
+    missing or refused perf returns the named `unavailable`: an absent capture never fails the
+    window's other numbers."""
+    argv = [perf, "stat", "-x,", "-e", ",".join(PERF_WINDOW_EVENTS), "-p", str(pid),
+            "--", "sleep", f"{max(seconds, 0.1):.1f}"]
+    try:
+        return subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except OSError as error:
+        return {"status": "unavailable", "reason": f"{perf} could not start: {error}"}
+
+
+def finish_perf_window(started: Any, population: dict[str, Any], start_ns: int, end_ns: int,
+                       *, timeout: float = 180.0) -> dict[str, Any]:
+    """The window's counters and fills per resident, or the named reason there are none."""
+    if started is None:
+        return {"status": "unavailable", "reason": "the measured window never opened"}
+    if isinstance(started, dict):
+        return started
+    seconds = (end_ns - start_ns) / 1e9
+    overran = False
+    try:
+        stdout, stderr = started.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        overran = True
+        started.terminate()
+        try:
+            stdout, stderr = started.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            started.kill()
+            return {"status": "unavailable", "reason": "capture overran the window; killed"}
+    if overran:
+        return {"status": "unavailable",
+                "reason": "capture overran the window; the counters do not cover it",
+                "stderr_tail": (stderr or "").strip().splitlines()[-3:]}
+    if started.returncode != 0:
+        return {"status": "unavailable", "reason": f"perf stat exited {started.returncode}",
+                "stderr_tail": (stderr or "").strip().splitlines()[-3:]}
+    counters = perf_stat_counters(stdout or "")
+    result: dict[str, Any] = {
+        "status": "measured" if counters else "unavailable",
+        "scope": "perf stat attached to the mc-core-tick owner over [start, end); counters only, "
+                 "no --per-thread, a running percentage below 100 is unavailable",
+        "window_seconds": round(seconds, 3),
+        "events": counters,
+    }
+    if not counters:
+        result["reason"] = "perf stat reported no event line"
+        return result
+    residents = population.get("resident_requested")
+    fills = (counters.get("ls_dmnd_fills_from_sys.all") or {}).get("count")
+    if isinstance(fills, int) and isinstance(residents, int) and residents > 0:
+        result["fills_per_resident"] = round(fills / residents, 3)
+        if seconds > 0:
+            result["fills_per_resident_per_second"] = round(fills / residents / seconds, 4)
+    return result
 
 
 def client_tick_arrival(bots: dict[str, Any]) -> dict[str, Any]:
@@ -1802,6 +1912,11 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
         result.update(epoch_unix_ns=epoch, start_unix_ns=start, end_unix_ns=end)
         deadline = time.monotonic() + args.warmup_seconds + args.measure_seconds + args.readiness_seconds
         previous_wall_start = 0
+        # COREPERF-REGION-ATTRIBUTION-PERTURBS-MEASURED-MEMORY-TRAFFIC: counters over exactly the
+        # measured window, attached to the process that owns the tick thread. A wrapper (`perf stat
+        # --`) cannot do this: it would count the whole process life and the shutdown's killpg would
+        # land on perf. Started at the window's first sample, ended by its own `sleep`.
+        perf_window: Any = None
         with (directory / "samples.jsonl").open("w", buffering=1) as raw:
             while True:
                 session.alive()
@@ -1817,7 +1932,13 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
                             and start <= tick["wall_start_unix_ns"] < end):
                         coverage_samples.append(validate_scale_sample(recipe, tick, allowed_cells))
                 stats = await session.http(url + "/stats", 2)
-                row = {"captured_unix_ns": time.time_ns() + offset,
+                captured = time.time_ns() + offset
+                if (perf_window is None and "coverage" in recipe
+                        and getattr(session, "remote", None) is None and captured >= start):
+                    owner = server_pid(session)
+                    if owner is not None:
+                        perf_window = start_perf_window(owner, (end - captured) / 1e9)
+                row = {"captured_unix_ns": captured,
                        "threads": server_threads(session),
                        "processes": session.process_samples(),
                        "stats": stats, "bots": session.latest_bot}
@@ -1830,6 +1951,8 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
                     raise ValueError("process RSS exceeded configured memory guard")
                 if metric["samples"] and metric["samples"][-1]["wall_start_unix_ns"] >= end:
                     break
+        if "coverage" in recipe:
+            result["perf_window"] = finish_perf_window(perf_window, recipe["population"], start, end)
         result["summary"] = summarize(samples, process_rows, start, end)
         result["summary"]["tick_thread"] = require_thread_wait(result["summary"]["threads"])
         if "coverage" in recipe and not attribution:

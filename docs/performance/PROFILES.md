@@ -224,6 +224,14 @@ writes fail; requested work never substitutes for observed work.
   (`reliable-overflow`, `*-write-failed`, `*-reliable-full`, …) and the last
   warning list. A normal end (client EOF, core-ordered kick, the lifecycle's own
   removal) is not a cause.
+- **`perf_window`** is the last-level counter capture of exactly the measured window: one
+  `perf stat -x,` attached to the process that owns `mc-core-tick`, started at the window's first
+  sample and ended by its own `sleep` (counters only, no `--per-thread`, so the shutdown's
+  `killpg` never lands on perf). It reports each event's count with the percentage of the window
+  it ran, and `fills_per_resident` / `fills_per_resident_per_second` from
+  `ls_dmnd_fills_from_sys.all`. A `<not counted>` value, a running percentage below 100 (a
+  multiplexed counter) or a missing/refused perf is a named `unavailable`, never a quoted number;
+  an unavailable capture does not fail the window's other figures.
 - **`client_tick_arrival`** is the bot-observed interval between the server's
   clock heartbeats (p50/p95/p99/max) and the per-tick period derived from the
   heartbeat's own game-time delta, per open-loop window; a window the bot report
