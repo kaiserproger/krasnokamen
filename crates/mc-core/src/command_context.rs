@@ -134,8 +134,25 @@ fn error(state: &mut TickState, context: Context, message: impl Into<String>) {
         return;
     }
     // Global-command failures return a vanilla lang key (`argument.entity.notfound.entity`); the
-    // client translates it, a plain chat line would show the key itself.
-    let change = if crate::command_feedback::is_translation_key(&message) {
+    // client translates it, a plain chat line would show the key itself. A key that needs arguments
+    // (vanilla `argument.resource_or_id.no_such_element` renders the id and the registry) is encoded
+    // by `translated_error` after `ERROR_ARGS`; decoding here keeps the `/debug function` trace above
+    // the single error sink (the trace records the raw key, never the separator form).
+    let (key, arguments) = match message.split_once(ERROR_ARGS) {
+        Some((key, rest)) if crate::command_feedback::is_translation_key(key) => {
+            let arguments = rest
+                .split(ERROR_ARGS)
+                .map(crate::command_feedback::text)
+                .collect();
+            (Some(key), arguments)
+        }
+        _ => (None, Vec::new()),
+    };
+    let change = if let Some(key) = key {
+        PlayerChange::StyledChat {
+            content: crate::command_feedback::translated(key, arguments),
+        }
+    } else if crate::command_feedback::is_translation_key(&message) {
         PlayerChange::StyledChat {
             content: crate::command_feedback::translated(message, Vec::new()),
         }
@@ -778,27 +795,7 @@ fn execute_branches(
         let outcome = match result {
             Ok(outcome) => outcome,
             Err(message) => {
-                // A `condition`/argument refusal may be a translation key that needs
-                // its arguments (vanilla `argument.resource_or_id.no_such_element`
-                // renders the id and the registry); the `Err(String)` channel carries
-                // them after ERROR_ARGS so the client never sees the raw template.
-                if let Some((key, rest)) = message
-                    .split_once(ERROR_ARGS)
-                    .filter(|(key, _)| crate::command_feedback::is_translation_key(key))
-                {
-                    let arguments = rest
-                        .split(ERROR_ARGS)
-                        .map(crate::command_feedback::text)
-                        .collect();
-                    state.push_player(
-                        context.connection,
-                        crate::boundary::PlayerChange::StyledChat {
-                            content: crate::command_feedback::translated(key, arguments),
-                        },
-                    );
-                } else {
-                    error(state, context, message);
-                }
+                error(state, context, message);
                 Some((false, 0))
             }
         };

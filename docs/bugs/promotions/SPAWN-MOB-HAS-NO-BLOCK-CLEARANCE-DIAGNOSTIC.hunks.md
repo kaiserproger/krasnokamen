@@ -1,80 +1,53 @@
 # SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC: patch-mode fix identity
 
-Original fix: `a6a30c6694` (`fix(tick): name the writer when a spawned body already overlaps a
-collision box`) — `TickState::spawn_mob` gained the clearance scan and the warn line.
-`fix_commit = "patch:c05869f2923c09ae…"` names the HEAD equivalent of this row's non-test hunk in
-`docs/bugs/promotions/SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC.patch` (a diff from the pre-fix form to
-the candidate; `git apply -R` restores the pre-fix code). Re-audit:
+Two commits, one path each:
+
+- `a6a30c6694` (`fix(tick): name the writer when a spawned body already overlaps a collision box`) — the
+  diagnostic itself: `TickState::spawn_mob` scans the cells the new AABB covers and emits one WARN (tick,
+  slot, type id, blueprint name, position, half width, height, writer) when a resident collision box
+  overlaps; the spawn is never refused.
+- `6130efff2` (`fix(tick): scan only living bodies for the spawn clearance diagnostic`) — review 6 B2: the
+  scan runs only for `EntityArchetype::Living` (hanging entities, items, orbs and other non-living
+  archetypes cannot suffocate; a wall frame's 0.25 half width enters its support by 0.21875 and used to
+  WARN), and residency is decided by `has_chunk` with `block_at` only reading the block (cold overlay
+  included).
+
+`fix_commit = "patch:7ca5ea378d79cf6b…"` names the HEAD equivalent of those two commits' non-test hunks in
+`docs/bugs/promotions/SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC.patch` (a diff from the real pre-image
+`a6a30c6694^:crates/mc-core/src/tick/entity_lifecycle.rs` to the candidate; `git apply -R` restores the
+pre-fix code — verified). Re-audit:
 `python3 -m tools.harness ledger promote SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC --fix-patch docs/bugs/promotions/SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC.patch --dry-run`.
-Rule (docs/bugs/README.md, step 1): every original non-test hunk is carried unless it is another row's or
-owner's behaviour, API the kept tests call, or code a later commit rewrote.
 
-## Why patch mode
+(Rewritten after review 7 B1: the earlier file still described the superseded `patch:c05869f2…`, a single
+hunk and a "re-audit after the style pass". The rustfmt commit `e1547078ec` only reformatted lines inside
+these additions, so the digest moved from `c05869f2…` to `7ca5ea37…`; the a/-side never changed.)
 
-`a6a30c6694` also declared the test module at the end of the production file (`#[cfg(test)] #[path =
-"entity_lifecycle_tests.rs"] mod tests;`). Reversing that hunk in the control deletes the declaration, so
-the row's refs become **unrunnable** instead of failing at their assertion — the first control attempt was
-refused for exactly that (`20261124T024843-ledger-promote-mutmjuuj`: `cargo:mc-core:tick::entity_lifecycle::tests::…=unrunnable
-(unknown or ignored test)`). `a00741b366` then moved the declaration to `tick.rs` beside the tick host's
-other `#[path]` test modules and registered the refs under `tick::entity_lifecycle_tests`. Because HEAD no
-longer has the `mod tests;` lines, `git show a6a30c6694 -- crates/mc-core/src/tick/entity_lifecycle.rs |
-git apply -R --check` fails at HEAD, and the `a6a30c6694` tree cannot produce a control for the moved ref
-names: its hunks no longer reverse-apply on the candidate and its tree cannot run the kept tests. The
-patch below is the production half of that hunk, ported to the candidate.
+## Carried (two hunks, both pure additions)
 
-## Carried
+- `entity_lifecycle.rs @@ -104,6 +104,14 @@` — the `living` filter computed from the entity-type
+  contract (`EntityArchetype::Living`). HEAD `crates/mc-core/src/tick/entity_lifecycle.rs:107-114`.
+- `entity_lifecycle.rs @@ -175,7 +183,102 @@ impl TickState` — the WARN block (gated by `living`), HEAD
+  `:186-203`, and the `body_overlaps_collision` helper, HEAD `:207-...` (the `has_chunk` residency check
+  plus the collision-box scan).
 
-- `entity_lifecycle.rs @@ -175,7 +175,97 @@ impl TickState` — the whole warn block plus the
-  `body_overlaps_collision` helper. HEAD `crates/mc-core/src/tick/entity_lifecycle.rs:178-197` (the call
-  and the `tracing::warn!`) and `:199-270` (the helper). The a/-side is the exact pre-image
-  (`git show a6a30c6694^:crates/mc-core/src/tick/entity_lifecycle.rs`); there is **no** a/-side adaptation.
-  `e1547078ec` applied rustfmt inside the added helper, so the added lines (not the a/- side) carry the
-  formatted `any(...)` predicate; that commit is why the patch digest moved from `bf1a0ca5…` to
-  `c05869f2…` after the style pass.
-
-  Verified: the patch's a/-blob is byte-identical to that real pre-image blob
-  (`diff /tmp/real_pre_el.rs /tmp/pre_el.rs` → no output), so the only difference between the pre-image and
-  HEAD is the reversed fix. No counter, oracle, helper text or test-visible API exists on the a/- side:
-  the kept test's only observable is the real `tracing::warn!` the fix adds, and the pre-fix code emits
-  none. Reversing the patch therefore removes behaviour the pre-fix tree genuinely lacked, not a probe
-  invented for the control.
-
-## Original non-test hunks (complete)
-
-```
-## a6a30c6694 non-test hunks (kept test file: crates/mc-core/src/tick/entity_lifecycle_tests.rs)
-- crates/mc-core/src/tick/entity_lifecycle.rs: -175,7 +175,99 (warn block, helper, and the test-module declaration)
-```
+Both hunks are additions; there is no a/-side adaptation and no invented code. The patch's a/-blob is
+byte-identical to the real pre-image `git show a6a30c6694^:crates/mc-core/src/tick/entity_lifecycle.rs`.
 
 ## Not carried
 
-- The three trailing declaration lines of that hunk (`#[cfg(test)]`, `#[path = "entity_lifecycle_tests.rs"]`,
-  `mod tests;`) — (c) `a00741b366` rewrote them into `crates/mc-core/src/tick.rs:87-89`, where they must
-  stay for the control to compile and fail at the assertion; reversing them again would only make the refs
-  unrunnable. They are not behaviour lines.
-- The test file — (b) kept.
+- The three test-module declaration lines added by `a6a30c6694` and moved to `tick.rs` by `a00741b366` —
+  (c) a later commit rewrote their location; they stay at `crates/mc-core/src/tick.rs:87-89` so the control
+  can fail at the assertion instead of losing the module.
+- The test file — (b) kept test API: the registered refs live there.
 
 ## Proving refs (file:line of the failing assertion)
 
 - `cargo:mc-core:tick::entity_lifecycle_tests::a_body_spawned_inside_a_block_is_created_and_named`
-  (`crates/mc-core/src/tick/entity_lifecycle_tests.rs:59`, `assert_eq!(lines.len(), 1)`, and the field
-  loop at `:61-71`): with the fix reversed no warn is emitted, so the captured list is empty.
-- `cargo:mc-core:tick::entity_lifecycle_tests::a_body_standing_on_the_collision_box_is_not_reported`
-  (`:85`) and `…a_body_spawned_outside_the_resident_world_is_not_reported` (`:103`): they are the
-  no-false-positive halves. They stay **green** with the fix reversed (an empty list is what they assert),
-  so they are **not evidence** for the control; the row's red is `:59`.
-
-## Re-audit after the style pass
-
-`promotions/SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC.json` records the original promotion
-(`tree_head a00741b366`, patch `bf1a0ca5…`, artifact `20261124T030010-ledger-promote-rg_69oqc`).
-`e1547078ec` then ran `cargo fmt --all`, which reformatted a predicate inside the added helper, so the
-addendum-only patch identity moved to `c05869f2…` while the a/- side stayed the same real pre-image.
-
-The row was re-audited on the post-style tree with
-`python3 -m tools.harness ledger promote SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC --fix-patch
-docs/bugs/promotions/SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC.patch --dry-run`
-(artifact `20261124T032114-ledger-promote-e8idx3j4`, `dry-run ok`, nothing written): the patch reverses on
-the current HEAD, `a_body_spawned_inside_a_block_is_created_and_named` is **red** (`FAIL`), the two
-no-false-positive refs stay green, and all three restore green. The row's `fix_commit` field therefore
-names `patch:c05869f2…`; the promotion record keeps the digest it actually promoted.
+  (`crates/mc-core/src/tick/entity_lifecycle_tests.rs:59`, `assert_eq!(lines.len(), 1)`, fields at
+  `:61-71`) — RED in the control: without the fix no WARN is emitted, so the captured list is empty.
+- `a_body_standing_on_the_collision_box_is_not_reported`, `a_wall_mounted_item_frame_is_not_reported` and
+  `a_body_spawned_outside_the_resident_world_is_not_reported` stay **green** with both hunks reversed and
+  are **not evidence**: they assert the absence of a report (the frame's case needs only the `living` hunk
+  reversed to red [inference]). The row's red is `:59`.
+- Promotion `20261124T043400-ledger-promote-oitndrch`: `fix_patch_sha256 = 7ca5ea37…`, the inside-a-block
+  ref `FAIL`, the other three green, restore green.
