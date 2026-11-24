@@ -41,13 +41,22 @@ The row is a scoped patch:
   `assert_eq!(family(at(&state, A).block.id.path()).unwrap().1, 0)`
   (`crates/mc-core/src/copper_tests.rs:483`); the control chest's `assert_eq!(…, 1)` right after shows the
   same `weather()` call still advances an unopened chest, so the red is the open-chest symptom.
-- `cargo:mc-core:copper::tests::copper_weathering_resumes_after_last_opener_dies_and_respawns` — the second
-  half; with the death release reversed the dead opener keeps the menu open
-  (`assert!(state.players[&entity].open.is_none())`, `crates/mc-core/src/copper_tests.rs:623`) and with the
-  guard reversed the stage advances while the first opener is still alive
-  (`assert_eq!(…, expected_age, "weathering after opener … died and respawned")`,
-  `crates/mc-core/src/copper_tests.rs:629-633`).
-- `harness:entities:native-v2-ledger-copper-chest-open` — a real client opens one of two unwaxed copper
-  chests on a fixture pad, the random-tick sampler carries an unopened control through two weathering
-  stages, and the opened chest keeps its stage and its 63-slot menu until the menu closes
-  (`tools/harness/backends/native_ledger_copper_chest.py`). Passed receipt: see the promotion JSON.
+- `cargo:mc-core:copper::tests::copper_weathering_resumes_after_last_opener_dies_and_respawns` — the release
+  half. It reds at its own
+  `assert_eq!(family(at(&state, A).block.id.path()).unwrap().1, expected_age, "weathering after opener … died
+  and respawned")` with `left: 0, right: 1` (`crates/mc-core/src/copper_tests.rs:629`). Two isolated controls
+  pin both carried hunks to it: reversing the whole patch reds it (with the guard's `:483` ref too), and
+  reversing **only** the `damage.rs` release hunk reds it at `:629` (`left: 0, right: 1`, second iteration)
+  while the `:483` ref stays green
+  (`.analysis/validation/20261124T130221-test-_6b8mqn8/test.log`). So `bd7a05a64`'s hunk belongs to this row's
+  release path, not to another row.
+  **Not evidence:** `crates/mc-core/src/copper_tests.rs:623` (`players[&entity].open.is_none()` after death).
+  `PlayerState::die` closes the player's own menu itself (`crates/mc-core/src/player.rs:1351-1356`), so the
+  reversed `damage.rs` line does not red there; it only leaves the viewer map `open_containers` populated,
+  which is what `:629`/`:643` observe.
+- `harness:entities:native-v2-ledger-copper-chest-open` — a real client opens one of three unwaxed copper
+  chests on a fixture pad; the random-tick sampler carries both unopened controls to `oxidized` while the
+  opened chest keeps its placed stage and its 63-slot menu, and it advances after the menu closes
+  (`tools/harness/backends/native_ledger_copper_chest.py`). Two controls make a guard-free tree pass only when
+  the opened chest's own draws lag all six control advances (about one run in seven), so the gate is repeated.
+  Passed receipts: see the promotion JSON.

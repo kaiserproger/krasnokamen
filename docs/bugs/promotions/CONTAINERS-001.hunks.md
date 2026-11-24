@@ -44,9 +44,11 @@ a tamed mount opens no inventory and a chest is never attached. Re-audit:
 ## Proving refs (file:line of the failing assertion)
 
 - `cargo:mc-core:mounts::tests::mount_inventory_opens_for_each_tamed_mount` — with the branch reversed a
-  tamed horse/donkey/mule/llama/camel secondary interaction opens nothing and the ref fails at its own
+  tamed horse/donkey/mule/llama/camel secondary interaction opens nothing, so it panics at
   `assert!(state.players[&actor].open.is_some(), "{name} inventory")`
-  (`crates/mc-core/src/mounts_tests.rs:288-312`).
+  (`crates/mc-core/src/mounts_tests.rs:303`). **Not evidence for this promotion**: the assertion carries its own
+  formatted message, which the receipt classifier does not recognise as an `assert!` macro, so the control
+  records it `unproven-panic`; the receipt's red is the second cargo ref below.
 - `cargo:mc-core:mounts::tests::mount_inventory_equipment_cargo_and_ridden_open_share_native_custody` — the
   chest attach and the 17-slot cargo menu are gone, so its own chest/cargo assertions fail
   (`crates/mc-core/src/mounts_tests.rs:316` onward).

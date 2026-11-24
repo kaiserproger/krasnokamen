@@ -249,12 +249,13 @@ SCENARIOS: dict[str, Scenario] = {
         requires=("xvfb",),
         sources=("tools/harness/backends/native_v2.py",
                  "tools/harness/backends/native_ledger_copper_chest.py"),
-        fixture="operator pad; one opened and one unopened unwaxed copper chest, randomTickSpeed raised so "
+        fixture="operator pad; one opened and two unopened unwaxed copper chests, randomTickSpeed raised so "
                 "the oxidation sampler rolls",
-        proves="the opened chest keeps its placed stage and its 63-slot ChestMenu through two control "
-               "weathering advances, then advances itself after the menu closes",
-        limits="One opened and one unopened single chest on one pad, stages 0..2; no double chest, waxed "
-               "neighbour, death/respawn opener release or restart.",
+        proves="the opened chest keeps its placed stage and its 63-slot ChestMenu until both unopened "
+               "controls reach oxidized, then advances itself after the menu closes",
+        limits="One opened and two unopened single chests on one pad, stages 0..3; no double chest, waxed "
+               "neighbour, death/respawn opener release or restart. A guard-free tree can pass when the "
+               "opened chest's own draws lag all six control advances, so this variable gate needs repeats.",
     ),
 
     "native-world-first-start-interrupted": _entry(
