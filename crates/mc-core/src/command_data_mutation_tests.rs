@@ -700,6 +700,44 @@ fn data_merge_health_zero_kills_a_living_mob_like_vanilla() {
         .slots()
         .find(|slot| matches!(state.entities.body(*slot).kind, EntityKind::Mob { .. }))
         .expect("the summoned cow");
+    // A summon must be alive: a zero Health is refused with Invalid Health, and nothing spawns.
+    let slots_before = state.entities.slots().count();
+    assert_eq!(
+        crate::command_context::run(
+            &mut state,
+            "summon minecraft:cow 4 60 4 {Health:0f}",
+            context,
+            &mut ChangeSet::default()
+        ),
+        0,
+        "no branch of the zero-health summon succeeds"
+    );
+    assert_eq!(
+        state.entities.slots().count(),
+        slots_before,
+        "the refused summon spawns nothing"
+    );
+    assert!(
+        said(&mut state).contains("Invalid Health"),
+        "the refusal says Invalid Health: {}",
+        said(&mut state)
+    );
+    // Deliberate difference from vanilla (recorded in the row): vanilla clamps a negative
+    // Health to 0 and the mob dies; here the same normaliser refuses it as Invalid Health.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {cow} {{Health:-5f}}")
+        ),
+        -1,
+        "a negative Health is refused"
+    );
+    assert!(
+        state.entities.body(slot).alive,
+        "the refused merge leaves the cow alive"
+    );
+    assert_eq!(state.entities.row(slot).health, 9.0);
     assert_eq!(
         data(
             &mut state,
