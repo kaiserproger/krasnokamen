@@ -164,7 +164,8 @@ def _banner_shot(steps: ProbeSteps, origin: tuple[int, int, int], name: str) -> 
                name + "_viewer_returned_to_interaction_position")
 
 
-def _frame(steps: ProbeSteps, origin: tuple[int, int, int], map_id: int) -> dict:
+def _frame_place(steps: ProbeSteps, origin: tuple[int, int, int]) -> dict:
+    """Place the support block and one empty item frame, without a map: returns the frame identity."""
     x, y, z = origin
     support = {"x": x, "y": y + 1, "z": z + 3}
     _set(steps, support, "minecraft:stone")
@@ -173,7 +174,11 @@ def _frame(steps: ProbeSteps, origin: tuple[int, int, int], map_id: int) -> dict
     _use(steps, support, "north")
     frame = steps.call("minecraft_wait_for_visible_entity", {
         "entity_type": "minecraft:item_frame", "radius": 8, "timeout_seconds": steps.remaining()})
-    identity = {key: frame[key] for key in ("entity_id", "entity_uuid", "entity_type")}
+    return {key: frame[key] for key in ("entity_id", "entity_uuid", "entity_type")}
+
+
+def _frame_insert(steps: ProbeSteps, identity: dict, map_id: int) -> None:
+    """Insert a clone of `map_id` into the frame through ordinary hand interaction."""
     _clone(steps, map_id, 0)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     steps.call("minecraft_interact_entity", {**identity, "hand": "main_hand"})
@@ -181,34 +186,43 @@ def _frame(steps: ProbeSteps, origin: tuple[int, int, int], map_id: int) -> dict
                "map_ordinary_frame_insertion_debited")
     steps.wait(lambda _state: _marker_count(steps, map_id, "frame") == 1,
                "map_near_frame_waypoint_received")
-    _aim(steps, frame)
+
+
+def _frame(steps: ProbeSteps, origin: tuple[int, int, int], map_id: int) -> dict:
+    identity = _frame_place(steps, origin)
+    _frame_insert(steps, identity, map_id)
+    _aim(steps, identity)
     _capture(steps, "map-framed-copy-near")
-    steps.report["frame"] = frame
-    return frame
+    steps.report["frame"] = identity
+    return identity
 
 
 def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     map_id = _create(steps)
-    # Drawn-marker predicate: one map id, one camera pose, two captures — the map held before a frame
-    # exists and the same map held once a clone of it is in a frame. The terrain cannot differ (same
-    # id, and the map stops receiving updates first) and the player pointer is static, so the only
-    # rendered difference is the frame's marker icon: a client that receives the decoration but never
-    # draws it produces the same frame twice.
-    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    # Drawn-marker predicate: one map id, one camera pose, two captures taken with the *same* world —
+    # the support and the empty frame are already placed — and the same held map; only the map inside
+    # the frame differs (absent, then present). The received colour array is asserted equal across the
+    # two captures, the player pointer is static, so the only rendered difference is the frame's
+    # marker icon: a client that receives the decoration and never draws it produces the same frame
+    # twice.
+    steps.fixture("clear @s minecraft:filled_map")
+    frame = _frame_place(steps, origin)
     steps.check("map_unframed_map_has_no_frame_waypoint", _marker_count(steps, map_id, "frame") == 0)
-    # The server keeps sending empty map updates (the live map's sequence advances every tick), so
-    # `_updates` never settles. The received colour array is what the client renders as terrain: it
-    # is compared across the two captures, and a difference fails here instead of the pixel count.
+    _clone(steps, map_id, 0)
+    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     colours_before = _map(steps, map_id)["colors"][:]
     _held_shot(steps, "map-held-without-frame-waypoint")
     steps.fixture("clear @s minecraft:filled_map")
-    _frame(steps, origin, map_id)
+    _frame_insert(steps, frame, map_id)
     steps.check("map_framed_map_has_exactly_one_frame_waypoint",
                 _marker_count(steps, map_id, "frame") == 1)
     _clone(steps, map_id, 0)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     _held_shot(steps, "map-held-with-frame-waypoint")
-    steps.check("map_pair_identical_terrain", _map(steps, map_id)["colors"] == colours_before)
+    colours_after = _map(steps, map_id)["colors"][:]
+    steps.report["map_terrain_changed_pixels"] = sum(
+        1 for before, after in zip(colours_before, colours_after) if before != after)
+    steps.check("map_pair_identical_terrain", colours_after == colours_before)
     changed = _differing_pixels(_shot_path(steps, "map-held-without-frame-waypoint"),
                                 _shot_path(steps, "map-held-with-frame-waypoint"))
     steps.report["frame_marker_pixels"] = changed
