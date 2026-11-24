@@ -152,4 +152,8 @@ Its production hunks reversed on its own tests: `receipts/D123PersistDiv/rework3
 In the full-patch control `a_restored_copy_upgraded_from_a_legacy_clock_keeps_its_journal` is not evidence:
 the base restore mints no branch, so it stops at its setup (`backup_tests.rs:1263`).
 
-Promotion run: see `docs/bugs/promotions/DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY.json`.
+Promotion run: `.analysis/validation/20261124T093040-ledger-promote-alqbpt01` (tree `8dd72a0e28`, clean,
+`control_tree: head`, nine reversed files); control `ledger-1-run.log` 14 of 18 red (4 green: the two mc-core
+frame/rebind refs, `a_minted_branch_uses_all_64_bits`, `the_crash_window_rewrite_keeps_the_branch`; proving
+reds at `backup_tests.rs:762`, `:865`, `journal_tests.rs:2445`, `store_marker_tests.rs:238`; the new ref at
+its setup `:1263`), restore `ledger-3-run.log` 18 of 18 green.
