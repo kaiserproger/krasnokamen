@@ -358,11 +358,18 @@ identity; instead every `world restore` mints a random branch for its copy
 (DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY), moves the copied tail above the
 checkpoint onto it and then writes the copy's first marker naming it, so two
 copies of one backup, or a copy and the world it came from, refuse each other's
-tails. All of it happens in a staging directory that no open admits (its store
-has no marker until the last step) and that is published with one rename once
+tails. All of it happens in a staging directory, `<target>.restore-staging`,
+that no open admits: every open — `Core::open`, offline recovery, the offline
+tools' store entry, the marker check and backup — refuses that reserved name,
+even once the copy's own marker is written, and every open that can write
+refuses it before touching the store. It is
+published with one rename over the empty target the restore keeps leased, once
 every directory in it is synced, so an interrupted restore never leaves a
-partial or source-branch copy at the target; a restored copy always has a
-`journal/` directory, and replay refuses one without it. A
+partial or source-branch copy at the target, and a refused one removes only its
+staging directory and a target it created that is still empty. Publication
+needs a directory rename over a leased directory, so restore runs on Unix only
+and refuses on Windows. A restored copy always has a `journal/` directory;
+replay refuses one without it, and backup and restore refuse it on their own. A
 world as created or imported is on the root branch, whose marker keeps the
 64-byte format-1 layout; only a restored copy's marker carries the branch
 (format 2), so existing markers need no converter. Offline tools that open a store without `Core::open` (prune,

@@ -487,26 +487,46 @@ it (`journal::rebind_tail`: each frame is first checked against the copied store
 and branch, its tick range, length and CRC, then only its eight branch bytes are
 rewritten in place and synced; batches at or below the checkpoint never replay
 and stay as copied), and writes the copy's first marker, naming the new branch,
-last. Until then the staged store has a checkpoint and no marker, so no open
-admits the staging directory. The restore then fsyncs every directory of the
-staged tree (each file was synced when written), publishes it with one rename
-over the empty target it leases (Windows, which renames no directory over
-another, removes the empty target just before) and fsyncs the parent. An
+last. The staging directory's name is reserved: `Core::open`, offline recovery,
+the offline tools' store entry (`NativeStore::open_checked`,
+`check_marker_file`), every marker check (`store_marker::verify`/`check`) and
+backup refuse a directory named `*.restore-staging` (or
+`.krasnokamen-conversion-*`) by name, directly or through an alias, even once
+the copy's own valid marker is written (the opens that can write refuse it
+before touching its store, read-only ones after opening it read-only), and
+restore refuses such a name as its target. Before that marker the staged store
+also has a checkpoint and no marker, which every open refuses on its own. The
+restore then fsyncs every directory of the staged tree (each file was synced
+when written), publishes it with one rename over the empty target it keeps
+leased from before the staging directory is created until after cleanup, and
+fsyncs the parent. Restore runs on Unix (Linux, macOS) only and refuses
+elsewhere: Windows renames no directory over another and keeps the lease in a
+file inside the target, so publishing there would mean releasing and removing
+the target first, and another process could take it in that gap. An
 interrupted restore therefore leaves the target as it was or the complete copy,
 never a partial one, plus the staging directory, which the next restore refuses
-until the operator removes it; a refusal removes what the restore created. Every
-copy a restore publishes has a `journal/` directory, an empty one included, and
-an offline backup keeps an empty one: recovery reads a missing journal as an
-empty tail only on the root branch and refuses a restored copy without it,
-whose tail is lost. Restoring one backup twice therefore yields two
-copies that refuse each other's journals, and a backup of a restored copy carries
-that copy's branch until its own restore branches again. The branch is held by
-the marker alone, so the bindings do not catch every swap inside a world
-directory: a sibling's marker moved together with its journal over another
-copy's store is that sibling as far as they can tell, and a sibling's
-`state.redb` swapped in at the same or a later checkpoint tick carries the same
-store id, passes the marker check and has the local journal replayed onto it. A
-world directory is therefore always moved and copied whole. A hot backup is not reported
+(it is never reused or removed automatically) until the operator removes it.
+"As it was" is an absent target or an empty directory, which `Core::open`
+initialises as a new, empty world; only the target a finished restore published
+is the restored copy. A refusal removes only what the restore owns: its staging
+directory, and the target only if the restore created it and it is still empty;
+anything else at the target stays. Every copy a restore publishes has a
+`journal/` directory, an empty one included, and an offline backup keeps an
+empty one: recovery reads a missing journal as an empty tail only on the root
+branch and refuses a restored copy without it, whose tail is lost. Backup
+refuses a restored copy without `journal/`, and restore refuses a backup of one,
+on their own and whether or not a content cache lets the command replay the
+copy, so a lost tail never becomes the empty journal of a fresh restore.
+Restoring one backup twice therefore yields two copies that refuse each other's
+journals, and a backup of a restored copy carries that copy's branch until its
+own restore branches again. The branch is held by the marker alone, so the
+bindings do not catch every swap inside a world directory: a sibling's marker
+moved together with its journal over another copy's store is that sibling as far
+as they can tell, and a sibling's `state.redb` swapped in at the same or a later
+checkpoint tick carries the same store id and passes the marker check, so the
+local journal may be replayed onto it (a checkpoint that falls inside a batch can
+still be refused by tick range, which is not a check to rely on). A world
+directory is therefore always moved and copied whole. A hot backup is not reported
 successful until it has been tried: the finished copy is opened read-only and
 the ordinary recovery reader and WAL replay run over it, requiring the recovered
 tick the copy claims (`HOT-BACKUP-STATE-DATABASE-COPY-UNVERIFIED`). Every batch

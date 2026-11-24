@@ -216,3 +216,45 @@ fn write_failure_reports_the_path() {
         "{error}"
     );
 }
+
+/// A restore writes the copy's own valid marker before it renames the staged
+/// copy into place, so admission refuses a staging directory by its reserved
+/// name, also through an alias, while the same marker opens under a world name.
+#[test]
+fn a_staging_directory_is_refused_even_with_a_valid_marker() {
+    let root = tempfile::tempdir().unwrap();
+    let names = [
+        format!("world{}", store_marker::RESTORE_STAGING_SUFFIX),
+        format!("{}interrupted", store_marker::CONVERSION_STAGING_PREFIX),
+    ];
+    for (index, name) in names.iter().enumerate() {
+        let staging = root.path().join(name);
+        std::fs::create_dir(&staging).unwrap();
+        store_marker::write(&staging, STORE, BRANCH, 7).unwrap();
+        for refusal in [
+            store_marker::verify(&staging, STORE, Some(7)),
+            store_marker::check(&staging, STORE, Some(8)),
+        ] {
+            let error = refusal.unwrap_err();
+            assert!(matches!(error, MarkerError::Unpublished { .. }), "{error}");
+        }
+        assert_eq!(
+            store_marker::read(&staging)
+                .unwrap()
+                .unwrap()
+                .checkpoint_tick,
+            7,
+            "a refused check must not rewrite the marker"
+        );
+        #[cfg(unix)]
+        {
+            let alias = root.path().join(format!("alias-{index}"));
+            std::os::unix::fs::symlink(&staging, &alias).unwrap();
+            let error = store_marker::verify(&alias, STORE, Some(7)).unwrap_err();
+            assert!(matches!(error, MarkerError::Unpublished { .. }), "{error}");
+        }
+        let world = root.path().join(format!("world-{index}"));
+        std::fs::rename(&staging, &world).unwrap();
+        store_marker::verify(&world, STORE, Some(7)).unwrap();
+    }
+}

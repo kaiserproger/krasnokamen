@@ -236,6 +236,10 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<usize> {
     if !world.is_dir() {
         bail!("backup source is not a directory: {}", world.display());
     }
+    // A staging directory is no world, even with a valid marker; refuse it
+    // before a lease file or redb repair can touch it.
+    mc_world::store_marker::refuse_unpublished(&world)
+        .map_err(|error| anyhow::anyhow!("backup refused: {error}"))?;
     let out = resolve_destination(out)?;
     refuse_overlap(&world, &out)?;
     let _world_lease = ExclusiveLease::acquire(&world)?;
@@ -254,6 +258,20 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<usize> {
             .map_err(|error| anyhow::anyhow!("backup source store: {error}"))?;
     mc_world::store_marker::verify(&world, store_uuid, store_tick)
         .map_err(|error| anyhow::anyhow!("backup refused: {error}"))?;
+    // A restored copy always has `journal/` and replay refuses one without it,
+    // its tail being lost. Copying such a copy would hand restore a backup it
+    // republishes with a fresh empty journal, so refuse it here, independent of
+    // the content check that may or may not follow.
+    let branch = mc_world::store_marker::branch(&world)
+        .map_err(|error| anyhow::anyhow!("backup refused: {error}"))?;
+    if branch != mc_world::store_marker::ROOT_BRANCH && !world.join("journal").is_dir() {
+        bail!(
+            "backup refused: {} is a restored copy on branch {:016x} without its journal/ \
+             directory; its WAL tail is lost, so it is not backed up as a valid world",
+            world.display(),
+            u64::from_be_bytes(branch),
+        );
+    }
     let mut database_lease = ExclusiveLease::acquire(&world.join(NATIVE_DATABASE))?;
     require_empty(&out)?;
     std::fs::create_dir_all(&out)?;
@@ -421,12 +439,21 @@ fn read_manifest(from: &Path) -> Result<BackupManifest> {
 /// and publish it with one rename ([`publish`]): an interrupted restore leaves
 /// the target as it was, or the complete restored world, never a partial one.
 /// Restore never merges into a nonempty target, follows links, or overlaps its
-/// source.
+/// source, and it runs on Unix only (see [`publish`]).
 pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+    if cfg!(not(unix)) {
+        bail!(
+            "restore runs on Unix (Linux, macOS) only: it publishes the restored world by \
+             renaming it over the empty target it keeps leased, which this platform cannot do; \
+             restore on Linux or macOS and move the finished world directory whole"
+        );
+    }
     let from = std::fs::canonicalize(from)
         .with_context(|| format!("resolving backup {}", from.display()))?;
     let target = resolve_destination(world_dir)?;
     refuse_overlap(&from, &target)?;
+    mc_world::store_marker::refuse_unpublished(&target)
+        .map_err(|error| anyhow::anyhow!("restore target refused: {error}"))?;
     let staging = staging_path(&target)?;
     let _source_lease = ExclusiveLease::acquire(&from)?;
     let manifest = read_manifest(&from)?;
@@ -477,23 +504,25 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
     };
     require_empty(&target)?;
     database_lease.0.rewind()?;
+    // The staging directory is created under the target lease: it is this
+    // restore's own until the lease drops, after cleanup.
     std::fs::create_dir(&staging).with_context(|| format!("creating {}", staging.display()))?;
     let published = stage_world(&from, &staging, &files, &manifest, &mut database_lease.0)
         .and_then(|()| {
             #[cfg(test)]
             tests::interruption_point(&tests::Step::Publishing);
-            publish(&staging, &target, target_lease)
+            publish(&staging, &target, &target_lease)
         });
     if let Err(error) = published {
-        // Nothing the restore created survives a refusal: the staging directory,
-        // and the target when this restore made it. An existing empty target
-        // stays (Windows removes it just before the rename; it is put back).
+        // Cleanup still holds the target lease and removes only what this
+        // restore owns: its staging directory, and the target only if this
+        // restore created it and it is still empty (`remove_dir` refuses
+        // anything else). Whatever else is at the target stays as found.
         let _ = std::fs::remove_dir_all(&staging);
         if created_target {
-            let _ = std::fs::remove_dir_all(&target);
-        } else if !target.exists() {
-            let _ = std::fs::create_dir(&target);
+            let _ = std::fs::remove_dir(&target);
         }
+        drop(target_lease);
         return Err(error);
     }
     #[cfg(test)]
@@ -514,13 +543,14 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
 }
 
 /// `<target>.restore-staging`: beside the target, so on its filesystem and one
-/// rename away from it, and never a name a world is configured with.
+/// rename away from it. The name is reserved: every open refuses it
+/// (`store_marker::refuse_unpublished`), whatever marker the copy holds.
 fn staging_path(target: &Path) -> Result<PathBuf> {
     let mut name = target
         .file_name()
         .context("destination has no file name")?
         .to_os_string();
-    name.push(".restore-staging");
+    name.push(mc_world::store_marker::RESTORE_STAGING_SUFFIX);
     Ok(target.with_file_name(name))
 }
 
@@ -542,10 +572,11 @@ fn refuse_mount_point(target: &Path) -> Result<()> {
 /// Build the restored world in `staging` (Books R4-P1 pair check, then the
 /// copy's own branch) and make every name in it durable.
 ///
-/// The staging directory never opens as a world: the backup's marker is
-/// verified from memory and not copied, so until the copy's own marker is
-/// written as the last step the staged store has a checkpoint and no marker,
-/// which every open refuses (`store_marker::check`/`verify`).
+/// The staging directory never opens as a world: its name is reserved
+/// ([`staging_path`]), so every open refuses it even once the copy's own marker
+/// is written. The backup's marker is also verified from memory and never
+/// copied, so until that marker is written as the last step the staged store
+/// has a checkpoint and no marker, which every open refuses on its own.
 fn stage_world(
     from: &Path,
     staging: &Path,
@@ -600,6 +631,18 @@ fn stage_world(
             copied
                 .admits(&marker_path, store_uuid, store_tick)
                 .map_err(|error| error.to_string())?;
+            // A backup of a restored copy carries that copy's `journal/`, an
+            // empty one included; without it the copy's tail was lost before
+            // the backup, and a fresh empty journal must not stand in for it.
+            if copied.branch != mc_world::store_marker::ROOT_BRANCH
+                && !from.join("journal").is_dir()
+            {
+                return Err(format!(
+                    "the backup is of a restored copy on branch {:016x} and has no journal/ \
+                     directory: that copy's WAL tail was lost",
+                    u64::from_be_bytes(copied.branch)
+                ));
+            }
             start_branch(staging, copied, store_tick.unwrap_or(0))
         });
     if let Err(error) = paired {
@@ -655,14 +698,14 @@ fn sync_tree(directory: &Path) -> Result<()> {
 }
 
 /// Publish the staged world at `target` with one rename. The target is an
-/// empty directory this restore leases (lease files at most): Unix renames a
-/// directory over an empty one atomically, so the leased empty target stands
-/// until the rename. Windows renames no directory over another and keeps the
-/// lease in a file inside it, so there the empty target is removed first and is
-/// absent, never partial, until the rename.
-fn publish(staging: &Path, target: &Path, lease: ExclusiveLease) -> Result<()> {
-    #[cfg(windows)]
-    drop(lease);
+/// empty directory this restore leases (lease files at most), and `_lease` is
+/// that lease: Unix renames a directory over an empty one atomically, so the
+/// leased empty target stands until the rename and nobody else can take it in
+/// between. The caller keeps the lease until it is done with the target. No
+/// Windows variant exists: there the lease is a file inside the target and no
+/// directory is renamed over another, so the target would have to be released
+/// and removed first, and another process could take it in that gap.
+fn publish(staging: &Path, target: &Path, _lease: &ExclusiveLease) -> Result<()> {
     for entry in std::fs::read_dir(target)? {
         let path = entry?.path();
         if !is_lease_file(&path) {
@@ -670,13 +713,8 @@ fn publish(staging: &Path, target: &Path, lease: ExclusiveLease) -> Result<()> {
         }
         std::fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
     }
-    #[cfg(windows)]
-    std::fs::remove_dir(target).with_context(|| format!("removing {}", target.display()))?;
     std::fs::rename(staging, target)
-        .with_context(|| format!("publishing the restored world at {}", target.display()))?;
-    #[cfg(not(windows))]
-    drop(lease);
-    Ok(())
+        .with_context(|| format!("publishing the restored world at {}", target.display()))
 }
 
 #[cfg(test)]

@@ -53,6 +53,24 @@ fn interrupted_restore(
     outcome.is_err() && !unfired
 }
 
+/// Run `run_restore` to its own end with `observe` called at every
+/// interruption point; a failed assertion in `observe` fails the test.
+fn observed_restore(
+    backup: &Path,
+    target: &Path,
+    mut observe: impl FnMut(&Step<'_>) + 'static,
+) -> Result<()> {
+    INTERRUPTION.with(|armed| {
+        *armed.borrow_mut() = Some(Box::new(move |step| {
+            observe(step);
+            false
+        }));
+    });
+    let outcome = run_restore(backup, target);
+    INTERRUPTION.with(|armed| armed.borrow_mut().take());
+    outcome
+}
+
 fn seed_world(root: &Path) {
     std::fs::create_dir_all(root.join("native")).unwrap();
     let store = NativeStore::create(&root.join(NATIVE_DATABASE), [7; 32]).unwrap();
@@ -852,21 +870,54 @@ fn assert_no_world_at(target: &Path, backup: &mc_world::store_marker::StoreMarke
     );
 }
 
-/// Opening the staging directory as a world is refused: its store has a
-/// checkpoint and the copy's own marker is not written yet.
+/// Every open refuses the staging directory by its reserved name, whatever
+/// marker it holds: the runtime, offline recovery, the offline tools' store
+/// entry and backup. Nothing is written into it or beside it.
+fn assert_staging_refused_by_every_open(staging: &Path) {
+    let refused = |open: &str, outcome: std::result::Result<(), String>| {
+        let refusal = outcome.err();
+        assert!(
+            refusal
+                .as_deref()
+                .is_some_and(|text| text.contains("unpublished staging directory")),
+            "{open} did not refuse the staging directory {} by its reserved name \
+             (None: it opened): {refusal:?}",
+            staging.display()
+        );
+    };
+    let opened = mc_core::Core::open(live_config(staging.to_path_buf()));
+    refused(
+        "Core::open",
+        opened
+            .map(|core| core.shutdown())
+            .map_err(|e| e.to_string()),
+    );
+    refused(
+        "offline recovery",
+        mc_core::native_checkpoint::recover_offline(&live_config(staging.to_path_buf()))
+            .map(drop)
+            .map_err(|e| e.to_string()),
+    );
+    refused(
+        "the offline tools' store entry",
+        NativeStore::check_marker_file(staging, &staging.join(NATIVE_DATABASE))
+            .map_err(|e| e.to_string()),
+    );
+    let out = staging.with_file_name("backup-of-the-staging-directory");
+    refused(
+        "backup",
+        run_backup(staging, &out)
+            .map(drop)
+            .map_err(|e| e.to_string()),
+    );
+    assert!(!out.exists(), "a refused backup wrote {}", out.display());
+}
+
+/// The staging directory of a restore stopped before its own marker: no
+/// marker yet, and every open refuses it.
 fn assert_staging_does_not_open(staging: &Path) {
     assert_eq!(mc_world::store_marker::read(staging).unwrap(), None);
-    let opened = mc_core::Core::open(live_config(staging.to_path_buf()));
-    let refusal = opened.as_ref().err().map(ToString::to_string);
-    if let Ok(core) = opened {
-        core.shutdown();
-    }
-    assert!(
-        refusal
-            .as_deref()
-            .is_some_and(|text| text.contains("is missing")),
-        "the staging directory opened as a world: {refusal:?}"
-    );
+    assert_staging_refused_by_every_open(staging);
 }
 
 /// Review blocker (DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY): a restore
@@ -973,12 +1024,84 @@ fn a_restore_interrupted_before_publication_leaves_the_target_untouched() {
         tail_branches(&staging, source.checkpoint_tick),
         [staged.branch; 2]
     );
+    assert_staging_refused_by_every_open(&staging);
 
     std::fs::remove_dir_all(&staging).unwrap();
     run_restore(&backup, &target).unwrap();
     assert!(!target.join("session.lock").exists());
     let recovered = mc_core::Core::open(live_config(target)).unwrap();
     recovered.shutdown();
+}
+
+/// Persistence re-review blocker 1: at the publication point the staged copy is
+/// complete, its own valid marker written and every directory synced, and still
+/// nothing opens it while the restore runs: the runtime, offline recovery, the
+/// tools' store entry and backup refuse the reserved name. Opened, it would be
+/// changed under the restore and then published. A target with a staging name
+/// is refused too. The restore then publishes a world that opens.
+#[test]
+fn a_staged_copy_with_its_own_marker_is_refused_by_every_open_at_publication() {
+    let root = tempfile::tempdir().unwrap();
+    let (backup, source) = backup_with_tail(root.path(), 2);
+    let target = root.path().join("restored");
+    let staging = root.path().join("restored.restore-staging");
+    let checked = std::rc::Rc::new(std::cell::Cell::new(false));
+    let seen = std::rc::Rc::clone(&checked);
+    let probe = staging.clone();
+    observed_restore(&backup, &target, move |step| {
+        if matches!(step, Step::Publishing) {
+            let staged = mc_world::store_marker::read(&probe).unwrap().unwrap();
+            assert_ne!(staged.branch, source.branch);
+            assert_staging_refused_by_every_open(&probe);
+            seen.set(true);
+        }
+    })
+    .unwrap();
+    assert!(checked.get(), "the restore never reached publication");
+    assert!(!staging.exists());
+    let recovered = mc_core::Core::open(live_config(target)).unwrap();
+    recovered.shutdown();
+
+    let reserved = root.path().join("other.restore-staging");
+    let error = run_restore(&backup, &reserved).unwrap_err().to_string();
+    assert!(error.contains("unpublished staging directory"), "{error}");
+    assert!(!reserved.exists());
+}
+
+/// Persistence re-review blocker 2: a publication that fails leaves the target
+/// as it finds it. The restore keeps the target lease through publication and
+/// cleanup, and cleanup removes only its own staging directory, never the
+/// target recursively: a file another writer put into the target this restore
+/// created survives the refusal.
+#[test]
+fn a_failed_publication_removes_only_the_restores_own_staging() {
+    let root = tempfile::tempdir().unwrap();
+    let (backup, _) = backup_with_tail(root.path(), 2);
+    let target = root.path().join("restored");
+    let staging = root.path().join("restored.restore-staging");
+    let probe = target.clone();
+    let error = observed_restore(&backup, &target, move |step| {
+        if matches!(step, Step::Publishing) {
+            assert!(
+                ExclusiveLease::acquire(&probe).is_err(),
+                "the target lease is not held at publication"
+            );
+            // A writer that ignores the lease puts its data into the target.
+            std::fs::write(probe.join("level.dat"), b"another world").unwrap();
+        }
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("not empty"), "{error}");
+    assert_eq!(
+        std::fs::read(target.join("level.dat")).ok().as_deref(),
+        Some(&b"another world"[..]),
+        "the failed restore's cleanup removed data it does not own"
+    );
+    assert!(
+        !staging.exists(),
+        "the restore's own staging directory stayed"
+    );
 }
 
 /// A restore killed right after the rename, before its final directory sync,
@@ -1020,6 +1143,47 @@ fn a_backup_of_a_restored_copy_with_an_empty_journal_verifies() {
     run_backup(&restored, &second).unwrap();
     assert!(second.join("journal").is_dir());
     verify_backup(&second, &live_config(restored)).unwrap();
+}
+
+/// Persistence re-review blocker 3: a restored copy that lost `journal/` is
+/// refused by backup on its own, before any content check (which the command
+/// skips without a content cache), so its lost tail never becomes the empty
+/// journal a restore would create.
+#[test]
+fn a_backup_refuses_a_restored_copy_that_lost_its_journal() {
+    let root = tempfile::tempdir().unwrap();
+    let world = stopped_core_world(root.path());
+    let first = root.path().join("first");
+    run_backup(&world, &first).unwrap();
+    let restored = root.path().join("restored");
+    run_restore(&first, &restored).unwrap();
+    std::fs::remove_dir_all(restored.join("journal")).unwrap();
+    let second = root.path().join("second");
+    let error = run_backup(&restored, &second).unwrap_err().to_string();
+    assert!(error.contains("without its journal/"), "{error}");
+    assert!(!second.exists());
+}
+
+/// Persistence re-review blocker 3, restore side: a backup of a restored copy
+/// without its `journal/` is refused instead of restored with a fresh empty
+/// one, and the refused restore leaves no target or staging directory.
+#[test]
+fn a_restore_refuses_a_backup_of_a_restored_copy_without_its_journal() {
+    let root = tempfile::tempdir().unwrap();
+    let world = stopped_core_world(root.path());
+    let first = root.path().join("first");
+    run_backup(&world, &first).unwrap();
+    let restored = root.path().join("restored");
+    run_restore(&first, &restored).unwrap();
+    let second = root.path().join("second");
+    run_backup(&restored, &second).unwrap();
+    // The copy's journal is empty, so the manifest stays complete without it.
+    std::fs::remove_dir(second.join("journal")).unwrap();
+    let again = root.path().join("again");
+    let error = run_restore(&second, &again).unwrap_err().to_string();
+    assert!(error.contains("has no journal/"), "{error}");
+    assert!(!again.exists());
+    assert!(!root.path().join("again.restore-staging").exists());
 }
 
 /// Hot backup → the real `restore` command with installed content: the copy of

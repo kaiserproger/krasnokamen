@@ -899,18 +899,11 @@ impl Core {
             .test_acceleration
             .startup()
             .map_err(CoreError::Config)?;
-        let is_stage = |path: &std::path::Path| {
-            path.file_name()
-                .and_then(std::ffi::OsStr::to_str)
-                .is_some_and(|name| name.starts_with(".krasnokamen-conversion-"))
-        };
-        if is_stage(&config.world_dir)
-            || std::fs::canonicalize(&config.world_dir).is_ok_and(|path| is_stage(&path))
-        {
-            return Err(CoreError::Storage(
-                "unpublished conversion staging directory cannot be opened by the runtime".into(),
-            ));
-        }
+        // A restore or conversion staging directory may already hold a store
+        // and a valid marker; it is refused by name before anything is created
+        // or leased there.
+        mc_world::store_marker::refuse_unpublished(&config.world_dir)
+            .map_err(|error| CoreError::Storage(format!("{error}; the runtime refuses it")))?;
         // R4-P2: creating the world directory must persist its own entry, or a
         // power loss after the first durable store/ journal publication can
         // remove the whole world (Books R4-P2).

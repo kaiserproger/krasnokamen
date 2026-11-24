@@ -1287,8 +1287,10 @@ Move or copy a world directory only as a whole — `native/`, `journal/` and
 of them between directories. The bindings catch many swaps but not all: a
 `native/state.redb` taken from another copy of the same world at the same or a
 later checkpoint tick (two copies restored from one backup, say) carries the same
-store id and passes the marker check, and the journal left beside it then
-replays its own branch's tail onto the other copy's store without an error.
+store id and passes the marker check, and the journal left beside it may then
+replay its own branch's tail onto the other copy's store without an error (a
+checkpoint inside one of its batches can still be refused by tick range; do not
+rely on that).
 Every `restore` starts a branch of its own: the copy keeps the world's store id,
 gets a random 64-bit branch in its `checkpoint.marker` (never the root or the
 backup's own; two restores collide only with probability 2^-64), and its copied
@@ -1296,13 +1298,24 @@ tail is moved onto that branch. Two copies restored from one backup, or a copy
 and the world it came from, therefore refuse each other's journals; a plain
 filesystem copy of a world or backup directory is not a restore and stays on the
 branch it was copied from, so restore every copy you intend to run next to the
-original. Restore verifies the full
+original. Restore runs on Linux and macOS only and refuses on Windows: run it on
+a Linux or macOS host and move the finished world directory whole. Restore verifies the full
 inventory and hashes before writing; the target must be empty or absent,
-separate from the backup and not a mount point. The copy is built in
-`<target>.restore-staging` beside the target and renamed over it only once it
-is complete and synced, so an interrupted restore leaves the target as it was
-(or the finished world) and the staging directory, which the next restore
-refuses until you delete it. Missing, changed or extra files, incompatible
+separate from the backup, not a mount point and not named `*.restore-staging`.
+The copy is built in `<target>.restore-staging` beside the target and renamed
+over it only once it is complete and synced. The server, the offline world tools
+and `backup` refuse a `*.restore-staging` directory by its name, even when it
+holds a complete copy with a valid marker; never rename it into place by hand.
+An interrupted restore leaves the target as it was (or the finished world) and
+the staging directory, which the next restore refuses until you delete it. A
+target without `checkpoint.marker` after an interrupted restore is not a
+restored copy, partial or otherwise: starting the server on an absent or empty
+target creates a new, empty world, so run the restore again first. A refused
+restore removes its staging directory, and the target only if
+it created the target and the target is still empty. `backup` refuses a restored
+copy whose `journal/` directory is missing, and `restore` refuses a backup of
+one, with or without a content cache: its WAL tail is lost, and restoring it
+would start the copy from an empty journal. Missing, changed or extra files, incompatible
 manifests and symlinks are refused. Retain the TOML, plugin artifacts and access
 lists separately; backups are never pruned automatically. Before reporting
 success, `backup` restores the copy it just wrote into its own directory and

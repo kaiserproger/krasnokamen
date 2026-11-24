@@ -31,6 +31,13 @@ use sha2::{Digest, Sha256};
 /// World-relative name of the marker file.
 pub const MARKER_FILE: &str = "checkpoint.marker";
 
+/// Name suffix of the directory `world restore` builds a copy in, beside its
+/// target (`<target>.restore-staging`).
+pub const RESTORE_STAGING_SUFFIX: &str = ".restore-staging";
+
+/// Name prefix of the directory an offline conversion builds its world in.
+pub const CONVERSION_STAGING_PREFIX: &str = ".krasnokamen-conversion-";
+
 /// Branch of a world as created or imported, before any restore.
 pub const ROOT_BRANCH: [u8; 8] = [0; 8];
 
@@ -105,6 +112,13 @@ pub enum MarkerError {
         store_tick: u64,
         marker_tick: u64,
     },
+    #[error(
+        "{} is an unpublished staging directory: a restore or conversion builds a world there \
+         before renaming it into place, and it is never opened as a world, whatever its \
+         checkpoint marker says",
+        path.display()
+    )]
+    Unpublished { path: PathBuf },
 }
 
 impl StoreMarker {
@@ -304,14 +318,37 @@ pub fn mint_branch(previous: [u8; 8]) -> [u8; 8] {
     }
 }
 
+/// Refuse `world_dir` when it, or the directory it resolves to, carries a
+/// staging name ([`RESTORE_STAGING_SUFFIX`], [`CONVERSION_STAGING_PREFIX`]).
+/// A restore writes the copy's own valid marker before it renames the copy into
+/// place, so the marker cannot tell a staging directory from a world; the name
+/// does. Every open runs this before it touches the store: `Core::open`,
+/// [`verify`] and [`check`], the offline tools' store entry and backup.
+pub fn refuse_unpublished(world_dir: &Path) -> Result<(), MarkerError> {
+    let reserved = |path: &Path| {
+        path.file_name().is_some_and(|name| {
+            let name = name.to_string_lossy();
+            name.starts_with(CONVERSION_STAGING_PREFIX) || name.ends_with(RESTORE_STAGING_SUFFIX)
+        })
+    };
+    if reserved(world_dir) || fs::canonicalize(world_dir).is_ok_and(|path| reserved(&path)) {
+        return Err(MarkerError::Unpublished {
+            path: world_dir.to_path_buf(),
+        });
+    }
+    Ok(())
+}
+
 /// The same refusal rules as [`check`], without writing: a store ahead of the
 /// marker is accepted and the marker is left byte-identical. Read-only tools
-/// (`world census`, `world probe`, backups) must use this one.
+/// (`world census`, `world probe`, backups) must use this one. A staging
+/// directory is refused first ([`refuse_unpublished`]), whatever its marker.
 pub fn verify(
     world_dir: &Path,
     store_uuid: [u8; 16],
     store_tick: Option<u64>,
 ) -> Result<(), MarkerError> {
+    refuse_unpublished(world_dir)?;
     let target = path(world_dir);
     let Some(marker) = read(world_dir)? else {
         return match store_tick {

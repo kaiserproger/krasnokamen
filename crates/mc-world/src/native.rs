@@ -544,8 +544,11 @@ impl NativeStore {
     /// Open a world's store for writing outside `Core::open` (world tools,
     /// maintenance, offline censuses) and run [`verify_marker`] before the
     /// caller's first write or reported read. One entry so no tool path can
-    /// skip the pair check; none of them rewrites the marker.
+    /// skip the pair check; none of them rewrites the marker. A restore or
+    /// conversion staging directory is refused before its store is opened.
     pub fn open_checked(world_dir: &Path, identity: [u8; 32]) -> Result<Self, NativeError> {
+        crate::store_marker::refuse_unpublished(world_dir)
+            .map_err(|error| NativeError::Marker(error.to_string()))?;
         let store = Self::open(&world_dir.join(NATIVE_DATABASE), identity)?;
         store.verify_marker(world_dir)?;
         Ok(store)
@@ -554,8 +557,11 @@ impl NativeStore {
     /// Marker check for a store whose identity cannot be compared yet (the
     /// worldgen-revision upgrade rewrites it). Repairs the store first if redb
     /// requires it, exactly as the first serve would, then refuses a store that
-    /// disagrees with its marker, without touching the marker file.
+    /// disagrees with its marker, without touching the marker file. A staging
+    /// directory is refused before the store is opened or repaired.
     pub fn check_marker_file(world_dir: &Path, path: &Path) -> Result<(), NativeError> {
+        crate::store_marker::refuse_unpublished(world_dir)
+            .map_err(|error| NativeError::Marker(error.to_string()))?;
         let (store_uuid, tick) = Self::read_marker_fields(path)?;
         crate::store_marker::verify(world_dir, store_uuid, tick)
             .map_err(|error| NativeError::Marker(error.to_string()))
