@@ -107,3 +107,11 @@ So the pick is visible away from the wall on both pins and only the close frame 
 draws the tool behind the wall, the fix in front of it. Receipts: candidate
 `.analysis/validation/20261124T162258-issue1-21-tool-clip-ujxwerro`, control
 `.analysis/validation/20261124T162352-issue1-21-tool-clip-gcr1cj_q`.
+
+Re-verified after the wave-2 review rework at clean core `c165e3bc1a` (server pin `2fd119e3d576…`, the
+reworked harness with pitch/frame-id samples and the hover step): the candidate `3c3d9fba9a` passes with tool 5526 px far and
+5526 px close, wall 15459; the control `e4a470fb7c` shows 5526 px far and 0 px close (wall 16697) and
+fails only `tool_wall_visible`. Receipts
+`.analysis/validation/20261124T184304-issue1-21-tool-clip-mm798uhy` (candidate) and
+`.analysis/validation/20261124T184350-issue1-21-tool-clip-v58hgdwt` (control) — the same numbers as the
+promoted pair, so the reworked harness (pitch/frame-id samples, hover step) did not change this gate.
