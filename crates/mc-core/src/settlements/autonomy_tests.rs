@@ -648,6 +648,49 @@ fn natural_lumber_and_mine_zones_certify_after_deferred_route_proofs() {
 }
 
 #[test]
+fn natural_lumber_camp_certifies_the_grove_not_one_tree_column() {
+    // CIV-6: the gate's phase log (20261124T020538) found the natural camp
+    // certified from a 1x8x1 column, so a lumberjack's zone was one trunk and
+    // the town never harvested wood. The grove west of the bell spans several
+    // columns; certification must cover the grove, not the probed column.
+    let logs: Vec<[i32; 2]> = (-14..=-9)
+        .flat_map(|x| (4..=7).map(move |z| [x, z]))
+        .collect();
+    let (mut state, chunks) = fixture(
+        vec![BELL],
+        vec![(
+            generated_claim(
+                "minecraft:village/plains/houses/plains_house_1",
+                [0, 201, 0],
+            ),
+            [6.5, 202.0, 6.5],
+            "none".into(),
+        )],
+        logs,
+    );
+    adopt(&mut state, &chunks);
+    settle_natural_proofs(&mut state, &[BuildingKind::LumberCamp]);
+    let camp = state
+        .settlements
+        .records()
+        .next()
+        .unwrap()
+        .buildings
+        .values()
+        .find(|building| building.kind == BuildingKind::LumberCamp)
+        .expect("the grove certifies a natural lumber camp");
+    assert!(camp.natural_zone);
+    let width = camp.bounds.max[0] - camp.bounds.min[0] + 1;
+    let depth = camp.bounds.max[2] - camp.bounds.min[2] + 1;
+    assert!(
+        width > 2 && depth > 2,
+        "a natural camp's zone is the grove, not one tree column: {width}x{depth} at {:?}..{:?}",
+        camp.bounds.min,
+        camp.bounds.max
+    );
+}
+
+#[test]
 fn natural_grove_ignores_structure_logs_and_finds_an_unblocked_side() {
     let (mut state, chunks) = fixture(
         vec![BELL],
@@ -811,7 +854,7 @@ fn natural_mine_requires_a_route_from_entrance_to_stock() {
     for _ in 0..8 {
         state.tick += 20;
         state.tick_budget.reset(state.tick);
-        prove_natural(&mut state, id, &residents, &mut candidates);
+        prove_natural(&mut state, id, None, &residents, &mut candidates);
         if candidates.is_empty() {
             break;
         }
@@ -863,7 +906,7 @@ fn loaded_but_unsimulated_natural_worksite_is_not_certified() {
     assert!(!state.world.is_active(5, 0));
     state.tick = 20;
     state.tick_budget.reset(state.tick);
-    prove_natural(&mut state, id, &residents, &mut candidates);
+    prove_natural(&mut state, id, None, &residents, &mut candidates);
     assert!(candidates.is_empty());
     assert!(!has_kind(&state, id, BuildingKind::Mine));
 }
@@ -998,7 +1041,7 @@ fn dense_village_finds_natural_zones_beyond_generated_footprints() {
         while !candidates.is_empty() {
             state.tick += 20;
             state.tick_budget.reset(state.tick);
-            prove_natural(&mut state, id, &residents, &mut candidates);
+            prove_natural(&mut state, id, None, &residents, &mut candidates);
         }
         if has_kind(&state, id, BuildingKind::Mine)
             && has_kind(&state, id, BuildingKind::LumberCamp)
@@ -1820,6 +1863,7 @@ fn busy_gatherer_can_prove_the_other_natural_source() {
         prove_natural(
             &mut state,
             id,
+            None,
             &[uuid].into_iter().collect(),
             &mut candidates,
         );

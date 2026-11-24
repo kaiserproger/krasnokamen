@@ -24,6 +24,9 @@ const ZONE_PROBES_PER_PASS: usize = 4;
 const NATURAL_ZONE_CYCLES: usize = 2;
 // VillagePlanSource documents a maximum reach of seven chunks plus a margin.
 const START_SEARCH_RADIUS: i32 = 8;
+/// Columns a natural lumber camp's zone may grow beyond the proved trunk: the
+/// grove a camp is for, not the single column the tree search probes (CIV-6).
+const GROVE_RADIUS: i32 = 6;
 
 #[derive(Debug, Default)]
 pub(crate) struct AutonomyQueue {
@@ -294,6 +297,7 @@ fn advance(
         prove_natural(
             state,
             id,
+            Some(&pending.site),
             &pending.known_residents,
             &mut pending.natural_candidates,
         );
@@ -726,6 +730,7 @@ fn queue_natural(
 fn prove_natural(
     state: &mut TickState,
     settlement: SettlementId,
+    site: Option<&GeneratedVillageSite>,
     residents: &BTreeSet<uuid::Uuid>,
     candidates: &mut VecDeque<NaturalCandidate>,
 ) {
@@ -838,13 +843,30 @@ fn prove_natural(
     }
     if reached {
         let candidate = candidates.pop_front().expect("proved candidate");
-        let _ = super::buildings::certify_zone(
+        // A natural lumber camp is the grove it stands in, not the one tree the
+        // probe found: the zone grows sideways at certification time (CIV-6), and
+        // the plain column stays the fallback when the wider rectangle is refused.
+        let grown = match candidate.kind {
+            BuildingKind::LumberCamp => grove_bounds(state, settlement, site, candidate.bounds),
+            _ => candidate.bounds,
+        };
+        if super::buildings::certify_zone(
             state,
             settlement,
             candidate.kind,
-            candidate.bounds,
+            grown,
             candidate.entrance,
-        );
+        )
+        .is_err()
+        {
+            let _ = super::buildings::certify_zone(
+                state,
+                settlement,
+                candidate.kind,
+                candidate.bounds,
+                candidate.entrance,
+            );
+        }
     } else {
         // A failed bounded route never installs a job. Try another resident on
         // a later pass, then let the existing terrain sweep seek another zone.
@@ -853,6 +875,89 @@ fn prove_natural(
             .expect("unproved candidate")
             .after_resident = Some(uuid);
     }
+}
+
+/// The grove a natural lumber camp is certified from: the proved tree's column
+/// widened sideways to the grove it stands in, so the camp's zone is the grove
+/// the design describes instead of one trunk (CIV-6; the phase log of
+/// 20261124T020538 found certified bounds of `1x8x1`).
+///
+/// Each side grows only while the rectangle's corners stay inside the
+/// settlement sphere (`buildings::certify_zone`'s own `within` rule) and the
+/// added columns are loaded, so the round trip stays bounded and never routes a
+/// worker into a chunk that never ticks. Certification still owns the remaining
+/// rules — overlap with another certificate, at least four zone logs, an open
+/// entrance — and `prove_natural` keeps the plain column when the wider
+/// rectangle is refused; a grove is an improvement, never a new failure.
+fn grove_bounds(
+    state: &TickState,
+    settlement: SettlementId,
+    site: Option<&GeneratedVillageSite>,
+    bounds: ScriptWorldBounds,
+) -> ScriptWorldBounds {
+    let Some(record) = state.settlements.get(settlement) else {
+        return bounds;
+    };
+    let inside = |min: [i32; 3], max: [i32; 3]| {
+        [min[0], max[0]].into_iter().all(|x| {
+            [min[1], max[1]].into_iter().all(|y| {
+                [min[2], max[2]].into_iter().all(|z| {
+                    [x, y, z]
+                        .into_iter()
+                        .zip(record.anchor)
+                        .map(|(v, a)| (i128::from(v) - i128::from(a)).pow(2))
+                        .sum::<i128>()
+                        <= i128::from(record.radius).pow(2)
+                })
+            })
+        })
+    };
+    let loaded = |min: [i32; 3], max: [i32; 3]| {
+        ScriptWorldBounds::new(min, max).is_ok_and(|rect| bounds_loaded(state, &rect))
+    };
+    // A certificate or a generated village piece already standing there ends
+    // the grove on that side (`queue_natural` refuses a tree inside a piece for
+    // the same reason: the zone never covers a house); the narrower rectangle
+    // still certifies, the plain column still falls back.
+    let clear = |min: [i32; 3], max: [i32; 3]| {
+        !record.buildings.values().any(|building| {
+            (0..3).all(|axis| {
+                building.bounds.min[axis] <= max[axis] && building.bounds.max[axis] >= min[axis]
+            })
+        }) && !site.is_some_and(|site| {
+            site.pieces
+                .iter()
+                .filter_map(|piece| piece.bounds)
+                .any(|(lo, hi)| {
+                    let lo = [lo.x, lo.y, lo.z];
+                    let hi = [hi.x, hi.y, hi.z];
+                    [0, 2]
+                        .into_iter()
+                        .all(|axis| lo[axis] <= max[axis] && hi[axis] >= min[axis])
+                })
+        })
+    };
+    let mut min = bounds.min;
+    let mut max = bounds.max;
+    for axis in [0_usize, 2] {
+        for (sign, limit) in [(-1_i32, GROVE_RADIUS), (1, GROVE_RADIUS)] {
+            for _ in 0..limit {
+                let mut probe = [min, max];
+                let index = usize::from(sign > 0);
+                probe[index][axis] += sign;
+                let (next_min, next_max) = (probe[0], probe[1]);
+                if !inside(next_min, next_max)
+                    || !loaded(next_min, next_max)
+                    || !clear(next_min, next_max)
+                {
+                    break;
+                }
+                min = next_min;
+                max = next_max;
+            }
+        }
+    }
+    ScriptWorldBounds::new(min, max).unwrap_or(bounds)
 }
 
 fn open_entrance(
