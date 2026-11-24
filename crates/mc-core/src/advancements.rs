@@ -114,18 +114,32 @@ pub fn location_snapshot(state: &TickState, entity: EntityId) -> Value {
     let Some(slot) = state.entities.slot_of_any(entity) else {
         return Value::Null;
     };
-    let position = state.entities.pos(slot);
-    let mut location = json!({"dimension": state.dimension.name(), "position": {
+    location_at(state, state.dimension, state.entities.pos(slot))
+}
+
+/// The loot-context `location` facts at an explicit origin. A datapack predicate
+/// evaluated by `/execute ... if predicate` binds its origin to the command
+/// context (`positioned`/`in` move it away from the executor's body), while a
+/// selector `predicate=` option binds it to each candidate's own position.
+pub(crate) fn location_at(
+    state: &TickState,
+    dimension: crate::dimensions::Dimension,
+    position: [f64; 3],
+) -> Value {
+    let mut location = json!({"dimension": dimension.name(), "position": {
         "x":position[0], "y":position[1], "z":position[2]
     }});
-    if let Some(biome) = state.world.biome_at(
+    let Some(world) = crate::dimensions::travel::world(state, dimension) else {
+        return location;
+    };
+    if let Some(biome) = world.world.biome_at(
         position[0].floor() as i32,
         position[1].floor() as i32,
         position[2].floor() as i32,
     ) {
         location["biomes"] = json!([biome.as_str()]);
     }
-    if let Some(block) = state
+    if let Some(block) = world
         .world
         .block_at(
             position[0].floor() as i32,

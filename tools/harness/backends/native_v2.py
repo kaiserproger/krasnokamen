@@ -209,31 +209,45 @@ def _ledger_summon_nbt(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture(f"summon minecraft:falling_block {x + .5} {y + 2} {z + 5.5} "
                   '{BlockState:{Name:"minecraft:sand"},NoGravity:1b}')
 
-    def received(kind: str, px: float, pz: float) -> dict:
-        found: dict = {}
+    def at(kind: str, px: float, pz: float) -> dict | None:
+        return next((row for row in _rows(steps, 16) if row["entity_type"] == kind
+                     and abs(row["x"] - px) < .6 and abs(row["z"] - pz) < .6), None)
 
-        def hit(_: dict) -> bool:
-            row = next((row for row in _rows(steps, 16) if row["entity_type"] == kind
-                        and abs(row["x"] - px) < .6 and abs(row["z"] - pz) < .6), None)
-            if row is None:
-                return False
-            found.update(row)
-            return True
+    # A refused summon is the row's symptom, so it is also a settled outcome:
+    # waiting for it keeps a reverted server failing at the assertion below
+    # instead of at a wait timeout.
+    refusal = "Unknown or unsupported summon NBT field"
 
-        steps.wait(hit, f"received_{kind}_{px}_{pz}")
-        return found
+    def settled(state: dict) -> bool:
+        return ((at("minecraft:tnt", x + .5, z + 2.5) is not None
+                 and at("minecraft:falling_block", x + .5, z + 5.5) is not None)
+                or any(refusal in line for line in state["recent_chat"]))
 
-    tnt = received("minecraft:tnt", x + .5, z + 2.5)
-    falling = received("minecraft:falling_block", x + .5, z + 5.5)
+    steps.wait(settled, "summon_nbt_settled", timeout_seconds=20)
+    tnt = at("minecraft:tnt", x + .5, z + 2.5)
+    falling = at("minecraft:falling_block", x + .5, z + 5.5)
+    steps.check("tnt_summon_accepts_fuse", tnt is not None)
+    steps.check("falling_block_summon_accepts_block_state", falling is not None)
+    if tnt is None or falling is None:
+        steps.report["summon_nbt"] = {"tnt": None, "falling_block": None}
+        return
     _capture(steps, "summon-nbt-entities")
+    # The answer arrives, so assert the authored value (a wrong value still
+    # answers). The fuse has been ticking since the summon: vanilla's default is
+    # 80 and the authored 1000 can only decay slowly, so anything above 500 is
+    # the authored fuse, not the default.
     steps.fixture(f"data get entity {tnt['entity_uuid']} fuse")
-    steps.wait(lambda s: any((m := re.search(r"fuse:\s*(\d+)", line)) and int(m.group(1)) == 1000
-                             for line in s["recent_chat"]),
-               "tnt_authored_fuse_read_back", timeout_seconds=20)
+    state = steps.wait(lambda s: any("entity data:" in line for line in s["recent_chat"]),
+                       "tnt_fuse_query_answered", timeout_seconds=20)
+    steps.check("tnt_authored_fuse_is_counting_down_from_thousand",
+                any((m := re.search(r"entity data: (-?\d+)s", line)) and 500 < int(m.group(1)) <= 1000
+                    for line in state["recent_chat"]))
     steps.fixture(f"data get entity {falling['entity_uuid']} BlockState")
-    steps.wait(lambda s: any("BlockState" in line and "minecraft:sand" in line
-                             for line in s["recent_chat"]),
-               "falling_block_authored_block_state_read_back", timeout_seconds=20)
+    state = steps.wait(lambda s: any("entity data:" in line and "Name" in line
+                                     for line in s["recent_chat"]),
+                       "falling_block_block_state_query_answered", timeout_seconds=20)
+    steps.check("falling_block_authored_block_state_read_back",
+                any("minecraft:sand" in line for line in state["recent_chat"]))
     steps.report["summon_nbt"] = {"tnt": tnt["entity_uuid"], "falling_block": falling["entity_uuid"]}
 
 
@@ -286,8 +300,16 @@ def _ledger_spawn_protection(steps: ProbeSteps, origin: tuple[int, int, int]) ->
     _block(steps, target, "minecraft:air")
     steps.check("operator_breaks_inside_spawn_radius", True)
     _set(steps, target, "minecraft:stone")
-    steps.fixture("op LedgerRowsDummy")
-    steps.fixture("deop @s")
+    # The world spawn (seed 81) is far from the probe pad: move it onto the pad
+    # first, else the protected radius never covers the target cell.
+    x, y, z = origin
+    steps.fixture(f"setworldspawn {x} {y} {z}")
+    # Console commands have no `@s`: deop the connected probe player by name,
+    # else the operator snapshot keeps the actor exempt from spawn protection
+    # (the probe config keeps a second operator entry so the list stays non-empty).
+    from .client_probes import probe_username
+
+    steps.fixture(f"deop {probe_username('entities')}")
     steps.call("minecraft_wait_ticks", {"ticks": 10})
     refused = False
     try:
@@ -297,9 +319,14 @@ def _ledger_spawn_protection(steps: ProbeSteps, origin: tuple[int, int, int]) ->
             "expected_drop_count": 0, "timeout_seconds": 20})
     except RuntimeError:
         refused = True
+    # Commands cannot observe the refusal, and the client may predict the break
+    # before the server's resync arrives: wait for the block to settle, then read.
+    steps.call("minecraft_wait_ticks", {"ticks": 10})
     still = steps.call("minecraft_read_block", target)
+    steps.report["nonop_break_read"] = still
+    steps.report["nonop_break_tool_refused"] = refused
     steps.check("nonop_break_refused_inside_spawn_radius",
-                refused and still.get("block_id") == "minecraft:stone")
+                still.get("block_id") == "minecraft:stone")
     steps.call("minecraft_set_hotbar_slot", {"slot": 1})
     _use(steps, target, "up")
     steps.call("minecraft_wait_ticks", {"ticks": 10})
@@ -311,6 +338,13 @@ def _ledger_spawn_protection(steps: ProbeSteps, origin: tuple[int, int, int]) ->
 
 def _ledger_dragon_egg(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     point = _point(origin)
+    # The egg has gravity: a target outside the shared pad would fall out of the
+    # sampled window. Extend the pad over the whole +-15/-13..+17 sample range and
+    # clear the air the egg can land in.
+    x, y, z = origin
+    steps.fixture(f"fill {x - 16} {y - 1} {z - 16} {x + 16} {y - 1} {z + 18} minecraft:obsidian")
+    steps.fixture(f"fill {x - 16} {y} {z - 16} {x + 16} {y + 7} {z + 18} minecraft:air")
+    _block(steps, _point(origin, dy=-1), "minecraft:obsidian")
     _set(steps, point, "minecraft:dragon_egg")
     _use(steps, point)
     moved: dict[str, Any] | None = None
@@ -319,32 +353,41 @@ def _ledger_dragon_egg(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         if moved.get("block_id") != "minecraft:dragon_egg":
             break
         steps.call("minecraft_wait_ticks", {"ticks": 5})
+    steps.report["egg_origin_after_click"] = moved
     steps.check("egg_left_original_cell", moved is not None and moved.get("block_id") != "minecraft:dragon_egg")
 
     def scan_eggs() -> list[dict[str, Any]]:
-        # Vanilla samples offsets in [-16, 16) horizontal and [-8, 8) vertical;
-        # four 16^3 boxes cover every possible target cell (scan caps one box at 4096).
-        x, y, z = origin
+        # The egg teleports within +-15 horizontal and +-7 vertical of its cell
+        # (vanilla draws two bounded samples per axis). Scan 8^3 boxes: an 8^3
+        # box is 512 cells, while a 16^3 box (4096 cells) came back empty for a
+        # block that was there (2026-11-24), so the box size is kept well under
+        # the tool's per-call cell budget.
+        ex, ey, ez = point["x"], point["y"], point["z"]
         found: list[dict[str, Any]] = []
-        for min_x, max_x in ((x - 16, x - 1), (x, x + 15)):
-            for min_z, max_z in ((z - 16, z - 1), (z, z + 15)):
-                scan = steps.call("minecraft_scan_blocks", {
-                    "min_x": min_x, "max_x": max_x, "min_y": y - 8, "max_y": y + 7,
-                    "min_z": min_z, "max_z": max_z, "max_blocks": 4096})
-                found.extend(row for row in scan.get("blocks", [])
-                             if row.get("block_id") == "minecraft:dragon_egg")
+        for bx in range(-16, 16, 8):
+            for by in range(-8, 8, 8):
+                for bz in range(-16, 16, 8):
+                    scan = steps.call("minecraft_scan_blocks", {
+                        "min_x": ex + bx, "max_x": ex + bx + 7,
+                        "min_y": ey + by, "max_y": ey + by + 7,
+                        "min_z": ez + bz, "max_z": ez + bz + 7, "max_blocks": 512})
+                    found.extend(row for row in scan.get("blocks", [])
+                                 if row.get("block_id") == "minecraft:dragon_egg")
         return found
 
     found: list[dict[str, Any]] = []
-    for _ in range(12):
+    scans = 0
+    for _ in range(8):
         steps.call("minecraft_wait_ticks", {"ticks": 10})
+        scans += 1
         found = scan_eggs()
         if len(found) == 1:
             break
+    steps.report["egg_scan_passes"] = scans
     steps.report["egg_targets"] = found
     steps.check("egg_teleported_exactly_once", len(found) == 1)
     steps.check("egg_not_consumed", item_count(steps.observe(), "minecraft:dragon_egg") == 0)
-    steps.report["limits"] = ["One teleport inside the vanilla sample range; not the falling-block path."]
+    steps.report["limits"] = ["One teleport inside the vanilla sample range; not the falling-block path. Scan boxes are 8^3 because a 16^3 box returned an empty result for a present block."]
 
 
 def _ledger_brush(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:

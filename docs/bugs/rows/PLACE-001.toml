@@ -8,4 +8,4 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PLACE-001"
 regression = ["cargo:mc-core:interact_parity_tests::interact_parity_spawn_protection_with_operator", "harness:entities:native-v2-ledger-spawn-protection"]
 fix_commit = "35308579c93ab0313e0366d1d0975957a4ff9eb0"
-repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/nc-interact-spawn-protection.log: test strengthened by 9915ae51b; old version stayed green under fix reversal, strengthened operator ref goes red."
+repro_check = "Product verified 2026-11-24: spawn_protection::protected returns true for a non-operator inside the radius (diagnostic: sp=16, ops=1, spawn on the pad, target inside radius) and the refused break leaves stone. The gate was red because the console `deop @s` never matched, the seed-81 world spawn was far from the pad, and the check depended on a client exception; fixed in e560a87189, green at 20261124T012645. No product fix to promote: POL-2 in receipts/D123/OWNER-DECISIONS-NEEDED.md."

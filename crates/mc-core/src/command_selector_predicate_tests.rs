@@ -227,3 +227,107 @@ fn global_selector_uses_root_catalog_with_each_targets_native_dimension() {
         vec![remote]
     );
 }
+
+/// One `/execute` chain through the production orchestrator (`native` owns
+/// neither `/execute` nor its continuations), returning its success count.
+fn chain(state: &mut TickState, executor: EntityId, input: &str) -> i32 {
+    state.command_context.current = None;
+    let context = crate::command_context::Context::source(
+        state,
+        crate::command_console::CONNECTION,
+        executor,
+        2,
+    );
+    crate::command_context::run(
+        state,
+        input,
+        context,
+        &mut crate::boundary::ChangeSet::default(),
+    )
+}
+
+#[test]
+fn execute_if_predicate_binds_the_datapack_predicate_to_the_command_origin() {
+    let (mut state, alice, _bob) = fixture();
+    let _root = install(
+        &mut state,
+        &[
+            (
+                "east",
+                json!({"condition":"minecraft:location_check","predicate":{"position":{"x":{"min":5}}}}),
+            ),
+            (
+                "player",
+                json!({"condition":"minecraft:entity_properties","entity":"this","predicate":{"type":"minecraft:player"}}),
+            ),
+        ],
+    );
+    // alice's body is at x = 0: the predicate matches the executor's own location.
+    let start = state.day_time;
+    assert_eq!(
+        chain(
+            &mut state,
+            alice,
+            "execute if predicate test:player run time add 1"
+        ),
+        1
+    );
+    assert_eq!(state.day_time, start + 1);
+    // `positioned` moves the loot ORIGIN, not the body: vanilla binds
+    // `LootContextParams.ORIGIN` to the command source position.
+    assert_eq!(
+        chain(
+            &mut state,
+            alice,
+            "execute positioned -10 80 0 if predicate test:east run time add 10"
+        ),
+        0
+    );
+    assert_eq!(
+        chain(
+            &mut state,
+            alice,
+            "execute positioned 10 80 0 if predicate test:east run time add 2"
+        ),
+        1
+    );
+    assert_eq!(state.day_time, start + 3);
+    // `unless` inverts the same condition.
+    assert_eq!(
+        chain(
+            &mut state,
+            alice,
+            "execute unless predicate test:east run time add 4"
+        ),
+        1
+    );
+    assert_eq!(state.day_time, start + 7);
+    // Vanilla resolves the id while parsing, so an unknown id fails the command
+    // with `argument.resource_or_id.no_such_element` instead of selecting nothing.
+    assert_eq!(
+        chain(
+            &mut state,
+            alice,
+            "execute if predicate test:missing run time add 100"
+        ),
+        0
+    );
+    assert_eq!(state.day_time, start + 7);
+    let feedback = state
+        .outbox
+        .get(&crate::command_console::CONNECTION)
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        feedback.iter().any(|change| matches!(
+            change,
+            crate::boundary::PlayerChange::StyledChat { content }
+                if *content
+                    == crate::command_feedback::translated(
+                        "argument.resource_or_id.no_such_element",
+                        Vec::new(),
+                    )
+        )),
+        "{feedback:?}"
+    );
+}

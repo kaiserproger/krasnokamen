@@ -85,6 +85,10 @@ mod auth_gate_tests;
 mod mirror_tests;
 
 #[cfg(test)]
+#[path = "tick/entity_lifecycle_tests.rs"]
+mod entity_lifecycle_tests;
+
+#[cfg(test)]
 #[path = "crowd_pen_tests.rs"]
 mod crowd_pen_tests;
 

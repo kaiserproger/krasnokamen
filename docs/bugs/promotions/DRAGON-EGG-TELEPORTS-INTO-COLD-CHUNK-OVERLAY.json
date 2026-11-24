@@ -1,0 +1,44 @@
+{
+  "id": "DRAGON-EGG-TELEPORTS-INTO-COLD-CHUNK-OVERLAY",
+  "verdict": "promoted",
+  "fix_commit": "patch:2015e4cf380b0bfdbc7503c6c9e77af042c5fc93a4f9f33e57546af6521da7e6",
+  "fix_commit_full": "patch:2015e4cf380b0bfdbc7503c6c9e77af042c5fc93a4f9f33e57546af6521da7e6",
+  "promoted_at": "2026-11-24T01:53:25+00:00",
+  "tree_head": "e560a87189045f5e7d84b03894291bb06226f1c6",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "2015e4cf380b0bfdbc7503c6c9e77af042c5fc93a4f9f33e57546af6521da7e6",
+  "reversed_files": [
+    "crates/mc-core/src/vanilla_interact.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_never_teleports_into_a_cold_overlay": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-ledger-dragon-egg": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_never_teleports_into_a_cold_overlay": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T013937-native-v2-ledger-dragon-egg-gcgfzx0i/result.json",
+    "tree_head": "e560a87189045f5e7d84b03894291bb06226f1c6",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "9e0003b30c1cb4b59df499e84e371fdbe5a4b057b4188dbe69347627b6c82ec5",
+    "covers": [
+      "harness:entities:native-v2-ledger-dragon-egg"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T014545-ledger-promote-o4tngr_c"
+}

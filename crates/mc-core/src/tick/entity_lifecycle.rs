@@ -175,7 +175,97 @@ impl TickState {
             crate::dolphin::initialize(self, slot, type_id);
             crate::turtle::initialize(self, slot, type_id);
             crate::mob_equipment::initialize(self, slot, type_id);
+            if self.body_overlaps_collision(pos, half_width, height) {
+                let entity_type = self
+                    .registry
+                    .blueprint(type_id)
+                    .map(|blueprint| blueprint.name.clone());
+                tracing::warn!(
+                    tick = self.tick,
+                    slot = slot.0,
+                    type_id,
+                    entity_type = entity_type.as_deref().unwrap_or("unknown"),
+                    position = ?pos,
+                    half_width,
+                    height,
+                    writer = "TickState::spawn_mob",
+                    "spawned body already overlaps a collision box"
+                );
+            }
         }
         id
+    }
+
+    /// Whether the body AABB at `pos` already overlaps a world collision box.
+    ///
+    /// Every spawn path (`/summon`, fixtures, plugins, natural spawning) enters
+    /// through [`TickState::spawn_mob`] without asking the world for clearance,
+    /// and vanilla `/summon` also places a body inside a block, so this never
+    /// refuses: the spawn path only names the writer of a body that will
+    /// suffocate at a fixed position.
+    fn body_overlaps_collision(&self, pos: [f64; 3], half_width: f64, height: f64) -> bool {
+        use mc_physics::mth::{ceil_i32, floor_i32};
+        if !pos.iter().all(|value| value.is_finite())
+            || !half_width.is_finite()
+            || !height.is_finite()
+            || half_width <= 0.0
+            || height <= 0.0
+        {
+            return false;
+        }
+        let body = [
+            pos[0] - half_width,
+            pos[1],
+            pos[2] - half_width,
+            pos[0] + half_width,
+            pos[1] + height,
+            pos[2] + half_width,
+        ];
+        let cells = [
+            (floor_i32(body[0]), ceil_i32(body[3]) - 1),
+            (floor_i32(body[1]), ceil_i32(body[4]) - 1),
+            (floor_i32(body[2]), ceil_i32(body[5]) - 1),
+        ];
+        // A spawn body spans a handful of cells; anything larger is not a body
+        // this diagnostic can describe, so it is not scanned.
+        if cells.iter().any(|&(min, max)| max < min)
+            || cells
+                .iter()
+                .any(|&(min, max)| i64::from(max) - i64::from(min) > 8)
+        {
+            return false;
+        }
+        let mut hit = false;
+        'scan: for x in cells[0].0..=cells[0].1 {
+            for y in cells[1].0..=cells[1].1 {
+                for z in cells[2].0..=cells[2].1 {
+                    // A cell outside the resident world is not evidence either
+                    // way; the motion path's conservative missing-chunk block
+                    // would turn every unloaded spawn into a false report.
+                    let Some(state) = self.world.block_at(x, y, z) else {
+                        continue;
+                    };
+                    let Some(boxes) = self.registry.collision_boxes.get(state as usize) else {
+                        continue;
+                    };
+                    for block in boxes.iter() {
+                        let local = block.as_blocks();
+                        let obstacle = [
+                            f64::from(x) + local[0],
+                            f64::from(y) + local[1],
+                            f64::from(z) + local[2],
+                            f64::from(x) + local[3],
+                            f64::from(y) + local[4],
+                            f64::from(z) + local[5],
+                        ];
+                        if mc_physics::aabb_intersects_deflated_obstacle(body, obstacle, 0.0) {
+                            hit = true;
+                            break 'scan;
+                        }
+                    }
+                }
+            }
+        }
+        hit
     }
 }
