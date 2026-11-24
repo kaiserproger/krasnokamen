@@ -1438,3 +1438,42 @@ class WindowReceiptFieldsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class PerfWindowTests(unittest.TestCase):
+    """COREPERF-REGION-ATTRIBUTION-PERTURBS-MEASURED-MEMORY-TRAFFIC, fills-per-entity half.
+
+    The capture is `perf stat -x,` over exactly the measured window (no `--per-thread`): the
+    parser is the unit under test here, the window itself belongs to Main's schedule."""
+
+    def test_counters_refuse_a_multiplexed_or_uncounted_event(self):
+        # Host-verified line shape (perf-window-host-check.log:97): value,unit,event,run,percent,…
+        text = ("11856655,,cycles,2426573,100.00,,\n"
+                "<not counted>,,ls_dmnd_fills_from_sys.all,0,0.00,,\n"
+                "123,,instructions,999,40.10,,\n"
+                "nonsense line\n")
+        counters = profiles.perf_stat_counters(text)
+        self.assertEqual(counters["cycles"], {"count": 11856655, "running_percent": 100.0})
+        self.assertEqual(counters["ls_dmnd_fills_from_sys.all"]["status"], "unavailable")
+        self.assertIn("value", counters["ls_dmnd_fills_from_sys.all"]["reason"])
+        self.assertEqual(counters["instructions"]["status"], "unavailable")
+        self.assertIn("multiplexed", counters["instructions"]["reason"])
+        self.assertNotIn("nonsense line", counters)
+
+    def test_the_window_block_divides_fills_by_the_resident_population(self):
+        started = subprocess.Popen(
+            [sys.executable, "-c",
+             "print('900,,ls_dmnd_fills_from_sys.all,1000,100.00,,')\nprint('', end='')"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        block = profiles.finish_perf_window(started, {"resident_requested": 300},
+                                            0, 2 * 10**9)
+        self.assertEqual(block["status"], "measured")
+        self.assertEqual(block["window_seconds"], 2.0)
+        self.assertEqual(block["fills_per_resident"], 3.0)
+        self.assertEqual(block["fills_per_resident_per_second"], 1.5)
+
+    def test_a_missing_perf_is_a_named_unavailable(self):
+        started = profiles.start_perf_window(os.getpid(), 1.0, perf="perf-does-not-exist-xyz")
+        self.assertEqual(started["status"], "unavailable")
+        self.assertIn("could not start", started["reason"])
+        self.assertEqual(profiles.finish_perf_window(None, {"resident_requested": 1}, 0, 1)["status"],
+                         "unavailable")
