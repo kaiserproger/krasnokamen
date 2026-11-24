@@ -1339,14 +1339,14 @@ class ClientRefTests(unittest.TestCase):
         package = {'name': 'client', 'targets': [
             {'name': 'client', 'kind': ['lib']}, {'name': 'ui', 'kind': ['bin']}]}
         result, calls = self.run_client_packages([package], [('client', 'unit::test')])
-        self.assertEqual(result[('client', 'unit::test')], (ledger.GREEN, ''))
+        self.assertEqual(result[('client', 'unit::test')], (ledger.GREEN, '', None))
         self.assertEqual(calls[-1], ['cargo', 'test', '-p', 'client', '--lib', '--', 'unit::test'])
 
     def test_client_bin_only_package_uses_named_binary_target(self):
         package = {'name': 'krasnokamen-launcher', 'targets': [
             {'name': 'krasnokamen-launcher', 'kind': ['bin']}]}
         result, calls = self.run_client_packages([package], [('krasnokamen-launcher', 'bootstrap::tests')])
-        self.assertEqual(result[('krasnokamen-launcher', 'bootstrap::tests')], (ledger.GREEN, ''))
+        self.assertEqual(result[('krasnokamen-launcher', 'bootstrap::tests')], (ledger.GREEN, '', None))
         self.assertEqual(calls[-1], ['cargo', 'test', '-p', 'krasnokamen-launcher',
                                      '--bin', 'krasnokamen-launcher', '--', 'bootstrap::tests'])
         self.assertEqual(sum(argv[1] == 'metadata' for argv in calls), 1)
@@ -1359,7 +1359,7 @@ class ClientRefTests(unittest.TestCase):
                              {'name': 'disabled', 'kind': ['bin'], 'test': False}]}]):
             with self.subTest(packages=packages):
                 result, calls = self.run_client_packages(packages, [('launcher', 'test')])
-                state, detail = result[('launcher', 'test')]
+                state, detail, _assertion = result[('launcher', 'test')]
                 self.assertEqual(state, ledger.UNRUNNABLE)
                 self.assertIn('launcher', detail)
                 self.assertEqual(len(calls), 1)  # metadata only, never guessed cargo test
@@ -1368,7 +1368,7 @@ class ClientRefTests(unittest.TestCase):
         package = {'name': 'launcher', 'targets': [{'name': 'launcher', 'kind': ['bin']}]}
         result, _ = self.run_client_packages([package], [('launcher', 'missing')],
                                              summary='test result: ok. 0 passed; 0 failed')
-        self.assertEqual(result[('launcher', 'missing')], (ledger.UNRUNNABLE, 'ran no matching test'))
+        self.assertEqual(result[('launcher', 'missing')], (ledger.UNRUNNABLE, 'ran no matching test', None))
 
 
 class LedgerRefContractTests(unittest.TestCase):
