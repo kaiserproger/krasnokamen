@@ -544,6 +544,9 @@ struct WindowCounters {
     received: WorkReceipts,
     automatic_respawn_requests: u64,
     automatic_respawn_deferred: u64,
+    /// Reported as its own `tick_arrival` object, not through this struct's Serialize.
+    #[serde(skip)]
+    tick_arrival: TickArrival,
 }
 
 impl WindowCounters {
@@ -568,6 +571,7 @@ impl WindowCounters {
         self.chat.merge(&other.chat);
         self.automatic_respawn_requests += other.automatic_respawn_requests;
         self.automatic_respawn_deferred += other.automatic_respawn_deferred;
+        self.tick_arrival.merge(&other.tick_arrival);
         self.received
             .add_delta(&other.received, &WorkReceipts::default());
     }
@@ -645,6 +649,37 @@ impl Histogram {
     }
 }
 
+/// Client-observed tick arrival: the gap between the server's clock heartbeats
+/// (`ClientboundSetTime`, one per 20 server ticks) and the per-tick period that gap implies
+/// through the heartbeat's own game-time delta.
+#[derive(Default, Clone)]
+struct TickArrival {
+    interval: Histogram,
+    period: Histogram,
+}
+
+impl TickArrival {
+    fn merge(&mut self, other: &Self) {
+        self.interval.merge(&other.interval);
+        self.period.merge(&other.period);
+    }
+
+    fn json(&self) -> Value {
+        json!({
+            "interval_us": self.interval.json(),
+            "tick_period_us": self.period.json(),
+            "scope": "client-observed clock heartbeat (ClientboundSetTime, one per 20 server ticks); tick_period_us = arrival interval / game-time delta",
+        })
+    }
+}
+
+/// One heartbeat pair's per-tick period: the wall interval divided by the server tick delta the
+/// heartbeat advanced. A heartbeat that did not advance the tick cannot measure a period.
+fn tick_period_us(interval: Duration, tick_delta: i64) -> Option<u64> {
+    let delta = u64::try_from(tick_delta).ok().filter(|&delta| delta > 0)?;
+    Some((interval.as_micros() as u64).div_ceil(delta))
+}
+
 #[derive(Default, Clone, Serialize)]
 struct Counters {
     packets_received: u64,
@@ -689,6 +724,9 @@ struct Counters {
     fixture_platform_checks: u64,
     #[serde(skip)]
     windows: Vec<WindowCounters>,
+    /// Last clock heartbeat `(arrival, game_time)`: the base of the next arrival interval.
+    #[serde(skip)]
+    clock: Option<(Instant, i64)>,
     #[serde(skip)]
     latency: Histogram,
     #[serde(skip)]
@@ -1983,6 +2021,22 @@ impl Bot {
             }
         }
     }
+    /// Records one clock heartbeat's arrival and the per-tick period it implies.
+    fn observe_tick_arrival(&mut self, game_time: i64, window: Option<usize>) {
+        let now = Instant::now();
+        if let Some((previous, previous_tick)) = self.metrics.clock {
+            let interval = now.duration_since(previous);
+            if let Some(index) = window
+                && let Some(period) = tick_period_us(interval, game_time - previous_tick)
+                && let Some(stats) = self.metrics.windows.get_mut(index)
+            {
+                stats.tick_arrival.interval.record(interval);
+                stats.tick_arrival.period.record(Duration::from_micros(period));
+            }
+        }
+        self.metrics.clock = Some((now, game_time));
+    }
+
     async fn frame(
         &mut self,
         client: &mut Client,
@@ -2009,6 +2063,13 @@ impl Bot {
         let id = frame.id;
         let mut body = frame.body.as_ref();
         match id {
+            ClientboundSetTime::ID => {
+                // The only per-ring packet a viewer receives on a fixed cadence: one heartbeat per
+                // 20 server ticks. Its arrival, divided by its own tick delta, is the tick pacing a
+                // player observes; the server MSPT excludes pacing sleep.
+                let packet = ClientboundSetTime::decode(&mut body)?;
+                self.observe_tick_arrival(packet.game_time, receipt_window);
+            }
             LoginPlay::ID => {
                 let login = LoginPlay::decode(&mut body)?;
                 ensure!(
@@ -3292,6 +3353,7 @@ fn aggregate(
                 }),
                 "chat": totals.chat.json(offered(window.chat_hz, u64::from(args.clients))),
                 "received": totals.received,
+                "tick_arrival": totals.tick_arrival.json(),
                 "automatic_respawn": {"requests": totals.automatic_respawn_requests, "deferred": totals.automatic_respawn_deferred},
             });
             start += duration;

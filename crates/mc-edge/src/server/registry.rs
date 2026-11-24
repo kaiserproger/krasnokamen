@@ -10,6 +10,9 @@ pub struct ConnectionRegistry {
     pub(super) next_id: AtomicU64,
     pub(super) inner: parking_lot::Mutex<RegistryInner>,
     pub(super) setup_fences_pending: AtomicBool,
+    /// Abnormal closes by cause since start: the per-window error rollup the
+    /// receipt cites (a socket drop, a reliable overflow, a failed write).
+    close_causes: parking_lot::Mutex<std::collections::BTreeMap<&'static str, u64>>,
 }
 
 #[derive(Default)]
@@ -86,7 +89,17 @@ impl ConnectionRegistry {
             next_id: AtomicU64::new(FIRST_CONNECTION_ID),
             inner: parking_lot::Mutex::new(RegistryInner::default()),
             setup_fences_pending: AtomicBool::new(false),
+            close_causes: parking_lot::Mutex::new(std::collections::BTreeMap::new()),
         }
+    }
+
+    /// Every abnormal close since start by cause, in cause order.
+    pub fn close_causes(&self) -> std::collections::BTreeMap<String, u64> {
+        self.close_causes
+            .lock()
+            .iter()
+            .map(|(cause, count)| ((*cause).to_owned(), *count))
+            .collect()
     }
 
     /// Allocate the next connection id.
@@ -319,6 +332,11 @@ impl ConnectionRegistry {
 
     /// [`Self::remove`] naming why: the connection owner logs `cause`.
     pub fn close(&self, id: ConnectionId, cause: &'static str) {
+        *self
+            .close_causes
+            .lock()
+            .entry(cause)
+            .or_insert(0) += 1;
         crate::vanilla_items::unmark(id);
         let closer = {
             let mut inner = self.inner.lock();

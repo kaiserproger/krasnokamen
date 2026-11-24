@@ -284,6 +284,7 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                     publish_us,
                     bytes_written: server.net_counters.bytes_written.load(Ordering::Relaxed),
                     reliable_drops: server.net_counters.reliable_drops.load(Ordering::Relaxed),
+                    close_causes: server.connections.close_causes(),
                     chunks: DashboardChunks {
                         loaded_total: out.snapshot.chunks.len(),
                     },

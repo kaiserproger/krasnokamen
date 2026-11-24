@@ -841,3 +841,65 @@ fn input_drops_are_polled_on_request_and_exported() {
         "Prometheus exports the cumulative drop counter: {text}"
     );
 }
+
+/// WAL-FSYNC-LATENCY-AND-BYTES-UNMEASURED and PERF-RECEIPT-HAS-NO-ERROR-COUNTER-
+/// ROLLUP: the operator surfaces carry the WAL write cost and every abnormal close
+/// cause, so a rung receipt can quote fsync service time and a socket drop.
+#[test]
+fn stats_carry_wal_write_cost_and_close_causes() {
+    let state = test_state();
+    let mut causes = std::collections::BTreeMap::new();
+    causes.insert("reliable-overflow".to_owned(), 2);
+    causes.insert("world-write-failed".to_owned(), 1);
+    state.record_pump_tick(PumpTick {
+        tick: 7,
+        close_causes: causes.clone(),
+        ..Default::default()
+    });
+    let snapshot = state.snapshot();
+    assert_eq!(snapshot.network.close_causes, causes);
+    let value = serde_json::to_value(&snapshot).unwrap();
+    assert_eq!(
+        value["network"]["close_causes"]["world-write-failed"], 1,
+        "the rollup is in the JSON receipt: {value}"
+    );
+    let write = mc_core::journal::journal_write_stats();
+    assert_eq!(snapshot.journal.append_bytes_total, write.append_bytes_total);
+    assert_eq!(snapshot.journal.batch_bytes_last, write.batch_bytes_last);
+    assert_eq!(snapshot.journal.file_fsyncs_total, write.file_fsyncs_total);
+    assert_eq!(snapshot.journal.dir_fsyncs_total, write.dir_fsyncs_total);
+    assert_eq!(snapshot.journal.fsync_nanos_total, write.fsync_nanos_total);
+    assert_eq!(snapshot.journal.fsync_nanos_max, write.fsync_nanos_max);
+    for key in [
+        "append_bytes_total",
+        "batch_bytes_last",
+        "file_fsyncs_total",
+        "dir_fsyncs_total",
+        "fsync_nanos_total",
+        "fsync_nanos_max",
+    ] {
+        assert!(value["journal"][key].is_u64(), "missing journal field {key}");
+    }
+    let metrics = prometheus(&state);
+    for name in [
+        "krasnokamen_journal_append_bytes_total",
+        "krasnokamen_journal_fsyncs_total",
+        "krasnokamen_journal_fsync_nanoseconds_max",
+        "krasnokamen_network_close_causes_total{cause=\"world-write-failed\"}",
+    ] {
+        assert!(metrics.contains(name), "missing {name}: {metrics}");
+    }
+}
+
+/// The close-cause counter is what a real disconnect records, not a test-only path:
+/// `ConnectionRegistry::close` is the only abnormal-close entry point.
+#[test]
+fn an_abnormal_close_is_counted_by_cause() {
+    let registry = crate::server::ConnectionRegistry::new();
+    registry.close(mc_core::boundary::ConnectionId(3), "reliable-overflow");
+    registry.close(mc_core::boundary::ConnectionId(3), "reliable-overflow");
+    registry.close(mc_core::boundary::ConnectionId(4), "world-write-failed");
+    let causes = registry.close_causes();
+    assert_eq!(causes["reliable-overflow"], 2);
+    assert_eq!(causes["world-write-failed"], 1);
+}

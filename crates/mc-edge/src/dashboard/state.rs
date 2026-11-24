@@ -345,6 +345,7 @@ impl DashboardState {
         push_window(&mut inner.publish_us, sample.publish_us);
         inner.network.bytes_written = sample.bytes_written;
         inner.network.reliable_drops = sample.reliable_drops;
+        inner.network.close_causes = sample.close_causes;
         inner.chunks = sample.chunks;
         inner.entities = sample.entities;
         if let Some(players) = sample.players {
@@ -432,10 +433,17 @@ impl DashboardState {
                 ..inner.network.clone()
             },
             journal: {
-                let stats = mc_core::journal::journal_prune_stats();
+                let prune = mc_core::journal::journal_prune_stats();
+                let write = mc_core::journal::journal_write_stats();
                 DashboardJournal {
-                    prune_failures_total: stats.failures_total,
-                    prune_retained_bytes: stats.retained_bytes,
+                    prune_failures_total: prune.failures_total,
+                    prune_retained_bytes: prune.retained_bytes,
+                    append_bytes_total: write.append_bytes_total,
+                    batch_bytes_last: write.batch_bytes_last,
+                    file_fsyncs_total: write.file_fsyncs_total,
+                    dir_fsyncs_total: write.dir_fsyncs_total,
+                    fsync_nanos_total: write.fsync_nanos_total,
+                    fsync_nanos_max: write.fsync_nanos_max,
                 }
             },
             plugin: self.plugin_snapshot(),
