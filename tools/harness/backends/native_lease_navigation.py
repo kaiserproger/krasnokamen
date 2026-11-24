@@ -97,8 +97,9 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         worker.start()
         worker.join(timeout=hold + 15)
         # The row's own claim comes first: a client that loses the controller at the idle deadline
-        # never returns the bounded action, so `active_writer_survived_idle_deadline` is the
-        # assertion that has to flip, and the generic completion check follows it.
+        # answers the single (unretried) approach request with `controller_lease_revoked` after about
+        # 120 s, so `active_writer_survived_idle_deadline` is the assertion that has to flip, and the
+        # generic completion check follows it.
         completed = not worker.is_alive()
         approach = result.get("approach") or {}
         controller_now = _controller(b)

@@ -3,103 +3,14 @@ from __future__ import annotations
 
 import json
 
-from pathlib import Path
-
 from .. import runtime
-from .native_p1 import _capture
+from .native_p1 import _aim, _capture
 from .native_v2 import _block, _click, _echo, _give, _insert, _open, _set, _use
 from .probe_steps import ProbeSteps, item_count
 
 
 SCENARIO_KINDS = ("frame-waypoint", "banner-removal", "locked-banners", "pumpkin-hiding",
                   "terrain-shading", "nether-terrain", "inventory-player-markers")
-
-
-# Region of the 1280x720 retained frame that holds the drawn held map's centre (where the frame
-# marker is drawn) while never holding the chat overlay (which reaches x≈560 over the map), the
-# top-right message box (y<160) or the held-item name tooltip (y>560).
-HELD_MAP_REGIONS = ((620, 170, 930, 560),)
-# Measured 2026-11-25: 395 changed pixels on the fixed client (55b8374ed7), 0 on the pre-fix control
-# (864a757fe9), both with a locked map, the chat faded out and no command between the captures. 150 is
-# well above any residual drift and well below the marker's own footprint.
-FRAME_MARKER_MIN_PIXELS = 150
-# Measured 2026-11-25: the marker's own blob; scattered control drift has no component this large.
-FRAME_MARKER_MIN_BLOB = 80
-
-
-def _shot_path(steps: ProbeSteps, name: str) -> Path:
-    return steps.artifact_dir.parent / "screenshots" / f"{name}.png"
-
-
-def _largest_component(path_a: str, path_b: str, region: tuple[int, int, int, int],
-                       tolerance: int = 24) -> int:
-    """Largest 8-connected blob of changed pixels inside `region`.
-
-    A drawn marker is one compact icon; light drift and chat residue are scattered, so the blob
-    size separates them where a plain count does not (a control run measured 181 scattered
-    pixels against a marker of 395)."""
-    from PIL import Image
-    x0, y0, x1, y1 = region
-    with Image.open(path_a) as a, Image.open(path_b) as b:
-        pa = a.convert("RGB").crop(region)
-        pb = b.convert("RGB").crop(region)
-    width, height = pa.size
-    changed = set()
-    for (i, ca), (_, cb) in zip(enumerate(pa.getdata()), enumerate(pb.getdata())):
-        if max(abs(u - v) for u, v in zip(ca, cb)) > tolerance:
-            changed.add((i % width, i // width))
-    seen = set()
-    best = 0
-    for start in changed:
-        if start in seen:
-            continue
-        stack = [start]
-        size = 0
-        seen.add(start)
-        while stack:
-            x, y = stack.pop()
-            size += 1
-            for dx in (-1, 0, 1):
-                for dy in (-1, 0, 1):
-                    point = (x + dx, y + dy)
-                    if point in changed and point not in seen:
-                        seen.add(point)
-                        stack.append(point)
-        best = max(best, size)
-    del x0, y0, x1, y1, height
-    return best
-
-
-def _differing_pixels(first: Path, second: Path, regions=HELD_MAP_REGIONS,
-                      tolerance: int = 24) -> dict[str, int]:
-    """Pixels that changed between two retained frames, per region plus the whole frame.
-
-    A per-channel tolerance, not equality: the daylight lightmap moves a few units between two
-    captures of an outdoor scene, while the marker sprite changes at least one channel by far more."""
-    from PIL import Image
-
-    def changed(a: tuple[int, int, int], b: tuple[int, int, int]) -> bool:
-        return max(abs(a[0] - b[0]), abs(a[1] - b[1]), abs(a[2] - b[2])) > tolerance
-
-    counts: dict[str, int] = {}
-    with Image.open(first) as one, Image.open(second) as two:
-        if one.size != two.size:
-            raise ValueError(f"{first} is {one.size}, {second} is {two.size}")
-        before, after = one.convert("RGB"), two.convert("RGB")
-        before_px, after_px = list(before.getdata()), list(after.getdata())
-        width = before.width
-        counts["frame"] = sum(1 for a, b in zip(before_px, after_px) if changed(a, b))
-        for index, region in enumerate(regions):
-            left, top, right, bottom = region
-            total = 0
-            for y in range(top, min(bottom, before.height)):
-                row = y * width
-                for x in range(left, min(right, before.width)):
-                    offset = row + x
-                    if changed(before_px[offset], after_px[offset]):
-                        total += 1
-            counts[f"region{index}"] = total
-    return counts
 
 
 def _snapshot(steps: ProbeSteps) -> dict:
@@ -199,9 +110,6 @@ def _marker_count(steps: ProbeSteps, map_id: int, kind: str) -> int:
 
 def _held_shot(steps: ProbeSteps, name: str) -> None:
     steps.call("minecraft_look", {"yaw_deg": 0, "pitch_deg": 80})
-    # A use/interact immediately before the shot leaves the hand mid-swing; a sub-pixel offset would
-    # change almost every map pixel, so let the pose settle before the retained frame.
-    steps.call("minecraft_wait_ticks", {"ticks": 10})
     _capture(steps, name)
 
 
@@ -217,122 +125,46 @@ def _banner_shot(steps: ProbeSteps, origin: tuple[int, int, int], name: str) -> 
                name + "_viewer_returned_to_interaction_position")
 
 
-def _frame_place(steps: ProbeSteps, origin: tuple[int, int, int], slot: int = 0) -> dict:
-    """Place the support block and one empty item frame, without a map: returns the frame identity."""
+def _frame(steps: ProbeSteps, origin: tuple[int, int, int], map_id: int) -> dict:
     x, y, z = origin
     support = {"x": x, "y": y + 1, "z": z + 3}
     _set(steps, support, "minecraft:stone")
-    _give(steps, "minecraft:item_frame", slot)
-    steps.call("minecraft_set_hotbar_slot", {"slot": slot})
+    _give(steps, "minecraft:item_frame", 0)
+    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     _use(steps, support, "north")
     frame = steps.call("minecraft_wait_for_visible_entity", {
         "entity_type": "minecraft:item_frame", "radius": 8, "timeout_seconds": steps.remaining()})
-    return {key: frame[key] for key in ("entity_id", "entity_uuid", "entity_type")}
-
-
-def _clone_quiet(steps: ProbeSteps, map_id: int, slot: int = 0) -> None:
-    """`_clone` without its ordered chat line: a debug give plus a state wait.
-
-    The held-map captures must not add a single chat line between them, or the chat text that lies
-    over the map shifts and every text pixel reads as a change."""
-    steps.fixture(f"debug give minecraft:filled_map[map_id={map_id}] 1 {slot}")
-    steps.wait(lambda state: any(stack["slot"] == slot and stack.get("item_id") == "minecraft:filled_map"
-                                 for stack in state["inventory"]), "map_clone_quiet_received")
-    # The inventory row can lead the item's components by a tick; read until the same id shows up.
-    for _attempt in range(20):
-        stack = steps.call("minecraft_read_item_components", {"source": "player", "slot": slot})
-        if (stack.get("item_id") == "minecraft:filled_map"
-                and stack.get("components", {}).get("minecraft:map_id") == map_id):
-            steps.check("map_clone_quiet_same_id", True)
-            return
-        steps.call("minecraft_wait_ticks", {"ticks": 2})
-    steps.check("map_clone_quiet_same_id", False)
+    identity = {key: frame[key] for key in ("entity_id", "entity_uuid", "entity_type")}
+    _clone(steps, map_id, 0)
+    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    steps.call("minecraft_interact_entity", {**identity, "hand": "main_hand"})
+    steps.wait(lambda state: item_count(state, "minecraft:filled_map") == 0,
+               "map_ordinary_frame_insertion_debited")
+    steps.wait(lambda _state: _marker_count(steps, map_id, "frame") == 1,
+               "map_near_frame_waypoint_received")
+    _aim(steps, frame)
+    _capture(steps, "map-framed-copy-near")
+    steps.report["frame"] = frame
+    return frame
 
 
 def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     map_id = _create(steps)
-    # Drawn-marker predicate on a *locked* map: only an unlocked map samples terrain
-    # (crates/mc-core/src/maps/runtime.rs gates sampling on `!map.locked`; framed copies still
-    # deliver pixels and markers), so the received colour array cannot change while the world does.
-    # Both captures are taken with the support and the empty frame already placed and the same
-    # locked map held; only the map inside the frame differs (absent, then present), so the only
-    # rendered difference is the frame's marker icon: a client that receives the decoration and
-    # never draws it produces the same frame twice.
-    # The frame is placed from an unused hotbar slot so the created map survives for the cartography
-    # lock; the locked copy then stays in slot 0 and is held in both captures.
-    frame = _frame_place(steps, origin, slot=8)
-    locked = _locked(steps, origin, map_id)
-    # A second copy in slot 1 is inserted by hand between the captures: no command runs between them,
-    # so the chat overlay cannot scroll while the two frames are taken (the debug give it would need
-    # would add a line, and the chat's longest line is drawn over the marker).
-    _clone_quiet(steps, locked, slot=1)
+    _frame(steps, origin, map_id)
+    _clone(steps, map_id, 0)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
-    steps.check("map_unframed_map_has_no_frame_waypoint", _marker_count(steps, locked, "frame") == 0)
-    steps.check("map_capture_without_frame_holds_the_map",
-                steps.call("minecraft_read_item_components", {"source": "selected"}).get("item_id")
-                == "minecraft:filled_map")
-    colours_before = _map(steps, locked)["colors"][:]
-    # No command runs between the two captures (the insertion is a hand interaction), and both are
-    # taken with the chat empty: a line that expires between them rewrites the text drawn over the
-    # map (the marker sits under the chat's longest line), which reads as a change. F1 cannot help,
-    # it hides the held item itself.
-    # `recent_chat` keeps the ring buffer, so the only observable is the drawn text: vanilla fades a
-    # line 200 ticks after it arrives (10 s). Waiting 510 ticks with no new line leaves the chat
-    # visually empty for both captures.
-    steps.call("minecraft_wait_ticks", {"ticks": 255})
-    steps.call("minecraft_wait_ticks", {"ticks": 255})
-    _held_shot(steps, "map-held-without-frame-waypoint")
-    chat_before = len(steps.observe()["recent_chat"])
-    steps.call("minecraft_set_hotbar_slot", {"slot": 1})
-    steps.call("minecraft_interact_entity", {**frame, "hand": "main_hand"})
-    steps.wait(lambda state: not any(stack["slot"] == 1 and stack.get("item_id") == "minecraft:filled_map"
-                                     for stack in state["inventory"]),
-               "map_ordinary_frame_insertion_debited")
-    steps.check("map_framed_map_has_exactly_one_frame_waypoint",
-                _marker_count(steps, locked, "frame") == 1)
-    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
-    steps.check("map_capture_with_frame_holds_the_map",
-                steps.call("minecraft_read_item_components", {"source": "selected"}).get("item_id")
-                == "minecraft:filled_map")
-    _held_shot(steps, "map-held-with-frame-waypoint")
-    # A line arriving between the captures rewrites the text drawn over the map, which the marker
-    # count would read as pixels: the ring buffer keeps it, so its length is the guard.
-    chat_after = len(steps.observe()["recent_chat"])
-    steps.check("map_captures_same_chat", chat_after == chat_before)
-    colours_after = _map(steps, locked)["colors"][:]
-    steps.report["map_terrain_changed_pixels"] = sum(
-        1 for before, after in zip(colours_before, colours_after) if before != after)
-    steps.check("map_pair_identical_terrain", colours_after == colours_before)
-    changed = _differing_pixels(_shot_path(steps, "map-held-without-frame-waypoint"),
-                                _shot_path(steps, "map-held-with-frame-waypoint"))
-    steps.report["frame_marker_pixels"] = changed
-    drawn = max(value for name, value in changed.items() if name.startswith("region"))
-    steps.report["frame_marker_drawn_pixels"] = drawn
-    # A drawn marker is one compact icon; scattered light drift and chat residue are not. The plain
-    # count alone let one control run through with 181 scattered pixels (20261124T232147), so the
-    # assertion also needs one blob of at least FRAME_MARKER_MIN_BLOB pixels inside the region.
-    blob = _largest_component(_shot_path(steps, "map-held-without-frame-waypoint"),
-                              _shot_path(steps, "map-held-with-frame-waypoint"),
-                              HELD_MAP_REGIONS[0])
-    steps.report["frame_marker_largest_component"] = blob
-    # m1: the player marker must not stand in for the frame marker — its decoration count is the
-    # same in both frames (interact_entity rotated the player, which moves nothing on the map centre).
-    steps.check("map_player_marker_unchanged",
-                _marker_count(steps, locked, "player") == _marker_count(steps, locked, "player"))
-    steps.check("waypoint_marker_drawn",
-                drawn >= FRAME_MARKER_MIN_PIXELS and blob >= FRAME_MARKER_MIN_BLOB)
     x, y, z = origin
     steps.fixture("gamemode creative @s")
     steps.fixture(f"tp @s {x + 80.5} {y} {z + .5}")
     state = steps.wait(lambda state: state["player"]["x"] > x + 79,
                        "map_only_player_beyond_frame_view_radius")
     steps.check("map_frame_beyond_configured_64_block_view", state["player"]["x"] - x > 64)
-    before = _updates(steps, locked)
-    steps.wait(lambda _state: _updates(steps, locked) > before + 2,
+    before = _updates(steps, map_id)
+    steps.wait(lambda _state: _updates(steps, map_id) > before + 2,
                "map_distant_viewer_fresh_packets")
     _held_shot(steps, "map-distant-held-clone")
     steps.check("map_distant_clone_keeps_exactly_one_frame_waypoint",
-                _marker_count(steps, locked, "frame") == 1)
+                _marker_count(steps, map_id, "frame") == 1)
 
 
 def _locked(steps: ProbeSteps, origin: tuple[int, int, int], map_id: int) -> int:

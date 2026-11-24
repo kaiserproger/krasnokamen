@@ -1,7 +1,8 @@
 # NATIVE-MAP-MARKERS — hunk map for the committed reversal pair
 
 Client pair: reversal `client:864a757fe9` → re-land `client:55b8374ed7`.
-Promotion: `promotions/NATIVE-MAP-MARKERS.json`; row `fix_commit = client:e1b22a5a` (the pair's
+**REVOKED 2026-11-25**: promotion `20261124T210606-ledger-promote-ftjn0o0f` was withdrawn — the third control run
+passed with 181 scattered pixels (`…232147`) and one restore failed the scene's model check (`…232050`). The row is `open` again.
 re-land restores exactly that commit's production hunk, and `e1b22a5a` is an ancestor of the
 re-land, so the row's `fix_commit` stays the historical commit).
 
@@ -69,7 +70,8 @@ Measured 2026-11-25 (first with the earlier head, then re-run for the promotion 
 | `20261124T210350-…-40grn4zr` | `55b8374ed7` (restore, **promotion receipt**) | passed | `waypoint_marker_drawn` true |
 | `20261124T210449-…-g_ro5jis` | `864a757fe9` (control, **promotion receipt**) | red | `waypoint_marker_drawn` false |
 
-Promotion: `20261124T210606-ledger-promote-ftjn0o0f` (row `status = fixed`, both client unit refs
+**REVOKED 2026-11-25**: promotion `20261124T210606-ledger-promote-ftjn0o0f` was withdrawn — the third control run
+passed with 181 scattered pixels (`…232147`) and one restore failed the scene's model check (`…232050`). The row is `open` again.
 re-run green against the candidate tree).
 
 Shapes that did not discriminate, kept for the record:

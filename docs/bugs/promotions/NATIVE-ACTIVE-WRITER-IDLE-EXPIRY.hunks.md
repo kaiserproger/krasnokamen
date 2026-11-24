@@ -98,7 +98,7 @@ Controls (client `9ff891766b`, three runs): `20261124T183250-native-v2-lease-nav
 (elapsed 165.2 s, `completed` false, lease revoked at 120 s), plus two more in `notes/idle2.tsv`;
 restore (client `20943b0e6f`): `20261124T183710-native-v2-lease-navigation-qfnfbxc_` — passed,
 elapsed 150.2 s, `completed` true, `controller_active` true. Head `7a350bfca`, server pin
-`pins/7a350bfcacd3-server-…`. Re-audit artifact: `<promote dry-run>`.
+`pins/7a350bfcacd3-server-…`. Re-audit artifact: `20261124T185543 (dry-run)`.
 
 ## Gate hygiene note (review N8)
 
@@ -114,6 +114,6 @@ measures handoff latency should record the attempt count.
 arms and `controller()`'s report) plus the scene asking the client for its own approach bound
 (`f91b021c`, 300 s, automation only). Pair delta 1 786 bytes, patch-id of the re-land computed from
 `git diff 9ff891766b 20943b0e6f`; the per-line reconciliation against `895c63f3^` is the table above.
-Controls `20261124T183250` / `…184256` / `…184719`, restore `20261124T183710`. Review M3 asks that the
-red be the client's own `controller_lease_revoked` answer instead of the MCP retry timeout; that
-amendment is open.
+Controls `20261124T183250` / `…184256` / `…184719`, restore `20261124T183710`. Review M3's amendment is **done**: the scene calls `call_tool_once` and the red is the client's own
+`controller_lease_revoked` answer after 120.2/120.1/120.2 s (controls 232828/233047/233309), with the restore
+232529 green and no error.
