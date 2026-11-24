@@ -207,17 +207,6 @@ def _clone_quiet(steps: ProbeSteps, map_id: int, slot: int = 0) -> None:
     steps.check("map_clone_quiet_same_id", False)
 
 
-def _frame_insert(steps: ProbeSteps, identity: dict, map_id: int) -> None:
-    """Insert a clone of `map_id` into the frame through ordinary hand interaction."""
-    _clone_quiet(steps, map_id)
-    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
-    steps.call("minecraft_interact_entity", {**identity, "hand": "main_hand"})
-    steps.wait(lambda state: item_count(state, "minecraft:filled_map") == 0,
-               "map_ordinary_frame_insertion_debited")
-    steps.wait(lambda _state: _marker_count(steps, map_id, "frame") == 1,
-               "map_near_frame_waypoint_received")
-
-
 def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     map_id = _create(steps)
     # Drawn-marker predicate on a *locked* map: only an unlocked map samples terrain
@@ -231,30 +220,36 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # lock; the locked copy then stays in slot 0 and is held in both captures.
     frame = _frame_place(steps, origin, slot=8)
     locked = _locked(steps, origin, map_id)
+    # A second copy in slot 1 is inserted by hand between the captures: no command runs between them,
+    # so the chat overlay cannot scroll while the two frames are taken (the debug give it would need
+    # would add a line, and the chat's longest line is drawn over the marker).
+    _clone_quiet(steps, locked, slot=1)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     steps.check("map_unframed_map_has_no_frame_waypoint", _marker_count(steps, locked, "frame") == 0)
     steps.check("map_capture_without_frame_holds_the_map",
                 steps.call("minecraft_read_item_components", {"source": "selected"}).get("item_id")
                 == "minecraft:filled_map")
     colours_before = _map(steps, locked)["colors"][:]
-    # The chat overlay is drawn over the left part of the held map and scrolls up with every new
-    # line, so the read region starts right of the chat's longest line. Command feedback is turned
-    # off for the two captures so only the ordered marker line is added between them (F1 would hide
-    # the held item itself, which is why the HUD stays visible).
+    # No command runs between the two captures (the insertion is a hand interaction), so the chat
+    # overlay cannot scroll while they are taken; command feedback is off as a safety net, and the
+    # read region starts right of the chat's longest line. F1 would hide the held item itself.
     steps.fixture("gamerule send_command_feedback false")
     _echo(steps, "map_captures_command_feedback_off")
     _held_shot(steps, "map-held-without-frame-waypoint")
-    steps.fixture("clear @s minecraft:filled_map")
-    _frame_insert(steps, frame, locked)
+    steps.call("minecraft_set_hotbar_slot", {"slot": 1})
+    steps.call("minecraft_interact_entity", {**frame, "hand": "main_hand"})
+    steps.wait(lambda state: not any(stack["slot"] == 1 and stack.get("item_id") == "minecraft:filled_map"
+                                     for stack in state["inventory"]),
+               "map_ordinary_frame_insertion_debited")
     steps.check("map_framed_map_has_exactly_one_frame_waypoint",
                 _marker_count(steps, locked, "frame") == 1)
-    _clone_quiet(steps, locked)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     steps.check("map_capture_with_frame_holds_the_map",
                 steps.call("minecraft_read_item_components", {"source": "selected"}).get("item_id")
                 == "minecraft:filled_map")
     _held_shot(steps, "map-held-with-frame-waypoint")
     steps.fixture("gamerule send_command_feedback true")
+    _echo(steps, "map_captures_command_feedback_restored")
     colours_after = _map(steps, locked)["colors"][:]
     steps.report["map_terrain_changed_pixels"] = sum(
         1 for before, after in zip(colours_before, colours_after) if before != after)
