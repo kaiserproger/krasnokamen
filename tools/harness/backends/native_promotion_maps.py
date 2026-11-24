@@ -234,8 +234,11 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # taken with the chat empty: a line that expires between them rewrites the text drawn over the
     # map (the marker sits under the chat's longest line), which reads as a change. F1 cannot help,
     # it hides the held item itself.
-    steps.wait(lambda state: not state.get("recent_chat"), "map_captures_chat_cleared",
-               timeout_seconds=30)
+    # `recent_chat` keeps the ring buffer, so the only observable is the drawn text: vanilla fades a
+    # line 200 ticks after it arrives (10 s). Waiting 510 ticks with no new line leaves the chat
+    # visually empty for both captures.
+    steps.call("minecraft_wait_ticks", {"ticks": 255})
+    steps.call("minecraft_wait_ticks", {"ticks": 255})
     _held_shot(steps, "map-held-without-frame-waypoint")
     steps.call("minecraft_set_hotbar_slot", {"slot": 1})
     steps.call("minecraft_interact_entity", {**frame, "hand": "main_hand"})
