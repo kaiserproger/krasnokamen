@@ -133,7 +133,11 @@ struct Drill {
 /// palette of the registry recovery replays under.
 fn drill_identity(config: &CoreConfig, state: &TickState) -> crate::journal::WalIdentity {
     let store = crate::native_checkpoint::tests::fixture_store(config).unwrap();
-    crate::journal::WalIdentity::new(store.store_uuid(), &state.registry.blocks)
+    crate::journal::WalIdentity::new(
+        store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        &state.registry.blocks,
+    )
 }
 
 impl Drill {

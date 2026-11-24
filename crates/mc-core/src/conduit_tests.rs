@@ -441,7 +441,10 @@ fn conduit_corrupt_target_wal_and_chunk_fail_closed() {
         .unwrap_err()
         .to_string();
     assert!(
-        error.contains("record 0 offset 56 kind OpaqueBlockEntity"),
+        error.contains(&format!(
+            "record 0 offset {} kind OpaqueBlockEntity",
+            crate::journal::HEADER_LEN
+        )),
         "{error}"
     );
     assert!(

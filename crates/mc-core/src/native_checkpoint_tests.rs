@@ -121,8 +121,13 @@ pub(crate) fn fixture_store(config: &CoreConfig) -> Result<Arc<NativeStore>, Cor
         .map_err(storage)?;
     // A real world always carries the checkpoint marker of its committed
     // checkpoint; `Core::open` refuses a store that has one without it.
-    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), 0)
-        .map_err(|e| CoreError::Storage(e.to_string()))?;
+    mc_world::store_marker::write(
+        &config.world_dir,
+        store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        0,
+    )
+    .map_err(|e| CoreError::Storage(e.to_string()))?;
     Ok(store)
 }
 
@@ -228,8 +233,13 @@ pub(crate) fn write_manifest(
             &registry.items,
         )
         .map_err(|e| CoreError::Storage(e.to_string()))?;
-    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), manifest.tick)
-        .map_err(|e| CoreError::Storage(e.to_string()))
+    mc_world::store_marker::write(
+        &config.world_dir,
+        store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        manifest.tick,
+    )
+    .map_err(|e| CoreError::Storage(e.to_string()))
 }
 
 #[test]
@@ -1459,7 +1469,13 @@ fn pre_plugin_native_checkpoint_opens_with_empty_authority_and_upgrades_on_check
         .unwrap();
     // A world this build wrote always has its checkpoint marker; the subject
     // here is the pre-plugin domain set, not the store identity.
-    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), 0).unwrap();
+    mc_world::store_marker::write(
+        &config.world_dir,
+        store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        0,
+    )
+    .unwrap();
     drop(store);
     let core = crate::Core::open(config.clone()).unwrap();
     core.shutdown();

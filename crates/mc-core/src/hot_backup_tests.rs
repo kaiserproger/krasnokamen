@@ -24,6 +24,7 @@ fn copy_world(
 fn identity(store: [u8; 16]) -> crate::journal::WalIdentity {
     crate::journal::WalIdentity {
         store,
+        branch: mc_world::store_marker::ROOT_BRANCH,
         palette: [0; 8],
     }
 }
@@ -42,7 +43,13 @@ fn fake_world() -> tempfile::TempDir {
     std::fs::create_dir_all(world.path().join("journal")).unwrap();
     std::fs::write(world.path().join("native/state.redb"), b"database").unwrap();
     // The marker travels with the store; a store with a checkpoint always has one.
-    mc_world::store_marker::write(world.path(), [9; 16], 10).unwrap();
+    mc_world::store_marker::write(
+        world.path(),
+        [9; 16],
+        mc_world::store_marker::ROOT_BRANCH,
+        10,
+    )
+    .unwrap();
     world
 }
 
@@ -386,7 +393,13 @@ fn rewrite_plugin_startup(copy: &std::path::Path, payload: &[u8]) {
             &registry.items,
         )
         .unwrap();
-    mc_world::store_marker::write(copy, store.store_uuid(), tick).unwrap();
+    mc_world::store_marker::write(
+        copy,
+        store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        tick,
+    )
+    .unwrap();
 }
 
 /// A verified hot copy is then verified offline exactly as `restore` does, and

@@ -25,7 +25,13 @@ pub(crate) fn native_store(
     // Publish the checkpoint marker a real first start writes: the store id is
     // then readable without opening (and locking) the database, which is what a
     // test writing this world's WAL tail needs to bind its frames to it.
-    mc_world::store_marker::write(directory, store.store_uuid(), 0).unwrap();
+    mc_world::store_marker::write(
+        directory,
+        store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        0,
+    )
+    .unwrap();
     let manifest = serde_json::json!({
         "tick":0,"dimensions":{},"end_fight":null,"raids":null,"tickets":{},"players":{},
         "world_spawn":[0,64,0],"world_spawn_rotation":[0,0],"generated_entity_claims":[],

@@ -603,7 +603,7 @@ seed = 81
                         and os.environ.get("BREAK_DL_ATTACK", "").startswith("hold"))):
                 def restart_server(remaining: float) -> str:
                     nonlocal server, server_log
-                    from .wal_forge import capture_identity
+                    from ..wal_frame import capture_identity
                     mcp.wal_identity = capture_identity(Path(evidence["world_dir"]))
                     old_pid = server.pid
                     if console_shutdown:
@@ -631,7 +631,7 @@ seed = 81
                                       corrupt=getattr(mcp, "corrupt_fixture", None))
                     if getattr(mcp, "wal_forge", None):
                         # The palette digest is a property of this build, so take it (and the
-                        # store id) from a format-2 batch the server itself wrote before it
+                        # store id and branch) from a format-3 batch the server itself wrote before it
                         # stopped; the shutdown checkpoint may still prune the journal, so the
                         # capture happens here, ahead of the stop path above.
                         identity = getattr(mcp, "wal_identity", None)

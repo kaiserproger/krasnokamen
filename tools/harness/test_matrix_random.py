@@ -7,12 +7,14 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+import zlib
 
+from . import wal_frame
 from .quirk_parity import player
 from .matrix_api import MissingCapability
 
 from .matrix_domains.random import (invariant_checks, stock, setup, recovery_matches,
-                                    _mine, _exact_slots, _action, _fixture_item_stock)
+                                    _mine, _exact_slots, _action, _fixture_item_stock, _published)
 from .quirk_parity.seeded import player_scenario
 
 
@@ -339,6 +341,21 @@ class RandomMatrixTests(unittest.TestCase):
                             stock([{'item_id': 'minecraft:oak_planks', 'count': 9}]))
         self.assertEqual(stock([{'item_id': 'minecraft:diamond', 'count': 1}]),
                          {'minecraft:diamond': 1})
+
+    def test_kill9_fence_reads_the_current_wal_frame_and_refuses_an_older_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = Path(tmp) / 'journal'
+            journal.mkdir()
+            ctx = SimpleNamespace(server=SimpleNamespace(world_dir=Path(tmp)))
+            identity = (bytes(range(1, 17)), bytes(range(51, 59)), bytes(range(101, 109)))
+            batch = journal / wal_frame.batch_name(7, 9)
+            batch.write_bytes(wal_frame.encode(7, 9, b'{}\n', identity))
+            self.assertEqual(_published(ctx, 8), {'path': str(batch), 'low': 7, 'high': 9})
+            # The server refuses a format-1 frame by name, so the fence never counts one as published.
+            (journal / wal_frame.batch_name(10, 10)).write_bytes(
+                struct.pack('<IIQQII', wal_frame.MAGIC, 1, 10, 10, 3, zlib.crc32(b'{}\n')) + b'{}\n')
+            with self.assertRaisesRegex(AssertionError, 'format 1'):
+                _published(ctx, 10)
 
 
 if __name__ == '__main__':

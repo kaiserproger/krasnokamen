@@ -61,13 +61,12 @@ import threading
 import time
 import traceback
 import uuid
-import zlib
 from pathlib import Path
 from typing import Any, Callable
 
 from tools.battle.crash_snapshot import verified_copy
 
-from .. import runtime
+from .. import runtime, wal_frame
 from ..profiles import ProfileContext, _run_command
 from ..quirk_parity import anvil
 from ..runtime import REPO_ROOT
@@ -751,17 +750,16 @@ def read_batches(directories: list[Path]) -> dict[tuple[int, int], Path]:
         if not directory.is_dir():
             continue
         for path in sorted(directory.glob("batch-*.bin")):
-            found = re.fullmatch(r"batch-(\d+)-(\d+)\.bin", path.name)
-            if not found:
+            span = wal_frame.span(path.name)
+            if span is None:
                 continue
-            span = (int(found.group(1)), int(found.group(2)))
             data = path.read_bytes()
-            if len(data) < 32:
-                continue
-            magic, version, low, high, length, crc = struct.unpack("<IIQQII", data[:32])
-            body = data[32:]
-            if magic != 0x534F4C4A or (low, high) != span or len(body) != length or zlib.crc32(body) != crc:
+            try:
+                wal_frame.decode(data, span)
+            except wal_frame.TornFrame:
                 continue  # torn tail: recovery replays only complete batches
+            except wal_frame.FrameError as error:
+                raise Incomplete(f"WAL batch {path}: {error}") from None
             if span in batches and batches[span].read_bytes() != data:
                 raise Incomplete(f"WAL batch {path.name} differs between {batches[span]} and {path}")
             batches.setdefault(span, path)
@@ -774,7 +772,7 @@ def wal_history(batches: dict[tuple[int, int], Path]) -> dict[str, Any]:
     removals: list[dict[str, Any]] = []
     motions: dict[str, list[tuple[int, int]]] = {}
     for (low, high), path in sorted(batches.items()):
-        for line in path.read_bytes()[32:].splitlines():
+        for line in wal_frame.read(path).payload.splitlines():
             if b'"Entity"' not in line and b'"RemoveEntity"' not in line and b'"ItemMotion"' not in line:
                 continue
             for dimension, entry in _visit(json.loads(line)):
@@ -1423,18 +1421,15 @@ class WindupObserver:
 
     def update(self) -> None:
         for path in sorted(self.archive.glob("batch-*.bin")):
-            match = re.fullmatch(r"batch-(\d+)-(\d+)\.bin", path.name)
-            if not match or int(match[2]) <= self.last_tick:
+            span = wal_frame.span(path.name)
+            if span is None or span[1] <= self.last_tick:
                 continue
-            data = path.read_bytes()
-            if len(data) < 32:
-                break
-            magic, version, low, high, length, crc = struct.unpack("<IIQQII", data[:32])
-            body = data[32:]
-            if (magic, version, low, high) != (0x534F4C4A, 1, int(match[1]), int(match[2])) \
-                    or len(body) != length or zlib.crc32(body) != crc:
-                break
-            for line in body.splitlines():
+            try:
+                frame = wal_frame.decode(path.read_bytes(), span)
+            except wal_frame.TornFrame:
+                break  # still being archived: the next update reads it whole
+            high = frame.hi
+            for line in frame.payload.splitlines():
                 if b'"Entity"' not in line and b'"Battle' not in line:
                     continue
                 for dimension, entry in _visit(json.loads(line)):
@@ -1746,7 +1741,7 @@ def battle_image(history_batches: dict[tuple[int, int], Path], until: int) -> di
     for (low, high), path in sorted(history_batches.items()):
         if high > until:
             break
-        for line in path.read_bytes()[32:].splitlines():
+        for line in wal_frame.read(path).payload.splitlines():
             if b'"Battle' not in line:
                 continue
             for dimension, entry in _visit(json.loads(line)):

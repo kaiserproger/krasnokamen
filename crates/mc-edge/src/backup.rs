@@ -1,6 +1,8 @@
 //! Offline native-v2 world backups: one exclusive directory lease, the native
 //! database's own lock, and a SHA-256 manifest covering the store, WAL and metadata.
-//! Restore validates the entire backup before creating or writing target data.
+//! Restore validates the entire backup before creating or writing target data,
+//! builds the world in a staging directory beside the target and publishes it
+//! with one rename.
 
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -221,6 +223,8 @@ fn copy_reader_durable(input: &mut impl Read, destination: &Path) -> Result<Stri
     }
     output.sync_all()?;
     mc_world::atomic_file::sync_parent_dir(destination)?;
+    #[cfg(test)]
+    tests::interruption_point(&tests::Step::Copied(destination));
     Ok(format!("{:x}", hasher.finalize()))
 }
 
@@ -232,6 +236,10 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<usize> {
     if !world.is_dir() {
         bail!("backup source is not a directory: {}", world.display());
     }
+    // A staging directory is no world, even with a valid marker; refuse it
+    // before a lease file or redb repair can touch it.
+    mc_world::store_marker::refuse_unpublished(&world)
+        .map_err(|error| anyhow::anyhow!("backup refused: {error}"))?;
     let out = resolve_destination(out)?;
     refuse_overlap(&world, &out)?;
     let _world_lease = ExclusiveLease::acquire(&world)?;
@@ -250,11 +258,30 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<usize> {
             .map_err(|error| anyhow::anyhow!("backup source store: {error}"))?;
     mc_world::store_marker::verify(&world, store_uuid, store_tick)
         .map_err(|error| anyhow::anyhow!("backup refused: {error}"))?;
+    // A restored copy always has `journal/` and replay refuses one without it,
+    // its tail being lost. Copying such a copy would hand restore a backup it
+    // republishes with a fresh empty journal, so refuse it here, independent of
+    // the content check that may or may not follow.
+    let branch = mc_world::store_marker::branch(&world)
+        .map_err(|error| anyhow::anyhow!("backup refused: {error}"))?;
+    if branch != mc_world::store_marker::ROOT_BRANCH && !world.join("journal").is_dir() {
+        bail!(
+            "backup refused: {} is a restored copy on branch {:016x} without its journal/ \
+             directory; its WAL tail is lost, so it is not backed up as a valid world",
+            world.display(),
+            u64::from_be_bytes(branch),
+        );
+    }
     let mut database_lease = ExclusiveLease::acquire(&world.join(NATIVE_DATABASE))?;
     require_empty(&out)?;
     std::fs::create_dir_all(&out)?;
     let _output_lease = ExclusiveLease::acquire(&out)?;
     require_empty(&out)?;
+    // The journal directory belongs to the world even when it is empty: replay
+    // refuses a restored copy without one, so a backup of such a copy keeps it.
+    if world.join("journal").is_dir() {
+        std::fs::create_dir(out.join("journal"))?;
+    }
     let mut manifest = BackupManifest::current();
     for (name, source) in files {
         // Windows byte-range locks also deny reads through a second handle in
@@ -407,13 +434,27 @@ fn read_manifest(from: &Path) -> Result<BackupManifest> {
     Ok(manifest)
 }
 
-/// Verify every manifest path and hash before writing any world data. Restore
-/// never merges into a nonempty target, follows links, or overlaps its source.
+/// Verify every manifest path and hash before writing any world data, then
+/// build the world in a staging directory beside the target ([`stage_world`])
+/// and publish it with one rename ([`publish`]): an interrupted restore leaves
+/// the target as it was, or the complete restored world, never a partial one.
+/// Restore never merges into a nonempty target, follows links, or overlaps its
+/// source, and it runs on Unix only (see [`publish`]).
 pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+    if cfg!(not(unix)) {
+        bail!(
+            "restore runs on Unix (Linux, macOS) only: it publishes the restored world by \
+             renaming it over the empty target it keeps leased, which this platform cannot do; \
+             restore on Linux or macOS and move the finished world directory whole"
+        );
+    }
     let from = std::fs::canonicalize(from)
         .with_context(|| format!("resolving backup {}", from.display()))?;
     let target = resolve_destination(world_dir)?;
     refuse_overlap(&from, &target)?;
+    mc_world::store_marker::refuse_unpublished(&target)
+        .map_err(|error| anyhow::anyhow!("restore target refused: {error}"))?;
+    let staging = staging_path(&target)?;
     let _source_lease = ExclusiveLease::acquire(&from)?;
     let manifest = read_manifest(&from)?;
     let files = collect_files(&from, true)?;
@@ -429,6 +470,10 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
         None
     };
     require_empty(&target)?;
+    #[cfg(unix)]
+    if target_lease.is_some() {
+        refuse_mount_point(&target)?;
+    }
     for (name, source) in &files {
         let actual = if name == NATIVE_DATABASE {
             digest_reader(&mut database_lease.0)?
@@ -442,62 +487,53 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
             );
         }
     }
-    std::fs::create_dir_all(&target)?;
-    let created_target = target_lease.is_none();
-    let _target_lease = match target_lease {
+    // A staging directory is never reused or removed silently: it holds what an
+    // interrupted restore copied, which the operator may still want to inspect.
+    if std::fs::symlink_metadata(&staging).is_ok() {
+        bail!(
+            "{} is left by an interrupted restore into {}; remove it and run restore again",
+            staging.display(),
+            target.display()
+        );
+    }
+    // Only a target this restore's own exclusive mkdir created is its own; one
+    // that appeared since the check above belongs to someone else.
+    let created_target = target_lease.is_none() && create_target(&target)?;
+    let target_lease = match target_lease {
         Some(lease) => lease,
         None => ExclusiveLease::acquire(&target)?,
     };
     require_empty(&target)?;
     database_lease.0.rewind()?;
-    for (name, source) in &files {
-        let actual = if name == NATIVE_DATABASE {
-            copy_reader_durable(&mut database_lease.0, &target.join(name))
-        } else {
-            copy_file_durable(source, &target.join(name))
-        }
-        .with_context(|| format!("restoring {name}"))?;
-        if actual != manifest.files[name] {
-            bail!("backup file {name} changed while restoring; restore is incomplete");
-        }
-    }
-    mc_world::atomic_file::sync_parent_dir(&target)?;
-    // Books R4-P1: the copied marker and the copied store must agree — the same
-    // store id and a store checkpoint at or after the marker's tick — and the
-    // marker must be present: every world this build writes has one, so a backup
-    // without it is not restorable. A backup that pairs one world's marker with
-    // another's store, or a store rolled back behind its marker, is refused
-    // instead of restored as a valid world.
-    let restored_database = target.join(NATIVE_DATABASE);
-    let pair = match mc_world::store_marker::read(&target) {
-        Ok(Some(_)) => Ok(()),
-        Ok(None) => Err("the backup has no checkpoint marker".to_owned()),
-        Err(error) => Err(error.to_string()),
-    }
-    .and_then(|()| {
-        mc_world::native::NativeStore::read_marker_fields(&restored_database)
-            .map_err(|error| format!("restored {}: {error}", restored_database.display()))
-    })
-    .and_then(|(store_uuid, store_tick)| {
-        mc_world::store_marker::verify(&target, store_uuid, store_tick)
-            .map_err(|error| error.to_string())
-    });
-    if let Err(error) = pair {
-        // Nothing the restore created survives a refusal: the whole target when
-        // this restore made it, otherwise the files it copied and the data
-        // directories it created under an existing empty target.
+    // The staging directory is created under the target lease: it is this
+    // restore's own until the lease drops, after cleanup.
+    std::fs::create_dir(&staging).with_context(|| format!("creating {}", staging.display()))?;
+    let published = stage_world(&from, &staging, &files, &manifest, &mut database_lease.0)
+        .and_then(|()| {
+            #[cfg(test)]
+            tests::interruption_point(&tests::Step::Publishing);
+            publish(&staging, &target, &target_lease)
+        });
+    if let Err(error) = published {
+        // Cleanup still holds the target lease and removes only what this
+        // restore owns: its staging directory, and the target only if this
+        // restore created it and it is still empty (`remove_dir` refuses
+        // anything else). Whatever else is at the target stays as found.
+        let _ = std::fs::remove_dir_all(&staging);
         if created_target {
-            let _ = std::fs::remove_dir_all(&target);
-        } else {
-            for name in files.keys() {
-                let _ = std::fs::remove_file(target.join(name));
-            }
-            for directory in ["native", "journal"] {
-                let _ = std::fs::remove_dir(target.join(directory));
-            }
+            let _ = std::fs::remove_dir(&target);
         }
-        bail!("restored world is inconsistent: {error}; nothing was kept");
+        drop(target_lease);
+        return Err(error);
     }
+    #[cfg(test)]
+    tests::interruption_point(&tests::Step::Published);
+    mc_world::atomic_file::sync_parent_dir(&target).with_context(|| {
+        format!(
+            "the restored world is published at {}, but its directory entry was not synced",
+            target.display()
+        )
+    })?;
     println!(
         "restore of {} into {} complete: {} files verified",
         from.display(),
@@ -505,6 +541,196 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
         files.len(),
     );
     Ok(())
+}
+
+/// `<target>.restore-staging`: beside the target, so on its filesystem and one
+/// rename away from it. The name is reserved: every open refuses it
+/// (`store_marker::refuse_unpublished`), whatever marker the copy holds.
+fn staging_path(target: &Path) -> Result<PathBuf> {
+    let mut name = target
+        .file_name()
+        .context("destination has no file name")?
+        .to_os_string();
+    name.push(mc_world::store_marker::RESTORE_STAGING_SUFFIX);
+    Ok(target.with_file_name(name))
+}
+
+/// Create `target` with an exclusive mkdir, its parents durably first, and
+/// report whether this call created it: an existing directory is not ours.
+fn create_target(target: &Path) -> Result<bool> {
+    let parent = target.parent().context("destination has no parent")?;
+    mc_world::atomic_file::create_dir_all_durable(parent)?;
+    match std::fs::create_dir(target) {
+        Ok(()) => {
+            mc_world::atomic_file::sync_parent_dir(target)?;
+            Ok(true)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+        Err(error) => Err(error).with_context(|| format!("creating {}", target.display())),
+    }
+}
+
+/// The restored world is published by renaming a directory beside the target
+/// over it, which cannot replace a mount point: refuse one before copying.
+#[cfg(unix)]
+fn refuse_mount_point(target: &Path) -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
+    let parent = target.parent().context("destination has no parent")?;
+    if std::fs::metadata(target)?.dev() != std::fs::metadata(parent)?.dev() {
+        bail!(
+            "destination {} is a mount point; restore into a new directory inside it",
+            target.display()
+        );
+    }
+    Ok(())
+}
+
+/// Build the restored world in `staging` (Books R4-P1 pair check, then the
+/// copy's own branch) and make every name in it durable.
+///
+/// The staging directory never opens as a world: its name is reserved
+/// ([`staging_path`]), so every open refuses it even once the copy's own marker
+/// is written. The backup's marker is also verified from memory and never
+/// copied, so until that marker is written as the last step the staged store
+/// has a checkpoint and no marker, which every open refuses on its own.
+fn stage_world(
+    from: &Path,
+    staging: &Path,
+    files: &BTreeMap<String, PathBuf>,
+    manifest: &BackupManifest,
+    database: &mut File,
+) -> Result<()> {
+    // A restored copy always has a journal directory, an empty one included:
+    // replay refuses a copy on a branch of its own without one (a lost tail).
+    std::fs::create_dir(staging.join("journal"))?;
+    let mut marker = None;
+    for (name, source) in files {
+        let expected = &manifest.files[name];
+        let actual = if name == mc_world::store_marker::MARKER_FILE {
+            let bytes = std::fs::read(source).with_context(|| format!("restoring {name}"))?;
+            let digest = digest_reader(&mut bytes.as_slice())?;
+            marker = Some(bytes);
+            digest
+        } else if name == NATIVE_DATABASE {
+            copy_reader_durable(database, &staging.join(name))
+                .with_context(|| format!("restoring {name}"))?
+        } else {
+            copy_file_durable(source, &staging.join(name))
+                .with_context(|| format!("restoring {name}"))?
+        };
+        if &actual != expected {
+            bail!("backup file {name} changed while restoring; nothing was restored");
+        }
+    }
+    // The backup's marker and store must agree — the same store id and a store
+    // checkpoint at or after the marker's tick — and the marker must be
+    // present: every world this build writes has one, so a backup without it is
+    // not restorable. A backup that pairs one world's marker with another's
+    // store, or a store rolled back behind its marker, is refused instead of
+    // restored as a valid world.
+    let marker_path = from.join(mc_world::store_marker::MARKER_FILE);
+    let database = staging.join(NATIVE_DATABASE);
+    let paired = marker
+        .ok_or_else(|| "the backup has no checkpoint marker".to_owned())
+        .and_then(|bytes| {
+            mc_world::store_marker::StoreMarker::decode(&bytes).map_err(|error| {
+                format!(
+                    "checkpoint marker {} is corrupt: {error}",
+                    marker_path.display()
+                )
+            })
+        })
+        .and_then(|copied| {
+            let (store_uuid, store_tick) =
+                mc_world::native::NativeStore::read_marker_fields(&database)
+                    .map_err(|error| format!("restored {}: {error}", database.display()))?;
+            copied
+                .admits(&marker_path, store_uuid, store_tick)
+                .map_err(|error| error.to_string())?;
+            // A backup of a restored copy carries that copy's `journal/`, an
+            // empty one included; without it the copy's tail was lost before
+            // the backup, and a fresh empty journal must not stand in for it.
+            if copied.branch != mc_world::store_marker::ROOT_BRANCH
+                && !from.join("journal").is_dir()
+            {
+                return Err(format!(
+                    "the backup is of a restored copy on branch {:016x} and has no journal/ \
+                     directory: that copy's WAL tail was lost",
+                    u64::from_be_bytes(copied.branch)
+                ));
+            }
+            start_branch(staging, copied, store_tick.unwrap_or(0))
+        });
+    if let Err(error) = paired {
+        bail!("restored world is inconsistent: {error}; nothing was kept");
+    }
+    sync_tree(staging)?;
+    mc_world::atomic_file::sync_parent_dir(staging)?;
+    Ok(())
+}
+
+/// Give the staged copy its own branch (DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY).
+///
+/// The store id is the world's identity and travels with every backup, so two
+/// copies of one backup — or a copy and the world it came from — would otherwise
+/// replay each other's WAL tails. A random branch that is neither the root nor
+/// the backup's own is minted, the copied tail above the store's checkpoint
+/// moves onto it, and the copy's first marker, naming it, is written last.
+fn start_branch(
+    staging: &Path,
+    copied: mc_world::store_marker::StoreMarker,
+    store_tick: u64,
+) -> Result<(), String> {
+    let branch = mc_world::store_marker::mint_branch(copied.branch);
+    mc_core::journal::rebind_tail(
+        staging,
+        store_tick,
+        copied.store_uuid,
+        copied.branch,
+        branch,
+        |_| {
+            #[cfg(test)]
+            tests::interruption_point(&tests::Step::Rebinding);
+        },
+    )
+    .map_err(|error| error.to_string())?;
+    mc_world::store_marker::write(staging, copied.store_uuid, branch, copied.checkpoint_tick)
+        .map_err(|error| error.to_string())
+}
+
+/// Fsync every directory of the staged tree, `directory` itself last. Each file
+/// was synced by the step that wrote it (copy, rebind, marker), but a copy syncs
+/// only its own parent: the links of `journal/`, `native/` and nested data
+/// directories inside the staging directory are made durable here.
+fn sync_tree(directory: &Path) -> Result<()> {
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            sync_tree(&entry.path())?;
+        }
+    }
+    mc_core::journal::fsync_dir(directory)
+        .with_context(|| format!("syncing {}", directory.display()))
+}
+
+/// Publish the staged world at `target` with one rename. The target is an
+/// empty directory this restore leases (lease files at most), and `_lease` is
+/// that lease: Unix renames a directory over an empty one atomically, so the
+/// leased empty target stands until the rename and nobody else can take it in
+/// between. The caller keeps the lease until it is done with the target. No
+/// Windows variant exists: there the lease is a file inside the target and no
+/// directory is renamed over another, so the target would have to be released
+/// and removed first, and another process could take it in that gap.
+fn publish(staging: &Path, target: &Path, _lease: &ExclusiveLease) -> Result<()> {
+    for entry in std::fs::read_dir(target)? {
+        let path = entry?.path();
+        if !is_lease_file(&path) {
+            bail!("destination is not empty: {}", target.display());
+        }
+        std::fs::remove_file(&path).with_context(|| format!("removing {}", path.display()))?;
+    }
+    std::fs::rename(staging, target)
+        .with_context(|| format!("publishing the restored world at {}", target.display()))
 }
 
 #[cfg(test)]

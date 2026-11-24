@@ -1320,8 +1320,8 @@ fn journal_decode_corrupt_final_batch_fails_open_without_writes() {
         let path = batch_path(dir.path(), 3);
         let mut bytes = std::fs::read(&path).unwrap();
         if crc_damage {
-            // Flip a payload byte after the 56-byte v2 header.
-            bytes[56] ^= 1;
+            // Flip a payload byte after the frame header.
+            bytes[crate::journal::HEADER_LEN] ^= 1;
         } else {
             bytes.pop();
         }
@@ -1345,7 +1345,11 @@ fn journal_missing_middle_batch_refuses_runtime_recovery_without_rewrites() {
     // `Core::open` replays under the opened store's own id and palette, so the
     // fixture writes its tail under exactly that identity.
     let registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
-    let identity = crate::journal::WalIdentity::new(store.store_uuid(), &registry.blocks);
+    let identity = crate::journal::WalIdentity::new(
+        store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        &registry.blocks,
+    );
     let mut writer = JournalWriter::open(dir.path(), 1, identity).unwrap();
     for tick in 1..=3 {
         writer
@@ -1448,9 +1452,11 @@ fn journal_decode_crc_valid_invalid_records_fail_open_without_writes() {
             let mut bytes = std::fs::read(&path).unwrap();
             let prefix = format!("{{\"RemoveEntity\":{{\"id\":77,\"tick\":{tick}}}}}\n");
             let payload = format!("{prefix}{invalid}\n");
-            bytes.truncate(56);
-            bytes[48..52].copy_from_slice(&(payload.len() as u32).to_le_bytes());
-            bytes[52..56].copy_from_slice(&crc32fast::hash(payload.as_bytes()).to_le_bytes());
+            let header = crate::journal::HEADER_LEN;
+            bytes.truncate(header);
+            bytes[header - 8..header - 4].copy_from_slice(&(payload.len() as u32).to_le_bytes());
+            bytes[header - 4..header]
+                .copy_from_slice(&crc32fast::hash(payload.as_bytes()).to_le_bytes());
             bytes.extend_from_slice(payload.as_bytes());
             std::fs::write(&path, bytes).unwrap();
             let before = journal_recovery_files(dir.path());
@@ -1460,7 +1466,7 @@ fn journal_decode_crc_valid_invalid_records_fail_open_without_writes() {
                     .to_string();
             assert!(error.contains(path.to_str().unwrap()), "{error}");
             assert!(
-                error.contains(&format!("record 1 offset {}", 56 + prefix.len())),
+                error.contains(&format!("record 1 offset {}", header + prefix.len())),
                 "{error}"
             );
             assert!(error.contains("line 1 column"), "{error}");
@@ -1478,8 +1484,8 @@ fn journal_decode_mid_file_crc_damage_fails_open_without_writes() {
     let dir = decode_failure_fixture();
     let path = batch_path(dir.path(), 2);
     let mut bytes = std::fs::read(&path).unwrap();
-    // Flip a payload byte (the 56-byte v2 header stays intact); the CRC does not.
-    bytes[56] ^= 1;
+    // Flip a payload byte (the frame header stays intact); the CRC does not.
+    bytes[crate::journal::HEADER_LEN] ^= 1;
     std::fs::write(&path, bytes).unwrap();
     let before = journal_recovery_files(dir.path());
     let error = crate::journal::read_complete_batches_after_test(&dir.path().join("journal"), 0)
@@ -2087,8 +2093,8 @@ fn open_reports_temporaries_it_cannot_remove() {
 }
 
 /// The pre-binding frame is refused by name, with the clean-stop path in the
-/// message, instead of being decoded as if it carried the v2 header (ADR 0013:
-/// no compatibility surface of our own).
+/// message, instead of being decoded as if it carried the current header (ADR
+/// 0013: no compatibility surface of our own).
 #[test]
 fn format_one_batch_is_refused_naming_the_clean_stop_path() {
     let root = tempfile::tempdir().unwrap();
@@ -2128,8 +2134,11 @@ fn recovery_refuses_a_journal_copied_from_another_world() {
         "two worlds never share a store id"
     );
     let registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
-    let source_identity =
-        crate::journal::WalIdentity::new(source_store.store_uuid(), &registry.blocks);
+    let source_identity = crate::journal::WalIdentity::new(
+        source_store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        &registry.blocks,
+    );
     let mut writer = JournalWriter::open(&source.world_dir, 1, source_identity).unwrap();
     writer.append(1, 1, &[]).unwrap();
     writer.flush().unwrap();
@@ -2172,6 +2181,7 @@ fn recovery_refuses_a_tail_written_under_another_block_palette() {
     let registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
     let foreign = crate::journal::WalIdentity {
         store: store.store_uuid(),
+        branch: mc_world::store_marker::ROOT_BRANCH,
         palette: [0xAB; 8],
     };
     let mut writer = JournalWriter::open(&config.world_dir, 1, foreign).unwrap();
@@ -2192,7 +2202,11 @@ fn recovery_refuses_a_tail_written_under_another_block_palette() {
 
     // Positive control: the same tail under this build's palette recovers.
     std::fs::remove_file(batch_path(&config.world_dir, 1)).unwrap();
-    let legal = crate::journal::WalIdentity::new(store.store_uuid(), &registry.blocks);
+    let legal = crate::journal::WalIdentity::new(
+        store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        &registry.blocks,
+    );
     let mut writer = JournalWriter::open(&config.world_dir, 1, legal).unwrap();
     writer.append(1, 1, &[]).unwrap();
     writer.flush().unwrap();
@@ -2222,6 +2236,7 @@ fn recovery_refuses_a_batch_whose_store_id_is_zero() {
     // This build's palette, but no store: what a rewritten header looks like.
     let zero_store = crate::journal::WalIdentity {
         store: [0; 16],
+        branch: mc_world::store_marker::ROOT_BRANCH,
         palette: registry.blocks.palette_digest(),
     };
     let mut writer = JournalWriter::open(&config.world_dir, 1, zero_store).unwrap();
@@ -2255,6 +2270,7 @@ fn recovery_refuses_a_batch_whose_palette_digest_is_zero() {
     let registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
     let zero_palette = crate::journal::WalIdentity {
         store: store.store_uuid(),
+        branch: mc_world::store_marker::ROOT_BRANCH,
         palette: [0; 8],
     };
     let mut writer = JournalWriter::open(&config.world_dir, 1, zero_palette).unwrap();
@@ -2275,4 +2291,161 @@ fn recovery_refuses_a_batch_whose_palette_digest_is_zero() {
         text.contains("0000000000000000"),
         "the refusal names the zero digest: {text}"
     );
+}
+
+/// The store-bound frame without a branch (format 2) is refused like format 1,
+/// naming the clean-stop path: a tail of a build that could not tell two
+/// restored copies apart is never replayed as this copy's own.
+#[test]
+fn format_two_batch_is_refused_naming_the_clean_stop_path() {
+    let root = tempfile::tempdir().unwrap();
+    let journal = root.path().join("journal");
+    std::fs::create_dir_all(&journal).unwrap();
+    let mut frame = Vec::new();
+    frame.extend_from_slice(&0x534F_4C4Au32.to_le_bytes());
+    frame.extend_from_slice(&2u32.to_le_bytes());
+    frame.extend_from_slice(&[0x11; 16]);
+    frame.extend_from_slice(&[0x22; 8]);
+    frame.extend_from_slice(&1u64.to_le_bytes());
+    frame.extend_from_slice(&1u64.to_le_bytes());
+    frame.extend_from_slice(&0u32.to_le_bytes());
+    frame.extend_from_slice(&crc32fast::hash(b"").to_le_bytes());
+    std::fs::write(batch_path(root.path(), 1), &frame).unwrap();
+
+    let error = crate::journal::read_complete_batches_after_test(&journal, 0)
+        .expect_err("format 2 is not read");
+    let text = error.to_string();
+    assert!(text.contains("format 2"), "{text}");
+    assert!(text.contains("checkpoint"), "{text}");
+}
+
+/// DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY, the frame side: a CRC-clean
+/// tail of this very store but another branch is refused by recovery naming
+/// both branches, and the same tail moved to the opened branch by
+/// `rebind_tail` recovers — so the refusal is the branch binding alone.
+#[test]
+fn recovery_refuses_a_tail_of_another_branch_of_the_same_store() {
+    let root = tempfile::tempdir().unwrap();
+    let config = crate::config::CoreConfig::new(root.path().join("world"), 42);
+    let store = crate::native_checkpoint::tests::fixture_store(&config).unwrap();
+    let registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
+    let sibling = [0x5A; 8];
+    let opened = [0xC3; 8];
+    let mut writer = JournalWriter::open(
+        &config.world_dir,
+        1,
+        crate::journal::WalIdentity::new(store.store_uuid(), sibling, &registry.blocks),
+    )
+    .unwrap();
+    writer.append(1, 1, &[]).unwrap();
+    writer.flush().unwrap();
+    drop(writer);
+    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), opened, 0).unwrap();
+
+    let error = crate::native_checkpoint::recover_with_reader(
+        &config,
+        std::sync::Arc::clone(&registry),
+        store.checkpoint_reader().unwrap(),
+    )
+    .err()
+    .expect("another branch's tail is never replayed");
+    let text = error.to_string();
+    assert!(text.contains("branch 5a5a5a5a5a5a5a5a"), "{text}");
+    assert!(text.contains("copy is branch c3c3c3c3c3c3c3c3"), "{text}");
+
+    let moved = crate::journal::rebind_tail(
+        &config.world_dir,
+        0,
+        store.store_uuid(),
+        sibling,
+        opened,
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(moved, 1);
+    crate::native_checkpoint::recover_with_reader(
+        &config,
+        registry,
+        store.checkpoint_reader().unwrap(),
+    )
+    .expect("the tail on the opened branch recovers");
+}
+
+/// `rebind_tail` moves exactly the replayable tail of the copied branch: a
+/// batch at or below the checkpoint stays byte-identical, and a batch of any
+/// other branch is refused by name instead of joining the copy's branch.
+#[test]
+fn rebind_tail_moves_only_the_copied_branch_above_the_checkpoint() {
+    let root = tempfile::tempdir().unwrap();
+    let store = [0x11; 16];
+    let from = [0x22; 8];
+    let to = [0x33; 8];
+    let palette = [0x44; 8];
+    let identity = |branch| crate::journal::WalIdentity {
+        store,
+        branch,
+        palette,
+    };
+    let mut writer = JournalWriter::open(root.path(), 1, identity(from)).unwrap();
+    for tick in 1..=3 {
+        writer.append(tick, tick, &[]).unwrap();
+    }
+    writer.flush().unwrap();
+    drop(writer);
+    let below = std::fs::read(batch_path(root.path(), 1)).unwrap();
+
+    let mut rewritten = Vec::new();
+    assert_eq!(
+        crate::journal::rebind_tail(root.path(), 1, store, from, to, |batch| rewritten
+            .push(batch.to_path_buf()))
+        .unwrap(),
+        2
+    );
+    rewritten.sort();
+    assert_eq!(
+        rewritten,
+        [batch_path(root.path(), 2), batch_path(root.path(), 3)],
+        "the hook sees every rewrite, and only those"
+    );
+    assert_eq!(std::fs::read(batch_path(root.path(), 1)).unwrap(), below);
+    let tail =
+        crate::journal::read_complete_batches_after(&root.path().join("journal"), 1, identity(to))
+            .expect("the moved tail replays on the new branch");
+    assert_eq!(tail.len(), 2);
+
+    let mut foreign = JournalWriter::open(root.path(), 1, identity([0x55; 8])).unwrap();
+    foreign.append(4, 4, &[]).unwrap();
+    foreign.flush().unwrap();
+    drop(foreign);
+    let error = crate::journal::rebind_tail(root.path(), 3, store, to, [0x66; 8], |_| {})
+        .expect_err("a batch of another branch is not the copy's own");
+    let text = error.to_string();
+    assert!(text.contains("branch 5555555555555555"), "{text}");
+    assert!(text.contains("only the backup's own tail"), "{text}");
+}
+
+/// `world restore` creates the journal directory in every copy it publishes,
+/// so on a restored copy's branch a missing one is a lost tail and is refused
+/// by name; on the root branch it is the empty tail of a world whose journal
+/// was never opened.
+#[test]
+fn a_missing_journal_is_an_empty_tail_only_on_the_root_branch() {
+    let root = tempfile::tempdir().unwrap();
+    let journal = root.path().join("journal");
+    let identity = |branch| crate::journal::WalIdentity {
+        store: [0x11; 16],
+        branch,
+        palette: [0x44; 8],
+    };
+    let visit = |branch| {
+        crate::journal::visit_complete_batches_after(&journal, 7, identity(branch), |_| Ok(()))
+    };
+    assert_eq!(visit(mc_world::store_marker::ROOT_BRANCH).unwrap(), 7);
+    let text = visit([0x33; 8])
+        .expect_err("a restored copy without its journal lost its tail")
+        .to_string();
+    assert!(text.contains("branch 3333333333333333"), "{text}");
+    assert!(text.contains("restore the backup again"), "{text}");
+    std::fs::create_dir(&journal).unwrap();
+    assert_eq!(visit([0x33; 8]).unwrap(), 7);
 }

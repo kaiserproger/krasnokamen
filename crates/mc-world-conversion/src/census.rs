@@ -137,6 +137,8 @@ fn census(
     if !source.is_dir() {
         return Err(fail("source must be a directory"));
     }
+    // A staging directory is no world: refuse it before a lease file is created.
+    mc_world::store_marker::refuse_unpublished(&source).map_err(fail)?;
     let lease = mc_world::storage::open_for_lease(&source).map_err(fail)?;
     lease.try_lock().map_err(fail)?;
     receipt.input_hashes = hashes(&source)?;
@@ -371,7 +373,7 @@ fn census(
     mc_core::journal::visit_complete_batches_after(
         &source.join("journal"),
         manifest.tick,
-        mc_core::journal::WalIdentity::new(reader.store_uuid(), &registry.blocks),
+        mc_core::journal::WalIdentity::of_world(&source, reader.store_uuid(), &registry.blocks)?,
         |_| {
             tail += 1;
             Ok(())

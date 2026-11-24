@@ -10,7 +10,7 @@ import zlib
 from pathlib import Path
 from unittest import mock
 
-from tools.harness import profiles
+from tools.harness import profiles, wal_frame
 from tools.harness.backends import battle_recovery as br
 
 SPEAR = {"id": "minecraft:iron_spear", "count": 1, "components": {"minecraft:item_model": "krasnokamen_battle:iron_spear"}}
@@ -37,11 +37,17 @@ def history(first, last, spawns=(), removals=()):
             "removals": list(removals), "motions": {}}
 
 
+# The bindings a forged test batch carries: any 16-byte store, 8-byte branch, 8-byte palette.
+IDENTITY = (bytes(range(1, 17)), bytes(range(51, 59)), bytes(range(101, 109)))
+
+
 def batch(directory: Path, low: int, high: int, lines: list[dict], *, corrupt: bool = False) -> Path:
     body = b"".join(json.dumps(line).encode() + b"\n" for line in lines)
-    crc = zlib.crc32(body) ^ (1 if corrupt else 0)
-    path = directory / f"batch-{low:020d}-{high:020d}.bin"
-    path.write_bytes(struct.pack("<IIQQII", 0x534F4C4A, 1, low, high, len(body), crc) + body)
+    frame = bytearray(wal_frame.encode(low, high, body, IDENTITY))
+    if corrupt:
+        frame[wal_frame.HEADER_LEN - 4] ^= 1  # the CRC field
+    path = directory / wal_frame.batch_name(low, high)
+    path.write_bytes(bytes(frame))
     return path
 
 
@@ -313,6 +319,44 @@ class RearmScenarioTests(unittest.TestCase):
         session.holder.capture.assert_called_once_with("precut-repeated-rearm")
         self.assertTrue(report["assertions"]["rearmed_twice_before_crash"])
         self.assertIs(br.VERDICTS["battle-rearm-recovery"], br.kit_census)
+
+
+class WalFrameTests(unittest.TestCase):
+    """The census reads the server's current WAL frame; a stale layout is refused, never misread."""
+
+    def test_read_batches_skips_a_torn_tail_and_refuses_an_older_format(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = batch(root, 1, 1, [{"Entity": {"id": 3, "uuid": "horse-id", "type_id": 67}}])
+            torn = batch(root, 2, 2, [{"Player": {"uuid": "x"}}])
+            torn.write_bytes(torn.read_bytes()[:-1])
+            self.assertEqual(br.read_batches([root]), {(1, 1): first})
+            self.assertEqual(br.wal_history({(1, 1): first})["spawns"][0]["uuid"], "horse-id")
+            torn.unlink()
+            # A format-1 frame (32-byte header) is what the server refuses by name; so does the census.
+            body = b'{"Player":{"uuid":"x"}}\n'
+            (root / wal_frame.batch_name(2, 2)).write_bytes(
+                struct.pack("<IIQQII", wal_frame.MAGIC, 1, 2, 2, len(body), zlib.crc32(body)) + body)
+            with self.assertRaisesRegex(br.Incomplete, "format 1"):
+                br.read_batches([root])
+
+    def test_windup_observer_waits_for_a_torn_batch_and_refuses_an_older_format(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            torn = batch(root, 1, 1, [{"Entity": {"id": 3, "uuid": "horse-id", "type_id": 67}}])
+            whole = torn.read_bytes()
+            torn.write_bytes(whole[:-1])
+            observer = br.WindupObserver(root, 67)
+            observer.update()
+            self.assertEqual((observer.last_tick, observer.horses), (-1, {}))
+            torn.write_bytes(whole)
+            observer.update()
+            self.assertEqual((observer.last_tick, observer.horses), (1, {3: "horse-id"}))
+            body = b"{}\n"
+            (root / wal_frame.batch_name(2, 2)).write_bytes(
+                struct.pack("<IIQQII", wal_frame.MAGIC, 1, 2, 2, len(body), zlib.crc32(body)) + body)
+            with self.assertRaisesRegex(wal_frame.FrameError, "format 1"):
+                observer.update()
 
 
 class ClientKitTests(unittest.TestCase):

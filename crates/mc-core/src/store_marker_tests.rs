@@ -225,7 +225,13 @@ fn a_marker_from_another_store_is_refused() {
 
     let ours = marker(&config);
     let foreign = [0x5a; 16];
-    store_marker::write(&config.world_dir, foreign, ours.checkpoint_tick).unwrap();
+    store_marker::write(
+        &config.world_dir,
+        foreign,
+        store_marker::ROOT_BRANCH,
+        ours.checkpoint_tick,
+    )
+    .unwrap();
     let error = Core::open(config.clone())
         .expect_err("foreign marker")
         .to_string();
@@ -267,6 +273,7 @@ fn a_store_ahead_of_the_marker_is_the_crash_window_and_rewrites_the_marker() {
     store_marker::write(
         &config.world_dir,
         marker.store_uuid,
+        store_marker::ROOT_BRANCH,
         marker.checkpoint_tick - 1,
     )
     .unwrap();
@@ -328,7 +335,13 @@ fn an_interrupted_first_start_publishes_the_marker_once_and_then_refuses() {
         "{error}"
     );
     // Restore the pair so the temporary world is left valid.
-    store_marker::write(&config.world_dir, marker.store_uuid, marker.checkpoint_tick).unwrap();
+    store_marker::write(
+        &config.world_dir,
+        marker.store_uuid,
+        store_marker::ROOT_BRANCH,
+        marker.checkpoint_tick,
+    )
+    .unwrap();
 }
 
 /// SM2-3: the marker write fails at real file I/O (its temporary path is a

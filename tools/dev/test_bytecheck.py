@@ -1,4 +1,4 @@
-"""WAL v2 framing and X1/X2/X3 classifier tests, not producer byte proofs."""
+"""WAL v3 framing and X1/X2/X3 classifier tests, not producer byte proofs."""
 import base64
 import copy
 import json
@@ -12,8 +12,9 @@ from tools.dev import bytecheck
 def frame(entries):
     payload = b''.join(json.dumps(entry, separators=(',', ':')).encode() + b'\n'
                        for entry in entries)
-    header = struct.pack('<II16s8sQQII', 0x534F4C4A, 2, bytes(range(16)),
-                         bytes(range(8)), 2, 2, len(payload), zlib.crc32(payload))
+    header = struct.pack('<II16s8s8sQQII', 0x534F4C4A, 3, bytes(range(16)),
+                         bytes(range(8)), bytes(range(8, 16)), 2, 2, len(payload),
+                         zlib.crc32(payload))
     return header + payload
 
 
@@ -81,13 +82,13 @@ class WalClassificationTests(unittest.TestCase):
 
     def test_incomplete_headers_refuse(self):
         raw = frame([{'Entity': {'id': 1}}])
-        for length in range(56):
+        for length in range(64):
             with self.subTest(length=length):
-                with self.assertRaisesRegex(SystemExit, 'incomplete WAL v2'):
+                with self.assertRaisesRegex(SystemExit, 'incomplete WAL v3'):
                     bytecheck.wal_lines(artifact(raw[:length]))
 
-    def test_non_v2_versions_refuse(self):
-        for version in (0, 1, 3):
+    def test_non_v3_versions_refuse(self):
+        for version in (0, 1, 2, 4):
             with self.subTest(version=version):
                 raw = bytearray(frame([{'Entity': {'id': 1}}]))
                 struct.pack_into('<I', raw, 4, version)
@@ -107,9 +108,9 @@ class WalClassificationTests(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, 'WAL frame length mismatch'):
                     bytecheck.wal_lines(artifact(invalid))
 
-    def test_wrong_v2_length_refuses(self):
+    def test_wrong_v3_length_refuses(self):
         raw = bytearray(frame([{'Entity': {'id': 1}}]))
-        struct.pack_into('<I', raw, 48, len(raw))
+        struct.pack_into('<I', raw, 56, len(raw))
         with self.assertRaisesRegex(SystemExit, 'WAL frame length mismatch'):
             bytecheck.wal_lines(artifact(raw))
 

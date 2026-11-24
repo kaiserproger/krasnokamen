@@ -1,11 +1,87 @@
 use super::*;
 use mc_world::native::{NativeReadOnlyStore, NativeStore};
 
+/// A point where an interruption test stops a restore the way a killed process
+/// would: [`interruption_point`] panics there, so unwinding skips every refusal
+/// path's cleanup and only drops the leases, as the kernel drops a dead
+/// process's locks.
+#[derive(Debug)]
+pub(super) enum Step<'a> {
+    /// A file was copied and synced.
+    Copied(&'a Path),
+    /// A batch of the copied tail is about to move to the copy's branch.
+    Rebinding,
+    /// The staged world is complete and durable; the target is untouched.
+    Publishing,
+    /// The staged world was renamed over the target.
+    Published,
+}
+
+type Interruption = Box<dyn FnMut(&Step<'_>) -> bool>;
+
+thread_local! {
+    static INTERRUPTION: std::cell::RefCell<Option<Interruption>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Stop here when the armed interruption says so (once).
+pub(super) fn interruption_point(step: &Step<'_>) {
+    let stop = INTERRUPTION.with(|armed| {
+        let mut armed = armed.borrow_mut();
+        let stop = armed.as_mut().is_some_and(|stops| stops(step));
+        if stop {
+            *armed = None;
+        }
+        stop
+    });
+    assert!(!stop, "interrupted at {step:?}");
+}
+
+/// Run `run_restore` as a process killed at the first step `stops` names;
+/// return whether it stopped there (false: it ran to an end of its own).
+fn interrupted_restore(
+    backup: &Path,
+    target: &Path,
+    stops: impl FnMut(&Step<'_>) -> bool + 'static,
+) -> bool {
+    INTERRUPTION.with(|armed| *armed.borrow_mut() = Some(Box::new(stops)));
+    let outcome =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run_restore(backup, target)));
+    let unfired = INTERRUPTION
+        .with(|armed| armed.borrow_mut().take())
+        .is_some();
+    outcome.is_err() && !unfired
+}
+
+/// Run `run_restore` to its own end with `observe` called at every
+/// interruption point; a failed assertion in `observe` fails the test.
+fn observed_restore(
+    backup: &Path,
+    target: &Path,
+    mut observe: impl FnMut(&Step<'_>) + 'static,
+) -> Result<()> {
+    INTERRUPTION.with(|armed| {
+        *armed.borrow_mut() = Some(Box::new(move |step| {
+            observe(step);
+            false
+        }));
+    });
+    let outcome = run_restore(backup, target);
+    INTERRUPTION.with(|armed| armed.borrow_mut().take());
+    outcome
+}
+
 fn seed_world(root: &Path) {
     std::fs::create_dir_all(root.join("native")).unwrap();
     let store = NativeStore::create(&root.join(NATIVE_DATABASE), [7; 32]).unwrap();
     // Every world this build creates has a checkpoint marker; restore requires it.
-    mc_world::store_marker::write(root, store.store_uuid(), 0).unwrap();
+    mc_world::store_marker::write(
+        root,
+        store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        0,
+    )
+    .unwrap();
     drop(store);
     let mut journal =
         mc_core::journal::JournalWriter::open(root, 1, mc_core::journal::test_wal_identity(root))
@@ -66,7 +142,11 @@ fn backup_roundtrip_preserves_real_core_store_wal_and_metadata() {
             .as_path(),
     ))
     .unwrap();
-    let identity = mc_core::journal::WalIdentity::new(store_uuid, &registry.blocks);
+    let identity = mc_core::journal::WalIdentity::new(
+        store_uuid,
+        mc_world::store_marker::ROOT_BRANCH,
+        &registry.blocks,
+    );
     let mut journal = mc_core::journal::JournalWriter::open(&world, 1, identity).unwrap();
     journal.append(image.tick + 1, image.tick + 1, &[]).unwrap();
     journal.flush().unwrap();
@@ -96,12 +176,41 @@ fn backup_roundtrip_preserves_real_core_store_wal_and_metadata() {
 
     let restored = root.path().join("restored");
     run_restore(&backup, &restored).unwrap();
+    // A restored copy is the same world on a branch of its own: the marker and
+    // the replayable tail name the new branch, every other byte is the backup's.
+    let source_marker = mc_world::store_marker::read(&world).unwrap().unwrap();
+    let restored_marker = mc_world::store_marker::read(&restored).unwrap().unwrap();
+    assert_eq!(restored_marker.store_uuid, source_marker.store_uuid);
+    assert_eq!(
+        restored_marker.checkpoint_tick,
+        source_marker.checkpoint_tick
+    );
+    assert_ne!(
+        restored_marker.branch, source_marker.branch,
+        "the restore starts a branch"
+    );
+    assert_ne!(restored_marker.branch, mc_world::store_marker::ROOT_BRANCH);
     for name in manifest.files.keys() {
-        assert_eq!(
-            std::fs::read(world.join(name)).unwrap(),
-            std::fs::read(restored.join(name)).unwrap(),
-            "{name} differs after restore",
-        );
+        if name == mc_world::store_marker::MARKER_FILE {
+            continue;
+        }
+        let source = std::fs::read(world.join(name)).unwrap();
+        let mut copy = std::fs::read(restored.join(name)).unwrap();
+        let replayable = name
+            .strip_prefix("journal/batch-")
+            .and_then(|range| range.strip_suffix(".bin"))
+            .and_then(|range| range.split_once('-'))
+            .is_some_and(|(_, hi)| hi.parse::<u64>().unwrap() > source_marker.checkpoint_tick);
+        if replayable {
+            // Bytes 24..32 of the frame header are its branch.
+            assert_eq!(
+                &copy[24..32],
+                &restored_marker.branch,
+                "{name} keeps the old branch"
+            );
+            copy[24..32].copy_from_slice(&source[24..32]);
+        }
+        assert_eq!(source, copy, "{name} differs after restore");
     }
     assert!(!restored.join(BACKUP_MANIFEST).exists());
     #[cfg(not(windows))]
@@ -587,9 +696,12 @@ fn offline_backup_and_restore_keep_the_store_and_its_marker_paired() {
 
     let target = root.path().join("restored");
     run_restore(&backup, &target).unwrap();
+    let restored = mc_world::store_marker::read(&target)
+        .unwrap()
+        .expect("the marker is restored with the store");
     assert_eq!(
-        mc_world::store_marker::read(&target).unwrap(),
-        Some(source),
+        (restored.store_uuid, restored.checkpoint_tick),
+        (source.store_uuid, source.checkpoint_tick),
         "the marker is restored with the store"
     );
     let (store_uuid, store_tick) =
@@ -599,6 +711,60 @@ fn offline_backup_and_restore_keep_the_store_and_its_marker_paired() {
     // The pair is admitted, not merely copied: the restored world serves.
     let recovered = mc_core::Core::open(live_config(target)).unwrap();
     recovered.shutdown();
+}
+
+/// DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY: restore one backup twice and let
+/// one copy run on alone. Its journal next to the other copy's store is refused
+/// by name instead of replayed: the store id is shared by design (a restored
+/// backup is the same world), so only the branch each restore mints tells the
+/// two timelines apart.
+#[test]
+fn a_restored_copy_refuses_the_journal_of_another_copy_of_its_backup() {
+    let root = tempfile::tempdir().unwrap();
+    let world = stopped_core_world(root.path());
+    let backup = root.path().join("backup");
+    run_backup(&world, &backup).unwrap();
+    let left = root.path().join("left");
+    let right = root.path().join("right");
+    run_restore(&backup, &left).unwrap();
+    run_restore(&backup, &right).unwrap();
+
+    // The right copy runs on and publishes a tail of its own timeline, bound
+    // exactly as its serve binds it: store id, marker branch, build palette.
+    let marker = mc_world::store_marker::read(&right).unwrap().unwrap();
+    let registry = mc_core::registry::CoreRegistry::load(Some(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/vanilla")
+            .as_path(),
+    ))
+    .unwrap();
+    let identity =
+        mc_core::journal::WalIdentity::of_world(&right, marker.store_uuid, &registry.blocks)
+            .unwrap();
+    let tick = marker.checkpoint_tick + 1;
+    let mut journal = mc_core::journal::JournalWriter::open(&right, 1, identity).unwrap();
+    journal.append(tick, tick, &[]).unwrap();
+    journal.flush().unwrap();
+    drop(journal);
+
+    // The operator mistake the row names: the right copy's journal ends up next
+    // to the left copy's store, in exactly the tick range that continues it.
+    if left.join("journal").exists() {
+        std::fs::remove_dir_all(left.join("journal")).unwrap();
+    }
+    recopy_tree(&right.join("journal"), &left.join("journal"));
+
+    let opened = mc_core::Core::open(live_config(left));
+    let refusal = opened.as_ref().err().map(ToString::to_string);
+    if let Ok(core) = opened {
+        core.shutdown();
+    }
+    assert!(
+        refusal
+            .as_deref()
+            .is_some_and(|text| text.contains("branch")),
+        "the left copy replayed the right copy's journal: {refusal:?}"
+    );
 }
 
 #[test]
@@ -612,7 +778,13 @@ fn restore_refuses_a_marker_from_another_store() {
     // Replace the copied marker with a foreign store's marker and keep the
     // manifest honest, so only the pair check can refuse the restore.
     let foreign = [0x77; 16];
-    mc_world::store_marker::write(&backup, foreign, source.checkpoint_tick).unwrap();
+    mc_world::store_marker::write(
+        &backup,
+        foreign,
+        mc_world::store_marker::ROOT_BRANCH,
+        source.checkpoint_tick,
+    )
+    .unwrap();
     change_manifest(&backup, |manifest| {
         let digest = digest_file(&backup.join(mc_world::store_marker::MARKER_FILE)).unwrap();
         manifest["files"][mc_world::store_marker::MARKER_FILE] = serde_json::Value::String(digest);
@@ -629,6 +801,504 @@ fn restore_refuses_a_marker_from_another_store() {
         !target.join(NATIVE_DATABASE).exists(),
         "a refused restore keeps no store"
     );
+    assert!(
+        !root.path().join("restored.restore-staging").exists(),
+        "a refused restore keeps no staging directory"
+    );
+}
+
+/// A stopped Core world with `ticks` one-tick batches published above its
+/// checkpoint, bound exactly as its serve binds them, backed up offline.
+fn backup_with_tail(root: &Path, ticks: u64) -> (PathBuf, mc_world::store_marker::StoreMarker) {
+    let world = stopped_core_world(root);
+    let marker = mc_world::store_marker::read(&world).unwrap().unwrap();
+    let registry = mc_core::registry::CoreRegistry::load(Some(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../data/vanilla")
+            .as_path(),
+    ))
+    .unwrap();
+    let identity =
+        mc_core::journal::WalIdentity::of_world(&world, marker.store_uuid, &registry.blocks)
+            .unwrap();
+    let mut journal = mc_core::journal::JournalWriter::open(&world, 1, identity).unwrap();
+    for tick in marker.checkpoint_tick + 1..=marker.checkpoint_tick + ticks {
+        journal.append(tick, tick, &[]).unwrap();
+    }
+    journal.flush().unwrap();
+    drop(journal);
+    let backup = root.join("backup");
+    run_backup(&world, &backup).unwrap();
+    (backup, marker)
+}
+
+/// Branch bytes (frame offset 24..32) of every batch in `world` above `tick`.
+fn tail_branches(world: &Path, tick: u64) -> Vec<[u8; 8]> {
+    let mut branches = Vec::new();
+    for entry in std::fs::read_dir(world.join("journal")).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_str().unwrap().to_owned();
+        let replayable = name
+            .strip_prefix("batch-")
+            .and_then(|range| range.strip_suffix(".bin"))
+            .and_then(|range| range.split_once('-'))
+            .is_some_and(|(_, hi)| hi.parse::<u64>().unwrap() > tick);
+        if replayable {
+            let bytes = std::fs::read(&path).unwrap();
+            branches.push(bytes[24..32].try_into().unwrap());
+        }
+    }
+    branches
+}
+
+/// What an interrupted restore left at `target` must not be a world: at most
+/// the empty directory the restore leased (and its lease file).
+fn assert_no_world_at(target: &Path, backup: &mc_world::store_marker::StoreMarker) {
+    let left: Vec<_> = std::fs::read_dir(target)
+        .map(|entries| {
+            entries
+                .map(|entry| entry.unwrap().path())
+                .filter(|path| !is_lease_file(path))
+                .collect()
+        })
+        .unwrap_or_default();
+    assert!(
+        left.is_empty(),
+        "an interrupted restore left {left:?} at the target, marker {:?}; the backup's branch is {:?}",
+        mc_world::store_marker::read(target).ok().flatten(),
+        backup.branch,
+    );
+}
+
+/// Every open refuses the staging directory by its reserved name, whatever
+/// marker it holds: the runtime, offline recovery, the offline tools' store
+/// entry and backup. Nothing is written into it or beside it.
+fn assert_staging_refused_by_every_open(staging: &Path) {
+    let refused = |open: &str, outcome: std::result::Result<(), String>| {
+        let refusal = outcome.err();
+        assert!(
+            refusal
+                .as_deref()
+                .is_some_and(|text| text.contains("unpublished staging directory")),
+            "{open} did not refuse the staging directory {} by its reserved name \
+             (None: it opened): {refusal:?}",
+            staging.display()
+        );
+    };
+    let opened = mc_core::Core::open(live_config(staging.to_path_buf()));
+    refused(
+        "Core::open",
+        opened
+            .map(|core| core.shutdown())
+            .map_err(|e| e.to_string()),
+    );
+    refused(
+        "offline recovery",
+        mc_core::native_checkpoint::recover_offline(&live_config(staging.to_path_buf()))
+            .map(drop)
+            .map_err(|e| e.to_string()),
+    );
+    refused(
+        "the offline tools' store entry",
+        NativeStore::check_marker_file(staging, &staging.join(NATIVE_DATABASE))
+            .map_err(|e| e.to_string()),
+    );
+    let out = staging.with_file_name("backup-of-the-staging-directory");
+    refused(
+        "backup",
+        run_backup(staging, &out)
+            .map(drop)
+            .map_err(|e| e.to_string()),
+    );
+    assert!(!out.exists(), "a refused backup wrote {}", out.display());
+}
+
+/// The staging directory of a restore stopped before its own marker: no
+/// marker yet, and every open refuses it.
+fn assert_staging_does_not_open(staging: &Path) {
+    assert_eq!(mc_world::store_marker::read(staging).unwrap(), None);
+    assert_staging_refused_by_every_open(staging);
+}
+
+/// Review blocker (DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY): a restore
+/// killed after its last copy and before its first rebind must leave nothing
+/// that opens. Copied in place, that copy is the backup's store, marker and
+/// tail on the backup's own branch, which every other copy of the backup shares.
+#[test]
+fn a_restore_interrupted_before_its_first_rebind_leaves_nothing_that_opens() {
+    let root = tempfile::tempdir().unwrap();
+    let (backup, source) = backup_with_tail(root.path(), 2);
+    let last = read_manifest(&backup)
+        .unwrap()
+        .files
+        .into_keys()
+        .rfind(|name| name != mc_world::store_marker::MARKER_FILE)
+        .unwrap();
+    let target = root.path().join("restored");
+    let staging = root.path().join("restored.restore-staging");
+    let interrupted = interrupted_restore(
+        &backup,
+        &target,
+        move |step| matches!(step, Step::Copied(path) if path.ends_with(&last)),
+    );
+    assert!(interrupted, "the restore never copied its last file");
+    assert_no_world_at(&target, &source);
+    assert_staging_does_not_open(&staging);
+    assert!(
+        tail_branches(&staging, source.checkpoint_tick)
+            .iter()
+            .all(|branch| *branch == source.branch),
+        "nothing was rebound yet"
+    );
+
+    // The next restore refuses the leftover instead of reusing or removing it.
+    let error = run_restore(&backup, &target).unwrap_err().to_string();
+    assert!(error.contains("interrupted restore"), "{error}");
+    std::fs::remove_dir_all(&staging).unwrap();
+    run_restore(&backup, &target).unwrap();
+    let restored = mc_world::store_marker::read(&target).unwrap().unwrap();
+    assert_ne!(restored.branch, source.branch);
+}
+
+/// A restore killed between two batches of its tail rebind leaves one batch on
+/// the new branch and one on the backup's, with no marker naming either: the
+/// staging directory does not open and the target holds nothing.
+#[test]
+fn a_restore_interrupted_inside_its_tail_rebind_leaves_nothing_that_opens() {
+    let root = tempfile::tempdir().unwrap();
+    let (backup, source) = backup_with_tail(root.path(), 2);
+    let target = root.path().join("restored");
+    let staging = root.path().join("restored.restore-staging");
+    let mut rebinds = 0;
+    let interrupted = interrupted_restore(&backup, &target, move |step| {
+        rebinds += usize::from(matches!(step, Step::Rebinding));
+        rebinds == 2
+    });
+    assert!(interrupted, "the restore never reached its second rebind");
+    assert_no_world_at(&target, &source);
+    let branches = tail_branches(&staging, source.checkpoint_tick);
+    assert_eq!(branches.len(), 2, "{branches:?}");
+    assert_eq!(
+        branches
+            .iter()
+            .filter(|branch| **branch == source.branch)
+            .count(),
+        1,
+        "exactly one batch moved: {branches:?}"
+    );
+    assert_staging_does_not_open(&staging);
+}
+
+/// A restore killed with its staged world complete and durable, just before
+/// publication, leaves the target exactly as it was (here an existing empty
+/// directory with a stale lock file) and the full copy beside it.
+#[test]
+fn a_restore_interrupted_before_publication_leaves_the_target_untouched() {
+    let root = tempfile::tempdir().unwrap();
+    let (backup, source) = backup_with_tail(root.path(), 2);
+    let target = root.path().join("restored");
+    let staging = root.path().join("restored.restore-staging");
+    std::fs::create_dir(&target).unwrap();
+    std::fs::write(target.join("session.lock"), b"stale lease, not state").unwrap();
+    let interrupted =
+        interrupted_restore(&backup, &target, |step| matches!(step, Step::Publishing));
+    assert!(interrupted, "the restore never reached publication");
+    let left: Vec<_> = std::fs::read_dir(&target)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .filter(|name| name != mc_world::storage::WORLD_LEASE_FILE_NAME)
+        .collect();
+    assert_eq!(
+        left,
+        ["session.lock"],
+        "the target changed before publication"
+    );
+    let staged = mc_world::store_marker::read(&staging).unwrap().unwrap();
+    assert_eq!(
+        (staged.store_uuid, staged.checkpoint_tick),
+        (source.store_uuid, source.checkpoint_tick)
+    );
+    assert_ne!(staged.branch, source.branch);
+    assert_ne!(staged.branch, mc_world::store_marker::ROOT_BRANCH);
+    assert_eq!(
+        tail_branches(&staging, source.checkpoint_tick),
+        [staged.branch; 2]
+    );
+    assert_staging_refused_by_every_open(&staging);
+
+    std::fs::remove_dir_all(&staging).unwrap();
+    run_restore(&backup, &target).unwrap();
+    assert!(!target.join("session.lock").exists());
+    let recovered = mc_core::Core::open(live_config(target)).unwrap();
+    recovered.shutdown();
+}
+
+/// Persistence re-review blocker 1: at the publication point the staged copy is
+/// complete, its own valid marker written and every directory synced, and still
+/// nothing opens it while the restore runs: the runtime, offline recovery, the
+/// tools' store entry and backup refuse the reserved name. Opened, it would be
+/// changed under the restore and then published. A target with a staging name
+/// is refused too. The restore then publishes a world that opens.
+#[test]
+fn a_staged_copy_with_its_own_marker_is_refused_by_every_open_at_publication() {
+    let root = tempfile::tempdir().unwrap();
+    let (backup, source) = backup_with_tail(root.path(), 2);
+    let target = root.path().join("restored");
+    let staging = root.path().join("restored.restore-staging");
+    let checked = std::rc::Rc::new(std::cell::Cell::new(false));
+    let seen = std::rc::Rc::clone(&checked);
+    let probe = staging.clone();
+    observed_restore(&backup, &target, move |step| {
+        if matches!(step, Step::Publishing) {
+            let staged = mc_world::store_marker::read(&probe).unwrap().unwrap();
+            assert_ne!(staged.branch, source.branch);
+            assert_staging_refused_by_every_open(&probe);
+            seen.set(true);
+        }
+    })
+    .unwrap();
+    assert!(checked.get(), "the restore never reached publication");
+    assert!(!staging.exists());
+    let recovered = mc_core::Core::open(live_config(target)).unwrap();
+    recovered.shutdown();
+
+    let reserved = root.path().join("other.restore-staging");
+    let error = run_restore(&backup, &reserved).unwrap_err().to_string();
+    assert!(error.contains("unpublished staging directory"), "{error}");
+    assert!(!reserved.exists());
+}
+
+/// Persistence re-review blocker 2: a publication that fails leaves the target
+/// as it finds it. The restore keeps the target lease through publication and
+/// cleanup, and cleanup removes only its own staging directory, never the
+/// target recursively: a file another writer put into the target this restore
+/// created survives the refusal.
+#[test]
+fn a_failed_publication_removes_only_the_restores_own_staging() {
+    let root = tempfile::tempdir().unwrap();
+    let (backup, _) = backup_with_tail(root.path(), 2);
+    let target = root.path().join("restored");
+    let staging = root.path().join("restored.restore-staging");
+    let probe = target.clone();
+    let error = observed_restore(&backup, &target, move |step| {
+        if matches!(step, Step::Publishing) {
+            assert!(
+                ExclusiveLease::acquire(&probe).is_err(),
+                "the target lease is not held at publication"
+            );
+            // A writer that ignores the lease puts its data into the target.
+            std::fs::write(probe.join("level.dat"), b"another world").unwrap();
+        }
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("not empty"), "{error}");
+    assert_eq!(
+        std::fs::read(target.join("level.dat")).ok().as_deref(),
+        Some(&b"another world"[..]),
+        "the failed restore's cleanup removed data it does not own"
+    );
+    assert!(
+        !staging.exists(),
+        "the restore's own staging directory stayed"
+    );
+}
+
+/// A restore killed right after the rename, before its final directory sync,
+/// has published the complete world: its own branch, its rebound tail, no
+/// staging directory left, and it opens.
+#[test]
+fn a_restore_interrupted_after_publication_leaves_the_complete_world() {
+    let root = tempfile::tempdir().unwrap();
+    let (backup, source) = backup_with_tail(root.path(), 2);
+    let target = root.path().join("restored");
+    let interrupted = interrupted_restore(&backup, &target, |step| matches!(step, Step::Published));
+    assert!(interrupted, "the restore never published");
+    assert!(!root.path().join("restored.restore-staging").exists());
+    assert!(target.join("journal").is_dir());
+    let restored = mc_world::store_marker::read(&target).unwrap().unwrap();
+    assert_ne!(restored.branch, source.branch);
+    assert_ne!(restored.branch, mc_world::store_marker::ROOT_BRANCH);
+    assert_eq!(
+        tail_branches(&target, source.checkpoint_tick),
+        [restored.branch; 2]
+    );
+    let recovered = mc_core::Core::open(live_config(target)).unwrap();
+    recovered.shutdown();
+}
+
+/// Replay refuses a restored copy without a journal directory (a lost tail),
+/// so a restore always publishes one and a backup of a copy whose journal is
+/// empty keeps the empty directory: that backup verifies.
+#[test]
+fn a_backup_of_a_restored_copy_with_an_empty_journal_verifies() {
+    let root = tempfile::tempdir().unwrap();
+    let world = stopped_core_world(root.path());
+    let first = root.path().join("first");
+    run_backup(&world, &first).unwrap();
+    let restored = root.path().join("restored");
+    run_restore(&first, &restored).unwrap();
+    assert!(restored.join("journal").is_dir());
+    let second = root.path().join("second");
+    run_backup(&restored, &second).unwrap();
+    assert!(second.join("journal").is_dir());
+    verify_backup(&second, &live_config(restored)).unwrap();
+}
+
+/// Persistence re-review blocker 3: a restored copy that lost `journal/` is
+/// refused by backup on its own, before any content check (which the command
+/// skips without a content cache), so its lost tail never becomes the empty
+/// journal a restore would create.
+#[test]
+fn a_backup_refuses_a_restored_copy_that_lost_its_journal() {
+    let root = tempfile::tempdir().unwrap();
+    let world = stopped_core_world(root.path());
+    let first = root.path().join("first");
+    run_backup(&world, &first).unwrap();
+    let restored = root.path().join("restored");
+    run_restore(&first, &restored).unwrap();
+    std::fs::remove_dir_all(restored.join("journal")).unwrap();
+    let second = root.path().join("second");
+    let error = run_backup(&restored, &second).unwrap_err().to_string();
+    assert!(error.contains("without its journal/"), "{error}");
+    assert!(!second.exists());
+}
+
+/// Persistence re-review blocker 3, restore side: a backup of a restored copy
+/// without its `journal/` is refused instead of restored with a fresh empty
+/// one, and the refused restore leaves no target or staging directory.
+#[test]
+fn a_restore_refuses_a_backup_of_a_restored_copy_without_its_journal() {
+    let root = tempfile::tempdir().unwrap();
+    let world = stopped_core_world(root.path());
+    let first = root.path().join("first");
+    run_backup(&world, &first).unwrap();
+    let restored = root.path().join("restored");
+    run_restore(&first, &restored).unwrap();
+    let second = root.path().join("second");
+    run_backup(&restored, &second).unwrap();
+    // The copy's journal is empty, so the manifest stays complete without it.
+    std::fs::remove_dir(second.join("journal")).unwrap();
+    let again = root.path().join("again");
+    let error = run_restore(&second, &again).unwrap_err().to_string();
+    assert!(error.contains("has no journal/"), "{error}");
+    assert!(!again.exists());
+    assert!(!root.path().join("again.restore-staging").exists());
+}
+
+/// Turn the stopped frozen `world` into a legacy frozen-clock world the way an
+/// older binary left it (no debt anchors, no `held_since`) and append one tail
+/// batch on the world's own branch; return the checkpoint tick.
+fn make_legacy_clock(world: &Path, config: &mc_core::CoreConfig) -> u64 {
+    use mc_core::journal::{CheckpointManifest, JournalEntry, JournalWriter, WalIdentity};
+    let identity = mc_core::native_checkpoint::native_identity(config);
+    let store = NativeStore::open_checked(world, identity).unwrap();
+    let mut image = store.read_checkpoint().unwrap();
+    let checkpoint = image.tick;
+    let mut manifest: CheckpointManifest =
+        serde_json::from_slice(&image.globals["checkpoint"].payload).unwrap();
+    let climate = manifest.climate.as_mut().unwrap();
+    climate.sim_debt_anchored_since = None;
+    let mc_core::weather::GameClockImage::Held { held_since, .. } = &mut climate.game_clock else {
+        panic!("frozen checkpoint required")
+    };
+    *held_since = None;
+    let tail_climate = *climate;
+    for debt in &mut manifest.debt {
+        debt.held_anchor = None;
+    }
+    for image in manifest.dimensions.values_mut() {
+        for debt in &mut image.debt {
+            debt.held_anchor = None;
+        }
+    }
+    image.globals.get_mut("checkpoint").unwrap().payload = serde_json::to_vec(&manifest).unwrap();
+    let registry =
+        mc_core::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref()).unwrap();
+    store
+        .commit_checkpoint(
+            mc_world::native::NativeCheckpoint {
+                tick: checkpoint,
+                previous_tick: checkpoint,
+                chunks: &[],
+                entities: &[],
+                players: &[],
+                globals: &image.globals,
+            },
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
+    let wal = WalIdentity::of_world(world, store.store_uuid(), &registry.blocks).unwrap();
+    drop(store);
+    let mut writer = JournalWriter::open(world, 1, wal).unwrap();
+    let tail = [JournalEntry::Climate {
+        value: tail_climate,
+    }];
+    writer
+        .append(checkpoint + 1, checkpoint + 1, &tail)
+        .unwrap();
+    writer.flush().unwrap();
+    checkpoint
+}
+
+/// Persistence re-review 3 blocker: `world upgrade-game-clock` on a restored
+/// copy (a branch of its own) archives the covered batches but keeps
+/// `journal/`, so the upgraded copy opens, backs up and restores. Moving the
+/// whole directory away left a restored copy that every open refuses. Round 4:
+/// the marker pins the converted checkpoint on the copy's branch before that.
+#[test]
+fn a_restored_copy_upgraded_from_a_legacy_clock_keeps_its_journal() {
+    let root = tempfile::tempdir().unwrap();
+    let mut frozen = live_config(root.path().join("world"));
+    frozen.start_frozen = true;
+    let core = mc_core::Core::open(frozen).unwrap();
+    core.subscribe().blocking_recv().unwrap();
+    core.shutdown();
+    drop(core);
+    let first = root.path().join("first");
+    run_backup(&root.path().join("world"), &first).unwrap();
+    let copy = root.path().join("copy");
+    run_restore(&first, &copy).unwrap();
+    let restored = mc_world::store_marker::read(&copy).unwrap().unwrap();
+    let branch = restored.branch;
+    assert_ne!(branch, mc_world::store_marker::ROOT_BRANCH);
+    let checkpoint = make_legacy_clock(&copy, &live_config(copy.clone()));
+
+    let operator = live_config(root.path().join("original"));
+    std::fs::create_dir(&operator.world_dir).unwrap();
+    let report = mc_world_tools::game_clock_upgrade::upgrade_game_clock(&operator, &copy).unwrap();
+    assert_eq!(report.tick, checkpoint + 1);
+    let batch = format!("batch-{:020}-{:020}.bin", checkpoint + 1, checkpoint + 1);
+    let archive = copy.join(format!("journal-before-game-clock-{checkpoint}"));
+    assert!(
+        archive.join(&batch).is_file(),
+        "the tail batch was not archived"
+    );
+    // Read before any open (`Core::open` itself advances a lagging marker): the
+    // converted checkpoint is pinned with the copy's own store id and branch.
+    assert_eq!(
+        mc_world::store_marker::read(&copy).unwrap(),
+        Some(mc_world::store_marker::StoreMarker::new(
+            restored.store_uuid,
+            branch,
+            report.tick
+        )),
+        "the WAL was archived with the marker still at the old checkpoint"
+    );
+
+    let reopened = mc_core::Core::open(live_config(copy.clone()));
+    let refusal = reopened.as_ref().err().map(ToString::to_string);
+    if let Ok(core) = reopened {
+        core.shutdown();
+    }
+    assert_eq!(refusal, None, "the upgraded restored copy does not open");
+    let second = root.path().join("second");
+    run_backup(&copy, &second).unwrap();
+    let again = root.path().join("again");
+    run_restore(&second, &again).unwrap();
+    let recovered = mc_core::Core::open(live_config(again)).unwrap();
+    recovered.shutdown();
 }
 
 /// Hot backup → the real `restore` command with installed content: the copy of

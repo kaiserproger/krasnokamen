@@ -496,7 +496,11 @@ fn world_with_unrecovered_block_write(world_dir: &std::path::Path) -> crate::con
     let mut journal = mc_core::journal::JournalWriter::open(
         world_dir,
         1,
-        mc_core::journal::WalIdentity::new(store_uuid, &registry.blocks),
+        mc_core::journal::WalIdentity::new(
+            store_uuid,
+            mc_world::store_marker::ROOT_BRANCH,
+            &registry.blocks,
+        ),
     )
     .unwrap();
     journal

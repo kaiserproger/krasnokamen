@@ -991,7 +991,11 @@ fn recover_with_clock(
     let recovered_tick = crate::journal::visit_complete_batches_after(
         &config.world_dir.join("journal"),
         manifest.tick,
-        crate::journal::WalIdentity::new(reader.store_uuid(), &registry.blocks),
+        crate::journal::WalIdentity::of_world(
+            &config.world_dir,
+            reader.store_uuid(),
+            &registry.blocks,
+        )?,
         |batch| {
             let batches = [batch];
             game_clock.observe_batches(&batches, legacy)?;
