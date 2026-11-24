@@ -4,8 +4,17 @@
 //! the WAL covering the lost interval is already pruned (Books R4-P1). The
 //! damaged commit slot is gone, so the store itself cannot record that the
 //! newer checkpoint ever existed. This module keeps a small fixed-size file
-//! next to the store with the world's immutable store id and the tick of the
-//! last checkpoint whose WAL was acknowledged and pruned.
+//! next to the store with the world's immutable store id, its branch and the
+//! tick of the last checkpoint whose WAL was acknowledged and pruned.
+//!
+//! The branch separates copies of one world. The store id is minted once and
+//! travels with every backup, so two copies restored from one backup share it;
+//! `world restore` therefore mints a fresh random branch for each copy, and the
+//! WAL frames carry it beside the store id
+//! (DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY). A world as created or
+//! imported is on [`ROOT_BRANCH`]. The branch cannot live in redb for the same
+//! reason the tick cannot: a repair that rolls the store back behind the
+//! restore would silently drop it.
 //!
 //! Writer order (see `mc-core`): redb Immediate commit, then this file
 //! (temporary file, `sync_all`, rename over the marker, fsync the directory),
@@ -22,18 +31,32 @@ use sha2::{Digest, Sha256};
 /// World-relative name of the marker file.
 pub const MARKER_FILE: &str = "checkpoint.marker";
 
-/// `KCMARK` + format version 1.
-const MAGIC: &[u8; 8] = b"KCMARK\x01\x00";
+/// Branch of a world as created or imported, before any restore.
+pub const ROOT_BRANCH: [u8; 8] = [0; 8];
+
+/// Root-branch marker: `KCMARK` + format 1, `[magic][store id][tick][sha256]`.
+/// It carries no branch field because the root branch is the only one a world
+/// has before a restore; every created or imported world writes this layout.
+const ROOT_MAGIC: &[u8; 8] = b"KCMARK\x01\x00";
+/// Restored-copy marker: `KCMARK` + format 2,
+/// `[magic][store id][branch][tick][sha256]`, written only for a branch other
+/// than [`ROOT_BRANCH`]. Each branch has exactly one encoding, so a format-2
+/// marker naming the root branch is corrupt.
+const BRANCH_MAGIC: &[u8; 8] = b"KCMARK\x02\x00";
 const UUID_AT: usize = 8;
-const TICK_AT: usize = UUID_AT + 16;
-const CHECKSUM_AT: usize = TICK_AT + 8;
-const LENGTH: usize = CHECKSUM_AT + 32;
+/// Where the root layout's tick and the restored layout's branch begin.
+const FIELDS_AT: usize = UUID_AT + 16;
+const ROOT_LENGTH: usize = FIELDS_AT + 8 + 32;
+const BRANCH_LENGTH: usize = FIELDS_AT + 8 + 8 + 32;
 
 /// One durable checkpoint of one store.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StoreMarker {
     /// Immutable store id written into the native header at creation.
     pub store_uuid: [u8; 16],
+    /// Branch of this copy of the store: [`ROOT_BRANCH`] until a restore mints
+    /// one ([`mint_branch`]). Every WAL batch the copy writes carries it.
+    pub branch: [u8; 8],
     /// Tick of the committed checkpoint this marker witnesses.
     pub checkpoint_tick: u64,
 }
@@ -86,42 +109,61 @@ pub enum MarkerError {
 
 impl StoreMarker {
     #[must_use]
-    pub fn new(store_uuid: [u8; 16], checkpoint_tick: u64) -> Self {
+    pub fn new(store_uuid: [u8; 16], branch: [u8; 8], checkpoint_tick: u64) -> Self {
         Self {
             store_uuid,
+            branch,
             checkpoint_tick,
         }
     }
 
-    /// Fixed-size record: magic, store id, tick, SHA-256 of the preceding bytes.
+    /// Fixed-size record: magic, store id, the branch unless it is the root,
+    /// tick, SHA-256 of the preceding bytes.
     #[must_use]
-    pub fn encode(&self) -> [u8; LENGTH] {
-        let mut bytes = [0; LENGTH];
-        bytes[..8].copy_from_slice(MAGIC);
-        bytes[UUID_AT..TICK_AT].copy_from_slice(&self.store_uuid);
-        bytes[TICK_AT..CHECKSUM_AT].copy_from_slice(&self.checkpoint_tick.to_be_bytes());
-        let checksum = Sha256::digest(&bytes[..CHECKSUM_AT]);
-        bytes[CHECKSUM_AT..].copy_from_slice(&checksum);
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(BRANCH_LENGTH);
+        if self.branch == ROOT_BRANCH {
+            bytes.extend_from_slice(ROOT_MAGIC);
+            bytes.extend_from_slice(&self.store_uuid);
+        } else {
+            bytes.extend_from_slice(BRANCH_MAGIC);
+            bytes.extend_from_slice(&self.store_uuid);
+            bytes.extend_from_slice(&self.branch);
+        }
+        bytes.extend_from_slice(&self.checkpoint_tick.to_be_bytes());
+        let checksum = Sha256::digest(&bytes);
+        bytes.extend_from_slice(&checksum);
         bytes
     }
 
     pub fn decode(bytes: &[u8]) -> Result<Self, DecodeError> {
-        if bytes.len() != LENGTH {
-            return Err(DecodeError("wrong length"));
-        }
-        if &bytes[..8] != MAGIC {
+        let (magic, tick_at) = match bytes.len() {
+            ROOT_LENGTH => (ROOT_MAGIC, FIELDS_AT),
+            BRANCH_LENGTH => (BRANCH_MAGIC, FIELDS_AT + 8),
+            _ => return Err(DecodeError("wrong length")),
+        };
+        if &bytes[..8] != magic {
             return Err(DecodeError("wrong magic or format version"));
         }
-        let expected = Sha256::digest(&bytes[..CHECKSUM_AT]);
-        if bytes[CHECKSUM_AT..] != expected[..] {
+        let checksum_at = tick_at + 8;
+        let expected = Sha256::digest(&bytes[..checksum_at]);
+        if bytes[checksum_at..] != expected[..] {
             return Err(DecodeError("checksum mismatch"));
         }
         let mut store_uuid = [0; 16];
-        store_uuid.copy_from_slice(&bytes[UUID_AT..TICK_AT]);
+        store_uuid.copy_from_slice(&bytes[UUID_AT..FIELDS_AT]);
+        let mut branch = ROOT_BRANCH;
+        if tick_at > FIELDS_AT {
+            branch.copy_from_slice(&bytes[FIELDS_AT..tick_at]);
+            if branch == ROOT_BRANCH {
+                return Err(DecodeError("format 2 names the root branch"));
+            }
+        }
         let mut tick = [0; 8];
-        tick.copy_from_slice(&bytes[TICK_AT..CHECKSUM_AT]);
+        tick.copy_from_slice(&bytes[tick_at..checksum_at]);
         Ok(Self {
             store_uuid,
+            branch,
             checkpoint_tick: u64::from_be_bytes(tick),
         })
     }
@@ -170,11 +212,12 @@ pub fn read(world_dir: &Path) -> Result<Option<StoreMarker>, MarkerError> {
 pub fn write(
     world_dir: &Path,
     store_uuid: [u8; 16],
+    branch: [u8; 8],
     checkpoint_tick: u64,
 ) -> Result<(), MarkerError> {
     let target = path(world_dir);
     let temporary = world_dir.join(format!("{MARKER_FILE}.tmp"));
-    let bytes = StoreMarker::new(store_uuid, checkpoint_tick).encode();
+    let bytes = StoreMarker::new(store_uuid, branch, checkpoint_tick).encode();
     let mut file = File::create(&temporary).map_err(|error| io_error(&temporary, error))?;
     file.write_all(&bytes)
         .and_then(|()| file.sync_all())
@@ -203,9 +246,29 @@ pub fn check(
     };
     let store_tick = store_tick.unwrap_or(0);
     if store_tick > marker.checkpoint_tick {
-        write(world_dir, store_uuid, store_tick)?;
+        write(world_dir, store_uuid, marker.branch, store_tick)?;
     }
     Ok(())
+}
+
+/// Branch of the world at `world_dir`: the marker's, or [`ROOT_BRANCH`] for a
+/// store created before its first checkpoint and marker. Callers run [`check`]
+/// or [`verify`] first, so a missing marker here never hides a refused store.
+pub fn branch(world_dir: &Path) -> Result<[u8; 8], MarkerError> {
+    Ok(read(world_dir)?.map_or(ROOT_BRANCH, |marker| marker.branch))
+}
+
+/// A fresh random branch for a restored copy: never [`ROOT_BRANCH`] and never
+/// `previous`, the branch the copy was restored from.
+#[must_use]
+pub fn mint_branch(previous: [u8; 8]) -> [u8; 8] {
+    loop {
+        let mut branch = ROOT_BRANCH;
+        branch.copy_from_slice(&uuid::Uuid::new_v4().as_bytes()[..8]);
+        if branch != ROOT_BRANCH && branch != previous {
+            return branch;
+        }
+    }
 }
 
 /// The same refusal rules as [`check`], without writing: a store ahead of the

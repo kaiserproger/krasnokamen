@@ -253,7 +253,13 @@ fn a_stale_marker_with_a_refused_upgrade_leaves_the_world_unchanged() {
         .unwrap()
         .expect("a Core world has a marker");
     assert!(marker.checkpoint_tick >= 1, "{marker:?}");
-    mc_world::store_marker::write(&dir, marker.store_uuid, marker.checkpoint_tick - 1).unwrap();
+    mc_world::store_marker::write(
+        &dir,
+        marker.store_uuid,
+        mc_world::store_marker::ROOT_BRANCH,
+        marker.checkpoint_tick - 1,
+    )
+    .unwrap();
     let stale = mc_world::store_marker::read(&dir).unwrap().unwrap();
     let fingerprint = checkpoint_fingerprint(&config);
     let marker_bytes = std::fs::read(mc_world::store_marker::path(&dir)).unwrap();

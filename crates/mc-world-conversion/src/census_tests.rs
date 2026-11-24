@@ -542,6 +542,7 @@ fn census_keeps_a_store_ahead_of_its_marker_byte_identical_and_refuses_a_bad_pai
     mc_world::store_marker::write(
         &fixture.world,
         marker.store_uuid,
+        mc_world::store_marker::ROOT_BRANCH,
         marker.checkpoint_tick.saturating_sub(1),
     )
     .unwrap();
@@ -580,9 +581,13 @@ fn census_keeps_a_store_ahead_of_its_marker_byte_identical_and_refuses_a_bad_pai
             .unwrap();
         match marker_write {
             None => std::fs::remove_file(mc_world::store_marker::path(&fixture.world)).unwrap(),
-            Some(uuid) => {
-                mc_world::store_marker::write(&fixture.world, uuid, ours.checkpoint_tick).unwrap()
-            }
+            Some(uuid) => mc_world::store_marker::write(
+                &fixture.world,
+                uuid,
+                mc_world::store_marker::ROOT_BRANCH,
+                ours.checkpoint_tick,
+            )
+            .unwrap(),
         }
         let out = tempfile::tempdir().unwrap();
         let error = census_native(
@@ -599,8 +604,13 @@ fn census_keeps_a_store_ahead_of_its_marker_byte_identical_and_refuses_a_bad_pai
     let ours = mc_world::store_marker::read(&fixture.world)
         .unwrap()
         .unwrap();
-    mc_world::store_marker::write(&fixture.world, ours.store_uuid, ours.checkpoint_tick + 1)
-        .unwrap();
+    mc_world::store_marker::write(
+        &fixture.world,
+        ours.store_uuid,
+        mc_world::store_marker::ROOT_BRANCH,
+        ours.checkpoint_tick + 1,
+    )
+    .unwrap();
     let out = tempfile::tempdir().unwrap();
     let error = census_native(
         &fixture.config,

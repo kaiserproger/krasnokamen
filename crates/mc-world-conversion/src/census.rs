@@ -371,7 +371,7 @@ fn census(
     mc_core::journal::visit_complete_batches_after(
         &source.join("journal"),
         manifest.tick,
-        mc_core::journal::WalIdentity::new(reader.store_uuid(), &registry.blocks),
+        mc_core::journal::WalIdentity::of_world(&source, reader.store_uuid(), &registry.blocks)?,
         |_| {
             tail += 1;
             Ok(())

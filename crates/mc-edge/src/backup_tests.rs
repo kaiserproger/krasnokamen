@@ -5,7 +5,13 @@ fn seed_world(root: &Path) {
     std::fs::create_dir_all(root.join("native")).unwrap();
     let store = NativeStore::create(&root.join(NATIVE_DATABASE), [7; 32]).unwrap();
     // Every world this build creates has a checkpoint marker; restore requires it.
-    mc_world::store_marker::write(root, store.store_uuid(), 0).unwrap();
+    mc_world::store_marker::write(
+        root,
+        store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        0,
+    )
+    .unwrap();
     drop(store);
     let mut journal =
         mc_core::journal::JournalWriter::open(root, 1, mc_core::journal::test_wal_identity(root))
@@ -66,7 +72,11 @@ fn backup_roundtrip_preserves_real_core_store_wal_and_metadata() {
             .as_path(),
     ))
     .unwrap();
-    let identity = mc_core::journal::WalIdentity::new(store_uuid, &registry.blocks);
+    let identity = mc_core::journal::WalIdentity::new(
+        store_uuid,
+        mc_world::store_marker::ROOT_BRANCH,
+        &registry.blocks,
+    );
     let mut journal = mc_core::journal::JournalWriter::open(&world, 1, identity).unwrap();
     journal.append(image.tick + 1, image.tick + 1, &[]).unwrap();
     journal.flush().unwrap();
@@ -612,7 +622,13 @@ fn restore_refuses_a_marker_from_another_store() {
     // Replace the copied marker with a foreign store's marker and keep the
     // manifest honest, so only the pair check can refuse the restore.
     let foreign = [0x77; 16];
-    mc_world::store_marker::write(&backup, foreign, source.checkpoint_tick).unwrap();
+    mc_world::store_marker::write(
+        &backup,
+        foreign,
+        mc_world::store_marker::ROOT_BRANCH,
+        source.checkpoint_tick,
+    )
+    .unwrap();
     change_manifest(&backup, |manifest| {
         let digest = digest_file(&backup.join(mc_world::store_marker::MARKER_FILE)).unwrap();
         manifest["files"][mc_world::store_marker::MARKER_FILE] = serde_json::Value::String(digest);

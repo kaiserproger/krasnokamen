@@ -3,8 +3,8 @@
 //!
 //! Layout under `<world_dir>/`:
 //! - `journal/batch-<first_tick>-<last_tick>.bin`: framed batches. One batch
-//!   holds whole ticks: `[magic u32][version u32][store id 16][palette 8]
-//!   [tick_lo u64][tick_hi u64][len u32][crc32 u32][payload]`.
+//!   holds whole ticks: `[magic u32][version u32][store id 16][branch 8]
+//!   [palette 8][tick_lo u64][tick_hi u64][len u32][crc32 u32][payload]`.
 //!   Payload is JSON lines of [`JournalEntry`]. Unpublished `.tmp` files are ignored
 //!   when reading and removed by the next [`JournalWriter::open`].
 //! - `native/state.redb`: one atomic checkpoint of chunks, entities, players,
@@ -33,36 +33,42 @@ mod replay_game_clock;
 pub(crate) use replay_game_clock::ReplayGameClock;
 
 const BATCH_MAGIC: u32 = 0x534F_4C4A;
-/// Frame version 2 binds every batch to the store that wrote it and to the
-/// block-state palette its numeric ids mean (Books R4-P3, R5-G5). Format 1 is
-/// refused, not converted: ADR 0013 keeps no compatibility surface of our own,
-/// and a clean stop with the build that wrote it folds the tail into the
-/// checkpoint and prunes it before this build starts.
-const BATCH_VERSION: u32 = 2;
-/// The pre-binding frame, recognized only to name the refusal.
-const BATCH_VERSION_V1: u32 = 1;
-/// `[magic][version][store id][palette digest][tick_lo][tick_hi][len][crc]`.
-const HEADER_LEN: usize = 4 + 4 + 16 + 8 + 8 + 8 + 4 + 4;
+/// Frame version 3 binds every batch to the store that wrote it, to the branch
+/// of that store (a restored copy's own lineage, DIVERGED-BACKUP-COPIES-SHARE-
+/// STORE-IDENTITY) and to the block-state palette its numeric ids mean (Books
+/// R4-P3, R5-G5). Older formats are refused, not converted: ADR 0013 keeps no
+/// compatibility surface of our own, and a clean stop with the build that wrote
+/// them folds the tail into the checkpoint and prunes it before this build starts.
+const BATCH_VERSION: u32 = 3;
+/// `[magic][version][store id][branch][palette digest][tick_lo][tick_hi][len][crc]`;
+/// the length and CRC are its last eight bytes.
+pub(crate) const HEADER_LEN: usize = 4 + 4 + 16 + 8 + 8 + 8 + 8 + 4 + 4;
+/// Offset of the branch in the frame header.
+const BRANCH_AT: usize = 4 + 4 + 16;
 
-/// What a WAL batch is bound to: the store that wrote it and the block-state
-/// palette its `JournalEntry::Block` ids mean.
+/// What a WAL batch is bound to: the store that wrote it, the branch of that
+/// store, and the block-state palette its `JournalEntry::Block` ids mean.
 ///
-/// Both values already persist with the world — the store id in the native
-/// header (`store_uuid`, required on every open), the palette as the content
-/// the build registers — so binding the frame adds no stored state and no
-/// migration. A batch whose identity differs from the opened world is refused
-/// by name, never replayed with a warning (Books R4-P3, R5-G5).
+/// All three already persist with the world — the store id in the native header
+/// (`store_uuid`, required on every open), the branch in the checkpoint marker
+/// (minted by `world restore`), the palette as the content the build registers.
+/// A batch whose identity differs from the opened world is refused by name,
+/// never replayed with a warning (Books R4-P3, R5-G5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WalIdentity {
     /// The native store's immutable 16-byte id.
     pub store: [u8; 16],
+    /// [`mc_world::store_marker::StoreMarker::branch`] of the opened copy:
+    /// two copies restored from one backup share the store id but never the
+    /// branch, so neither replays the other's tail.
+    pub branch: [u8; 8],
     /// [`mc_world::BlockRegistry::palette_digest`] of the registry that wrote
     /// (and must read) the numeric block states.
     pub palette: [u8; 8],
 }
 
 /// Identity a WAL tail written into `world_dir` must carry: that world's store
-/// id under this build's palette.
+/// id and branch under this build's palette.
 ///
 /// The palette is a property of the build (the embedded block report), not of the
 /// content cache, so a tool that writes or reads a stopped world's journal
@@ -85,7 +91,7 @@ pub fn test_wal_identity(world_dir: &Path) -> WalIdentity {
             &mc_data::blocks::krasnokamen_required_blocks_report(),
         )
         .expect("embedded block report");
-        return WalIdentity::new(marker.store_uuid, &blocks);
+        return WalIdentity::new(marker.store_uuid, marker.branch, &blocks);
     }
     let store_uuid =
         mc_world::native::NativeReadOnlyStore::open_learning_identity(&store_path, CACHE)
@@ -102,7 +108,7 @@ pub fn test_wal_identity(world_dir: &Path) -> WalIdentity {
                 &mc_data::blocks::krasnokamen_required_blocks_report(),
             )
             .expect("embedded block report");
-            WalIdentity::new(store_uuid, &blocks)
+            WalIdentity::new(store_uuid, mc_world::store_marker::ROOT_BRANCH, &blocks)
         }
         None => WalIdentity::fixture(),
     }
@@ -116,23 +122,38 @@ pub(crate) fn tail_identity(world_dir: &Path) -> WalIdentity {
 }
 
 impl WalIdentity {
-    /// Identity of `store` under `blocks`.
+    /// Identity of `store` on `branch` under `blocks`.
     #[must_use]
-    pub fn new(store: [u8; 16], blocks: &mc_world::BlockRegistry) -> Self {
+    pub fn new(store: [u8; 16], branch: [u8; 8], blocks: &mc_world::BlockRegistry) -> Self {
         Self {
             store,
+            branch,
             palette: blocks.palette_digest(),
         }
     }
 
+    /// Identity of the opened `store` at `world_dir`: its branch is the one
+    /// the world's checkpoint marker records. Call after the marker check
+    /// (`store_marker::check`/`verify`), which refuses a marker of another store.
+    pub fn of_world(
+        world_dir: &Path,
+        store: [u8; 16],
+        blocks: &mc_world::BlockRegistry,
+    ) -> Result<Self, CoreError> {
+        let branch = mc_world::store_marker::branch(world_dir)
+            .map_err(|error| CoreError::Storage(error.to_string()))?;
+        Ok(Self::new(store, branch, blocks))
+    }
+
     /// Identity for journals a test writes without opening a store: batches
     /// carry this fixed value and a test reader accepts it. Production always
-    /// derives the identity from the opened store ([`WalIdentity::new`]).
+    /// derives the identity from the opened store ([`WalIdentity::of_world`]).
     #[doc(hidden)]
     #[must_use]
     pub const fn fixture() -> Self {
         Self {
             store: [0; 16],
+            branch: [0; 8],
             palette: [0; 8],
         }
     }
@@ -980,8 +1001,8 @@ impl JournalWriter {
     }
 
     /// Test support: once the world a test writes into exists, rewrite the
-    /// store id and palette of the frames this writer published so they belong
-    /// to it. Only the header is touched — the CRC covers the payload.
+    /// store id, branch and palette of the frames this writer published so they
+    /// belong to it. Only the header is touched — the CRC covers the payload.
     #[cfg(test)]
     fn bind_pending_frames(&mut self) -> Result<(), CoreError> {
         let Some(world) = self.pending_world.clone() else {
@@ -1002,6 +1023,8 @@ impl JournalWriter {
             file.seek(SeekFrom::Start(8))
                 .map_err(|err| CoreError::Storage(err.to_string()))?;
             file.write_all(&identity.store)
+                .map_err(|err| CoreError::Storage(err.to_string()))?;
+            file.write_all(&identity.branch)
                 .map_err(|err| CoreError::Storage(err.to_string()))?;
             file.write_all(&identity.palette)
                 .map_err(|err| CoreError::Storage(err.to_string()))?;
@@ -1062,8 +1085,8 @@ pub fn read_complete_batches_after(
 
 /// Decode and consume one published batch at a time. Recovery memory is bounded
 /// by one batch and the latest recovered images, never the complete WAL history.
-/// A batch whose store or palette does not match `identity` is refused by name
-/// (Books R4-P3, R5-G5), as is a format-1 frame.
+/// A batch whose store, branch or palette does not match `identity` is refused
+/// by name (Books R4-P3, R5-G5), as is a frame of an older format.
 pub fn visit_complete_batches_after(
     journal_dir: &Path,
     manifest_tick: u64,
@@ -1200,44 +1223,54 @@ impl BatchDecodeError {
     }
 }
 
-/// Every frame records the store id and palette that wrote it: a batch that
-/// belongs to another world, or to another block-state mapping, is refused by
-/// name instead of replayed over this store's checkpoint (Books R4-P3, R5-G5).
-/// Both bindings are compared unconditionally: a zero field is a value like any
+/// Every frame records the store id, branch and palette that wrote it: a batch
+/// that belongs to another world, to another copy of this world, or to another
+/// block-state mapping is refused by name instead of replayed over this store's
+/// checkpoint (Books R4-P3, R5-G5, DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY).
+/// All bindings are compared unconditionally: a zero field is a value like any
 /// other, not a wildcard, and the CRC covers only the payload, so accepting a
 /// zero-side match would let a rewritten header through. A test that opens a
 /// world passes that world's `WalIdentity` on both sides; `WalIdentity::fixture`
 /// matches only itself.
-fn verify_bindings(
-    store: [u8; 16],
-    palette: [u8; 8],
-    identity: WalIdentity,
-) -> Result<(), BatchDecodeError> {
-    if store != identity.store {
+fn verify_bindings(frame: WalIdentity, identity: WalIdentity) -> Result<(), BatchDecodeError> {
+    if frame.store != identity.store {
         return Err(BatchDecodeError::Framing(format!(
             "batch belongs to store {} but the opened store is {}; a journal from another world \
              is never replayed (restore its own journal with it)",
-            uuid::Uuid::from_bytes(store),
+            uuid::Uuid::from_bytes(frame.store),
             uuid::Uuid::from_bytes(identity.store),
         )));
     }
-    if palette != identity.palette {
+    if frame.branch != identity.branch {
+        return Err(BatchDecodeError::Framing(format!(
+            "batch belongs to branch {} of store {} but the opened copy is branch {}; a restored \
+             copy replays only its own journal, never one of another copy of the same backup or \
+             of the world it was restored from (restore its own journal with it)",
+            identity_hex(&frame.branch),
+            uuid::Uuid::from_bytes(frame.store),
+            identity_hex(&identity.branch),
+        )));
+    }
+    if frame.palette != identity.palette {
         return Err(BatchDecodeError::Framing(format!(
             "batch was written under block palette {} but this build registers {}; block-state \
              ids would remap, so the tail is refused",
-            identity_hex(&palette),
+            identity_hex(&frame.palette),
             identity_hex(&identity.palette),
         )));
     }
     Ok(())
 }
 
-fn decode_batch(
+/// Frame checks shared by replay and [`rebind_tail`]: magic, this format, the
+/// header's bindings (`bind` receives them), the tick range the file name
+/// promises, the length and the payload CRC. Returns the payload.
+fn check_frame(
     bytes: &[u8],
     expect_lo: u64,
     expect_hi: u64,
-    identity: WalIdentity,
-) -> Result<Vec<JournalEntry>, BatchDecodeError> {
+    bind: impl FnOnce(WalIdentity) -> Result<(), BatchDecodeError>,
+) -> Result<&[u8], BatchDecodeError> {
     if bytes.len() < 4 + 4 {
         return Err(BatchDecodeError::Framing("incomplete batch header".into()));
     }
@@ -1248,15 +1281,15 @@ fn decode_batch(
         )));
     }
     let version = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
-    if version == BATCH_VERSION_V1 {
-        return Err(BatchDecodeError::Framing(
-            "batch format 1 carries no store identity and this build reads format 2; start the \
-             world once with the build that wrote it, let it save and stop, and confirm its \
-             final checkpoint covers the last published batch before starting this build \
-             (docs/OPERATING.md, upgrading a world). A batch below a covering checkpoint is \
-             never replayed and needs no removal"
-                .into(),
-        ));
+    if version < BATCH_VERSION {
+        return Err(BatchDecodeError::Framing(format!(
+            "batch format {version} predates format {BATCH_VERSION}, which this build reads and \
+             which binds every batch to its store and to the branch a restore gives each copy; \
+             start the world once with the build that wrote it, let it save and stop, and \
+             confirm its final checkpoint covers the last published batch before starting this \
+             build (docs/OPERATING.md, upgrading a world). A batch below a covering checkpoint \
+             is never replayed and needs no removal"
+        )));
     }
     if version != BATCH_VERSION {
         return Err(BatchDecodeError::Framing(format!(
@@ -1266,15 +1299,15 @@ fn decode_batch(
     if bytes.len() < HEADER_LEN {
         return Err(BatchDecodeError::Framing("incomplete batch header".into()));
     }
-    verify_bindings(
-        bytes[8..24].try_into().unwrap(),
-        bytes[24..32].try_into().unwrap(),
-        identity,
-    )?;
-    let lo = u64::from_le_bytes(bytes[32..40].try_into().unwrap());
-    let hi = u64::from_le_bytes(bytes[40..48].try_into().unwrap());
-    let len = u32::from_le_bytes(bytes[48..52].try_into().unwrap()) as usize;
-    let crc = u32::from_le_bytes(bytes[52..56].try_into().unwrap());
+    bind(WalIdentity {
+        store: bytes[8..24].try_into().unwrap(),
+        branch: bytes[BRANCH_AT..BRANCH_AT + 8].try_into().unwrap(),
+        palette: bytes[32..40].try_into().unwrap(),
+    })?;
+    let lo = u64::from_le_bytes(bytes[40..48].try_into().unwrap());
+    let hi = u64::from_le_bytes(bytes[48..56].try_into().unwrap());
+    let len = u32::from_le_bytes(bytes[56..60].try_into().unwrap()) as usize;
+    let crc = u32::from_le_bytes(bytes[60..64].try_into().unwrap());
     if lo != expect_lo || hi != expect_hi {
         return Err(BatchDecodeError::Framing(format!(
             "invalid header: magic {magic:#x}, version {version}, ticks {lo}..={hi}, expected {expect_lo}..={expect_hi}"
@@ -1298,6 +1331,18 @@ fn decode_batch(
             "CRC mismatch: expected {crc:#x}, found {actual_crc:#x}"
         )));
     }
+    Ok(payload)
+}
+
+fn decode_batch(
+    bytes: &[u8],
+    expect_lo: u64,
+    expect_hi: u64,
+    identity: WalIdentity,
+) -> Result<Vec<JournalEntry>, BatchDecodeError> {
+    let payload = check_frame(bytes, expect_lo, expect_hi, |frame| {
+        verify_bindings(frame, identity)
+    })?;
     let mut entries = Vec::new();
     let mut offset = HEADER_LEN;
     for (index, line) in payload.split(|byte| *byte == b'\n').enumerate() {
@@ -1463,7 +1508,7 @@ pub struct CheckpointManifest {
 }
 
 /// Frame one batch payload:
-/// `[magic][version][tick_lo][tick_hi][len][crc32][payload]`.
+/// `[magic][version][store][branch][palette][tick_lo][tick_hi][len][crc32][payload]`.
 ///
 /// [`JournalWriter::append`] is the only production writer; fixtures (the hot
 /// backup tests) use this instead of hand-rolling bytes that would not decode.
@@ -1477,6 +1522,7 @@ pub(crate) fn frame_batch(
     frame.extend_from_slice(&BATCH_MAGIC.to_le_bytes());
     frame.extend_from_slice(&BATCH_VERSION.to_le_bytes());
     frame.extend_from_slice(&identity.store);
+    frame.extend_from_slice(&identity.branch);
     frame.extend_from_slice(&identity.palette);
     frame.extend_from_slice(&tick_lo.to_le_bytes());
     frame.extend_from_slice(&tick_hi.to_le_bytes());
@@ -1679,6 +1725,82 @@ pub fn verify_batch_file(
         .map_err(|error| CoreError::Storage(format!("journal {}: {error}", path.display())))?;
     let entries = decode_batch(&bytes, lo, hi, identity).map_err(|error| error.at_path(path))?;
     Ok((lo, hi, entries.len()))
+}
+
+/// Move the replayable tail of a just-restored copy from branch `from` to `to`,
+/// the branch `world restore` minted for it, and return how many batches moved
+/// (DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY).
+///
+/// Only batches above `checkpoint_tick` replay, so only they move; a batch at or
+/// below it is never read again and stays as copied. Each moved frame is checked
+/// first — this format, the copy's `store`, branch `from`, the tick range its
+/// name promises, its length and CRC — so a batch that is not the backup's own
+/// refuses the restore instead of joining the copy's branch. Only the eight
+/// branch bytes change (the CRC covers the payload); the palette stays as written
+/// and the first replay checks it. The copy is not open yet, which makes this the
+/// one rewrite of a published batch: an interrupted run leaves a copy whose
+/// marker still names `from` next to a batch on `to` (or a torn branch), and
+/// that copy refuses to open.
+pub fn rebind_tail(
+    world_dir: &Path,
+    checkpoint_tick: u64,
+    store: [u8; 16],
+    from: [u8; 8],
+    to: [u8; 8],
+) -> Result<usize, CoreError> {
+    use std::io::{Seek, SeekFrom};
+    let journal = world_dir.join("journal");
+    let listing = |error: std::io::Error| {
+        CoreError::Storage(format!("journal {}: {error}", journal.display()))
+    };
+    let entries = match std::fs::read_dir(&journal) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => return Err(listing(error)),
+    };
+    let mut moved = 0;
+    for entry in entries {
+        let name = entry
+            .map_err(listing)?
+            .file_name()
+            .to_string_lossy()
+            .into_owned();
+        let Some((lo, hi)) = parse_batch_name(&name) else {
+            continue;
+        };
+        if hi <= checkpoint_tick {
+            continue;
+        }
+        let path = journal.join(&name);
+        let storage = |error: std::io::Error| {
+            CoreError::Storage(format!("journal {}: {error}", path.display()))
+        };
+        let bytes = std::fs::read(&path).map_err(storage)?;
+        check_frame(&bytes, lo, hi, |frame| {
+            if frame.store == store && frame.branch == from {
+                return Ok(());
+            }
+            Err(BatchDecodeError::Framing(format!(
+                "batch belongs to store {} branch {}, not to the restored store {} branch {}; \
+                 only the backup's own tail moves to the copy's new branch",
+                uuid::Uuid::from_bytes(frame.store),
+                identity_hex(&frame.branch),
+                uuid::Uuid::from_bytes(store),
+                identity_hex(&from),
+            )))
+        })
+        .map_err(|error| error.at_path(&path))?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .map_err(storage)?;
+        file.seek(SeekFrom::Start(BRANCH_AT as u64))
+            .map_err(storage)?;
+        file.write_all(&to).map_err(storage)?;
+        file.sync_all().map_err(storage)?;
+        moved += 1;
+    }
+    Ok(moved)
 }
 
 /// Compact player post-image shared by the journal and checkpoints.

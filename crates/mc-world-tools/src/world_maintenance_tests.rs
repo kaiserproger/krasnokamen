@@ -237,7 +237,13 @@ fn compact_refuses_a_store_that_disagrees_with_its_checkpoint_marker() {
     );
 
     // A marker from another store.
-    store_marker::write(&config.world_dir, [0x42; 16], marker.checkpoint_tick).unwrap();
+    store_marker::write(
+        &config.world_dir,
+        [0x42; 16],
+        store_marker::ROOT_BRANCH,
+        marker.checkpoint_tick,
+    )
+    .unwrap();
     let error = compact_world(&config)
         .expect_err("foreign marker")
         .to_string();
@@ -248,6 +254,7 @@ fn compact_refuses_a_store_that_disagrees_with_its_checkpoint_marker() {
     store_marker::write(
         &config.world_dir,
         marker.store_uuid,
+        store_marker::ROOT_BRANCH,
         marker.checkpoint_tick + 1,
     )
     .unwrap();
@@ -258,7 +265,13 @@ fn compact_refuses_a_store_that_disagrees_with_its_checkpoint_marker() {
     assert_eq!(checkpoint_fingerprint(&config), fingerprint);
 
     // The pair restored: compact runs and keeps the world readable.
-    store_marker::write(&config.world_dir, marker.store_uuid, marker.checkpoint_tick).unwrap();
+    store_marker::write(
+        &config.world_dir,
+        marker.store_uuid,
+        store_marker::ROOT_BRANCH,
+        marker.checkpoint_tick,
+    )
+    .unwrap();
     compact_world(&config).expect("a consistent pair compacts");
     assert_eq!(
         store_marker::read(&config.world_dir).unwrap(),

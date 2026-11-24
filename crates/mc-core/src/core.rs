@@ -1057,15 +1057,19 @@ impl Core {
                 .map_err(|e| CoreError::Storage(e.to_string()))?
                 .is_none()
         {
-            mc_world::store_marker::write(&config.world_dir, store.store_uuid(), 0).map_err(
-                |error| {
-                    CoreError::Storage(format!(
-                        "world {}: interrupted first start could not publish its checkpoint \
+            mc_world::store_marker::write(
+                &config.world_dir,
+                store.store_uuid(),
+                mc_world::store_marker::ROOT_BRANCH,
+                0,
+            )
+            .map_err(|error| {
+                CoreError::Storage(format!(
+                    "world {}: interrupted first start could not publish its checkpoint \
                          marker: {error}",
-                        config.world_dir.display()
-                    ))
-                },
-            )?;
+                    config.world_dir.display()
+                ))
+            })?;
         }
         mc_world::store_marker::check(&config.world_dir, store.store_uuid(), store_tick).map_err(
             |error| {
@@ -1135,12 +1139,16 @@ impl Core {
             ),
         ];
         let world_dir = config.world_dir.clone();
-        // The WAL is bound to this store and to the block palette recovery
-        // replayed it under (Books R4-P3, R5-G5): derived once, from the same
-        // base registry `recover_with_reader` used, so the tail this process
-        // writes is exactly the tail it would accept back.
-        let wal_identity =
-            crate::journal::WalIdentity::new(store.store_uuid(), &base_registry.blocks);
+        // The WAL is bound to this store, to the branch its checkpoint marker
+        // records and to the block palette recovery replayed it under (Books
+        // R4-P3, R5-G5): derived once, from the same marker and base registry
+        // `recover_with_reader` used, so the tail this process writes is exactly
+        // the tail it would accept back.
+        let wal_identity = crate::journal::WalIdentity::of_world(
+            &config.world_dir,
+            store.store_uuid(),
+            &base_registry.blocks,
+        )?;
         // Fresh worlds pin worldgen inputs in their first checkpoint. Existing
         // worlds adopt diagnostic metadata on the next positive-tick checkpoint.
         if fresh || (salt_minted && tick_state.tick > 0) {

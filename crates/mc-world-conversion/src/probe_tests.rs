@@ -346,6 +346,7 @@ fn probe_keeps_a_store_ahead_of_its_marker_byte_identical_and_refuses_a_foreign_
     mc_world::store_marker::write(
         &fixture.world,
         marker.store_uuid,
+        mc_world::store_marker::ROOT_BRANCH,
         marker.checkpoint_tick.saturating_sub(1),
     )
     .unwrap();
@@ -373,7 +374,13 @@ fn probe_keeps_a_store_ahead_of_its_marker_byte_identical_and_refuses_a_foreign_
         Some(ahead)
     );
 
-    mc_world::store_marker::write(&fixture.world, [0x44; 16], ahead.checkpoint_tick).unwrap();
+    mc_world::store_marker::write(
+        &fixture.world,
+        [0x44; 16],
+        mc_world::store_marker::ROOT_BRANCH,
+        ahead.checkpoint_tick,
+    )
+    .unwrap();
     let out = tempfile::tempdir().unwrap();
     let error = probe_native(
         &fixture.config,

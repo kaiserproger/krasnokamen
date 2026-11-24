@@ -53,7 +53,11 @@ fn copy_command_checkpoints_legacy_tail_then_archives_identical_wal() {
             &registry.items,
         )
         .unwrap();
-    let identity = mc_core::journal::WalIdentity::new(store.store_uuid(), &registry.blocks);
+    let identity = mc_core::journal::WalIdentity::new(
+        store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        &registry.blocks,
+    );
     drop(store);
     let mut writer = JournalWriter::open(&copy, 1, identity).unwrap();
     writer

@@ -182,15 +182,16 @@ def wal_lines(artifact):
             yield value
     for name, encoded in artifact.items():
         raw = base64.b64decode(encoded)
-        # Classification accepts only the current store/palette-bound frame.
-        # The verdict above still compares every header, CRC and payload byte.
-        if len(raw) < 56:
-            raise SystemExit(f'incomplete WAL v2 frame header: {name}')
+        # Classification accepts only the current store/branch/palette-bound frame
+        # (format 3, 64-byte header). The verdict above still compares every
+        # header, CRC and payload byte.
+        if len(raw) < 64:
+            raise SystemExit(f'incomplete WAL v3 frame header: {name}')
         magic, version = struct.unpack_from('<II', raw)
-        if magic != 0x534F4C4A or version != 2:
+        if magic != 0x534F4C4A or version != 3:
             raise SystemExit(f'unsupported WAL frame header: {name}')
-        payload = raw[56:]
-        if len(payload) != struct.unpack_from('<I', raw, 48)[0]:
+        payload = raw[64:]
+        if len(payload) != struct.unpack_from('<I', raw, 56)[0]:
             raise SystemExit(f'WAL frame length mismatch: {name}')
         for line in payload.splitlines():
             for image in images(json.loads(line)):

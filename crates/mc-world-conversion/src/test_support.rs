@@ -105,7 +105,13 @@ pub(super) fn fixture_store(config: &CoreConfig) -> Result<Arc<NativeStore>, Cor
             &registry.items,
         )
         .map_err(storage)?;
-    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), 0).map_err(storage)?;
+    mc_world::store_marker::write(
+        &config.world_dir,
+        store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        0,
+    )
+    .map_err(storage)?;
     Ok(store)
 }
 
@@ -165,8 +171,13 @@ pub(super) fn write_manifest(
             &registry.items,
         )
         .map_err(storage)?;
-    mc_world::store_marker::write(&config.world_dir, store.store_uuid(), manifest.tick)
-        .map_err(storage)
+    mc_world::store_marker::write(
+        &config.world_dir,
+        store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        manifest.tick,
+    )
+    .map_err(storage)
 }
 
 pub(super) struct Running {

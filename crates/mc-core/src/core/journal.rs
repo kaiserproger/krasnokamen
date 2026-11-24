@@ -1219,7 +1219,12 @@ pub(super) fn run_native_work(
             // failure: report the checkpoint as failed and halt the writer.
             let mut durable = committed;
             if durable {
-                match write_checkpoint_marker(world_dir, store, prev_manifest.tick) {
+                match write_checkpoint_marker(
+                    world_dir,
+                    store,
+                    wal_identity.branch,
+                    prev_manifest.tick,
+                ) {
                     Ok(()) => {
                         committed_tick
                             .store(prev_manifest.tick, std::sync::atomic::Ordering::Release);
@@ -1346,16 +1351,24 @@ pub(super) fn write_checkpoint(
         .regions
         .store()
         .ok_or_else(|| CoreError::Storage("checkpoint has no native store".into()))?;
-    write_checkpoint_marker(world_dir, store, prev_manifest.tick)?;
+    write_checkpoint_marker(
+        world_dir,
+        store,
+        writer.identity().branch,
+        prev_manifest.tick,
+    )?;
     Ok(written)
 }
 
-/// Durably publish `(store id, checkpoint tick)` after the native commit and
-/// before the checkpoint is acknowledged or its WAL is pruned (Books R4-P1).
-/// A failure here is reported as a failed checkpoint by every caller.
+/// Durably publish `(store id, branch, checkpoint tick)` after the native
+/// commit and before the checkpoint is acknowledged or its WAL is pruned (Books
+/// R4-P1). `branch` is the writer's own, so a restored copy stays on the branch
+/// its restore minted. A failure here is reported as a failed checkpoint by
+/// every caller.
 pub(super) fn write_checkpoint_marker(
     world_dir: &std::path::Path,
     store: &mc_world::native::NativeStore,
+    branch: [u8; 8],
     tick: u64,
 ) -> Result<(), CoreError> {
     #[cfg(test)]
@@ -1370,7 +1383,7 @@ pub(super) fn write_checkpoint_marker(
             "injected checkpoint marker failure".to_owned(),
         ));
     }
-    mc_world::store_marker::write(world_dir, store.store_uuid(), tick)
+    mc_world::store_marker::write(world_dir, store.store_uuid(), branch, tick)
         .map_err(|error| CoreError::Storage(format!("checkpoint marker: {error}")))
 }
 

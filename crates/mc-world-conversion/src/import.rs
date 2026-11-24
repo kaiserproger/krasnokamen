@@ -1569,8 +1569,13 @@ pub(super) fn convert(
     // The published world carries its checkpoint marker: the runtime refuses a
     // store with a checkpoint and no marker, and the converter must not create
     // one that cannot be opened (Books R4-P1).
-    mc_world::store_marker::write(stage, store.store_uuid(), tick)
-        .map_err(|error| fail(format!("checkpoint marker: {error}")))?;
+    mc_world::store_marker::write(
+        stage,
+        store.store_uuid(),
+        mc_world::store_marker::ROOT_BRANCH,
+        tick,
+    )
+    .map_err(|error| fail(format!("checkpoint marker: {error}")))?;
     drop(store);
     Ok(stats)
 }
