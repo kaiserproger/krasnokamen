@@ -1151,24 +1151,34 @@ def proving_refs(row):
 def _check_proving_choice(ident, row, control):
     """Refuse a `proving_refs` that shrinks the proof dishonestly.
 
-    (a) a real-client row keeps every graphical ref proving: the scene carries the symptom, so it can
-    never be excluded by naming the one cargo ref that happens to go red; (b) an excluded ref that IS
-    red in the control is a flipping check, so it must be named instead of dropped."""
-    from . import regressions
+    Every excluded ref must be GREEN on the control — a check that does not flip with the fix and
+    without it is structurally non-proving, and anything else (unrunnable, fixture failure, unproven
+    panic, needs-real-client, or red) means the row is dropping a check that the control says flips.
+    A real-client row keeps at least one graphical ref proving, and may exclude a graphical one only
+    when it is green (REVIEW-wave2-13 R2/R3). A proving harness ref of a named scenario must name the
+    assertion it fails (M4)."""
+    from . import regressions, scenarios
 
     proving = set(proving_refs(row))
     excluded = [ref for ref in row.get('regression') or [] if ref not in proving]
-    if not excluded:
-        return proving
-    if regressions.needs_real_client(row):
-        graphical = [ref for ref in excluded if regressions.is_graphical_ref(ref)]
-        if graphical:
-            raise Refused(f"{ident}: proving_refs excludes the real-client ref(s) {', '.join(graphical)}; "
-                          'the scene carries the symptom and must stay proving')
-    flipping = [ref for ref in excluded if (control.get(ref) or {}).get('state') == RED]
-    if flipping:
-        raise Refused(f"{ident}: proving_refs excludes {', '.join(flipping)}, which went red on the control: "
-                      'a flipping check is proving, name it (or remove it from regression)')
+    if excluded:
+        if regressions.needs_real_client(row):
+            graphical = [ref for ref in proving if regressions.is_graphical_ref(ref)]
+            if not graphical:
+                raise Refused(f"{ident}: proving_refs keeps no real-client ref; the scene carries the "
+                              'symptom, so at least one graphical ref stays proving')
+        bad = {ref: (control.get(ref) or {}).get('state') for ref in excluded}
+        bad = {ref: state for ref, state in bad.items() if state != GREEN}
+        if bad:
+            raise Refused(f"{ident}: proving_refs excludes " + ', '.join(
+                f"{ref}={state or 'no result'}" for ref, state in bad.items())
+                + ': an excluded ref must be green on the control (proving refs red, non-proving green)')
+    named = row.get('proving_assertions') if isinstance(row.get('proving_assertions'), dict) else {}
+    for ref in sorted(proving):
+        _, profile, check = ref.split(':', 2) if ref.count(':') >= 2 else ('', '', '')
+        if profile == 'scene-shot' and check in scenarios.SCENARIOS and not named.get(ref):
+            raise Refused(f"{ident}: proving ref {ref} is a named scenario: name the assertion it must fail "
+                          'in proving_assertions')
     return proving
 
 
@@ -1958,6 +1968,12 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         valid_red = {ref for ref, entry in control.items()
                      if entry['state'] == RED and _assertion_in_files(entry, control_dir, reversed_files)} \
             if test_only else {ref for ref, entry in control.items() if entry['state'] == RED}
+        if not valid_red:
+            raise Refused(f"{ident}: negative control ({control_tree}) did not go red at an assertion with the fix reversed: "
+                          + '; '.join(f"{ref}={entry['state']}" + (f" ({entry['detail']})" if entry['detail'] else '') for ref, entry in control.items())
+                          + (f" (a red outside {', '.join(reversed_files)} is not evidence: a production panic or a build "
+                             'failure is not control A)' if test_only else
+                             ' (a check that stays green does not test the fix; one that cannot build or run without it cannot show an assertion failing)'))
         proving = sorted(_check_proving_choice(ident, row, control))
         if test_only:
             # A test-only red outside the reversed files is not control A at all, so the precise
@@ -1966,7 +1982,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         else:
             _require_control_red(ident, control, proving)
             uncovered = [ref for ref in proving if ref not in valid_red]
-        if not valid_red or uncovered:
+        if uncovered:
             raise Refused(f"{ident}: negative control ({control_tree}) did not go red at an assertion with the fix reversed: "
                           + '; '.join(f"{ref}={entry['state']}" + (f" ({entry['detail']})" if entry['detail'] else '') for ref, entry in control.items())
                           + (f" (a red outside {', '.join(reversed_files)} is not evidence: a production panic or a build "
@@ -2021,14 +2037,14 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
                 raise Refused(f'{ident}: control A red {sorted(valid_red)} and control B red {sorted(valid_b)} do '
                               'not overlap: the same test has to flip both ways, so the corrected oracle is '
                               'proven in its own direction and not merely the old assertion')
-            lacking = [ref for ref in proving_refs(row) if ref not in proving]
-            if lacking:
-                raise Refused(f"{ident}: the declared proving refs {', '.join(lacking)} are not red on both "
-                              'controls: a test-only row proves the refs that flip in each direction')
             for ref in proving:
                 if _ref_test_file(candidate, ref, reversed_files) is None:
                     raise Refused(f'{ident}: proving ref {ref} is not defined in '
                                   f"{', '.join(reversed_files)}: a bare name from another file proves nothing")
+            lacking = [ref for ref in proving_refs(row) if ref not in proving]
+            if lacking:
+                raise Refused(f"{ident}: the declared proving refs {', '.join(lacking)} are not red on both "
+                              'controls: a test-only row proves the refs that flip in each direction')
         _materialize(root, candidate, tree_now)
         # A ref the supplied receipt already passed on this HEAD is not rerun, unless it carried the red
         # control: its restore proves the red was the reversal, not the environment.

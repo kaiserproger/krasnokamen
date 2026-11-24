@@ -626,7 +626,7 @@ class TestOnlyFixTests(unittest.TestCase):
         self.git(root, 'checkout', '--', '.')
         return diff
 
-    def scratch(self, production_hunk=False, covered=True, defect_text=None,
+    def scratch(self, production_hunk=False, covered=True, defect_text=None, proving='auto',
                 defect_path='docs/bugs/test-only/BUG-defect.patch', write_patch=True,
                 defect=None, later_edit=False, sha_override=None, two_files=False,
                 refs=None, control_a_files=None):
@@ -683,6 +683,7 @@ severity = "major"
 status = "open"
 source = "x"
 regression = {json.dumps(refs or [self.REF, self.REF_OTHER])}
+{"proving_refs = " + json.dumps([self.REF] if proving == "auto" else proving) if proving is not None else ""}
 fix_commit = "{self.fix}"
 repro_check = "old oracle asserted value == old; vanilla 26.3 data says ok"
 test_only_fix = true
@@ -699,7 +700,7 @@ control_b_patch = "{defect_path}"
         return root
 
     def runner(self, control_a_red=True, defect_red=True, a_assertion=None, b_assertion=None,
-               b_red_refs=(REF,), b_state=ledger.RED, b_line=3):
+               a_red_refs=(REF,), b_red_refs=(REF,), b_state=ledger.RED, b_line=3):
         """The four steps in order: A (old oracle restored), B (defect injected), restore."""
         seen = []
 
@@ -719,7 +720,7 @@ control_b_patch = "{defect_path}"
             out = {}
             for ref in refs:
                 if not defect:
-                    out[ref] = entry(tree, old_oracle and control_a_red, a_assertion)
+                    out[ref] = entry(tree, old_oracle and control_a_red and ref in a_red_refs, a_assertion)
                 elif b_state != ledger.RED:
                     out[ref] = {'state': b_state, 'detail': 'build error'}
                 else:
@@ -877,9 +878,11 @@ control_b_patch = "{defect_path}"
             self.promote(root, runner)
 
     def test_a_defect_red_on_an_unrelated_ref_is_not_proving(self):
-        root = self.scratch()
+        root = self.scratch(proving=None)
         runner = self.runner(b_red_refs={self.REF_OTHER})
-        with self.assertRaisesRegex(ledger.Refused, 'is not defined in .*: a bare name from another file'):
+        # Under LEDGER-CONTROL-COVERS-ONE-REF the row must be refused even earlier: a ref that stays
+        # green on control A is proving by default, so the uncovered proving set is the refusal.
+        with self.assertRaisesRegex(ledger.Refused, 'did not go red at an assertion|bare name|do not overlap'):
             self.promote(root, runner)
 
     def test_a_defect_red_on_no_changed_test_does_not_overlap_control_a(self):
@@ -1827,6 +1830,45 @@ class LedgerToolTests(unittest.TestCase):
             self.promote(root, self.runner(red_when_buggy=False))
         self.assertEqual(ledger.document(root), before)
 
+    def test_a_partial_red_control_does_not_carry_a_second_ref(self):
+        """LEDGER-CONTROL-COVERS-ONE-REF R4: {cargo red, harness unrunnable} is a refusal.
+
+        Deleting the `_require_control_red` call from the reversed-hunk path turns this red."""
+        root = self.scratch()
+        refs = ['cargo:mc-core:t::flip', 'harness:scene-shot:issue1-19-hostile-motion']
+        ledger.edit(root, 'BUG', [f'regression = {json.dumps(refs)}',
+                                  f'proving_assertions = {toml_assertion(refs[1])}'])
+        def runner(ctx, given, tree, client):
+            buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
+            out = {}
+            for ref in given:
+                if not buggy:
+                    out[ref] = {'state': ledger.GREEN, 'detail': ''}
+                elif ref.startswith('cargo:'):
+                    out[ref] = {'state': ledger.RED, 'detail': 'FAIL',
+                                'assertion': {'file': 'crates/mc-core/src/tests.rs', 'line': 1,
+                                              'error': 'panic', 'class': 'assertion'}}
+                else:
+                    out[ref] = {'state': ledger.UNRUNNABLE, 'detail': 'launch failed'}
+            return out
+        with self.assertRaisesRegex(ledger.Refused, 'not red on every proving ref'):
+            self.promote(root, runner)
+
+    def test_the_split_refusals_are_explained_once_a_ref_is_named(self):
+        """An excluded ref must be green on the control; a flipping one must stay proving (R2/R3)."""
+        root = self.scratch()
+        scene = 'harness:scene-shot:issue1-19-hostile-motion'
+        ledger.edit(root, 'BUG', [f'regression = {json.dumps(["cargo:mc-core:t::flip", scene])}',
+                                  f'proving_assertions = {toml_assertion(scene)}'])
+        row = next(bug for bug in ledger.load_rows(root) if bug['id'] == 'BUG')
+        control = {ref: {'state': ledger.RED} for ref in row['regression']}
+        green = {ref: {'state': ledger.GREEN} for ref in row['regression']}
+        named = {**row, 'proving_refs': [scene],
+                 'proving_assertions': {scene: 'chase_speed_zombie'}}
+        with self.assertRaisesRegex(ledger.Refused, 'excluded ref must be green'):
+            ledger._check_proving_choice('BUG', named, control)
+        self.assertEqual(ledger._check_proving_choice('BUG', named, green), {scene})
+
     def test_restored_check_that_is_not_green_is_refused(self):
         root = self.scratch()
         def always_red(ctx, refs, tree, client):
@@ -2524,6 +2566,10 @@ class ReleasePinTests(unittest.TestCase):
         self.build.assert_not_called()
 
 
+def toml_assertion(ref, name='chase_speed_zombie'):
+    return '{ "' + ref + '" = "' + name + '" }'
+
+
 class ControlCoversEveryProvingRefTests(unittest.TestCase):
     """A row's control must be red on every ref it claims as proof (LEDGER-CONTROL-COVERS-ONE-REF).
 
@@ -2596,12 +2642,12 @@ class ControlCoversEveryProvingRefTests(unittest.TestCase):
                'proving_refs': ['cargo:t::flip']}
         control = {'cargo:t::flip': {'state': 'red', 'detail': 'FAIL'},
                    'harness:scene-shot:issue1-19-hostile-motion': {'state': 'green', 'detail': ''}}
-        with self.assertRaisesRegex(ledger.Refused, 'must stay proving'):
+        with self.assertRaisesRegex(ledger.Refused, 'at least one graphical ref stays proving'):
             self.rule_choice()('ROW', row, control)
 
     def test_an_excluded_ref_that_flips_must_be_named(self):
         row = {**self.ROW, 'proving_refs': ['harness:scene-shot:scene']}
-        with self.assertRaisesRegex(ledger.Refused, 'which went red on the control'):
+        with self.assertRaisesRegex(ledger.Refused, 'excluded ref must be green'):
             self.rule_choice()('ROW', row, self.states())
 
     def rule_choice(self):
