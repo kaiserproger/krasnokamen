@@ -294,6 +294,49 @@ def check_decorated_pot(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("pot_side_pattern_changed", changed > 300)
 
 
+def check_structure_box(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-BLOCK-ENTITY-DRAW: a spectator's structure block draws its received wire box.
+
+    26.3 draws the structure block's transform box only for a viewer allowed to see the game-master
+    overlay (a spectator, or a level-2 creative operator) and only from the block entity's received
+    `mode`/`posX…`/`sizeX…`/`showboundingbox` fields. The fixture holds one structure block at a
+    fixed position and camera, re-set at the same cell in LOAD mode twice: first with
+    `showboundingbox` off (block model only), then with it on (block model plus the 4x3x3 box), so
+    the two frames may differ only by the overlay wireframe.
+    """
+    shots = _qa._load_shots(probe, artifact, ("box-hidden", "box-shown"))
+    hidden_f, shown_f = shots["box-hidden"][0], shots["box-shown"][0]
+    # Standing on the pad the eye reads 161.60 (the player settles a hair into its top face), so the
+    # height carries a 0.05 band; x/z stay tight and both frames must agree exactly.
+    probe.check("structure_camera_at_fixture", all(
+        abs(a - b) < 0.05 for a, b in zip(hidden_f["camera_position"], (1000.5, 161.62, 1002.0))
+    ) and abs(hidden_f["yaw"]) < 0.01 and abs(hidden_f["pitch"]) < 0.01)
+    probe.check("structure_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(hidden_f["camera_position"], shown_f["camera_position"])
+    ) and abs(hidden_f["yaw"] - shown_f["yaw"]) < 0.01
+      and abs(hidden_f["pitch"] - shown_f["pitch"]) < 0.01)
+    # The eye is at 161.60 with pitch 0, so the horizon is the screen centre: below y=361 the frame is
+    # the stone pad. The pad still moves 3000+ px between frames (drifting cloud shadows), so the
+    # wireframe's pixel counts stay evidence in the report and the row's assertion is the frame's own
+    # block-entity submission: `wire` emits 12 edges = 72 indices, and the entity is only submitted
+    # when the received box asks for it.
+    box = (200, 361, 910, 650)
+    line = lambda r, g, b: r > 190 and g > 190 and b > 190 and max(r, g, b) - min(r, g, b) <= 16
+    lines = [_count(shots[name][1], box, line) for name in ("box-hidden", "box-shown")]
+    changed = _changed(shots["box-hidden"][1], shots["box-shown"][1], box)
+    probe.report["structure_box_roi"] = list(box)
+    probe.report["structure_box_line_pixels"] = lines
+    probe.report["structure_box_changed_pixels"] = changed
+    hidden_e, shown_e = hidden_f["entity_extraction"], shown_f["entity_extraction"]
+    probe.report["structure_box_block_entities"] = [hidden_e["block_entities"], shown_e["block_entities"]]
+    probe.report["structure_box_block_entity_indices"] = [
+        hidden_e["block_entity_indices"], shown_e["block_entity_indices"]]
+    probe.check("structure_box_hidden_without_flag",
+                hidden_e["block_entities"] == 0 and hidden_e["block_entity_indices"] == 0)
+    probe.check("structure_block_submitted",
+                shown_e["block_entities"] >= 1 and shown_e["block_entity_indices"] >= 72)
+
+
 def check_element_emission(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-ELEMENT-EMISSION: a model element with `light_emission` draws full-bright at night.
 
@@ -779,4 +822,44 @@ def check_dynamic_context(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("compass_needle_follows_position", axis_diff(angles[0], angles[1]) > 30.0)
     probe.report["visual_review_required"] = [
         "Inspect ctx-day/ctx-night/compass-day frames; mask predicates do not prove vanilla needle parity."
+    ]
+
+
+def check_worn_head(probe: ProbeSteps, artifact: Path) -> None:
+    """WORN-PIGLIN-HEAD-EARS: a worn piglin head's ears angle down, not sideways.
+
+    26.3's piglin head carries its ear flaps inside the head model, angled down; the pre-fix rig
+    (client 8a7817c8, control) gave the head two separate horizontal ear boxes at eye level, so its
+    ear pixels stop at the head's mid-line while the fixed model's flaps reach the jaw. Two
+    stationary zombies, one per shot, a front camera each and the HUD hidden: the piglin frame is the
+    row's, the dragon frame (a much larger skull) is retained as WORN-DRAGON-HEAD-GEOMETRY evidence -
+    its neutral-black band counts are reported, not asserted (two framings measured 12750 vs 5982,
+    too close for a load-proof control; that row needs the HeadBreaker third-person angle).
+    """
+    shots = _qa._load_shots(probe, artifact, ("dragon-head", "piglin-head"))
+    dragon, piglin = shots["dragon-head"][0], shots["piglin-head"][0]
+    probe.check("worn_head_camera_at_fixture", all(
+        abs(a - b) < 0.01 for a, b in zip(dragon["camera_position"], (1000.5, 161.62, 1001.0))
+    ) and abs(piglin["camera_position"][2] - 1001.5) < 0.01
+      and abs(piglin["camera_position"][1] - 161.62) < 0.01
+      and abs(piglin["yaw"]) < 0.01 and abs(piglin["pitch"]) < 0.01)
+    probe.check("worn_head_noon", dragon["environment"]["time_of_day"] == "6000"
+                and piglin["environment"]["time_of_day"] == "6000")
+    image = shots["piglin-head"][1]
+    brown = lambda r, g, b: r > 90 and r > g + 15
+    # The head cube spans x 555..730 at this framing; the strips are the air beside it, where a
+    # horizontal ear reaches out at eye level (control) and a downward flap reaches the jaw (fix).
+    left, right = (450, 300, 560, 380), (720, 300, 830, 380)
+    ears = [sum(1 for pixel in image.crop(box).getdata() if brown(*pixel)) for box in (left, right)]
+    probe.report["worn_piglin_ear_strips"] = [list(left), list(right)]
+    probe.report["worn_piglin_ear_pixels"] = ears
+    probe.check("worn_piglin_head_visible", sum(ears) >= 200)
+    # Measured: control 542, fix 3859 (the flaps hang to the jaw). Floor 1500 keeps a 2.6x band.
+    probe.check("worn_piglin_ears_angle_down", sum(ears) >= 1500)
+    dark = lambda r, g, b: max(r, g, b) < 60 and g <= r + 8 and g <= b + 8
+    band = (560, 365, 730, 440)
+    probe.report["worn_dragon_skull_band_pixels"] = sum(
+        1 for pixel in shots["dragon-head"][1].crop(band).getdata() if dark(*pixel))
+    probe.report["visual_review_required"] = [
+        "Inspect dragon-head.png and piglin-head.png; the ear strips prove the flap direction only."
     ]

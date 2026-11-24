@@ -1,0 +1,104 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 994 159 994 1006 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 994 160 994 1006 165 1010 minecraft:air"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1002.0,
+        0,
+        0
+      ]
+    },
+    {
+      "cmd": "gamemode spectator"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "cmd": "setblock 1000 160 1004 minecraft:structure_block[mode=load]{mode:\"LOAD\",posX:-2,posY:0,posZ:1,sizeX:4,sizeY:3,sizeZ:3,showboundingbox:0b}"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "assert_block": {
+        "name": "structure-block-present",
+        "args": {
+          "x": 1000,
+          "y": 160,
+          "z": 1004
+        },
+        "expect": "minecraft:structure_block"
+      }
+    },
+    {
+      "shot": "box-hidden"
+    },
+    {
+      "cmd": "setblock 1000 160 1004 minecraft:structure_block[mode=load]{mode:\"LOAD\",posX:-2,posY:0,posZ:1,sizeX:4,sizeY:3,sizeZ:3,showboundingbox:1b}"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "assert_block": {
+        "name": "structure-block-box-present",
+        "args": {
+          "x": 1000,
+          "y": 160,
+          "z": 1004
+        },
+        "expect": "minecraft:structure_block"
+      }
+    },
+    {
+      "shot": "box-shown"
+    }
+  ]
+}

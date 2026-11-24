@@ -1,0 +1,105 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 994 159 994 1010 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 994 160 994 1010 165 1010 minecraft:air"
+    },
+    {
+      "cmd": "clear @s"
+    },
+    {
+      "cmd": "summon minecraft:zombie 1000.5 160 1005 {NoAI:1b,PersistenceRequired:1b,Rotation:[180f,0f],equipment:{head:{id:\"minecraft:dragon_head\",count:1}}}"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1001.0,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "key": {
+        "keys": [
+          "key.keyboard.f1"
+        ],
+        "ticks": 1
+      }
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "shot": "dragon-head"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:zombie]"
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "cmd": "summon minecraft:zombie 1000.5 160 1004 {NoAI:1b,PersistenceRequired:1b,Rotation:[180f,0f],equipment:{head:{id:\"minecraft:piglin_head\",count:1}}}"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1001.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "piglin-head"
+    }
+  ]
+}
