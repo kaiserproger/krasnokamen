@@ -1866,8 +1866,8 @@ def _promote_client_test_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, c
         if check[0]:
             raise Refused(repair)
         _git(tree, 'apply', '-R', '--whitespace=nowarn', '-', stdin=patch.encode(errors='surrogateescape'))
-        runner = client_runner or (lambda refs, tree: _client_ref_states_of(_run_client(ctx, {
-            _client_test(key, ref): key for key in refs}, root, tree)))
+        runner = client_runner or (lambda refs, tree: _client_ref_states_of(_run_client(
+            ctx, {_client_test(ref): ref for ref in refs}, root, tree)))
         control = runner(client_refs, tree)
         changed = set(reversed_files) | set(kept_test_files)
         for ref, entry in control.items():

@@ -374,6 +374,51 @@ class ClientTestPromotionTests(unittest.TestCase):
         self.assertIn('needs a client:', str(refused.exception))
 
 
+    def test_run_accepts_a_fixed_client_test_row_without_a_graphical_ref(self):
+        import json
+        fix = f'client-test:{self.fix[:12]}'
+        self.ledger_write(
+            f'id = "CLIENT-TEST-ROW"\ntitle = "t"\narea = "client"\nrepro = "source"\nseverity = "major"\n'
+            f'status = "fixed"\nsource = "s"\nfix_commit = "{fix}"\n'
+            'regression = ["client:krasnokamen-client:tests::a_save_never_writes_when_the_guard_is_present"]\n'
+            'promotion = "docs/bugs/promotions/CLIENT-TEST-ROW.json"\n')
+        (self.root / 'docs/bugs/promotions').mkdir(parents=True, exist_ok=True)
+        (self.root / 'docs/bugs/promotions/CLIENT-TEST-ROW.json').write_text(json.dumps({
+            'id': 'CLIENT-TEST-ROW', 'verdict': 'promoted', 'fix_commit': fix,
+            'control': 'client_test_reversal', 'reversed_files': ['src/lib.rs']}))
+        with patch.object(regressions, 'REPO_ROOT', self.root), \
+             patch.object(regressions, 'BASE_FIXED', frozenset()):
+            details = regressions.run(profiles.ProfileContext(self.base / 'artifacts2'))
+        self.assertEqual(details['fixed'], 1)
+
+    def test_default_runner_routes_the_refs_into_the_reversed_copy(self):
+        # The injected-runner tests bypass the default lambda; this one pins it: a ref must be parsed
+        # into (crate, test), run in the control copy, and come back keyed by the ref.
+        seen = []
+
+        def fake_client(ctx, tests, root, repo=None):
+            text = (Path(repo) / 'src/lib.rs').read_text()
+            assert 'SAVE_TO_A_PATH' not in text, 'the control copy must be reversed'
+            seen.append(set(tests))
+            line = self.assertion_line(text)
+            return {test: (ledger.RED, '1 failed', {'file': 'src/lib.rs', 'line': line, 'error': 'panic'})
+                    for test in tests}
+
+        def fake_green(ctx, tests, root, repo=None):
+            return {test: (ledger.GREEN, '', None) for test in tests}
+
+        def dispatch(ctx, tests, root, repo=None):
+            # Both calls pass the tree; the control copy holds the reversal, the checkout does not.
+            reversed_now = 'SAVE_TO_A_PATH' not in (Path(repo) / 'src/lib.rs').read_text()
+            return fake_client(ctx, tests, root, repo) if reversed_now else fake_green(ctx, tests, root, repo)
+
+        with patch.object(ledger, '_run_client', side_effect=dispatch):
+            receipt = ledger.promote('CLIENT-TEST-ROW', root=self.root, ctx=self.ctx())
+        self.assertEqual(receipt['control'], 'client_test_reversal')
+        self.assertEqual(seen, [{('krasnokamen-client',
+                                  'tests::a_save_never_writes_when_the_guard_is_present')}])
+
+
 class GraphicalControlBackfillTests(unittest.TestCase):
     """`ledger graphical-control`: record a promoted row's graphical red later, never promote."""
 
@@ -524,3 +569,4 @@ class GraphicalControlBackfillTests(unittest.TestCase):
         self.assertEqual(entry['state'], 'red')
         self.assertEqual(entry['assertion'], 'animated_face')
         self.assertEqual(entry['receipt'], str(receipt.resolve()))
+

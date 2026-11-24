@@ -764,7 +764,9 @@ def run(ctx, *, cargo_junit: Path | None = None):
                 client_tests[(first, second)].add(ident)
             else:
                 clients[ref].add(ident)
-        if bug.get('status') == 'fixed' and needs_real_client(bug) and not any(is_graphical_ref(ref) for ref in refs):
+        if (bug.get('status') == 'fixed' and needs_real_client(bug)
+                and not str(bug.get('fix_commit', '')).startswith('client-test:')
+                and not any(is_graphical_ref(ref) for ref in refs)):
             errors.append(f'{ident}: original or client-surface repro needs a real-client check')
         if isinstance(bug.get('fix_commit'), str) and bug['fix_commit'].startswith('client-test:') and not any(
                 ref.startswith('client:') for ref in refs):
