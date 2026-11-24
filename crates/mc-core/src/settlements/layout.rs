@@ -1262,15 +1262,35 @@ fn stand_column(anchor: [i32; 3], x: i32, z: i32) -> [i32; 2] {
 /// road column itself while paving, on the road beside a lamp post's column,
 /// inside the wall beside a wall or gate column, and on the road beside the
 /// well's rim.
+///
+/// A street plan follows the terrain, so a road or lamp on a slope lies well
+/// below the bell's own level: its stand is searched around the cell's level.
+/// Searching around the anchor instead left every street cell more than
+/// `SITE_BAND` below the bell without a stand (seed 24, 2026-11-23: cells 9
+/// blocks below the anchor, `worksite_unreached` with `navigation=None` and the
+/// road and lamp at 0/N for the whole 96 000-tick window). The perimeter, a
+/// gatehouse and the well are planned on the bell's level and keep the anchor.
 #[must_use]
 pub(crate) fn stand(state: &TickState, project: &Project, next: [i32; 3]) -> Option<[i32; 3]> {
     let record = state.settlements.get(project.settlement)?;
+    let centre = if street(project.blueprint.as_str()) {
+        next[1]
+    } else {
+        record.anchor[1]
+    };
     stand_columns(record.anchor, project.blueprint.as_str(), next[0], next[2])
         .into_iter()
         .find_map(|[x, z]| {
-            let y = construction::surface_y(state, record.anchor[1], x, z)?;
+            let y = construction::surface_y(state, centre, x, z)?;
             Some([x, y + 1, z])
         })
+}
+
+/// Street work: pavement, a lamp post and a meadow clearing. These follow the
+/// terrain and raise no authored body above their floor.
+#[must_use]
+pub(crate) fn street(blueprint: &str) -> bool {
+    matches!(blueprint, ROAD | LAMP | MEADOW)
 }
 
 /// Columns a builder may stand on to place `(x, z)` of a `blueprint` project,
