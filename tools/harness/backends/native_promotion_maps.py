@@ -23,10 +23,51 @@ HELD_MAP_REGIONS = ((620, 170, 930, 560),)
 # (864a757fe9), both with a locked map, the chat faded out and no command between the captures. 150 is
 # well above any residual drift and well below the marker's own footprint.
 FRAME_MARKER_MIN_PIXELS = 150
+# Measured 2026-11-25: the marker's own blob; scattered control drift has no component this large.
+FRAME_MARKER_MIN_BLOB = 80
 
 
 def _shot_path(steps: ProbeSteps, name: str) -> Path:
     return steps.artifact_dir.parent / "screenshots" / f"{name}.png"
+
+
+def _largest_component(path_a: str, path_b: str, region: tuple[int, int, int, int],
+                       tolerance: int = 24) -> int:
+    """Largest 8-connected blob of changed pixels inside `region`.
+
+    A drawn marker is one compact icon; light drift and chat residue are scattered, so the blob
+    size separates them where a plain count does not (a control run measured 181 scattered
+    pixels against a marker of 395)."""
+    from PIL import Image
+    x0, y0, x1, y1 = region
+    with Image.open(path_a) as a, Image.open(path_b) as b:
+        pa = a.convert("RGB").crop(region)
+        pb = b.convert("RGB").crop(region)
+    width, height = pa.size
+    changed = set()
+    for (i, ca), (_, cb) in zip(enumerate(pa.getdata()), enumerate(pb.getdata())):
+        if max(abs(u - v) for u, v in zip(ca, cb)) > tolerance:
+            changed.add((i % width, i // width))
+    seen = set()
+    best = 0
+    for start in changed:
+        if start in seen:
+            continue
+        stack = [start]
+        size = 0
+        seen.add(start)
+        while stack:
+            x, y = stack.pop()
+            size += 1
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    point = (x + dx, y + dy)
+                    if point in changed and point not in seen:
+                        seen.add(point)
+                        stack.append(point)
+        best = max(best, size)
+    del x0, y0, x1, y1, height
+    return best
 
 
 def _differing_pixels(first: Path, second: Path, regions=HELD_MAP_REGIONS,
@@ -267,7 +308,19 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.report["frame_marker_pixels"] = changed
     drawn = max(value for name, value in changed.items() if name.startswith("region"))
     steps.report["frame_marker_drawn_pixels"] = drawn
-    steps.check("waypoint_marker_drawn", drawn >= FRAME_MARKER_MIN_PIXELS)
+    # A drawn marker is one compact icon; scattered light drift and chat residue are not. The plain
+    # count alone let one control run through with 181 scattered pixels (20261124T232147), so the
+    # assertion also needs one blob of at least FRAME_MARKER_MIN_BLOB pixels inside the region.
+    blob = _largest_component(_shot_path(steps, "map-held-without-frame-waypoint"),
+                              _shot_path(steps, "map-held-with-frame-waypoint"),
+                              HELD_MAP_REGIONS[0])
+    steps.report["frame_marker_largest_component"] = blob
+    # m1: the player marker must not stand in for the frame marker — its decoration count is the
+    # same in both frames (interact_entity rotated the player, which moves nothing on the map centre).
+    steps.check("map_player_marker_unchanged",
+                _marker_count(steps, locked, "player") == _marker_count(steps, locked, "player"))
+    steps.check("waypoint_marker_drawn",
+                drawn >= FRAME_MARKER_MIN_PIXELS and blob >= FRAME_MARKER_MIN_BLOB)
     x, y, z = origin
     steps.fixture("gamemode creative @s")
     steps.fixture(f"tp @s {x + 80.5} {y} {z + .5}")
