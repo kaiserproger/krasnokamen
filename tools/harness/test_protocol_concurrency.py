@@ -8,10 +8,14 @@ import threading
 from types import SimpleNamespace
 import unittest
 
+from . import wal_frame
 from .matrix_api import MissingCapability
 from .protocol_concurrency import (concurrent_clicks, match_click_and_break, submit_click_and_break,
                                    verify_destroy_tick_fence, committed_destroy_records)
 from .matrix_domains.death_respawn import destroy_after_census, destroy_census
+
+# The bindings a forged test batch carries: any 16-byte store, 8-byte branch, 8-byte palette.
+IDENTITY = (bytes(range(1, 17)), bytes(range(51, 59)), bytes(range(101, 109)))
 
 
 class ConcurrentAdmissionTests(unittest.TestCase):
@@ -118,15 +122,22 @@ class ConcurrentAdmissionTests(unittest.TestCase):
             block = {'actor': 'A', 'pos': [1, 2, 3], 'tick': 25, 'change': {'Block': {}}}
             container = {'actor': 'A', 'pos': [1, 2, 3], 'tick': 25, 'change': {'Container': {}}}
             ctx = SimpleNamespace(server=SimpleNamespace(world_dir=Path(tmp)))
-            def write(records):
+            def write(records, version=wal_frame.VERSION):
                 payload = (json.dumps({'BlockLog': {'value': {'records': records}}}) + '\n').encode()
-                header = struct.pack('<IIQQII', 0x534F4C4A, 1, 25, 25, len(payload), zlib.crc32(payload))
-                (directory / 'batch-25-25.bin').write_bytes(header + payload)
+                frame = wal_frame.encode(25, 25, payload, IDENTITY)
+                if version != wal_frame.VERSION:
+                    frame = struct.pack('<IIQQII', wal_frame.MAGIC, version, 25, 25, len(payload),
+                                        zlib.crc32(payload)) + payload
+                (directory / 'batch-25-25.bin').write_bytes(frame)
             write([block, container])
             self.assertEqual(committed_destroy_records(ctx, 25, 'A', (1, 2, 3)),
                              {'block': block, 'container': container})
             write([block])
             with self.assertRaisesRegex(MissingCapability, 'missing_or_ambiguous'):
+                committed_destroy_records(ctx, 25, 'A', (1, 2, 3))
+            # The server refuses a format-1 frame by name; the fence never reads one as evidence.
+            write([block, container], version=1)
+            with self.assertRaisesRegex(RuntimeError, 'format 1'):
                 committed_destroy_records(ctx, 25, 'A', (1, 2, 3))
 
     def test_single_actor_batch_matches_click_and_dig(self):

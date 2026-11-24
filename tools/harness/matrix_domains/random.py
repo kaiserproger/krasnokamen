@@ -9,10 +9,8 @@ from collections import Counter
 import json
 import copy
 import re
-import struct
-import zlib
 
-from .. import runtime
+from .. import runtime, wal_frame
 from ..matrix_api import Adapter, Check, MissingCapability
 from ..backends.village_autonomy_qa import _container_totals, _snbt_fields, _snbt_parts
 from .session import data
@@ -135,18 +133,20 @@ def _published(ctx, through):
     directory = ctx.server.world_dir / 'journal'
     def ready():
         for path in directory.glob('batch-*-*.bin'):
+            span = wal_frame.span(path.name)
+            if span is None:
+                continue
             try:
                 raw = path.read_bytes()
             except FileNotFoundError:
                 # A checkpoint can retire a batch between enumeration and read.
                 continue
-            if len(raw) < 32:
-                raise AssertionError('truncated published WAL header')
-            magic, version, low, high, size, crc = struct.unpack_from('<IIQQII', raw)
-            if magic != 0x534F4C4A or version != 1 or len(raw) != size + 32 or zlib.crc32(raw[32:]) != crc:
-                raise AssertionError('invalid published WAL batch')
-            if high >= through:
-                return True, {'path': str(path), 'low': low, 'high': high}
+            try:
+                frame = wal_frame.decode(raw, span)
+            except wal_frame.FrameError as error:
+                raise AssertionError(f'invalid published WAL batch {path.name}: {error}') from None
+            if frame.hi >= through:
+                return True, {'path': str(path), 'low': frame.lo, 'high': frame.hi}
         return False, None
     return runtime.wait_for_path_condition(directory / '.fence', 30, ready)
 

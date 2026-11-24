@@ -39,14 +39,12 @@ import os
 import re
 import shutil
 import signal
-import struct
 import subprocess
 import uuid
-import zlib
 from pathlib import Path
 from typing import Any
 
-from . import runtime
+from . import runtime, wal_frame
 from .backends.protocol_lifecycle import ProtocolServer, reserve_matrix_port
 from .crash_wal import read_published
 
@@ -56,7 +54,6 @@ SEED = 2311
 WAIT = 900.0
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 CHECKPOINT = re.compile(r"checkpoint committed tick=(\d+)")
-BATCH = re.compile(r"batch-(\d+)-(\d+)\.bin\Z")
 BIRTH = re.compile(r"settlement_birth child=(\S+) settlement=(\d+) household=(\S+) tick=(\d+)")
 DEPARTED = re.compile(
     r"Household (\S+) left in transit ([0-9a-f-]{36}) with (\d+) members; "
@@ -108,8 +105,7 @@ def last_checkpoint(log: Path) -> int:
 
 def published_through(journal: Path, checkpoint_tick: int) -> int:
     """Highest tick of the contiguous published batches after the checkpoint (names only)."""
-    spans = sorted((int(m[1]), int(m[2])) for name in os.listdir(journal)
-                   if (m := BATCH.fullmatch(name)))
+    spans = sorted(span for name in os.listdir(journal) if (span := wal_frame.span(name)))
     following = checkpoint_tick + 1
     for lo, hi in spans:
         if hi <= checkpoint_tick:
@@ -204,12 +200,11 @@ def census_verdict(cut: str, census: dict, destination_name: str) -> list[str]:
     return failures
 
 
-def publish_batch(journal: Path, tick: int, entries: list[dict]) -> Path:
-    """Publish one complete one-tick WAL batch (format of crates/mc-core/src/journal.rs)."""
+def publish_batch(journal: Path, tick: int, entries: list[dict], identity: wal_frame.Identity) -> Path:
+    """Publish one complete one-tick WAL batch bound to `identity`, the world's own (`wal_frame`)."""
     payload = "".join(json.dumps(entry, separators=(",", ":")) + "\n" for entry in entries).encode()
-    header = struct.pack("<IIQQII", 0x534F4C4A, 1, tick, tick, len(payload), zlib.crc32(payload))
-    path = journal / f"batch-{tick:020}-{tick:020}.bin"
-    path.write_bytes(header + payload)
+    path = journal / wal_frame.batch_name(tick, tick)
+    path.write_bytes(wal_frame.encode(tick, tick, payload, identity))
     return path
 
 
@@ -376,14 +371,14 @@ class Run:
                 raise RuntimeError(f"transit refused: {line[0]}")
             # Published batch files are immutable: decode each new one once.
             for name in sorted(os.listdir(journal)):
-                match = BATCH.fullmatch(name)
-                if not match or name in seen or int(match[2]) <= checkpoint:
+                span = wal_frame.span(name)
+                if span is None or name in seen or span[1] <= checkpoint:
                     continue
                 seen.add(name)
                 data = (journal / name).read_bytes()
                 if self.facts["record"].encode() not in data:
                     continue
-                entries = [json.loads(line) for line in data[32:].splitlines() if line]
+                entries = wal_frame.decode(data, span).entries()
                 found.extend(image["tick"] for image in _transits(entries, self.facts["record"])
                              if wanted(json.loads(image["record"]) if image["record"] else None))
             return bool(found), found[:1]
@@ -541,7 +536,12 @@ def forged_duplicate(run: Path, binary: Path, config: Path, facts: dict) -> dict
     forged.mkdir()
     tick = wal["published_through"] + 1
     world = copy_world(crash, forged / "census" / "world")
-    publish_batch(world / "journal", tick, [body_entry(member, FORGED_WIRE_ID, tick)])
+    # The forged batch belongs to this copy under this build: take the store id,
+    # branch and palette from a batch the server itself published there.
+    identity = wal_frame.capture_identity(world)
+    if identity is None:
+        raise RuntimeError(f"no server-written WAL batch in {world} to take the forged batch's identity from")
+    publish_batch(world / "journal", tick, [body_entry(member, FORGED_WIRE_ID, tick)], identity)
     code, custody = run_tool(forged, binary, config, "custody", ["custody-census", "--copy", str(world)])
     census_red = (code != 0 and custody.get("status") == "FAIL"
                   and f"member {member['uuid']} of transit record" in (custody.get("error") or ""))

@@ -5,14 +5,17 @@ import unittest
 import zlib
 from pathlib import Path
 
+from tools.harness import wal_frame
 from tools.harness.crash_wal import classify_observation, read_published
+
+# The bindings a forged test batch carries: any 16-byte store, 8-byte branch, 8-byte palette.
+IDENTITY = (bytes(range(1, 17)), bytes(range(51, 59)), bytes(range(101, 109)))
 
 
 def frame(directory, lo, hi, entries):
     payload = b''.join(json.dumps(entry).encode() + b'\n' for entry in entries)
-    data = struct.pack('<IIQQII', 0x534F4C4A, 1, lo, hi, len(payload), zlib.crc32(payload)) + payload
-    path = directory / f'batch-{lo:020}-{hi:020}.bin'
-    path.write_bytes(data)
+    path = directory / wal_frame.batch_name(lo, hi)
+    path.write_bytes(wal_frame.encode(lo, hi, payload, IDENTITY))
     return path
 
 
@@ -48,6 +51,15 @@ class CrashWalTest(unittest.TestCase):
             path.write_bytes(path.read_bytes() + b'x')
             with self.assertRaisesRegex(ValueError, 'checksum'):
                 read_published(journal, 6)
+
+    def test_an_older_frame_format_is_refused_by_name(self):
+        with tempfile.TemporaryDirectory() as temp:
+            journal = Path(temp)
+            payload = b'{"Player":{"inventory":["marker"]}}\n'
+            (journal / wal_frame.batch_name(5, 5)).write_bytes(
+                struct.pack('<IIQQII', wal_frame.MAGIC, 1, 5, 5, len(payload), zlib.crc32(payload)) + payload)
+            with self.assertRaisesRegex(wal_frame.FrameError, 'format 1'):
+                read_published(journal, 4)
 
 
 if __name__ == '__main__':

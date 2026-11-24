@@ -7,12 +7,15 @@ import unittest
 import uuid
 from pathlib import Path
 
+from . import wal_frame
 from .crash_wal import read_published
 from .transit_crash import (body_entry, bread_count, census_verdict, custody_verdict, places,
                             publish_batch, published_through, transit_images, uuid_array)
 
 A, B, C = (str(uuid.UUID(int=n)) for n in (0x10, 0x11, 0x12))
 RECORD = A
+# The world's bindings a forged batch must carry: any 16-byte store, 8-byte branch, 8-byte palette.
+IDENTITY = (bytes(range(1, 17)), bytes(range(51, 59)), bytes(range(101, 109)))
 
 
 def receipt(villagers=None, transits=None, status="PASS"):
@@ -78,8 +81,8 @@ class WalTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             journal = Path(temp)
             publish_batch(journal, 5, [{"Transit": {"id": RECORD, "tick": 5,
-                                                    "record": json.dumps(record([A, B]))}}])
-            publish_batch(journal, 6, [body_entry(member, 99, 6)])
+                                                    "record": json.dumps(record([A, B]))}}], IDENTITY)
+            publish_batch(journal, 6, [body_entry(member, 99, 6)], IDENTITY)
             self.assertEqual(published_through(journal, 4), 6)
             self.assertEqual(published_through(journal, 6), 6)
             wal = read_published(journal, 4)
@@ -89,12 +92,15 @@ class WalTests(unittest.TestCase):
             forged = wal["frames"][1]["entries"][0]["Entity"]
             self.assertEqual((forged["id"], forged["uuid"], forged["tick"]), (99, B, 6))
             self.assertNotIn("ground", forged)
+            frame = wal_frame.read(journal / wal_frame.batch_name(6, 6))
+            self.assertEqual((frame.identity, frame.lo, frame.hi), (IDENTITY, 6, 6),
+                             "the forged batch is the current format, bound to the world it joins")
 
     def test_published_through_stops_at_a_gap(self):
         with tempfile.TemporaryDirectory() as temp:
             journal = Path(temp)
-            publish_batch(journal, 5, [])
-            publish_batch(journal, 7, [])
+            publish_batch(journal, 5, [], IDENTITY)
+            publish_batch(journal, 7, [], IDENTITY)
             self.assertEqual(published_through(journal, 4), 5)
 
     def test_uuid_array_matches_vanilla_signed_words(self):

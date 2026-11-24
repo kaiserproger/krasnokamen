@@ -578,7 +578,7 @@ seed = 81
                         and os.environ.get("BREAK_DL_ATTACK", "").startswith("hold"))):
                 def restart_server(remaining: float) -> str:
                     nonlocal server, server_log
-                    from .wal_forge import capture_identity
+                    from ..wal_frame import capture_identity
                     mcp.wal_identity = capture_identity(Path(evidence["world_dir"]))
                     old_pid = server.pid
                     if console_shutdown:

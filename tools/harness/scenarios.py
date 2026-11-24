@@ -564,7 +564,8 @@ SCENARIOS: dict[str, Scenario] = {
         requires=("xvfb",),
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_corrupt_block_entities.py",
                  "tools/harness/backends/anvil_corrupt.py", "tools/harness/backends/native_promotion_custody.py",
-                 "tools/harness/backends/wal_forge.py", "tools/harness/backends/client_probes.py"),
+                 "tools/harness/backends/wal_forge.py", "tools/harness/backends/client_probes.py",
+                 "tools/harness/wal_frame.py"),
         fixture="private world; jukebox, sculk shrieker and beacon, each alone in its own chunk two chunks from the player, saved, exported to Anvil, one field of each record corrupted, imported again; the same player rejoins beside them. Then a crafter and an oak shelf, each alone in its own chunk, and a clean stop whose shutdown checkpoint a forged tick-WAL batch overrides with undecodable opaque images of those two blocks; the player rejoins again",
         proves="the server refuses exactly the two undecodable imported chunks (one error each naming the record), never panics, keeps advancing game time past the beacon's 80-tick pass, serves ordered chat and keeps the player's own chunk; the checkpoint after the refusal and the shutdown checkpoint both commit, one error lists every refused chunk with its counts, and a restarted server refuses the same chunks again; the decodable beacon record is not refused; after the WAL replay the server refuses the crafter and shelf chunks once each, never panics and keeps advancing game time",
         limits="a beacon record is decodable by construction, so its fixture is the runtime-path control, not a refusal; crafter and shelf records are validated by the importer through their block (mc-world test) and an imported record is keyed by its own position, so crafter and shelf records reach the server only as forged WAL images under a foreign record id that replay's id-based validator does not check; no conduit fixture exists, because replay validation and `validate_loaded` refuse a forged conduit record at start and imports validate it; byte identity of a refused record is a Cargo check; whether checkpoints decline beside the WAL-refused chunks is not asserted; the native client keeps its loading screen until the chunks within about 12 blocks of the camera are known, so fixtures keep two chunks away (see native-v2-corrupt-chunk-near-camera)",
@@ -715,7 +716,8 @@ SCENARIOS: dict[str, Scenario] = {
         id="battle-kit-census", summary="A dropped battle kit piece is never issued twice across SIGKILL, death and reconnect",
         owner="core:harness", evidence="graphical", profile="battle-crash-recovery",
         scenario_id="battle-kit-census", requires=("xvfb",),
-        sources=("tools/harness/backends/battle_recovery.py", "tools/battle/run-battle.py"),
+        sources=("tools/harness/backends/battle_recovery.py", "tools/battle/run-battle.py",
+                 "tools/harness/wal_frame.py"),
         fixture="field-1k 1500/side on KRASNOKAMEN_BATTLE_WORLD, real Horizon PovRed holder and CamSpec spectator, "
                 "battle runner with --crash-handoff, actual SIGKILL",
         proves="full crash census at issue, drop, the stopped SIGKILL image (verdict recorded before reopen), "
@@ -731,7 +733,8 @@ SCENARIOS: dict[str, Scenario] = {
         summary="Repeated battle rearm survives SIGKILL, clean checkpoint, restart and export",
         owner="core:harness", evidence="graphical", profile="battle-crash-recovery",
         scenario_id="battle-rearm-recovery", requires=("xvfb",),
-        sources=("tools/harness/backends/battle_recovery.py", "tools/battle/run-battle.py"),
+        sources=("tools/harness/backends/battle_recovery.py", "tools/battle/run-battle.py",
+                 "tools/harness/wal_frame.py"),
         fixture="field-1k 1500/side, real Horizon holder and spectator; drop spear, rearm twice, freeze, "
                 "kill a horse extra targeted by an observed fresh soldier windup, checkpoint, SIGKILL",
         proves="a published windup targets the horse extra, which departs before impact; the resulting "
@@ -743,7 +746,8 @@ SCENARIOS: dict[str, Scenario] = {
         id="battle-crash-handoff", summary="The battle runner keeps the crash handoff for pre-stage and staged SIGKILLs",
         owner="core:harness", evidence="graphical", profile="battle-crash-recovery",
         scenario_id="battle-crash-handoff", requires=("xvfb",),
-        sources=("tools/harness/backends/battle_recovery.py", "tools/battle/run-battle.py"),
+        sources=("tools/harness/backends/battle_recovery.py", "tools/battle/run-battle.py",
+                 "tools/harness/wal_frame.py"),
         fixture="two runner sessions (SIGKILL before battle setup; SIGKILL staged before start), real Horizon clients",
         proves="the runner exits 0 with crash-handoff.json, the crash copy and a clean WAL archive; recovery starts "
                "from them, the clients rejoin, the staged battle resumes with both roles and strikes",
@@ -752,7 +756,7 @@ SCENARIOS: dict[str, Scenario] = {
     "transit-crash": _entry(
         id="transit-crash", summary="Migration transit custody survives SIGKILL at departure, in transit and arrival",
         owner="core:settlements", evidence="persistence", profile="transit-crash",
-        sources=("tools/harness/transit_crash.py", "tools/harness/crash_wal.py",
+        sources=("tools/harness/transit_crash.py", "tools/harness/crash_wal.py", "tools/harness/wal_frame.py",
                  "crates/mc-core/src/settlements/transit.rs",
                  "crates/mc-world-conversion/src/custody_census.rs"),
         fixture="pinned release server (KRASNOKAMEN_SERVER_BINARY), fresh seed-2311 world, no players or plugins; "
@@ -768,7 +772,7 @@ SCENARIOS: dict[str, Scenario] = {
         id="battle-auth-hydration", summary="Auth-locked battle roles hydrate only after /login, once",
         owner="core:harness", evidence="graphical", profile="battle-crash-recovery",
         scenario_id="battle-auth-hydration", requires=("xvfb", "sibling:solaris-default-plugins"),
-        sources=("tools/harness/backends/battle_recovery.py",),
+        sources=("tools/harness/backends/battle_recovery.py", "tools/harness/wal_frame.py"),
         fixture="krasnokamen-auth deployed via [plugins].directory, generated passwords, field-1k 1500/side, "
                 "real Horizon holder and spectator, actual SIGKILL mid-battle",
         proves="after recovery both rejoin locked: no kit, camera unbound, the durable battle image keeps the "
@@ -1557,7 +1561,7 @@ SCENARIOS: dict[str, Scenario] = {
         owner="core:harness", evidence="tcp", profile="matrix-random",
         selector=("--script", "tools/harness/matrix_scripts/random-break-seed-4.json", "--vanilla-data", "data/vanilla"),
         sources=("tools/harness/matrix_scripts/random-break-seed-4.json", "tools/harness/matrix_domains/random.py",
-                 "tools/harness/protocol_input_verbs.py"),
+                 "tools/harness/protocol_input_verbs.py", "tools/harness/wal_frame.py"),
         fixture="release server named by --server-bin (default KRASNOKAMEN_SERVER_BINARY); two protocol bots, one declared dirt block at Y80, survival",
         proves="the bot's StartDestroy+Finish PlayerAction pair (26.3 ordinals) makes the server remove the block, received as a block update",
         limits="TCP protocol bots, not a native or Java client; one block, no tool-speed or drop-parity coverage",
