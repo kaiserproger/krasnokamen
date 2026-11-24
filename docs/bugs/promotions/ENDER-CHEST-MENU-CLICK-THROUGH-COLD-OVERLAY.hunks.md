@@ -83,5 +83,8 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   that reverse leaves the cold guard in place: `menu_source_cold` is false, `close_player_menu` never runs,
   and the menu survives as the test expects. With the whole patch reversed it reds through
   `close_player_menu` (`crates/mc-core/src/tick/players.rs:155-173`, `MenuClosed` + custody assertions).
-  A one-hunk control (slot-of only) would be the proof that the guard itself matters; not run — the
-  promoting dry-run/receipts are the recorded controls.
+  One-hunk control (slot-of only, cold guard intact), run 2026-11-24 on `b8122ab6e8`: the test **reds at
+  `crates/mc-core/src/ender_chest_tests.rs:347`** (`a ghost owner's slot-state input is ignored` — the cold
+  guard then closes the menu through `close_player_menu`), and the same run restored green. The guard is
+  therefore controlled; the whole-patch control above is green for that test only because it removes the
+  cold guard as well.

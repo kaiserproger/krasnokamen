@@ -10,5 +10,5 @@ regression = ["cargo:mc-core:ender_chest::tests::ender_chest_click_with_a_cold_m
 failing_first = "not recorded"
 ingress_proof = ["crates/mc-core/src/tick/input/inventory.rs:228 menu_source_cold closes a cold ender-chest menu before is_open selects personal storage"]
 fix_commit = "patch:0db22dafacbc9521171e85c65fb24dde7c8a5856cded1263aac6df8444c7302b"
-repro_check = "Promoted on patch:0db22dafacbc. Control 20261123T231647-ledger-promote-d6x5u_d1: click + slot-state + button cold tests red (menu stays open / no MenuClosed), restored green. The despawned-owner test does not control the slot-of guard on its own (green with that one hunk reversed); with the whole patch reversed it reds through close_player_menu."
+repro_check = "Promoted on patch:0db22dafacbc. Control 20261123T231647-ledger-promote-d6x5u_d1: click + slot-state + button cold tests red (menu stays open / no MenuClosed), restored green. The despawned-owner test controls the slot-of guard in a one-hunk reverse (cold guard intact): red at ender_chest_tests.rs:347 on b8122ab6e8, green restored; under the whole-patch reverse it is green because the cold guard is gone too."
 promotion = "docs/bugs/promotions/ENDER-CHEST-MENU-CLICK-THROUGH-COLD-OVERLAY.json"
