@@ -6,5 +6,11 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "receipts/Books/REPORT-R1.md gap G-2 and section F3 (Gregg 5.4.2 off-CPU analysis, 2.5.13 latency analysis; perf). crates/mc-core/src/tick/phase_laps.rs laps are Instant wall times; tools/coreperf/profiles.py has no per-thread CPU field (only lscpu and affinity), although docs/development/performance-windows-and-profiling.md requires per-thread /proc/self/task/*/stat CPU per tick and tools/coreperf/capacity_ladder.py implements it for the capacity ladder only. Without it an optimisation round cannot say whether a win is work removed or waiting redistributed. Verified open on main 5bdc02911 (no schedstat read anywhere). Fix direction: sample /proc/<pid>/task/<tid>/schedstat field 2 for the tick thread about once per second in host_telemetry (about two file reads per second) and add per-thread CPU seconds to the profiles.py receipt; the one-off check is perf stat --per-thread -p <pid> -e task-clock -- sleep 60."
-regression = []
 failing_first = "not recorded"
+regression = [
+"python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_receipt_records_the_tick_thread_run_queue_wait",
+"python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_a_laps_only_phase_receipt_is_refused",
+"python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_thread_usage_reads_schedstat_field_two_for_a_fixture_process"
+]
+fix_commit = "2941bc91f88f537c0bf113c43cbac46717ac2b79"
+repro_check = "Implemented in 2941bc91f: tools/coreperf/profiles.py samples every server thread's /proc/<pid>/task/<tid>/schedstat field 2 (nanoseconds waiting on a run queue) and /proc/<pid>/task/<tid>/stat CPU seconds on every measurement poll (about once a second), sums same-named threads, and writes summary.threads with first-to-last CPU seconds, run_queue_wait_ms and both per source tick. summary.tick_thread is the tick thread's row and require_thread_wait refuses a run whose sampling is unavailable, so a laps-only receipt cannot pass; the fixture tree test reads a real schedstat layout and skips a short line instead of reading zero. The phase laps in crates/mc-core/src/tick/phase_laps.rs stay wall time by design: the receipt now carries the wait side per thread, which is what a phase cost is split with. Control: test_receipt_records_the_tick_thread_run_queue_wait reds at its first assertIn (summarize's threads key); the two helper tests are unrunnable under the reversal (new symbols) and green at HEAD. A quiet window would quote real numbers; the field's ownership proof is the fixture test."
