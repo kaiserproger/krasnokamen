@@ -135,6 +135,8 @@ fn probe(
     if !source.is_dir() {
         return Err(fail("source must be a directory"));
     }
+    // A staging directory is no world: refuse it before a lease file is created.
+    mc_world::store_marker::refuse_unpublished(&source).map_err(fail)?;
     let lease = mc_world::storage::open_for_lease(&source).map_err(fail)?;
     lease.try_lock().map_err(fail)?;
     receipt.input_hashes = hashes(&source)?;

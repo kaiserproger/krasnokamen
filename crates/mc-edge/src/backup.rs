@@ -496,8 +496,9 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
             target.display()
         );
     }
-    mc_world::atomic_file::create_dir_all_durable(&target)?;
-    let created_target = target_lease.is_none();
+    // Only a target this restore's own exclusive mkdir created is its own; one
+    // that appeared since the check above belongs to someone else.
+    let created_target = target_lease.is_none() && create_target(&target)?;
     let target_lease = match target_lease {
         Some(lease) => lease,
         None => ExclusiveLease::acquire(&target)?,
@@ -552,6 +553,21 @@ fn staging_path(target: &Path) -> Result<PathBuf> {
         .to_os_string();
     name.push(mc_world::store_marker::RESTORE_STAGING_SUFFIX);
     Ok(target.with_file_name(name))
+}
+
+/// Create `target` with an exclusive mkdir, its parents durably first, and
+/// report whether this call created it: an existing directory is not ours.
+fn create_target(target: &Path) -> Result<bool> {
+    let parent = target.parent().context("destination has no parent")?;
+    mc_world::atomic_file::create_dir_all_durable(parent)?;
+    match std::fs::create_dir(target) {
+        Ok(()) => {
+            mc_world::atomic_file::sync_parent_dir(target)?;
+            Ok(true)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+        Err(error) => Err(error).with_context(|| format!("creating {}", target.display())),
+    }
 }
 
 /// The restored world is published by renaming a directory beside the target

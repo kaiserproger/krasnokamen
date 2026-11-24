@@ -1186,6 +1186,108 @@ fn a_restore_refuses_a_backup_of_a_restored_copy_without_its_journal() {
     assert!(!root.path().join("again.restore-staging").exists());
 }
 
+/// Turn the stopped frozen `world` into a legacy frozen-clock world the way an
+/// older binary left it (no debt anchors, no `held_since`) and append one tail
+/// batch on the world's own branch; return the checkpoint tick.
+fn make_legacy_clock(world: &Path, config: &mc_core::CoreConfig) -> u64 {
+    use mc_core::journal::{CheckpointManifest, JournalEntry, JournalWriter, WalIdentity};
+    let identity = mc_core::native_checkpoint::native_identity(config);
+    let store = NativeStore::open_checked(world, identity).unwrap();
+    let mut image = store.read_checkpoint().unwrap();
+    let checkpoint = image.tick;
+    let mut manifest: CheckpointManifest =
+        serde_json::from_slice(&image.globals["checkpoint"].payload).unwrap();
+    let climate = manifest.climate.as_mut().unwrap();
+    climate.sim_debt_anchored_since = None;
+    let mc_core::weather::GameClockImage::Held { held_since, .. } = &mut climate.game_clock else {
+        panic!("frozen checkpoint required")
+    };
+    *held_since = None;
+    let tail_climate = *climate;
+    for debt in &mut manifest.debt {
+        debt.held_anchor = None;
+    }
+    for image in manifest.dimensions.values_mut() {
+        for debt in &mut image.debt {
+            debt.held_anchor = None;
+        }
+    }
+    image.globals.get_mut("checkpoint").unwrap().payload = serde_json::to_vec(&manifest).unwrap();
+    let registry =
+        mc_core::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref()).unwrap();
+    store
+        .commit_checkpoint(
+            mc_world::native::NativeCheckpoint {
+                tick: checkpoint,
+                previous_tick: checkpoint,
+                chunks: &[],
+                entities: &[],
+                players: &[],
+                globals: &image.globals,
+            },
+            &registry.blocks,
+            &registry.items,
+        )
+        .unwrap();
+    let wal = WalIdentity::of_world(world, store.store_uuid(), &registry.blocks).unwrap();
+    drop(store);
+    let mut writer = JournalWriter::open(world, 1, wal).unwrap();
+    let tail = [JournalEntry::Climate {
+        value: tail_climate,
+    }];
+    writer
+        .append(checkpoint + 1, checkpoint + 1, &tail)
+        .unwrap();
+    writer.flush().unwrap();
+    checkpoint
+}
+
+/// Persistence re-review 3 blocker: `world upgrade-game-clock` on a restored
+/// copy (a branch of its own) archives the covered batches but keeps
+/// `journal/`, so the upgraded copy opens, backs up and restores. Moving the
+/// whole directory away left a restored copy that every open refuses.
+#[test]
+fn a_restored_copy_upgraded_from_a_legacy_clock_keeps_its_journal() {
+    let root = tempfile::tempdir().unwrap();
+    let mut frozen = live_config(root.path().join("world"));
+    frozen.start_frozen = true;
+    let core = mc_core::Core::open(frozen).unwrap();
+    core.subscribe().blocking_recv().unwrap();
+    core.shutdown();
+    drop(core);
+    let first = root.path().join("first");
+    run_backup(&root.path().join("world"), &first).unwrap();
+    let copy = root.path().join("copy");
+    run_restore(&first, &copy).unwrap();
+    let branch = mc_world::store_marker::read(&copy).unwrap().unwrap().branch;
+    assert_ne!(branch, mc_world::store_marker::ROOT_BRANCH);
+    let checkpoint = make_legacy_clock(&copy, &live_config(copy.clone()));
+
+    let operator = live_config(root.path().join("original"));
+    std::fs::create_dir(&operator.world_dir).unwrap();
+    let report = mc_world_tools::game_clock_upgrade::upgrade_game_clock(&operator, &copy).unwrap();
+    assert_eq!(report.tick, checkpoint + 1);
+    let batch = format!("batch-{:020}-{:020}.bin", checkpoint + 1, checkpoint + 1);
+    let archive = copy.join(format!("journal-before-game-clock-{checkpoint}"));
+    assert!(
+        archive.join(&batch).is_file(),
+        "the tail batch was not archived"
+    );
+
+    let reopened = mc_core::Core::open(live_config(copy.clone()));
+    let refusal = reopened.as_ref().err().map(ToString::to_string);
+    if let Ok(core) = reopened {
+        core.shutdown();
+    }
+    assert_eq!(refusal, None, "the upgraded restored copy does not open");
+    let second = root.path().join("second");
+    run_backup(&copy, &second).unwrap();
+    let again = root.path().join("again");
+    run_restore(&second, &again).unwrap();
+    let recovered = mc_core::Core::open(live_config(again)).unwrap();
+    recovered.shutdown();
+}
+
 /// Hot backup → the real `restore` command with installed content: the copy of
 /// a running store needs redb repair, so verification must read the identity,
 /// store id and checkpoint from the one verification instance (a repaired

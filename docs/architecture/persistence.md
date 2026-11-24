@@ -344,9 +344,11 @@ clock, then writes one checkpoint at recovered native tick `c`. A legacy Held
 checkpoint at `K` without `held_since` uses `K` as its initial boundary; tail
 Held boundaries come from the preceding running counter. Held tail ticks do
 not age dropped items or entity countdowns. Ambiguous transitions refuse
-before checkpoint publication. It archives the old
-`journal` directory untouched after commit; a crash before archive leaves
-covered batches that recovery ignores.
+before checkpoint publication. After the commit it moves every file of
+`journal/` unchanged into `journal-before-game-clock-<K>/` and keeps the
+`journal/` directory itself, now empty: a restored copy is refused without it
+(see restore below). A crash before or during the archive leaves covered
+batches in `journal/` that recovery ignores.
 
 Every winning debt, including cold native-only records, gains an explicit held
 prefix. Active records re-anchor to `(c, H(c))`; inactive records at `L` use

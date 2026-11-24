@@ -89,7 +89,12 @@ fn copy_command_checkpoints_legacy_tail_then_archives_identical_wal() {
         .unwrap(),
         before
     );
-    assert!(!copy.join("journal").exists());
+    // The archive takes the batches, not the directory: `journal/` stays, empty.
+    assert_eq!(
+        std::fs::read_dir(copy.join("journal")).unwrap().count(),
+        0,
+        "journal/ still holds files after the archive"
+    );
     let recovered = mc_core::native_checkpoint::recover_offline(&config).unwrap();
     assert_eq!(recovered.checkpoint.tick, checkpoint + 1);
     drop(recovered);
