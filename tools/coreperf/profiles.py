@@ -1743,7 +1743,7 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
         initial = await initial_metrics(session, url)
         cursor = initial["latest_tick"]
         proof = (await cold_visibility_proof(session, url, args.clients, cursor, args.readiness_seconds)
-                 if "coverage" in recipe else None)
+                 if "coverage" in recipe and attribution else None)
         epoch = time.time_ns()
         if args.clients:
             stdin = session.processes["bots"].stdin
@@ -1770,7 +1770,8 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
                     if tick["wall_start_unix_ns"] <= previous_wall_start:
                         raise ValueError("source wall clock regressed")
                     previous_wall_start = tick["wall_start_unix_ns"]
-                    if "coverage" in recipe and start <= tick["wall_start_unix_ns"] < end:
+                    if (attribution and "coverage" in recipe
+                            and start <= tick["wall_start_unix_ns"] < end):
                         coverage_samples.append(validate_scale_sample(recipe, tick, allowed_cells))
                 stats = await session.http(url + "/stats", 2)
                 row = {"captured_unix_ns": time.time_ns() + offset,
@@ -1788,7 +1789,23 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
                     break
         result["summary"] = summarize(samples, process_rows, start, end)
         result["summary"]["tick_thread"] = require_thread_wait(result["summary"]["threads"])
-        if "coverage" in recipe:
+        if "coverage" in recipe and not attribution:
+            # COREPERF-REGION-ATTRIBUTION-PERTURBS-MEASURED-MEMORY-TRAFFIC control leg: the same
+            # population and window with the per-slot region probe off. Region-derived gates cannot
+            # be observed by construction; the receipt names every number it cannot report instead
+            # of omitting it, and keeps the measured window (MSPT/RSS/TPS) comparable to the
+            # attributed leg.
+            result["coverage"] = {
+                "status": "unavailable",
+                "reason": "region attribution off (control leg): no source-tick region telemetry "
+                          "and no cold visibility proof"}
+            result["population"] = {
+                **recipe["population"],
+                "resident_observed_saved": sum(prepared["cohort"]["counts"].values()),
+                "visible_unique_entities": None,
+                "visible_unique_scope": "unavailable: region attribution off (control leg)",
+                "source_tick_samples": 0}
+        elif "coverage" in recipe:
             if not coverage_samples:
                 raise ValueError("measurement lacks source-tick region coverage")
             if (recipe["variant"].endswith("-mostly-resting")
@@ -2146,6 +2163,12 @@ def main() -> int:
     parser.add_argument("--observer-stride", type=int, default=1,
                         help="scale profiles only: keep one observer anchor per N active regions "
                              "(cohort and pen coverage unchanged); for measuring the per-client slope")
+    parser.add_argument("--no-coreperf-regions", dest="coreperf_regions", action="store_false",
+                        help="scale profiles only: the control leg for the region-attribution bias "
+                             "(COREPERF-REGION-ATTRIBUTION-PERTURBS-MEASURED-MEMORY-TRAFFIC) — the "
+                             "same population and window with KRASNOKAMEN_COREPERF_REGIONS unset; "
+                             "region-derived gates are recorded unavailable, never omitted")
+    parser.set_defaults(coreperf_regions=True)
     parser.add_argument("--spawn-mobs", choices=("on", "off"))
     parser.add_argument("--spawn-monsters", choices=("on", "off"))
     stress.add_argument("--churn-percent", type=int, choices=(0, 1, 10))
@@ -2159,6 +2182,14 @@ def main() -> int:
         parser.error("--items requires the items-heavy profile")
     if args.items_bots < 1:
         parser.error("--items-bots must be positive")
+    if not args.coreperf_regions:
+        if args.profile not in SCALE_PROFILES:
+            parser.error("--no-coreperf-regions is for a scale profile control leg")
+        if any(value is not None for value in (
+                args.projectiles, args.xp_orbs, args.containers, args.productive_npcs,
+                args.damage_victims, args.map_frames, args.churn_percent, args.daylight_zombies,
+                args.wool_sheep, args.reactive_pairs)):
+            parser.error("--no-coreperf-regions control leg requires a recipe without stress")
     if args.profile in SCALE_PROFILES:
         if args.remote_host:
             parser.error("scale telemetry requires a local server")
