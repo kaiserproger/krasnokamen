@@ -6,5 +6,6 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-003"
-regression = ["cargo:mc-core:tick_tests::predicted_table_use_waits_for_accepted_placement"]
+regression = ["cargo:mc-core:tick_tests::predicted_table_use_waits_for_accepted_placement", "harness:entities:native-v2-ledger-crafting-pickup"]
 repro_check = "Historical commit 2ccf8cc1a397481928c7ac575cf6df177de66fb2 changes the crafting table's backing size from 10 to 0; the earlier claim that no discrete fix existed was wrong. A current-tree reversal of this exact size change is prepared in ../receipts/D79LedgerSprint/queue-batch-06/CONTAINERS-003-crafting-table-size10-control.patch but has not been run. The registered test includes pickup checks; red/restore and the original manual client behavior remain unverified."
+fix_commit = "patch:0d9f12319f244b46f7f9c31286aaea89f088ad03b40bb0fb13721ec1d177d00c"
