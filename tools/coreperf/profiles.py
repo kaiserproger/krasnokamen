@@ -1358,15 +1358,17 @@ def schedstat_run_queue_wait_ns(text: str) -> int:
     return int(fields[1])
 
 
-def thread_row(stat: str, schedstat: str) -> tuple[str, float, int] | None:
+def thread_row(stat: str, schedstat: str, ticks: int | None = None) -> tuple[str, float, int] | None:
     """Name, CPU seconds and run-queue wait of one thread, or `None` when either read is unusable.
 
-    `stat` is the `task/<tid>/stat` line and `schedstat` its three-field line. A thread that exits
-    between the two reads is skipped, never reported as zero."""
+    `stat` is the `task/<tid>/stat` line and `schedstat` its three-field line. `ticks` is USER_HZ
+    (`getconf CLK_TCK`) of the host that produced `stat`: the local one by default, the remote host's
+    for a `Remote.thread_listing` text, whose stat fields are in that host's clock ticks. A thread
+    that exits between the two reads is skipped, never reported as zero."""
     try:
         wait_ns = schedstat_run_queue_wait_ns(schedstat)
         fields = stat[stat.rindex(")") + 2:].split()
-        cpu_seconds = (int(fields[11]) + int(fields[12])) / os.sysconf("SC_CLK_TCK")
+        cpu_seconds = (int(fields[11]) + int(fields[12])) / (ticks or os.sysconf("SC_CLK_TCK"))
         return stat[stat.index("(") + 1:stat.rindex(")")], cpu_seconds, wait_ns
     except (ValueError, IndexError):
         return None
@@ -1403,16 +1405,17 @@ def thread_usage(pid: int, *, proc: Path = Path("/proc")) -> dict[str, dict[str,
     return result
 
 
-def thread_usage_listing(text: str) -> dict[str, dict[str, Any]]:
+def thread_usage_listing(text: str, ticks: int | None = None) -> dict[str, dict[str, Any]]:
     """`thread_usage` rows from one `Remote.thread_listing` text (`@@TASK`/`@@SCHED` blocks).
 
     A `--remote-host` session's server runs on another host, so its `/proc` is read there; the same
     MainPID on this host is some unrelated process or nothing at all
-    (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT)."""
+    (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT). `ticks` is that host's USER_HZ, not the
+    reader's: `task/<tid>/stat` utime/stime are in the clock ticks of the kernel that wrote them."""
     result: dict[str, dict[str, Any]] = {}
     for block in text.split("@@TASK")[1:]:
         stat, _, schedstat = block.partition("@@SCHED")
-        row = thread_row(stat.strip("\n"), schedstat.strip("\n"))
+        row = thread_row(stat.strip("\n"), schedstat.strip("\n"), ticks)
         if row is not None:
             add_thread_row(result, row)
     return result
@@ -1474,20 +1477,60 @@ def require_thread_wait(threads: dict[str, Any]) -> dict[str, Any]:
     return tick
 
 
-def server_threads(session: Any) -> dict[str, dict[str, Any]]:
+def tick_thread_pid(pid: int, *, proc: Path = Path("/proc"),
+                    name: str = TICK_THREAD) -> int | None:
+    """The process in `pid`'s tree whose task list carries the `name` thread, or `None`.
+
+    `--server-wrapper "perf stat … --"` (and `env A=1`, a launcher script) runs the server as a
+    child, so `session.processes["server"].pid` is the wrapper and its own task list has no
+    `mc-core-tick` thread: sampling it yields no tick row and `require_thread_wait` refuses the
+    window (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT). Walk `/proc/<pid>/task/*/children`
+    breadth-first, as `singleplayer_regressions._server_child` does, and answer the first process
+    that owns the thread. `proc` exists so a test drives it from a fixture tree."""
+    seen: set[int] = set()
+    pending = [pid]
+    while pending:
+        current = pending.pop(0)
+        if current in seen:
+            continue
+        seen.add(current)
+        try:
+            tasks = list((proc / str(current) / "task").iterdir())
+        except OSError:
+            continue
+        for task in tasks:
+            try:
+                if (task / "comm").read_text().strip() == name:
+                    return current
+            except OSError:
+                continue
+        for path in (proc / str(current) / "task").glob("*/children"):
+            try:
+                pending.extend(int(child) for child in path.read_text().split())
+            except (OSError, ValueError):
+                continue
+    return None
+
+
+def server_threads(session: Any, *, proc: Path = Path("/proc")) -> dict[str, dict[str, Any]]:
     """Per-thread CPU and run-queue sample of the process this session runs as the server.
 
+    A `--server-wrapper` that forks (`perf stat … --`, a launcher) makes the sampled pid the
+    wrapper, so the pid that owns the `mc-core-tick` thread is looked up through
+    [`tick_thread_pid`]; a local session with no wrapper keeps the session's own pid.
     A `--remote-host` session runs the server on another host, where `session.pid` is the remote
-    unit's MainPID: that host's `/proc` is read over the session's ssh connection instead of the
-    local one (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT)."""
+    unit's MainPID (the server itself, `taskset` execs into it): that host's `/proc` and clock
+    ticks are read over the session's ssh connection instead of the local ones
+    (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT)."""
     process = getattr(session, "processes", {}).get("server")
     pid = getattr(process, "pid", None) or getattr(session, "pid", None)
     if not isinstance(pid, int):
         return {}
     remote = getattr(session, "remote", None)
     if remote is not None:
-        return thread_usage_listing(remote.thread_listing(pid))
-    return thread_usage(pid)
+        return thread_usage_listing(remote.thread_listing(pid), remote.clk_tck())
+    owner = tick_thread_pid(pid, proc=proc)
+    return thread_usage(owner if owner is not None else pid, proc=proc)
 
 
 def client_tick_arrival(bots: dict[str, Any]) -> dict[str, Any]:

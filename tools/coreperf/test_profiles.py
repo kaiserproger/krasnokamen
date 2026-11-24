@@ -1,5 +1,9 @@
 """Unit contracts for public profile receipts; no server launch."""
 import argparse
+import os
+import signal
+import subprocess
+import sys
 import unittest
 import json
 from pathlib import Path
@@ -1260,15 +1264,16 @@ class WindowReceiptFieldsTests(unittest.TestCase):
         # A thread read in one sample only would report the whole process lifetime as its window:
         # named unavailable, and the tick thread refuses instead of reading a negative delta.
         samples, rows = self.fixture()
-        rows[1]["threads"].pop(profiles.TICK_THREAD)
+        rows[0]["threads"].pop(profiles.TICK_THREAD)
         threads = profiles.summarize(samples, rows, 1000, 3000)["threads"]
-        self.assertEqual(threads[profiles.TICK_THREAD]["status"], "unavailable")
+        self.assertEqual(threads.get(profiles.TICK_THREAD, {}).get("status"), "unavailable")
         with self.assertRaisesRegex(ValueError, "run-queue wait"):
             profiles.require_thread_wait(threads)
 
     def test_a_remote_session_reads_threads_over_its_connection(self):
         # A --remote-host session's pid is the MainPID on the remote host; reading the local
-        # /proc for it samples nothing (or an unrelated process).
+        # /proc for it samples nothing (or an unrelated process). The stat fields are in that
+        # host's USER_HZ, not this one's.
         listing = ("@@TASK\n7 (mc-core-tick) S 1 2 3 4 5 6 7 8 9 10 300 100 0 0\n"
                    "@@SCHED\n0 2500000 5\n"
                    "@@TASK\n8 (server-console) S 1 2 3 4 5 6 7 8 9 10 5 0 0 0\n"
@@ -1277,10 +1282,15 @@ class WindowReceiptFieldsTests(unittest.TestCase):
         class Remote:
             def __init__(self):
                 self.pids = []
+                self.probes = 0
 
             def thread_listing(self, pid):
                 self.pids.append(pid)
                 return listing
+
+            def clk_tck(self):
+                self.probes += 1
+                return 250
 
         class Session:
             processes = {}
@@ -1290,8 +1300,90 @@ class WindowReceiptFieldsTests(unittest.TestCase):
         rows = profiles.server_threads(Session())
         self.assertIn(profiles.TICK_THREAD, rows)
         self.assertEqual(Session.remote.pids, [4_194_303])
+        self.assertEqual(Session.remote.probes, 1)
         self.assertEqual(rows[profiles.TICK_THREAD]["run_queue_wait_ns"], 2_500_000)
         self.assertEqual(rows[profiles.TICK_THREAD]["threads"], 1)
+        self.assertAlmostEqual(rows[profiles.TICK_THREAD]["cpu_seconds"], 400 / 250,
+                               msg="the remote host's USER_HZ, not the reader's")
+
+    def test_a_wrapping_server_spawns_the_tick_thread_in_its_child(self):
+        # `--server-wrapper "perf stat … --"` makes the sampled pid the wrapper, whose own task
+        # list has no tick thread: the sample must come from the child that owns it
+        # (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT). A real wrapper/child pair, no sleep:
+        # the wrapper relays its child's `ready` line once the named thread exists.
+        child = ("import ctypes, sys, threading, time\n"
+                 "def hold():\n"
+                 "    ctypes.CDLL(None).prctl(15, b'mc-core-tick', 0, 0, 0)\n"
+                 "    time.sleep(600)\n"
+                 "threading.Thread(target=hold, daemon=True).start()\n"
+                 "print('ready', flush=True)\n"
+                 "sys.stdin.read()\n")
+        wrapper = ("import subprocess, sys\n"
+                   "subprocess.run([sys.executable, '-c', sys.argv[1]])\n")
+        process = subprocess.Popen([sys.executable, "-c", wrapper, child], stdin=subprocess.PIPE,
+                                   stdout=subprocess.PIPE, text=True, start_new_session=True)
+
+        def cleanup():
+            try:
+                process.stdin.close()
+            except OSError:
+                pass
+            try:
+                process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                process.wait(timeout=30)
+
+        self.addCleanup(cleanup)
+        self.assertEqual(process.stdout.readline().strip(), "ready")
+
+        class Process:
+            pid = process.pid
+
+        class Session:
+            processes = {"server": Process()}
+            pid = process.pid
+
+        rows = profiles.server_threads(Session())
+        self.assertIn(
+            profiles.TICK_THREAD, rows,
+            "the tick thread lives in the wrapper's child, not in the wrapper's own task list")
+        self.assertEqual(rows[profiles.TICK_THREAD]["threads"], 1)
+
+    def test_the_tick_thread_walker_reads_a_fixture_process_tree(self):
+        # The walker itself, on a tree with an extra wrapper level. Not a promotion ref: before the
+        # fix the function does not exist, so a reversal makes this level unrunnable, not red.
+        with tempfile.TemporaryDirectory() as directory:
+            proc = Path(directory)
+
+            def task(pid, tid, name, utime, stime, wait, children=()):
+                path = proc / str(pid) / "task" / str(tid)
+                path.mkdir(parents=True)
+                (path / "comm").write_text(name + "\n")
+                (path / "stat").write_text(f"{tid} ({name}) S 1 2 3 4 5 6 7 8 9 10 {utime} {stime} 0 0\n")
+                (path / "schedstat").write_text(f"{utime * 10_000_000} {wait} 5\n")
+                (path / "children").write_text(" ".join(str(child) for child in children) + "\n")
+
+            task(90, 9001, "perf", 1, 0, 0, children=(91,))
+            task(91, 9101, "taskset", 0, 0, 0, children=(92,))
+            task(92, 9201, "mc-core-tick", 300, 100, 2_500_000)
+            task(92, 9202, "server-console", 5, 0, 0)
+
+            class Process:
+                pid = 90
+
+            class Session:
+                processes = {"server": Process()}
+                pid = 90
+
+            self.assertEqual(profiles.tick_thread_pid(90, proc=proc), 92)
+            self.assertIsNone(profiles.tick_thread_pid(777, proc=proc))
+            rows = profiles.server_threads(Session(), proc=proc)
+            self.assertEqual(rows[profiles.TICK_THREAD]["run_queue_wait_ns"], 2_500_000)
+            self.assertNotIn("perf", rows, "the wrapper's own threads are not the server")
 
     def test_receipt_records_wal_fsync_service_time_and_bytes(self):
         # WAL-FSYNC-LATENCY-AND-BYTES-UNMEASURED: service time, count and bytes per source tick.
