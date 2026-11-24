@@ -3,17 +3,18 @@
 docs/settlements/construction.md#perimeter-gates-and-well. One founded settlement on a flat
 pad, a certified storage shell stocked through the ordinary chest menu with cobblestone and four
 oak doors (no logs, so no autonomous building is funded), ten bound villagers. Nothing else is
-ordered: the planner and its Builders must lay the wall line 25 blocks from the bell, a gatehouse
-with a door where each of the four roads crosses it, and a well on a plaza corner. The wall is
-read back through the native client's block scan, never from the server:
+ordered: the planner and its Builders must lay the wall line 30 blocks from the bell (the core's
+`settlements/layout.rs` RING, mirrored as `LAYOUT_RING`), a gatehouse with a door where each of
+the four roads crosses it, and a well on a plaza corner. The wall is read back through the native
+client's block scan, never from the server:
 
 - `walls_absent_before`: the wall line and the plaza corners are empty before the stock arrives,
   so no fixture command placed what is scanned afterwards;
 - `well_built`: a water source ringed by eight cobblestone blocks on a plaza corner;
 - `gates_built`: four gatehouses, seven columns of four blocks with an oak door in the centre;
 - `wall_built`: every other wall column is three cobblestone blocks;
-- `enclosed`: no column of the 200-column line is open at foot or head height;
-- `gate_door_opens`: a client interaction opens a gate door;
+- `enclosed`: no column of the 240-column line is open at foot or head height;
+- `gate_door_opens`: a gate door reads closed before a client interaction and open after it;
 - `project_named`: every active project the Construction page showed during the build carries a
   display name (never `Unknown blueprint`), and at least one of the built-in layout kinds
   (wall section, gate, well) was among them, so the name row had something to read.
@@ -32,6 +33,9 @@ from typing import Any
 from ..profiles import ProfileContext
 from . import buildings_qa as _qa
 from . import native_client
+# The layout mirror `LayoutMirrorTests` pins to `settlements/layout.rs` (`RING = PERIOD + 2`,
+# `MAX_SIZE[2] = 11`): the one place the harness knows the wall line's distance from the bell.
+from .settlement_map_qa import LAYOUT_RING
 from .buildings_qa import (
     _block_id, _chat_lines, _chest_totals, _deposit_all_at, _echo, _hand_storage_at,
     _open_chest_at, _props, _read, _scan_box, _summon_bind, _verdict, _villagers,
@@ -54,11 +58,13 @@ GATE_HALF = 3
 RESIDENTS = 10
 RADIUS = 64
 # Flat pad half width around the bell: the wall line plus a margin for the Builders to stand on.
-# The wall line itself is the core's `settlements/layout.rs` RING, derived from the deepest
-# blueprint (`MAX_SIZE[2] = 11` -> 30) and therefore not a constant to copy here: the product's
-# own founded line names it (`Founded <name> (revision <n>), wall ring <n>.`) and the gate reads
-# it there, so a blueprint depth change moves the pad with it instead of silently scanning the
-# wrong line (20261124T160759: the wall stood at 30 while this file scanned 25).
+# The line itself is the core's `settlements/layout.rs` RING (derived from the deepest blueprint,
+# `MAX_SIZE[2] = 11` -> 30). It is read from the harness mirror `settlement_map_qa.LAYOUT_RING`,
+# the one constant `LayoutMirrorTests` pins against that Rust source, instead of a copy here or a
+# new chat convention (review wave 2, M1: a `wall ring` suffix broke
+# `tools/coreperf/constantinople.py` and printed in every founder's chat). A ring that does not
+# fit the pad fails the fixture; a stale mirror scans the wrong line and the wall verdicts FAIL,
+# so no wrong ring can pass.
 PAD = 40
 COBBLE_STACKS = 12
 DOORS = 4
@@ -81,16 +87,6 @@ def ring_columns(ax: int, az: int, ring: int) -> list[tuple[int, int, int]]:
             if max(abs(dx), abs(dz)) == ring:
                 columns.append((ax + dx, az + dz, dx if abs(dz) == ring else dz))
     return columns
-
-
-def founded_ring(lines: list[str], name: str) -> int:
-    """The wall ring the product's founded line names, or 0 when the line carries none."""
-    for line in lines:
-        if f"Founded {name}" in str(line):
-            match = re.search(r"wall ring (\d+)", str(line))
-            if match:
-                return int(match.group(1))
-    return 0
 
 
 def wanted(across: int) -> list[str]:
@@ -133,6 +129,18 @@ def column_state(blocks: dict[tuple[int, int, int], str], x: int, ay: int, z: in
     if have == want:
         return "built"
     return "empty" if all(block == AIR for block in have) else "partial"
+
+
+def door_property(block: dict[str, Any]) -> str | None:
+    """The gate door's `open` property, or None when the block is not a door."""
+    if _block_id(block) != DOOR:
+        return None
+    return str(_props(block).get("open")).lower()
+
+
+def door_opens(before: dict[str, Any], after: dict[str, Any]) -> bool:
+    """The gate door was closed before the client interaction and open after it."""
+    return door_property(before) == "false" and door_property(after) == "true"
 
 
 def well_standing(blocks: dict[tuple[int, int, int], str], ay: int,
@@ -246,20 +254,18 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
     founded = any(f"Founded {sname}" in line for line in echo.get("recent_chat", []))
     _verdict(sub, "settlement_founded", "PASS" if founded else "FAIL", f"{sname} r={RADIUS}")
     probe.check(f"{FIXTURE}_founded", founded)
-    # The wall line is the product's own RING (blueprint depth dependent), named in the founded
-    # line. A run that cannot read it never reached the question: fail the fixture, never scan a
-    # guessed line and report an empty wall.
-    founded_line = next((str(line) for line in echo.get("recent_chat", [])
-                         if f"Founded {sname}" in str(line)), "")
-    wall_ring = founded_ring([founded_line], sname)
+    # The wall line is the core's RING, taken from the harness mirror `LAYOUT_RING` (the constant
+    # `LayoutMirrorTests` pins to `layout.rs`). It must fit the flat pad, or the fixture never
+    # reached the question: fail it instead of scanning a line the Builders cannot reach. A
+    # stale mirror scans the wrong line and the wall verdicts fail, never pass.
+    wall_ring = LAYOUT_RING
     fits = wall_ring > 0 and wall_ring + 6 <= PAD
-    sub["wall_ring"] = {"line": founded_line, "ring": wall_ring, "pad": PAD}
+    sub["wall_ring"] = {"source": "settlement_map_qa.LAYOUT_RING", "ring": wall_ring, "pad": PAD}
     probe.check(f"{FIXTURE}_ring", fits)
-    _verdict(sub, "wall_ring", "PASS" if fits else "FAIL",
-             f"ring {wall_ring} under pad {PAD} ({founded_line!r})")
+    _verdict(sub, "wall_ring", "PASS" if fits else "FAIL", f"ring {wall_ring} under pad {PAD}")
     if not fits:
-        raise RuntimeError(f"buildings-qa fixture: no readable wall ring under pad {PAD}: "
-                           f"{founded_line!r}")
+        raise RuntimeError(f"buildings-qa fixture: layout mirror ring {wall_ring} does not fit "
+                           f"pad {PAD}")
     ax, ay, az = px, py, pz
     sub["bell"] = [ax, ay, az]
     # The buyer's own way into the hub: a bell on the anchor, as the civil fixture has. Without it
@@ -396,18 +402,31 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
         probe.fixture(f"tp @s {ax + 1.5} {ay + 1.0} {az - 3.5} 90 25")
         probe.call("minecraft_wait_ticks", {"ticks": 60})
         native_client.capture(probe.client, artifact, f"{NAME}-well")
-    # A client interaction opens a gate door: the gate is a door, not a wall.
+    # A client interaction opens a gate door: the gate is a door, not a wall. The state is read on
+    # both sides of the click — closed before (the product places every door closed, `layout.rs`
+    # `open=false`) and open after — so a resident that opened it earlier cannot make the check
+    # vacuous, and a gate that cannot be opened fails it.
     door = (ax, ay, az - wall_ring)
+    closed_before = False
     opens = False
     if counts["doors"]:
         probe.fixture(f"tp @s {ax + 0.5} {ay + 1.0} {az - wall_ring + 3.5}")
         probe.call("minecraft_wait_ticks", {"ticks": 40})
         probe.call("minecraft_set_hotbar_slot", {"slot": 8})
+        before_block = _read(probe, door)
+        closed_before = door_property(before_block) == "false"
+        probe.check(f"{FIXTURE}_door_closed_before", closed_before)
+        sub["door_before"] = {"state": door_property(before_block)}
         probe.call("minecraft_use_item_on",
                    {"x": door[0], "y": door[1], "z": door[2], "face": "south", "hand": "main_hand"})
         probe.call("minecraft_wait_ticks", {"ticks": 20})
         block = _read(probe, door)
-        opens = str(_props(block).get("open")).lower() == "true" and _block_id(block) == DOOR
-    _verdict(sub, "gate_door_opens", "PASS" if opens else "FAIL", f"{door} open={opens}")
+        sub["door_after"] = {"state": door_property(block)}
+        opens = door_opens(before_block, block)
+    _verdict(sub, "gate_door_opens", "PASS" if opens else "FAIL",
+             f"{door} closed before={closed_before} open after={opens}")
     sub["chat_tail"] = _chat_lines(probe.observe(), 6)
     probe.check(f"{CHECK}_walled", complete(counts))
+    # The outcome assertion (M2): a run with the door closed before and still closed after fails
+    # here, and an already-open door failed the fixture above, so neither read alone can pass.
+    probe.check(f"{CHECK}_door_opens", opens)

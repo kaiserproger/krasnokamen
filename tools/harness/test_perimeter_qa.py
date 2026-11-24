@@ -6,7 +6,7 @@ from . import regressions
 from .backends import perimeter_qa as qa
 
 # The core's wall ring for today's deepest blueprint (settlements/layout.rs RING = 30); the gate
-# itself learns it from the founded line.
+# takes it from the same `settlement_map_qa.LAYOUT_RING` mirror the tests below pin.
 RING = 30
 
 
@@ -121,14 +121,24 @@ class PerimeterStatusRead(unittest.TestCase):
 
 
 class PerimeterWallRing(unittest.TestCase):
-    def test_the_gate_reads_the_ring_the_product_names(self):
+    """The wall line is the shared `LAYOUT_RING` mirror, and a stale ring can never pass."""
+
+    def test_the_gate_scans_the_shared_layout_ring(self):
         # 20261124T160759: the wall stood at 30 (the core's RING for MAX_SIZE[2] = 11) while the
-        # gate scanned 25 and reported an empty wall. The founded line carries the ring now.
-        self.assertEqual(qa.founded_ring(
-            ["Founded bqa_perimeter (revision 3), wall ring 30."], "bqa_perimeter"), 30)
-        self.assertEqual(qa.founded_ring(
-            ["Founded bqa_other (revision 1), wall ring 30."], "bqa_perimeter"), 0)
-        self.assertEqual(qa.founded_ring(["Founded bqa_perimeter (revision 1)."], "bqa_perimeter"), 0)
+        # gate scanned 25 and reported an empty wall. Review wave 2 M1: the ring comes from the
+        # one mirror `LayoutMirrorTests` pins to layout.rs, not from a chat suffix or a copy here.
+        from .backends import settlement_map_qa
+        self.assertEqual(qa.LAYOUT_RING, settlement_map_qa.LAYOUT_RING)
+        self.assertGreater(qa.LAYOUT_RING, 0)
+        self.assertLessEqual(qa.LAYOUT_RING + 6, qa.PAD)
+
+    def test_a_stale_ring_scans_an_empty_line_and_cannot_pass(self):
+        ring, wells, (ax, ay, az) = standing_town()
+        stale = qa.tally(ring, wells, ax, ay, az, qa.LAYOUT_RING - 5)
+        self.assertEqual(stale["wall_columns"]["built"], 0)
+        self.assertEqual(stale["gate_columns"]["built"], 0)
+        self.assertGreater(stale["open_columns"], 0)
+        self.assertFalse(qa.complete(stale))
 
     def test_the_line_scanned_moves_with_the_ring(self):
         self.assertEqual(len(qa.ring_columns(128, 0, 30)), 4 * (2 * 30 + 1) - 4)
@@ -138,6 +148,31 @@ class PerimeterWallRing(unittest.TestCase):
         gates = [across for _, _, across in qa.ring_columns(128, 0, 30)
                  if abs(across) <= qa.GATE_HALF]
         self.assertEqual(len(gates), 4 * (2 * qa.GATE_HALF + 1))
+
+
+class PerimeterGateDoor(unittest.TestCase):
+    """M2: the door is read closed before the click and open after it, never one read alone."""
+
+    def test_a_closed_door_reads_open_after_the_click(self):
+        closed = {"block_id": qa.DOOR, "properties": {"open": "false", "facing": "north"}}
+        opened = {"block_id": qa.DOOR, "properties": {"open": "true", "facing": "north"}}
+        self.assertEqual(qa.door_property(closed), "false")
+        self.assertTrue(qa.door_opens(closed, opened))
+
+    def test_an_already_open_door_is_not_evidence(self):
+        opened = {"block_id": qa.DOOR, "properties": {"open": "true"}}
+        self.assertFalse(qa.door_opens(opened, opened))
+
+    def test_a_door_that_stays_closed_fails(self):
+        closed = {"block_id": qa.DOOR, "properties": {"open": "false"}}
+        self.assertFalse(qa.door_opens(closed, closed))
+
+    def test_a_non_door_block_never_opens(self):
+        self.assertIsNone(qa.door_property({"block_id": "minecraft:cobblestone",
+                                            "properties": {}}))
+        self.assertFalse(qa.door_opens(
+            {"block_id": "minecraft:cobblestone", "properties": {}},
+            {"block_id": qa.DOOR, "properties": {"open": "true"}}))
 
 
 if __name__ == "__main__":
