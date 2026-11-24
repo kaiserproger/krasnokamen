@@ -148,7 +148,7 @@ pub(in crate::tick) fn step_entity(
                 .copied()
                 .flatten();
         }
-    } else if let Some(target) = row.plugin_target {
+    } else if let RareMotion::Plugin(target) = row.rare_motion {
         vel = crate::entity_motion::steer(row.movement, row.pos, target, f64::from(row.speed));
         look_target = Some(target);
     } else if row.standing {
@@ -251,7 +251,7 @@ pub(in crate::tick) fn step_entity(
             row.vel[1],
             row.vel[2] - row.horizontal_impulse[1],
         ];
-    } else if let Some(target) = row.gold_target {
+    } else if let RareMotion::Gold(target) = row.rare_motion {
         vel = crate::entity_motion::steer(row.movement, row.pos, target, f64::from(row.speed));
         look_target = Some(target);
     } else if crate::piglin::is_hoglin_type(row.type_id)

@@ -456,10 +456,13 @@ fn sparse_admission_retains_indexed_path_for_dormant_rows() {
 
 #[test]
 fn worker_snapshot_keeps_rare_state_in_entity_store() {
+    // Exact ratchet: one `RareMotion` (32 B) instead of two `Option<[f64; 3]>`
+    // (64 B). The control restores the two fields as a size-only regression and
+    // this equality fails.
     let bytes = std::mem::size_of::<ReadRow>();
-    assert!(
-        bytes <= 256,
-        "hot combat/breeding scalar snapshot copies {bytes} bytes"
+    assert_eq!(
+        bytes, 224,
+        "hot combat/breeding scalar snapshot copies {bytes} bytes; the exact bound is 224"
     );
 }
 
@@ -779,7 +782,12 @@ fn parallel_row_prep_matches_the_serial_prep_including_rare_fixups() {
     let mut parallel = PrepChunk::default();
     prepare_rows(&state, &periods, &env, true, &mut parallel);
     assert!(serial.rows.len() > 2 * PREP_CHUNK);
-    assert!(serial.rows.iter().any(|row| row.plugin_target.is_some()));
+    assert!(
+        serial
+            .rows
+            .iter()
+            .any(|row| matches!(row.rare_motion, RareMotion::Plugin(_)))
+    );
     assert!(serial.rare.is_empty() && parallel.rare.is_empty());
     assert_eq!(serial.summary, parallel.summary);
     assert!(parallel.summary.has_dolphin);

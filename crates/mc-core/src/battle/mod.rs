@@ -147,7 +147,16 @@ pub struct UnitCounters {
     pub tick: u64,
     pub units: u64,
     pub alive_per_faction: Vec<FactionAlive>,
+    /// Slot of each present faction in `alive_per_faction`, rebuilt by
+    /// `finish`; a lookup is one hash probe instead of a linear faction scan.
+    index: rustc_hash::FxHashMap<u16, usize>,
 }
+
+/// Test-only: faction lookups performed by `record` (one per unit in the fixed
+/// code, one per visited faction with the pre-fix linear find).
+#[cfg(test)]
+pub(crate) static RECORD_LOOKUPS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FactionAlive {
@@ -159,6 +168,7 @@ impl UnitCounters {
     fn clear(&mut self) {
         self.units = 0;
         self.alive_per_faction.clear();
+        self.index.clear();
     }
 
     fn record(&mut self, faction: u16, alive: bool) {
@@ -166,21 +176,28 @@ impl UnitCounters {
             return;
         }
         self.units += 1;
-        let alive = u64::from(alive);
-        if let Some(count) = self
-            .alive_per_faction
-            .iter_mut()
-            .find(|c| c.faction == faction)
+        #[cfg(test)]
         {
-            count.alive += alive;
+            RECORD_LOOKUPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        let alive = u64::from(alive);
+        if let Some(&slot) = self.index.get(&faction) {
+            self.alive_per_faction[slot].alive += alive;
         } else {
+            self.index.insert(faction, self.alive_per_faction.len());
             self.alive_per_faction.push(FactionAlive { faction, alive });
         }
     }
 
     fn finish(&mut self) {
+        // Present factions in index order, then published ascending; the slot
+        // map follows the sort so a later sample's lookups stay exact.
         self.alive_per_faction
             .sort_unstable_by_key(|count| count.faction);
+        self.index.clear();
+        for (slot, count) in self.alive_per_faction.iter().enumerate() {
+            self.index.insert(count.faction, slot);
+        }
     }
 
     #[cfg(test)]

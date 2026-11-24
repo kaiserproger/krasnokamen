@@ -47,8 +47,25 @@ struct Search {
 pub struct TargetGrid {
     cells: FxHashMap<(u16, i32, i32), Cell>,
     factions: Vec<u16>,
+    /// Membership scratch for `rebuild`: sorted, so the published faction list
+    /// is the ascending distinct set without a per-unit linear scan.
+    present: std::collections::BTreeSet<u16>,
     input: Vec<Unit>,
     members: Vec<Unit>,
+}
+
+/// Test-only: faction lookups performed by `rebuild` (one per unit in the
+/// fixed code, one per visited faction with the pre-fix `contains`).
+#[cfg(test)]
+pub(crate) static REBUILD_LOOKUPS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+impl TargetGrid {
+    /// The ascending distinct faction list a query walks.
+    pub(crate) fn factions(&self) -> &[u16] {
+        &self.factions
+    }
 }
 
 fn cell(value: f64) -> i32 {
@@ -76,16 +93,19 @@ impl TargetGrid {
     pub fn rebuild(&mut self, units: impl Iterator<Item = Unit>) {
         self.cells.clear();
         self.factions.clear();
+        self.present.clear();
         self.input.clear();
         for unit in units.filter(|unit| super::battle_row(unit.faction)) {
             let key = (unit.faction, cell(unit.pos[0]), cell(unit.pos[2]));
             self.cells.entry(key).or_default().len += 1;
-            if !self.factions.contains(&unit.faction) {
-                self.factions.push(unit.faction);
+            #[cfg(test)]
+            {
+                REBUILD_LOOKUPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
+            self.present.insert(unit.faction);
             self.input.push(unit);
         }
-        self.factions.sort_unstable();
+        self.factions.extend(self.present.iter().copied());
         let mut start = 0;
         for bucket in self.cells.values_mut() {
             bucket.start = start;
