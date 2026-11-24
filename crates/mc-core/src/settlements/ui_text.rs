@@ -797,6 +797,7 @@ pub(crate) fn blueprint(lang: Lang, id: &str) -> &'static str {
         "perimeter" => ("Wall section", "Секция стены"),
         "perimeter_gate" => ("Gate", "Ворота"),
         "well" => ("Well", "Колодец"),
+        "furnace" => ("Furnace", "Печь"),
         "road" => ("Road", "Дорога"),
         "lamp" => ("Street lamp", "Фонарь"),
         "meadow" => ("Meadow clearing", "Расчистка луга"),
@@ -985,6 +986,21 @@ mod tests {
         assert_eq!(Lang::of(Some("de_de")), Lang::En);
         assert_eq!(Lang::of(Some("")), Lang::En);
         assert_eq!(Lang::of(None), Lang::En);
+    }
+
+    #[test]
+    fn every_project_kind_has_a_display_name() {
+        // Every kind the planner can put on the Construction dialog: the layout
+        // infrastructure ids and the one-cell autonomous furnace workstation. An
+        // unnamed kind prints "Unknown blueprint" to the player and stops the
+        // civilization gate's dialog read (seed 24, 2026-11-24: `furnace`).
+        use crate::settlements::layout::{GATE, LAMP, MEADOW, PERIMETER, ROAD, WELL};
+        for id in [ROAD, LAMP, MEADOW, PERIMETER, GATE, WELL, crate::settlements::construction::furnace::NAME] {
+            assert_ne!(blueprint(Lang::En, id), "Unknown blueprint", "{id}");
+            assert_ne!(blueprint(Lang::Ru, id), "Неизвестный чертёж", "{id}");
+        }
+        assert_eq!(blueprint(Lang::En, crate::settlements::construction::furnace::NAME), "Furnace");
+        assert_eq!(blueprint(Lang::Ru, crate::settlements::construction::furnace::NAME), "Печь");
     }
 
     #[test]
