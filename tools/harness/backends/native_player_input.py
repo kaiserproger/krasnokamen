@@ -109,17 +109,17 @@ def _physical_short_click(steps: ProbeSteps, origin: tuple[int, int, int]) -> No
     steps.call("minecraft_look_at_block", {**target, "face": "north"})
     _shot(steps, "short-click-aim")
     _input(steps, button=1)
-    # The server applies the break on its own tick; a click the tick never saw
-    # leaves the block standing. The chat reply is the server's own verdict.
-    marker = f"fast click {uuid.uuid4().hex}"
-    steps.call("minecraft_send_chat", {
-        "message": (f"execute if block {target['x']} {target['y']} {target['z']} "
-                    f"minecraft:air run say {marker}"),
-        "command": True,
-    })
-    steps.wait(lambda state: any(isinstance(line, str) and marker in line
-                                 for line in state["recent_chat"]),
-               "physical_short_click_breaks_block", timeout_seconds=20)
+    # The break is the world's own answer: the client stops holding the aimed slot only
+    # once its authoritative block state says air. A click the tick never saw leaves the
+    # block standing, and the bounded wait reports that instead of hanging the scenario.
+    try:
+        steps.call("minecraft_wait_for_block_state", {
+            **target, "block_id": "minecraft:air", "timeout_seconds": 10,
+        })
+        broke = True
+    except RuntimeError:
+        broke = False
+    steps.check("physical_short_click_breaks_block", broke)
     _shot(steps, "short-click-broken")
 
 
