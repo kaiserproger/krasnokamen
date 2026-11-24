@@ -82,8 +82,50 @@ def _open_inventory(steps: ProbeSteps, creative: bool) -> dict:
     return state
 
 
-def menus(steps: ProbeSteps, _origin: tuple[int, int, int]) -> None:
+def _physical_short_click(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    """QA5-FAST-CLICK: a press and its release queued inside one client tick still
+    start one attack (vanilla `KeyMapping.click` keeps the press for the next tick),
+    so a physical short click on the aimed block destroys it.
+
+    The inventory's own short click cannot prove this: a slot click is handled by the
+    open screen on the press event, never by the attack key mapping, and it passes on
+    the pre-fix client. This step runs before the scene freezes the server so the
+    authoritative break lands on a ticking world.
+    """
+    from .native_v2 import _block
+    x, y, z = origin
+    target = {"x": x, "y": y + 1, "z": z + 3}
+    steps.fixture("gamemode survival")
+    steps.fixture(f"setblock {target['x']} {target['y']} {target['z']} minecraft:slime_block")
+    _block(steps, target, "minecraft:slime_block")
+    pointer = Pointer(steps.client.p4_window)
+    try:
+        # The press must reach this window even when the pointer starts elsewhere;
+        # warp first, then aim, so the warp's own motion cannot spoil the look.
+        pointer.move(60, 60)
+    finally:
+        pointer.close()
+    steps.call("minecraft_wait_ticks", {"ticks": 1})
+    steps.call("minecraft_look_at_block", {**target, "face": "north"})
+    _shot(steps, "short-click-aim")
+    _input(steps, button=1)
+    # The server applies the break on its own tick; a click the tick never saw
+    # leaves the block standing. The chat reply is the server's own verdict.
+    marker = f"fast click {uuid.uuid4().hex}"
+    steps.call("minecraft_send_chat", {
+        "message": (f"execute if block {target['x']} {target['y']} {target['z']} "
+                    f"minecraft:air run say {marker}"),
+        "command": True,
+    })
+    steps.wait(lambda state: any(isinstance(line, str) and marker in line
+                                 for line in state["recent_chat"]),
+               "physical_short_click_breaks_block", timeout_seconds=20)
+    _shot(steps, "short-click-broken")
+
+
+def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from PIL import Image, ImageChops
+    _physical_short_click(steps, origin)
     steps.fixture("tick freeze")
     _echo(steps, "menu_world_frozen")
     for creative in (False, True):
