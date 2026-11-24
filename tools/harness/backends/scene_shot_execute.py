@@ -593,7 +593,7 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             from . import mob_chase_oracle
 
             samples = [json.loads((artifact / f"{item}.json").read_text()) for item in value["samples"]]
-            measurement = mob_chase_oracle.measure(samples, value["kind"])
+            measurement = mob_chase_oracle.measure(samples, value["kind"], value["min_distance_last"])
             (artifact / f"{value['name']}.json").write_text(json.dumps(measurement, indent=2) + "\n")
             slug = value["kind"].split(":")[1]
             bit = 1 << value["aggressive_bit"]
@@ -607,6 +607,9 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             probe.check(f"chase_aggressive_{slug}",
                         bool(measurement["flags_first"] & bit) and bool(measurement["flags_last"] & bit))
             probe.check(f"chase_identity_{slug}", measurement["identity_constant"])
+            # The window has to end with the mob still at range: a brawl on top of the player is not a
+            # chase (REVIEW-wave2-13 M1-res).
+            probe.check(f"chase_cruise_{slug}", measurement["reach_kept"])
         elif kind == "assert_block":
             result = probe.call("minecraft_read_block", value["args"])
             (artifact / f"{value['name']}.json").write_text(json.dumps(result, indent=2) + "\n")

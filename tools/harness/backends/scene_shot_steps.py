@@ -292,7 +292,7 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
         elif kind == "mob_chase":
             valid = (client == "native" and isinstance(value, dict)
                      and set(value) == {"samples", "name", "kind", "min_speed", "max_speed",
-                                        "min_approach_blocks", "aggressive_bit"}
+                                        "min_approach_blocks", "min_distance_last", "aggressive_bit"}
                      and isinstance(value["name"], str) and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
                      and isinstance(value["kind"], str)
                      and re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", value["kind"])
@@ -300,7 +300,7 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and all(isinstance(item, str) and re.fullmatch(r"[A-Za-z0-9_-]+", item)
                              for item in value["samples"])
                      and all(type(value[key]) in (int, float) and math.isfinite(value[key]) and value[key] >= 0
-                             for key in ("min_speed", "max_speed", "min_approach_blocks"))
+                             for key in ("min_speed", "max_speed", "min_approach_blocks", "min_distance_last"))
                      and value["min_speed"] < value["max_speed"]
                      and type(value["aggressive_bit"]) is int and 0 <= value["aggressive_bit"] <= 7)
         elif kind == "assert_block":
