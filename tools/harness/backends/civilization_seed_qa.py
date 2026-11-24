@@ -951,6 +951,11 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                 furnace["container_observation"] = "read-only data get block; totals across slots"
             except Exception as exc:
                 furnace["container_error"] = str(exc)
+            try:
+                furnace["recipes_used"] = village.read_recipes(
+                    server, server_log, pos, min(15.0, probe.remaining()))
+            except Exception as exc:
+                furnace["recipes_error"] = str(exc)
             if pos not in seen_furnaces:
                 probe.call("minecraft_close_screen", {})
                 player = probe.observe()["player"]
@@ -962,18 +967,27 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                 workstation_shots.append(native_client.capture(
                     probe.client, artifact, f"civilization-workstation-{advanced:06d}"))
                 seen_furnaces.add(pos)
-            if ((furnace.get("container_totals") or {}).get("minecraft:iron_ingot", 0) > 0
-                    and pos not in baseline_furnaces and pos not in iron_captured):
-                iron_menu = capture_iron_menu(probe, server, read_container, artifact, pos, advanced)
-                if iron_menu is None:
-                    furnace["iron_menu_skipped"] = "output collected before the simulation hold"
-                    continue
-                furnace["iron_menu"] = iron_menu
-                iron_captured.add(pos)
-                detail["milestones"].setdefault("iron_smelted", {
-                    "sprint_ticks": advanced, "screenshot": iron_menu["screenshot"],
-                    "furnace": pos, "menu": iron_menu["container"],
-                })
+            if pos not in baseline_furnaces and "iron_smelted" not in detail["milestones"]:
+                stored = (furnace.get("container_totals") or {}).get("minecraft:iron_ingot", 0)
+                if stored > 0 and pos not in iron_captured:
+                    iron_menu = capture_iron_menu(probe, server, read_container, artifact, pos, advanced)
+                    if iron_menu is None:
+                        furnace["iron_menu_skipped"] = "output collected before the simulation hold"
+                    else:
+                        furnace["iron_menu"] = iron_menu
+                        iron_captured.add(pos)
+                        detail["milestones"]["iron_smelted"] = {
+                            "sprint_ticks": advanced, "screenshot": iron_menu["screenshot"],
+                            "furnace": pos, "menu": iron_menu["container"],
+                        }
+                if "iron_smelted" not in detail["milestones"] \
+                        and village.iron_smelted_by_recipes(furnace.get("recipes_used")):
+                    detail["milestones"]["iron_smelted"] = {
+                        "sprint_ticks": advanced, "furnace": pos,
+                        "recipes_used": furnace["recipes_used"],
+                        "source": "furnace_recipes",
+                        "note": "persistent RecipesUsed counter; the ingot was collected between samples",
+                    }
         shot = native_client.capture(probe.client, artifact, f"civilization-{advanced:06d}")
         row = {"sprint_ticks": advanced, "elapsed_seconds": time.monotonic() - started,
                "client_game_time": village._gametime(probe),

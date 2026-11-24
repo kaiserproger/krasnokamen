@@ -477,3 +477,49 @@ class ServerStorageReadTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class IronSmeltCounterTests(unittest.TestCase):
+    """CIV-B2 (1): the furnace's persistent RecipesUsed counter proves a smelt.
+
+    Seed-24 gate 20261124T212153: the tower furnace showed
+    RecipesUsed: {"minecraft:iron_ingot_from_smelting_raw_iron": 2} while every
+    sample found the output slot empty and shears in storage, so the ingot was
+    collected between samples and the slot-only evidence never saw it.
+    """
+
+    def test_a_furnace_recipe_counter_proves_a_smelt(self) -> None:
+        line = ('132, 78, -222 has the following block data: {CookTime: 0, Items: [], '
+                'RecipesUsed: {"minecraft:iron_ingot_from_smelting_raw_iron": 2}, '
+                'id: "minecraft:furnace"}')
+        counts = qa._recipe_counts(line)
+        self.assertEqual(counts, {qa.IRON_SMELT_RECIPE: 2})
+        self.assertTrue(qa.iron_smelted_by_recipes(counts))
+
+    def test_an_empty_or_foreign_counter_is_no_evidence(self) -> None:
+        for recipes in (None, {}, {qa.IRON_SMELT_RECIPE: 0},
+                        {"minecraft:iron_ingot_from_blasting_raw_iron": 2}):
+            with self.subTest(recipes=recipes):
+                self.assertFalse(qa.iron_smelted_by_recipes(recipes))
+        self.assertEqual(qa._recipe_counts(
+            '1, 64, 1 has the following block data: {Items: [], id: "minecraft:furnace"}'), {})
+
+    def test_recipe_read_reports_console_refusal_and_expiry(self) -> None:
+        with TemporaryDirectory() as directory:
+            log = Path(directory) / "server.log"
+            log.write_text("")
+            server = SimpleNamespace(stdin=io.BytesIO())
+            with patch.object(qa.runtime, "wait_for_path_condition",
+                              side_effect=TimeoutError("recipe read timed out")):
+                with self.assertRaisesRegex(TimeoutError, "recipe read"):
+                    qa.read_recipes(server, log, (12, 64, 1), 15.0)
+
+            def refused(path, timeout, condition):
+                log.write_text("The target block is not a block entity\n")
+                reached, value = condition()
+                self.assertTrue(reached)
+                return value
+
+            with patch.object(qa.runtime, "wait_for_path_condition", side_effect=refused):
+                with self.assertRaisesRegex(RuntimeError, "not a block entity"):
+                    qa.read_recipes(server, log, (12, 64, 1), 15.0)

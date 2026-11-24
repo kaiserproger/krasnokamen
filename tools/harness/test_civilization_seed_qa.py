@@ -170,8 +170,11 @@ class CivilizationEvidenceTests(unittest.TestCase):
             result = qa.capture_target(probe, "artifact", "baby", (160.5, 75.5, -280.5),
                                        entity=baby, teleport=teleport)
         self.assertTrue(result["observer_teleported"])
+        # The capture stands beside the baby (first BABY_TELEPORT_SIDES entry,
+        # +1.5 x): from the baby's own block the client sees its own body and the
+        # report showed the wall. The return teleport goes back to the walker.
         self.assertEqual([c.args for c in teleport.call_args_list],
-                         [(160.5, 75.0, -280.5), (131.0, 77.0, -215.0)])
+                         [(162.0, 75.0, -280.5), (131.0, 77.0, -215.0)])
 
     def test_sparse_building_whose_centre_aim_misses_is_aimed_at_the_nearest_solid_block(self):
         # Seed-24 Lumber camp (runs 0yj9abeh, p1pmn34d): the centre-nearest solid
@@ -428,21 +431,29 @@ class CivilizationEvidenceTests(unittest.TestCase):
     def test_remote_building_loads_each_chunk_and_returns_observer(self):
         building = {"natural": False, "min": [234, 72, -213], "max": [240, 76, -207]}
         probe = Mock()
-        probe.observe.return_value = {"player": {"x": 131.5, "y": 78.0, "z": -217.5}}
         probe.remaining.return_value = 120.0
         probe.call.return_value = {"blocks": [{"block_id": "minecraft:red_bed"}], "truncated": False}
         server = Mock()
+        moves: list[str] = []
+        probe.observe.side_effect = lambda: {"player":
+            {"x": 237.0, "y": 79.0, "z": -210.0} if len(moves) == 1
+            else {"x": 131.5, "y": 78.0, "z": -217.5}}
         with patch.object(qa.village, "_listed_buildings", return_value=[building]), \
-             patch.object(qa.item_merge, "_console") as console:
+             patch.object(qa.item_merge, "_console", side_effect=lambda _s, command: moves.append(command)) as console:
             evidence = qa.building_blocks(probe, [], server)
         self.assertEqual(evidence[0]["blocks"][0]["block_id"], "minecraft:red_bed")
+        self.assertTrue(evidence[0]["observer_teleported"])
+        self.assertTrue(evidence[0]["observer_moved"])
+        # A remote menu holds the observer, so the scan closes it first, loads each
+        # chunk of the 2x2 chunk footprint, scans, and returns the observer through
+        # the console tp with a bounded horizontal wait (move_observer).
         self.assertEqual([call.args[0] for call in probe.call.call_args_list], [
+            "minecraft_close_screen",
             "minecraft_wait_for_loaded_block", "minecraft_wait_for_loaded_block",
             "minecraft_wait_for_loaded_block", "minecraft_wait_for_loaded_block",
-            "minecraft_scan_blocks", "minecraft_wait_for_loaded_block"])
+            "minecraft_scan_blocks", "minecraft_wait_for_loaded_block",
+            "minecraft_close_screen"])
         self.assertEqual(console.call_count, 2)
-        self.assertEqual([call.args[1] for call in probe.wait.call_args_list],
-                         ["building_scan_observer_arrived", "building_scan_observer_returned"])
 
     def test_iron_capture_opens_furnace_and_requires_visible_output(self):
         probe = Mock()

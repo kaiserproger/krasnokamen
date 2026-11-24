@@ -414,6 +414,54 @@ def _snbt_fields(source: str) -> dict[str, str]:
     return fields
 
 
+IRON_SMELT_RECIPE = "minecraft:iron_ingot_from_smelting_raw_iron"
+
+
+def iron_smelted_by_recipes(recipes: dict[str, int] | None) -> bool:
+    """A furnace's persistent counter proves a smelt even when the output was collected.
+
+    The counter lives in the block entity for the world's life, so it survives the
+    resident collecting an ingot between samples (seed-24 gate 20261124T212153:
+    two ingots smelted, shears in storage, no ingot in a slot at any sample).
+    """
+    return (recipes or {}).get(IRON_SMELT_RECIPE, 0) >= 1
+
+
+def _recipe_counts(source: str) -> dict[str, int]:
+    """`RecipesUsed: {"minecraft:...": N}` from one block-entity read."""
+    match = re.search(r"RecipesUsed: \{([^}]*)\}", source)
+    if match is None:
+        return {}
+    return {key: int(count) for key, count in re.findall(r'"([^"]+)"\s*:\s*(\d+)', match.group(1))}
+
+
+def read_recipes(
+    server: subprocess.Popen[Any], log_path: Path, pos: tuple[int, int, int], timeout: float,
+) -> dict[str, int]:
+    """Read one block entity's persistent RecipesUsed counters (read-only)."""
+    if server.stdin is None:
+        raise RuntimeError("server console is unavailable for a recipe read")
+    offset = log_path.stat().st_size
+    x, y, z = pos
+    command = f"data get block {x} {y} {z}"
+    prefix = f"{x}, {y}, {z} has the following block data: "
+    server.stdin.write((command + "\n").encode())
+    server.stdin.flush()
+
+    def replied() -> tuple[bool, str]:
+        with log_path.open("rb") as stream:
+            stream.seek(offset)
+            lines = stream.read().decode(errors="replace").splitlines()
+        for line in lines:
+            if line.startswith(prefix):
+                return True, line
+            if line in ("That position is not loaded", "The target block is not a block entity") or line.startswith("Command failed:"):
+                raise RuntimeError(f"recipe read refused {command!r}: {line}")
+        return False, ""
+
+    return _recipe_counts(runtime.wait_for_path_condition(log_path, timeout, replied))
+
+
 def _container_totals(source: str) -> dict[str, int]:
     """Read one physical block's live Items; absent Items means an empty block."""
     items = _snbt_fields(source).get("Items", "[]").strip()
