@@ -40,8 +40,14 @@ filter are literal. No line was invented.
 
 ## Gate
 
-`entities`, scenario `native-v2-craft-drag`: a plain initial click on the inventory's oak-log stack,
-release over the source, then a server-echo probe. `initial_drag_keeps_server_cursor` requires the
-server-observed carried stack to still hold the log (count 1, origin `server_observed`) and the source
-slot to be empty. On the control the pre-fix prediction puts the stack back on release, so the carried
-stack is empty and the assertion fails.
+Measured 2026-11-24 on the committed pair (server pin `pins/70d1d0679b56`, core `70d1d0679b`):
+
+- `native-v2-craft-drag` (`initial_drag_keeps_server_cursor`) and `native-v2-craft-drag-paced`
+  (`native_drag_matches_vanilla_cursor`) PASS on the control: their server-echo probes read the
+  authoritative cursor, which the local prediction does not override for a release over the drag's
+  origin.
+- `native-v2-chest-drag-disconnect` FAILS on the control at `chest_drag_cursor_retained` (control
+  `20261124T133513`, restore `20261124T133604` passed): the pre-fix prediction drops the retained
+  cursor across the chest drag, which is the row's symptom ("the item disappears"). This is the ref
+  the promotion uses; `chest_drag_cursor_retained` is the row's cursor-retention path, and it is the
+  first failure in that scene on the control.
