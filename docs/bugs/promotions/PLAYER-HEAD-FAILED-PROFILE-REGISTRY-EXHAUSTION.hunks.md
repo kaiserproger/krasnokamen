@@ -20,7 +20,7 @@ guarded behaviour the row names.
 | hunk | content | disposition |
 |---|---|---|
 | `@@ -14,8 +14,19 @@ const MAX_HEADS` | `Entries.skins` becomes `Entry` (state/generation/last_access), `clock`, `enum State` | NOT carried — (b): the reversed refusal sits inside a `match entry.state`, so the reversed tree keeps these types and the kept registry tests construct them |
-| `@@ -51,18 +62,32 @@ impl HeadTextures` | the lookup's `last_access`/`State` match **and** `if entries.skins.len() >= MAX_HEADS { return Err("head texture registry full") }` → LRU/failed-victim eviction + pending-queue cleanup, `Entry { state: Pending, generation: access, … }` insertion | **CARRIED in part** — the pair's `a/`-side is the refusal line exactly as `19259ce8^` had it and its `+`-side is the eviction block verbatim (11 added, 1 replaced line); the rest of the hunk (lookup/insertion) is NOT carried — (b): the kept tests read `last_access`/`generation`, and reversing them without the reconciliation changes nothing the row asserts |
+| `@@ -51,18 +62,32 @@ impl HeadTextures` | the lookup's `last_access`/`State` match **and** `if entries.skins.len() >= MAX_HEADS { return Err("head texture registry full") }` → LRU/failed-victim eviction + pending-queue cleanup, `Entry { state: Pending, generation: access, … }` insertion | **CARRIED in part** — the pair's `a/`-side is the refusal line exactly as `19259ce8^` had it, and its `+`-side is HEAD's eviction block (11 added, 1 replaced line); the rest of the hunk (lookup/insertion) is NOT carried — (b): the kept tests read `last_access`/`generation`, and reversing them without the reconciliation changes nothing the row asserts. The `+`-side is not byte-identical to `19259ce8`'s own lines: see "pair-only lines" below |
 | `@@ -80,14 +105,35 @@ impl HeadTextures` | `retry()` re-queues with the request's generation and drops a superseded fence | NOT carried — (b): the kept test `head_registry_eviction_bounds_queue_and_fences_readmitted_keys` calls `retry` and asserts the fence, so the reversed tree keeps the body |
 | `@@ -117,7 +163,7 @@ mod tests`, `@@ -130,13 +176,9 @@ mod tests`, `@@ -147,4 +189,62 @@ mod tests` | test-module fixtures and the two registry tests | test hunks (excluded from the non-test patch) |
 
@@ -34,11 +34,30 @@ guarded behaviour the row names.
 | `@@ -127,7 +152,7 @@ impl Session` | the publish path's error plumbing that the split needs | NOT carried — (a)/(b): only the fence split calls it |
 | `@@ -175,7 +200,7 @@ mod tests`, `@@ -266,4 +291,111 @@ mod tests` | test fixtures and the session fence test | test hunks; the second is the hunk that straddles the module boundary and is why the ledger refused `19259ce8` as `fix_commit` |
 
+## Pair-only lines (Main's mechanical check: 9 of 12)
+
+The pair's changed lines (`git diff f01f4330 7d2e8212 -U0`) are 11 added and 1 removed. Against
+`19259ce8`'s own diff, 9 of the 12 are absent; `git blame -C -C 530556e8` names them all to one
+commit:
+
+| pair-only line (`src/profile_textures/heads.rs`) | blame commit | class |
+|---|---|---|
+| `let victim = *entries` / `.skins` / `.iter()` | `6bcb8cb2a` | (c) rustfmt |
+| `.min_by_key(|(_, entry)| (!matches!(entry.state, State::Failed), entry.last_access))` | `6bcb8cb2a` | (c) rustfmt |
+| `.expect("full registry has an eviction candidate")` / `.0;` | `6bcb8cb2a` | (c) rustfmt |
+| `entries` / `.pending` / `.retain(|request| request.target != ProfileTextureTarget::Head(victim));` | `6bcb8cb2a` | (c) rustfmt |
+
+`6bcb8cb2a` is "style(client): apply cargo fmt drift on four files" (2026-11-24): it reflowed
+`19259ce8`'s eviction block (`min_by_key`, the `Entry { … }` insertion) without changing a token of
+its logic, so the behaviour is identical and no second fix commit joins the map. The statement that
+the `+`-side is "the eviction block verbatim" is therefore wrong as written: it is `19259ce8`'s block
+in HEAD's rustfmt form.
+
 ## a/-side adaptation
 
 None. The control's `a/`-side line is the byte-exact pre-fix refusal
 (`return Err("head texture registry full".into())`) taken from `19259ce8^`; the re-land restores the
-eviction block verbatim. Everything else in the control tree is HEAD's.
+eviction behaviour in HEAD's (rustfmt-drifted) form. Everything else in the control tree is HEAD's.
 
 ## Proving ref
 

@@ -23,10 +23,35 @@ reaches the client as bare strings, and the item renderer meanwhile read a four-
 | `src/entities/presentation.rs` | `@@ -3045,9 +3051,10 @@ mod tests {` | the item test's fixture component shape (array → record) | REVERSED — a test hunk (excluded from the non-test patch), reversed only so both trees' test suites are coherent |
 | `src/entities/render_blocks/village_tests.rs` | `@@ -788,11 +788,12 @@ fn static_decorated_pot_uses_received_sherd_textures()` | the placed-pot test's fixture (record form with `id`) | NOT reversed — the test uses the `{id}` form, which the pre-fix read already handled, so it passes on both trees; the kept test is what the pair's control must not red |
 
+## Pair-only lines (Main's mechanical check: 8 of 53)
+
+`git diff 3faa03bb6c 57d14c6316 -U0` changes 54 lines (27 added, 27 removed). Eight of them are
+absent from `6e541f96`'s own diff; `git blame -C -C 530556e8` names each:
+
+| pair-only line | blame commit | class |
+|---|---|---|
+| `src/entities/presentation.rs`: `match item` / `.strip_prefix("minecraft:")` / `.and_then(|name| name.strip_suffix("_pottery_sherd"))` / `{` | `9a645aa99` | (c) the clippy/rustfmt pass split the origin's single-line `match item.strip_prefix(…)` |
+| `src/entities/render_blocks/surfaces.rs`: `let tex = texture(` / `c,` / `&super::super::presentation::pot_side_texture(e.data_value().get("sherds"), side),` / `)?;` | `29b6c059b` | (c) the stage0 rebrand's rustfmt wrapped the origin's over-long single-line call |
+
+No pair-only line is behavioural, so no second fix commit joins the map and the gates were not re-run
+for this row beyond the fresh scene run that added the block read below.
+
+## How the reversal was produced, and what "byte-exact" means here
+
+Both statements this lane wrote are true once separated: **the reversal is a 3-way apply resolved by
+hand, hunk by hunk** (`git apply -R --3way` reports conflicts in `presentation.rs` and
+`render_blocks/surfaces.rs`, because `9a645aa99`/`29b6c059b` reflowed the very lines the fix
+touched), **and every restored `a/`-side line is the pre-image's expression from `6e541f96^`** —
+the array read, the `_pottery_sherd` suffix match, the template-only `["sherds"][side]["id"]` read —
+with only the later commits' line wrapping standing between the two texts. The control's deleted
+helper and the item branch are `6e541f96`'s own lines; the kept `{id}`-form test hunk is the one
+hunk left unreversed (it passes on both trees, since the pre-fix read already accepted `{id}`).
+
 ## a/-side adaptation
 
-None. Every restored line is the byte-exact pre-image from `6e541f96^`; the re-land restores the
-fix's own lines. No stub, no flag, no early return.
+None. Every restored line is the pre-image's expression from `6e541f96^` (see the pair-only table for
+the two later commits' reflow of the same tokens); the re-land restores the fix's own lines. No
+stub, no flag, no early return.
 
 ## Proving ref
 

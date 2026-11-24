@@ -17,8 +17,15 @@ only that hunk.
 
 | file | original hunk | content | disposition |
 |---|---|---|---|
-| `src/terrain/mesher.rs` | `@@ -283,11 +283,15 @@ fn model_quad(` | `let shade = if quad.shade { rules.directional_shade[quad.face as usize] } else { rules.directional_shade[1] };` → `rules.directional_shade[match quad.shade_direction { Some(face) => face as usize, None if quad.shade => quad.face as usize, None => 1 }]` plus the 26.3 comment | REVERSED — the one hunk `da965e30` reverses and `858518eb` restores; at HEAD it sits at `src/terrain/mesher.rs:299-313` verbatim (later commits did not touch the expression) |
+| `src/terrain/mesher.rs` | `@@ -283,11 +283,15 @@ fn model_quad(` | `let shade = if quad.shade { rules.directional_shade[quad.face as usize] } else { rules.directional_shade[1] };` → `rules.directional_shade[match quad.shade_direction { Some(face) => face as usize, None if quad.shade => quad.face as usize, None => 1 }]` plus the 26.3 comment | REVERSED — the one hunk `da965e30` reverses and `858518eb` restores; at HEAD it sits at `src/terrain/mesher.rs:299-313` with the same tokens (later commits did not touch the expression) |
+| `src/protocol/models.rs` | `@@ -… fn model_quad`-side parser: `pub shade_direction: Option<u8>` on `Quad`, `fn shade_direction_override(element)`, the per-element read and the `shade_direction: None` literals | the model-side parser that fills the field the mesher reads | NOT reversed — (b): the same row's path, kept. The mesher's override branch only *means* anything because this parser populates `quad.shade_direction`; reversing it would delete the subject's override and make the scene green on the control for the wrong reason, and the kept `terrain::border_tests::shade_direction_override_*` refs call it. The parser's own `@@` hunks are the `+pub shade_direction` field, `@@"` around `fn shade_direction_override`, its two unit tests and the `shade_direction: None` constructors |
 | every other file of `43362918` | — | other rows' models, rigs, UI and their tests | OMITTED — (a) another row's behaviour; `CM1-REVERSIBILITY.md` records, per file, whether the hunk still reverses, and no other file carries this row's symptom |
+
+## Pair-only lines (Main's mechanical check: 0 of 14)
+
+`git diff da965e30 858518eb -U0` is 9 added and 5 removed lines, and every one of them is in
+`43362918`'s own diff: the shade expression's two pre-fix lines, the four-line `match` replacement
+(both files' hunks) and the comment. The pair is clean; no line was contributed by a later commit.
 
 ## a/-side adaptation
 
@@ -37,8 +44,14 @@ ratio — so the control reds the row's own symptom; with the override both take
 The three `client:krasnokamen-client:terrain::border_tests::shade_direction_override_*` refs cover
 the weight selection at unit level and stay green on the candidate.
 
-The `north`/`down` directions the row also names have no placeable subject on this server:
-`flowerbed_*` (the only `north` models) is absent from the block data, and `snow_height2` overrides
-its own single `down` face with `down`, which shades identically before and after the fix. The `up`
-direction is the same code path (`quad.shade_direction`) and covers the row's majority blockstates
-(crosses, crops, torches, lanterns, chains, redstone dust, repeaters, tripwires, vines).
+The `north`/`down` directions the row also names have **no placeable subject on this server** and
+are named unproven here: `flowerbed_*` (the only `north` models) is absent from the block data, and
+`snow_height2` overrides its own single `down` face with `down`, which shades identically before and
+after the fix. Only the `up` direction is proven (the torch), and it is the same code path
+(`quad.shade_direction`) that covers the row's majority blockstates (crosses, crops, torches,
+lanterns, chains, redstone dust, repeaters, tripwires, vines); a `north`/`down` frame needs a
+blockstate with such an override, which this server cannot place.
+
+Promotion-receipt numbers (the values `promotions/MODEL-SHADE-OVERRIDE.json` records): control
+ratio 1.254 (the receipt's `torch_face_luminance_ratio`) and re-land 1.004 — the earlier text's
+1.263/0.997 came from the pre-promotion trial run, not from the receipts.

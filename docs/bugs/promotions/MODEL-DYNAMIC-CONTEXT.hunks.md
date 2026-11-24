@@ -13,9 +13,24 @@ describes. The pair forward-ports only the second.
 
 ## Hunks
 
-Of the commit's 25 production lines on this path, the pair carries **3** (the world-context
-application it deletes and restores) and keeps **22** for the reasons below — every hunk of the
-commit is listed, so the count is checkable.
+`git diff 698fe4a947 4f8d72692d -U0` changes 25 lines (23 added, 2 removed). The pair carries the
+whole world-context application (the reversible hunk `@@ -81,10 +83,30 @@` is ~20 lines) and keeps the
+rest for the reasons below — every hunk of the commit is listed, so the count is checkable.
+
+**Pair-only lines (Main's mechanical check: 3-4 of 25).** Against `9096a86b`'s own diff, four changed
+lines of the pair are absent; `git blame -C -C 530556e8` names each:
+
+| pair-only line (`src/entities/render_special/items.rs`) | blame commit | class |
+|---|---|---|
+| `block_world,` | `54b79f73d` | (c) the stage0-drift repair restored and reflowed `9096a86b`'s destructure (`light, block_world } = frame;` became one field per line); same tokens as the origin |
+| `if cache.block_clock_needles.len() >= 4096 && !cache.block_clock_needles.contains_key(&key)` | `be9d31c8d` | (c) rustfmt split the origin's single-line `if` |
+| `{` | `be9d31c8d` | (c) the same split |
+| `block_world: _,` (the pair's `-` side) | `698fe4a947` (this pair's control) | the documented `_`-binding adaptation; it is the control's own line, not a fix line |
+
+So the earlier statement "the pair carries 3 of the commit's 25 production lines" was wrong in both
+places: the carried hunk is ~20 lines, and 3 (by Main's count; 4 by line matching, because the
+destructure reflow also differs) are pair-only and non-behavioural. No behavioural edit was found
+outside the map, so the gates were not re-run for this row.
 
 | file | original hunk | content | disposition |
 |---|---|---|---|
