@@ -447,29 +447,33 @@ pub(crate) fn certify(
         .values()
         .filter(|b| overlaps(b.bounds, bounds));
     if let Some(existing) = overlapping.next() {
-        if overlapping.next().is_some()
-            || existing.kind != kind
-            || !inside(bounds, existing.bounds.min)
-            || !inside(bounds, existing.bounds.max)
-        {
+        if overlapping.next().is_some() {
             return Err(failure(
                 "building overlaps another certificate; expansion must contain the original bounds",
             ));
         }
-        let (id, level) = (existing.id, existing.level);
-        let points = inspect(state, kind, level, bounds)?;
-        let record = state
-            .settlements
-            .get_mut(settlement)
-            .expect("validated settlement");
-        record.revision = record.revision.saturating_add(1);
-        let building = record.buildings.get_mut(&id).expect("validated building");
-        building.bounds = bounds;
-        building.work_points = points;
-        building.natural_zone = false;
-        building.revision = building.revision.saturating_add(1);
-        wake_residents(state, settlement);
-        return Ok(id);
+        if existing.kind != kind {
+            // One generated piece can be both a house and its own workstation
+            // (a plains library holds a lectern beside beds), so exactly that
+            // pair certifies twice, on the piece's own bounds: the House record
+            // owns the beds and the Workshop record the job site, and neither
+            // fact is counted twice.
+            if !(house_workshop_pair(existing.kind, kind)
+                && existing.bounds.min == bounds.min
+                && existing.bounds.max == bounds.max)
+            {
+                return Err(failure(
+                    "building overlaps another certificate; expansion must contain the original bounds",
+                ));
+            }
+        } else {
+            if !inside(bounds, existing.bounds.min) || !inside(bounds, existing.bounds.max) {
+                return Err(failure(
+                    "building overlaps another certificate; expansion must contain the original bounds",
+                ));
+            }
+            return expand(state, settlement, existing.id, existing.level, kind, bounds);
+        }
     }
     if record.buildings.len() >= 1024 {
         return Err(failure("maximum 1024 buildings per settlement"));
@@ -506,6 +510,42 @@ pub(crate) fn certify(
     wake_residents(state, settlement);
     Ok(id)
 }
+/// The one generated piece that is both a house and its own workplace: a plains
+/// library's lectern beside its beds. Only this pair certifies twice, and only on
+/// the piece's own bounds.
+fn house_workshop_pair(a: BuildingKind, b: BuildingKind) -> bool {
+    matches!(
+        (a, b),
+        (BuildingKind::House, BuildingKind::Workshop(_))
+            | (BuildingKind::Workshop(_), BuildingKind::House)
+    )
+}
+
+/// Grow an existing certificate to contain `bounds`; the caller checked same kind
+/// and containment.
+fn expand(
+    state: &mut TickState,
+    settlement: SettlementId,
+    id: BuildingId,
+    level: u8,
+    kind: BuildingKind,
+    bounds: ScriptWorldBounds,
+) -> Result<BuildingId, CertError> {
+    let points = inspect(state, kind, level, bounds)?;
+    let record = state
+        .settlements
+        .get_mut(settlement)
+        .expect("validated settlement");
+    record.revision = record.revision.saturating_add(1);
+    let building = record.buildings.get_mut(&id).expect("validated building");
+    building.bounds = bounds;
+    building.work_points = points;
+    building.natural_zone = false;
+    building.revision = building.revision.saturating_add(1);
+    wake_residents(state, settlement);
+    Ok(id)
+}
+
 pub(crate) fn upgrade(state: &mut TickState, id: BuildingId) -> Result<(), CertError> {
     let settlement = SettlementId(id.0 >> 32);
     let record = state

@@ -43,7 +43,9 @@ struct PendingVillage {
     known_residents: BTreeSet<uuid::Uuid>,
     meeting_bell: Option<Option<[i32; 3]>>,
     uncertified: VecDeque<usize>,
-    piece_kinds: Vec<Option<Option<BuildingKind>>>,
+    /// `None` = not classified yet (an unreadable column retries); `Some(vec![])`
+    /// = classified as no building.
+    piece_kinds: Vec<Option<Vec<BuildingKind>>>,
     zone_cursor: usize,
     natural_candidates: VecDeque<NaturalCandidate>,
 }
@@ -278,14 +280,23 @@ fn advance(
                 continue;
             }
             if !overlaps_existing(state, id, &bounds) {
-                let kind = if let Some(kind) = pending.piece_kinds[index] {
-                    kind
-                } else {
-                    let kind = piece_kind(piece, state, &bounds);
-                    pending.piece_kinds[index] = Some(kind);
-                    kind
+                let kinds = match pending.piece_kinds[index].clone() {
+                    Some(kinds) => kinds.clone(),
+                    None => match piece_kinds(piece, state, &bounds) {
+                        Some(kinds) => {
+                            pending.piece_kinds[index] = Some(kinds.clone());
+                            kinds
+                        }
+                        // An unreadable column is not a verdict: keep the queue
+                        // position and retry, never a "no building" for the
+                        // world's life.
+                        None => {
+                            pending.uncertified.push_back(index);
+                            continue;
+                        }
+                    },
                 };
-                if let Some(kind) = kind {
+                for kind in kinds {
                     let _ = super::buildings::certify(state, id, kind, bounds);
                 }
             }
@@ -1033,36 +1044,55 @@ fn overlaps_existing(state: &TickState, id: SettlementId, bounds: &ScriptWorldBo
     })
 }
 
-fn piece_kind(
+/// What one generated piece certifies, or `None` when a column could not be read
+/// (the caller retries on a later tick rather than dropping the piece forever).
+///
+/// A piece that holds both beds and its own workstation certifies as both: a
+/// plains library's lectern stands beside its beds, so the House keeps the beds
+/// and the Workshop keeps the profession slot.
+fn piece_kinds(
     piece: &GeneratedVillagePiece,
     state: &TickState,
     bounds: &ScriptWorldBounds,
-) -> Option<BuildingKind> {
+) -> Option<Vec<BuildingKind>> {
     let template = piece.template.as_deref()?;
     if template.contains("farm") || template.contains("field") || template.contains("crop") {
-        return Some(BuildingKind::Workshop(
+        return Some(vec![BuildingKind::Workshop(
             crate::villager::VillagerProfession::Farmer,
-        ));
+        )]);
     }
     use super::allocator::{PoiKind, poi_kind};
     let mut bed = false;
+    let mut job = None;
     for x in bounds.min[0]..=bounds.max[0] {
         for z in bounds.min[2]..=bounds.max[2] {
             for y in bounds.min[1]..=bounds.max[1] {
                 let id = state.world.block_at(x, y, z)?;
                 let block = state.registry.blocks.by_id(mc_world::BlockStateId(id))?;
-                if let Some(PoiKind::Job(profession)) = poi_kind(&state.registry, id) {
-                    return Some(BuildingKind::Workshop(profession));
+                if job.is_none()
+                    && let Some(PoiKind::Job(profession)) = poi_kind(&state.registry, id)
+                {
+                    job = Some(profession);
                 }
                 bed |= block.block.id.path().ends_with("_bed")
                     && block
                         .properties
                         .iter()
                         .any(|(name, value)| name == "part" && value == "head");
+                if bed && job.is_some() {
+                    break;
+                }
             }
         }
     }
-    bed.then_some(BuildingKind::House)
+    let mut kinds = Vec::new();
+    if bed {
+        kinds.push(BuildingKind::House);
+    }
+    if let Some(profession) = job {
+        kinds.push(BuildingKind::Workshop(profession));
+    }
+    Some(kinds)
 }
 
 #[cfg(test)]
