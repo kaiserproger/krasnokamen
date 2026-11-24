@@ -1,0 +1,99 @@
+{
+  "id": "PERF-RECEIPT-HAS-NO-ERROR-COUNTER-ROLLUP",
+  "verdict": "promoted",
+  "fix_commit": "bc2c459422ea338244ede66173badc2cf837bd28",
+  "fix_commit_full": "bc2c459422ea338244ede66173badc2cf837bd28",
+  "promoted_at": "2026-11-24T19:20:41+00:00",
+  "tree_head": "6800e98ce4c6ae88a7dbcd66acfe429e6400a58a",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "40bb6414464e5879306f64e38c0452b9b1fbe205e3fd23f0fd8b1260d50eb6e0",
+  "control_tree_head": "6800e98ce4c6ae88a7dbcd66acfe429e6400a58a",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-edge/src/dashboard.rs",
+    "crates/mc-edge/src/dashboard/state.rs",
+    "crates/mc-edge/src/server/connection.rs",
+    "crates/mc-edge/src/server/pump.rs",
+    "crates/mc-edge/src/server/registry.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-edge/src/dashboard/tests.rs",
+    "crates/mc-edge/src/server_lifecycle_tests.rs",
+    "crates/mc-edge/src/server_lock_tests.rs",
+    "crates/mc-edge/src/server_session_security_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-edge:dashboard::tests::an_abnormal_close_is_counted_by_cause": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/dashboard/tests.rs",
+        "line": 915,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-edge:dashboard::tests::stats_carry_wal_write_cost_and_close_causes": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/dashboard/tests.rs",
+        "line": 857,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-edge:server::session_security_tests::a_play_write_failure_is_counted_by_cause": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/server_session_security_tests.rs",
+        "line": 554,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-edge:server::lifecycle_tests::an_ordinary_lifecycle_drop_records_no_close_cause": {
+      "state": "unproven-panic",
+      "detail": "FAIL | panic at crates/mc-edge/src/server_lifecycle_tests.rs:395 is not an assert macro; name it in proving_assertions",
+      "assertion": {
+        "file": "crates/mc-edge/src/server_lifecycle_tests.rs",
+        "line": 395,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_receipt_records_the_error_rollup": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:dashboard::tests::an_abnormal_close_is_counted_by_cause": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:dashboard::tests::stats_carry_wal_write_cost_and_close_causes": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::session_security_tests::a_play_write_failure_is_counted_by_cause": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::lifecycle_tests::an_ordinary_lifecycle_drop_records_no_close_cause": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_receipt_records_the_error_rollup": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T191215-ledger-promote-ghdordwy"
+}

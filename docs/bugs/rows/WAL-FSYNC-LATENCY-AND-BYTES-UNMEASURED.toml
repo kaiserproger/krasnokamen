@@ -4,7 +4,7 @@ title = "No receipt records WAL fsync service time, fsync count or WAL bytes per
 area = "harness"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "receipts/Books/REPORT-R1.md gap G-5 and section F5 (Gregg 8.5.2 file system latency analysis, 9.5.2 disk USE; perf/durability). crates/mc-core/src/journal.rs appends one file per tick (File::create, write_all, sync_all, rename, directory fsync every fsync_every batches); the dashboard exposes journal_build_us and journal_queue_us (crates/mc-edge/src/dashboard.rs), which are queue and backpressure, not service time; the WAL creates 20 files/s (1.7 M files/day in one directory) and at 1M the batch size grows with the entity count; the 128-batch queue absorbs a slow fsync until it fills and then the tick blocks with a cause invisible in every current receipt. Verified open on main 5bdc02911 (no fsync latency or batch-byte counter in dashboard.rs). Measurement (no rebuild needed): bpftrace on vfs_fsync per thread name for p50/p99/p999, biolatency-bpfcc and iostat -x 5 for the device, WAL bytes/tick from new batch files or a counter beside journal_build_us, correlated with journal_queue_us p99. Related R1 idea I-9 (WAL micro-benchmark) is in receipts/Perf1M/BOOKS-IDEAS.md."
 failing_first = "not recorded"
 regression = [
@@ -14,3 +14,4 @@ regression = [
 ]
 fix_commit = "154914e44e83c78340ebcd7adb18a44ce449b862"
 repro_check = "Implemented in 154914e44e83c78340ebcd7adb18a44ce449b862 (journal.rs counters from 2941bc91f), re-promoted after review REVIEW-wave2-9 M1. summary.journal reports the window delta of append_bytes_total, file_fsyncs_total and dir_fsyncs_total, append_bytes_per_tick over the source ticks between the two samples, batch_bytes_last, fsync_ms_mean = window fsync nanos / (file + directory fsyncs) because fsync_nanos_total times both kinds (the old file-only divisor inflated the mean by every journal flush), and fsync_ms_max_since_start, the process-lifetime fetch_max named for its scope instead of being presented as a window maximum. A server without the counters, or fewer than two samples, yields a named unavailable. Control: reversing the fix's non-test hunks reds test_receipt_records_wal_fsync_service_time_and_bytes at fsync_ms_mean (0.3 before, 0.25 after); its cargo refs stay green in the control and the restore is green. Journal device utilisation is not measured and the row title no longer claims it: a window receipt that wants that number needs an iostat/queue-depth capture, a separate finding. A real window receipt is prepared as W1 in receipts/D123/D123Harness/PERF-QUEUE.md, not required for this row's proof."
+promotion = "docs/bugs/promotions/WAL-FSYNC-LATENCY-AND-BYTES-UNMEASURED.json"
