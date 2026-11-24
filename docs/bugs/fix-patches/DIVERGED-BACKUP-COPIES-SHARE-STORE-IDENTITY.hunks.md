@@ -94,15 +94,16 @@ sides, so no a/-side text outside the original pre-image):
 
 Not evidence (red only because the control has no such step): `a_restore_interrupted_inside_its_tail_rebind_*`,
 `*_before_publication_*` and `*_after_publication_*` fail at `assert!(interrupted, …)`;
-`a_staged_copy_with_its_own_marker_is_refused_by_every_open_at_publication` and
-`a_failed_publication_removes_only_the_restores_own_staging` find no publication step in the base restore;
-`backup_roundtrip_preserves_real_core_store_wal_and_metadata` fails at the branch assertion (no branch
-minted). Red at a `journal/` assertion of the carried staging hunk, not the row's symptom:
-`a_backup_of_a_restored_copy_with_an_empty_journal_verifies` (`backup_tests.rs:1141`) and
-`a_restore_refuses_a_backup_of_a_restored_copy_without_its_journal` (the base backup keeps no empty
-`journal/`); `a_backup_refuses_a_restored_copy_that_lost_its_journal` is red because the base backup accepts
-the journal-less copy, which the base restore left on the root branch. Green in the control and regressions
-only: the mc-core frame-binding and rebind refs, the other mc-world marker refs.
+`a_staged_copy_with_its_own_marker_is_refused_by_every_open_at_publication` (`:1060`, "the restore never
+reached publication") and `a_failed_publication_removes_only_the_restores_own_staging` (`:1093`, the base
+restore succeeds) find no publication step in the base restore;
+`backup_roundtrip_preserves_real_core_store_wal_and_metadata` fails at the branch assertion (`:188`, no branch
+minted). Red at a `journal/` assertion or setup step of the carried staging hunk, not the row's symptom:
+`a_backup_of_a_restored_copy_with_an_empty_journal_verifies` (`backup_tests.rs:1141`, the base restore
+publishes no `journal/`), `a_backup_refuses_a_restored_copy_that_lost_its_journal` (`:1160`, no `journal/` to
+remove in the base restore's copy) and `a_restore_refuses_a_backup_of_a_restored_copy_without_its_journal`
+(`:1181`, the base backup keeps no empty `journal/`). Green in the control and regressions only: the mc-core
+frame-binding and rebind refs, the other mc-world marker refs.
 
 ## Control of `f0d7f039d` reversed on its own
 
@@ -124,4 +125,7 @@ Its production hunks reversed on its own tests (everything else at `f0d7f039d`; 
 - not evidence: `a_restore_interrupted_before_its_first_rebind_*` and `*_inside_its_tail_rebind_*` at
   `:879`, refused there by the missing marker instead of the reserved name.
 
-Promotion run: see `docs/bugs/promotions/DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY.json`.
+Promotion run: `.analysis/validation/20261124T090455-ledger-promote-xbaqiogo` (tree `323586146f`, clean,
+`control_tree: head`, six reversed files); control `ledger-1-run.log` 13 of 17 red (4 green: the two mc-core
+frame/rebind refs, `a_minted_branch_uses_all_64_bits`, `the_crash_window_rewrite_keeps_the_branch`),
+restore `ledger-3-run.log` 17 of 17 green.
