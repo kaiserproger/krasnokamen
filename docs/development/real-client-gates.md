@@ -655,11 +655,13 @@ carrying a saddle in equipment slot 7 draws the same frame as the plain pig
 on `minecraft:pig` (`command_summon`) and forwards it as slot 7
 (`entity_appearance`, `EquipmentSlot::Saddle`), so one client is enough: the pig
 is captured plain, then replaced by the same pig with the saddle at the same
-position and camera, and the body region must change while both frames show the
-pig. A client whose animal overlay table carries only the horse and wolf resolves
-none of the other species' mount slots and draws two identical pigs. The other
-species and the saddle's exact vanilla shape stay unit-covered
-(`equipment::tests`).
+position and camera. Both frames must show the pig, and the saddle's leather is
+the only brown in the region (the stone is grey, the sky blue): the plain frame
+holds under 100 leather pixels and the saddled one over 300, while an animation
+or shading difference between the two pigs stays pink and cannot pass. A client
+whose animal overlay table carries only the horse and wolf resolves none of the
+other species' mount slots and draws no saddle. The other species and the
+saddle's exact vanilla shape stay unit-covered (`equipment::tests`).
 
 `run scenario native-player-head --client native --windowed` fails if a placed
 or worn player head does not change its frame region (MODEL-OPUS-N3). The hat

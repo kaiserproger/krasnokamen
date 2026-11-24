@@ -52,18 +52,6 @@
       "cmd": "summon minecraft:pig 1000.5 160 1004.5 {NoAI:1b,PersistenceRequired:1b,Rotation:[0f,0f]}"
     },
     {
-      "require_entities": {
-        "name": "pig-plain-present",
-        "args": {
-          "radius": 8,
-          "limit": 16
-        },
-        "types": [
-          "minecraft:pig"
-        ]
-      }
-    },
-    {
       "tp": [
         1000.5,
         160,
@@ -76,6 +64,18 @@
       "wait_ticks": 40
     },
     {
+      "require_entities": {
+        "name": "pig-plain-present",
+        "args": {
+          "radius": 8,
+          "limit": 16
+        },
+        "types": [
+          "minecraft:pig"
+        ]
+      }
+    },
+    {
       "shot": "pig-plain"
     },
     {
@@ -83,6 +83,9 @@
     },
     {
       "cmd": "summon minecraft:pig 1000.5 160 1004.5 {NoAI:1b,PersistenceRequired:1b,Rotation:[0f,0f],equipment:{saddle:{id:\"minecraft:saddle\"}}}"
+    },
+    {
+      "wait_ticks": 40
     },
     {
       "require_entities": {
@@ -95,9 +98,6 @@
           "minecraft:pig"
         ]
       }
-    },
-    {
-      "wait_ticks": 40
     },
     {
       "shot": "pig-saddled"

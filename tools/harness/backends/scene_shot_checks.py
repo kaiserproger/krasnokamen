@@ -314,17 +314,24 @@ def check_pig_saddle(probe: ProbeSteps, artifact: Path) -> None:
         abs(a - b) < 0.01 for a, b in zip(plain_f["camera_position"], saddled_f["camera_position"])
     ) and abs(plain_f["yaw"] - saddled_f["yaw"]) < 0.01
       and abs(plain_f["pitch"] - saddled_f["pitch"]) < 0.01)
-    # The body against the stone floor and sky: pig skin is a desaturated pink.
+    # The body against the stone floor and sky: pig skin is a desaturated pink, and the saddle's
+    # leather is the only brown in the frame (the stone is grey, the sky blue). The two frames are
+    # the same pig one summon apart, so an animation or shading difference between them stays pink
+    # and cannot pass this count; measured 0 on the control and 3978 brown pixels on the re-land.
     box = (500, 260, 780, 560)
     pig = lambda r, g, b: r > 120 and r > g + 25 and r > b + 25
+    leather = lambda r, g, b: r > 70 and r > g + 35 and g > b + 15 and b < 90
     bodies = [sum(1 for pixel in shots[name][1].crop(box).getdata() if pig(*pixel))
               for name in ("pig-plain", "pig-saddled")]
+    saddles = [sum(1 for pixel in shots[name][1].crop(box).getdata() if leather(*pixel))
+               for name in ("pig-plain", "pig-saddled")]
     changed = _changed(shots["pig-plain"][1], shots["pig-saddled"][1], box)
     probe.report["pig_saddle_roi"] = list(box)
     probe.report["pig_visible_pixels"] = bodies
+    probe.report["pig_saddle_leather_pixels"] = saddles
     probe.report["pig_saddle_changed_pixels"] = changed
     probe.check("pig_visible_both_frames", all(count > 1500 for count in bodies))
-    probe.check("pig_saddle_changed", changed > 200)
+    probe.check("pig_saddle_drawn", saddles[0] < 100 and saddles[1] > 300)
 
 
 def player_head_skin_pack(artifact: Path) -> Path:
