@@ -7,6 +7,10 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T170731-matrix-random-4x_c80x4/result.json; regression: tools/harness/test_protocol_input_verbs.py EncodingTests.test_break_block_sends_start_then_stop_with_sequence"
 regression = ["harness:matrix-random:protocol-random-break-seed-4", "python:tools.harness.test_protocol_input_verbs:EncodingTests.test_break_block_sends_start_then_stop_with_sequence", "python:tools.harness.test_protocol_input_verbs:EncodingTests.test_break_block_phases_send_exact_actions", "python:tools.harness.test_matrix_random:RandomMatrixTests.test_mining_waits_for_exact_ack_including_sequence_zero"]
-fix_commit = "5cbed1e33"
+fix_commit = "patch:b684c3f352101d4df3b32e887a04aa34dd4997d549bc05f2ca86ebeb3066de36"
+# Pack 11: the commit-mode fix 5cbed1e33 changed the bots' action ordinals and also edited
+# docs/AGENT_TOOLING.md and docs/bugs/ledger.toml, whose context has since drifted, so the commit
+# no longer reverses as a whole. The recorded patch is exactly its two harness hunks (the defect),
+# which do reverse on current code; the docs hunks carry no behaviour and are not part of the fix.
 repro_check = "control receipts/XHarnessJava/NC-R6-reverse-5cbed1e33.log (both non-test files reversed -> 3 red: stop/abort codes and the drop code); live twin in receipts/CheckInvalid3; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "reported"

@@ -1,0 +1,43 @@
+diff --git a/tools/harness/protocol_input_verbs.py b/tools/harness/protocol_input_verbs.py
+index 114f4db53..e1dec20ca 100644
+--- a/tools/harness/protocol_input_verbs.py
++++ b/tools/harness/protocol_input_verbs.py
+@@ -210,7 +210,7 @@ class ProtocolInputVerbs:
+             raise MissingCapability('oracle:block_drop')
+         block = _parse_block_position(position)
+         _parse_face(face)
+-        actions = {'start': (0,), 'abort': (1,), 'stop': (2,), 'complete': (0, 2)}[phase]
++        actions = {'start': (0,), 'abort': (2,), 'stop': (3,), 'complete': (0, 3)}[phase]
+         for action in actions:
+             self.observer.sequence += 1
+             self.observer.send(PLAYER_ACTION_ID,
+@@ -239,14 +239,14 @@ class ProtocolInputVerbs:
+         """Send ``ReleaseUseItem`` (bow release / interrupted eating)."""
+         self.observer.sequence += 1
+         self.observer.send(PLAYER_ACTION_ID,
+-                           _player_action_body(5, (0, 0, 0), 'down', self.observer.sequence))
++                           _player_action_body(6, (0, 0, 0), 'down', self.observer.sequence))
+         self.observer.send(CLIENT_TICK_END_ID)
+ 
+     def swap_hands(self) -> None:
+         """Send ``SwapItemWithOffhand``."""
+         self.observer.sequence += 1
+         self.observer.send(PLAYER_ACTION_ID,
+-                           _player_action_body(6, (0, 0, 0), 'down', self.observer.sequence))
++                           _player_action_body(7, (0, 0, 0), 'down', self.observer.sequence))
+         self.observer.send(CLIENT_TICK_END_ID)
+ 
+     def respawn(self) -> None:
+diff --git a/tools/harness/protocol_matrix_client.py b/tools/harness/protocol_matrix_client.py
+index 1fd99fb04..ad18e2d4e 100644
+--- a/tools/harness/protocol_matrix_client.py
++++ b/tools/harness/protocol_matrix_client.py
+@@ -260,7 +260,7 @@ class ProtocolMatrixClient(ProtocolStationVerbs, ProtocolInputVerbs):
+     def drop(self, all=False):
+         self.observer.sequence += 1
+         # interaction.rs ServerboundPlayerAction 0x29; direction=down.
+-        self.observer.send(0x29, wire.write_varint(3 if all else 4)
++        self.observer.send(0x29, wire.write_varint(4 if all else 5)
+                            + wire.pack_block_position((0,0,0)) + b'\x00'
+                            + wire.write_varint(self.observer.sequence))
+         self.observer.send(0x0D)
