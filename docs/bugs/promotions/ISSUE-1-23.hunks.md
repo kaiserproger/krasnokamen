@@ -56,4 +56,9 @@ pixels at the witch's.
 
 - `emerald_held_pixels` and `redstone_held_pixels` require the colours inside the fixed windows;
   a pre-image client draws neither item. The proving assertion is `emerald_held_pixels`.
-- Counts, windows and receipts are recorded here after the candidate/control runs.
+- Measured on the committed pair (server pin `54a4a124a7e7`, core `54a4a124a7`; both receipts on
+  that candidate tree): candidate `586b2d07d2` emerald 2011 px and redstone 2148 px, all assertions
+  true; control `27a3806c61` emerald **0 px** and `emerald_held_pixels` the only false assertion (the
+  run aborts there, so the redstone window is not reached). Receipts:
+  `.analysis/validation/20261124T170135-issue1-23-held-items-xr7fmmk5` (candidate) and
+  `.analysis/validation/20261124T170238-issue1-23-held-items-k5h_puso` (control).
