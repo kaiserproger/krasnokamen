@@ -1,0 +1,44 @@
+{
+  "id": "LOADER-MCP-ATTACK-IGNORES-USE-ITEM-GATE",
+  "verdict": "promoted",
+  "fix_commit": "loader:d508697926173402fb8b52ca4a2d90492127c675",
+  "fix_commit_full": "d508697926173402fb8b52ca4a2d90492127c675",
+  "promoted_at": "2026-11-24T23:29:59+00:00",
+  "tree_head": "f6c27a945c367ae7a652e6e365ff2d8d52177325",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "loader_fix": true,
+  "control": "loader_reversal",
+  "control_tree": "loader_head",
+  "fix_patch_sha256": "da3993309c6d2c7a61f8d492a4f87f5ebebae2268f58018e45531287142d4e0e",
+  "reversed_files": [
+    "java-agent/src/main/java/dev/krasnokamen/agent/javaagent/MinecraftActionAccess.java"
+  ],
+  "kept_test_files": [
+    "java-agent/src/test/java/dev/krasnokamen/agent/javaagent/MinecraftAttackInputTest.java"
+  ],
+  "loader_checkout": {
+    "path": "/run/media/kaiserroman/games/solaris-work/targets/loader-builds/loader-d508697",
+    "head": "d508697926173402fb8b52ca4a2d90492127c675",
+    "untracked": []
+  },
+  "negative_control": {
+    "loader:gradle:java-agent:dev.krasnokamen.agent.javaagent.MinecraftAttackInputTest": {
+      "state": "red",
+      "detail": "usingItemRefusesBothOrdinaryAndPiercingAttacksUntilReleased() AssertionError",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-loader-control/java-agent/src/test/java/dev/krasnokamen/agent/javaagent/MinecraftAttackInputTest.java",
+        "line": 98,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "loader:gradle:java-agent:dev.krasnokamen.agent.javaagent.MinecraftAttackInputTest": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T232907-ledger-promote-o81z4ejh"
+}
