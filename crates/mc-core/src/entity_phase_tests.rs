@@ -2593,17 +2593,18 @@ fn hot_row_stays_within_one_cache_line() {
 /// cold read bit for bit.
 fn assert_hot_read_matches_cold(state: &mut TickState, slot: EntitySlot) {
     state.entities.prepare_motion_hints(&state.registry);
-    let view = PrepView::of(state);
-    let flags = state.entities.motion_flags(slot);
-    let rare = RarePrep::default();
-    let (fast, _) = read_row(&view, slot, flags, 1, &rare);
-    let (cold, _) = read_row_from_cold(&view, slot, flags, 1, &rare);
-    assert_eq!(
-        format!("{fast:?}"),
-        format!("{cold:?}"),
-        "the derived-column read must equal the cold read"
-    );
-    drop(view);
+    {
+        let view = PrepView::of(state);
+        let flags = state.entities.motion_flags(slot);
+        let rare = RarePrep::default();
+        let (fast, _) = read_row(&view, slot, flags, 1, &rare);
+        let (cold, _) = read_row_from_cold(&view, slot, flags, 1, &rare);
+        assert_eq!(
+            format!("{fast:?}"),
+            format!("{cold:?}"),
+            "the derived-column read must equal the cold read"
+        );
+    }
     state.entities.hot_row(slot);
 }
 
