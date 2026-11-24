@@ -6,11 +6,11 @@ a selector through `hub.resolve_moderation_selector` and answers `No player was 
 selection, and it moved the whitelist to the same resolved profiles. The commit no longer reverses on HEAD
 (the whitelist and moderation paths were rewritten by later fence commits), so the row is a scoped patch:
 `fix_commit = "patch:b69e31e85a2d333c95235b2cef5bedc8a6489fb6fee306cea9f0632eddea0c0e"` in
-`docs/bugs/fix-patches/OP-DEOP-SELECTOR-LITERAL.patch`. Its a/-side is the pre-image: before `d0ae64284`
+`docs/bugs/promotions/OP-DEOP-SELECTOR-LITERAL.patch`. Its a/-side is the pre-image: before `d0ae64284`
 the op/deop handler had no selector branch at all, so the reversed tree restores the literal
 `admin.find(target)`/`offline_uuid("@s")` behaviour, exactly the reported symptom (`/deop @s` left the
 player in `ops.json`). Re-audit:
-`python3 -m tools.harness ledger promote OP-DEOP-SELECTOR-LITERAL --fix-patch docs/bugs/fix-patches/OP-DEOP-SELECTOR-LITERAL.patch --dry-run`.
+`python3 -m tools.harness ledger promote OP-DEOP-SELECTOR-LITERAL --fix-patch docs/bugs/promotions/OP-DEOP-SELECTOR-LITERAL.patch --dry-run`.
 
 ## Carried
 
@@ -30,8 +30,8 @@ player in `ops.json`). Re-audit:
   a deletion of code the reversed branch needs would not compile.
 - `crates/mc-edge/src/admin.rs` — the `Admin` profile lookup helpers (`find`, `profile`, `sessions_for_uuid`)
   — (b) the kept handler calls them; reversing them stops the control from compiling.
-- `crates/mc-edge/src/server.rs @@ -895,7 +895,8 @@` and `crates/mc-edge/src/server.rs @@ -971,6 +972,74 @@`
-  fence/queue plumbing that later commits rewrote — (c).
+- `crates/mc-edge/src/server.rs @@ -895,7 +895,8 @@` — the connection/moderation fence plumbing that later
+  commits rewrote — (c).
 - `docs/COMPATIBILITY.md`, `admin_tests.rs` — (b) docs and the kept tests; the tests are the control's refs.
 
 ## Proving refs (file:line of the failing assertion)
@@ -41,6 +41,7 @@ player in `ops.json`). Re-audit:
   keeps level 4; the ref fails at its own operator-level assertions.
 - `cargo:mc-edge:server::admin_tests::profile_selectors_empty_targets_use_vanilla_error_without_fake_profiles`
   — the reversed handler reports a fake success instead of `No player was found`.
-- `harness:entities:native-v2-ledger-op-selector` — the real client's own `/deop @s` answers completion and
-  a following level-2 command leaves its received game mode survival
+- `harness:entities:native-v2-ledger-op-selector` — the real client's own `/deop @s` answers
+  `Command deop completed for @s` and a following `/gamemode creative` is refused
+  (`Unknown or incomplete command`), while the same command answers before the deop
   (`tools/harness/backends/native_ledger_op_selector.py`). Passed receipt: see the promotion JSON.

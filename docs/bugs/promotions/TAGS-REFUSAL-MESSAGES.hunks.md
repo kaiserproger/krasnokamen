@@ -7,11 +7,11 @@ refusal to `expected at most 1024 tags` and made `validate_tags` `pub(crate)`. T
 longer reverses on HEAD (they also carry TAGS-DUPLICATES' normalization and duplicate-key refusals and
 other rows' world/data changes), so the row is a scoped patch:
 `fix_commit = "patch:a1dae3762dffce388825c288c8bf9ecf9250f89df7af7882a0feffacbf21c55a"` in
-`docs/bugs/fix-patches/TAGS-REFUSAL-MESSAGES.patch`. Its a/-side is the real pre-image:
+`docs/bugs/promotions/TAGS-REFUSAL-MESSAGES.patch`. Its a/-side is the real pre-image:
 `git log -S"expected at most 1024 strings" -- crates/mc-core/src/command_summon.rs` names
 `3a79a7535`/`0c51b3a44` as the only history of that text, and the reversed tree reproduces the merged
 count-or-type refusal. Re-audit:
-`python3 -m tools.harness ledger promote TAGS-REFUSAL-MESSAGES --fix-patch docs/bugs/fix-patches/TAGS-REFUSAL-MESSAGES.patch --dry-run`.
+`python3 -m tools.harness ledger promote TAGS-REFUSAL-MESSAGES --fix-patch docs/bugs/promotions/TAGS-REFUSAL-MESSAGES.patch --dry-run`.
 
 ## Carried
 
