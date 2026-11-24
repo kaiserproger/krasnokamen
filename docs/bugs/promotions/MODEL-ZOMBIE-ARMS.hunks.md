@@ -55,6 +55,11 @@ them is in `ebe56023`'s own diff; `git blame -C -C 530556e8` names each:
 `CM1-REVERSIBILITY.md` records that both bulk commits' other presentation hunks no longer reverse at
 HEAD; this table is the per-hunk form Main asked for.
 
+Re-run after the map and the walk windows changed (core `b3493773a`, the pair's own pins): control
+`20261124T153224-issue1-19-hostile-motion-e8as_xnl` is red at `zombie_arm_raised_pixels`; re-land
+`20261124T153310-issue1-19-hostile-motion-mhhcgyon` is green, with `mob_step_zombie` and
+`mob_step_spider` measuring `[2.0, 2.0]` behind a passing coarse rate band.
+
 ## a/-side adaptation
 
 None beyond the deletion. The control tree keeps `zombie_arm_rotation`, `zombie_arms`,

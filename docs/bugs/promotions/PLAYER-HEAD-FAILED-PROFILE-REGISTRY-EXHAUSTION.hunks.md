@@ -47,6 +47,12 @@ commit:
 | `.expect("full registry has an eviction candidate")` / `.0;` | `6bcb8cb2a` | (c) rustfmt |
 | `entries` / `.pending` / `.retain(|request| request.target != ProfileTextureTarget::Head(victim));` | `6bcb8cb2a` | (c) rustfmt |
 
+Re-run after the positive control was added (core `b3493773a`, the pair's own pins): control
+`20261124T153553-native-player-head-registry-cj28e64k` passed `pre_flood_valid_head_renders`
+(6296 changed pixels before the flood) and red at `valid_head_after_flood` (434 px, threshold
+>2000); re-land `20261124T153801-native-player-head-registry-v74dp4h4` passed with 6403 px. The
+network path is therefore proven in the same run as the row's red.
+
 `6bcb8cb2a` is "style(client): apply cargo fmt drift on four files" (2026-11-24): it reflowed
 `19259ce8`'s eviction block (`min_by_key`, the `Entry { … }` insertion) without changing a token of
 its logic, so the behaviour is identical and no second fix commit joins the map. The statement that

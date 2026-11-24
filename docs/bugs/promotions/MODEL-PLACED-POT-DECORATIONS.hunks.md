@@ -33,8 +33,9 @@ absent from `6e541f96`'s own diff; `git blame -C -C 530556e8` names each:
 | `src/entities/presentation.rs`: `match item` / `.strip_prefix("minecraft:")` / `.and_then(|name| name.strip_suffix("_pottery_sherd"))` / `{` | `9a645aa99` | (c) the clippy/rustfmt pass split the origin's single-line `match item.strip_prefix(…)` |
 | `src/entities/render_blocks/surfaces.rs`: `let tex = texture(` / `c,` / `&super::super::presentation::pot_side_texture(e.data_value().get("sherds"), side),` / `)?;` | `29b6c059b` | (c) the stage0 rebrand's rustfmt wrapped the origin's over-long single-line call |
 
-No pair-only line is behavioural, so no second fix commit joins the map and the gates were not re-run
-for this row beyond the fresh scene run that added the block read below.
+No pair-only line is behavioural, so no second fix commit joins the map. The scene was re-run after
+`assert_block pot-sherds-block` was added: `20261124T154028-native-decorated-pot-28oieq22` passed on
+the re-land's own pin at core `b3493773a` (`pot_side_pattern_changed` and the block read both true).
 
 ## How the reversal was produced, and what "byte-exact" means here
 
