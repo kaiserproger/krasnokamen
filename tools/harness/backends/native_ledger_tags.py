@@ -49,13 +49,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _chat(steps, "mixed_tag_list_refused_with_the_element_type", "every list element must be a string")
     steps.check("mixed_tag_list_creates_no_entity", _cows(steps, origin) == before)
 
-    # 3. More than 1024 tags names the documented count bound, not a storage error.
-    too_many = ",".join(["'x'"] * 1025)
-    _command(steps, f"summon {COW} {at} {{Tags:[{too_many}]}}")
-    _chat(steps, "oversized_tag_list_refused_with_the_1024_limit", "expected at most 1024 tags")
-    steps.check("oversized_tag_list_creates_no_entity", _cows(steps, origin) == before)
-
-    # 4. The same parser boundary on a non-mob spawn path.
+    # 3. The same parser boundary on a non-mob spawn path.
     _command(steps, f"summon minecraft:experience_orb {at} {{Value:1,Tags:[1b]}}")
     _chat(steps, "non_mob_spawn_refuses_the_same_tag_element",
           "every list element must be a string")
@@ -74,3 +68,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.report["cows_after"] = _cows(steps, origin)
     steps.check("exactly_one_valid_summon", steps.report["cows_after"] == before + 1)
     steps.fixture("kill @e[type=minecraft:cow]")
+    steps.report["limits"] = [
+        "The client chat tool caps a message at 256 characters, so the 1025-element list and the "
+        "70000-byte string cannot be typed from a client; those two classes rest on the Cargo ref.",
+    ]

@@ -181,12 +181,12 @@ SCENARIOS: dict[str, Scenario] = {
                  "tools/harness/backends/native_ledger_tags.py"),
         fixture="operator pad; every command is the player's own chat command and every answer is the "
                 "player's own received chat line",
-        proves="a non-string list element answers `Invalid Tags: every list element must be a string`, a "
-               "1025-element list answers `expected at most 1024 tags`, neither creates an entity, a "
-               "well-formed list is accepted and read back by `data get`",
-        limits="The 70000-Modified-UTF-8-byte string cannot be typed: the serverbound command packet is "
-               "bounded at 32767 bytes, so only the Cargo ref covers that class; one mob and one "
-               "experience-orb spawn path.",
+        proves="a non-string list element answers `Invalid Tags: every list element must be a string` on "
+               "the mob and the experience-orb spawn paths, neither creates an entity, a well-formed list "
+               "is accepted and read back by `data get`",
+        limits="The client chat tool caps a message at 256 characters, so the 1025-element count list and "
+               "the 70000-Modified-UTF-8-byte string cannot be typed from a client and rest on the Cargo "
+               "ref; one mob and one experience-orb spawn path.",
     ),
 
     "native-v2-ledger-lectern": _entry(
@@ -214,7 +214,7 @@ SCENARIOS: dict[str, Scenario] = {
         sources=("tools/harness/backends/native_v2.py",
                  "tools/harness/backends/native_ledger_op_selector.py"),
         fixture="operator pad; the probe player is made an operator by the fixture and is deopped by its own chat command",
-        proves="`/deop @e[type=!player]` answers `No player was found`, `/deop @s` answers its completion and "
+        proves="`/deop @a[name=Missing]` answers `No player was found`, `/deop @s` answers its completion and "
                "a following level-2 command leaves the client's received game mode survival",
         limits="One operator and the self selector; quoting and multi-target forms rest on the mc-edge "
                "profile-command refs.",

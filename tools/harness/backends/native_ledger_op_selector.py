@@ -27,7 +27,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.wait(lambda state: state["player"]["game_mode"] == 0, "player_starts_in_survival")
 
     # An empty selector is not a player: vanilla answers the no-target error.
-    steps.call("minecraft_send_chat", {"message": "deop @e[type=!player]", "command": True})
+    steps.call("minecraft_send_chat", {"message": "deop @a[name=Missing]", "command": True})
     _chat(steps, "empty_selector_is_not_a_player", "No player was found")
 
     # The player's own selector resolves to the player and removes the level.
