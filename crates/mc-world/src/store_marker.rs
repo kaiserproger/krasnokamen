@@ -285,13 +285,19 @@ pub fn branch(world_dir: &Path) -> Result<[u8; 8], MarkerError> {
     Ok(read(world_dir)?.map_or(ROOT_BRANCH, |marker| marker.branch))
 }
 
-/// A fresh random branch for a restored copy: never [`ROOT_BRANCH`] and never
-/// `previous`, the branch the copy was restored from.
+/// A random branch for a restored copy: never [`ROOT_BRANCH`] and never
+/// `previous`, the branch the copy was restored from. All 64 bits are random,
+/// so two independent restores pick the same branch with probability 2^-64 per
+/// pair: improbable, not impossible.
 #[must_use]
 pub fn mint_branch(previous: [u8; 8]) -> [u8; 8] {
     loop {
+        // RFC 9562: byte 6 of a v4 UUID holds the version and byte 8 the
+        // variant; the other 14 bytes are random. Take eight of those.
+        let random = uuid::Uuid::new_v4().into_bytes();
         let mut branch = ROOT_BRANCH;
-        branch.copy_from_slice(&uuid::Uuid::new_v4().as_bytes()[..8]);
+        branch[..6].copy_from_slice(&random[..6]);
+        branch[6..].copy_from_slice(&random[9..11]);
         if branch != ROOT_BRANCH && branch != previous {
             return branch;
         }

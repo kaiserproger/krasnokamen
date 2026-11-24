@@ -1282,15 +1282,21 @@ versioned SHA-256 manifest (lease files excluded). A `journal/` directory
 belongs to the store it was written with: every batch carries that store's id,
 the branch of that copy of the store and the block-palette digest, and startup
 refuses a foreign tail by name instead of replaying it into the wrong world.
-`backup` and `restore` always move both together; restoring only
-`native/state.redb` over an existing `journal/` is refused at the next start,
-not a supported path. Every `restore` starts a branch of its own: the copy keeps
-the world's store id, gets a fresh random branch in its `checkpoint.marker`, and
-its copied tail is moved onto that branch. Two copies restored from one backup,
-or a copy and the world it came from, therefore refuse each other's journals; a
-plain filesystem copy of a world or backup directory is not a restore and stays
-on the branch it was copied from, so restore every copy you intend to run next to
-the original. Restore verifies the full
+Move or copy a world directory only as a whole — `native/`, `journal/` and
+`checkpoint.marker` together, as `backup` and `restore` do — and never swap one
+of them between directories. The bindings catch many swaps but not all: a
+`native/state.redb` taken from another copy of the same world at the same or a
+later checkpoint tick (two copies restored from one backup, say) carries the same
+store id and passes the marker check, and the journal left beside it then
+replays its own branch's tail onto the other copy's store without an error.
+Every `restore` starts a branch of its own: the copy keeps the world's store id,
+gets a random 64-bit branch in its `checkpoint.marker` (never the root or the
+backup's own; two restores collide only with probability 2^-64), and its copied
+tail is moved onto that branch. Two copies restored from one backup, or a copy
+and the world it came from, therefore refuse each other's journals; a plain
+filesystem copy of a world or backup directory is not a restore and stays on the
+branch it was copied from, so restore every copy you intend to run next to the
+original. Restore verifies the full
 inventory and hashes before writing; the target must be empty or absent,
 separate from the backup and not a mount point. The copy is built in
 `<target>.restore-staging` beside the target and renamed over it only once it

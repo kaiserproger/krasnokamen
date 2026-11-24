@@ -439,7 +439,9 @@ The branch tells copies of one store apart
 (`DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY`). A world as created or imported
 is on the root branch, and its marker keeps the 64-byte format-1 layout
 `[KCMARK 1][store id][tick][SHA-256]`; every `world restore` gives its copy a
-fresh random 8-byte branch, and that marker takes the 72-byte format-2 layout
+random 8-byte branch (all 64 bits random, never the root or the backup's own;
+two restores collide with probability 2^-64, which is improbable, not
+impossible), and that marker takes the 72-byte format-2 layout
 with the branch after the store id. Each branch has exactly one encoding (a
 format-2 marker naming the root branch is corrupt), so no marker is converted: a
 world that was never restored writes the same bytes it wrote before branches
@@ -499,9 +501,12 @@ empty tail only on the root branch and refuses a restored copy without it,
 whose tail is lost. Restoring one backup twice therefore yields two
 copies that refuse each other's journals, and a backup of a restored copy carries
 that copy's branch until its own restore branches again. The branch is held by
-the marker alone: a sibling's marker moved together with its journal over another
-copy's store is that sibling as far as the bindings can tell, so a world
-directory is always kept and copied whole. A hot backup is not reported
+the marker alone, so the bindings do not catch every swap inside a world
+directory: a sibling's marker moved together with its journal over another
+copy's store is that sibling as far as they can tell, and a sibling's
+`state.redb` swapped in at the same or a later checkpoint tick carries the same
+store id, passes the marker check and has the local journal replayed onto it. A
+world directory is therefore always moved and copied whole. A hot backup is not reported
 successful until it has been tried: the finished copy is opened read-only and
 the ordinary recovery reader and WAL replay run over it, requiring the recovered
 tick the copy claims (`HOT-BACKUP-STATE-DATABASE-COPY-UNVERIFIED`). Every batch

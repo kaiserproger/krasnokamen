@@ -76,6 +76,20 @@ fn a_minted_branch_is_never_the_root_or_the_previous_one() {
     assert_ne!(second, first);
 }
 
+/// The branch is the only thing that tells two restores of one backup apart, so
+/// every one of its 64 bits is random: no bit position keeps one value across
+/// mints (a UUIDv4 prefix would pin the version nibble and leave 60).
+#[test]
+fn a_minted_branch_uses_all_64_bits() {
+    let (mut ones, mut zeros) = (0_u64, 0_u64);
+    for _ in 0..256 {
+        let branch = u64::from_be_bytes(store_marker::mint_branch(store_marker::ROOT_BRANCH));
+        ones |= branch;
+        zeros |= !branch;
+    }
+    assert_eq!((ones, zeros), (u64::MAX, u64::MAX), "a bit never varied");
+}
+
 #[test]
 fn write_is_durable_and_readable() {
     let root = tempfile::tempdir().unwrap();
