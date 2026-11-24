@@ -20,7 +20,14 @@ only the I/O owner's write-failure handling and the send-side precedence.
 
 ## The pair's own diff
 
-`git diff 7c9e84721f 900da09902 -- src/protocol/network.rs` is 13 414 bytes and is **byte-for-byte**
+`git diff 7c9e84721422 900da0990290` is 13 414 bytes. Its changed-line multiset equals the union of
+the two origin patches: `non_test_patch(bf55a58f)` (patch-id `50f53aed…`, the `network.rs:228-249`
+kick-reason latch) and `non_test_patch(be484c28)` (patch-id `4e0a2609…`, hunks `338+` and `554-783`,
+the closed-queue-with-terminal-packet arm). The hunks do not overlap, and `git diff` between the
+sorted changed lines of the pair and of the union is empty; the pair's own patch-id
+`766b0865…` differs from the union's `9eff60f6…` only because the pair orders the `be484c28`
+hunk before the second half of the `bf55a58f` hunk. Comparing the pair against
+`non_test_patch(900da09902)` would be the commit against itself and is not evidence.
 `non_test_patch(client repository, 900da09902)` (checked locally: equal strings, sha256
 `f6c010c3759b4c6b…`). The pair's two commits:
 

@@ -1,6 +1,7 @@
 # NATIVE-ACTIVE-WRITER-IDLE-EXPIRY — hunk map for the committed reversal pair
 
-Client pair: reversal `client:9ff891766b` → re-land `client:20943b0e6f` (the row's `fix_commit`).
+- **Promoted pair (this row's record)**: `0051108980` -> `88a5f4f0c4` (promotion
+  `20261124T122635-ledger-promote-ik3tvuw_`); the row's `fix_commit` and the promotion JSON name it.
 Promotion receipt: `promotions/NATIVE-ACTIVE-WRITER-IDLE-EXPIRY.json` (the first promotion, pair
 `0051108980` → `88a5f4f0c4`); this pair supersedes its control, whose kept `lease_verdict` arms 2-3
 and `controller()` report were not the pre-image (review B-M1).
@@ -106,3 +107,13 @@ The scene retries `minecraft_press_inputs` up to 25 times while the client answe
 several decades of milliseconds). The run report keeps `replacement_press_errors` with the last
 error when every attempt failed, but a slow unwind is not surfaced per attempt; the next scene that
 measures handoff latency should record the attempt count.
+
+## Additional re-audit pair (review B-M1, not the promotion)
+
+`9ff891766b` -> `20943b0e6f`: the same reversibility with a wider pre-image (all three `lease_verdict`
+arms and `controller()`'s report) plus the scene asking the client for its own approach bound
+(`f91b021c`, 300 s, automation only). Pair delta 1 786 bytes, patch-id of the re-land computed from
+`git diff 9ff891766b 20943b0e6f`; the per-line reconciliation against `895c63f3^` is the table above.
+Controls `20261124T183250` / `…184256` / `…184719`, restore `20261124T183710`. Review M3 asks that the
+red be the client's own `controller_lease_revoked` answer instead of the MCP retry timeout; that
+amendment is open.

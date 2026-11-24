@@ -18,8 +18,9 @@ git diff 864a757fe9 55b8374ed7 -- src/ui/packets.rs
 ```
 
 `git patch-id --verbatim` of the pair equals that of `non_test_patch(client repository, e1b22a5a)`
-(`937a7fcfa5aa1c5c…`); the only textual difference is the `index` line and the hunk's line offset
-(the tip added lines above it).
+(`937a7fcfa5aa1c5c…`) — the equality is what `git patch-id --verbatim` reports for both patches, and
+the texts differ only in their `index` lines and `@@` line numbers (the tip added lines above the hunk),
+which patch-id ignores.
 
 ## Why a reversal and not the pre-image pin
 

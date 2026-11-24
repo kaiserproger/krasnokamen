@@ -9,6 +9,6 @@ source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F5, 1/2, 
 regression = ["client:krasnokamen-client:protocol::network::tests::kick_reason_survives_a_failed_client_write", "client:krasnokamen-client:protocol::network::tests::kick_published_before_the_writer_ends_is_not_replaced_by_a_queue_error", "harness:entities:native-v2-duplicate-login"]
 failing_first = "reported"
 fix_commit = "client:900da0990290bcde145e00696f26a2126304187c"
-repro_check = "real-hunk control red ('play disconnect packet must be delivered'); real gate harness:entities:native-v2-duplicate-login (BREAK_DL_ATTACK=nether); area=client, candidate"
+repro_check = "Real-client red is the row's own symptom: on the pre-fix client the Nether travel-burst leg of harness:entities:native-v2-duplicate-login records nether_kick.disconnect_reason = \"Broken pipe (os error 32)\" instead of the server's reason (receipt 20261124T174024), while the first leg still preserves the reason. The sampling was amended under review M1: >=6 restore runs on pins/0ccfdd946084 (all must pass) and >=6 control runs with the red fraction recorded, plus the two unit refs' red cargo receipts on the control client. Pair-origin check: git diff 7c9e84721422 900da0990290 changed lines equal the union of non_test_patch(bf55a58f) and non_test_patch(be484c28) (promotions/NATIVE-KICK-REASON-BROKEN-PIPE.hunks.md)."
 proving_assertions = { "harness:entities:native-v2-duplicate-login" = "kick_reason_preserved" }
 promotion = "docs/bugs/promotions/NATIVE-KICK-REASON-BROKEN-PIPE.json"
