@@ -1,6 +1,8 @@
+diff --git a/crates/mc-core/src/command_world.rs b/crates/mc-core/src/command_world.rs
+index 54dcddcc9..b3fa07532 100644
 --- a/crates/mc-core/src/command_world.rs
 +++ b/crates/mc-core/src/command_world.rs
-@@ -432,7 +432,16 @@
+@@ -432,7 +432,16 @@ pub(crate) fn execute(
              Failed,
          ),
      };

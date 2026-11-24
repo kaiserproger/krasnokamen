@@ -94,6 +94,27 @@
     },
     {
       "shot": "summon-tags"
+    },
+    {
+      "cmd": "fill ~2 ~2 ~2 ~3 ~2 ~3 minecraft:stone"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "assert_chat": {
+        "name": "fill-success",
+        "contains": [
+          "Successfully filled 4 block(s)"
+        ],
+        "excludes": [
+          "Changed 4 block(s)",
+          "No blocks were changed"
+        ]
+      }
+    },
+    {
+      "shot": "fill-success"
     }
   ]
 }
