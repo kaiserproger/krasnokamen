@@ -477,6 +477,8 @@ class SceneShotTests(unittest.TestCase):
                                                     "mob_step_zombie": step_ok})
         step = steps[0]["mob_motion"]
         scene_shot.validate_steps([{"mob_motion": step}], "native")
+        del step["types"][0]["min_blocks"]
+        del step["types"][0]["max_blocks"]
         for bad in ({"min_blocks": 1.5}, {"max_blocks": 2.5},
                     {"min_blocks": 2.5, "max_blocks": 1.5},
                     {"min_blocks": -1, "max_blocks": 2.5}):
@@ -738,7 +740,7 @@ class PlayerHeadRegistryTests(unittest.TestCase):
         shots.mkdir(exist_ok=True)
         frame = {"gpu_completion": True, "camera_position": [1000.5, 161.62, 1001.5],
                  "yaw": 0, "pitch": 0}
-        for name in ("empty", "flood-steve", "flood-valid"):
+        for name in ("empty", "pre-valid", "flood-steve", "flood-valid"):
             image = Image.new("RGB", scene_shot.WINDOW, (70, 70, 70))
             if name != "empty":
                 draw = ImageDraw.Draw(image)
@@ -773,12 +775,19 @@ class PlayerHeadRegistryTests(unittest.TestCase):
         self.assertEqual(len(set(malformed)), 261)
         valid = [step["cmd"] for step in scene["steps"]
                  if "cmd" in step and step["cmd"].startswith("give") and "eyJ0ZXh0" in step["cmd"]]
-        self.assertEqual(len(valid), 1)
+        # The pre-flood positive control and the post-flood demand: two distinct registry keys
+        # (the key hashes the value bytes) that resolve the same public texture.
+        self.assertEqual(len(valid), 2)
         import base64
-        value = valid[0].rsplit('value:"', 1)[1].split('"')[0]
-        decoded = json.loads(base64.b64decode(value))
-        self.assertTrue(decoded["textures"]["SKIN"]["url"].startswith(
-            "http://textures.minecraft.net/texture/"))
+        values = [cmd.rsplit('value:"', 1)[1].split('"')[0] for cmd in valid]
+        self.assertNotEqual(values[0], values[1])
+        urls = [json.loads(base64.b64decode(value))["textures"]["SKIN"]["url"] for value in values]
+        self.assertTrue(urls[0].startswith("http://textures.minecraft.net/texture/"))
+        self.assertEqual(urls[0], urls[1])
+        pre = scene["steps"].index(next(step for step in scene["steps"] if step.get("cmd") == valid[0]))
+        flood = min(index for index, step in enumerate(scene["steps"])
+                    if "cmd" in step and 'value:"bad0' in step["cmd"])
+        self.assertLess(pre, flood)
         order = [index for index, step in enumerate(scene["steps"])
                  if "shot" in step and step["shot"] in ("flood-steve", "flood-valid")]
         self.assertEqual([scene["steps"][index]["shot"] for index in order],
