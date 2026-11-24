@@ -4,9 +4,10 @@ title = "Element-level `light_emission` is ignored by the model baker: `open_eye
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-20261102.md:25"
 regression = ["harness:scene-shot:native-element-emission", "client:krasnokamen-client:terrain::border_tests::element_emission_stays_on_its_quad_across_chunk_boundaries", "client:krasnokamen-client:protocol::models::tests::element_emission_is_baked_per_element_and_bounded"]
 fix_commit = "client:3cf928ed"
 repro_check = "client:dde97f91 control (the three draw sites pass the sampled light, 83994480's pre-image lines) vs re-land 3cf928ed; native-element-emission puts one firefly bush in a roofed stone cell at midnight with the HUD hidden and counts the emissive overlay's near-white texels: control 0, re-land 306 (threshold 60). The row's own mesher ref reds on the control at the emitted vertex light; the baker ref stays green. area=client"
 proving_assertions = { "harness:scene-shot:native-element-emission" = "emissive_overlay_full_bright" }
+promotion = "docs/bugs/promotions/MODEL-ELEMENT-EMISSION.json"

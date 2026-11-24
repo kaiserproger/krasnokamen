@@ -34,15 +34,29 @@ therefore keeps the plumbing and removes only the application — exactly the pr
 the row's own `border_tests` ref reds on the control at the emitted vertex light, which is the
 symptom.
 
-## Every other hunk of `83994480`
+## Every emission-path hunk of `83994480`
 
-`83994480` is a bulk ClientNext integration (`@@` hunks across `presentation.rs` (43),
-`render_blocks.rs` (7), `render_blocks/surfaces.rs`, `protocol/models.rs` (7), `ui/state.rs` (3),
-`entities.rs` (2) plus rig assets). Every hunk not listed above is (a) another row's behaviour
-(command feedback, GUI panes, use poses, battle materials) or (b) API the kept tests call;
-`CM1-REVERSIBILITY.md`'s addendum records that those files reverse only 3-way with conflicts, and the
-task's rule is to carry only the hunks that still reverse — the three above do, so the rest stay
-queued under CM-1 for their own rows.
+`git show 83994480 -- src | grep` for `light_emission`/`light_with_emission` finds exactly sixteen
+hunks; each is dispositioned here. Everything else in the commit (43 `presentation.rs` hunks,
+`render_blocks.rs` (7), `render_blocks/surfaces.rs`, `ui/state.rs` (3), `entities.rs` (2), the rig
+assets and the other protocol/UI slices) is (a) another row's behaviour — the commit is the bulk
+ClientNext integration, and `CM1-REVERSIBILITY.md`'s addendum records that those files reverse only
+3-way with conflicts.
+
+| file | hunk | disposition |
+|---|---|---|
+| `src/terrain/mesher.rs` | `@@ -303,7 +320,7 @@ fn model_quad(` | CARRIED (the terrain draw site) |
+| `src/entities/presentation.rs` | `@@ -1569,7 +1839,7 @@ append_block_quads` | CARRIED (block quads) |
+| `src/entities/presentation.rs` | `@@ -1460,7 +1730,7 @@ pub(super) fn append_baked(` | CARRIED (baked-item quads) |
+| `src/protocol/models.rs` | `@@ -41,12 +41,23 @@ pub struct BakedQuad` | (b) kept: the field and the `light_with_emission` method the carried call sites and the kept tests use |
+| `src/protocol/models.rs` | `@@ -577,6 +588,11 @@ fn bake_elements(` | (b) kept: the baker's `element["light_emission"]` read, asserted by the kept baker test |
+| `src/protocol/models.rs` | `@@ -690,6 +706,7 @@ fn bake_elements(` | (b) kept: the element quad literal needs the field; the value is the element's own read |
+| `src/protocol/models.rs` | `@@ -799,6 +816,7 @@ fn generated_elements(` | (b) kept: literal `light_emission: 0`; inert |
+| `src/entities/presentation.rs` | `@@ -2019,6 +2293,7 @@`, `@@ -2047,6 +2322,7 @@`, `@@ -2091,6 +2367,7 @@ special_item(` | (b) kept: three quad literals with `light_emission: 0`; the field is required to compile and the value is inert |
+| `src/protocol/content.rs` | `@@ -2359,6 +2359,7 @@ impl Content` | (b) kept: same literal |
+| `src/protocol/models.rs` | `@@ -1236,6 +1254,23 @@`, `@@ -1362,9 +1397,11 @@`, `@@ -1403,9 +1440,12 @@ mod tests` | test hunks: the baker test (`element_emission_is_baked_per_element_and_bounded`, green on both trees because the baker and field are kept) and two fixture literals |
+| `src/protocol/models/lighting.rs` | `@@ -208,6 +208,7 @@ mod tests` | test hunk: a fixture literal |
+| `src/terrain/border_tests.rs` | `@@ -1144,3 +1144,70 @@` | test hunk: the mesher emission test, which reds on the control at the emitted vertex light (the row's own assertion) |
 
 ## Proving ref
 
@@ -56,6 +70,14 @@ the emissive overlay. Measured: control **0**, re-land **306** (threshold 60).
 The two unit refs stay green on the candidate: the baker test (emission is baked per element, 0..=15
 bounded) and the mesher test (the emissive quad's vertices carry light 15). The latter reds on the
 control by design — it is the row's own assertion.
+
+**Flake observed and its cause.** Two runs of the same pinned client read 0 near-white pixels while
+a `ledger promote`'s cargo test held a build token: the frame showed the overlay dim, i.e. the
+section was meshed with the unlit `[-1.; 2]` light sample, which `light_with_emission` deliberately
+passes through. Six other runs (including both promotion receipts) read 306. The fixture therefore
+needs a forced section remesh after the bush appears, or a client-side vertex-light probe; until then
+a heavily loaded host can false-red it. This is recorded, not hidden: the promotion receipts are from
+runs on an unloaded client.
 
 ## a/-side adaptation
 

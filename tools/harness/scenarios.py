@@ -746,9 +746,9 @@ SCENARIOS: dict[str, Scenario] = {
         owner="core:harness", evidence="graphical", profile="scene-shot",
         scenario_id="native-element-emission", requires=("xvfb",),
         sources=("tools/harness/element_emission_scene.json", "tools/harness/backends/scene_shot_checks.py"),
-        fixture="private native client, one firefly bush on a stone floor at midnight, fixed camera",
+        fixture="private native client, one firefly bush in a roofed stone cell at midnight, fixed camera, HUD hidden",
         proves="the bush's emissive overlay keeps near-white texels at night, so the element emission replaced the sampled light",
-        limits="one emissive cross model and one camera; eyeblossom and potted variants and the daytime frame stay unproven",
+        limits="one emissive cross model and one camera; eyeblossom and potted variants and the daytime frame stay unproven, and a heavily loaded host can mesh the cell unlit (recorded in the row's map)",
     ),
     "native-pig-saddle": _entry(
         id="native-pig-saddle", summary="A saddled pig draws its saddle layer",
