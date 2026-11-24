@@ -268,7 +268,7 @@ SCENARIOS: dict[str, Scenario] = {
                  "tools/harness/backends/native_ledger_tag_duplicates.py"),
         fixture="operator pad; one NoAI cow summoned with Tags:['dupx','dupx']",
         proves="the duplicated element list still selects the cow, one /tag remove answers "
-               "`Removed tag 'dupx'`, and an `execute unless entity @e[tag=dupx]` branch then prints "
+               "`Updated tags on 1 entities`, and an `execute unless entity @e[tag=dupx]` branch then prints "
                "its marker, so no duplicate entry survived",
         limits="One cow, one duplicated element and one removal; the remaining entry is observed through a "
                "selector because `tag <uuid> list` and `data get` answers do not reach the client chat. No "

@@ -49,6 +49,6 @@ replaced that with `image`/`base` (the private-field merge base). Eleven hunks a
   and `cargo:mc-world-conversion:export_tests::export_refuses_ambiguous_player_tags_from_real_wal_without_publication`
   — legacy normalisation and the export refusal.
 - `harness:entities:native-v2-ledger-tag-duplicates` — a real client summons a NoAI cow with
-  `Tags:['dupx','dupx']`, proves the selector matches, removes the tag once (`Removed tag 'dupx'`), and then
+  `Tags:['dupx','dupx']`, proves the selector matches, removes the tag once (the server answers `Updated tags on 1 entities`), and then
   an `execute unless entity @e[type=minecraft:cow,tag=dupx] run say DUP_GONE` branch prints its marker
   (`tools/harness/backends/native_ledger_tag_duplicates.py`). Passed receipt: see the promotion JSON.

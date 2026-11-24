@@ -54,7 +54,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
 
     # 2. One removal, which on a set leaves no tag behind.
     _command(steps, f"tag @e[type={COW},tag={TAG},limit=1] remove {TAG}")
-    _chat(steps, "one_tag_removal_reported", "Removed tag", TAG)
+    _chat(steps, "one_tag_removal_reported", "Updated tags on")
 
     # 3. The selector no longer matches: only this branch can print the marker, so a
     #    tree that kept the second entry never reaches the assertion.
