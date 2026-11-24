@@ -3,7 +3,7 @@ id = "CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED"
 title = "A falling block's automation contract cannot describe the prediction it runs: list_entity_value exposed no predicted velocity, so no consumer could model the integrator state the client uses between position packets"
 area = "client"
 severity = "major"
-status = "fixed"
+status = "open"
 source = "Core sand gate native-v2-input-sand on the current tree failed sand_predicts_between_received_updates (20261124T134021-native-v2-input-sand-c47ps1jh): the harness modelled the received velocity while the client integrates its own; and with DATA_NO_GRAVITY set the client kept moving on a stale local velocity instead of the server's"
 repro = "client"
 regression = [
@@ -15,4 +15,3 @@ failing_first = "reported"
 proving_assertions = { "harness:entities:native-v2-input-sand" = "falling_block_predicted_velocity_field" }
 repro_check = "Narrowed after review REVIEW-wave2-8 M1: the row's real gap is the contract field, not a no-gravity drift. list_entity_value now reports predicted_velocity (the client's own integrator state) beside the two poses; the red is the scene's named `falling_block_predicted_velocity_field` on a client without it (the model has no fallback to the stale received velocity), and `sand_predicts_between_received_updates` stays the candidate-side oracle. The pair is client:f1168d66 (reversal) -> client:bf54c241 (fix), whose diff is exactly d0337426's four-line contract hunk; the reversed blob ffe8a4c1 is the pre-image that commit started from. d0337426's physical.rs hunk is NOT part of this fix and is removed by client:a5769870: the server zeroes only the gravity term and still applies 0.98 drag, so a no-gravity block keeps integrating (falling_block_no_gravity_keeps_air_drag_without_gravity pins it), and the stale-local-velocity cause cannot occur on the packet path because SET_ENTITY_MOTION and move_to(velocity) already clear falling_velocity. The old freeze fence wrote entity.velocity directly; it now sends its stop through SET_ENTITY_MOTION. docs/bugs/promotions/CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED.hunks.md maps the hunks."
 
-promotion = "docs/bugs/promotions/CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED.json"
