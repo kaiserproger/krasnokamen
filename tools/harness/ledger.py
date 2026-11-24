@@ -2251,8 +2251,8 @@ def _promote_loader_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, loader
     loader_python = [ref for ref in loader_refs if ref.split(':', 2)[1] == 'python']
     loader_gradle = [ref for ref in loader_refs if ref.split(':', 2)[1] == 'gradle']
     if not loader_refs:
-        raise Refused(f'{ident}: a {LOADER_FIX_PREFIX}<sha> fix needs a loader:python:<dir>:<module>.<test> ref '
-                      'to carry the pair')
+        raise Refused(f'{ident}: a {LOADER_FIX_PREFIX}<sha> fix needs a loader ref to carry the pair — '
+                      'loader:python:<dir>:<module>.<test> or loader:gradle:<module>:<class>')
     repo, head, untracked = _loader_source_state(root)
     if _git(repo, 'merge-base', '--is-ancestor', fix_full, head, check=False)[0]:
         raise Refused(f'{ident}: the Loader checkout {repo} at {head[:12]} does not contain the fix '
