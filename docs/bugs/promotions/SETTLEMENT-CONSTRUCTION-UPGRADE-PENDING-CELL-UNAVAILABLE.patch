@@ -1,5 +1,5 @@
 diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-index 52acc954c..be64b95c9 100644
+index 52acc954c..90ada21da 100644
 --- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
 +++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
 @@ -332,7 +332,14 @@ pub(crate) fn recover(
@@ -18,7 +18,19 @@ index 52acc954c..be64b95c9 100644
          return Ok(false);
      }
      let retry = (paused
-@@ -399,7 +406,10 @@ pub(crate) fn recover(
+@@ -391,7 +398,10 @@ pub(crate) fn recover(
+             continue;
+         }
+         let current = record.snapshot.current_stage_index as usize;
+-        let completed = if current > index {
++        // A terminal index has no stage of its own, so every stage is behind it and its cells
++        // count as placed: an abandoned site must still show its empty cells, or the tail below
++        // commits a structure whose blocks were never there (BuildQA house L1, 20261124T221059).
++        let completed = if terminal || current > index {
+             record.cells[index].len()
+         } else if current == index {
+             record.snapshot.completed_work_units as usize
+@@ -399,7 +409,10 @@ pub(crate) fn recover(
              0
          };
          for cell in record.cells[index].iter().take(completed).rev() {
