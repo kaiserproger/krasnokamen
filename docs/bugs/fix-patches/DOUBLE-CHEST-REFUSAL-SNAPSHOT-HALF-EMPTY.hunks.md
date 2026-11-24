@@ -63,11 +63,11 @@ stack, evicts the named halves (`finish_inhabited_tick`, empty active set,
 In the control all three fail at their own assertions: the pre-fix body
 resends the half-empty menu and leaves `open` set. The red is
 `chests_tests.rs:706:5` (the first `MenuContents`-for-the-closed-window
-assertion) for all three refs; the promote receipt is
+assertion) for all three refs. Receipts: the current one,
+`.analysis/validation/20261124T004504-ledger-promote-7an4s21u` (control red for
+all three, restore green), and the same a/-side text earlier in
 `.analysis/validation/20261123T232452-ledger-promote-xi38rkf0`
-(`ledger-1-run.log:335`, `:354`, `:373` on the earlier identical-identity receipt
-`20261123T223848-ledger-promote-2rc43auc`; the current receipt re-ran and restored
-the refs green), restore green in the same receipt.
+(`ledger-1-run.log:245`, `:264`, `:283`).
 
 ## Fix in several commits
 
