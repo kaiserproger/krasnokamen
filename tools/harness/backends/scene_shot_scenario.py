@@ -219,16 +219,12 @@ def run(
             entry = source_root / name
             if entry.exists():
                 (settings_path.parent / name).symlink_to(entry.resolve(), target_is_directory=entry.is_dir())
-    original = os.environ.get("KRASNOKAMEN_CLIENT_SETTINGS")
-    if original and Path(original).is_file():
-        base = json.loads(Path(original).read_text())
-    else:
-        base_path = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "krasnokamen-client" / "client-settings.json"
-        base = json.loads(base_path.read_text()) if base_path.is_file() else {}
-    # The owner's personal fov must not leak into a reference comparison.
+    # Only this scene's own settings reach the client: an inherited file (the operator's
+    # environment or their data root) would make a reference comparison depend on the
+    # machine, and a client test that saved a rebinding would silently change the gate.
     # The native client takes its language from KRASNOKAMEN_CLIENT_LANGUAGE (below), not the file.
-    base.update({"fov": NATIVE_FOV, **{key: value for key, value in settings.items()
-                                       if not (key == "language" and ctx.client != "java")}})
+    base = {"fov": NATIVE_FOV, **{key: value for key, value in settings.items()
+                                  if not (key == "language" and ctx.client != "java")}}
     if ctx.client == "java" and "graphics_preset" in settings:
         raise ValueError("graphics_preset is a native-client setting; the Java client keeps its default")
     settings_path.write_text(json.dumps(base, indent=2) + "\n")
@@ -267,12 +263,10 @@ def run(
         xvfb, display, _ = runtime.start_xvfb(artifact, tuple(settings.get("screen_size", WINDOW)))
         ctx.logs.append(str(artifact / "xvfb.log"))
         old_xdg = os.environ.get("XDG_DATA_HOME")
-        old_settings = os.environ.get("KRASNOKAMEN_CLIENT_SETTINGS")
         old_packs = os.environ.get("KRASNOKAMEN_CLIENT_RESOURCE_PACKS")
         old_language = os.environ.get("KRASNOKAMEN_CLIENT_LANGUAGE")
         try:
             os.environ["XDG_DATA_HOME"] = str(xdg)
-            os.environ["KRASNOKAMEN_CLIENT_SETTINGS"] = str(settings_path)
             if ctx.client != "java" and "language" in settings:
                 os.environ["KRASNOKAMEN_CLIENT_LANGUAGE"] = settings["language"]
             if ctx.scenario_id in ("native-player-head", "native-placed-head"):
@@ -288,9 +282,9 @@ def run(
                     screen_size=tuple(settings.get("screen_size", WINDOW)),
                     hide_chat=scenario.get("java_hide_chat", False))
             else:
-                client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f"127.0.0.1:{client_port}", username, timeout, display=display)
+                client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f"127.0.0.1:{client_port}", username, timeout, display=display, settings=settings_path)
         finally:
-            for key, old in (("XDG_DATA_HOME", old_xdg), ("KRASNOKAMEN_CLIENT_SETTINGS", old_settings),
+            for key, old in (("XDG_DATA_HOME", old_xdg),
                              ("KRASNOKAMEN_CLIENT_RESOURCE_PACKS", old_packs),
                              ("KRASNOKAMEN_CLIENT_LANGUAGE", old_language)):
                 if old is None:
