@@ -215,9 +215,11 @@ SCENARIOS: dict[str, Scenario] = {
         sources=("tools/harness/backends/native_v2.py",
                  "tools/harness/backends/native_ledger_op_selector.py"),
         fixture="operator pad; the probe player is made an operator by the fixture and is deopped by its own chat command",
-        proves="`/deop @a[name=Missing]` answers `No player was found`, `/deop @s` answers its completion and "
-               "a following level-2 command leaves the client's received game mode survival",
-        limits="One operator and the self selector; quoting and multi-target forms rest on the mc-edge "
+        proves="`/gamemode adventure` answers `Set own game mode to Adventure Mode` while the player is an "
+               "operator, `/deop @a[name=Missing]` answers `No player was found`, `/deop @s` answers its "
+               "completion and `/gamemode creative` is then refused (`Unknown or incomplete command`)",
+        limits="One operator and the self selector; the answer text is the evidence because the harness "
+               "observation exposes no game mode; quoting and multi-target forms rest on the mc-edge "
                "profile-command refs.",
     ),
 
