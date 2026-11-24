@@ -1,0 +1,10 @@
+{
+  "steps": [
+    {"cmd": "gamerule sendCommandFeedback true"},
+    {"wait_ticks": 20},
+    {"assert_observation": {"name": "op-permission", "path": ["command", "permission_level"], "equals": 2}},
+    {"cmd": "deop @s"},
+    {"wait_ticks": 40},
+    {"assert_observation": {"name": "deop-permission", "path": ["command", "permission_level"], "equals": 0}}
+  ]
+}

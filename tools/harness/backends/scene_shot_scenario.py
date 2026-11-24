@@ -85,6 +85,7 @@ NAMED_FIXTURES = {
     "native-datapack-hover": "datapack_hover_scene.json",
     "issue1-23-held-items": "issue1_23_held_item_scene.json",
     "issue1-23-witch-potion": "issue1_23_witch_potion_scene.json",
+    "command-selector-permission": "command_selector_permission_scene.json",
 }
 
 
