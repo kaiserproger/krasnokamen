@@ -330,7 +330,10 @@ def check_held_tool_rest(probe: ProbeSteps, artifact: Path) -> None:
         probe.check(f"{name}_camera_unchanged", all(
             abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
         ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
-    box = (640, 0, 1280, 660)
+    # The held pickaxe at rest: the right half below the sky (clouds drift above the
+    # horizon even on a frozen tick) and above the hotbar. Measured 0 changed pixels on
+    # the fixed client and a bounded count on the pre-fix one.
+    box = (640, 380, 1280, 660)
     diffs = {name: _changed(shots["hand-rest-a"][1], shots[name][1], box)
              for name in ("hand-rest-b", "hand-rest-c")}
     probe.report["held_tool_roi"] = list(box)
