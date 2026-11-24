@@ -1,0 +1,19 @@
+diff --git a/crates/mc-core/src/core.rs b/crates/mc-core/src/core.rs
+index a59a5c8ef..d71fd1363 100644
+--- a/crates/mc-core/src/core.rs
++++ b/crates/mc-core/src/core.rs
+@@ -1777,6 +1777,14 @@ impl Core {
+         let backup = result
+             .recv()
+             .unwrap_or_else(|_| Err(CoreError::Storage("hot backup: the core stopped".into())))?;
++        // Books R5-G3: a copy is reported successful only after it restores.
++        // Verify the copy on this caller's thread; the world keeps ticking.
++        crate::hot_backup::verify_restorable(
++            out,
++            &self.inner.config,
++            Arc::clone(&self.inner.registry),
++            backup.wal_tick,
++        )?;
+         Ok(backup)
+     }
+ 

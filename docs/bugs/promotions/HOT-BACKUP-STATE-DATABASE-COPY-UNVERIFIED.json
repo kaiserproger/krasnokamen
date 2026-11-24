@@ -1,0 +1,38 @@
+{
+  "id": "HOT-BACKUP-STATE-DATABASE-COPY-UNVERIFIED",
+  "verdict": "promoted",
+  "fix_commit": "patch:bfab16b165d49e12c75742231c886f96b9241fafbc7457ebccd22f556a40ff17",
+  "fix_commit_full": "patch:bfab16b165d49e12c75742231c886f96b9241fafbc7457ebccd22f556a40ff17",
+  "promoted_at": "2026-11-24T04:30:50+00:00",
+  "tree_head": "57c153f98fe12c2daa281af93a0abcd6befed1c1",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "bfab16b165d49e12c75742231c886f96b9241fafbc7457ebccd22f556a40ff17",
+  "reversed_files": [
+    "crates/mc-core/src/core.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:backup::tests::the_restore_command_accepts_a_hot_backup_verified_with_content": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:hot_backup_tests::backup_refuses_a_copy_that_does_not_restore": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:backup::tests::the_restore_command_accepts_a_hot_backup_verified_with_content": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:hot_backup_tests::backup_refuses_a_copy_that_does_not_restore": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T042601-ledger-promote-24i6p8zj"
+}
