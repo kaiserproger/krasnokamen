@@ -46,10 +46,10 @@
       "cmd": "fill 985 160 985 1015 174 1015 minecraft:air"
     },
     {
-      "cmd": "summon minecraft:villager 999.5 160 1003.5 {NoAI:1b,PersistenceRequired:1b,Invulnerable:1b,Silent:1b,Rotation:[180f,0f]}"
+      "cmd": "summon minecraft:villager 999.5 160 1003.5 {NoAI:1b,PersistenceRequired:1b,Invulnerable:1b,Rotation:[180f,0f]}"
     },
     {
-      "cmd": "summon minecraft:witch 1001.5 160 1003.5 {NoAI:1b,PersistenceRequired:1b,Invulnerable:1b,Silent:1b,Rotation:[180f,0f]}"
+      "cmd": "summon minecraft:witch 1001.5 160 1003.5 {NoAI:1b,PersistenceRequired:1b,Invulnerable:1b,Rotation:[180f,0f]}"
     },
     {
       "tp": [
@@ -104,10 +104,10 @@
         "name": "emerald_held",
         "shot": "held-items",
         "window": [
-          400,
-          420,
-          540,
-          560
+          800,
+          355,
+          895,
+          480
         ],
         "color": {
           "min": [
@@ -121,7 +121,7 @@
             220
           ]
         },
-        "min_pixels": 6
+        "min_pixels": 200
       }
     },
     {
@@ -129,10 +129,10 @@
         "name": "redstone_held",
         "shot": "held-items",
         "window": [
-          740,
-          400,
-          880,
-          560
+          375,
+          355,
+          470,
+          475
         ],
         "color": {
           "min": [
@@ -146,7 +146,7 @@
             40
           ]
         },
-        "min_pixels": 6
+        "min_pixels": 200
       }
     }
   ]
