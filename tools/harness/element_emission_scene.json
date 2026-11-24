@@ -49,6 +49,12 @@
       "cmd": "fill 994 160 994 1006 165 1010 minecraft:air"
     },
     {
+      "cmd": "fill 995 160 995 1005 163 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 996 160 996 1004 162 1009 minecraft:air"
+    },
+    {
       "cmd": "setblock 1000 160 1004 minecraft:firefly_bush"
     },
     {
@@ -73,6 +79,17 @@
         },
         "expect": "minecraft:firefly_bush"
       }
+    },
+    {
+      "key": {
+        "keys": [
+          "key.keyboard.f1"
+        ],
+        "ticks": 1
+      }
+    },
+    {
+      "wait_ticks": 5
     },
     {
       "shot": "bush-night"
