@@ -249,7 +249,12 @@ worker, runs the negative control.
      pre-image (for example an admission part); a surviving half of a mixed
      hunk after an (a) split; a type annotation that only lets the reversed
      tree compile; and a kept helper whose callers are all among the
-     carried hunks. Nothing else is an adaptation: an invented stub or
+     carried hunks. **Accepted kept-helper class:** a whole module or helper
+     the fix created (for example `mounts/menus.rs` or `lectern.rs`) may stay
+     in the control tree, unreferenced by the reversed dispatch, when every
+     caller of it is inside the carried hunks; the control then proves the
+     dispatch is what the row lacked, not that the module is absent. Nothing else is
+     an adaptation: an invented stub or
      guard is refused. **A hand re-break is not a control**: an a/-side line
      that invents the assumed pre-fix outcome (a counter, a comment, a branch
      the original code never ran, or a behaviour the pre-image did not have)

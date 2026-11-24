@@ -236,8 +236,26 @@ SCENARIOS: dict[str, Scenario] = {
                "HorseInventoryMenu with 53 slots, and a quick move puts exactly seven diamonds in the first "
                "cargo slot and brings them back",
         limits="One tamed NoAI donkey and one chest; mule comparison, death drop and llama columns rest on "
-               "the cargo test. No offline export/reimport: the registered custody scenario needs a client "
-               "hook (`promotion_mount_export_reimport`) that the client does not implement.",
+               "the cargo test. No offline export/reimport here: that half belongs to "
+               "native-v2-custody-mount-export, which does run (its export/reimport hook is supplied by "
+               "tools/harness/backends/client_probes.py), and it costs two world conversions.",
+    ),
+
+    "native-v2-ledger-copper-chest-open": _entry(
+        id="native-v2-ledger-copper-chest-open",
+        summary="An open copper chest does not weather until its menu closes",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-copper-chest-open",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_copper_chest.py"),
+        fixture="operator pad; one opened and two unopened unwaxed copper chests, randomTickSpeed raised so "
+                "the oxidation sampler rolls",
+        proves="the opened chest keeps its placed stage and its 63-slot ChestMenu until both unopened "
+               "controls reach oxidized, then advances itself after the menu closes",
+        limits="One opened and two unopened single chests on one pad, stages 0..3; no double chest, waxed "
+               "neighbour, death/respawn opener release or restart. A guard-free tree can pass when the "
+               "opened chest's own draws lag all six control advances, so this variable gate needs repeats.",
     ),
 
     "native-world-first-start-interrupted": _entry(

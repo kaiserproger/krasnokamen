@@ -1,0 +1,22 @@
+diff --git a/crates/mc-core/src/redstone/containers.rs b/crates/mc-core/src/redstone/containers.rs
+--- a/crates/mc-core/src/redstone/containers.rs
++++ b/crates/mc-core/src/redstone/containers.rs
+@@ -1055,11 +1055,15 @@
+         if let Some(above) = super::offset(pos, (0, 1, 0)) {
+             moved |= if kind(state, above).and_then(size).is_some()
+                 || kind(state, above) == Some("composter")
+             {
+                 take_composter(state, above, pos)
+                     || transfer_one(state, above, pos, (0, -1, 0), true)
+-            } else {
+-                crate::vehicles::pull_into_hopper(state, above, pos) || suction(state, pos, above)
+-            };
++            } else if crate::vehicles::pull_into_hopper(state, above, pos) {
++                // The vehicle syncs its own viewers; the hopper's need the same notice.
++                changed(state, pos);
++                true
++            } else {
++                suction(state, pos, above)
++            };
+         }
+         if moved {

@@ -44,15 +44,19 @@ a tamed mount opens no inventory and a chest is never attached. Re-audit:
 ## Proving refs (file:line of the failing assertion)
 
 - `cargo:mc-core:mounts::tests::mount_inventory_opens_for_each_tamed_mount` — with the branch reversed a
-  tamed horse/donkey/mule/llama/camel secondary interaction opens nothing and the ref fails at its own
+  tamed horse/donkey/mule/llama/camel secondary interaction opens nothing, so it panics at
   `assert!(state.players[&actor].open.is_some(), "{name} inventory")`
-  (`crates/mc-core/src/mounts_tests.rs:288-312`).
+  (`crates/mc-core/src/mounts_tests.rs:303`). **Not evidence for this promotion**: the assertion carries its own
+  formatted message, which the receipt classifier does not recognise as an `assert!` macro, so the control
+  records it `unproven-panic`; the receipt's red is the second cargo ref below.
 - `cargo:mc-core:mounts::tests::mount_inventory_equipment_cargo_and_ridden_open_share_native_custody` — the
   chest attach and the 17-slot cargo menu are gone, so its own chest/cargo assertions fail
   (`crates/mc-core/src/mounts_tests.rs:316` onward).
 - `harness:entities:native-v2-ledger-donkey-cargo` — a real client attaches a chest to a tamed donkey,
   receives `HorseInventoryMenu` with 53 slots, and moves seven diamonds into the first cargo slot and back
   through the received menu (`tools/harness/backends/native_ledger_donkey_cargo.py`). Passed receipt: see
-  the promotion JSON. The older `native-v2-custody-mount-export` entry is unrunnable on this host: its
-  backend requires a client hook (`promotion_mount_export_reimport`) that the client repository does not
-  implement.
+  the promotion JSON. The row does not cite the older `native-v2-custody-mount-export` entry because this
+  gate is the row's own symptom (menu present, cargo moves) and needs no world conversion;
+  `native-v2-custody-mount-export` does run — the harness supplies its `promotion_mount_export_reimport`
+  hook (`tools/harness/backends/client_probes.py:649-657`) and it passed in 101 s on 27fbf5c24bf0
+  (`.analysis/validation/20261124T124744-native-v2-custody-mount-export-tp8r598k`).
