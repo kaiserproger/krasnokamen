@@ -189,6 +189,37 @@ SCENARIOS: dict[str, Scenario] = {
                "experience-orb spawn path.",
     ),
 
+    "native-v2-ledger-lectern": _entry(
+        id="native-v2-ledger-lectern",
+        summary="A held book is inserted onto a lectern, the lectern menu opens and the book is taken back",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-lectern",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_lectern.py"),
+        fixture="operator pad; one fixture lectern and one written book",
+        proves="the client's own block read turns has_book true, a second use receives LecternMenu with "
+               "one slot holding the book, the take-book button returns the same book to the inventory "
+               "and has_book turns false",
+        limits="One written book; page turning is a menu property the client does not expose, so only "
+               "insert/open/take are asserted.",
+    ),
+
+    "native-v2-ledger-op-selector": _entry(
+        id="native-v2-ledger-op-selector",
+        summary="A player's own `/deop @s` removes the operator level; an empty selector is no player",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-op-selector",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_op_selector.py"),
+        fixture="operator pad; the probe player is made an operator by the fixture and is deopped by its own chat command",
+        proves="`/deop @e[type=!player]` answers `No player was found`, `/deop @s` answers its completion and "
+               "a following level-2 command leaves the client's received game mode survival",
+        limits="One operator and the self selector; quoting and multi-target forms rest on the mc-edge "
+               "profile-command refs.",
+    ),
+
     "native-world-first-start-interrupted": _entry(
         id="native-world-first-start-interrupted",
         summary="Recover a singleplayer world interrupted during its first start",

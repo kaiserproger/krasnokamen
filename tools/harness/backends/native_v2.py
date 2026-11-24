@@ -1159,6 +1159,12 @@ def _ledger_tag_refusals(steps: ProbeSteps, origin: tuple[int, int, int]) -> Non
     run(steps, origin)
 
 
+def _ledger_op_selector(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_ledger_op_selector import run
+
+    run(steps, origin)
+
+
 RUNNERS = {
     "native-v2-happy-ghast-harness": _happy_ghast,
     "native-v2-mob-metadata-spot": _mob_metadata,
@@ -1179,6 +1185,7 @@ RUNNERS = {
     "native-v2-ledger-infiniburn": _ledger_infiniburn,
     "native-v2-ledger-pot-shelf": _ledger_pot_shelf,
     "native-v2-ledger-tag-refusals": _ledger_tag_refusals,
+    "native-v2-ledger-op-selector": _ledger_op_selector,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
     "native-v2-map-locked-banners": _promotion_maps,
