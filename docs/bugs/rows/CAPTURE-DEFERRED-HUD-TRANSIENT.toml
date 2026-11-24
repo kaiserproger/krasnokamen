@@ -1,6 +1,6 @@
 [[bug]]
 id = "CAPTURE-DEFERRED-HUD-TRANSIENT"
-title = "Screenshots and automation captures are deferred for the whole lifetime of any HUD animation, so a 10 s toast is never in the frame."
+title = "Screenshots and automation captures were deferred for the whole lifetime of the unsecure-server toast, so its 10 s panel was never in a frame; the hotbar selection slide was deferred the same way, but is covered by unit tests only."
 area = "client"
 repro = "manual"
 severity = "minor"
@@ -13,5 +13,5 @@ regression = [
 proving_assertions = { "harness:scene-shot:native-toast" = "toast_panel_appeared" }
 failing_first = "not recorded (the red was read from the capture path, not from a failed assertion in a pre-fix build)"
 fix_commit = "client:8a9ecaa678"
-repro_check = "CONTROL 2026-11-24 on core 12dc478ed3: with the pre-fix client 10a9c5dee5 pinned, native-toast FAILS at toast_panel_appeared (20261123T215415-native-toast-ki79xsv8) - the two frames carry no toast panel (late panel 170 px of terrain silhouette only); with the fix client 8a9ecaa678 the frame shows the panel and the yellow title (20261123T215339-native-toast-nmjj7q5f, early panel 89615, late 0 inside the panel rect). The later client 37bdec7f3e narrows the same predicate to screen transitions only (exit fade, screen open window, hover/press/value easing); the hotbar slide and toasts no longer defer a capture."
+repro_check = "CONTROL 2026-11-24 on core 12dc478ed3: with the pre-fix client 10a9c5dee5 pinned, native-toast FAILS at toast_panel_appeared (20261123T215415-native-toast-ki79xsv8) - the two frames carry no toast panel (late panel 170 px of terrain silhouette only); with the fix client 8a9ecaa678 the frame shows the panel and the yellow title (20261123T215339-native-toast-nmjj7q5f, early panel 89615, late 0 inside the panel rect). The later client 37bdec7f3e narrows the same predicate to screen transitions only (exit fade, screen open window, hover/press/value easing); the hotbar slide and toasts no longer defer a capture. The real-client proof is the toast frame only; the hotbar-slide half is unit-covered (`ui::toasts::tests::capture_deferring_ignores_a_live_toast_in_play`) and the menu case by `capture_deferring_ignores_a_live_toast_inside_a_settled_menu` (client:a16f11b334)."
 promotion = "docs/bugs/promotions/CAPTURE-DEFERRED-HUD-TRANSIENT.json"
