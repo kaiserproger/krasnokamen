@@ -4,9 +4,10 @@ title = "Villager leg model translucent and malformed"
 area = "client"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = ["harness:scene-shot:issue1-01-villager-leg"]
-fix_commit = "client:97e988d2"
-proving_assertions = { "harness:scene-shot:issue1-01-villager-leg" = "villager-leg-opaque_pixels" }
-repro_check = "Stage2X SLICES.md:125,144,151: era pin 97e988d2^ failed villager-leg-opaque_pixels (receipts/Stage2Client/run-redfix-01.log), client 34a85940 passed (run-green2-01_villager_leg.log). The era control is not an exact reversal of the candidate and must be rebuilt for stage 3. REVERSAL 2026-11-23: reverting 97e988d2 on client f5c929f7 conflicts in src/ui/items.rs, src/entities/presentation.rs, src/render/frame.rs, src/player/visual.rs, src/entities/animation_tests.rs, docs/AGENT_TESTING.md and villager/wandering_trader/witch model JSON; the control needs a forward-ported patch."
+fix_commit = "client:938ccc19"
+proving_assertions = { "harness:scene-shot:issue1-01-villager-leg" = "villager-leg-vanilla_pixels" }
+repro_check = "Committed-reversal pair at HEAD for the pre-rename bulk fix client:97e988d2 (2026-10-19): client:6069e262 restores the real pre-image (the four villager-family models verbatim from 97e988d2^ at the HEAD paths, and the family's pre-fix full humanoid leg swing hand-ported to role_pose) and client:938ccc19 re-lands the fix; the pair's diff equals the forward-ported non-test patch (client_control_delta.fix_patch_id 6ae8d6e88a710be851b4b2cb9adc154a549851b6). Map docs/bugs/promotions/ISSUE-1-01.hunks.md. The old scene window was invalidated: 560,240,760,470 with brown 40..130/30..100/20..80 and 8000 px measured grass (the terrain green is inside the box), so the pre-fix legs passed; the window now covers the leg band (596,322,700,346) and counts the vanilla leg texture's grey boot band (55..100), measured 756 px on the fixed client vs 242 px on the pre-image, threshold 500. Scene receipts: candidate 20261124T200348 PASSED (756 px), control 20261124T200212 FAILED at villager-leg-vanilla_pixels (242 px) on core 483a2d5ab. The era control (97e988d2^ pin, receipts/Stage2Client/run-redfix-01.log) is not an exact reversal and was rebuilt for this pair."
+promotion = "docs/bugs/promotions/ISSUE-1-01.json"
