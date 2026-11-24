@@ -381,6 +381,44 @@ def check_player_head(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("worn_head_back_unchanged", added_back_hat <= 100)
 
 
+def check_player_head_registry(probe: ProbeSteps, artifact: Path) -> None:
+    """PLAYER-HEAD-FAILED-PROFILE-REGISTRY-EXHAUSTION: 261 malformed profiles must not deny a
+    newly demanded valid one.
+
+    Both heads are worn by the same avatar in the same fixed third-person frame, demanded after
+    the flood, so the only difference between the frames is the profile: `flood-steve` carries an
+    offline name (default skin) and `flood-valid` the public Notch texture property. A client whose
+    head registry keeps failed keys at its cap refuses the valid key and renders the same default
+    skin; the fixed client evicts a failed entry and publishes Notch, changing the avatar's head.
+    The retained frames measure 327 changed pixels on the pre-fix client (mean colour unchanged:
+    the same default skin) against 6712 on the fixed one, so the threshold sits between them.
+    """
+    shots = _qa._load_shots(probe, artifact, ("empty", "flood-steve", "flood-valid"))
+    ref = shots["empty"][0]
+    for name in ("flood-steve", "flood-valid"):
+        frame = shots[name][0]
+        probe.check(f"{name}_camera_unchanged", all(
+            abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+        ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    # The avatar's worn head at the fixed third-person camera; the same ROI `check_player_head`
+    # samples for `worn_head_renders`.
+    head_box = (600, 280, 680, 375)
+    steve = _changed(shots["flood-steve"][1], shots["empty"][1], head_box)
+    valid = _changed(shots["flood-valid"][1], shots["empty"][1], head_box)
+    profile = _changed(shots["flood-valid"][1], shots["flood-steve"][1], head_box)
+    probe.report["flood_head_roi"] = list(head_box)
+    probe.report["flood_steve_changed_pixels"] = steve
+    probe.report["flood_valid_changed_pixels"] = valid
+    probe.report["flood_profile_changed_pixels"] = profile
+    probe.check("flood_steve_head_renders", steve > 100)
+    probe.check("flood_valid_head_renders", valid > 100)
+    probe.check("valid_head_after_flood", profile > 2000)
+    probe.report["visual_review_required"] = [
+        "Inspect flood-valid against flood-steve: the pixels prove a different skin was published, "
+        "not the exact Notch face."
+    ]
+
+
 def _clock_face_samples(image: Any, box: tuple[int, ...]) -> tuple[int, list, int, int]:
     """Sample the gold-enclosed face, including its pose-independent sky colours."""
     crop = image.crop(box)

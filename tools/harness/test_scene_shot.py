@@ -682,6 +682,71 @@ class PlayerHeadTests(unittest.TestCase):
             self.assertTrue(all("HarnessHat" in command for command in heads))
 
 
+class PlayerHeadRegistryTests(unittest.TestCase):
+    """PLAYER-HEAD-FAILED-PROFILE-REGISTRY-EXHAUSTION: a full registry must not deny new demand."""
+
+    class Probe:
+        def __init__(self):
+            self.report = {}
+
+        def check(self, name, value):
+            if not value:
+                raise AssertionError(name)
+
+    def store_frames(self, root, *, valid_differs=True):
+        from PIL import Image, ImageDraw
+
+        shots = root / "screenshots"
+        shots.mkdir(exist_ok=True)
+        frame = {"gpu_completion": True, "camera_position": [1000.5, 161.62, 1001.5],
+                 "yaw": 0, "pitch": 0}
+        for name in ("empty", "flood-steve", "flood-valid"):
+            image = Image.new("RGB", scene_shot.WINDOW, (70, 70, 70))
+            if name != "empty":
+                draw = ImageDraw.Draw(image)
+                draw.rectangle((610, 290, 680, 370), fill=(160, 120, 90))
+                if name == "flood-valid" and valid_differs:
+                    draw.rectangle((610, 290, 680, 370), fill=(210, 180, 170))
+            image.save(shots / f"{name}.png")
+            (shots / f"{name}.json").write_text(json.dumps(frame))
+
+    def test_valid_head_after_flood_requires_a_published_skin(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.store_frames(root)
+            probe = self.Probe()
+            scene_shot.check_player_head_registry(probe, root)
+            self.assertGreater(probe.report["flood_profile_changed_pixels"], 2000)
+            self.store_frames(root, valid_differs=False)
+            probe = self.Probe()
+            with self.assertRaisesRegex(AssertionError, "valid_head_after_flood"):
+                scene_shot.check_player_head_registry(probe, root)
+            self.assertEqual(probe.report["flood_profile_changed_pixels"], 0)
+
+    def test_scene_is_the_generated_261_property_flood(self):
+        from tools.harness import gen_player_head_registry_scene as gen
+
+        scene = json.loads(Path(__file__).with_name("player_head_registry_scene.json").read_text())
+        self.assertEqual(scene["steps"], gen.steps())
+        self.assertEqual(scene["seed"], 100)
+        malformed = [step["cmd"] for step in scene["steps"]
+                     if "cmd" in step and 'value:"bad0' in step["cmd"]]
+        self.assertEqual(len(malformed), 261)
+        self.assertEqual(len(set(malformed)), 261)
+        valid = [step["cmd"] for step in scene["steps"]
+                 if "cmd" in step and step["cmd"].startswith("give") and "eyJ0ZXh0" in step["cmd"]]
+        self.assertEqual(len(valid), 1)
+        import base64
+        value = valid[0].rsplit('value:"', 1)[1].split('"')[0]
+        decoded = json.loads(base64.b64decode(value))
+        self.assertTrue(decoded["textures"]["SKIN"]["url"].startswith(
+            "http://textures.minecraft.net/texture/"))
+        order = [index for index, step in enumerate(scene["steps"])
+                 if "shot" in step and step["shot"] in ("flood-steve", "flood-valid")]
+        self.assertEqual([scene["steps"][index]["shot"] for index in order],
+                         ["flood-steve", "flood-valid"])
+
+
 class ElytraTests(unittest.TestCase):
     class Probe:
         def __init__(self):

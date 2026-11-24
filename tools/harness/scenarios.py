@@ -705,6 +705,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the placed head changes its frame region and carries the authored hat layer, i.e. the default skin is drawn",
         limits="one fixture and one camera; the listed-profile online skin path stays unit-covered",
     ),
+    "native-player-head-registry": _entry(
+        id="native-player-head-registry", summary="261 malformed head profiles do not deny a newly demanded valid one",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-player-head-registry", requires=("xvfb",),
+        sources=("tools/harness/player_head_registry_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client; 261 distinct malformed hotbar properties, then two worn heads (an offline name and the public Notch texture property) in one fixed third-person frame",
+        proves="the worn head carrying the valid profile changes the frame region against the offline default-skin head worn in the same frame after the flood",
+        limits="one fixture and one camera per shot; the network fetch of the public texture is a real fetch, and a mismatched Notch appearance is not asserted",
+    ),
     "native-elytra": _entry(
         id="native-elytra", summary="A worn elytra draws its wings on the third-person avatar's back",
         owner="core:harness", evidence="graphical", profile="scene-shot",
