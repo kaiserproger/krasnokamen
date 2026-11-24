@@ -15,9 +15,10 @@ SCENARIO_KINDS = ("frame-waypoint", "banner-removal", "locked-banners", "pumpkin
                   "terrain-shading", "nether-terrain", "inventory-player-markers")
 
 
-# Regions of the 1280x720 retained frame that hold the drawn held map while never holding the chat
-# overlay (left of the map) or the top-right message box. Both are inside the map in every capture.
-HELD_MAP_REGIONS = ((400, 120, 880, 620), (640, 200, 1200, 640))
+# Region of the 1280x720 retained frame that holds the drawn held map's centre (where the frame
+# marker is drawn) while never holding the chat overlay (which reaches x≈560 over the map), the
+# top-right message box (y<160) or the held-item name tooltip (y>560).
+HELD_MAP_REGIONS = ((590, 170, 930, 560),)
 # The frame-marker icon is ~12x15 drawn pixels (measured on the fixed client: see the hunks map);
 # 0 on a client that receives the decoration and never draws it.
 FRAME_MARKER_MIN_PIXELS = 20
@@ -149,6 +150,9 @@ def _marker_count(steps: ProbeSteps, map_id: int, kind: str) -> int:
 
 def _held_shot(steps: ProbeSteps, name: str) -> None:
     steps.call("minecraft_look", {"yaw_deg": 0, "pitch_deg": 80})
+    # A use/interact immediately before the shot leaves the hand mid-swing; a sub-pixel offset would
+    # change almost every map pixel, so let the pose settle before the retained frame.
+    steps.call("minecraft_wait_ticks", {"ticks": 10})
     _capture(steps, name)
 
 
