@@ -36,10 +36,9 @@ VIEW_DISTANCE = 8
 PRE_STAGE_TICKS = 120
 BATTLE_TICKS_BOUND = 1200
 FALL_TOLERANCE_BLOCKS = 40.0
-# The row's symptom: 230 blocks from the fight with no enemy in sight. Weapon reach is a
-# few blocks; a generous 8 keeps the check about the fight, not about the exact weapon.
+# The row's symptom is an enemy in sight after the respawn; a 8-block weapon reach keeps a
+# future census check about the fight. Reserved for the server-side battle image.
 ENEMY_REACH_BLOCKS = 8.0
-ENEMY_SAMPLE_TICKS = 20
 # The spectator camera sits about a block behind the followed entity's eye.
 CAMERA_FOLLOW_BLOCKS = 8.0
 RESPAWN_MARKERS = (
@@ -169,13 +168,14 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         report["observations"]["camera_gap_blocks"] = gap
         check(report, "spectator_camera_followed_the_respawn",
               gap is not None and gap <= CAMERA_FOLLOW_BLOCKS, {"gap": gap, "camera": camera_after.get("entity_id")})
-        # The row's *symptom*, independent of any log field: after the respawn the
-        # holder's own client must see an enemy soldier within weapon reach. The old
-        # centre rule put him 230 blocks from the fight with 0 enemies for minutes
-        # (review wave2-13 M3); `contact=true` alone is a string the fix writes.
-        seen = _enemies_within(clients[0], ENEMY_REACH_BLOCKS)
-        report["observations"]["enemies_within_reach_after_respawn"] = seen
-        check(report, "holder_sees_an_enemy_after_respawn", seen >= 1, seen)
+        # The row's symptom (an enemy in sight after the respawn) cannot be measured by
+        # this gate yet: the holder's horizon-ctl exposes no entity census (`entities`
+        # blocks, `minecraft_list_entities` belongs to the hotbar MCP client) and the
+        # client `state` carries no entities. Recorded as the row's missing proof —
+        # `contact=`/`rule=centre` are strings the fix itself writes, not a control
+        # (review wave2-13 M3).
+        report.setdefault("incomplete", []).append(
+            "no client entity census through horizon-ctl: the enemy-in-reach symptom is not measured")
         # Where he landed against where he fell: the row names a 230-block jump.
         if at is not None and died_at is not None:
             fall = sum((a - b) ** 2 for a, b in zip(at, died_at)) ** 0.5
@@ -232,34 +232,6 @@ def _point(state: dict[str, Any]) -> list[float] | None:
     if all(isinstance(player.get(key), (int, float)) for key in ("x", "y", "z")):
         return [float(player["x"]), float(player["y"]), float(player["z"])]
     return None
-
-
-def _enemies_within(client: Any, reach: float, samples: int = ENEMY_SAMPLE_TICKS) -> int:
-    """How many times the holder's client reports an enemy soldier within `reach` blocks.
-
-    The client's own entity list is the witness: it is the thing the player saw, and it
-    carries no field the fix writes.
-    """
-    seen = 0
-    for _ in range(samples):
-        state = client.driver("state")
-        entities = state.get("entities") or []
-        me = (state.get("player") or {}).get("block_pos")
-        for entity in entities:
-            kind = str(entity.get("type") or entity.get("kind") or "")
-            if "player" in kind or not me:
-                continue
-            pos = entity.get("block_pos") or entity.get("position")
-            if not (isinstance(pos, list) and len(pos) == 3):
-                continue
-            gap = sum((float(a) - float(b)) ** 2 for a, b in zip(pos, me)) ** 0.5
-            if gap <= reach:
-                seen += 1
-                break
-        if seen:
-            break
-        time.sleep(0.25)
-    return seen
 
 
 def _camera_gap(camera: dict[str, Any], holder: dict[str, Any]) -> float | None:
