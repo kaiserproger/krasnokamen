@@ -25,6 +25,7 @@ from .probe_steps import ProbeSteps
 from . import scene_shot as _qa
 from .scene_shot_checks import (
     check_263_entity_rigs, check_dynamic_context, check_elytra, check_entity_visuals, check_gait_spider,
+    check_held_tool_rest,
     check_item_bars, check_placed_head, check_player_head, check_shade_override, check_shelf_clock,
     check_toasts,
     player_head_skin_pack,
@@ -78,6 +79,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-settlement-radius-growth": "settlement_radius_scene.json",
         "native-settlement-buildings-upgrade": "settlement_buildings_scene.json",
         "issue1-01-villager-leg": "issue1_01_villager_leg_scene.json",
+        "issue1-02-held-tool": "held_tool_rest_scene.json",
         "issue1-18-sheep-goat": "issue1_18_sheep_goat_scene.json",
         "issue1-19-hostile-motion": "issue1_19_hostile_motion_scene.json",
     }
@@ -327,6 +329,8 @@ def run(
                 check_shelf_clock(probe, artifact)
             elif ctx.scenario_id == "native-elytra":
                 check_elytra(probe, artifact)
+            elif ctx.scenario_id == "issue1-02-held-tool":
+                check_held_tool_rest(probe, artifact)
             elif ctx.scenario_id == "native-toast":
                 check_toasts(probe, artifact)
             elif ctx.scenario_id == "native-entity-visuals":

@@ -27,6 +27,30 @@ prediction block is the commit's block with the current call shapes (`inventory.
 `inventory.menu().kind.virtual_result`, which both still exist); the release branch and destination
 filter are literal. No line was invented.
 
+## Hand-carried lines — provenance table (`git blame -C -C b7c48e1c^`)
+
+Every a/-side line the reversal re-adds at HEAD (reversal commit `5f01c22101`) is named here with its
+pre-fix source line and the commit that introduced it. No line is invented; the classes are
+**behavioural** (the fix's path: the prediction state and its release logic) and **(c) drift** (the
+line exists only in its pre-fix form because a later commit changed it, or was re-fitted by rustfmt at
+HEAD — restoring it is the HEAD equivalent, not a behavioural invention).
+
+| HEAD line(s) in the reversal | pre-fix `b7c48e1c^` line(s) | blame commit | class |
+|---|---|---|---|
+| `state.rs:465` `pub(crate) drag_pickup: bool,` | 453 | `433629185` | behavioural (prediction state) |
+| `state.rs:602` `drag_pickup: false,` (new) | 579 | `433629185` | behavioural |
+| `state.rs:1299` `self.drag_pickup = false;` (`release_all`) | 1164 | `433629185` | behavioural |
+| `state.rs:2197` `self.drag_pickup = false;` (pointer down) | 2053 | `433629185` | behavioural |
+| `state.rs:2262` `if !self.drag_carrying || modifiers.shift || button == 2 {` | 2095 | `4ccb68fb` | **(c) drift**: a later commit dropped the `modifiers.shift` clause; the pre-fix line is restored |
+| `state.rs:2263-2280` pickup prediction block | 2096-2111 | `433629185` (two context lines `.and_then(Option::as_ref)`, `.filter(...)` are `4ccb68fb`) | behavioural; the `if button == 1 && !…virtual_result(…)` condition is one pre-fix line and rustfmt wraps it to two at HEAD — **(c) drift** (formatting only) |
+| `state.rs:2443` `} else if self.drag_carrying \|\| self.drag_pickup {` | 2253 | `433629185` | behavioural |
+| `state.rs:2456-2460` comment + `destination.filter(...)` | 2266-2270 | `433629185` | behavioural |
+
+The pre-fix `b7c48e1c^` side is itself a real tree (not a stub): `git show b7c48e1c^:src/ui/state.rs`
+holds every line above, and `433629185`/`4ccb68fb` are in the client history. The fix commit
+`b7c48e1c` is the commit that removes them; the row's delta (`git diff 5f01c22101 f843981bd3`) is
+exactly the re-land's own non-test patch.
+
 ## Every other non-test hunk of b7c48e1c and why it is not in this pair
 
 | file | hunks | what they do | reason |

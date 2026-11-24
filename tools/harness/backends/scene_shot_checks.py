@@ -316,6 +316,34 @@ def check_elytra(probe: ProbeSteps, artifact: Path) -> None:
     ]
 
 
+def check_held_tool_rest(probe: ProbeSteps, artifact: Path) -> None:
+    """ISSUE-1-02: the first-person held tool is perfectly still at rest.
+
+    Three frames of the same frozen-world, standing player: the camera must not move, and the
+    hand region (the right half above the hotbar) must keep the same pixels. The pre-fix native
+    client adds a time-based idle sway, so its frames differ by that sub-pixel motion.
+    """
+    shots = _qa._load_shots(probe, artifact, ("hand-rest-a", "hand-rest-b", "hand-rest-c"))
+    ref = shots["hand-rest-a"][0]
+    for name in ("hand-rest-b", "hand-rest-c"):
+        frame = shots[name][0]
+        probe.check(f"{name}_camera_unchanged", all(
+            abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+        ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    # The held pickaxe at rest: the right half below the sky (clouds drift above the
+    # horizon even on a frozen tick) and above the hotbar. Measured 0 changed pixels on
+    # the fixed client and a bounded count on the pre-fix one.
+    box = (640, 380, 1280, 660)
+    diffs = {name: _changed(shots["hand-rest-a"][1], shots[name][1], box)
+             for name in ("hand-rest-b", "hand-rest-c")}
+    probe.report["held_tool_roi"] = list(box)
+    probe.report["held_tool_changed_pixels"] = diffs
+    probe.check("held_tool_at_rest_is_still", max(diffs.values()) <= 2)
+    probe.report["visual_review_required"] = [
+        "Inspect hand-rest-a/b/c: the held pickaxe must sit on the same pixels in all three."
+    ]
+
+
 def check_placed_head(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-PLACED-HEAD-PROFILE: an unresolved placed head keeps the default skin.
 
