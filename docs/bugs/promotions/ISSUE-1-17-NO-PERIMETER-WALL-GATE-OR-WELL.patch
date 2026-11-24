@@ -1,12 +1,16 @@
 diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
-index 5dfce3544..0d6244542 100644
+index abe22b6dc..0d6244542 100644
 --- a/crates/mc-core/src/settlements/construction.rs
 +++ b/crates/mc-core/src/settlements/construction.rs
-@@ -1877,7 +1877,9 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
-     // The wall, its gates and the well come before street work: the streets
-     // reach every standing building in the radius and owe work without end,
-     // the fortification is a bounded list that the world itself shortens.
+@@ -1874,8 +1874,12 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
+     if gathering {
+         return false;
+     }
+-    // Free street work fills every pass that starts no building or upgrade.
 -    let Some(site) = street_site(state, record, &images) else {
++    // The wall, its gates and the well come before street work: the streets
++    // reach every standing building in the radius and owe work without end,
++    // the fortification is a bounded list that the world itself shortens.
 +    let Some(site) = fortification_site(state, record, residents, &images)
 +        .or_else(|| street_site(state, record, &images))
 +    else {

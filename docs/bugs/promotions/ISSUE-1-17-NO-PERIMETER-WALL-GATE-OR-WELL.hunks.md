@@ -1,7 +1,7 @@
 # ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL — HEAD re-break control patch
 
 Patch: `docs/bugs/promotions/ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL.patch`
-(`patch:37a0f28ae2527ee6…`), the row's `fix_commit`. It reverses on the clean
+(`patch:e10af253738912cd…`), the row's `fix_commit`. It reverses on the clean
 committed tree at `b67e1b0612` (`git apply -R --check`, plain context) and is
 what a promotion passes as `--fix-patch`.
 
@@ -18,7 +18,18 @@ asked for and no gate or well was placed.
 At HEAD the pass reads
 `fortification_site(state, record, residents, &images).or_else(|| street_site(...))`.
 The control removes that arm and calls `street_site` directly, exactly the
-pre-fix admission: walls, gatehouses and the well are never admitted.
+pre-fix admission: walls, gatehouses and the well are never admitted. It also
+restores the pre-image comment (`// Free street work fills every pass that starts
+no building or upgrade.`) instead of keeping the fix's own three-line comment in a
+tree that never admits fortification.
+
+### a/-side adaptation (named)
+
+The pre-image admission was `if let Some(site) = street_site(...) { begin_cells(...); }`
+and the function ended there (unit); HEAD's pass returns `bool` and uses
+`let Some(site) = ... else { return false; };`. The a/-side keeps HEAD's shape and
+its `return false` None arm, which is the same control flow (no site started). No
+other a/-side text differs from the pre-image.
 
 ## Omissions
 
@@ -33,7 +44,8 @@ pre-fix admission: walls, gatehouses and the well are never admitted.
 ## Reverse-apply evidence
 
 `git apply -R --check docs/bugs/promotions/ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL.patch`
-on the committed tree `b67e1b0612` succeeds.
+on the committed tree `b67e1b0612` succeeds (and re-checked at the B5 audit head,
+where the one hunk still applies with plain context).
 
 Control run (reversed tree, then restored): `python3 -m tools.harness run test
 -p mc-core --lib settlements::construction::fortification_tests::ten_residents_wall_the_town`
