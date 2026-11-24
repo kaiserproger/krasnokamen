@@ -1560,13 +1560,19 @@ class LedgerToolTests(unittest.TestCase):
         self.addCleanup(self.client_root.stop)
         return root
 
-    def client_row(self, client_sha=None, ref='harness:entities:native-v2-craft-drag'):
+    def client_row(self, client_sha=None, ref='harness:entities:native-v2-craft-drag', extra=None,
+                   refs=None):
         root = self.scratch(area='client', ref=ref)
         fix = f'client:{client_sha}' if client_sha else ''
         text = ledger.document(root).replace(
             f'fix_commit = "{self.fix}"', f'fix_commit = "{fix}"')
         if ref == 'harness:entities:native-v2-craft-drag':
             text += '\nproving_assertions = { "harness:entities:native-v2-craft-drag" = "initial_drag_keeps_server_cursor" }\n'
+        if refs is not None:
+            import re as _re
+            text = _re.sub(r'^regression = .*$', 'regression = ' + json.dumps(refs), text, count=1, flags=_re.M)
+        if extra:
+            text += '\n' + extra + '\n'
         ledger.write_rows(root, text)
         self.git(root, 'commit', '-qam', 'client row')
         return root
@@ -1678,6 +1684,32 @@ class LedgerToolTests(unittest.TestCase):
         with self.assertRaisesRegex(ledger.Refused, 'not red on any of the row'):
             self.promote(root, self.runner(), client_control_receipt=self.client_receipt(root, self.client_base),
                          client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+
+    def test_a_client_row_cannot_shrink_its_proving_refs_to_a_cargo_ref(self):
+        """R4 client half: the pair path refuses a `proving_refs` that drops the real-client ref.
+
+        Deleting the `_check_proving_choice` call from `_promote_client_fix` turns this test red: the
+        promotion would then succeed on a control that only ever proved a cargo ref."""
+        self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12],
+                               refs=['cargo:mc-core:t::flip', 'harness:entities:native-v2-craft-drag'],
+                               extra='proving_refs = ["cargo:mc-core:t::flip"]')
+        with self.assertRaisesRegex(ledger.Refused, 'keeps no real-client ref'):
+            self.promote(root, self.runner(),
+                         client_control_receipt=self.client_receipt(root, self.client_base, verdict=False,
+                                                                    assertions={'initial_drag_keeps_server_cursor': False}),
+                         client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+
+    def test_a_client_row_may_exclude_a_green_graphical_ref(self):
+        """R3 client half: excluding an extra graphical ref is allowed only while another stays proving."""
+        self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12],
+                               extra='proving_refs = ["harness:entities:native-v2-craft-drag"]')
+        control = self.client_receipt(root, self.client_base, verdict=False,
+                                      assertions={'initial_drag_keeps_server_cursor': False})
+        receipt = self.promote(root, self.runner(), client_control_receipt=control,
+                               client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+        self.assertEqual(receipt['verdict'], 'promoted')
 
     def test_client_control_that_already_has_the_fix_is_refused(self):
         self.client_repo()
