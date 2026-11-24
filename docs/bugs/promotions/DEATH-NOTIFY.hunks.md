@@ -15,8 +15,16 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
 
 - `tick/damage.rs @@ -428,52 +425,25 @@` (the death-delivery rewrite) — the HEAD equivalent is
   `crates/mc-core/src/tick/damage.rs:801-812`: `message` chosen under `show`, the unconditional
-  `push_player(connection, PlayerChange::Died { message })`, and `broadcast` still gated. Reversing it
-  moves the push back inside `if show` (the a/-side is prior code).
+  `push_player(connection, PlayerChange::Died { message })`, and `broadcast` still gated.
+  **a/-side line: reordering.** The reverse is not "prior code": it is the same HEAD lines moved back
+  inside `if show` (the `message` binding moves with them), because the original hunk reordered the head of
+  the death block; no line of the a/-side is invented and `death_message::component` already exists
+  (created by the same `7fe490528`, hunk `tick/death_message.rs -0,0 +1,128`).
+  The rest of the original hunk `-428,52 +425,25` (KEEP_INVENTORY/world-drop and `show_death_messages`
+  branches, the offline/dead-connection drop fallback, the grave hook) is **present at HEAD unchanged**
+  (`crates/mc-core/src/tick/damage.rs:812-900`): those lines were not in the patch because a later commit
+  (`b7020b427`, "integrate death protection and entity damage state") rewrote the surrounding block and
+  left them; reversing them would red the death-drop/inventory rows, not this one — (a)/(c).
 
 ## Original non-test hunks (complete)
 
@@ -74,5 +82,7 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   `assert!(state.outbox[&ConnectionId(1)].iter().any(|change| matches!(change, PlayerChange::Died { .. })))`
   fails once the push is back inside `if show` (the dying player receives nothing while the observer
   broadcast stays suppressed, `:80-90`).
-- Client ref `harness:entities:native-v2-death-messages` — no receipt is on file for this candidate; a
-  fresh real-client run is required for promotion (see HANDOFF-6).
+- Client ref `harness:entities:native-v2-death-messages` green receipt on the candidate `9c78eee8e`:
+  `.analysis/validation/20261123T211907-native-v2-death-messages-9epvsbj2/result.json` (assertion
+  `victim_gets_death_screen_despite_show_death_messages_false`; promotion record
+  `docs/bugs/promotions/DEATH-NOTIFY.json`).

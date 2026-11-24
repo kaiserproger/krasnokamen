@@ -1,8 +1,8 @@
 diff --git a/crates/mc-core/src/tick/input/inventory.rs b/crates/mc-core/src/tick/input/inventory.rs
-index 9b59a22e3..bbcd0523c 100644
+index e75cb169a..bbcd0523c 100644
 --- a/crates/mc-core/src/tick/input/inventory.rs
 +++ b/crates/mc-core/src/tick/input/inventory.rs
-@@ -225,6 +225,10 @@ pub(in crate::tick) fn container_click(
+@@ -225,6 +225,10 @@
      if state.entities.slot_of(entity).is_none() {
          return;
      }
@@ -13,3 +13,28 @@ index 9b59a22e3..bbcd0523c 100644
      if crate::mounts::menus::target(state, entity).is_some() {
          crate::mounts::menus::click(
              state, entity, *window, *state_id, *slot, *button, *mode, changes,
+@@ -479,6 +483,13 @@
+     (connection, window, slot, enabled): (&ConnectionId, &u8, &i32, &bool),
+ ) {
+     if let Some(entity) = state.connections.by_connection.get(connection).copied() {
++        if state.entities.slot_of(entity).is_none() {
++            return;
++        }
++        if crate::tick::containers::menu_source_cold(state, entity) {
++            crate::tick::close_player_menu(state, *connection);
++            return;
++        }
+         crate::crafter::slot_state(state, entity, *window, *slot, *enabled);
+     }
+ }
+@@ -494,6 +505,10 @@
+     if state.entities.slot_of(entity).is_none() {
+         return;
+     }
++    if crate::tick::containers::menu_source_cold(state, entity) {
++        crate::tick::close_player_menu(state, *connection);
++        return;
++    }
+     if crate::lectern::button(state, entity, *window, *button, changes) {
+         return;
+     }

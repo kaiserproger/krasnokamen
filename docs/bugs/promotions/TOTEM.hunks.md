@@ -7,7 +7,7 @@ branch of `TickState::commit_damage` into the totem rescue (`totem::rescue` + `t
 same block, and a control tree at `fix_commit` fails to load the current registry (the rejection's red
 was a fixture panic, not an assertion). The patch is the HEAD equivalent of the fix's behaviour: the
 root `died |= player.vitals.hurt(...)` form in `tick/damage.rs`. `fix_commit =
-"patch:6de54645be008b18…"` names it in `docs/bugs/promotions/TOTEM.patch` (a diff from the pre-fix form to
+"patch:11f2526265bfb37f…"` names it in `docs/bugs/promotions/TOTEM.patch` (a diff from the pre-fix form to
 the candidate; `git apply -R` restores the pre-fix code). Re-audit:
 `python3 -m tools.harness ledger promote TOTEM --fix-patch docs/bugs/promotions/TOTEM.patch --dry-run`.
 Rule (docs/bugs/README.md, step 1): every original non-test hunk is carried unless it is another row's or
@@ -21,6 +21,13 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   removing the `if lethal { rescue = totem::rescue(...); if rescue.is_none() { died = true; } }` block and
   restoring `health_changed |= player.vitals.health != before` / `... - player.vitals.health ...`. The
   a/-side is that prior code (from `de780c882^`), not an invented stub.
+- `tick/damage.rs @@ -550,7 +550,7 @@` — **compile-support a/-side line**: the declaration ten lines
+  before the hurt call, `let mut rescue = None` → `let mut rescue: Option<totem::Rescue> = None` in the
+  a/-side. The later `b7020b427` restructure added the kept `if let Some(mut rescue) = rescue { … }`
+  application block (`crates/mc-core/src/tick/damage.rs:693-720`), whose `rescue.used` leaves `rescue`
+  otherwise untyped once the assignment is reversed (E0282, observed 2026-11-24 in the control tree). The
+  a/-side line is the same local, same initialiser, annotated only so the reversed tree compiles; it adds
+  no behaviour and never reaches the candidate (the patch's b/+ side is the untyped declaration).
 
 ## Original non-test hunks (complete)
 
@@ -47,8 +54,14 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   `death_protection` component parsing is what the kept tests author
   (`ItemArgument::parse("stick[death_protection=...]")`); reversing them stops the control from
   compiling.
-- `tick/damage.rs @@ -152,6/-295,6` (the `totems` vector and the post-loop apply) — (b) kept for the same
-  reason; they are inert once `rescue` is never assigned.
+- `tick/damage.rs @@ -152,6/-295,6` (the `totems` vector and the post-loop apply) and the kept
+  `if let Some(mut rescue) = rescue { … }` application block (`crates/mc-core/src/tick/damage.rs:693-720`)
+  — (c) a later commit (`b7020b427`, "integrate death protection and entity damage state") rewrote that
+  region around the decision point, so the pre-fix shape is "decision gone, application inert with
+  `rescue == None`". No kept test calls the application block directly; it is left in place so the reverse
+  stays one decision-point hunk. The `rescue.is_none() &&` term in `combat_hit`
+  (`crates/mc-core/src/tick/damage.rs:689`) is neutral at `None`, so the reversed tree records the same
+  hit identity up to the death decision.
 - `docs/ARCHITECTURE.md` — (b) docs.
 - Test files — (b) kept.
 
@@ -58,9 +71,10 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   (`crates/mc-core/src/tick/combat_parity_tests.rs:489`) — with the rescue gone, the lethal fall hit kills
   the player, so `crates/mc-core/src/tick/combat_parity_tests.rs:503`
   `assert!(deaths.is_empty(), "held totem must prevent death")` fails on the first hand.
-- Client ref `harness:entities:native-v2-command-score-store` (the row's registered harness ref) green
-  receipt on the gate-wave tree
-  `.analysis/validation/20261123T163153-native-v2-command-score-store-qk0xz17p/result.json`; a fresh
-  receipt on this candidate is required for promotion (see HANDOFF-6). That scenario does not exercise
-  totems — it is the row's registered ref, not a totem assertion; the real-client totem proof is an open
-  gap (owner decision file).
+- Client ref `harness:entities:native-v2-p4-totem` green receipt on the pinned candidate tree
+  (`pin-release` of `f78cba26f`; `.analysis/validation/20261123T222754-native-v2-p4-totem-65mn_ngj/result.json`,
+  all fifteen assertions true: rescue at one health, totem consumed, the three effects,
+  `default_totem_survives_at_one_health`, and `no_totem_lethal_damage_kills_the_player`). The scenario is
+  registered in `tools/harness/scenarios.py` + `backends/native_v2.py` and implemented by
+  `_totem` in `backends/native_p4.py`; the reflective server assertion is
+  `default_totem_applies_regeneration_absorption_and_fire_resistance` on the ordered effect receipt.

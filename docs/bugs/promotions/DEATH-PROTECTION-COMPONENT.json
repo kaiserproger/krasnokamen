@@ -1,0 +1,44 @@
+{
+  "id": "DEATH-PROTECTION-COMPONENT",
+  "verdict": "promoted",
+  "fix_commit": "patch:11f2526265bfb37f4a20fa035cba57ccc4af07da9e011310181ce932de98402b",
+  "fix_commit_full": "patch:11f2526265bfb37f4a20fa035cba57ccc4af07da9e011310181ce932de98402b",
+  "promoted_at": "2026-11-23T22:52:41+00:00",
+  "tree_head": "62881e4ee8aaf4ea94d2c13b8db7c1a11897390d",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "11f2526265bfb37f4a20fa035cba57ccc4af07da9e011310181ce932de98402b",
+  "reversed_files": [
+    "crates/mc-core/src/tick/damage.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:tick_tests::combat_parity_tests::death_protection_component_rescues_any_held_item_without_default_totem_effects": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-p4-death-protection": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick_tests::combat_parity_tests::death_protection_component_rescues_any_held_item_without_default_totem_effects": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T222939-native-v2-p4-death-protection-t2oyivrz/result.json",
+    "tree_head": "62881e4ee8aaf4ea94d2c13b8db7c1a11897390d",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "446fc4724b0ede19a6dc946d52721a5b083131df50f95248ef5f613b36379229",
+    "covers": [
+      "harness:entities:native-v2-p4-death-protection"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261123T224602-ledger-promote-job32nik"
+}

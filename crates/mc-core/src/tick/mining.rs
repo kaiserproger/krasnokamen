@@ -64,7 +64,8 @@ fn cold_target_or_eye(state: &TickState, entity: EntityId, position: BlockPos) -
 /// A finish is delivered over the target's +-2 frame and applied under the
 /// actor's own chunk, so every chunk of that frame must be resident before the
 /// queued finish is extracted. The +-2 span crosses at most two chunk columns
-/// per axis, so this is at most four lookups.
+/// per axis, so the frame is at most four lookups, plus the actor's own body
+/// cell below.
 fn cold_delivery_frame(state: &TickState, entity: EntityId, position: BlockPos) -> bool {
     let span = |centre: i32| ((centre - 2).div_euclid(16), (centre + 2).div_euclid(16));
     let (x0, x1) = span(position.x);

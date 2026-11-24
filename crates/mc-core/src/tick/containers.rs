@@ -15,10 +15,13 @@ use mc_data::block_entity_kinds::BlockEntityKind;
 /// destroyed container does. `damage_anvil` repeats the residency check where it
 /// writes the stored cell.
 ///
-/// Three menu inputs are deliberately not gated here: `place_recipe` closes the
-/// menu when a cell has no block, `select_bundle_item` mutates only resident
-/// `block_entities` records, and `beacon::configure` reads the recorded image and
-/// materializes its chunk instead of writing the overlay.
+/// Three menu inputs are deliberately not gated here: `place_recipe`'s cell
+/// test answers from the cold overlay, so it cannot serve as a residency gate;
+/// its slot snapshot comes from resident `block_entities` records, and a cold
+/// cell has none, so the menu's slot-count check closes it before any write.
+/// `select_bundle_item` mutates only resident `block_entities` records, and
+/// `beacon::configure` reads the recorded image and materializes its chunk
+/// instead of writing the overlay.
 pub(super) fn menu_source_cold(state: &TickState, actor: EntityId) -> bool {
     state
         .open_containers

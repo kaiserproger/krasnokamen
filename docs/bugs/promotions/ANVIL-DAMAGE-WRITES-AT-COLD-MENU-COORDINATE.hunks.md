@@ -3,9 +3,10 @@
 Original fix: `c7bd44dd06` (`fix(residency): keep cold menu, mining, brush, copper and egg writes off the
 overlay`) added the menu-source residency check and the `damage_anvil` guard; `b460f313cc` later corrected
 the `stations.rs` comment ("discards the damage draw", not "waits"). The `damage_anvil` guard is this
-row's path; the same two commits' `menu_source_cold` and `container_click`/`container_slot_state`/
-`container_button` guards close ENDER-CHEST-MENU-CLICK-THROUGH-COLD-OVERLAY and part of
-COPPER-HONEYCOMB-WAXES-ACROSS-COLD-CHUNK-EDGE, and are carried by those rows' own controls.
+row's path; the same two commits' `container_click`/`container_slot_state`/`container_button` guards are
+carried by ENDER-CHEST-MENU-CLICK-THROUGH-COLD-OVERLAY (that row's patch also keeps `menu_source_cold`
+compiling; `damage_anvil` does not call the helper), and the copper write guard belongs to
+COPPER-HONEYCOMB-WAXES-ACROSS-COLD-CHUNK-EDGE.
 
 `fix_commit = "patch:948c1d9485e5c681…"` names the HEAD equivalents of this row's non-test hunk in
 `docs/bugs/promotions/ANVIL-DAMAGE-WRITES-AT-COLD-MENU-COORDINATE.patch` (a diff from the pre-fix form

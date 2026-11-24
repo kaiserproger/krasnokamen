@@ -328,14 +328,14 @@ SCENARIOS: dict[str, Scenario] = {
         limits="four query shapes only",
     ),
     "native-v2-death-messages": _entry(
-        id="native-v2-death-messages", summary="/kill shows the victim a generic_kill death message despite show_death_messages false",
+        id="native-v2-death-messages", summary="/kill delivers the Died change (death screen) to the victim despite show_death_messages false",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-death-messages",
         requires=("xvfb",),
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
                  "tools/harness/backends/client_probes.py"),
         fixture="show_death_messages false, then /kill @s",
-        proves="the dying player still receives the generic_kill message and the death screen, then respawns",
-        limits="single client is the victim; team packets excluded (pinned client parses set_player_team with pre-26.3 field order; TEAM-DEATH-VISIBILITY blocked separately)",
+        proves="the dying player receives the Died change and the death screen (victim_gets_death_screen_despite_show_death_messages_false); the ordered chat receipt and identity are recorded",
+        limits="single client is the victim; the observer broadcast gating is proven by damage_scoreboard_tests.rs:80-90, not here; team packets excluded (pinned client parses set_player_team with pre-26.3 field order; TEAM-DEATH-VISIBILITY blocked separately)",
     ),
     "native-v2-score-food": _entry(
         id="native-v2-score-food", summary="food criterion is creatable and auto-updates when hunger drains",

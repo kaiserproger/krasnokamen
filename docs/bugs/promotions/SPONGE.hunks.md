@@ -11,10 +11,13 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
 
 ## Carried
 
-- `tick/dimension.rs` (the after-blocks hook list) — the HEAD equivalent is the
-  `crate::sponge::after_blocks(state, &mut block_writes, &mut popped_drops)` call and its lap line at
-  `crates/mc-core/src/tick/dimension.rs:378-379`. Reversing them removes the pass from the tick, so a
-  sponge placed by a real `UseItemOn` never absorbs (the a/-side is the surrounding prior hook list).
+- Original hunk `tick.rs @@ -2881,6 +2888,7 @@` — the `crate::sponge::after_blocks(state,
+  &mut block_writes, &mut popped_drops);` line inserted in `run_dimension_tick_inner` right after
+  `crate::portals::nether::after_blocks(...)`. At HEAD that function moved to
+  `crates/mc-core/src/tick/dimension.rs`, so the HEAD equivalent is that call plus its `block_laps.lap("sponge")`
+  line at `crates/mc-core/src/tick/dimension.rs:378-379`. Reversing them removes the pass from the tick, so
+  a sponge placed by a real `UseItemOn` never absorbs (the a/-side is the surrounding prior hook list,
+  `nether::after_blocks` → `fluids::schedule`, unchanged HEAD lines).
 
 ## Original non-test hunks (complete)
 

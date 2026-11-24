@@ -14,9 +14,11 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
 ## Carried
 
 - `tick/input/interact.rs @@ -310,6 +322,11 @@` — the `crate::vanilla_interact::axe(...)` term in the
-  `use_item_on` chain; HEAD `crates/mc-core/src/tick/input/interact.rs:330-332`. Reversing it drops the
-  axe term (the a/-side is the prior `brushing::use_on`-only branch, real code, no stub) and
-  `use_on` on a log/copper block changes nothing.
+  `use_item_on` chain; HEAD `crates/mc-core/src/tick/input/interact.rs:330-332`. The whole five-line block
+  was added by `35308579c` (`-310,6 +322,11`), and the patch reverses only this row's disjunct.
+  **a/-side line: (a)-split.** The surviving `if crate::brushing::use_on(...) { return; }` half belongs to
+  FALL-002's row — the same hunk installs both handlers, so a whole-block reverse would red the brush row
+  instead; it never existed alone in this branch's history, and it is not a kept-API constructor.
 
 ## Original non-test hunks (complete)
 
@@ -62,6 +64,9 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
 - `brushing.rs`, `sponge.rs`, `painting.rs`, `spawn_protection.rs`, `special_storage.rs` (the other new
   modules) — (a) FALL-002, SPONGE, SPECIAL-001 and the painting/spawn rows; their controls reverse their
   own call sites/bodies.
+- The same commit's four other `tick/input/interact.rs` hunks — `-60,7 +60,8`, `-78,6 +79,12`,
+  `-166,6 +173,8`, `-178,6 +187,9` — (a) the dragon-egg and spawn-protection routing of the same rebase,
+  carried by those rows/gates; they are not the axe dispatch.
 - All remaining files — (a) the rebase's other rows (dragon egg, painting, spawn protection, special
   storage, chest/lectern custody, edge/config plumbing); (b) test files kept.
 - `example.toml`/`docs/QUIRK_PARITY.md` — (b) docs/config text, never reversed.
@@ -73,6 +78,6 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   `crates/mc-core/src/interact_parity_tests.rs:48-52`
   `assert_eq!(state.world.block_at(POS...), Some(block(&state, result, props)), "{source}")` fails on the
   first case (`oak_log` stays `oak_log`), and `:54` (wear `Some(3)`) fails too.
-- Client ref `harness:entities:native-v2-ledger-axe` green receipt on the gate-wave tree:
-  `.analysis/validation/20261123T192234-native-v2-ledger-axe-cb0sqx0m/result.json` (tree `0218c529e`);
-  a fresh receipt on this candidate is required for promotion (see HANDOFF-6).
+- Client ref `harness:entities:native-v2-ledger-axe` green receipt on the candidate `9c78eee8e`:
+  `.analysis/validation/20261123T211938-native-v2-ledger-axe-146xzfla/result.json` (promotion record
+  `docs/bugs/promotions/INTERACT-001.json`).
