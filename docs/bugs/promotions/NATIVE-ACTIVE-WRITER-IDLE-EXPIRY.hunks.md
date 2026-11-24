@@ -1,6 +1,6 @@
 # NATIVE-ACTIVE-WRITER-IDLE-EXPIRY — hunk map for the committed reversal pair
 
-Client pair: reversal `client:2e4f355e59` → re-land `client:7ac3be5d7c` (the row's `fix_commit`).
+Client pair: reversal `client:9ff891766b` → re-land `client:20943b0e6f` (the row's `fix_commit`).
 Promotion receipt: `promotions/NATIVE-ACTIVE-WRITER-IDLE-EXPIRY.json` (the first promotion, pair
 `0051108980` → `88a5f4f0c4`); this pair supersedes its control, whose kept `lease_verdict` arms 2-3
 and `controller()` report were not the pre-image (review B-M1).
@@ -43,8 +43,9 @@ git diff 2e4f355e59 7ac3be5d7c -- src/automation/control.rs
 +            Some(_) | None => (None, None),
 ```
 
-`git diff 2e4f355e59 7ac3be5d7c` is 1 786 bytes and is byte-for-byte
-`non_test_patch(client repository, 7ac3be5d7c)` (sha256 `9e426ef3c2bb0518…`). Every changed line's
+`git diff 9ff891766b 20943b0e6f` is 1 786 bytes and is byte-for-byte
+`non_test_patch(client repository, 20943b0e6f)` (sha256 `9e426ef3c2bb0518…`; the same patch as the first
+pair `2e4f355e59` → `7ac3be5d7c`, re-made on the client that widened the approach bound). Every changed line's
 `a/-` side is the historical pre-image (`git show 895c63f3^:src/automation/control.rs`). No
 adaptation.
 
@@ -81,9 +82,15 @@ historical text.
 before the scene's generic `long_action_completed`. A client that loses the controller at the idle
 deadline never returns the bounded action, so the row's own assertion is the one that flips.
 
-The scene's action is now **150 s** with `elapsed >= 125` and `join(165)` (review B-M2): the approach
-used to be 120 s, exactly `WRITER_IDLE_TTL`, so a revocation and the action's own timeout were
-indistinguishable. Controls: <control receipts, ≥3>; restore: <restore receipt>.
+The scene's action is now **150 s** with `elapsed >= hold - 25` and `join(hold + 15)` (review B-M2):
+the approach used to be 120 s, exactly `WRITER_IDLE_TTL`, so a revocation and the action's own timeout
+were indistinguishable. The tool had to accept a longer bound first: `client:f91b021c` widened
+`minecraft_approach_entity`'s `timeout_seconds` to 300 s in the catalogue and in the internal range
+(`src/minecraft/entities.rs`), and both sides of this pair contain it. The scene asks the client for
+its bound (`_approach_hold`) and records `approach_timeout_seconds`, so a client that still caps at
+120 s runs the other legs but cannot carry the idle margin.
+
+Controls: <control receipts, ≥3>; restore: <restore receipt>.
 
 ## Gate hygiene note (review N8)
 
