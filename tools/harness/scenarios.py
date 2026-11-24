@@ -954,6 +954,35 @@ SCENARIOS: dict[str, Scenario] = {
         limits="one bed and one sleeper on a private world; the predicate is the server's state, the client's own "
                "read_block is recorded evidence, not a rendering-parity claim",
     ),
+    "native-v2-mob-yaw-blocked-step": _entry(
+        id="native-v2-mob-yaw-blocked-step",
+        summary="A zombie whose step a fence deflects keeps its body on the wanted drive, not on the resolved step",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-v2-mob-yaw-blocked-step", requires=("xvfb",),
+        sources=("tools/harness/backends/scene_shot.py", "tools/harness/backends/mob_motion_oracle.py",
+                 "tools/harness/mob_yaw_blocked_step_scene.json"),
+        fixture="a bare stone platform, one oak-fence line between a running zombie and a survival player "
+                "standing diagonally behind it",
+        proves="the fence zeroes the chase step's +x half while +z still carries (the scene first asserts the "
+               "step really is deflected by at least 30 degrees), and the received body yaw stays within 15 "
+               "degrees of the bearing to the player instead of the deflected step, at no more than 90 "
+               "degrees per tick",
+        limits="one zombie, one fence and one camera; it compares the received body yaw with the local "
+               "player's position and the entity's received velocity, not the head yaw",
+    ),
+    "native-v2-spear-jab-decode": _entry(
+        id="native-v2-spear-jab-decode",
+        summary="A charged iron-spear jab on a real native client reaches the server and deals its damage",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-v2-spear-jab-decode", requires=("xvfb",),
+        sources=("tools/harness/backends/scene_shot.py", "tools/harness/spear_jab_scene.json"),
+        fixture="a bare platform, a survival player given one iron spear in a cleared inventory, and one "
+                "NoAI cow in ordinary reach",
+        proves="the client dispatches the jab and the server confirms authoritative damage (a health drop or "
+               "removal) instead of dropping the STAB action at decode, with a framed shot of the swing",
+        limits="one cow and one swing; the swing is the captured frame, not a pixel oracle; the pre-fix "
+               "control is a reversed server pin with the same client",
+    ),
     "native-village-open-air-home": _entry(
         id="native-village-open-air-home", summary="A resident leaves an outdoor bed for an unbound villager that claims and uses it",
         owner="core:harness", evidence="graphical", profile="scene-shot",

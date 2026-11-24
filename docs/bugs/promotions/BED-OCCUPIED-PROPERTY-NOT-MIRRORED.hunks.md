@@ -116,3 +116,36 @@ and the passing candidate receipts for both the player arm
 (`20261124T181951-native-bed-occupied-state-bnymsftm`) and the resident arm
 (`20261124T182026-native-village-occupied-bed-9mz_u_tp`).
 
+
+## Review wave2-9 Minor-1 — the patch is regenerated at HEAD (`patch:2d890e2a…`)
+
+The recorded `patch:d3314283…` stopped reversing once `51e8c1c77` (the empty-pass early return in
+`sleep.rs`) and the `tick.rs` doc line landed: `git apply -R --check` refused at
+`crates/mc-core/src/tick.rs:442` and `crates/mc-core/src/sleep.rs:295`. Every commit between the
+pre-image and HEAD that touches the four production files is one of the bed fix's own commits
+(`34af8faf8`, `44c0c66a3`, `865c34a92`, `71261486d`, `51e8c1c77` — `git log 34af8faf86^..HEAD --
+sleep.rs tick.rs tick/dimension.rs tick/state.rs`), so the patch is the whole fix's non-test hunks:
+
+```
+git diff 34af8faf86^..HEAD -- crates/mc-core/src/sleep.rs crates/mc-core/src/tick.rs \
+    crates/mc-core/src/tick/dimension.rs crates/mc-core/src/tick/state.rs
+```
+
+sha256 `2d890e2a90ebff6b78218b5faf6798d5b94ecac43474e14a19117300e5553c25`, a/- side = the real
+pre-image before `34af8faf8` (no `occupied_beds`, no mirror, no call), b/- side = HEAD.
+`git apply -R --check` passes on `6e177ea0e` (verified). The row's `fix_commit` now names this digest;
+the promotion JSON keeps the digest the promote actually ran with (`d3314283…` on `85269b467`) — it is
+a receipt, not rewritten. The early return is part of the reverse control too (it only skips a pass
+whose wanted set is empty, so reversing it cannot change an observed bed state).
+
+## Review wave2-9 Minor-2 — the resident branch's graphical negative control
+
+`.analysis/validation/20261124T201909-native-village-occupied-bed-xo4zzd56` — **FAIL** 73.3 s on the
+already built reversed pin `pins/660717828dd4-1be2cc9d-server-x86_64-unknown-linux-gnu` (the four
+files at `178456759b`, patch reversed; server binary sha256 `054800eb3094…`), client pin
+`530556e864c2`, windowed native:
+
+`scene-shot assertion failed: resident_bed_head_occupied_contains_0` — the scene reached the sleeping
+resident (`villager_occupies_bed_*` passed) and the server's own `execute if block …
+[part=head,occupied=true]` predicate did not match, i.e. the resident's bed stayed free with the fix
+removed. Both split branches of the row (player and resident) now have their own real-client red.

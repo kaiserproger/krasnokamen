@@ -422,6 +422,116 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 raise RuntimeError("entity snapshot omitted same-thread game_time")
             receipt = {"game_time": result["game_time"], "snapshot": result}
             (artifact / f"{value['name']}.json").write_text(json.dumps(receipt, indent=2) + "\n")
+        elif kind == "attack_entity":
+            def find_target() -> dict[str, Any]:
+                snapshot = probe.call("minecraft_list_entities", {"radius": 32, "limit": 128})
+                entities = snapshot.get("entities")
+                if not isinstance(entities, list):
+                    raise RuntimeError("entity snapshot omitted entities")
+                matches = [row for row in entities if row.get("entity_type") == value["entity_type"]]
+                if len(matches) != 1:
+                    raise RuntimeError(f"attack_entity needs exactly one {value['entity_type']}, "
+                                       f"got {len(matches)}")
+                for key in ("entity_id", "entity_uuid", "entity_type"):
+                    if key not in matches[0]:
+                        raise RuntimeError(f"target row omitted {key}")
+                return matches[0]
+
+            target = find_target()
+            receipt: dict[str, Any] = {"target": target, "health_before": target.get("health")}
+            if "expect_item" in value:
+                held = (probe.observe().get("selected_item") or {}).get("item_id")
+                receipt["selected_item"] = held
+                probe.check(f"{value['name']}_holds_{value['expect_item'].split(':')[1]}",
+                            held == value["expect_item"])
+            attempts = value.get("attempts", 2)
+            measured = {"health_before": receipt["health_before"], "health_after": receipt["health_before"],
+                        "removed": False, "confirmed": False}
+            receipt["attempts"] = []
+            for attempt in range(attempts):
+                if measured["health_before"] is None:
+                    break
+                attempt_receipt: dict[str, Any] = {"index": attempt}
+                probe.call("minecraft_approach_entity", {
+                    "entity_id": target["entity_id"], "timeout_seconds": value["timeout_seconds"]})
+                try:
+                    attempt_receipt["attack"] = probe.call("minecraft_attack_entity_once", {
+                        "entity_id": target["entity_id"], "entity_uuid": target["entity_uuid"],
+                        "entity_type": target["entity_type"],
+                        "timeout_seconds": value["timeout_seconds"]})
+                except Exception as error:
+                    # The client's own wait is one witness; the authoritative one is the target's
+                    # received state below, so a timed-out tool still lets the damage speak.
+                    attempt_receipt["attack_error"] = str(error)
+                probe.call("minecraft_wait_ticks", {"ticks": 10})
+                after = None
+                try:
+                    current = probe.call("minecraft_list_entities", {"radius": 32, "limit": 128})
+                    rows = [row for row in current.get("entities") or []
+                            if row.get("entity_uuid") == target["entity_uuid"]]
+                    after = rows[0] if rows else None
+                except Exception as error:
+                    attempt_receipt["after_error"] = str(error)
+                attack = attempt_receipt.get("attack") or {}
+                attempt_receipt["health_after"] = None if after is None else after.get("health")
+                receipt["attempts"].append(attempt_receipt)
+                removed = after is None or attack.get("removed") is True
+                dropped = (type(measured["health_before"]) in (int, float)
+                           and type(attempt_receipt["health_after"]) in (int, float)
+                           and attempt_receipt["health_after"] < measured["health_before"])
+                confirmed = (attack.get("confirmed") is True
+                             or (type(attack.get("health_before")) in (int, float)
+                                 and type(attack.get("health_after")) in (int, float)
+                                 and attack["health_after"] < attack["health_before"]))
+                measured.update({"health_after": attempt_receipt["health_after"],
+                                 "removed": removed, "confirmed": confirmed})
+                receipt["attack"] = attempt_receipt.get("attack")
+                receipt["health_after"] = attempt_receipt["health_after"]
+                if removed or dropped or confirmed:
+                    break
+            (artifact / f"{value['name']}.json").write_text(json.dumps(receipt, indent=2) + "\n")
+            receipt["removed"] = measured["removed"]
+            # The jab was accepted only if the server's own damage shows up in the target's
+            # received state: a STAB action dropped at decode leaves the target untouched.
+            probe.check(f"{value['name']}_accepted",
+                        measured["removed"] or measured["confirmed"]
+                        or (type(receipt["health_before"]) in (int, float)
+                            and type(receipt["health_after"]) in (int, float)
+                            and receipt["health_after"] < receipt["health_before"])
+                        or any(type(row.get("health_after")) in (int, float)
+                               and type(receipt["health_before"]) in (int, float)
+                               and row["health_after"] < receipt["health_before"]
+                               for row in receipt["attempts"]))
+            probe.check(f"{value['name']}_damaged",
+                        measured["removed"]
+                        or any(type(row.get("health_after")) in (int, float)
+                               and type(receipt["health_before"]) in (int, float)
+                               and row["health_after"] < receipt["health_before"]
+                               for row in receipt["attempts"]))
+        elif kind == "chase_facing":
+            from . import mob_motion_oracle
+
+            samples = [json.loads((artifact / f"{item}.json").read_text()) for item in value["samples"]]
+            state = probe.observe()
+            player = state.get("player") or {}
+            if not all(key in player for key in ("x", "y", "z")):
+                raise RuntimeError("client observation omitted the local player position")
+            measurement = mob_motion_oracle.chase_facing(
+                samples, value["entity_type"], [float(player["x"]), float(player["y"]), float(player["z"])])
+            (artifact / f"{value['name']}.json").write_text(json.dumps(measurement, indent=2) + "\n")
+            name = value["name"]
+            slug = value["entity_type"].split(":")[1]
+            # The fixture must have produced a deflected step, or a yaw assertion would not
+            # tell a wanted-direction body from a resolved-step body.
+            probe.check(f"{name}_step_deflected",
+                        measurement["moving_samples"] >= value.get("min_moving_samples", 2)
+                        and measurement["max_step_deflection_deg"]
+                        >= value.get("min_step_deflection_deg", 30))
+            probe.check(f"{name}_{slug}_faces_wanted",
+                        measurement["max_gap_to_wanted_deg"] <= value["max_wanted_gap_deg"])
+            probe.check(f"{name}_{slug}_yaw_rate",
+                        measurement["max_yaw_change_deg_per_tick"]
+                        <= value.get("max_yaw_rate_deg", 90))
         elif kind == "mob_motion":
             from . import mob_motion_oracle
 

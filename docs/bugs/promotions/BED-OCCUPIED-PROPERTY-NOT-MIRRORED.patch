@@ -1,8 +1,8 @@
 diff --git a/crates/mc-core/src/sleep.rs b/crates/mc-core/src/sleep.rs
-index 6e21fd7c7..38cc66ebf 100644
+index 6e21fd7c7..a4ffda0cf 100644
 --- a/crates/mc-core/src/sleep.rs
 +++ b/crates/mc-core/src/sleep.rs
-@@ -295,6 +295,82 @@ pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
+@@ -295,6 +295,87 @@ pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
      }
  }
  
@@ -37,6 +37,11 @@ index 6e21fd7c7..38cc66ebf 100644
 +                wanted.insert(home);
 +            }
 +        }
++    }
++    // No sleeper and no occupied cell: nothing to compare, and the per-tick pass must not build
++    // the written-cell set for every dimension on every tick (review wave2-8 m8).
++    if previous.is_empty() && wanted.is_empty() {
++        return;
 +    }
 +    // One set for the pass: an accepted write to any cell this tick wins.
 +    let written: rustc_hash::FxHashSet<BlockPos> = state
@@ -86,7 +91,7 @@ index 6e21fd7c7..38cc66ebf 100644
  /// night is over or who were hurt, and skip the night when the gamerule's
  /// percentage of active non-spectator players sleeps soundly.
 diff --git a/crates/mc-core/src/tick.rs b/crates/mc-core/src/tick.rs
-index 60ef9b2c5..9a4d1409e 100644
+index 60ef9b2c5..9c2fb4d41 100644
 --- a/crates/mc-core/src/tick.rs
 +++ b/crates/mc-core/src/tick.rs
 @@ -442,6 +442,10 @@ pub struct TickState {
@@ -94,7 +99,7 @@ index 60ef9b2c5..9a4d1409e 100644
      /// Players lying in a bed ([`crate::sleep`]).
      pub sleepers: HashMap<EntityId, crate::sleep::Sleeper>,
 +    /// Bed head cells whose block `occupied` property this tick mirrored
-+    /// ([`crate::sleep::run`]). Derived from the sleepers and sleeping
++    /// ([`crate::sleep::mirror_occupied_beds`]). Derived from the sleepers and sleeping
 +    /// residents every tick, never persisted.
 +    pub(crate) occupied_beds: HashSet<BlockPos>,
      /// Last journaled player / block-entity post-images. Images are

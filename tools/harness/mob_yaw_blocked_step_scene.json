@@ -1,0 +1,143 @@
+{
+  "seed": 107,
+  "server_view_distance": 6,
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode survival"
+    },
+    {
+      "cmd": "difficulty normal"
+    },
+    {
+      "cmd": "gamerule doMobSpawning false"
+    },
+    {
+      "cmd": "gamerule doDaylightCycle false"
+    },
+    {
+      "tp": [
+        9.5,
+        72,
+        4.5,
+        133,
+        15
+      ]
+    },
+    {
+      "wait_ticks": 60
+    },
+    {
+      "cmd": "fill -6 69 -8 20 69 14 minecraft:stone"
+    },
+    {
+      "cmd": "fill -6 70 -8 20 76 14 minecraft:air"
+    },
+    {
+      "cmd": "fill 6 70 -8 6 70 8 minecraft:oak_fence"
+    },
+    {
+      "cmd": "effect give @s minecraft:resistance 300 4 true"
+    },
+    {
+      "cmd": "effect give @s minecraft:regeneration 300 1 true"
+    },
+    {
+      "tp": [
+        9.5,
+        70,
+        4.5,
+        133,
+        15
+      ]
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "cmd": "summon minecraft:zombie 5.2 70 0.5 {PersistenceRequired:1b}"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "timed_entities": {
+        "name": "mob_yaw_1",
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "timed_entities": {
+        "name": "mob_yaw_2",
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "timed_entities": {
+        "name": "mob_yaw_3",
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "timed_entities": {
+        "name": "mob_yaw_4",
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "timed_entities": {
+        "name": "mob_yaw_5",
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "chase_facing": {
+        "name": "mob_yaw_blocked",
+        "samples": [
+          "mob_yaw_1",
+          "mob_yaw_2",
+          "mob_yaw_3",
+          "mob_yaw_4",
+          "mob_yaw_5"
+        ],
+        "entity_type": "minecraft:zombie",
+        "max_wanted_gap_deg": 15,
+        "min_step_deflection_deg": 30,
+        "min_moving_samples": 3,
+        "max_yaw_rate_deg": 90
+      }
+    },
+    {
+      "shot": "mob-yaw-blocked-step"
+    }
+  ]
+}

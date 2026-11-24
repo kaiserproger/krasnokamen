@@ -48,14 +48,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
 import os
 import re
 import subprocess
 import time
 import urllib.request
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -74,6 +73,10 @@ RATE_WAIT_SECONDS = 12.0       # `/tick query`'s reply shares the pump queue it 
 PUBLISH_BUDGET_SECONDS = 1.6
 OUTBOX_STALL_SECONDS = 10.0     # the reliable outbox stall watch row 2 names
 HALT_WINDOW_MARGIN_SECONDS = 2.0  # the verdict needs the whole stall window, not a fragment of it
+# The halt watch's own window, measured in wall clock from the server's log stamps.
+HALT_WINDOW_SECONDS = OUTBOX_STALL_SECONDS + HALT_WINDOW_MARGIN_SECONDS
+APPLIED_RATE_TOLERANCE = 1.25  # a publication this near the requested rate already runs at it
+PUBLICATION_LINE = "pump published tick tick="
 ENGAGED_LINE = "pump lag enabled"  # the server's warn line for the test/dev knob
 CRITERIA = ("join_behind_slow_pump", "live_pump_does_not_halt")
 
@@ -167,6 +170,68 @@ def _wait_rate(line: str, start: str, end: str, seconds: float | None) -> float 
     return ticks / seconds if ticks > 0 else None
 
 
+def _publications(log_path: Path) -> list[tuple[datetime, int]]:
+    """Every `pump published` line's stamp and the tick it published (pure helper)."""
+    try:
+        text = log_path.read_text(errors="replace")
+    except OSError:
+        return []
+    rows: list[tuple[datetime, int]] = []
+    for line in text.splitlines():
+        if PUBLICATION_LINE not in line:
+            continue
+        stamp = _moment(line.split(" ", 1)[0])
+        tick = _int(r"pump published tick tick=(\d+)", line)
+        if stamp is not None and tick is not None:
+            rows.append((stamp, tick))
+    return rows
+
+
+def admitted_moment(log_path: Path, username: str) -> datetime | None:
+    """The server's own admission stamp for one client (pure helper)."""
+    try:
+        text = log_path.read_text(errors="replace")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        if "login admitted" in line and f"name={username}" in line:
+            return _moment(line.split(" ", 1)[0])
+    return None
+
+
+def publish_window(log_path: Path, username: str, requested_rate: float) -> dict[str, Any]:
+    """The halt watch's observation window in wall clock, from the server's own log stamps.
+
+    Ticks divided by the admitted rate overcount a window that began at the pre-`/tick rate`
+    speed: the first 31 ticks of the receipt run passed at ~20 TPS, so a "17.0 s" window was
+    7.3 s of server life (review wave2-9 Major-1). The window starts at the later of the
+    joiner's admission and the first publication whose own interval already runs at the
+    requested rate, and ends at the last publication the log carries.
+    """
+    rows = _publications(log_path)
+    admitted = admitted_moment(log_path, username)
+    applied_at: datetime | None = None
+    previous: tuple[datetime, int] | None = None
+    for stamp, tick in rows:
+        if previous is not None:
+            elapsed = (stamp - previous[0]).total_seconds()
+            ticks = tick - previous[1]
+            if elapsed > 0 and ticks > 0 and ticks / elapsed <= requested_rate * APPLIED_RATE_TOLERANCE:
+                applied_at = stamp
+                break
+        previous = (stamp, tick)
+    candidates = [moment for moment in (admitted, applied_at) if moment is not None]
+    start = max(candidates) if candidates else None
+    end = rows[-1][0] if rows else None
+    seconds = (end - start).total_seconds() if start is not None and end is not None else None
+    return {"admitted_at": None if admitted is None else admitted.isoformat(),
+            "applied_at": None if applied_at is None else applied_at.isoformat(),
+            "start_at": None if start is None else start.isoformat(),
+            "end_at": None if end is None else end.isoformat(),
+            "end_tick": None if not rows else rows[-1][1],
+            "seconds": None if seconds is None else round(seconds, 2)}
+
+
 def witness(record: dict[str, Any], knob_on: bool, applied_rate: float | None,
             stale_skips: int, lagged_skips: int = 0) -> tuple[bool, str]:
     """Why an output is known to have aged past the publish budget, on either tree.
@@ -239,12 +304,14 @@ def join_verdict(record: dict[str, Any], knob_on: bool, applied_rate: float | No
 
 def halt_verdict(knob_on: bool, record: dict[str, Any], applied_rate: float | None,
                  stale_skips: int, tick_before: int, tick_after: int, halt: str | None,
-                 window_start: int | None = None) -> tuple[bool | None, str]:
+                 window_seconds: float | None = None) -> tuple[bool | None, str]:
     """Row 2 verdict: False only for a halt or a stuck core behind the same witnessed publication.
 
     A pass needs a window at least as long as the outbox stall watch the row names: the halt fires
     10 s after the queue stopped draining, so a shorter observation would "pass" a core that had
-    simply not been given the chance to halt yet (review wave2-8 M3)."""
+    simply not been given the chance to halt yet (review wave2-8 M3). The window is wall clock from
+    the server's own stamps (`publish_window`): dividing ticks by the admitted rate overcounts a
+    window that began at the pre-`/tick rate` speed (review wave2-9 Major-1)."""
     witnessed, info = witness(record, knob_on, applied_rate, stale_skips)
     if not witnessed:
         return None, info
@@ -252,15 +319,13 @@ def halt_verdict(knob_on: bool, record: dict[str, Any], applied_rate: float | No
         return False, f"the core halted under a live lagging pump: {halt}"
     if tick_after <= tick_before:
         return False, f"the simulation tick did not advance ({tick_before} -> {tick_after})"
-    needed = OUTBOX_STALL_SECONDS + HALT_WINDOW_MARGIN_SECONDS
-    if window_start is not None:
-        rate = record.get("rate") or applied_rate
-        elapsed = ((tick_after - window_start) / rate) if rate and rate > 0 else None
-        if elapsed is None or elapsed < needed:
-            return None, (f"the halt watch had only {elapsed if elapsed is not None else 'unknown'} s "
-                          f"of observation ({window_start} -> {tick_after}), shorter than the "
-                          f"{needed:.0f} s stall window: a pass proves nothing")
-    return True, f"the core kept ticking {tick_before} -> {tick_after} with {info}"
+    if window_seconds is None or window_seconds < HALT_WINDOW_SECONDS:
+        return None, (f"the halt watch had only "
+                      f"{'unknown' if window_seconds is None else f'{window_seconds:.1f}'} s of wall "
+                      f"clock ({tick_before} -> {tick_after}), shorter than the "
+                      f"{HALT_WINDOW_SECONDS:.0f} s stall window: a pass proves nothing")
+    return True, (f"the core kept ticking {tick_before} -> {tick_after} over "
+                  f"{window_seconds:.1f} s of wall clock with {info}")
 
 
 def disposition(verdicts: dict[str, bool | None]) -> tuple[str, list[str]]:
@@ -567,12 +632,6 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: float, 
         # landing record and the halt line; row 1 has no join outcome because none was attempted.
         return _early_halt(detail, verdicts, a, error, server_log_path, delayed, tick_rate, server)
     tick_before = _safe_tick(dashboard_port)
-    # The halt watch's own origin: the stall watch runs for 10 s from the queue stalling, so the
-    # observation window is measured from the tick the rate applied (review wave2-8 M3).
-    try:
-        observed_at_rate = (a.observe(outside_play=True).get("time") or {}).get("game_time")
-    except Exception:
-        observed_at_rate = None
     skips_before = _skip_counters(dashboard_port)
     joiner: ProbeSteps | None = None
     try:
@@ -624,23 +683,30 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: float, 
                                       else round(float(record["landed_seconds"]), 2))
     detail["join_in_play"] = joiner_in_play
     halt = halt_line(server_log_path)
-    # A pass needs the whole stall window, not the fragment a fast join leaves: hold the witness
-    # until the client's own observed clock has advanced past OUTBOX_STALL_SECONDS + margin at the
-    # applied rate. Event-driven (`minecraft_wait_for_state_change`), never a sleep.
+    # The halt watch's window is wall clock from the server's own stamps (review wave2-9 Major-1):
+    # ticks divided by the admitted rate overcounted a window that began at the pre-rate speed, so
+    # a pass could never have seen the halt. Hold the run, event-driven, until a publication stamps
+    # the whole window; a halt inside it is row 2's own symptom and ends the wait.
     bound_rate = applied_rate if applied_rate is not None and applied_rate > 0 else tick_rate
-    needed_ticks = math.ceil((OUTBOX_STALL_SECONDS + HALT_WINDOW_MARGIN_SECONDS) * bound_rate)
-    if halt is None and observed_at_rate is not None:
+    window = publish_window(server_log_path, JOINER, bound_rate)
+    window_start = _moment(window.get("start_at"))
+    if halt is None and window_start is not None:
+        deadline_at = window_start + timedelta(seconds=HALT_WINDOW_SECONDS)
+
+        def extended() -> tuple[bool, dict[str, Any]]:
+            current = publish_window(server_log_path, JOINER, bound_rate)
+            end = _moment(current.get("end_at"))
+            return ((end is not None and end >= deadline_at)
+                    or halt_line(server_log_path) is not None), current
+
         try:
-            a.wait(lambda s: (s.get("time") or {}).get("game_time", -1) >= observed_at_rate + needed_ticks,
-                   "halt_window_elapsed", outside_play=True, timeout_seconds=OUTBOX_STALL_SECONDS + 20.0,
-                   record=False)
-            detail["halt_window_ticks"] = needed_ticks
-        except Exception as error:
-            # A halt inside the window is row 2's own symptom and is read below; a silent client
-            # leaves the window check to halt_verdict (a None verdict, never a pass).
-            detail["halt_window_error"] = str(error)
-            if halt is None:
-                halt = halt_line(server_log_path)
+            window = runtime.wait_for_path_condition(
+                server_log_path, HALT_WINDOW_SECONDS + 20.0, extended, server)
+        except (TimeoutError, runtime.ChildExited):
+            window = publish_window(server_log_path, JOINER, bound_rate)
+        if halt is None:
+            halt = halt_line(server_log_path)
+    detail["halt_window"] = window
     tick_after = _safe_tick(dashboard_port)
     stats_end = None
     try:
@@ -653,9 +719,6 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: float, 
     detail["join_stale_skips"] = stale_delta
     detail["join_lagged_skips"] = lagged_delta
     detail["join_ticks"] = [tick_before, tick_after]
-    detail["halt_window"] = {"start_tick": tick_before, "end_tick": tick_after,
-                             "seconds": (None if not bound_rate or tick_after <= tick_before
-                                         else round((tick_after - tick_before) / bound_rate, 2))}
     detail["publish"] = (stats_end or {}).get("publish")
     detail["tps_at_end"] = (stats_end or {}).get("tps")
     detail["halt_line"] = halt
@@ -667,7 +730,8 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: float, 
     # Row 2 is judged from the *joiner's* record only: the witness joined before `/tick rate`, so
     # its lag and its 20 TPS rate are evidence about another phase (review wave2-8 M4).
     ok2, why2 = halt_verdict(delayed, record, applied_rate, stale_delta,
-                             tick_before, tick_after, halt, window_start=tick_before)
+                             tick_before, tick_after, halt,
+                             window_seconds=window.get("seconds"))
     detail["halt_verdict"] = why2
     detail.setdefault("verdicts", {})["live_pump_does_not_halt"] = why2
     verdicts["live_pump_does_not_halt"] = ok2

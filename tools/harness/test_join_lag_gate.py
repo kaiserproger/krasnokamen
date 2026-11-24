@@ -187,7 +187,7 @@ class JoinVerdictTest(unittest.TestCase):
 
 class HaltVerdictTest(unittest.TestCase):
     def test_a_ticking_core_behind_a_witnessed_delay_passes(self) -> None:
-        ok, _ = join_lag.halt_verdict(True, record(), 3.0, 4, 100, 160, None)
+        ok, _ = join_lag.halt_verdict(True, record(), 3.0, 4, 100, 160, None, window_seconds=13.0)
         self.assertTrue(ok)
 
     def test_a_halted_core_under_a_witnessed_delay_fails(self) -> None:
@@ -202,13 +202,13 @@ class HaltVerdictTest(unittest.TestCase):
     def test_a_halt_watch_shorter_than_the_stall_window_is_inconclusive(self) -> None:
         # The PASS 151525 window was ~3 s at ~3 TPS, shorter than the 10 s outbox stall watch: that
         # core was never given the chance to halt, so the pass proved nothing (review wave2-8 M3).
-        ok, why = join_lag.halt_verdict(True, record(), 3.0, 4, 100, 110, None, window_start=100)
+        ok, why = join_lag.halt_verdict(True, record(), 3.0, 4, 100, 110, None, window_seconds=3.3)
         self.assertIsNone(ok)
         self.assertIn("stall window", why)
 
     def test_a_full_stall_window_passes(self) -> None:
-        # 40 ticks at 3 TPS = 13.3 s: past the 10 s watch plus the margin.
-        ok, _ = join_lag.halt_verdict(True, record(), 3.0, 4, 100, 140, None, window_start=100)
+        # 13.3 s of wall clock: past the 10 s watch plus the margin.
+        ok, _ = join_lag.halt_verdict(True, record(), 3.0, 4, 100, 140, None, window_seconds=13.3)
         self.assertTrue(ok)
 
     def test_an_unwitnessed_delay_proves_nothing(self) -> None:
@@ -454,12 +454,6 @@ class FakeSteps:
         self.events.append(f"wait:{label}")
         if not outside_play:
             self._observe()
-        if label == "halt_window_elapsed":
-            # The core is gone the moment it halted: the window wait must not pretend otherwise.
-            if self.halted:
-                raise TimeoutError(f"timed out waiting for {label}")
-            self.game_time += 40
-            return self.observe(outside_play=True)
         value = self.states.get(label, TimeoutError(f"timed out waiting for {label}"))
         if label == self.halt_after:
             self._halt()
@@ -571,9 +565,8 @@ class GateWalkTest(unittest.TestCase):
                                  states={"player_present": {"player": {"x": 0.5}}},
                                  halt_after=None, events=events)
         self.assertEqual([name for name in events if name != "event:10.0"],
-                         ["wait:player_present", "fixture:tick rate 3", "observe",
-                          "launch:joiner", "fixture:tick query", "wait:tick_rate_applied",
-                          "wait:halt_window_elapsed", "observe"])
+                         ["wait:player_present", "fixture:tick rate 3",
+                          "launch:joiner", "fixture:tick query", "wait:tick_rate_applied"])
 
     def test_a_held_rate_reply_is_tolerated_and_its_verdict_comes_from_the_joiner(self) -> None:
         events: list[str] = []
@@ -692,3 +685,49 @@ class PlayLostTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+MIXED_RATE_LOG = """\
+2026-11-24T18:19:31.393470Z DEBUG mc_edge::server::pump: pump published tick tick=241 viewers=1 elapsed_us=3764
+2026-11-24T18:19:31.790858Z DEBUG mc_edge::server::pump: pump published tick tick=249 viewers=1 elapsed_us=3190
+2026-11-24T18:19:32.589589Z  INFO mc_edge::server::connection: login admitted peer=127.0.0.1:42548 connection=5 name=JoinLagJoiner protocol=777 release="26.3"
+2026-11-24T18:19:33.361663Z DEBUG mc_edge::server::pump: pump published tick tick=280 viewers=1 elapsed_us=2900
+2026-11-24T18:19:35.992221Z DEBUG mc_edge::server::pump: pump published tick tick=292 viewers=1 elapsed_us=2019
+2026-11-24T18:19:38.656790Z DEBUG mc_edge::server::pump: pump published tick tick=300 viewers=2 elapsed_us=2797
+"""
+EXTENDED_LINE = ("2026-11-24T18:19:50.900000Z DEBUG mc_edge::server::pump: "
+                 "pump published tick tick=337 viewers=2 elapsed_us=2797\n")
+
+
+class PublishWindowTest(unittest.TestCase):
+    """The halt watch's window is wall clock from the server's stamps (review wave2-9 Major-1)."""
+
+    def test_a_mixed_rate_run_is_measured_in_wall_clock(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            log = Path(root) / "server.log"
+            log.write_text(MIXED_RATE_LOG)
+            window = join_lag.publish_window(log, join_lag.JOINER, 3.0)
+            # 249 -> 280 ran at ~20 TPS; only the 292 -> 300 interval already ran at 3 TPS.
+            self.assertEqual(window["admitted_at"], "2026-11-24T18:19:32.589589+00:00")
+            self.assertEqual(window["start_at"], "2026-11-24T18:19:38.656790+00:00")
+            self.assertEqual(window["end_tick"], 300)
+            self.assertLess(window["seconds"], join_lag.HALT_WINDOW_SECONDS)
+            # The receipt's own arithmetic divided the whole tick span by the admitted rate.
+            self.assertAlmostEqual((300 - 249) / 3.0, 17.0, places=6)
+
+    def test_a_publication_past_the_window_extends_it(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            log = Path(root) / "server.log"
+            log.write_text(MIXED_RATE_LOG + EXTENDED_LINE)
+            window = join_lag.publish_window(log, join_lag.JOINER, 3.0)
+            self.assertGreaterEqual(window["seconds"], join_lag.HALT_WINDOW_SECONDS)
+            self.assertEqual(window["end_tick"], 337)
+
+    def test_a_late_admission_wins_over_the_rate_change(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            log = Path(root) / "server.log"
+            log.write_text(MIXED_RATE_LOG.replace("18:19:32.589589", "18:19:39.500000")
+                           + EXTENDED_LINE)
+            window = join_lag.publish_window(log, join_lag.JOINER, 3.0)
+            self.assertEqual(window["start_at"], "2026-11-24T18:19:39.500000+00:00")
+            self.assertAlmostEqual(window["seconds"], 11.4, places=1)

@@ -14,6 +14,8 @@ regression = [
   "cargo:mc-core:combat::tests::spear_minimum_charge_refuses_until_fourteen_ticks",
   "cargo:mc-data:item_components::tests::embedded_required_item_facts_cover_spear_attack_range",
   "cargo:mc-data:item_components::tests::loads_component_report_fixture",
+  "harness:scene-shot:native-v2-spear-jab-decode",
 ]
 failing_first = "reported"
-repro_check = ["Fix be976b139 is in tree and seven cargo refs are green. Missing proof: the registered graphical scene `native-v2-spear-jab-decode` / the G2L real-client stab hit-test (SWEEP-MANIFEST.md: the jab animation plays and the attack packet is accepted with no decode drop) plus its passed receipt on the promotion tree."]
+fix_commit = "patch:8ab22ab90bb1813e9b5f46e4db8cb51bb1395b55c872ecb87eafd28ae5b8dc62"
+repro_check = ["The G2L real-client stab hit-test now exists as the registered scene `native-v2-spear-jab-decode` (scene-shot, windowed native; `tools/harness/spear_jab_scene.json`): the client holds the iron spear, looks at a NoAI cow two blocks ahead and dispatches one ordinary attack (wire-8 STAB); the step asserts the target's own received state (health drop or removal) and fails on a dropped jab. Evidence and limits in `docs/bugs/promotions/PLAYER-SPEAR-JAB-DROPPED-AT-DECODE.hunks.md`; the fix patch reverses on HEAD and its cargo reds are the control, the graphical control is recorded unrunnable (a reversed pin needs its own build)."]
