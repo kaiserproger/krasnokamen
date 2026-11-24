@@ -32,6 +32,10 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
         kind, value = next(iter(step.items()))
         if kind in ("key", "look", "hotbar", "use_item_on", "click_screen_button"):
             yield SCENE_TOOLS[kind], value
+        elif kind == "assert_block":
+            yield "minecraft_read_block", value["args"]
+        elif kind == "assert_screen":
+            yield "minecraft_observe", {}
         elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities", "wait_terrain"):
             yield SCENE_TOOLS[kind], value["args"]
         elif kind in ("timed_entities", "require_entities", "assert_entities"):
@@ -210,6 +214,25 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                                          and item[key] >= 0 for key in ("min_speed", "max_speed"))
                                  and item["min_speed"] < item["max_speed"])
                              for item in value["types"]))
+        elif kind == "assert_block":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"name", "args", "expect"}
+                     and isinstance(value["name"], str)
+                     and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and isinstance(value["args"], dict)
+                     and set(value["args"]) == {"x", "y", "z"}
+                     and all(type(number) is int for number in value["args"].values())
+                     and isinstance(value["expect"], str)
+                     and re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", value["expect"]))
+        elif kind == "assert_screen":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"name", "contains", "excludes"}
+                     and isinstance(value["name"], str)
+                     and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and all(isinstance(value[key], list)
+                             and all(isinstance(item, str) and bool(item) for item in value[key])
+                             for key in ("contains", "excludes"))
+                     and bool(value["contains"]))
         elif kind == "assert_entities":
             valid = (client == "native" and isinstance(value, dict)
                      and set(value) <= {"name", "args", "entity_type", "box", "min", "max",

@@ -1,0 +1,52 @@
+{
+  "id": "KELP-ITEMS-SPAWN-ON-OCEAN-FLOOR",
+  "verdict": "promoted",
+  "fix_commit": "patch:e6fee19a268eeee6a24d95c816b746f6b4209fa70c4e305b8bf85ba368289420",
+  "fix_commit_full": "patch:e6fee19a268eeee6a24d95c816b746f6b4209fa70c4e305b8bf85ba368289420",
+  "promoted_at": "2026-11-24T00:46:01+00:00",
+  "tree_head": "de73cffa44db8a2e5907f43c1b7f060e048dffe9",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "e6fee19a268eeee6a24d95c816b746f6b4209fa70c4e305b8bf85ba368289420",
+  "reversed_files": [
+    "crates/mc-core/src/fluids.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:fluids_tests::kelp_growing_in_still_water_drops_no_items": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:fluids_tests::flowing_water_keeps_kelp_and_seagrass_without_loot": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-kelp-ocean-floor": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:fluids_tests::kelp_growing_in_still_water_drops_no_items": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:fluids_tests::flowing_water_keeps_kelp_and_seagrass_without_loot": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T002855-native-kelp-ocean-floor-1emi8490/result.json",
+    "tree_head": "de73cffa44db8a2e5907f43c1b7f060e048dffe9",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "306e3aef50a056800c9eea8205c274ba406919d67f8dff7f27161ec2cda189b0",
+    "covers": [
+      "harness:scene-shot:native-kelp-ocean-floor"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T004242-ledger-promote-sgrf_jge"
+}

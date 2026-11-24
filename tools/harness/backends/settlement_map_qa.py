@@ -226,6 +226,20 @@ class Gui:
         finally:
             self.input._key("Shift_L", False)
 
+    def slot_named(self, pattern: str, label: str) -> int:
+        """Click the visible chest slot whose observed item name matches `pattern`."""
+        state = self.probe.observe()
+        container = state.get("container") or {}
+        candidates = [row for row in container.get("slots", [])
+                      if 0 <= int(row.get("slot", 99)) < 54
+                      and re.search(pattern, str(row.get("name") or ""), re.IGNORECASE)]
+        if not candidates:
+            names = [str(row.get("name")) for row in container.get("slots", []) if row.get("name")][:16]
+            raise RuntimeError(f"no visible slot matches {pattern!r} ({label}); names={names}")
+        slot = min(int(row["slot"]) for row in candidates)
+        self.slot(slot)
+        return slot
+
     def escape(self) -> None:
         self.input.tap("Escape")
         self.probe.wait(lambda state: not (state.get("screen") or {}).get("open"), "GUI closed")
@@ -239,6 +253,8 @@ NAME = "mapqa"
 RADIUS = 64
 PALETTE = {
     "territory": (0x4C, 0x7A, 0x34),
+    # A live construction site's own map colour (the D63 map legend's construction marker).
+    "site": (0xFF, 0x88, 0x00),
     "you": (0xFF, 0x55, 0xFF),
     "storage": (0x9C, 0x6B, 0x30),
     "house": (0xE3, 0xC0, 0x8D),
@@ -252,7 +268,7 @@ MIN_CELL = 8 * 8
 # `label(...)`; test_settlement_map_qa checks that every pair there is listed here.
 PAGES = {
     "hub": (f"Settlement {NAME}", f"Поселение {NAME}"),
-    "settlement": ("Settlement", "Поселение"),
+    "settlement": ("Management", "Управление"),
     "help": ("Help", "Помощь"),
     "map": ("Map ·", "Карта ·"),
     "house": ("House", "Дом"),
@@ -277,6 +293,36 @@ PAGES = {
 # The verdicts a receipt publishes in `details.verdicts` (registered as
 # `regressions._BOOLEAN_PROFILE_VERDICTS["settlement-map-qa"]`): one per GUI stage the run
 # walks, `localized_text` (every Russian title and text check, ru_ru runs only) and `all`.
+# Mirrors `settlements::layout` so a fixture can name a lot, its verge and its road without
+# asking the server. `test_settlement_map_qa` pins these literals against the Rust source.
+LAYOUT_PERIOD = 28      # 2 * (LOT_FRONT 3 + LOT_DEPTH = blueprints::MAX_SIZE[2] 11)
+LAYOUT_PLAZA = 4
+LAYOUT_RING = 30        # PERIOD + 2
+
+
+def layout_signed(value: int, anchor: int) -> int:
+    offset = (value - anchor) % LAYOUT_PERIOD
+    return offset - LAYOUT_PERIOD if offset > LAYOUT_PERIOD // 2 else offset
+
+
+def layout_cell(anchor: list[int], x: int, z: int) -> str:
+    dx, dz = layout_signed(x, anchor[0]), layout_signed(z, anchor[2])
+    if abs(dx) <= 1 or abs(dz) <= 1:
+        return "road"
+    if max(abs(x - anchor[0]), abs(z - anchor[2])) <= LAYOUT_PLAZA:
+        return "plaza"
+    if max(abs(x - anchor[0]), abs(z - anchor[2])) == LAYOUT_RING:
+        return "wall"
+    if abs(dx) == 2 or abs(dz) == 2:
+        return "verge"
+    return "lot"
+
+
+# Assertions the `--scenario selected-card` run must record true for its verdict.
+# Assertions the `--scenario verge` run must record true for its verdict.
+VERGE_ASSERTIONS = ("verge_project_admitted_on_the_status_page", "verge_obstacle_stands")
+SELECTED_CARD_ASSERTIONS = ("map_features_house_and_site", "selected_card_site_only",
+                            "selected_card_back_returns_map", "selected_card_building_only")
 STAGES = ("bell_opens_hub", "dashboard", "map", "building_order", "shortage_icons",
           "storage_transfer", "project_progress", "residents", "resources", "production_order")
 VERDICTS = (*STAGES, "localized_text", "all")
@@ -371,7 +417,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     parser.add_argument("--size", choices=("1280x720", "1920x1080"), default="1280x720")
     parser.add_argument("--wrong-click", action="store_true",
                         help="negative control: click Help instead of Settlement")
-    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race", "stage2", "stage2op", "blueprints"), default="civil",
+    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race", "stage2", "stage2op", "blueprints", "selected-card", "verge"), default="civil",
                         help="quickwins: the owner-path acceptance of the D63 quick wins (native, ru_ru); "
                              "quickwins-c1-race: the starter chest (C1) founded under block churn in its chunk")
     parser.add_argument("--survey", action="store_true",
@@ -389,6 +435,38 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         return settlement_quickwins_qa.run(ctx, args)
     if args.survey:
         raise ValueError("--survey belongs to --scenario quickwins")
+    if args.scenario == "verge":
+        settings = {"gui_scale": args.gui_scale, "language": args.language,
+                    "screen_size": list(map(int, args.size.split("x")))} if ctx.client == "java" else {}
+
+        def verge_script(probe, artifact, steps, client):
+            try:
+                return _verge_script(probe, artifact, steps, client, args)
+            finally:
+                checks = probe.report["assertions"]
+                ok = all(checks.get(name) is True for name in VERGE_ASSERTIONS)
+                published = {"verge_connected": ok, "all": ok}
+                probe.report["verdicts"] = published
+                ctx.client_evidence["verdicts"] = published
+        return scene_shot.run(ctx, scenario={"steps": [], "java_plain": ctx.client == "java",
+                                             "client_settings": settings}, script=verge_script)
+    if args.scenario == "selected-card":
+        # One live construction site and the storage; the site marker must open that project alone.
+        settings = {"gui_scale": args.gui_scale, "language": args.language,
+                    "screen_size": list(map(int, args.size.split("x")))} if ctx.client == "java" else {}
+
+        def selected_script(probe, artifact, steps, client):
+            try:
+                return _selected_card_script(probe, artifact, steps, client, args)
+            finally:
+                checks = probe.report["assertions"]
+                # Every required check must have been recorded true: a missing one is not a pass.
+                ok = all(checks.get(name) is True for name in SELECTED_CARD_ASSERTIONS)
+                published = {"selected_card": ok, "all": ok}
+                probe.report["verdicts"] = published
+                ctx.client_evidence["verdicts"] = published
+        return scene_shot.run(ctx, scenario={"steps": [], "java_plain": ctx.client == "java",
+                                             "client_settings": settings}, script=selected_script)
     if ctx.client != "java" and (args.gui_scale != 3 or args.language != "en_us" or args.size != "1280x720"):
         # The civil walk reads English page titles; the native client takes its language from
         # KRASNOKAMEN_CLIENT_LANGUAGE and only the quickwins scenario sets it.
@@ -503,10 +581,23 @@ def _dialog(probe: ProbeSteps, title: str) -> dict[str, Any]:
 
 
 def _menu(probe: ProbeSteps, title: str) -> dict[str, Any]:
-    return probe.wait(lambda state: (state.get("screen") or {}).get("class") == CONTAINER
-                      and str(state["screen"].get("title", "")).startswith(title)
-                      and (state.get("container") or {}).get("slot_count") == 90,
-                      f"GUI menu {title}", timeout_seconds=30)
+    try:
+        return probe.wait(lambda state: (state.get("screen") or {}).get("class") == CONTAINER
+                          and str(state["screen"].get("title", "")).startswith(title)
+                          and (state.get("container") or {}).get("slot_count") == 90,
+                          f"GUI menu {title}", timeout_seconds=30)
+    except Exception:
+        # A page that never opened is a failed GUI check; its observed payload names what was there.
+        observe = getattr(probe, "observe", None)
+        if observe is None:
+            raise
+        state = observe()
+        container = state.get("container") or {}
+        names = [str(row.get("name")) for row in container.get("slots", []) if row.get("name")][:16]
+        raise RuntimeError(f"GUI menu {title} never opened; screen="
+                           f"{(state.get('screen') or {}).get('title')!r} "
+                           f"class={(state.get('screen') or {}).get('class')!r} "
+                           f"slots={container.get('slot_count')} names={names}")
 
 
 def _enter_dashboard(probe: ProbeSteps, gui: Gui, label: str, title: str,
@@ -904,6 +995,272 @@ def _production(probe: ProbeSteps, gui: Gui, label: Callable[[str, str], str],
     probe.check("production_order_resident_crafted", bool(current["receipts"]) and current["done"] >= 1)
 
 
+def _fund_chest(probe: ProbeSteps, chest: list[int], blueprint: str) -> None:
+    """Privileged fixture: put one L1 bill of `blueprint` into the funding chest."""
+    materials = subprocess.run(
+        [sys.executable, str(scene_shot.runtime.REPO_ROOT / "tools/blueprints.py"), "materials", blueprint],
+        check=True, capture_output=True, text=True, cwd=scene_shot.runtime.REPO_ROOT,
+    )
+    base = next(ast.literal_eval(line.split("base", 1)[1].strip())
+                for line in materials.stdout.splitlines() if "L1:" in line and "base" in line)
+    slot = 0
+    for item, count in sorted(base.items()):
+        remaining = math.ceil(count * 1.5) + 1
+        while remaining:
+            amount = min(64, remaining)
+            if slot >= 27:
+                raise RuntimeError(f"{blueprint} L1 fixture exceeds the physical funding chest")
+            probe.fixture(f"item replace block {' '.join(map(str, chest))} container.{slot} "
+                          f"with minecraft:{item} {amount}")
+            remaining -= amount
+            slot += 1
+
+
+def _visible_text(state: dict[str, Any]) -> str:
+    """Every text a screen shows: title, dialog bodies/buttons and chest slot names."""
+    screen = state.get("screen") or {}
+    parts = [str(screen.get("title") or "")]
+    parts += [str(node.get("label")) for node in state.get("ui_nodes") or [] if node.get("label")]
+    parts += [str(row.get("name")) for row in (state.get("container") or {}).get("slots", []) if row.get("name")]
+    return "\n".join(parts)
+
+
+def _selected_card_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
+                          args: argparse.Namespace) -> list[str]:
+    """`--scenario selected-card` (SETTLEMENT-MAP-SITE-CLICK-LOSES-PROJECT): the civil fixture plus one
+    more ordered House, so the map carries a live construction site beside the certified storage. Two
+    different markers must open their own card: the site opens that project alone and the storage opens
+    the storage card; on the aggregate-screen control both carry the settlement's whole project set."""
+    size = tuple(map(int, args.size.split("x")))
+    scene_shot.resize_window(probe.client.p4_window, size)
+    gui = Gui(probe, artifact, client, args.gui_scale, size)
+    ru = args.language == "ru_ru"
+    label = lambda en, russian: russian if ru else en
+
+    def shot(name: str) -> str:
+        probe.call("minecraft_wait_ticks", {"ticks": 2})
+        path = gui.capture(probe, artifact, name)
+        probe.check(f"{name}_dimensions", scene_shot.png_size(path) == size)
+        return path
+
+    try:
+        bell, seq, _bounds = _setup(probe)
+        chest = probe.report["fixture"]["funding_chest"]
+        # A second, live House project: its site must appear on the map beside the finished House.
+        _fund_chest(probe, chest, "house")
+        probe.fixture("settlement build house")
+        deadline_ticks = 0
+        while True:
+            probe.fixture("settlement building list")
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
+            chat = "\n".join(str(line) for line in probe.observe().get("recent_chat", []))
+            if len(re.findall(r"#\d+\s+house\s+level\s+1", chat, re.IGNORECASE)) >= 2:
+                break
+            deadline_ticks += 20
+            if deadline_ticks > 1200:
+                raise RuntimeError("the second House order never reached the building list")
+        _enter_hub(probe, gui, bell, label(f"Settlement {NAME}", f"Поселение {NAME}"))
+        _enter_dashboard(probe, gui, label("Management", "Управление"), label("Management", "Управление"))
+        shot("selected-dashboard")
+        gui.slot(10)
+        state = probe.wait(lambda s: (s.get("screen") or {}).get("class") == DIALOG
+                           and str(s["screen"].get("title", "")).startswith(label("Map ·", "Карта ·")),
+                           "selected_map_GUI", timeout_seconds=30)
+        map_title = state["screen"]["title"]
+        frame = shot("selected-map")
+        counts = _pixels(frame)
+        probe.check("map_features_house_and_site", counts["site"] > 0 and counts["storage"] > 0
+                    and counts["house"] > 0)
+        site = _palette_point(frame, PALETTE["site"])
+        storage = _palette_point(frame, PALETTE["storage"])
+        probe.report["selected_card"] = {"map_title": map_title, "site_pixel": site,
+                                         "storage_pixel": storage, "palette_counts": counts}
+        # The site marker opens that project alone: its own facts, never the storage's.
+        gui.input.move(*site)
+        gui.input.click(site)
+        landed = probe.wait(lambda s: (s.get("screen") or {}).get("open")
+                            and s["screen"].get("title") != map_title,
+                            "selected_card_site_GUI", timeout_seconds=30)
+        shot("selected-site-card")
+        site_text = _visible_text(landed)
+        probe.report["selected_card"]["site_card"] = site_text[:1200]
+        # One project's facts: the aggregate screen lists every active project (the control run shows
+        # "Active projects: 3/8" with Road, Street lamp and House) while a selected card has one level.
+        levels = len(re.findall(r"\bL1\b", site_text))
+        probe.report["selected_card"]["site_card_levels"] = levels
+        probe.check("selected_card_site_only",
+                    label("House", "Дом") in site_text and levels == 1
+                    and "Active projects" not in site_text and "Активные проекты" not in site_text)
+        gui.button(label("Back", "Назад"))
+        restored = probe.wait(lambda s: str((s.get("screen") or {}).get("title", ""))
+                              .startswith(label("Map ·", "Карта ·")),
+                              "selected_card_back_GUI", timeout_seconds=30)
+        probe.check("selected_card_back_returns_map",
+                    str((restored.get("screen") or {}).get("title", "")).startswith(label("Map ·", "Карта ·")))
+        shot("selected-map-restored")
+        # The storage marker opens the storage card alone: never the live House project's facts.
+        gui.input.move(*storage)
+        gui.input.click(storage)
+        card = probe.wait(lambda s: (s.get("screen") or {}).get("open")
+                          and s["screen"].get("title") != map_title,
+                          "selected_card_storage_GUI", timeout_seconds=30)
+        shot("selected-storage-card")
+        storage_text = _visible_text(card)
+        probe.report["selected_card"]["storage_card"] = storage_text[:1200]
+        probe.check("selected_card_building_only",
+                    label("Storage", "Склад") in storage_text
+                    and not re.search(label("Order construction", "Заказать стройку"), storage_text))
+        return [frame]
+    finally:
+        gui.close()
+
+
+def _verge_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
+                  args: argparse.Namespace) -> list[str]:
+    """`--scenario verge` (CIVILIZATION-STREET-VERGE): one legally fronting lot stays usable when a
+    stone wall spans its street's road band and only the walkable verge is free.
+
+    The fixture buries every other lot column to the sky (as the unit test's `street_plateau` does,
+    so a low hill the builder would level cannot count), keeps the storage's own eleven-block lot
+    square open, funds a Mine and walls its street at the storage's z. The fix routes the site's
+    frontage over the verge, so the order is admitted; without it the frontage is hidden, no site is
+    offered, and the Status page lists nothing. The wall must still stand afterwards."""
+    from .buildings_qa import _chunked_fills
+
+    size = tuple(map(int, args.size.split("x")))
+    scene_shot.resize_window(probe.client.p4_window, size)
+    gui = Gui(probe, artifact, client, args.gui_scale, size)
+    ru = args.language == "ru_ru"
+    label = lambda en, russian: russian if ru else en
+
+    def shot(name: str) -> str:
+        probe.call("minecraft_wait_ticks", {"ticks": 2})
+        path = gui.capture(probe, artifact, name)
+        probe.check(f"{name}_dimensions", scene_shot.png_size(path) == size)
+        return path
+
+    try:
+        for command in ("gamemode creative @s", "gamerule advance_time false",
+                        "gamerule spawn_mobs false", "time set 6000", "weather clear", "clear @s"):
+            probe.fixture(command)
+        me = probe.observe(wait_for_play=True)["player"]
+        x, z = (math.floor(float(me[axis])) for axis in ("x", "z"))
+        y = 201
+        probe.fixture(f"tp @s {x + .5} {y} {z - 2.0}")
+        for command in _chunked_fills(x - 64, y - 2, z - 64, x + 64, y - 2, z + 64, "minecraft:dirt"):
+            probe.fixture(command)
+        for command in _chunked_fills(x - 64, y - 1, z - 64, x + 64, y - 1, z + 64, "minecraft:grass_block"):
+            probe.fixture(command)
+        for command in _chunked_fills(x - 64, y, z - 64, x + 64, y + 40, z + 64, "minecraft:air"):
+            probe.fixture(command)
+        probe.fixture(f"tp @s {x + .5} {y} {z + .5}")
+        probe.wait(lambda state: all(state.get("player", {}).get(axis) == expected
+                                     for axis, expected in (("x", x + .5), ("y", y), ("z", z + .5))),
+                   "fixture_founder_at_anchor", timeout_seconds=30)
+        probe.fixture("gamemode survival @s")
+        _command(probe, f"settlement create {NAME} {RADIUS}", f"Founded {NAME}")
+        probe.fixture(f"setblock {x} {y} {z} minecraft:bell")
+        chest = [x + 20, y, z + 20]
+        probe.fixture(f"setblock {chest[0]} {chest[1]} {chest[2]} minecraft:chest")
+        _command(probe, f"settlement building certify storage {x + 19} {y - 1} {z + 19} {x + 21} {y + 2} {z + 21}",
+                 "Certified storage #")
+        taken: set[str] = set()
+        candidates: list[dict[str, Any]] = []
+
+        def arrived(_state: dict[str, Any]) -> bool:
+            nonlocal candidates
+            entities = probe.call("minecraft_list_entities", {"radius": 64})
+            candidates = [entity for entity in entities.get("entities", entities.get("visible_entities", []))
+                          if "villager" in str(entity.get("entity_type", entity.get("type", "")))
+                          and entity.get("entity_uuid") not in taken]
+            return bool(candidates)
+
+        for index in range(3):
+            probe.fixture(f"summon minecraft:villager {x + 5.5 + index} {y} {z + 5.5}")
+            probe.wait(arrived, f"fixture_villager_{index}_received", timeout_seconds=30)
+            worker = str(candidates[0]["entity_uuid"])
+            taken.add(worker)
+            probe.fixture(f"settlement bind {NAME} {worker}")
+        # Every lot column but the storage's own eleven-block square is stone to the sky, so the
+        # planner's only legal lot is the one the storage already stands in.
+        # Lot bands are |signed| 3..13: world offsets 3..13 and 15..25 (and their negative-period
+        # twins); offset 2 and 26 are verges and stay walkable.
+        target = (15, 25)
+        for x0 in (-25, -13, 3, 15):
+            for z0 in (-25, -13, 3, 15):
+                if (x0, z0) == target:
+                    continue
+                probe.fixture(f"fill {x + x0} {y + 1} {z + z0} {x + x0 + 10} {y + 40} {z + z0 + 10} "
+                              f"minecraft:stone")
+        # A stone wall spans the street's road band (offset 27..29) at the storage's z; the verge at
+        # offset 26 stays walkable, which is the route the fix must find.
+        wall = (x + 27, y + 1, z + 19, x + 29, y + 3, z + 19)
+        probe.fixture(f"fill {wall[0]} {wall[1]} {wall[2]} {wall[3]} {wall[4]} {wall[5]} minecraft:stone")
+        _fund_chest(probe, chest, "mine")
+        probe.fixture("settlement build mine")
+        # Admission is the product's own outcome line: an order that finds no site stays "waiting
+        # for a site", so the bounded wait refuses rather than counting a queued order as a pass.
+        deadline_ticks = 0
+        chat = ""
+        started = False
+        while deadline_ticks <= 1200:
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
+            chat = "\n".join(str(line) for line in probe.observe().get("recent_chat", []))
+            if re.search(r"Started mine construction", chat, re.IGNORECASE):
+                started = True
+                break
+            deadline_ticks += 20
+        probe.report.setdefault("verge", {})["admitted_chat"] = started
+        probe.report["verge"]["admission_chat"] = chat[-400:]
+        probe.fixture(f"tp @s {x + .5} {y} {z - 2.0}")
+        probe.wait(lambda state: all(state.get("player", {}).get(axis) == expected
+                                     for axis, expected in (("x", x + .5), ("y", y), ("z", z - 2.0))),
+                   "fixture_bell_approach_received", timeout_seconds=30)
+        _enter_hub(probe, gui, [x, y, z], label(f"Settlement {NAME}", f"Поселение {NAME}"))
+        _enter_dashboard(probe, gui, label("Management", "Управление"), label("Management", "Управление"))
+        shot("verge-dashboard")
+        gui.slot_named(r"^Construction$", "dashboard Construction")
+
+        def blueprint_page(state: dict[str, Any]) -> bool:
+            # The catalogue, not the dashboard it was opened from: the dashboard has no blueprint
+            # rows, so a bare 90-slot check would pass on the page meant to be left.
+            names = [str(row.get("name")) for row in (state.get("container") or {}).get("slots", [])
+                     if row.get("name")]
+            return ((state.get("screen") or {}).get("class") == CONTAINER
+                    and (state.get("container") or {}).get("slot_count") == 90
+                    and any(label("House L1", "Дом L1") in name for name in names))
+
+        blueprints = probe.wait(blueprint_page, "verge_blueprints_GUI", timeout_seconds=30)
+        probe.report["verge"] = {"blueprint_slots": [str(row.get("name")) for row in
+                                                     (blueprints.get("container") or {}).get("slots", [])
+                                                     if row.get("name")][:16]}
+        gui.slot_named(r"^Status$|^Статус$", "blueprints Status")
+
+        def project_page(state: dict[str, Any]) -> bool:
+            # The active-project page, not the blueprint catalogue: it carries the project counter.
+            names = [str(row.get("name")) for row in (state.get("container") or {}).get("slots", [])
+                     if row.get("name")]
+            return ((state.get("screen") or {}).get("class") == CONTAINER
+                    and (state.get("container") or {}).get("slot_count") == 90
+                    and any(label("Active projects", "Активные проекты") in name for name in names))
+
+        status = probe.wait(project_page, "verge_status_GUI", timeout_seconds=30)
+        names = [str(row.get("name")) for row in (status.get("container") or {}).get("slots", [])
+                 if row.get("name")]
+        probe.report["verge"]["status_names"] = names[:16]
+        shot("verge-status")
+        text = "\n".join(names)
+        probe.check("verge_project_admitted_on_the_status_page",
+                    label("Mine", "Шахта") in text
+                    and not re.search(r"Active projects:\s*0\b|Активные проекты:\s*0\b", text))
+        wall_block = probe.call("minecraft_read_block", {"x": wall[0], "y": wall[1] + 1, "z": wall[2]})
+        probe.check("verge_obstacle_stands", wall_block.get("block_id") == "minecraft:stone")
+        shot("verge-final")
+        return []
+    finally:
+        gui.close()
+
+
 def _script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
             args: argparse.Namespace) -> list[str]:
     size = tuple(map(int, args.size.split("x")))
@@ -926,7 +1283,7 @@ def _script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], cli
         _enter_hub(probe, gui, _bell, f"Поселение {NAME}" if ru else f"Settlement {NAME}")
 
     def dashboard() -> None:
-        _enter_dashboard(probe, gui, label("Settlement", "Поселение"), label("Settlement", "Поселение"),
+        _enter_dashboard(probe, gui, label("Management", "Управление"), label("Management", "Управление"),
                          args.wrong_click, label("Help", "Помощь"))
 
     def project() -> dict[str, Any]:

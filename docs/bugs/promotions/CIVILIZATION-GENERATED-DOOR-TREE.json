@@ -1,0 +1,44 @@
+{
+  "id": "CIVILIZATION-GENERATED-DOOR-TREE",
+  "verdict": "promoted",
+  "fix_commit": "patch:6d225aa51498dbf4aebf199d2b77e0fb5a5d78a121536afd85e394ebf835692a",
+  "fix_commit_full": "patch:6d225aa51498dbf4aebf199d2b77e0fb5a5d78a121536afd85e394ebf835692a",
+  "promoted_at": "2026-11-24T00:55:17+00:00",
+  "tree_head": "de73cffa44db8a2e5907f43c1b7f060e048dffe9",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "6d225aa51498dbf4aebf199d2b77e0fb5a5d78a121536afd85e394ebf835692a",
+  "reversed_files": [
+    "crates/mc-worldgen/src/terrain/trees.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-worldgen:terrain::village_seed_tests::seed24_village_entrance_keeps_headroom_after_decoration": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-village-exit-foliage": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-worldgen:terrain::village_seed_tests::seed24_village_entrance_keeps_headroom_after_decoration": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T002830-native-village-exit-foliage-pb628v_k/result.json",
+    "tree_head": "de73cffa44db8a2e5907f43c1b7f060e048dffe9",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "306e3aef50a056800c9eea8205c274ba406919d67f8dff7f27161ec2cda189b0",
+    "covers": [
+      "harness:scene-shot:native-village-exit-foliage"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T005442-ledger-promote-yo8p1xbb"
+}

@@ -1,0 +1,49 @@
+{
+  "id": "SETTLEMENT-MAP-SITE-CLICK-LOSES-PROJECT",
+  "verdict": "promoted",
+  "fix_commit": "f8f27afda8",
+  "fix_commit_full": "f8f27afda87050d0dfe6b67cf6f8a8d16ee7a208",
+  "promoted_at": "2026-11-24T03:13:59+00:00",
+  "tree_head": "868ae80e650ca74b1197844f3bcf6843a8e6c21a",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/settlements/ui.rs",
+    "crates/mc-core/src/settlements/ui_map.rs",
+    "crates/mc-core/src/settlements/ui_menus.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/settlements/ui_map_tests.rs",
+    "crates/mc-core/src/settlements/ui_menus_tests.rs",
+    "crates/mc-core/src/settlements/ui_project_selection_tests.rs",
+    "crates/mc-core/src/settlements/ui_tests.rs"
+  ],
+  "negative_control": {
+    "harness:settlement-map-qa:selected_card": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run settlement-map-qa --client native --windowed --timeout-seconds 3600 -- --scenario selected-card exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T030635-ledger-promote-hto7rv_j/regressions-client-0.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T030635-ledger-promote-hto7rv_j/client-artifacts/20261124T030835-settlement-map-qa-bh3v_alq/result.json"
+    }
+  },
+  "restored": {
+    "harness:settlement-map-qa:selected_card": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T030635-ledger-promote-hto7rv_j/client-artifacts/20261124T031120-settlement-map-qa-jvc7r5qj/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T030329-settlement-map-qa-01ycyax7/result.json",
+    "tree_head": "868ae80e650ca74b1197844f3bcf6843a8e6c21a",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "1acca8340f9fd0a118fb7948a39086125b85ca20c7a270ef387b3dbb8df39bbd",
+    "covers": [
+      "harness:settlement-map-qa:selected_card"
+    ],
+    "profile": "settlement-map-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T030635-ledger-promote-hto7rv_j"
+}

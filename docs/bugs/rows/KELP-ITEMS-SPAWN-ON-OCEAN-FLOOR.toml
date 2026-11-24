@@ -4,12 +4,14 @@ title = "Kelp item entities keep appearing on the ocean floor (y 52-62) without 
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "BlockLogTickO java-matrix run 1, 2026-11-11 (receipts/BlockLogTickO/real-client-runs.txt): new item entity ids 274-278 in one column at x=9.5 z=3.5 about 120 blocks below the arena."
 regression = [
   "cargo:mc-core:fluids_tests::flowing_water_keeps_kelp_and_seagrass_without_loot",
   "cargo:mc-core:fluids_tests::kelp_growing_in_still_water_drops_no_items",
+  "harness:scene-shot:native-kelp-ocean-floor",
 ]
 failing_first = "reported"
 fix_commit = "patch:e6fee19a268eeee6a24d95c816b746f6b4209fa70c4e305b8bf85ba368289420"
-repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/nc-interact-kelp.log: reversing the real fluid fix fails both kelp refs; a real-client gate remains required for the original report."
+repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/nc-interact-kelp.log: reversing the real fluid fix fails both kelp refs; a real-client gate remains required for the original report. Graphical control confirmed: on the all-three-patches-reversed tree (pin 95cccb7d) the scene fails at kelp_survives_the_neighbouring_flow (.analysis/validation/20261124T002042-native-kelp-ocean-floor-_7e00i6h), and both promoted cargo refs fail there."
+promotion = "docs/bugs/promotions/KELP-ITEMS-SPAWN-ON-OCEAN-FLOOR.json"

@@ -34,8 +34,8 @@ class Gui:
     def button(self, label):
         self.buttons.append(label)
         self.probe.state = {
-            "screen": {"open": True, "class": gate.CONTAINER if label == "Settlement" else gate.DIALOG,
-                       "title": "Settlement" if label == "Settlement" else "Help"},
+            "screen": {"open": True, "class": gate.CONTAINER if label == "Management" else gate.DIALOG,
+                       "title": "Management" if label == "Management" else "Help"},
             "container": {"slot_count": 90},
         }
 
@@ -201,24 +201,24 @@ class SettlementMapQaTests(unittest.TestCase):
     def test_dashboard_is_answered_by_a_real_gui_action_not_a_menu_command(self):
         probe = Probe()
         gui = Gui(probe)
-        gate._enter_dashboard(probe, gui, "Settlement", "Settlement")
-        self.assertEqual(gui.buttons, ["Settlement"])
+        gate._enter_dashboard(probe, gui, "Management", "Management")
+        self.assertEqual(gui.buttons, ["Management"])
         self.assertEqual(probe.fixtures, [])
 
     def test_wrong_click_negative_control_fails_the_same_gui_oracle(self):
         probe = Probe()
         gui = Gui(probe)
-        with self.assertRaisesRegex(AssertionError, "GUI menu Settlement"):
-            gate._enter_dashboard(probe, gui, "Settlement", "Settlement", wrong_click=True)
+        with self.assertRaisesRegex(AssertionError, "GUI menu Management"):
+            gate._enter_dashboard(probe, gui, "Management", "Management", wrong_click=True)
         self.assertEqual(gui.buttons, ["Help"])
         self.assertEqual(probe.fixtures, [])
 
     def test_menu_oracle_refuses_a_dialog_with_the_expected_title(self):
         probe = Probe()
-        probe.state["screen"]["title"] = "Settlement"
+        probe.state["screen"]["title"] = "Management"
         probe.state["container"] = {"slot_count": 90}
         with self.assertRaises(AssertionError):
-            gate._menu(probe, "Settlement")
+            gate._menu(probe, "Management")
 
     def test_cell_calibration_excludes_baseline_world_pixels(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -396,12 +396,12 @@ class SettlementMapQaTests(unittest.TestCase):
 # Assertions of the recorded real-client runs (their scene-shot/scenario.json, or
 # details.scenario.assertions of the passing native run `134750-v4iye6sx`); only the
 # GUI-check names matter here, the fixture and screenshot-size checks are kept as recorded.
-RECORDED_WRONG_CLICK = {  # 140953-1275_cmr: Help clicked instead of Settlement, fails on the menu
+RECORDED_WRONG_CLICK = {  # 140953-1275_cmr: Help clicked instead of Management, fails on the menu
     "in_play": True, "fixture_founder_at_anchor": True, "chat Founded mapqa": True,
     "chat anchor=[128, 201, 0]": True, "chat Certified storage #": True,
     "fixture_villager_0_received": True, "fixture_bell_approach_received": True,
     "GUI bell target": True, "GUI dialog Settlement mapqa": True, "civil-hub_dimensions": True,
-    "GUI menu Settlement": False,
+    "GUI menu Management": False,
 }
 RECORDED_PASS = {  # 134750-v4iye6sx
     "in_play": True, "GUI bell target": True, "GUI closed": True,
@@ -409,7 +409,7 @@ RECORDED_PASS = {  # 134750-v4iye6sx
     "GUI dialog Settlement mapqa": True, "GUI dialog waiting for materials": True,
     "GUI menu #2 ": True, "GUI menu Construction": True, "GUI menu Household": True,
     "GUI menu Projects": True, "GUI menu Resident ·": True, "GUI menu Residents": True,
-    "GUI menu Resources": True, "GUI menu Settlement": True, "GUI menu Storage": True,
+    "GUI menu Resources": True, "GUI menu Management": True, "GUI menu Storage": True,
     "GUI shift slot/81 applied": True, "GUI_native_progress_advanced": True,
     "GUI_progress_matches_independent_placed_blocks": True, "GUI_storage_transfer_conserves_one": True,
     "GUI_supply_deposit": True, "chat Founded mapqa": True, "civil-hub_dimensions": True,
@@ -440,6 +440,48 @@ def production_names(language):
             f"GUI menu {page('new_order_form')}", "production_recipe_entry",
             f"GUI dialog {page('new_order_form')}", f"GUI dialog {page('orders')}",
             "production_order_listed", "production_order_exists", "production_order_resident_crafted"]
+
+
+class LayoutMirrorTests(unittest.TestCase):
+    def test_mirrored_layout_constants_match_the_rust_source(self):
+        from pathlib import Path as P
+        root = P(__file__).resolve().parents[2]
+        layout = (root / "crates/mc-core/src/settlements/layout.rs").read_text()
+        blueprints = (root / "crates/mc-core/src/settlements/blueprints.rs").read_text()
+        self.assertIn("const LOT_FRONT: i32 = 3;", layout)
+        self.assertIn("const PLAZA: i32 = 4;", layout)
+        self.assertIn("const RING: i32 = PERIOD + 2;", layout)
+        self.assertIn("const LOT_DEPTH: i32 = blueprints::MAX_SIZE[2] as i32;", layout)
+        self.assertIn("pub const MAX_SIZE: [u8; 3] = [13, 11, 11];", blueprints)
+        self.assertEqual(gate.LAYOUT_PERIOD, 2 * (3 + 11))
+        self.assertEqual(gate.LAYOUT_PLAZA, 4)
+        self.assertEqual(gate.LAYOUT_RING, gate.LAYOUT_PERIOD + 2)
+        anchor = [0, 201, 0]
+        self.assertEqual(gate.layout_cell(anchor, 0, 5), "road")
+        self.assertEqual(gate.layout_cell(anchor, 2, 8), "verge")
+        self.assertEqual(gate.layout_cell(anchor, 5, 5), "lot")
+        self.assertEqual(gate.layout_cell(anchor, 19, 19), "lot")
+        self.assertEqual(gate.layout_cell(anchor, 28, 19), "road")
+        self.assertEqual(gate.layout_cell(anchor, 30, 19), "wall")
+        self.assertEqual(gate.layout_cell(anchor, -2, 5), "verge")
+        self.assertEqual(gate.layout_cell(anchor, -5, 5), "lot")
+
+
+class SelectedCardScenarioTests(unittest.TestCase):
+    def test_selected_card_is_a_boolean_verdict_of_this_profile(self):
+        from tools.harness import regressions
+        self.assertIn("selected_card", regressions._BOOLEAN_PROFILE_VERDICTS["settlement-map-qa"])
+        self.assertNotIn("selected_card", gate.VERDICTS)  # the civil walk's stages are unchanged
+        self.assertEqual(gate.PALETTE["site"], (0xFF, 0x88, 0x00))
+
+    def test_visible_text_collects_title_dialog_and_slot_names(self):
+        state = {"screen": {"title": "#7 House L1"},
+                 "ui_nodes": [{"id": "dialog/body/0", "label": "Prepared 0/249"},
+                              {"id": "dialog/action/1", "label": "Back", "role": "button"}],
+                 "container": {"slots": [{"slot": 30, "name": "Storage"}]}}
+        text = gate._visible_text(state)
+        for needle in ("#7 House L1", "Prepared 0/249", "Back", "Storage"):
+            self.assertIn(needle, text)
 
 
 class SettlementMapVerdictTests(unittest.TestCase):
@@ -481,7 +523,7 @@ class SettlementMapVerdictTests(unittest.TestCase):
 
     def test_each_stage_goes_false_when_one_of_its_checks_fails(self):
         failing = {
-            "bell_opens_hub": "GUI dialog Settlement mapqa", "dashboard": "GUI menu Settlement",
+            "bell_opens_hub": "GUI dialog Settlement mapqa", "dashboard": "GUI menu Management",
             "map": "map_territory_rendered", "building_order": "GUI dialog Projects",
             "shortage_icons": "exact_shortage_rendered", "storage_transfer": "GUI_storage_transfer_conserves_one",
             "project_progress": "GUI_native_progress_advanced", "residents": "GUI menu Household",
@@ -506,7 +548,7 @@ class SettlementMapVerdictTests(unittest.TestCase):
         self.assertIsNone(gate.verdicts_from_assertions(passing_run("en_us"), "en_us")["localized_text"])
 
     def test_a_run_that_stops_without_a_failed_check_leaves_unreached_verdicts_unknown(self):
-        reached = {name: True for name in ("GUI bell target", "GUI dialog Settlement mapqa", "GUI menu Settlement")}
+        reached = {name: True for name in ("GUI bell target", "GUI dialog Settlement mapqa", "GUI menu Management")}
         verdicts = gate.verdicts_from_assertions(reached, "en_us")
         self.assertIs(verdicts["bell_opens_hub"], True)
         self.assertIs(verdicts["dashboard"], True)
@@ -525,9 +567,9 @@ class SettlementMapVerdictTests(unittest.TestCase):
         gui.probe.report = {"assertions": {}}
         gui.probe.observe.return_value = {"ui_nodes": [], "screen": {}}
         with patch.object(gate.scene_shot, "png_size", return_value=(1280, 720)):
-            with self.assertRaisesRegex(RuntimeError, "visible GUI button 'Settlement' not found"):
-                gui.button("Settlement")
-        self.assertEqual(gui.probe.report["assertions"], {"GUI button Settlement": False})
+            with self.assertRaisesRegex(RuntimeError, "visible GUI button 'Management' not found"):
+                gui.button("Management")
+        self.assertEqual(gui.probe.report["assertions"], {"GUI button Management": False})
         verdicts = gate.verdicts_from_assertions({"GUI bell target": True, "GUI dialog Settlement mapqa": True,
                                                   **gui.probe.report["assertions"]}, "en_us")
         self.assertIs(verdicts["bell_opens_hub"], True)
@@ -539,13 +581,13 @@ class SettlementMapVerdictTests(unittest.TestCase):
         probe = SimpleNamespace(report={"assertions": dict(RECORDED_WRONG_CLICK)})
 
         def walk(*_):
-            raise RuntimeError("scene-shot assertion failed: GUI menu Settlement")
+            raise RuntimeError("scene-shot assertion failed: GUI menu Management")
 
         def scene(ctx_, scenario, script):
             return script(probe, Path("/nonexistent"), [], "native")
 
         with patch.object(gate, "_script", walk), patch.object(gate.scene_shot, "run", scene):
-            with self.assertRaisesRegex(RuntimeError, "GUI menu Settlement"):
+            with self.assertRaisesRegex(RuntimeError, "GUI menu Management"):
                 gate.run(ctx)
         self.assertIs(ctx.client_evidence["verdicts"]["dashboard"], False)
         self.assertIs(ctx.client_evidence["verdicts"]["bell_opens_hub"], True)
