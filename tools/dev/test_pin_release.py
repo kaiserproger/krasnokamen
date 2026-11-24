@@ -685,9 +685,12 @@ class LedgerRegistrationTests(unittest.TestCase):
         pin.ledger_register(candidate, binary)
         sha = pin.w.sha256_file(binary)
         registry = candidate / ".analysis/ledger-builds"
-        recorded = json.loads((registry / f"{sha}.json").read_text())
         fingerprint = pin.ledger_fingerprint(candidate)
+        # One file per (binary, tree) pair: a python-only fix cites the same server binary for the
+        # candidate and its reverted control tree, so a per-binary name would drop one of them.
+        recorded = json.loads((registry / f"{sha}-{fingerprint['sha256']}.json").read_text())
         self.assertEqual(recorded, {"sha256": sha, "tree": {"head": fingerprint["head"], "sha256": fingerprint["sha256"]}})
+        self.assertEqual(sorted(path.name for path in registry.glob("*.json")), [f"{sha}-{fingerprint['sha256']}.json"])
         accepted = self.probe(candidate, sha)
         self.assertEqual(accepted.returncode, 0, accepted.stderr)
         self.assertEqual(accepted.stdout.strip(), sha)

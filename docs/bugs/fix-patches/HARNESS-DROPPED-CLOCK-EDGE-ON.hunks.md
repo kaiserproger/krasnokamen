@@ -8,10 +8,13 @@ frames (4 ticks apart) until the gold-rimmed face is fully observable, then copi
 and its same-frame sidecar.
 
 The committed patch (`docs/bugs/fix-patches/HARNESS-DROPPED-CLOCK-EDGE-ON.patch`,
-`patch:a8aa87b9…`) is HEAD's equivalent. `1cadb5c0a` split the runtime: the step validation and MCP
+`patch:f720ec08…`) is HEAD's equivalent. `1cadb5c0a` split the runtime: the step validation and MCP
 call plan live in `scene_shot_steps.py`, the executor branch in `scene_shot_execute.py`, and
 `_capture_dropped_clock` in `scene_shot_checks.py` (its `capture`/`_load_shots` calls are spelled
-`_qa.` there).
+`_qa.` there). An earlier port (`patch:a8aa87b9…`) removed the function but not
+`scene_shot_execute.py`'s import of it, so its reversed tree died at `ImportError` and the promotion
+refused (`20261124T123706-ledger-promote-b3alh9et`: unrunnable, not red). The import hunk below is what
+makes the reversal land on an assertion; `patch:f720ec08` is the promoted digest.
 
 | original hunk (`635d650e1`, `scene_shot.py`) | HEAD equivalent | note |
 |---|---|---|
@@ -29,6 +32,8 @@ a/-side adaptations: none.
 Proving ref and line: `python:tools.harness.test_scene_shot:DroppedClockTests.test_clock_scene_samples_past_edge_on_without_changing_oracle`
 red at `tools/harness/test_scene_shot.py:825` (the test's probe raises `AssertionError:
 dropped_clock_face_day` from `check_clock_face` once the edge-on frame is captured as the only shot).
-The two other registered refs are also red for the same restored behaviour (single-shot capture is
-bounded to one attempt; the static-face oracle rejects the edge-on frame). Green at HEAD.
+The row's other two refs — `test_clock_capture_is_bounded_and_does_not_accept_hud_only` and
+`test_clock_capture_selects_static_face_but_animation_oracle_rejects_it` — are **unrunnable** in the
+control, not red (`promotions/HARNESS-DROPPED-CLOCK-EDGE-ON.json` records both that way): with the
+`dropped_clock_capture` step reverted their assertions are never reached. Green at HEAD.
 Observed 2026-11-24.

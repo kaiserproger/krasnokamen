@@ -586,6 +586,81 @@ class GraphicalControlBackfillTests(unittest.TestCase):
                                      runner=self.runner())
         self.assertIn("not the promotion's reversed control", str(refused.exception))
 
+    def test_records_the_assertion_from_the_run_receipt(self):
+        """A generic control detail is not evidence; the failed assertion comes from the run's receipt."""
+        import json
+        receipt = self.base / 'run/result.json'
+        receipt.parent.mkdir()
+        receipt.write_text(json.dumps({
+            'status': 'failed',
+            'details': {'named_scenario': {'id': 'native-dynamic-context',
+                                           'assertions': {'animated_face': False}}},
+        }))
+
+        def runner(ctx, refs, tree, client):
+            return {ref: {'state': ledger.RED, 'detail': "client receipt is 'failed', not passed",
+                          'receipt': str(receipt)} for ref in refs}
+
+        updated = ledger.graphical_control('GRAPHICAL-ROW', root=self.root,
+                                           control_tree=self.control_tree(), ctx=self.ctx(), runner=runner)
+        self.assertEqual(updated['negative_control'][self.REF]['assertion'], 'animated_face')
+
+    def add_row(self, ident, proving=None, ref=None):
+        body = self.ROW.format(fix=self.fix).replace('GRAPHICAL-ROW', ident)
+        if proving is not None:
+            body += f'proving_assertions = {{ "{ref or self.REF}" = "{proving}" }}\n'
+        (self.root / f'docs/bugs/rows/{ident}.toml').write_text('[[bug]]\n' + body)
+
+    def test_refuses_a_scene_shared_with_another_row_without_proving_assertions(self):
+        self.add_row('OTHER-ROW')
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.graphical_control('GRAPHICAL-ROW', root=self.root, control_tree=self.control_tree(),
+                                     ctx=self.ctx(), runner=self.runner())
+        self.assertIn('is cited by another row too', str(refused.exception))
+        self.assertIn('proving_assertions', str(refused.exception))
+
+    def test_refuses_a_shared_scene_that_failed_another_rows_assertion(self):
+        import json
+        self.add_row('OTHER-ROW')
+        (self.root / 'docs/bugs/rows/GRAPHICAL-ROW.toml').write_text(
+            '[[bug]]\n' + self.ROW.format(fix=self.fix) + f'proving_assertions = {{ "{self.REF}" = "expected_name" }}\n')
+        tree = self.control_tree()
+        receipt = self.base / 'run/result.json'
+        receipt.parent.mkdir()
+        receipt.write_text(json.dumps({
+            'status': 'failed',
+            'details': {'named_scenario': {'id': 'native-dynamic-context',
+                                           'assertions': {'another_rows_name': False}}},
+        }))
+
+        def runner(ctx, refs, tree, client):
+            return {ref: {'state': ledger.RED, 'detail': 'failed', 'receipt': str(receipt)} for ref in refs}
+
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.graphical_control('GRAPHICAL-ROW', root=self.root, control_tree=tree,
+                                     ctx=self.ctx(), runner=runner)
+        self.assertIn("not the row's 'expected_name'", str(refused.exception))
+
+    def test_accepts_a_shared_scene_that_failed_the_rows_own_assertion(self):
+        import json
+        self.add_row('OTHER-ROW')
+        (self.root / 'docs/bugs/rows/GRAPHICAL-ROW.toml').write_text(
+            '[[bug]]\n' + self.ROW.format(fix=self.fix) + f'proving_assertions = {{ "{self.REF}" = "expected_name" }}\n')
+        receipt = self.base / 'run/result.json'
+        receipt.parent.mkdir()
+        receipt.write_text(json.dumps({
+            'status': 'failed',
+            'details': {'named_scenario': {'id': 'native-dynamic-context',
+                                           'assertions': {'expected_name': False}}},
+        }))
+
+        def runner(ctx, refs, tree, client):
+            return {ref: {'state': ledger.RED, 'detail': 'failed', 'receipt': str(receipt)} for ref in refs}
+
+        updated = ledger.graphical_control('GRAPHICAL-ROW', root=self.root,
+                                           control_tree=self.control_tree(), ctx=self.ctx(), runner=runner)
+        self.assertEqual(updated['negative_control'][self.REF]['assertion'], 'expected_name')
+
     def test_refuses_a_receipt_whose_server_was_not_built_from_the_control(self):
         import json
         self.control_tree()

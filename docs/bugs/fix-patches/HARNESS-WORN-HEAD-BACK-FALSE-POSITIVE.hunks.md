@@ -27,9 +27,16 @@ commit's own `worn > 500`.
 Proving ref and line: `python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_back_attachment_despite_unrelated_head_roi_changes`
 red at `tools/harness/test_scene_shot.py:644` (`assertRaisesRegex(AssertionError, "worn_head_renders")`
 reports `"worn_head_renders" does not match "worn_head_back_unchanged"`: the reversed gate passed the
-worn pose and a pre-existing guard rejected it later). Green at HEAD. Observed 2026-11-24.
+worn pose and a later guard rejected it afterwards). Green at HEAD. Observed 2026-11-24.
 
-Honest limit: at HEAD the older `worn_head_back_unchanged` check (predating this fix) also rejects the
-test frame, so the control proves that this row's guard fires *first* on the reported frame, not that
-the frame would be accepted by an otherwise unguarded gate. The test and the assertion are this row's
-own; no other row's ref is the proving one.
+Honest limit: `worn_head_back_unchanged` is **younger** than this fix, not older. `071d9c593`
+"fix(harness): reject extra back attachments in player-head oracle" added it after `fad1cef1e`
+(`git log -S'worn_head_back_unchanged' -- tools/harness/backends/scene_shot*.py` lists only `071d9c593`
+and the module split `1cadb5c0a`), and the receipt line is the HEAD-ORACLE-IDLE-POSE fix `f3229f1a7`.
+So on HEAD a later guard masks the symptom: with this row's predicate reversed the worn pose passes
+`worn_head_renders` and the frame is rejected by `worn_head_back_unchanged` afterwards — the red at
+`:644` is a real regression of *this row's predicate* (the gate would accept the frame were the later
+guard absent), but the "gate accepts a back attachment" symptom no longer reproduces end to end. The
+row is now defence-in-depth: the authored-hat check rejects the frame earlier than the back-region
+guard, on any frame whose hat layer is not drawn in the head ROI. The test and the assertion are this
+row's own; no other row's ref is the proving one.
