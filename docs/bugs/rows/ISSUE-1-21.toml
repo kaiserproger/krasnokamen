@@ -7,6 +7,6 @@ severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = ["harness:scene-shot:issue1-21-tool-clip"]
-fix_commit = "client:e7c8a46a5d"
+fix_commit = "client:c01ad27a02"
 proving_assertions = { "harness:scene-shot:issue1-21-tool-clip" = "tool_wall_visible" }
 repro_check = "Committed-reversal pair at HEAD: client:3ad35fe519 loads world depth in the first-person pass (the historical d4c5a326 control hunk, unusable as a build after the 26.3 cutover); client:e7c8a46a5d clears it again. Map docs/bugs/promotions/ISSUE-1-21.hunks.md. Real client: scene-shot issue1-21-tool-clip (obsidian wall, diamond pickaxe, far and close frames) asserts tool_wall_visible; the control draws the tool behind the wall, the fix keeps it in front. Receipts in results."

@@ -17,8 +17,10 @@ tool held over a wall is depth-tested behind it. That commit is a child of `34a8
 26.3 cutover, so the pre-image is rebuilt as a committed reversal at HEAD:
 
 - reversal `3ad35fe51984d1c426d0d925f759d3e8c7a9b41b` — `Load` (scene red);
-- re-land `e7c8a46a5dc148c4ead5037fbfeddcb52069ae5e` — `Clear(1.)`; row `fix_commit`.
-- `git diff 3ad35fe519 e7c8a46a5d` is that one line.
+- re-land `e7c8a46a5dc148c4ead5037fbfeddcb52069ae5e` — `Clear(1.)`;
+- repair `c01ad27a024c1f90140df618d094ea664aa5221f` — the re-land's replace clobbered the
+  identifier to `wgpu::Clear(1.)Op`; this restores `wgpu::LoadOp::Clear(1.)` and builds. Row `fix_commit`.
+- `git diff 3ad35fe519 c01ad27a02` is that one line.
 
 ## Gate
 
