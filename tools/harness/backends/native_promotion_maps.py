@@ -190,6 +190,12 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     map_id = _create(steps)
     _frame(steps, origin, map_id)
     _clone(steps, map_id, 0)
+    # A second map at the same centre that was never framed: the drawn-marker predicate is the
+    # difference between the two held maps, so it needs no colour oracle. Both maps keep the same
+    # received terrain (asserted below), and only the framed one carries a marker.
+    without_frame = _create(steps)
+    _clone(steps, map_id, 0)
+    _clone(steps, without_frame, 1)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     x, y, z = origin
     steps.fixture("gamemode creative @s")
@@ -203,13 +209,17 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _held_shot(steps, "map-distant-held-clone")
     steps.check("map_distant_clone_keeps_exactly_one_frame_waypoint",
                 _marker_count(steps, map_id, "frame") == 1)
-    # Drawn-marker predicate: the same held map, same terrain, same camera, before and after the
-    # frame decoration is removed. The only rendered change the player can see is the marker icon
-    # (the frame is 80 blocks away, off-screen, and the map keeps its received colours), so a client
-    # that receives the decoration but never draws it produces the same frame twice.
-    steps.fixture("kill @e[type=minecraft:item_frame]")
-    steps.wait(lambda _state: _marker_count(steps, map_id, "frame") == 0,
-               "map_frame_waypoint_removed")
+    # Drawn-marker predicate: two maps of the same centre and identical received terrain, only one of
+    # them in a frame, captured at the same held pose. The difference between the two frames is the
+    # marker icon, so a client that receives the decoration but never draws it produces the same
+    # frame twice. Terrain equality is waited for (the map fills over several packets) so the
+    # difference cannot be map data.
+    steps.check("map_pair_frame_marker_absent",
+                _marker_count(steps, without_frame, "frame") == 0)
+    steps.wait(lambda _state: _map(steps, without_frame) is not None
+               and _map(steps, without_frame)["colors"] == _map(steps, map_id)["colors"],
+               "map_pair_identical_terrain", timeout_seconds=180)
+    steps.call("minecraft_set_hotbar_slot", {"slot": 1})
     _held_shot(steps, "map-distant-held-without-frame-marker")
     changed = _differing_pixels(_shot_path(steps, "map-distant-held-clone"),
                                 _shot_path(steps, "map-distant-held-without-frame-marker"))
