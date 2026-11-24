@@ -81,14 +81,12 @@ Green in the control, **not this patch's** evidence:
   (`native checkpoint/NBT/duplicate_field`, `command_summon_scoreboard_tags_disk_tests.rs:179-180`), which is
   outside this patch. "The refusal disappears with the reversed normalisation" was wrong.
 
-Not evidence (control could not run the ref):
-- `…::duplicate_tags_keys_in_wal_refuse_recovery` (`disk_tests.rs:197`),
-  `…::opaque_wal_trailing_bytes_refuse_offline_and_live_recovery` (`disk_tests.rs:218`),
-  `…::duplicate_player_tags_keys_in_wal_refuse_offline_export_and_live_recovery` (`disk_tests.rs:296`) and
-  `cargo:mc-world-conversion:export_tests::export_refuses_ambiguous_player_tags_from_real_wal_without_publication`
-  (`export_tests.rs:684`) all report `fixture-failure` in the reversed control (the fixture world/image cannot
-  build there), and `harness:entities:native-v2-ledger-tag-duplicates` is `unrunnable` in the control for lack
-  of a reverted-tree pin (POL-1 practice). Its passed candidate receipt is the graphical half.
+Not evidence in the first promotion, now their own controls (review N2): the four refs below are rewritten as
+`assert!(matches!(&result, Err(_)))` so the refusal itself is the assertion, and each reds at that assert on
+`command_summon_scoreboard_tags_disk_tests.rs:200` (WAL duplicate key), `:223`/`:228` (trailing bytes, offline and
+live) and `crates/mc-world-conversion/src/export_tests.rs:687` (export refusal); the re-promotion after this
+change is the receipt to cite. `harness:entities:native-v2-ledger-tag-duplicates` stays `unrunnable` in the
+control for lack of a reverted-tree pin (POL-1 practice); its passed candidate receipt is the graphical half.
 
 ## Real-client ref
 
