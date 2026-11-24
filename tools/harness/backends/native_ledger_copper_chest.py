@@ -66,10 +66,13 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.check("open_copper_chest_menu_survives_second_control_stage", _menu(state))
 
     # Closing the menu releases custody: the chest must now weather like the control.
+    # It may pass more than one stage before the client read, so any advance counts.
     steps.call("minecraft_close_screen")
     steps.call("minecraft_wait_for_block_state", {
         **opened, "block_id": EXPOSED, "properties": {}, "timeout_seconds": 110})
-    steps.check("closed_copper_chest_resumes_weathering", _id(steps, opened) == EXPOSED)
+    resumed = _id(steps, opened)
+    steps.report["closed_copper_chest_stage"] = resumed
+    steps.check("closed_copper_chest_resumes_weathering", resumed in (EXPOSED, WEATHERED))
     steps.report["limits"] = [
         "One opened and one unopened single chest on one pad, ages 0..2; no double chest, "
         "waxed neighbour, death/respawn opener release or restart.  The control carries the "
