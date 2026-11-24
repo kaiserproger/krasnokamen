@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from ..profiles import ProfileContext
-from . import native_client
+from . import native_client, scene_shot
 from .buildings_qa import (
     _block_id, _chat_lines, _chest_totals, _deposit_all_at, _echo, _hand_storage_at,
     _open_chest_at, _props, _read, _scan_box, _summon_bind, _verdict, _villagers,
@@ -200,7 +200,9 @@ def _status_names(probe: ProbeSteps, artifact: Path, ax: int, ay: int, az: int,
     from . import settlement_map_qa as ui
 
     probe.fixture(f"tp @s {ax + 0.5} {ay + 1.0} {az - 2.5}")
-    gui = ui.Gui(probe, artifact, "native", 3, (1280, 720))
+    size = (1280, 720)
+    scene_shot.resize_window(probe.client.p4_window, size)
+    gui = ui.Gui(probe, artifact, "native", 3, size)
     try:
         ui._enter_hub(probe, gui, [ax, ay, az], f"Settlement {sname}")
         ui._enter_dashboard(probe, gui, "Management", "Management")
