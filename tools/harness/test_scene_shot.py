@@ -446,6 +446,44 @@ class SceneShotTests(unittest.TestCase):
             }}])
             self.assertEqual(probe.checks, {"mob_moved_zombie": True, "mob_speed_zombie": False})
 
+    def test_mob_motion_gate_checks_the_teleport_step_not_only_the_rate(self):
+        """The hostile-motion fixture teleports a fixed number of blocks per segment; the
+        client-tick rate divides by round-trip ticks, so the step is the measurement the
+        fixture controls and the rate is only a coarse band."""
+        class Probe:
+            def __init__(self):
+                self.checks = {}
+                self.report = {}
+            def check(self, name, value):
+                self.checks[name] = value
+        steps = [{"mob_motion": {"samples": ["a", "b", "c"], "name": "motion", "types": [
+            {"id": "minecraft:zombie", "min_speed": 0.02, "max_speed": 0.12,
+             "min_blocks": 1.5, "max_blocks": 2.5}]}}]
+        for xs, step_ok in (((0., 2., 4.), True), ((0., 1., 3.), False)):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                for name, tick, x in zip(("a", "b", "c"), (100, 125, 150), xs):
+                    (root / f"{name}.json").write_text(json.dumps({
+                        "game_time": tick,
+                        "snapshot": {"entities": [
+                            {"entity_type": "minecraft:zombie", "entity_uuid": "z", "x": x, "z": 0},
+                        ]},
+                    }))
+                probe = Probe()
+                scene_shot.execute(probe, root, steps)
+                with self.subTest(xs=xs):
+                    self.assertEqual(probe.checks, {"mob_moved_zombie": True,
+                                                    "mob_speed_zombie": True,
+                                                    "mob_step_zombie": step_ok})
+        step = steps[0]["mob_motion"]
+        scene_shot.validate_steps([{"mob_motion": step}], "native")
+        for bad in ({"min_blocks": 1.5}, {"max_blocks": 2.5},
+                    {"min_blocks": 2.5, "max_blocks": 1.5},
+                    {"min_blocks": -1, "max_blocks": 2.5}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                scene_shot.validate_steps([{"mob_motion": {
+                    **step, "types": [{**step["types"][0], **bad}]}}], "native")
+
     def test_mob_motion_gate_requires_the_kinds_it_measures(self):
         step = {"mob_motion": {"samples": ["a", "b", "c"], "name": "motion"}}
         with self.assertRaises(ValueError):

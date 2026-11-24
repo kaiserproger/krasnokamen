@@ -174,8 +174,10 @@
         "types": [
           {
             "id": "minecraft:zombie",
-            "min_speed": 0.025,
-            "max_speed": 0.08
+            "min_speed": 0.02,
+            "max_speed": 0.12,
+            "min_blocks": 1.5,
+            "max_blocks": 2.5
           }
         ]
       }
@@ -236,8 +238,10 @@
         "types": [
           {
             "id": "minecraft:spider",
-            "min_speed": 0.025,
-            "max_speed": 0.08
+            "min_speed": 0.02,
+            "max_speed": 0.12,
+            "min_blocks": 1.5,
+            "max_blocks": 2.5
           }
         ]
       }

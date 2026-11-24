@@ -207,12 +207,20 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and all((isinstance(item, str)
                               and re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", item))
                              or (isinstance(item, dict)
-                                 and set(item) == {"id", "min_speed", "max_speed"}
+                                 and {"id", "min_speed", "max_speed"} <= set(item)
+                                 and set(item) <= {"id", "min_speed", "max_speed",
+                                                   "min_blocks", "max_blocks"}
                                  and isinstance(item["id"], str)
                                  and re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", item["id"])
                                  and all(type(item[key]) in (int, float) and math.isfinite(item[key])
                                          and item[key] >= 0 for key in ("min_speed", "max_speed"))
-                                 and item["min_speed"] < item["max_speed"])
+                                 and item["min_speed"] < item["max_speed"]
+                                 and (("min_blocks" in item) == ("max_blocks" in item))
+                                 and all(type(item[key]) in (int, float) and math.isfinite(item[key])
+                                         and item[key] >= 0
+                                         for key in ("min_blocks", "max_blocks") if key in item)
+                                 and (("min_blocks" not in item)
+                                      or item["min_blocks"] < item["max_blocks"]))
                              for item in value["types"]))
         elif kind == "assert_block":
             valid = (client == "native" and isinstance(value, dict)

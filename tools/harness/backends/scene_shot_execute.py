@@ -442,6 +442,16 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                     rates = [segment["blocks_per_client_tick"] for segment in row["segments"]]
                     probe.check("mob_speed_" + slug,
                                 all(entry["min_speed"] <= rate <= entry["max_speed"] for rate in rates))
+                    if "min_blocks" in entry:
+                        # The fixture teleports a fixed number of blocks per segment. The rate
+                        # above divides by the client ticks between two snapshots, which include
+                        # every command round-trip, so it can only be a coarse band; the step
+                        # itself is the measurement the fixture controls.
+                        steps = [segment["displacement_blocks"] for segment in row["segments"]]
+                        probe.report["mob_step_" + slug] = steps
+                        probe.check("mob_step_" + slug,
+                                    all(entry["min_blocks"] <= step <= entry["max_blocks"]
+                                        for step in steps))
         elif kind == "assert_block":
             result = probe.call("minecraft_read_block", value["args"])
             (artifact / f"{value['name']}.json").write_text(json.dumps(result, indent=2) + "\n")
