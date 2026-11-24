@@ -1,0 +1,81 @@
+{
+  "id": "MODEL-BLOCK-ENTITY-DRAW",
+  "verdict": "promoted",
+  "fix_commit": "client:00c7efd111",
+  "fix_commit_full": "00c7efd111920a811b6b907343417f268daa3ef5",
+  "promoted_at": "2026-11-24T20:06:17+00:00",
+  "tree_head": "333726fb8fab65e23f2815f508bb691cadcc8e55",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T200246-native-structure-box-l0o5fv5f/result.json",
+    "client_head": "7a653e5d846ace60189722ec9f230b47eae18ba2",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "red": [
+      "harness:scene-shot:native-structure-box"
+    ],
+    "states": {
+      "harness:scene-shot:native-structure-box": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T200315-native-structure-box-xj0f6lwj/result.json",
+    "client_head": "00c7efd111920a811b6b907343417f268daa3ef5",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "green": [
+      "harness:scene-shot:native-structure-box"
+    ],
+    "states": {
+      "harness:scene-shot:native-structure-box": "green"
+    },
+    "tree_head": "333726fb8fab65e23f2815f508bb691cadcc8e55",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T200315-native-structure-box-xj0f6lwj/result.json",
+    "client_head": "00c7efd111920a811b6b907343417f268daa3ef5",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "green": [
+      "harness:scene-shot:native-structure-box"
+    ],
+    "states": {
+      "harness:scene-shot:native-structure-box": "green"
+    },
+    "tree_head": "333726fb8fab65e23f2815f508bb691cadcc8e55",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "4355980de7ab00ddb5589c26432f8bc134aa762b",
+    "paths": [
+      "src/entities/render_blocks.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::render_blocks::village_tests::every_factory_block_entity_reaches_the_static_scene": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::render_blocks::village_tests::static_brushable_renders_received_item_with_adjacent_light_and_clears": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::render_blocks::village_tests::static_shelf_renders_and_clears_received_item_slots": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::render_blocks::village_tests::structure_box_tracks_viewer_and_received_mode_and_size": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::render_blocks::village_tests::test_instance_scene_tracks_received_status_box_and_errors": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T200506-ledger-promote-vuq9griy"
+}
