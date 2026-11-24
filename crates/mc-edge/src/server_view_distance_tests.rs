@@ -88,7 +88,16 @@ async fn client_view_distance_join_grow_and_shrink() {
     let spawn = [8.0, 64.0, 8.0];
     server
         .connections
-        .stash_join(id, (entity, spawn, 0, Default::default()));
+        .stash_join(
+            id,
+            JoinedSpawn {
+                entity,
+                position: spawn,
+                rotation: [0.0, 0.0],
+                game_mode: 0,
+                dimension: Default::default(),
+            },
+        );
     wait_for_join(
         &server,
         id,

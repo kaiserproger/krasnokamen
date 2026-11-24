@@ -276,12 +276,13 @@ async fn removed_join_rejects_late_join_reason_waiter_and_registration() {
     registry.remove(id);
     registry.stash_join(
         id,
-        (
-            mc_core::boundary::EntityId(1),
-            [0.0; 3],
-            0,
-            Default::default(),
-        ),
+        JoinedSpawn {
+            entity: mc_core::boundary::EntityId(1),
+            position: [0.0; 3],
+            rotation: [0.0, 0.0],
+            game_mode: 0,
+            dimension: Default::default(),
+        },
     );
     registry.stash_disconnect_reason(id, "late".into());
     assert!(registry.take_join(id).is_none());

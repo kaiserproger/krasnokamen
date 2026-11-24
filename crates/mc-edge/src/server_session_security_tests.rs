@@ -24,12 +24,13 @@ fn retired_connections_never_recreate_join_or_reliable_stashes() {
     let registry = ConnectionRegistry::new();
     let id = registry.joining_id();
     registry.remove(id);
-    let joined = (
-        mc_core::boundary::EntityId(1),
-        [0.0; 3],
-        0,
-        Default::default(),
-    );
+    let joined = JoinedSpawn {
+        entity: mc_core::boundary::EntityId(1),
+        position: [0.0; 3],
+        rotation: [0.0, 0.0],
+        game_mode: 0,
+        dimension: Default::default(),
+    };
     registry.stash_join(id, joined);
     registry.stash_disconnect_reason(id, "late kick".into());
     let mut changes = vec![mc_core::boundary::PlayerChange::Chat {

@@ -300,22 +300,24 @@ async fn simultaneous_joins_both_resolve() {
     let rx_a = registry.wait_join(a);
     let rx_b = registry.wait_join(b);
     // Pump routes A's Joined: fires A's waiter, stashes for fast path.
-    let joined_a = (
-        mc_core::boundary::EntityId(11),
-        [1.0, 2.0, 3.0],
-        0u8,
-        Default::default(),
-    );
+    let joined_a = JoinedSpawn {
+        entity: mc_core::boundary::EntityId(11),
+        position: [1.0, 2.0, 3.0],
+        rotation: [0.0, 0.0],
+        game_mode: 0u8,
+        dimension: Default::default(),
+    };
     registry.stash_join(a, joined_a);
     // B's waiter must NOT fire from A's Joined.
     assert!(registry.take_join(b).is_none());
     // Pump routes B's Joined.
-    let joined_b = (
-        mc_core::boundary::EntityId(22),
-        [4.0, 5.0, 6.0],
-        1u8,
-        Default::default(),
-    );
+    let joined_b = JoinedSpawn {
+        entity: mc_core::boundary::EntityId(22),
+        position: [4.0, 5.0, 6.0],
+        rotation: [0.0, 0.0],
+        game_mode: 1u8,
+        dimension: Default::default(),
+    };
     registry.stash_join(b, joined_b);
     assert_eq!(rx_a.await.expect("A resolves"), joined_a);
     assert_eq!(rx_b.await.expect("B resolves"), joined_b);
@@ -330,12 +332,13 @@ async fn simultaneous_joins_both_resolve() {
 async fn late_waiter_sees_stash() {
     let registry = ConnectionRegistry::new();
     let id = registry.joining_id();
-    let joined = (
-        mc_core::boundary::EntityId(7),
-        [8.0, 80.0, 8.0],
-        0u8,
-        Default::default(),
-    );
+    let joined = JoinedSpawn {
+        entity: mc_core::boundary::EntityId(7),
+        position: [8.0, 80.0, 8.0],
+        rotation: [0.0, 0.0],
+        game_mode: 0u8,
+        dimension: Default::default(),
+    };
     registry.stash_join(id, joined);
     // wait_for_join's fast path.
     assert_eq!(registry.take_join(id), Some(joined));
@@ -428,12 +431,13 @@ fn queue_registration_seals_the_native_count_inside_its_critical_section() {
 fn stashed_join_survives_repeated_takes() {
     let registry = ConnectionRegistry::new();
     let id = registry.joining_id();
-    let joined = (
-        mc_core::boundary::EntityId(99),
-        [1.0, 2.0, 3.0],
-        1u8,
-        Default::default(),
-    );
+    let joined = JoinedSpawn {
+        entity: mc_core::boundary::EntityId(99),
+        position: [1.0, 2.0, 3.0],
+        rotation: [0.0, 0.0],
+        game_mode: 1u8,
+        dimension: Default::default(),
+    };
     registry.stash_join(id, joined);
     assert_eq!(registry.take_join(id), Some(joined));
     assert_eq!(registry.take_join(id), Some(joined));
