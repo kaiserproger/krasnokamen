@@ -94,7 +94,13 @@ def stall_signature(status: dict[str, Any]) -> tuple[Any, ...]:
     slot their gathered materials are unrelated resource growth and must not
     conceal its stall; without an active project they are the progress.
     """
-    project = status.get("project")
+    # `_planner_status` reports every project it parsed on the live dialog, in
+    # display order: the project that holds the slot comes first (2026-11-24: this
+    # read `status["project"]`, a key nobody writes, so the oracle never saw an
+    # active project and the whole dialog text - including a waiting project's
+    # gathered materials - was the signature).
+    projects = status.get("projects") or []
+    project = projects[0] if projects else None
     ui = status.get("project_ui") or []
     if project:
         ui = [node for node in ui if node.get("id") == "dialog/body/0"]
@@ -803,9 +809,14 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
             raise RuntimeError(f"cannot establish planner or storage state: {status}")
         if not project_shot:
             raise RuntimeError("project status dialog was not observed and captured")
-        project = status.get("project")
-        if project and project["blueprint"] in blueprints and project not in projects:
-            projects.append(project)
+        # Every project the dialog shows, not only the slot holder: a completion may be
+        # any of them, and the same read used to take `status["project"]` - a key
+        # `_planner_status` never writes - so `projects` stayed empty and no new
+        # building could ever match (new_house and second_building unreachable).
+        for project in status.get("projects") or []:
+            if project["blueprint"] in blueprints and project not in projects:
+                projects.append(project)
+        detail["projects_observed"] = list(projects)
         entities = entity_census(probe)
         ecology = village._probe_ecology(probe, detail, status["buildings_now"], entities=entities)
         blocks = building_blocks(probe, status["buildings_now"], server)
