@@ -8,6 +8,9 @@ use mc_world::native::NativeStore;
 
 /// The caller must supply a disposable copy, never a live or original world.
 /// Holds the exclusive world lease through recovery, commit and WAL archive.
+/// The converted checkpoint is pinned in the checkpoint marker (same store id
+/// and branch) before any batch leaves `journal/`: once the WAL is archived the
+/// marker is the only witness that the store must not be behind the new tick.
 /// The archive takes the files of `journal/`, never the directory itself: a
 /// restored copy (a branch of its own) is refused without `journal/`.
 pub fn upgrade_game_clock(config: &CoreConfig, copy: &Path) -> Result<Conversion, CoreError> {
@@ -41,8 +44,16 @@ pub fn upgrade_game_clock(config: &CoreConfig, copy: &Path) -> Result<Conversion
             archive.display()
         )));
     }
+    let store_uuid = store.store_uuid();
+    let branch = mc_world::store_marker::branch(copy).map_err(|error| storage(&error))?;
     let report =
         mc_core::native_checkpoint::game_clock_upgrade::write_converted_checkpoint(&config, store)?;
+    #[cfg(test)]
+    tests::before_marker(copy);
+    // A store that loses this commit after the WAL is archived would otherwise
+    // open on the old checkpoint without a tail; a failed write keeps the WAL.
+    mc_world::store_marker::write(copy, store_uuid, branch, report.tick)
+        .map_err(|error| storage(&error))?;
     archive_covered_journal(copy, &archive).map_err(|error| storage(&error))?;
     Ok(report)
 }

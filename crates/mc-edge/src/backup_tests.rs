@@ -1245,7 +1245,8 @@ fn make_legacy_clock(world: &Path, config: &mc_core::CoreConfig) -> u64 {
 /// Persistence re-review 3 blocker: `world upgrade-game-clock` on a restored
 /// copy (a branch of its own) archives the covered batches but keeps
 /// `journal/`, so the upgraded copy opens, backs up and restores. Moving the
-/// whole directory away left a restored copy that every open refuses.
+/// whole directory away left a restored copy that every open refuses. Round 4:
+/// the marker pins the converted checkpoint on the copy's branch before that.
 #[test]
 fn a_restored_copy_upgraded_from_a_legacy_clock_keeps_its_journal() {
     let root = tempfile::tempdir().unwrap();
@@ -1259,7 +1260,8 @@ fn a_restored_copy_upgraded_from_a_legacy_clock_keeps_its_journal() {
     run_backup(&root.path().join("world"), &first).unwrap();
     let copy = root.path().join("copy");
     run_restore(&first, &copy).unwrap();
-    let branch = mc_world::store_marker::read(&copy).unwrap().unwrap().branch;
+    let restored = mc_world::store_marker::read(&copy).unwrap().unwrap();
+    let branch = restored.branch;
     assert_ne!(branch, mc_world::store_marker::ROOT_BRANCH);
     let checkpoint = make_legacy_clock(&copy, &live_config(copy.clone()));
 
@@ -1272,6 +1274,17 @@ fn a_restored_copy_upgraded_from_a_legacy_clock_keeps_its_journal() {
     assert!(
         archive.join(&batch).is_file(),
         "the tail batch was not archived"
+    );
+    // Read before any open (`Core::open` itself advances a lagging marker): the
+    // converted checkpoint is pinned with the copy's own store id and branch.
+    assert_eq!(
+        mc_world::store_marker::read(&copy).unwrap(),
+        Some(mc_world::store_marker::StoreMarker::new(
+            restored.store_uuid,
+            branch,
+            report.tick
+        )),
+        "the WAL was archived with the marker still at the old checkpoint"
     );
 
     let reopened = mc_core::Core::open(live_config(copy.clone()));
