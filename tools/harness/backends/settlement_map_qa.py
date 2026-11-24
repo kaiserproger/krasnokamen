@@ -323,6 +323,9 @@ def layout_cell(anchor: list[int], x: int, z: int) -> str:
 VERGE_ASSERTIONS = ("verge_project_admitted_on_the_status_page", "verge_obstacle_stands")
 SELECTED_CARD_ASSERTIONS = ("map_features_house_and_site", "selected_card_site_only",
                             "selected_card_back_returns_map", "selected_card_building_only")
+# The `--scenario bell-hub` run's assertions: the client targeted the anchor bell and its own screen
+# is the settlement hub (the civil walk's first stage, without the pages that stop on the D63 dialog).
+BELL_ASSERTIONS = ("GUI bell target", "bell_opens_hub_dialog")
 STAGES = ("bell_opens_hub", "dashboard", "map", "building_order", "shortage_icons",
           "storage_transfer", "project_progress", "residents", "resources", "production_order")
 VERDICTS = (*STAGES, "localized_text", "all")
@@ -422,7 +425,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     parser.add_argument("--size", choices=("1280x720", "1920x1080"), default="1280x720")
     parser.add_argument("--wrong-click", action="store_true",
                         help="negative control: click Help instead of Settlement")
-    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race", "stage2", "stage2op", "blueprints", "selected-card", "verge"), default="civil",
+    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race", "stage2", "stage2op", "blueprints", "selected-card", "verge", "bell-hub"), default="civil",
                         help="quickwins: the owner-path acceptance of the D63 quick wins (native, ru_ru); "
                              "quickwins-c1-race: the starter chest (C1) founded under block churn in its chunk")
     parser.add_argument("--survey", action="store_true",
@@ -472,6 +475,24 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
                 ctx.client_evidence["verdicts"] = published
         return scene_shot.run(ctx, scenario={"steps": [], "java_plain": ctx.client == "java",
                                              "client_settings": settings}, script=selected_script)
+    if args.scenario == "bell-hub":
+        # ISSUE-1-24: the anchor bell alone must open its settlement's hub. This is the civil
+        # walk's own first stage with a lean fixture, so the row is not hostage to the later pages.
+        settings = {"gui_scale": args.gui_scale, "language": args.language,
+                    "screen_size": list(map(int, args.size.split("x")))} if ctx.client == "java" else {}
+
+        def bell_script(probe, artifact, steps, client):
+            try:
+                return _bell_script(probe, artifact, steps, client, args)
+            finally:
+                checks = probe.report["assertions"]
+                # A missing check is not a pass: every required assertion must be recorded true.
+                ok = all(checks.get(name) is True for name in BELL_ASSERTIONS)
+                published = {"bell_opens_hub": ok, "all": ok}
+                probe.report["verdicts"] = published
+                ctx.client_evidence["verdicts"] = published
+        return scene_shot.run(ctx, scenario={"steps": [], "java_plain": ctx.client == "java",
+                                             "client_settings": settings}, script=bell_script)
     if ctx.client != "java" and (args.gui_scale != 3 or args.language != "en_us" or args.size != "1280x720"):
         # The civil walk reads English page titles; the native client takes its language from
         # KRASNOKAMEN_CLIENT_LANGUAGE and only the quickwins scenario sets it.
@@ -1116,6 +1137,60 @@ def _selected_card_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[s
                     label("Storage", "Склад") in storage_text
                     and not re.search(label("Order construction", "Заказать стройку"), storage_text))
         return [frame]
+    finally:
+        gui.close()
+
+
+def _bell_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
+                 args: argparse.Namespace) -> list[str]:
+    """`--scenario bell-hub` (ISSUE-1-24): the anchor bell opens the settlement hub.
+
+    Lean fixture: a flat pad, one owned settlement at its centre and the anchor bell. No chest,
+    residents or authored House, because the stage under test is the civil walk's own first one
+    (`_enter_hub`): look at the bell, right-click it, and the client's own screen must be the hub
+    dialog. A settlement whose bell does not dispatch the menu fails the `bell_opens_hub_dialog`
+    check; a client that never targets the bell fails `GUI bell target`."""
+    from .buildings_qa import _chunked_fills
+
+    size = tuple(map(int, args.size.split("x")))
+    scene_shot.resize_window(probe.client.p4_window, size)
+    gui = Gui(probe, artifact, client, args.gui_scale, size)
+    ru = args.language == "ru_ru"
+    label = lambda en, russian: russian if ru else en
+    try:
+        for command in ("gamemode creative @s", "gamerule advance_time false",
+                        "gamerule spawn_mobs false", "time set 6000", "weather clear", "clear @s"):
+            probe.fixture(command)
+        me = probe.observe(wait_for_play=True)["player"]
+        x, z = (math.floor(float(me[axis])) for axis in ("x", "z"))
+        y = 201
+        probe.fixture(f"tp @s {x + .5} {y} {z - 2.0}")
+        for command in _chunked_fills(x - 32, y - 2, z - 32, x + 32, y - 2, z + 32, "minecraft:dirt"):
+            probe.fixture(command)
+        for command in _chunked_fills(x - 32, y - 1, z - 32, x + 32, y - 1, z + 32, "minecraft:grass_block"):
+            probe.fixture(command)
+        for command in _chunked_fills(x - 32, y, z - 32, x + 32, y + 8, z + 32, "minecraft:air"):
+            probe.fixture(command)
+        probe.fixture(f"tp @s {x + .5} {y} {z + .5}")
+        probe.wait(lambda state: all(state.get("player", {}).get(axis) == expected
+                                     for axis, expected in (("x", x + .5), ("y", y), ("z", z + .5))),
+                   "fixture_founder_at_anchor", timeout_seconds=30)
+        probe.fixture("gamemode survival @s")
+        _command(probe, f"settlement create {NAME} {RADIUS}", f"Founded {NAME}")
+        probe.fixture(f"setblock {x} {y} {z} minecraft:bell")
+        probe.fixture(f"tp @s {x + .5} {y} {z - 2.0}")
+        probe.wait(lambda state: all(state.get("player", {}).get(axis) == expected
+                                     for axis, expected in (("x", x + .5), ("y", y), ("z", z - 2.0))),
+                   "fixture_bell_approach_received", timeout_seconds=30)
+        title = label(f"Settlement {NAME}", f"Поселение {NAME}")
+        _enter_hub(probe, gui, [x, y, z], title)
+        state = probe.observe()
+        screen = state.get("screen") or {}
+        probe.report["bell_hub"] = {"title": screen.get("title"), "class": screen.get("class")}
+        probe.check("bell_opens_hub_dialog", bool(screen.get("open")) and screen.get("title") == title)
+        path = gui.capture(probe, artifact, "bell-hub")
+        probe.check("bell-hub_dimensions", scene_shot.png_size(path) == size)
+        return [path]
     finally:
         gui.close()
 

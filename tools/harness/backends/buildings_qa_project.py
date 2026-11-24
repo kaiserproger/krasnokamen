@@ -17,8 +17,7 @@ from . import native_client
 from .probe_steps import ProbeSteps
 from . import buildings_qa as _qa
 from .buildings_qa_consts import (
-    DIALOG_CLASS, KIND_LABEL, PROJECT_ICON_SLOT, PROJECT_LABEL, PROJECT_STATUS_LINE_SLOT,
-    PROJECT_STATUS_SLOT, _ORDER_TERMINAL,
+    DIALOG_CLASS, KIND_LABEL, PROJECT_LABEL, PROJECT_STATUS_SLOT, _ORDER_TERMINAL,
 )
 from .buildings_qa_probe import _building_bounds, _container_titled
 
@@ -112,20 +111,62 @@ def _admitted_or_caught(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: st
     return caught
 
 
+# `ui_text::Projects` is "Construction"/"Строительство" since the D63 dialog set, and
+# `ui_menus` renders the blueprint catalogue (`projects_screen`) and the project-status page
+# (`project_screen`) under that one title in one reused window. The driver therefore recognises
+# each page by its rows, never by the page title alone.
+PROJECT_TITLES = ("Construction", "Строительство")
+_CATALOGUE_ROW = re.compile(r"^.+ L1$")
+_PROJECT_CARD = re.compile(r"^(.+?) L(\d+) · ")
+# A queued order is a book at slots 18.., not an admitted project card: `Pending #<n>: <label>
+# L<level> · <reason>` also matches the card shape, and reading it as an active project made the
+# certificate wait believe the settlement was busy for 40 minutes while two unfunded fence orders
+# stood (20261124T195112-buildings-qa-i3lpcv6x).
+_PENDING_ORDER = re.compile(r"^Pending #\d+:")
+
+
+def _active_card(name: str) -> bool:
+    """An admitted project card `<label> L<level> · <phase>`, never a pending-order book."""
+    return bool(_PROJECT_CARD.match(name)) and not _PENDING_ORDER.match(name)
+
+
+_SUMMARY_LINE = re.compile(r"^(?:Active projects|Активные стройки|Pending orders|Заказы|Заказов)\b")
+
+
+def _page_names(state: dict[str, Any]) -> list[str]:
+    return [str(row.get("name")) for row in (state.get("container") or {}).get("slots", [])
+            if row.get("name")]
+
+
+def _project_titled(state: dict[str, Any]) -> bool:
+    screen = state.get("screen") or {}
+    return screen.get("class") == _qa.CONTAINER_CLASS and str(screen.get("title")) in PROJECT_TITLES
+
+
+def _catalogue_page(state: dict[str, Any]) -> bool:
+    """The blueprint catalogue: `projects_screen` names every orderable blueprint `<label> L1`."""
+    return _project_titled(state) and any(_CATALOGUE_ROW.match(name) for name in _page_names(state))
+
+
+def _status_page(state: dict[str, Any]) -> bool:
+    """The project-status page: the summary clock and/or an admitted project's card."""
+    names = _page_names(state)
+    return _project_titled(state) and (any(_SUMMARY_LINE.match(name) for name in names)
+                                       or any(_active_card(name) for name in names))
+
+
 def _project_page(probe: ProbeSteps) -> dict[str, Any]:
-    """The open Construction page of the Projects menu (Projects -> Status icon). The caller
-    closes the screen."""
+    """The open Construction status page of the Projects menu (Projects -> Status icon). The
+    caller closes the screen."""
     _qa._close_any_screen(probe)
     probe.call("minecraft_send_chat", {"message": "settlement menu projects", "command": True})
-    projects = probe.wait(lambda s: _container_titled(s, "Projects"), "projects_menu_open",
-                          timeout_seconds=60)
+    projects = probe.wait(_catalogue_page, "projects_menu_open", timeout_seconds=60)
     action = next((row for row in projects["container"]["slots"] if row.get("slot") == PROJECT_STATUS_SLOT), None)
-    if action is None or action.get("name") != "Status":
-        raise RuntimeError(f"buildings-qa: Projects menu slot {PROJECT_STATUS_SLOT} is {action}, not Status")
+    if action is None or not re.fullmatch(r"Status|Статус", str(action.get("name") or "")):
+        raise RuntimeError(f"buildings-qa: Construction menu slot {PROJECT_STATUS_SLOT} is {action}, not Status")
     probe.call("minecraft_click_container_slot", {"slot": PROJECT_STATUS_SLOT, "button": "primary",
                                                   "timeout_seconds": probe.remaining()})
-    return probe.wait(lambda s: _container_titled(s, "Construction"), "project_status_open",
-                      timeout_seconds=60)
+    return probe.wait(_status_page, "project_status_open", timeout_seconds=60)
 
 
 def _order_refusal(sub: dict[str, Any], level: int) -> str | None:
@@ -142,25 +183,39 @@ def _order_refusal(sub: dict[str, Any], level: int) -> str | None:
 
 
 def _project_view(probe: ProbeSteps) -> tuple[str, int, bool] | None:
-    """Return the project label, level and whether it is active rather than queued.
+    """Return the first admitted project's label and level, or None.
 
-    Read from the civil menus: Projects -> Status icon -> the Construction page, whose slot 4 is
-    the project's `<label> L<level>` icon and slot 10 its status line (ui_menus.rs project_screen)."""
+    `ui_menus::project_screen` puts each admitted project's card at slots 0.. as
+    `<label> L<level> · <phase>`; a queued order is a `Pending #<n>: <label> L<level> · <reason>`
+    book at slots 18.., which matches the card shape but is not an active project, so it is
+    excluded (`_active_card`)."""
     page = _qa._project_page(probe)
     slots = page["container"]["slots"]
-    icon = next((row for row in slots if row.get("slot") == PROJECT_ICON_SLOT), None)
-    status = next((row for row in slots if row.get("slot") == PROJECT_STATUS_LINE_SLOT), None)
     probe.call("minecraft_close_screen", {})
-    match = re.fullmatch(r"(.+) L(\d+)", str((icon or {}).get("name") or ""))
-    if not match:
-        return None
-    queued = str((status or {}).get("name") or "").startswith("Queued — site not assigned")
-    return match.group(1), int(match.group(2)), not queued
+    for row in slots:
+        name = str(row.get("name") or "")
+        if _active_card(name):
+            match = _PROJECT_CARD.match(name)
+            return match.group(1), int(match.group(2)), True
+    return None
 
 
 def _project_status(probe: ProbeSteps) -> tuple[str, int] | None:
     view = _project_view(probe)
     return (view[0], view[1]) if view is not None and view[2] else None
+
+
+def _pending_names(probe: ProbeSteps) -> list[str]:
+    """The status page's queued-order books (`Pending #<n>: <label> L<level> · <reason>`)."""
+    page = _qa._project_page(probe)
+    names = [str(row.get("name")) for row in page["container"]["slots"] if row.get("name")]
+    probe.call("minecraft_close_screen", {})
+    return [name for name in names if _PENDING_ORDER.match(name)]
+
+
+def _pending_fence(probe: ProbeSteps, expected: str) -> bool:
+    """A queued order for the fence kind is still on the page."""
+    return any(expected in name.lower() for name in _pending_names(probe))
 
 
 def _project_active_quiet(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
@@ -204,10 +259,13 @@ def _wait_certified_origin_here(probe: ProbeSteps, sub: dict[str, Any], tag: str
         if certificate is None:
             continue
         view = _project_view(probe)
-        if view is not None and view[2]:
+        if view is not None:
             continue
         expected = PROJECT_LABEL.get(fence, fence.capitalize()).lower()
-        fenced = view is not None and not view[2] and view[1] == 1 and view[0].lower() == expected
+        # The fence is a queued order, so it lives in the page's `Pending #<n>:` book, not in a
+        # project card. Reading the book (never the card list) is what proves the settlement
+        # certified this level while its autonomous work stayed fenced.
+        fenced = _pending_fence(probe, expected)
         probe.check(f"{tag}_L{level}_fence_waiting", fenced)
         # The listing flips on upgrade admission, not completion; check it
         # again after observing the queued fence.
@@ -220,24 +278,45 @@ def _wait_certified_origin_here(probe: ProbeSteps, sub: dict[str, Any], tag: str
     return None
 
 
-def _menu_click_named(probe: ProbeSteps, title: str, name: str) -> None:
-    """Find an icon across container pages and click its exact name."""
-    page = probe.wait(lambda s: _container_titled(s, title), f"{title}_menu_open",
-                      timeout_seconds=60)
+def _click_row(probe: ProbeSteps, page: Callable[[dict[str, Any]], bool], name: str,
+               label: str) -> None:
+    """Find an icon across the pages of the screen `page` matches and click its exact name."""
+    state = probe.wait(page, label, timeout_seconds=60)
     while True:
-        slots = page["container"]["slots"]
+        slots = state["container"]["slots"]
         match = next((row for row in slots if row.get("name") == name), None)
         if match is not None:
             probe.call("minecraft_click_container_slot", {"slot": int(match["slot"]), "button": "primary",
                                                           "timeout_seconds": probe.remaining()})
             return
         if not any(row.get("slot") == 50 and row.get("name") == "Next page" for row in slots):
-            raise RuntimeError(f"buildings-qa: {name!r} missing from {title} menu")
+            raise RuntimeError(f"buildings-qa: {name!r} missing from {label}")
         probe.call("minecraft_click_container_slot", {"slot": 50, "button": "primary",
                                                       "timeout_seconds": probe.remaining()})
-        page = probe.wait(lambda s: _container_titled(s, title)
-                          and s["container"]["slots"] != slots,
-                          f"{title}_next_page", timeout_seconds=60)
+        state = probe.wait(lambda s: page(s) and s["container"]["slots"] != slots,
+                           f"{label}_next_page", timeout_seconds=60)
+
+
+def _menu_click_named(probe: ProbeSteps, title: str, name: str) -> None:
+    """Find an icon across container pages and click its exact name."""
+    _click_row(probe, lambda s: _container_titled(s, title), name, f"{title}_menu_open")
+
+
+def _order_result(label: str):
+    """The dialog after the confirmation click: any dialog body except the review just clicked.
+
+    The product answers an order with `Dialog::multi_action` (class `MultiButtonDialogScreen`,
+    title Construction) carrying `Started <blueprint> construction.` / `Order accepted:
+    <blueprint>.`; the review page it came from is titled `Order: <label>` and can still be
+    mounted while the click is delivered, so it is excluded by title. The old wait accepted only
+    `SimpleDialogScreen` and timed out after a successful order (20261124T185742)."""
+    def predicate(state: dict[str, Any]) -> bool:
+        screen = state.get("screen") or {}
+        return (str(screen.get("class") or "").endswith("DialogScreen")
+                and str(screen.get("title") or "") != label
+                and any(str(node.get("id", "")).startswith("dialog/body/")
+                        for node in state.get("ui_nodes", [])))
+    return predicate
 
 
 def _confirm_project(probe: ProbeSteps, label: str) -> str:
@@ -249,19 +328,22 @@ def _confirm_project(probe: ProbeSteps, label: str) -> str:
     probe.call("minecraft_click_screen_button", {"expected_screen_class": DIALOG_CLASS,
                                                 "expected_title": opened["screen"]["title"],
                                                 "button_label": label})
-    result = probe.wait(
-        lambda s: (s.get("screen") or {}).get("class", "").endswith("SimpleDialogScreen")
-        and any(str(node.get("id", "")).startswith("dialog/body/") for node in s.get("ui_nodes", [])),
-        "project_confirmation_result", timeout_seconds=60)
+    result = probe.wait(_qa._order_result(label), "project_confirmation_result", timeout_seconds=60)
     return " | ".join(str(node.get("label", "")) for node in result.get("ui_nodes", [])
                       if str(node.get("id", "")).startswith("dialog/body/"))
 
 
 def _order_via_dialog(probe: ProbeSteps, sub: dict[str, Any], tag: str,
                       bp: str, level: int, settlement: str) -> str:
+    """Order through the player's Construction catalogue (D63 dialog set).
+
+    `settlement menu projects` opens the blueprint catalogue under the Construction title
+    (`ui_text::Projects`), rows named `<label> L1`; the old wait for a page titled `Projects`
+    timed out on every attempt and the order was never issued
+    (20261124T183657-buildings-qa-6odkzjcy, `buildings_house_L1_project`)."""
     _qa._send(probe, "settlement menu projects")
     label = PROJECT_LABEL.get(bp, bp.capitalize())
-    _qa._menu_click_named(probe, "Projects", f"{label} L1")
+    _qa._click_row(probe, _qa._catalogue_page, f"{label} L1", "projects_menu_open")
     result = _qa._confirm_project(probe, f"Order: {label}")
     sub[f"L{level}_dialog_order"] = result
     return result

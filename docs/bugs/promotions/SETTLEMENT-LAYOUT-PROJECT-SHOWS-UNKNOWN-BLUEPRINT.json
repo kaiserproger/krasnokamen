@@ -1,0 +1,52 @@
+{
+  "id": "SETTLEMENT-LAYOUT-PROJECT-SHOWS-UNKNOWN-BLUEPRINT",
+  "verdict": "promoted",
+  "fix_commit": "patch:7115b0d628472efc2bc6467230c260f7fbc86ec0bdc14ce5463350d2bbdd5a01",
+  "fix_commit_full": "patch:7115b0d628472efc2bc6467230c260f7fbc86ec0bdc14ce5463350d2bbdd5a01",
+  "promoted_at": "2026-11-24T17:25:25+00:00",
+  "tree_head": "9b172eb54845a5599486de2773b395cf9e584731",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "7115b0d628472efc2bc6467230c260f7fbc86ec0bdc14ce5463350d2bbdd5a01",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/ui_text.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::ui_text::tests::every_layout_infrastructure_project_has_a_display_name": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/settlements/ui_text.rs",
+        "line": 1021,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "harness:buildings-qa:perimeter.project_named": {
+      "state": "unrunnable",
+      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/9b172eb54845-server-x86_64-unknown-linux-gnu-incr/krasnokamen: [Errno 2] No such file or directory: '/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/ledger-builds/ed8dcdce5bce545710eb36f720863e97d7ffd090b5110111379c87a63f471ddf.json'. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::ui_text::tests::every_layout_infrastructure_project_has_a_display_name": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T165528-buildings-qa-b4yr9z2j/result.json",
+    "tree_head": "9b172eb54845a5599486de2773b395cf9e584731",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "ed8dcdce5bce545710eb36f720863e97d7ffd090b5110111379c87a63f471ddf",
+    "covers": [
+      "harness:buildings-qa:perimeter.project_named"
+    ],
+    "profile": "buildings-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T172030-ledger-promote-xawawg3i"
+}

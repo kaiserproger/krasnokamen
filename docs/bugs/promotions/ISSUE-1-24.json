@@ -1,0 +1,52 @@
+{
+  "id": "ISSUE-1-24",
+  "verdict": "promoted",
+  "fix_commit": "patch:27f3e55f33cb2c8bfd22946ad7b28e451e64867d6e56ceb40138d1ec624e0cc2",
+  "fix_commit_full": "patch:27f3e55f33cb2c8bfd22946ad7b28e451e64867d6e56ceb40138d1ec624e0cc2",
+  "promoted_at": "2026-11-24T11:15:49+00:00",
+  "tree_head": "f17cd6efd6ce7960a3d68c7ea04f89eb698ceaf3",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "27f3e55f33cb2c8bfd22946ad7b28e451e64867d6e56ceb40138d1ec624e0cc2",
+  "reversed_files": [
+    "crates/mc-core/src/tick/input/interact.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::ui::tests::anchor_bell_opens_its_settlement_for_a_non_owner_and_rings": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/settlements/ui_tests.rs",
+        "line": 202,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "harness:settlement-map-qa:bell_opens_hub": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::ui::tests::anchor_bell_opens_its_settlement_for_a_non_owner_and_rings": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T104224-settlement-map-qa-zkmonl1t/result.json",
+    "tree_head": "f17cd6efd6ce7960a3d68c7ea04f89eb698ceaf3",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "0c952281a2db2c5057d956ceade003afbe5457573d2c74f8215f968e8aa740e2",
+    "covers": [
+      "harness:settlement-map-qa:bell_opens_hub"
+    ],
+    "profile": "settlement-map-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T111151-ledger-promote-8o31j84s"
+}

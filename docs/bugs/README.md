@@ -437,7 +437,9 @@ three classes before `valid_red`/`valid_b` are computed:
   red says nothing about the fix.
 - **(b) assertion — accepted.** The panicking source line is an `assert!`/`assert_eq!`/`assert_ne!`/
   `debug_assert!`/`panic!(`. A shared helper inside a `*_tests.rs` file counts (for example
-  `core_journal_backpressure_tests.rs`), because the row's own test calls it.
+  `core_journal_backpressure_tests.rs`), because the row's own test calls it. A line inside an inline
+  `#[cfg(test)] mod` of a production file counts too (`settlements/ui_text.rs`'s `assert_ne!`); an
+  assert in the production code beside it does not.
 - **(c) `unproven-panic` — refused unless named.** Any other panic (a helper without an assert macro,
   a `-> Result<()>` test failing through `?` with no panic line at all): the row must name it as
   `proving_assertions = { "<ref>" = "path:line" }` and the recorded location must equal that value.

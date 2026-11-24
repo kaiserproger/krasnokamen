@@ -1,0 +1,118 @@
+{
+  "id": "ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL",
+  "verdict": "promoted",
+  "fix_commit": "patch:c94fd89091a83c5fb27c4b5bd018490f96deadd98b5db1e8589714eaecec28c9",
+  "fix_commit_full": "patch:c94fd89091a83c5fb27c4b5bd018490f96deadd98b5db1e8589714eaecec28c9",
+  "promoted_at": "2026-11-24T17:14:54+00:00",
+  "tree_head": "9b172eb54845a5599486de2773b395cf9e584731",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "c94fd89091a83c5fb27c4b5bd018490f96deadd98b5db1e8589714eaecec28c9",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/construction.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::construction::fortification_tests::the_free_water_source_and_door_halves_pass_ledger_validation": {
+      "state": "unproven-panic",
+      "detail": "FAIL | panic at crates/mc-core/src/settlements/construction_fortification_tests.rs:249 is not an assert macro; name it in proving_assertions",
+      "assertion": {
+        "file": "crates/mc-core/src/settlements/construction_fortification_tests.rs",
+        "line": 249,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "cargo:mc-core:settlements::layout::tests::perimeter_closes_the_square_wall_line_with_a_gatehouse_on_each_road": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::construction::fortification_tests::fewer_than_ten_residents_or_no_stock_start_no_fortification": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::construction::fortification_tests::a_column_over_water_stays_a_gap_and_the_rest_of_the_wall_stands": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/settlements/construction_fortification_tests.rs",
+        "line": 310,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:settlements::construction::fortification_tests::ten_residents_wall_the_town_in_with_four_gates_and_one_well": {
+      "state": "unproven-panic",
+      "detail": "FAIL | panic at crates/mc-core/src/settlements/construction_fortification_tests.rs:175 is not an assert macro; name it in proving_assertions",
+      "assertion": {
+        "file": "crates/mc-core/src/settlements/construction_fortification_tests.rs",
+        "line": 175,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "cargo:mc-core:settlements::layout::tests::well_corners_are_open_plaza_squares_without_a_lamp": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::construction::fortification_tests::a_gatehouse_stands_on_a_road_that_was_paved_first": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/settlements/construction_fortification_tests.rs",
+        "line": 293,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "harness:buildings-qa:perimeter.enclosed": {
+      "state": "unrunnable",
+      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/9b172eb54845-server-x86_64-unknown-linux-gnu-incr/krasnokamen: [Errno 2] No such file or directory: '/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/ledger-builds/ed8dcdce5bce545710eb36f720863e97d7ffd090b5110111379c87a63f471ddf.json'. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::construction::fortification_tests::the_free_water_source_and_door_halves_pass_ledger_validation": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::layout::tests::perimeter_closes_the_square_wall_line_with_a_gatehouse_on_each_road": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::construction::fortification_tests::fewer_than_ten_residents_or_no_stock_start_no_fortification": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::construction::fortification_tests::a_column_over_water_stays_a_gap_and_the_rest_of_the_wall_stands": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::construction::fortification_tests::ten_residents_wall_the_town_in_with_four_gates_and_one_well": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::layout::tests::well_corners_are_open_plaza_squares_without_a_lamp": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::construction::fortification_tests::a_gatehouse_stands_on_a_road_that_was_paved_first": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T165528-buildings-qa-b4yr9z2j/result.json",
+    "tree_head": "9b172eb54845a5599486de2773b395cf9e584731",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "ed8dcdce5bce545710eb36f720863e97d7ffd090b5110111379c87a63f471ddf",
+    "covers": [
+      "harness:buildings-qa:perimeter.enclosed"
+    ],
+    "profile": "buildings-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T170842-ledger-promote-5exfglyz"
+}

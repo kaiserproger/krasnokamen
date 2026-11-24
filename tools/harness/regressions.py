@@ -261,6 +261,9 @@ _PROFILE_VERDICT_RUN = {
     # The site/storage markers each open their own card (row SETTLEMENT-MAP-SITE-CLICK-LOSES-PROJECT);
     # one live construction site beside the certified storage, native windowed.
     ('settlement-map-qa', 'selected_card'): ('native', ['--', '--scenario', 'selected-card']),
+    # The anchor bell opens its settlement's hub (row ISSUE-1-24): the civil walk's own first stage
+    # with a lean fixture, so a later dialog page cannot hide this verdict.
+    ('settlement-map-qa', 'bell_opens_hub'): ('native', ['--', '--scenario', 'bell-hub']),
     # A road-spanning obstruction must not hide a legally fronting lot (row CIVILIZATION-STREET-VERGE).
     ('settlement-map-qa', 'verge_connected'): ('native', ['--', '--scenario', 'verge']),
     # The chisel resource-pack admission is a vanilla-Java client behaviour; the native client

@@ -1,0 +1,52 @@
+{
+  "id": "SPAWN-PEACEFUL-REMOVAL",
+  "verdict": "promoted",
+  "fix_commit": "patch:9055c23a6b306e5d3818a8738e42a7742d2977ff80caec64c9f237ce94ae0d6a",
+  "fix_commit_full": "patch:9055c23a6b306e5d3818a8738e42a7742d2977ff80caec64c9f237ce94ae0d6a",
+  "promoted_at": "2026-11-24T10:56:04+00:00",
+  "tree_head": "f17cd6efd6ce7960a3d68c7ea04f89eb698ceaf3",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "9055c23a6b306e5d3818a8738e42a7742d2977ff80caec64c9f237ce94ae0d6a",
+  "reversed_files": [
+    "crates/mc-core/src/natural_spawn.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:natural_spawn_tests::fix_mobs_peaceful_command_removes_hostiles_with_spawning_disabled": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/natural_spawn_tests.rs",
+        "line": 1381,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "harness:entities:native-v2-peaceful-removal": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:natural_spawn_tests::fix_mobs_peaceful_command_removes_hostiles_with_spawning_disabled": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T104137-native-v2-peaceful-removal-prf9g6zd/result.json",
+    "tree_head": "f17cd6efd6ce7960a3d68c7ea04f89eb698ceaf3",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "0c952281a2db2c5057d956ceade003afbe5457573d2c74f8215f968e8aa740e2",
+    "covers": [
+      "harness:entities:native-v2-peaceful-removal"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T105423-ledger-promote-y43jdaqh"
+}

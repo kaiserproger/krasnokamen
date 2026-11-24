@@ -1,0 +1,70 @@
+{
+  "id": "JAVA-CLIENT-MISSES-FOUNDING-STARTER-CHEST-BLOCK",
+  "verdict": "promoted",
+  "fix_commit": "1a3021c5053bc9975dabd569366b74188bd6bf9d",
+  "fix_commit_full": "1a3021c5053bc9975dabd569366b74188bd6bf9d",
+  "promoted_at": "2026-11-24T17:41:47+00:00",
+  "tree_head": "9b172eb54845a5599486de2773b395cf9e584731",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/dimensions_travel.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/dimensions_tests.rs",
+    "crates/mc-edge/src/plan/coordinator_block_tests.rs",
+    "crates/mc-edge/src/plan_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:dimensions::tests::cross_dimension_anchor_respawn_publishes_the_spent_charge_in_its_chunk_image": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/dimensions_tests.rs",
+        "line": 1890,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-edge:plan::plan_tests::coordinator_block_tests::coordinator_respawn_anchor_charge_reaches_a_viewer_holding_the_chunk": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/plan/coordinator_block_tests.rs",
+        "line": 209,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "harness:settlement-map-qa:starter_chest_race": {
+      "state": "unrunnable",
+      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/9b172eb54845-server-x86_64-unknown-linux-gnu-incr/krasnokamen: [Errno 2] No such file or directory: '/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/ledger-builds/ed8dcdce5bce545710eb36f720863e97d7ffd090b5110111379c87a63f471ddf.json'. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:dimensions::tests::cross_dimension_anchor_respawn_publishes_the_spent_charge_in_its_chunk_image": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:plan::plan_tests::coordinator_block_tests::coordinator_respawn_anchor_charge_reaches_a_viewer_holding_the_chunk": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T172610-settlement-map-qa-p0xtrng0/result.json",
+    "tree_head": "9b172eb54845a5599486de2773b395cf9e584731",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "ed8dcdce5bce545710eb36f720863e97d7ffd090b5110111379c87a63f471ddf",
+    "covers": [
+      "harness:settlement-map-qa:starter_chest_race"
+    ],
+    "profile": "settlement-map-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T172909-ledger-promote-ecd_7dd9"
+}

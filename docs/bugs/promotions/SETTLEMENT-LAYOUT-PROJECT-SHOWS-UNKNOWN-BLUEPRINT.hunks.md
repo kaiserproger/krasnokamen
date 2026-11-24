@@ -1,36 +1,50 @@
-# Control map — SETTLEMENT-LAYOUT-PROJECT-SHOWS-UNKNOWN-BLUEPRINT
+# SETTLEMENT-LAYOUT-PROJECT-SHOWS-UNKNOWN-BLUEPRINT — HEAD-adapted name patch
 
-Patch: `docs/bugs/promotions/SETTLEMENT-LAYOUT-PROJECT-SHOWS-UNKNOWN-BLUEPRINT.patch`
-(production hunk only; `patch:7115b0d628472efc2bc6467230c260f7fbc86ec0bdc14ce5463350d2bbdd5a01`,
-the file's own sha256 because the file holds no test hunk).
-Regenerated 2026-11-24 at HEAD `f5fdd9f0bd` because the earlier copy of `patch:cf80f14a`
-no longer reverse-applies (its `@@ -794` context predates the furnace name line `a895cc853b`).
+## Origin
 
-## Original commit
+The fix is `49151c3a6` ("fix(settlements): plan no wall stretch without a builder stand; name
+layout projects", 2026-11-23). Its `ui_text.rs` hunk adds the three built-in layout kinds:
 
-`49151c3a6` — fix(settlements): plan no wall stretch without a builder stand; name layout
-projects. It closes two rows; only the naming part belongs to this row.
+```
++        "perimeter" => ("Wall section", "Секция стены"),
++        "perimeter_gate" => ("Gate", "Ворота"),
++        "well" => ("Well", "Колодец"),
+```
 
-## Hunks
+before `"road"`, and the same commit adds the regression test
+`every_layout_infrastructure_project_has_a_display_name` inside `mod tests`.
 
-| original hunk | file | HEAD equivalent | status |
-|---|---|---|---|
-| `ui_text.rs @@ -794,6 +794,9` — adds `perimeter` (Wall section), `perimeter_gate` (Gate), `well` (Well) to `blueprint()` | `crates/mc-core/src/settlements/ui_text.rs` | the same three added lines; only the neighbouring `"furnace"` line came later (`a895cc853b`), so the hunk is re-anchored at 794 with unchanged context | **carried** |
-| `ui_text.rs` test hunk — `every_layout_infrastructure_project_has_a_display_name` | same file, inline `#[cfg(test)]` module | unchanged at HEAD | stays (test hunk; the splitter keeps Rust hunks inside an inline `#[cfg(test)]` module) |
-| `layout.rs` — `stand_columns`/`span_work` wall-stretch refactor | `crates/mc-core/src/settlements/layout.rs` | unchanged at HEAD | omitted **(a)**: another row's behaviour — `SETTLEMENT-WALL-STRETCH-WITHOUT-STAND`, promoted with its own control `patch:f630747d`; reverting it here would turn the control red on that row's assertion |
-| `construction_fortification_tests.rs` | test file | unchanged | stays (test file) |
-| `docs/settlements/construction.md`, `docs/bugs/**` | docs | unchanged | excluded by the splitter (docs stay) |
+## Why this patch is the HEAD equivalent, not the commit's diff
 
-## a/-side adaptation
+A later commit, `a895cc853` ("settlements: name the autonomous furnace project", 2026-11-23),
+inserted `"furnace" => ("Furnace", "Печь"),` exactly where the three arms end. The origin
+commit's hunk (well followed by `"road"`) therefore no longer reverse-applies at HEAD. This
+patch carries the same three lines at HEAD's position, between `"spanish_wall"` and the
+newly inserted `"furnace"` arm; the a/-side is HEAD's real text (it exists: the arms are in
+`ui_text.rs:797-799`), only the hunk context differs. `patch:7115b0d6…` is its digest.
 
-None. Every deleted line of the patch is the current file's own text (the pre-image of
-`49151c3a6` for this hunk), so the reversed tree is byte-identical to the pre-fix code for
-this behaviour.
+## What is left out
 
-## Proving ref
+- The commit's test hunk (class (b), a kept test): the row's regression test must survive the
+  reversal, otherwise the control cannot run the test that proves the symptom.
+- Everything else in `49151c3a6` (the `layout::stand_columns` planner change) belongs to
+  SETTLEMENT-WALL-STRETCH-WITHOUT-STAND (class (a): another row's behaviour, promoted there).
 
-`cargo:mc-core:settlements::ui_text::tests::every_layout_infrastructure_project_has_a_display_name`
-fails on the reversed tree at `assert_ne!(blueprint(Lang::En, "perimeter"), "Unknown blueprint")`
-— the row's own symptom (the status card names the project). Recorded control:
-`.analysis/validation/20261123T155230-test-a40xgdpk` (the earlier patch's red run; re-run by
-`ledger promote` on this patch).
+## Proving refs
+
+- `cargo:mc-core:settlements::ui_text::tests::every_layout_infrastructure_project_has_a_display_name`
+  — red on the reversed tree at `assert_ne!(blueprint(Lang::En, id), "Unknown blueprint")` for
+  `perimeter` (the reversed map falls through to the `_ => ("Unknown blueprint", …)` arm). The row
+  names that panic in `proving_assertions` as `crates/mc-core/src/settlements/ui_text.rs:1021`: the
+  reversed patch removes the three naming arms **above** the test, so the control tree's line 1021
+  (column 13) is HEAD's `assert_ne!` at line 1024 — the promote's class check reads the candidate
+  file, which is why the row carries the control-tree location explicitly (promote artifact
+  `20261124T171527-ledger-promote-x_zmjg1r`, panic text `assertion left != right failed: perimeter`,
+  `left: "Unknown blueprint"`).
+- `harness:buildings-qa:perimeter.project_named` — the settlement's own fortification projects
+  (wall section, gates, well) are the ones this fix names; the gate reads the live Construction
+  page's project labels through the native client and fails when any active project is
+  `Unknown blueprint` or when no layout-infrastructure label is observed during the wall build. A
+  real-client receipt of `buildings-qa` `perimeter` covers it; the *graphical* control needs its
+  own reverted-tree pin with its own `.analysis/ledger-builds` registration, so the promote records
+  it `unrunnable` (wave-2 rule 2) rather than pretending a red.
