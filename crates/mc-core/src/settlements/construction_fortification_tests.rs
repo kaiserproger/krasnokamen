@@ -3,8 +3,8 @@
 
 use super::*;
 use crate::settlements::allocator::tests::villager;
-use crate::settlements::construction::tests::{complete, fixture};
 use crate::settlements::buildings::BuildingKind;
+use crate::settlements::construction::tests::{complete, fixture};
 use crate::settlements::layout::{GATE, PERIMETER, RING, WELL};
 use crate::villager::Activity;
 use mc_data::ItemStack;
@@ -381,11 +381,7 @@ fn plain_residents_start_fortification_under_the_real_tick() {
         v.activity = Activity::Idle;
     }
     let seeds = item(&state, "wheat_seeds");
-    state
-        .block_entities
-        .get_mut(&(1, 201, 1))
-        .unwrap()
-        .slots[15] = ItemStack::new(seeds, 64);
+    state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots[15] = ItemStack::new(seeds, 64);
     let mut started = None;
     for _ in 0..6000 {
         crate::tick::run_tick(&mut state, &[]);
@@ -501,7 +497,11 @@ fn a_demanded_staffed_lumberjack_does_not_hold_the_fortification() {
         "the funded fortification gets a builder: {started:?}"
     );
     let v = state.entities.row(builder).villager.as_ref().unwrap();
-    assert_eq!(v.data.profession, Profession::Lumberjack, "lending keeps the row's profession");
+    assert_eq!(
+        v.data.profession,
+        Profession::Lumberjack,
+        "lending keeps the row's profession"
+    );
     assert_eq!(
         v.job_site,
         Some(crate::boundary::BlockPos { x: 3, y: 201, z: 3 }),
