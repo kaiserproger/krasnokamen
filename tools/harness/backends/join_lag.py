@@ -76,6 +76,7 @@ HALT_WINDOW_MARGIN_SECONDS = 2.0  # the verdict needs the whole stall window, no
 # The halt watch's own window, measured in wall clock from the server's log stamps.
 HALT_WINDOW_SECONDS = OUTBOX_STALL_SECONDS + HALT_WINDOW_MARGIN_SECONDS
 APPLIED_RATE_TOLERANCE = 1.25  # a publication this near the requested rate already runs at it
+APPLIED_RATE_BLIND = 16.0  # at r >= 16, 1.25*r >= 20 TPS: the startup speed would match too
 PUBLICATION_LINE = "pump published tick tick="
 ENGAGED_LINE = "pump lag enabled"  # the server's warn line for the test/dev knob
 CRITERIA = ("join_behind_slow_pump", "live_pump_does_not_halt")
@@ -213,7 +214,11 @@ def publish_window(log_path: Path, username: str, requested_rate: float) -> dict
     applied_at: datetime | None = None
     previous: tuple[datetime, int] | None = None
     for stamp, tick in rows:
-        if previous is not None:
+        if previous is not None and admitted is not None and stamp > admitted:
+            # Only intervals that END after the joiner's admission count: a server-startup
+            # interval also runs at the requested rate (tick 85 -> 86 at 20 TPS with r=3 would
+            # match 1.25*r) and would pin the window's start to the admission forever
+            # (review wave2-12 Major-2).
             elapsed = (stamp - previous[0]).total_seconds()
             ticks = tick - previous[1]
             if elapsed > 0 and ticks > 0 and ticks / elapsed <= requested_rate * APPLIED_RATE_TOLERANCE:
@@ -230,6 +235,19 @@ def publish_window(log_path: Path, username: str, requested_rate: float) -> dict
             "end_at": None if end is None else end.isoformat(),
             "end_tick": None if not rows else rows[-1][1],
             "seconds": None if seconds is None else round(seconds, 2)}
+
+
+def window_deadline(window: dict[str, Any]) -> datetime | None:
+    """When a window's start proves the whole stall watch (pure helper)."""
+    start = _moment(window.get("start_at"))
+    return None if start is None else start + timedelta(seconds=HALT_WINDOW_SECONDS)
+
+
+def window_complete(window: dict[str, Any]) -> bool:
+    """Whether a publication in the window has stamped the whole stall watch (pure helper)."""
+    deadline = window_deadline(window)
+    end = _moment(window.get("end_at"))
+    return deadline is not None and end is not None and end >= deadline
 
 
 def witness(record: dict[str, Any], knob_on: bool, applied_rate: float | None,
@@ -459,8 +477,11 @@ def validate_args(ctx: ProfileContext) -> tuple[float, float, int]:
     # test/dev knob, never an operator setting).
     parser.add_argument("--pump-lag-ticks", type=int, default=8)
     args = parser.parse_args(ctx.extra_args)
-    if not 1.0 <= args.tick_rate <= 20.0:
-        raise ValueError("join-lag-gate --tick-rate must be in [1, 20]")
+    if not 1.0 <= args.tick_rate < APPLIED_RATE_BLIND:
+        # At or above 16 TPS the pre-`/tick rate` interval (20 TPS) also matches 1.25*r, so the
+        # wall-clock window could not tell the applied rate from the startup speed
+        # (review wave2-12 Major-2).
+        raise ValueError(f"join-lag-gate --tick-rate must be in [1, {APPLIED_RATE_BLIND:g})")
     if not 1 <= args.pump_lag_ticks <= 64:
         raise ValueError("join-lag-gate --pump-lag-ticks must be in [1, 64]")
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else TIMEOUT
@@ -630,7 +651,7 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: float, 
     except Exception as error:
         # Before `/tick rate` is even sent a halt is row 2's symptom, judged from the witness's own
         # landing record and the halt line; row 1 has no join outcome because none was attempted.
-        return _early_halt(detail, verdicts, a, error, server_log_path, delayed, tick_rate, server)
+        return _early_halt(detail, verdicts, a, error, server_log_path, delayed, None, server)
     tick_before = _safe_tick(dashboard_port)
     skips_before = _skip_counters(dashboard_port)
     joiner: ProbeSteps | None = None
@@ -689,15 +710,14 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: float, 
     # the whole window; a halt inside it is row 2's own symptom and ends the wait.
     bound_rate = applied_rate if applied_rate is not None and applied_rate > 0 else tick_rate
     window = publish_window(server_log_path, JOINER, bound_rate)
-    window_start = _moment(window.get("start_at"))
-    if halt is None and window_start is not None:
-        deadline_at = window_start + timedelta(seconds=HALT_WINDOW_SECONDS)
+    if halt is None and window.get("start_at") is not None:
 
         def extended() -> tuple[bool, dict[str, Any]]:
+            # The start moves later while the search waits for an applied-rate interval after the
+            # admission, so the deadline is recomputed on every event instead of once
+            # (review wave2-12 Major-2).
             current = publish_window(server_log_path, JOINER, bound_rate)
-            end = _moment(current.get("end_at"))
-            return ((end is not None and end >= deadline_at)
-                    or halt_line(server_log_path) is not None), current
+            return (window_complete(current) or halt_line(server_log_path) is not None), current
 
         try:
             window = runtime.wait_for_path_condition(

@@ -1,18 +1,10 @@
 # PLAYER-SPEAR-JAB-DROPPED-AT-DECODE — fix-hunk map
 
-The production patch `PLAYER-SPEAR-JAB-DROPPED-AT-DECODE.patch` is the fix's non-test hunks,
-`patch:8ab22ab90bb1813e9b5f46e4db8cb51bb1395b55c872ecb87eafd28ae5b8dc62`, built from git history:
-
-```
-git diff be976b139^..be976b139 -- crates/mc-core/src/tick/input/combat.rs \
-    crates/mc-core/src/tick/players.rs crates/mc-data/data/required_item_components.json \
-    crates/mc-data/src/item_components.rs crates/mc-edge/src/decode.rs
-```
-
-`git apply -R --check` passes on `6e177ea0e` (verified): the a/- side is the real pre-image before
-`be976b139` (no STAB arm in edge decode, no `stab()` kernel, no `piercing_weapon`/`attack_range`
-facts), and no later commit restructured those regions — the only files the fix touches are the
-five above plus tests and `docs/COMPATIBILITY.md` (a doc line, left out of the patch).
+The patch the promotion ran with is the decode hunk alone,
+`patch:e9197d123ade38000e96734a68fbcbb604f8fa1bf30bce4caa8ad8e31a503903`
+(`git diff be976b139^..be976b139 -- crates/mc-edge/src/decode.rs`); the earlier five-file patch
+`8ab22ab9…` is superseded because its control tree did not compile (below). `git apply -R --check`
+passes on the promotion tree `1aee24a978`.
 
 ## The fix
 
@@ -23,16 +15,20 @@ five above plus tests and `docs/COMPATIBILITY.md` (a doc line, left out of the p
 | `crates/mc-core/src/tick/input/combat.rs` | `stab()`: piercing-weapon facts, minimum-charge gate, near/far attack-range raycast, damage |
 | `crates/mc-data/...` | the spear's `piercing_weapon` + `attack_range` item facts |
 
-## Control
+## Control (what the promotion measured)
 
-Reversing the patch reds the row's registered cargo refs at their own assertions, above all
-`cargo:mc-edge:decode::decode_tests::player_action_maps_dig_drop_release_swap` (the decode table no
-longer maps action 8) and
-`cargo:mc-core:tick_tests::spear_stab_hits_at_range_only_when_charged` (no stab kernel).
+Reversing the decode patch reds exactly two of the row's refs, both at their own assertions
+(`promote.json` `negative_control`):
 
-The graphical control is a reversed server pin; it is recorded `unrunnable` in `promote.json`
-(Main's CIV-B1 ruling: a reversed pin needs its own release build). The candidate's real-client
-receipt is the scene below.
+- `cargo:mc-edge:decode::decode_tests::player_action_maps_dig_drop_release_swap` —
+  `crates/mc-edge/src/decode_tests.rs:579`, `left: []`;
+- `cargo:mc-edge:translation::adjacent::play::tests::old_client_stab_reaches_core_input_through_adjacent_translation` —
+  `crates/mc-edge/src/translation/adjacent/play_tests.rs:724`, `left: []` (`protocol 775`).
+
+The other five refs stay green on the control (they construct `PlayerInput`/item facts directly): the
+row's symptom is the decode drop, and those refs are the guards for the rest of the path. The kernel
+half (`combat::stab`) is **not** covered by a control, and the graphical control is a reversed server
+pin, recorded `unrunnable` per Main's CIV-B1 ruling.
 
 ## Real-client proof (candidate)
 

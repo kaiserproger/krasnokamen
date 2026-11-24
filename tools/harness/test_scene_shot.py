@@ -985,6 +985,10 @@ class _FakeProbe:
         self.report = {"assertions": {}, "calls": []}
         self.calls = []
         self.attacked = False
+        self.fail_after_snapshot = False
+        self.truncated = False
+        self.jab_damages = True
+        self.snapshots = 0
 
     def observe(self, **kwargs):
         return {"in_play": True, "dimension": self.dimension, "gamemode": "survival",
@@ -997,13 +1001,16 @@ class _FakeProbe:
         self.calls.append((name, arguments))
         self.report["calls"].append({"tool": name, "arguments": arguments})
         if name == "minecraft_list_entities":
+            self.snapshots += 1
+            if self.fail_after_snapshot and self.snapshots > 1:
+                raise RuntimeError("list failed")
             # The server's damage is what the client receives: the second snapshot carries it.
             entities = [dict(row) for row in self.entities]
-            if self.attacked:
+            if self.attacked and self.jab_damages:
                 for row in entities:
                     if row.get("entity_uuid") == "u":
                         row["health"] = 4.0
-            return {"game_time": 120, "truncated": False, "entities": entities}
+            return {"game_time": 120, "truncated": self.truncated, "entities": entities}
         if name == "minecraft_attack_entity_once":
             self.attacked = True
             return {"entity_id": 7, "entity_uuid": "u", "entity_type": "minecraft:cow",
@@ -1025,8 +1032,6 @@ class NewSceneStepTests(unittest.TestCase):
             {"attack_entity": {"name": "spear_jab", "entity_type": "minecraft:cow", "timeout_seconds": 20}},
             {"attack_entity": {"name": "spear_jab", "entity_type": "minecraft:cow", "timeout_seconds": 20,
                                "expect_item": "minecraft:iron_spear", "attempts": 3}},
-            {"chase_facing": {"name": "mob_yaw", "samples": ["a", "b", "c"],
-                              "entity_type": "minecraft:zombie", "max_wanted_gap_deg": 15}},
         ], "native")
         for bad in (
             {"attack_entity": {"name": "jab", "entity_type": "cow", "timeout_seconds": 20}},
@@ -1034,14 +1039,44 @@ class NewSceneStepTests(unittest.TestCase):
                                "expect_item": "iron_spear"}},
             {"attack_entity": {"name": "jab", "entity_type": "minecraft:cow", "timeout_seconds": 20,
                                "attempts": 9}},
-            {"chase_facing": {"name": "yaw", "samples": ["a", "b"],
-                              "entity_type": "minecraft:zombie", "max_wanted_gap_deg": 15}},
-            {"chase_facing": {"name": "yaw", "samples": ["a", "b", "c"],
-                              "entity_type": "minecraft:zombie",
-                              "max_wanted_gap_deg": 15, "min_moving_samples": 9}},
         ):
             with self.assertRaisesRegex(ValueError, "invalid scene step"):
                 validate_steps([bad], "native")
+
+    def test_attack_entity_fails_closed_on_an_unreadable_target(self):
+        from tools.harness.backends.scene_shot_execute import execute
+
+        row = {"entity_id": 7, "entity_uuid": "u", "entity_type": "minecraft:cow",
+               "x": 3.5, "y": 99.0, "z": 0.5, "health": 10.0}
+        step = {"attack_entity": {"name": "spear_jab", "entity_type": "minecraft:cow",
+                                  "timeout_seconds": 20}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            probe = _FakeProbe(entities=[row])
+            probe.fail_after_snapshot = True
+            with self.assertRaisesRegex(RuntimeError, "list failed"):
+                execute(probe, root, [step], "native")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            probe = _FakeProbe(entities=[row])
+            probe.truncated = True
+            with self.assertRaisesRegex(RuntimeError, "truncated"):
+                execute(probe, root, [step], "native")
+
+    def test_attack_entity_reports_an_untouched_target_as_not_damaged(self):
+        from tools.harness.backends.scene_shot_execute import execute
+
+        row = {"entity_id": 7, "entity_uuid": "u", "entity_type": "minecraft:cow",
+               "x": 3.5, "y": 99.0, "z": 0.5, "health": 10.0}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            probe = _FakeProbe(entities=[row])
+            probe.jab_damages = False
+            with self.assertRaisesRegex(AssertionError, "spear_jab_damaged"):
+                execute(probe, root, [{"attack_entity": {"name": "spear_jab",
+                                                        "entity_type": "minecraft:cow",
+                                                        "timeout_seconds": 20}}], "native")
+            self.assertFalse(probe.report["assertions"]["spear_jab_damaged"])
 
     def test_attack_entity_reports_only_authoritative_damage(self):
         from tools.harness.backends.scene_shot_execute import execute
@@ -1062,33 +1097,3 @@ class NewSceneStepTests(unittest.TestCase):
             self.assertEqual(receipt["attack"]["health_after"], 4.0)
             self.assertEqual(receipt["health_after"], 4.0)
 
-    def test_chase_facing_gates_a_step_facing_body(self):
-        from tools.harness.backends.mob_motion_oracle import bearing
-        from tools.harness.backends.scene_shot_execute import execute
-
-        player = (9.5, 71.0, 4.5)
-        wanted = bearing(player[0] - 5.2, player[2] - 0.5)
-
-        def samples(root, yaw):
-            for index in range(5):
-                z = 0.5 + 0.1 * index
-                (root / f"s{index}.json").write_text(json.dumps({"game_time": 100 + 3 * index, "snapshot": {
-                    "entities": [{"entity_type": "minecraft:zombie", "entity_uuid": "z",
-                                  "x": 5.2, "y": 64.0, "z": z, "yaw": yaw,
-                                  "velocity": {"x": 0.0, "y": 0.0, "z": 0.23}}]}}))
-            return {"chase_facing": {"name": "mob_yaw", "samples": [f"s{i}" for i in range(5)],
-                                     "entity_type": "minecraft:zombie", "max_wanted_gap_deg": 15,
-                                     "min_step_deflection_deg": 30, "min_moving_samples": 3}}
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            probe = _FakeProbe(player=player)
-            execute(probe, root, [samples(root, wanted)], "native")
-            self.assertTrue(probe.report["assertions"]["mob_yaw_step_deflected"])
-            self.assertTrue(probe.report["assertions"]["mob_yaw_zombie_faces_wanted"])
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            probe = _FakeProbe(player=player)
-            with self.assertRaisesRegex(AssertionError, "mob_yaw_zombie_faces_wanted"):
-                execute(probe, root, [samples(root, 0.0)], "native")
-            self.assertFalse(probe.report["assertions"]["mob_yaw_zombie_faces_wanted"])

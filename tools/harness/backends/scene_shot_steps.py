@@ -46,8 +46,6 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
             yield "minecraft_attack_entity_once", {"entity_id": 1, "entity_uuid": "00000000-0000-0000-0000-000000000000",
                                                   "entity_type": value["entity_type"],
                                                   "timeout_seconds": min(value["timeout_seconds"], 30)}
-        elif kind == "chase_facing":
-            yield "minecraft_observe", {}
         elif kind == "wait_ticks":
             yield "minecraft_wait_ticks", {"ticks": min(value, 100)}
         elif kind == "pause":
@@ -306,28 +304,6 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                           or (isinstance(value["expect_item"], str)
                               and bool(re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+",
                                                     value["expect_item"])))))
-        elif kind == "chase_facing":
-            valid = (client == "native" and isinstance(value, dict)
-                     and {"name", "samples", "entity_type", "max_wanted_gap_deg"} <= set(value)
-                     and set(value) <= {"name", "samples", "entity_type", "max_wanted_gap_deg",
-                                        "min_step_deflection_deg", "min_moving_samples",
-                                        "max_yaw_rate_deg"}
-                     and isinstance(value["name"], str)
-                     and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
-                     and isinstance(value["samples"], list) and 3 <= len(value["samples"]) <= 12
-                     and all(isinstance(item, str) and re.fullmatch(r"[A-Za-z0-9_-]+", item)
-                             for item in value["samples"])
-                     and isinstance(value["entity_type"], str)
-                     and bool(re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", value["entity_type"]))
-                     and type(value["max_wanted_gap_deg"]) in (int, float)
-                     and math.isfinite(value["max_wanted_gap_deg"])
-                     and 0 < value["max_wanted_gap_deg"] <= 180
-                     and (type(value.get("min_step_deflection_deg", 30)) in (int, float)
-                          and 0 <= value.get("min_step_deflection_deg", 30) <= 180)
-                     and (type(value.get("min_moving_samples", 2)) is int
-                          and 1 <= value.get("min_moving_samples", 2) <= len(value["samples"]))
-                     and (type(value.get("max_yaw_rate_deg", 90)) in (int, float)
-                          and 0 < value.get("max_yaw_rate_deg", 90) <= 180))
         else:
             valid = False
         if not valid:

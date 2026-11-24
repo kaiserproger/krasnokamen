@@ -1,9 +1,13 @@
 # BED-OCCUPIED-PROPERTY-NOT-MIRRORED — fix-hunk map
 
-The production patch `BED-OCCUPIED-PROPERTY-NOT-MIRRORED.patch` is the fix's non-test hunks,
-`patch:d3314283f18e37fb9f16a99418f5d8b3b8f15f17a3820e42440cb79d3950bac3` (regenerated after the N4
-review; the earlier `patch:06c5dace…` carried the v1 linear scan and no longer reversed). It
-reverse-applies on the candidate (`git apply -R --check`).
+The production patch `BED-OCCUPIED-PROPERTY-NOT-MIRRORED.patch` is now the fix's **behaviour** only —
+`crates/mc-core/src/sleep.rs` (the mirror and its writer) and `crates/mc-core/src/tick/dimension.rs`
+(one call after the merge) — sha256
+`fb6d7c78c3ad229b655fddb7960cb96e47224e53c7e3a24c960eec760c079361`, which is the digest the
+re-promotion `20261124T205132-ledger-promote-x9e6a0hj` ran with on `0a785659af`. The earlier digests
+(`d3314283…`, `06c5dace…`, `2d890e2a…`) are superseded; the sections below record why each was replaced.
+The `TickState::occupied_beds` field and its `HashSet::default()` initialiser stay in the control tree
+(deliberately kept: the kept test file reads them; the field without the mirror is inert).
 
 ## The fix
 
@@ -61,7 +65,7 @@ palette has `part=foot, occupied=true` states (`crates/mc-data/data/required_blo
 - The property is client-visible: promotion still needs a scene that reads the bed head during sleep
   (`OWNER-DECISIONS-NEEDED.md` item 2).
 
-## Regenerated 2026-11-24 (`patch:d3314283…`, was `patch:06c5dace…`)
+## Regenerated 2026-11-24 (`patch:d3314283…`, was `patch:06c5dace…`) — superseded by `fb6d7c78`
 
 The recorded patch stopped reversing on the candidate: its `accepted()` helper was the v1 linear scan,
 while `71261486d` (review N4) made it one pass-local `FxHashSet<BlockPos>`. A stale patch is refused by
@@ -117,7 +121,7 @@ and the passing candidate receipts for both the player arm
 (`20261124T182026-native-village-occupied-bed-9mz_u_tp`).
 
 
-## Review wave2-9 Minor-1 — the patch is regenerated at HEAD (`patch:2d890e2a…`)
+## Review wave2-9 Minor-1 — first regeneration (`patch:2d890e2a…`, superseded: it did not compile as a control)
 
 The recorded `patch:d3314283…` stopped reversing once `51e8c1c77` (the empty-pass early return in
 `sleep.rs`) and the `tick.rs` doc line landed: `git apply -R --check` refused at
@@ -150,7 +154,7 @@ resident (`villager_occupies_bed_*` passed) and the server's own `execute if blo
 [part=head,occupied=true]` predicate did not match, i.e. the resident's bed stayed free with the fix
 removed. Both split branches of the row (player and resident) now have their own real-client red.
 
-## Re-generated again for the control (review wave2-9 Minor-1 closure, 2026-11-25)
+## Re-generated for a compiling control (review wave2-9 Minor-1 closure; this is `fb6d7c78…`)
 
 The five-commit patch (`2d890e2a…`) reversed cleanly but its control tree did not compile:
 `51e8c1c77` added a test that reads `rig.state.occupied_beds`, and reversing `tick.rs`/`tick/state.rs`

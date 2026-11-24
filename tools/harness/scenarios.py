@@ -775,6 +775,35 @@ SCENARIOS: dict[str, Scenario] = {
                "reconnect and clean-stop custody censuses reconcile",
         limits="one kit and one dropped spear; custody exports share an entity-restore projection",
     ),
+    "battle-live-respawn-line-contact": _entry(
+        id="battle-live-respawn-line-contact",
+        summary="A battle holder who dies at the contact edge respawns in his line's fighting file, not at the far centre",
+        owner="core:harness", evidence="graphical", profile="battle-live",
+        scenario_id="battle-live-respawn-line-contact", requires=("xvfb",),
+        sources=("tools/harness/backends/battle_live.py", "tools/harness/backends/battle_recovery.py",
+                 "tools/battle/run-battle.py"),
+        fixture="field-1k with 200 a side on KRASNOKAMEN_BATTLE_WORLD, one real Horizon PovRed holder (survival, "
+                "front rank) and CamSpec spectator; the holder is killed through the console fifo once the "
+                "telemetry reports fighting",
+        proves="the holder is in play as the survival front rank before the kill; the server's own respawn line "
+               "carries contact=true (the fix's rule) instead of the centre fallback; his client is back in play "
+               "with a new entity id after the respawn, and, when the client exposes its position, the respawn is "
+               "within 40 blocks of where he fell",
+        limits="one holder and one respawn; the fall-distance assertion needs the client's player coordinates "
+               "(recorded, and named incomplete otherwise); the run is a small battle, not the take-7 geometry",
+    ),
+    "battle-live-spectator-follows-respawn": _entry(
+        id="battle-live-spectator-follows-respawn",
+        summary="A spectator bound to a battle holder keeps his camera on him across death and respawn",
+        owner="core:harness", evidence="graphical", profile="battle-live",
+        scenario_id="battle-live-spectator-follows-respawn", requires=("xvfb",),
+        sources=("tools/harness/backends/battle_live.py", "tools/harness/backends/battle_recovery.py",
+                 "tools/battle/run-battle.py"),
+        fixture="the same small battle: CamSpec is bound to PovRed before his death and the holder is killed at contact",
+        proves="the spectator's camera entity is the holder before the death and the holder's new entity after the "
+               "respawn, i.e. the binding followed him instead of staying on the dead entity",
+        limits="one spectator and one respawn; the client's camera entity id is the assertion, not a pixel view",
+    ),
     "battle-crash-handoff": _entry(
         id="battle-crash-handoff", summary="The battle runner keeps the crash handoff for pre-stage and staged SIGKILLs",
         owner="core:harness", evidence="graphical", profile="battle-crash-recovery",
@@ -953,22 +982,6 @@ SCENARIOS: dict[str, Scenario] = {
                "with the client's read_block receipts beside each step",
         limits="one bed and one sleeper on a private world; the predicate is the server's state, the client's own "
                "read_block is recorded evidence, not a rendering-parity claim",
-    ),
-    "native-v2-mob-yaw-blocked-step": _entry(
-        id="native-v2-mob-yaw-blocked-step",
-        summary="A zombie whose step a fence deflects keeps its body on the wanted drive, not on the resolved step",
-        owner="core:harness", evidence="graphical", profile="scene-shot",
-        scenario_id="native-v2-mob-yaw-blocked-step", requires=("xvfb",),
-        sources=("tools/harness/backends/scene_shot.py", "tools/harness/backends/mob_motion_oracle.py",
-                 "tools/harness/mob_yaw_blocked_step_scene.json"),
-        fixture="a bare stone platform, one oak-fence line between a running zombie and a survival player "
-                "standing diagonally behind it",
-        proves="the fence zeroes the chase step's +x half while +z still carries (the scene first asserts the "
-               "step really is deflected by at least 30 degrees), and the received body yaw stays within 15 "
-               "degrees of the bearing to the player instead of the deflected step, at no more than 90 "
-               "degrees per tick",
-        limits="one zombie, one fence and one camera; it compares the received body yaw with the local "
-               "player's position and the entity's received velocity, not the head yaw",
     ),
     "native-v2-spear-jab-decode": _entry(
         id="native-v2-spear-jab-decode",

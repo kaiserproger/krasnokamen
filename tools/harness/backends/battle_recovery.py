@@ -1533,10 +1533,16 @@ def force_windup_checkpoint(fifo: FifoConsole, session: RunnerSession, report: d
             or current["elapsed_ticks"] >= target["impact"]):
         raise Incomplete(f"windup event: horse did not depart inside the windup: {target}")
     actor = combat["ids"].index(target["actor"])
+    action_after = combat["fighters"][actor]["action"]
     event = {"before": target, "after_elapsed": current["elapsed_ticks"], "after_wal_tick": post["tick"],
-             "actor_action_after": combat["fighters"][actor]["action"], "kill_reply": kill_reply}
+             "actor_action_after": action_after, "kill_reply": kill_reply}
     (session.root / "windup-event.json").write_text(json.dumps(event, indent=1) + "\n")
     check(report, "horse_departed_during_windup", True, event)
+    # The fix must also have *converted* the stale windup: a fighter still holding `Windup` on the
+    # departed target would reopen with the row's unknown-target defect (review wave2-9 minor-3).
+    kind = json.dumps(action_after).lower()
+    check(report, "departed_windup_was_converted", "windup" not in kind,
+          {"actor_action_after": action_after, "departed": target["target"]})
     mark = fifo.mark()
     fifo.send("save-all")
     fifo.wait(r"Saved the game", mark, timeout=300)

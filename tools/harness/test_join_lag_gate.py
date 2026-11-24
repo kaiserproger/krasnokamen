@@ -688,6 +688,8 @@ if __name__ == "__main__":
 
 
 MIXED_RATE_LOG = """\
+2026-11-24T18:19:29.600000Z DEBUG mc_edge::server::pump: pump published tick tick=85 viewers=1 elapsed_us=1200
+2026-11-24T18:19:30.000000Z DEBUG mc_edge::server::pump: pump published tick tick=86 viewers=1 elapsed_us=1100
 2026-11-24T18:19:31.393470Z DEBUG mc_edge::server::pump: pump published tick tick=241 viewers=1 elapsed_us=3764
 2026-11-24T18:19:31.790858Z DEBUG mc_edge::server::pump: pump published tick tick=249 viewers=1 elapsed_us=3190
 2026-11-24T18:19:32.589589Z  INFO mc_edge::server::connection: login admitted peer=127.0.0.1:42548 connection=5 name=JoinLagJoiner protocol=777 release="26.3"
@@ -702,18 +704,46 @@ EXTENDED_LINE = ("2026-11-24T18:19:50.900000Z DEBUG mc_edge::server::pump: "
 class PublishWindowTest(unittest.TestCase):
     """The halt watch's window is wall clock from the server's stamps (review wave2-9 Major-1)."""
 
-    def test_a_mixed_rate_run_is_measured_in_wall_clock(self) -> None:
+    def test_a_startup_interval_does_not_name_the_applied_rate(self) -> None:
+        # server.log of receipt 201826 has tick 85 -> 86 in 0.40 s at startup: 2.5 TPS frame spacing
+        # with 20 TPS of ticks, i.e. <= 1.25*3 and indistinguishable from the applied rate by the
+        # interval alone. The search must start after the admission (review wave2-12 Major-2).
         with tempfile.TemporaryDirectory() as root:
             log = Path(root) / "server.log"
             log.write_text(MIXED_RATE_LOG)
             window = join_lag.publish_window(log, join_lag.JOINER, 3.0)
-            # 249 -> 280 ran at ~20 TPS; only the 292 -> 300 interval already ran at 3 TPS.
             self.assertEqual(window["admitted_at"], "2026-11-24T18:19:32.589589+00:00")
+            self.assertEqual(window["applied_at"], "2026-11-24T18:19:38.656790+00:00")
             self.assertEqual(window["start_at"], "2026-11-24T18:19:38.656790+00:00")
             self.assertEqual(window["end_tick"], 300)
             self.assertLess(window["seconds"], join_lag.HALT_WINDOW_SECONDS)
-            # The receipt's own arithmetic divided the whole tick span by the admitted rate.
-            self.assertAlmostEqual((300 - 249) / 3.0, 17.0, places=6)
+        # The startup interval alone would have named 18:19:30 as the applied rate before the fix.
+        with tempfile.TemporaryDirectory() as root:
+            log = Path(root) / "server.log"
+            log.write_text(MIXED_RATE_LOG.replace('name=JoinLagJoiner', 'name=SomeoneElse'))
+            window = join_lag.publish_window(log, join_lag.JOINER, 3.0)
+            self.assertIsNone(window["start_at"])  # no admission: no window, never the startup line
+
+    def test_the_deadline_is_recomputed_from_the_current_start(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            log = Path(root) / "server.log"
+            log.write_text(MIXED_RATE_LOG)
+            early = join_lag.publish_window(log, join_lag.JOINER, 3.0)
+            self.assertFalse(join_lag.window_complete(early))
+            # A publication 13 s after the admission but only 6.4 s after the applied rate: a
+            # deadline computed once from the admission would call this complete.
+            log.write_text(MIXED_RATE_LOG + "2026-11-24T18:19:45.900000Z DEBUG mc_edge::server::pump: pump published tick tick=310 viewers=2 elapsed_us=2797\n")
+            moved = join_lag.publish_window(log, join_lag.JOINER, 3.0)
+            self.assertEqual(moved["start_at"], "2026-11-24T18:19:38.656790+00:00")
+            self.assertFalse(join_lag.window_complete(moved))
+            log.write_text(MIXED_RATE_LOG + "2026-11-24T18:19:51.000000Z DEBUG mc_edge::server::pump: pump published tick tick=330 viewers=2 elapsed_us=2797\n")
+            self.assertTrue(join_lag.window_complete(join_lag.publish_window(log, join_lag.JOINER, 3.0)))
+
+    def test_a_rate_where_the_guard_is_blind_is_refused(self) -> None:
+        for rate in ("16", "20"):
+            with self.subTest(rate=rate):
+                with self.assertRaisesRegex(ValueError, "tick-rate must be in"):
+                    join_lag.validate_args(context("--tick-rate", rate))
 
     def test_a_publication_past_the_window_extends_it(self) -> None:
         with tempfile.TemporaryDirectory() as root:
@@ -723,11 +753,15 @@ class PublishWindowTest(unittest.TestCase):
             self.assertGreaterEqual(window["seconds"], join_lag.HALT_WINDOW_SECONDS)
             self.assertEqual(window["end_tick"], 337)
 
-    def test_a_late_admission_wins_over_the_rate_change(self) -> None:
+    def test_a_late_admission_defers_the_start_to_the_next_applied_interval(self) -> None:
+        # An admission inside an interval leaves that interval's end as the first publication that
+        # is known to be at the applied rate; the window starts there, never at the admission.
         with tempfile.TemporaryDirectory() as root:
             log = Path(root) / "server.log"
             log.write_text(MIXED_RATE_LOG.replace("18:19:32.589589", "18:19:39.500000")
                            + EXTENDED_LINE)
             window = join_lag.publish_window(log, join_lag.JOINER, 3.0)
-            self.assertEqual(window["start_at"], "2026-11-24T18:19:39.500000+00:00")
-            self.assertAlmostEqual(window["seconds"], 11.4, places=1)
+            self.assertEqual(window["admitted_at"], "2026-11-24T18:19:39.500000+00:00")
+            self.assertEqual(window["start_at"], "2026-11-24T18:19:50.900000+00:00")
+            self.assertAlmostEqual(window["seconds"], 0.0, places=1)
+            self.assertFalse(join_lag.window_complete(window))
