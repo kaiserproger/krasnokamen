@@ -4,9 +4,10 @@ title = "Animal equipment is never drawn."
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:78"
 regression = ["harness:scene-shot:native-pig-saddle", "client:krasnokamen-client:entities::equipment::tests::wearables::received_animal_equipment_draws_and_strips_every_supported_species"]
 fix_commit = "client:4d98dcdd"
 proving_assertions = { "harness:scene-shot:native-pig-saddle" = "pig_saddle_drawn" }
-repro_check = "client:50a177c0 control (the horse-and-wolf-only animal overlay restored from e8fe40c2^, 83994480's baby-omission guard removed) vs re-land 4d98dcdd; native-pig-saddle measures leather pixels 0 -> 0 on the control (pig_saddle_drawn red) and 0 -> 3918 on the re-land; receipts 20261124T153128-native-pig-saddle-fqy_bhrt and 20261124T153151-native-pig-saddle-1shj_yl9 on core b3493773a; area=client"
+repro_check = "client:50a177c0 control (the horse-and-wolf-only animal overlay restored from e8fe40c2^, with 83994480's baby-omission guard removed) vs re-land 4d98dcdd; native-pig-saddle measures leather pixels 0 -> 0 on the control (pig_saddle_drawn red) and 0 -> 3918 on the re-land; promote receipts 20261124T154141-native-pig-saddle-crsvoack and 20261124T154211-native-pig-saddle-8slwfswz on core a3f388f69, promote 20261124T154251-ledger-promote-6c84nmuy; area=client"
+promotion = "docs/bugs/promotions/MODEL-OPUS-3.json"

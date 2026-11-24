@@ -1,0 +1,65 @@
+{
+  "id": "MODEL-OPUS-3",
+  "verdict": "promoted",
+  "fix_commit": "client:4d98dcdd",
+  "fix_commit_full": "4d98dcddb16ac0ae0267e889f9af78cc404e24a6",
+  "promoted_at": "2026-11-24T15:44:01+00:00",
+  "tree_head": "a3f388f694dcc9f51e388d682c652f29b804cbe8",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T154141-native-pig-saddle-crsvoack/result.json",
+    "client_head": "50a177c07bde0e96b4867d4663278720a5aa2c14",
+    "server_binary_sha256": "7d4a2d8b9415d4f394f75e79446329a4ccaf42bff5fae7ce8bb909acaee8a26b",
+    "red": [
+      "harness:scene-shot:native-pig-saddle"
+    ],
+    "states": {
+      "harness:scene-shot:native-pig-saddle": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T154211-native-pig-saddle-8slwfswz/result.json",
+    "client_head": "4d98dcddb16ac0ae0267e889f9af78cc404e24a6",
+    "server_binary_sha256": "7d4a2d8b9415d4f394f75e79446329a4ccaf42bff5fae7ce8bb909acaee8a26b",
+    "green": [
+      "harness:scene-shot:native-pig-saddle"
+    ],
+    "states": {
+      "harness:scene-shot:native-pig-saddle": "green"
+    },
+    "tree_head": "a3f388f694dcc9f51e388d682c652f29b804cbe8",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T154211-native-pig-saddle-8slwfswz/result.json",
+    "client_head": "4d98dcddb16ac0ae0267e889f9af78cc404e24a6",
+    "server_binary_sha256": "7d4a2d8b9415d4f394f75e79446329a4ccaf42bff5fae7ce8bb909acaee8a26b",
+    "green": [
+      "harness:scene-shot:native-pig-saddle"
+    ],
+    "states": {
+      "harness:scene-shot:native-pig-saddle": "green"
+    },
+    "tree_head": "a3f388f694dcc9f51e388d682c652f29b804cbe8",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "de6d1c3ed3cb2c01614320e0cbd88674ab07ed1e",
+    "paths": [
+      "src/entities/equipment.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::equipment::tests::wearables::received_animal_equipment_draws_and_strips_every_supported_species": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T154251-ledger-promote-6c84nmuy"
+}
