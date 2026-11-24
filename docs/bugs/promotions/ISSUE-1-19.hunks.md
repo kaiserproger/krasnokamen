@@ -100,5 +100,14 @@ wanderer or a NoAI fixture from passing the speed band by luck.
   restore side green. The ledger builds its own control pin, so `KRASNOKAMEN_SERVER_BINARY` must be
   **unset** for a re-audit: an explicit candidate binary is refused against the control tree.
 
+### Stored receipt vs the amended audit
+
+`docs/bugs/promotions/ISSUE-1-19.json` was written at `e25d40529`, before the m1 naming: its
+`negative_control` records the cargo ref as `unproven-panic` and the scene ref red. With the row's
+`proving_assertions` naming `crates/mc-core/src/hostile_tests.rs:156` the same control is red on both
+refs, as the amended audit `.analysis/validation/20261124T222831-ledger-promote-9b4ctk2m/promote.json`
+shows, and the row declares both refs in `proving_refs` (LEDGER-CONTROL-COVERS-ONE-REF). The receipt is
+refreshed by the next promotion pass of the row; nothing else in it is stale.
+
 Why the block was needed: the fixture window alone passed a 3.8-speed server (the teleports dominate
 the displacement), which is exactly the state the row was left in after wave 1.
