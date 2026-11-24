@@ -2236,6 +2236,28 @@ def _run_loader(ctx, tests, root, repo=None):
     return results
 
 
+# Mockito's verification failures extend `MockitoAssertionError`, which extends `AssertionError`:
+# a JUnit report names the concrete subclass, so the classifier must know them by name
+# (NoInteractionsWanted from a guard that must not touch the game mode, 2026-11-25).
+_JUNIT_ASSERTIONS = (
+    'AssertionError',
+    'org.mockito.exceptions.verification.NoInteractionsWanted',
+    'org.mockito.exceptions.verification.WantedButNotInvoked',
+    'org.mockito.exceptions.verification.NeverWantedButInvoked',
+    'org.mockito.exceptions.verification.TooManyActualInvocations',
+    'org.mockito.exceptions.verification.TooFewActualInvocations',
+    'org.mockito.exceptions.verification.ArgumentsAreDifferent',
+    'org.mockito.exceptions.verification.SmartNullPointerException',
+    'org.mockito.exceptions.verification.VerificationInOrderFailure',
+    'org.mockito.exceptions.verification.MockitoAssertionError',
+)
+
+
+def _junit_assertion_failure(kind, text):
+    """Whether a JUnit failure type is an assertion (JUnit's own or a Mockito verification)."""
+    return any(name in kind or name in text for name in _JUNIT_ASSERTIONS)
+
+
 def _gradle_junit(module_dir, selector):
     """(state, detail, assertion) of one Gradle test selector from its JUnit XML.
 
@@ -2244,11 +2266,16 @@ def _gradle_junit(module_dir, selector):
     timeout cannot stand as a control."""
     import xml.etree.ElementTree as ET
 
-    results = module_dir / 'build' / 'test-results' / 'test'
-    if not results.is_dir():
-        return UNRUNNABLE, 'no Gradle test report (build or launch error)', None
+    # A Loader that sets its build directory per Minecraft version writes
+    # `<module>/build/<version>/test-results/test/TEST-*.xml`; the plain path is the default layout.
     class_name = selector.rsplit('.', 1)[-1]
-    suites = [path for path in sorted(results.glob('TEST-*.xml')) if class_name in path.name]
+    results = module_dir / 'build' / 'test-results' / 'test'
+    found = sorted(results.glob('TEST-*.xml')) if results.is_dir() else []
+    for versioned in sorted((module_dir / 'build').glob('*/test-results/test')):
+        found.extend(versioned.glob('TEST-*.xml'))
+    if not found:
+        return UNRUNNABLE, 'no Gradle test report (build or launch error)', None
+    suites = [path for path in found if class_name in path.name]
     if not suites:
         return UNRUNNABLE, f'no JUnit report for {class_name}', None
     passed = failed = 0
@@ -2267,7 +2294,7 @@ def _gradle_junit(module_dir, selector):
             kind = failure.get('type') or ''
             text = failure.text or ''
             position = re.search(r'\(([\w.$]+)\.java:(\d+)\)', text) or re.search(r'([\w.$]+)\.java:(\d+)', text)
-            if 'AssertionError' not in kind and 'AssertionError' not in text:
+            if not _junit_assertion_failure(kind, text):
                 return UNRUNNABLE, f'{case.get("name")} failed with {kind or "an error"}, not an assertion', None
             if position is None:
                 continue

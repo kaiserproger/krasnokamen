@@ -1,0 +1,21 @@
+diff --git a/tools/harness/backends/native_p4.py b/tools/harness/backends/native_p4.py
+index 313f0b3..5772c02 100644
+--- a/tools/harness/backends/native_p4.py
++++ b/tools/harness/backends/native_p4.py
+@@ -273,11 +273,13 @@ def _douse_and_drain(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+     steps.wait(dry, "douse_water_drained", timeout_seconds=60)
+ 
+ 
+-
+ def _disable_gamerule(steps: ProbeSteps, rule: str) -> None:
+-    """Set a boolean rule false."""
++    """Set a boolean rule false and wait for the server's acknowledgement."""
+     steps.fixture(f"gamerule {rule} false")
+-
++    steps.wait(
++        lambda state: f"Game rule {rule} is now set to false" in state.get("recent_chat", []),
++        f"{rule}_disabled",
++    )
+ 
+ 
+ # A falling stalactite deals 6 damage per fallen block (cap 40); from y+5 that is

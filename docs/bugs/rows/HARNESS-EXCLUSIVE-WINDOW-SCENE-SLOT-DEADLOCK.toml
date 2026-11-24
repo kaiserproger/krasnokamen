@@ -3,7 +3,25 @@ id = "HARNESS-EXCLUSIVE-WINDOW-SCENE-SLOT-DEADLOCK"
 title = "A mem-run -x window waiting for a scene slot deadlocks every build and gate on the host"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed-unpromoted"
+repro_check = """manual fleet repro, recorded 2026-11-25 from the lane's own evidence (no scripted control
+exists). Observed at the pre-fix tree c7fc3ab52^ on the owner host 2026-11-14 18:53-19:48
+(receipts/BvItemCache/g2x/window-V2-killed.neighbours:265 `-- 19:18:54`; the window was killed at
+19:48): receipts/BvItemCache/g2x/chain-V2.sh ran under `tools/dev/mem-run.sh -x` and held
+/tmp/solaris-mem-slots/exclusive.lock, then its replay-van.sh took a graphical scene and waited for
+one of the six /tmp/solaris-mem-slots/scene-*.lock slots; every slot was held by a task waiting for
+the exclusive lock or a build token, and the token-holder waited on a slot (load 0.2, 18 queued,
+~50 min). Exact commands, at a c7fc3ab52^ worktree: A) `tools/dev/mem-run.sh -x -m 6G
+receipts/BvItemCache/g2x/chain-V2.sh` (window starts, holds /tmp/solaris-mem-slots/exclusive.lock);
+B) inside A, `bash receipts/BvItemCache/g2x/replay-van.sh` (waits on /tmp/solaris-mem-slots/scene-1.lock,
+which A cannot release until B exits); C) two other tasks take scene-2/3 locks then wait on the
+window's build token. At c7fc3ab52^ there is no tools/dev/scene-slot.sh, so the wait is the raw
+flock in replay-van.sh; the fix's own tests (all five refs) pass on HEAD. Missing proof: any
+scripted control. A control would have to make a process wait on a scene lock while another waits
+on the window's own lock; reversing c7fc3ab52 on HEAD is impossible (scene-slot.sh was rewritten by
+e45998302/99655f913) and its pre-image has no scene-slot.sh, so a parent-tree run of the refs reds
+as FileNotFoundError, which the ledger refuses as evidence. Kept fixed-unpromoted by Main's call
+(2026-11-25): the end state is a recorded manual repro with no scripted control."""
 source = "Owner host 2026-11-14 18:53-19:48: receipts/BvItemCache/g2x/chain-V2.sh under mem-run -x held /tmp/solaris-mem-slots/exclusive.lock while its replay-van.sh waited for a slot through scene-slot.sh; all six scene slots were held by tasks waiting for the shared exclusive.lock or a build token. The token-holding builds were themselves waiting for the lock or frozen under -x (load 0.2, 18 queued, about 50 minutes). Broken by killing the window. Fix: tools/dev/mem-run.sh exports KRASNOKAMEN_EXCLUSIVE_WINDOW inside a window; tools/dev/scene-slot.sh reuses an inherited slot and otherwise refuses inside a window (lock order: scene slot, then -x). Checks: python3 tools/dev/test_scene_slot.py (refusal and reuse tests; both red on the previous scene-slot.sh). The ledger grammar has no python ref yet (owner question 13)."
 repro = "manual"
 regression = ["python:tools.dev.test_scene_slot:ExclusiveWindowSceneSlot.test_exclusive_window_refuses_new_slot", "python:tools.dev.test_scene_slot:ExclusiveWindowSceneSlot.test_nested_runner_preserves_window_marker", "python:tools.dev.test_scene_slot:ExclusiveWindowSceneSlot.test_exclusive_window_reuses_outer_slot", "python:tools.dev.test_scene_slot:SceneSlot.test_refuses_to_take_a_slot_inside_an_exclusive_window", "python:tools.dev.test_scene_slot:SceneSlot.test_window_inside_a_held_slot_reuses_it"]

@@ -1156,3 +1156,67 @@ class RestoreBytecodeTests(unittest.TestCase):
         self.assertEqual(results[('tools.harness.test_x', 'T.test_y')][0], ledger.GREEN)
         self.assertEqual((seen.get('env') or {}).get('PYTHONDONTWRITEBYTECODE'), '1',
                          'a python ref must not leave a .pyc for the control and the restore to share')
+
+class GradleJUnitLayoutTests(unittest.TestCase):
+    """A Loader that sets its build dir per Minecraft version keeps the JUnit XML under it.
+
+    `<module>/build/<version>/test-results/test/TEST-*.xml` was invisible to the locator, so a
+    reversed loader fix reported "no JUnit report" and the promotion of
+    LOADER-MCP-ATTACK-IGNORES-USE-ITEM-GATE was refused with a red control (2026-11-25)."""
+
+    REPORT = '''<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.krasnokamen.agent.javaagent.MinecraftAttackInputTest" tests="1" failures="1">
+  <testcase name="usingItemRefuses" classname="dev.krasnokamen.agent.javaagent.MinecraftAttackInputTest">
+    <failure type="java.lang.AssertionError" message="expected true">java.lang.AssertionError: expected true
+        at dev.krasnokamen.agent.javaagent.MinecraftAttackInputTest.usingItemRefuses(MinecraftAttackInputTest.java:99)</failure>
+  </testcase>
+</testsuite>
+'''
+
+    @staticmethod
+    def _source(module: Path):
+        source = module / 'src' / 'test' / 'java' / 'dev' / 'krasnokamen' / 'agent' / 'javaagent' / 'MinecraftAttackInputTest.java'
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text('final class MinecraftAttackInputTest {}\n')
+
+    def test_versioned_build_directory_report_is_read(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            module = Path(directory) / 'java-agent'
+            results = module / 'build' / '26.3' / 'test-results' / 'test'
+            results.mkdir(parents=True)
+            (results / 'TEST-dev.krasnokamen.agent.javaagent.MinecraftAttackInputTest.xml').write_text(self.REPORT)
+            self._source(module)
+            state, detail, assertion = ledger._gradle_junit(
+                module, 'dev.krasnokamen.agent.javaagent.MinecraftAttackInputTest')
+        self.assertEqual(state, ledger.RED, detail)
+        self.assertIsNotNone(assertion)
+        self.assertEqual(assertion.get('line'), 99)
+
+    def test_plain_layout_still_reads(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            module = Path(directory) / 'java-agent'
+            results = module / 'build' / 'test-results' / 'test'
+            results.mkdir(parents=True)
+            (results / 'TEST-dev.krasnokamen.agent.javaagent.MinecraftAttackInputTest.xml').write_text(self.REPORT)
+            self._source(module)
+            state, detail, assertion = ledger._gradle_junit(
+                module, 'dev.krasnokamen.agent.javaagent.MinecraftAttackInputTest')
+        self.assertEqual(state, ledger.RED, detail)
+
+    def test_mockito_verification_failure_is_an_assertion(self):
+        report = self.REPORT.replace(
+            'type="java.lang.AssertionError" message="expected true">java.lang.AssertionError: expected true',
+            'type="org.mockito.exceptions.verification.NoInteractionsWanted" message="no interactions">'
+            'org.mockito.exceptions.verification.NoInteractionsWanted: No interactions wanted')
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            module = Path(directory) / 'java-agent'
+            results = module / 'build' / 'test-results' / 'test'
+            results.mkdir(parents=True)
+            (results / 'TEST-dev.krasnokamen.agent.javaagent.MinecraftAttackInputTest.xml').write_text(report)
+            self._source(module)
+            state, detail, assertion = ledger._gradle_junit(
+                module, 'dev.krasnokamen.agent.javaagent.MinecraftAttackInputTest')
+        self.assertEqual(state, ledger.RED, detail)
