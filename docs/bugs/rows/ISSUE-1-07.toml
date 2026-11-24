@@ -4,10 +4,8 @@ title = "Miner and lumberjack professions missing"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "fixed"
+status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1 (miner and lumberjack work landed in 177a1205 (2026-10-19) with later fixes. Fix patch docs/bugs/fix-patches/ISSUE-1-07.patch is the dispatch of villager/brain.rs tick (Profession::Miner -> mining::work, Profession::Lumberjack -> lumber::work); reversing it leaves both professions idle at their station while the mining/lumber modules stay unused)"
 regression = ["harness:village-qa:miner_deposit", "harness:village-qa:lumberjack"]
 fix_commit = "patch:0424e7aa22b5d6e3947f2be4ad4d6542733a825c0bc566b1be60fad7c6a0cc3e"
-# Reopened 2026-11-13: qa-breaker verdict blocked (receipts/Issue1Breaker/REPORT.md, required coverage
-# unexercised: worker reassignment and death). Refs and fix_commit stand; re-promote after the breaker accepts.
-promotion = "docs/bugs/promotions/ISSUE-1-07.json"
+repro_check = "The promotion chain itself is correct and stays on record: the real-client village-qa run passed on 5f89dc39d3 (`.analysis/validation/20261123T232952-village-qa-rr7nhfzv`) and the same run on the reversed tree, pinned as its own release tree, went red at `miner_deposit` and `lumberjack` (docs/bugs/promotions/ISSUE-1-07.json, keep it). It is NOT fixed: the qa-breaker verdict for this row is blocked (receipts/Issue1Breaker/REPORT.md, receipts/Issue1Breaker2/QA_RESULT), and docs/QA_AGENT_PROTOCOL.md forbids `fixed` without breaker acceptance while worker reassignment, mid-run interruption and worker death are unexercised. Those gaps are filed as ISSUE-1-07-BREAKER-GAPS."

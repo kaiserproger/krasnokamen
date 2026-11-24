@@ -9,6 +9,21 @@ commands, receipts, Java/Loader client variables). This page is the working
 recipe and the traps for graphical and native-client gates. Profile and scenario
 lists come from `python3 -m tools.harness list` and `explain`, not from here.
 
+## Civilization gate: operator fixture and street stands
+
+`civilization-seed-qa` prepares the operator entry for its primary player
+(`prepare_operator_fixture`, level 4) because its founding fixture certifies the
+storage it deposits into with explicit bounds — `settlement building certify
+storage <min> <max>`, an operator-only capability. The ordinary in-game
+"Проверить здесь" path (certify the room the player stands in) is therefore not
+what this gate exercises (review N6, 2026-11-24). `spawn_protection = 0` in the
+fixture config keeps the op entry from changing spawn protection, and the claim
+still runs as an ordinary player command. The gate also needs
+`KRASNOKAMEN_SNAPSHOT_BINARY` (the `player-scale-bots` bots pin) for the birth
+checkpoint, and its street work is laid on terrain that can lie more than
+`SITE_BAND` below the bell, so a street cell's stand is searched around the
+cell's own level (`layout::stand`), not around the anchor.
+
 ## Mixed Fabric interaction
 
 `loader-fabric-mixed-interaction` uses the `loader-live` lifecycle and an

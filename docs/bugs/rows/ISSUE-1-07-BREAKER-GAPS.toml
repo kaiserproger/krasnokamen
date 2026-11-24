@@ -1,0 +1,10 @@
+[[bug]]
+id = "ISSUE-1-07-BREAKER-GAPS"
+title = "Miner and lumberjack work is unproven for reassignment, interruption and worker death"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "Split out of ISSUE-1-07 (owner decision, 2026-11-24): its real-client promotion chain is correct (village-qa miner_deposit/lumberjack passed on 5f89dc39d3 and the reversed tree went red), but the qa-breaker verdict is blocked and names the gaps this row owns - receipts/Issue1Breaker/REPORT.md: 'Same-seed profession fixture passed 3/3 ... earlier control's individual failing verdicts and reassignment/interruption cases remain unestablished'; receipts/Issue1Breaker2 QA_RESULT=BLOCKED. docs/QA_AGENT_PROTOCOL.md forbids `fixed` without a breaker report on these behaviours."
+regression = []
+failing_first = "not recorded"
