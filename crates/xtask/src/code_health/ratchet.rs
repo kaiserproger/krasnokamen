@@ -74,7 +74,10 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // (`minecraft:slime`, `minecraft:magma_cube`, `minecraft:chest`,
     // `minecraft:shipwreck`): +5, 2668. Resolving them through typed registry
     // ids in the fixtures is the follow-up that returns this to 2663.
-    vanilla_id_literals: 2_668,
+    // D123 integration 2026-11-24: the predicate refusal names its registry
+    // once (`minecraft:predicate`, command_context.rs, review Mechanics7 N1:
+    // the translated error carries the id and the registry): +1, 2669.
+    vanilla_id_literals: 2_669,
     // Measured 113 on 87c33206, 2026-11-13.
     path_equality: 113,
     panics: 5,
