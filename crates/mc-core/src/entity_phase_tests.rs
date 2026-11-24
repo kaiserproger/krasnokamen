@@ -2654,6 +2654,9 @@ fn hot_row_follows_every_writer() {
     let cow_kind = crate::entities::EntityKind::Mob {
         type_id: state.registry.cow_type_id,
     };
+    // The seat above still holds a rider, which alone forces the cold path;
+    // clear it so the assertion below reads the kind bit, not the riders bit.
+    state.entities.set_riders(slot, Vec::new());
     state.entities.set_kind(slot, cow_kind);
     state.entities.prepare_motion_hints(&state.registry);
     assert!(
