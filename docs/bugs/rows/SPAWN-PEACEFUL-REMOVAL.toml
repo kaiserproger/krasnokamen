@@ -4,8 +4,10 @@ title = "After Peaceful ACK, fresh zombie-presence queries remain true until tim
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-PEACEFUL-REMOVAL"
 regression = ["cargo:mc-core:natural_spawn_tests::fix_mobs_peaceful_command_removes_hostiles_with_spawning_disabled", "harness:entities:native-v2-peaceful-removal"]
-repro_check = "candidate: e2e05b33e's monster_spawner.rs hunks conflict in three large blocks, the despawn path predates it and was restructured by 2dfebd7ab, so no real-hunk control; module 43/43 green, only a synthetic mutation was red and is not counted; real-client gate pending (stage 3)"
-fix_commit = "e2e05b33e"
+repro_check = "guard older than the finding: docs/bugs/fix-patches/SPAWN-PEACEFUL-REMOVAL.patch (patch:9055c23a) is the Peaceful monster-removal branch at HEAD (natural_spawn.rs despawn, blamed to 1ada2ceb9 2026-10-18, before the 2026-10-24 report); e2e05b33e changed spawn eligibility and added the test, and 2dfebd7ab restructured the candidate sweep, so no later commit is this row control. Reversing the branch keeps the zombie when the player is inside no_despawn_distance and the test fails at \"hostile {id:?} survives peaceful\". Map: docs/bugs/promotions/SPAWN-PEACEFUL-REMOVAL.hunks.md. Real-client gate: harness:entities:native-v2-peaceful-removal on the candidate pin."
+fix_commit = "patch:9055c23a6b306e5d3818a8738e42a7742d2977ff80caec64c9f237ce94ae0d6a"
+proving_assertions = { "cargo:mc-core:natural_spawn_tests::fix_mobs_peaceful_command_removes_hostiles_with_spawning_disabled" = "crates/mc-core/src/natural_spawn_tests.rs:1381" }
+promotion = "docs/bugs/promotions/SPAWN-PEACEFUL-REMOVAL.json"
