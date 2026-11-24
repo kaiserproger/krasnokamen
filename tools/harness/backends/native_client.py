@@ -184,18 +184,19 @@ def launch_environment(
     windowed: bool,
     display: str | None,
     run_dir: Path,
+    settings: Path | None = None,
 ) -> dict[str, str]:
     """The environment one native client runs with.
 
     `DISPLAY` follows the mode. Managed settings are per run: the client
     persists `client-settings.json` under its data root and reads it back on
-    every start, so an inherited file makes two ids of the same tree disagree
-    about what a physical key does — a saved `hotbar_2` on the middle mouse
-    button left the inventory's `2` press with no action at all while `1` and
-    `3` still swapped. A caller that prepares settings for the run names the
-    file in `KRASNOKAMEN_CLIENT_SETTINGS` (scene-shot writes the fov and render
-    distance there); every other run reads an empty file inside its own
-    directory.
+    every start, so any file that outlives the run makes two ids of the same
+    tree disagree about what a physical key does — a saved `hotbar_2` on the
+    middle mouse button left the inventory's `2` press with no action at all
+    while `1` and `3` still swapped. `settings` is the only way a run uses a
+    prepared file (scene-shot writes the fov and render distance there); the
+    operator's own `KRASNOKAMEN_CLIENT_SETTINGS` never reaches a run, and every
+    other run reads an empty file inside its own directory.
     """
     env = dict(base)
     if windowed:
@@ -203,9 +204,8 @@ def launch_environment(
             raise ValueError("windowed native launch requires an explicit display")
         env["DISPLAY"] = display
         env.pop("WAYLAND_DISPLAY", None)
-    prepared = env.get("KRASNOKAMEN_CLIENT_SETTINGS")
-    env["KRASNOKAMEN_CLIENT_SETTINGS"] = str(
-        Path(prepared) if prepared else run_dir / "client-settings.json")
+    env.pop("KRASNOKAMEN_CLIENT_SETTINGS", None)
+    env["KRASNOKAMEN_CLIENT_SETTINGS"] = str(settings or run_dir / "client-settings.json")
     return env
 
 
@@ -218,12 +218,15 @@ def start(
     timeout: float,
     *,
     display: str | None = None,
+    settings: Path | None = None,
 ) -> tuple[subprocess.Popen[Any], BinaryIO, McpClient]:
     """Launch the selected native mode and await its live MCP handshake.
 
-    The caller owns the returned process, log and MCP session, and any Xvfb
-    it explicitly creates for windowed mode. Failure never falls back to
-    another client mode; readiness uses events, not sleeps or polling.
+    `settings` is the prepared managed-settings file for this run, if any; the
+    operator environment is never consulted. The caller owns the returned
+    process, log and MCP session, and any Xvfb it explicitly creates for
+    windowed mode. Failure never falls back to another client mode; readiness
+    uses events, not sleeps or polling.
     """
     evidence = ctx.client_evidence
     evidence.update({"launch_status": "starting", "headless": not ctx.windowed,
@@ -258,7 +261,8 @@ def start(
         artifact_dir = run_dir / "artifacts"
         artifact_dir.mkdir(mode=0o700)
         log_path = ctx.artifact_dir / "native-client.log"
-        env = launch_environment(os.environ, windowed=ctx.windowed, display=display, run_dir=run_dir)
+        env = launch_environment(os.environ, windowed=ctx.windowed, display=display,
+                                 run_dir=run_dir, settings=settings)
         resource_names = (
             ("KRASNOKAMEN_CLIENT_DATA_DIR", "KRASNOKAMEN_CLIENT_RESOURCE_ROOT",
              "KRASNOKAMEN_CLIENT_ASSET_ROOT", "KRASNOKAMEN_CLIENT_ASSET_INDEX")
@@ -277,12 +281,21 @@ def start(
             available = path.is_file() if name == "KRASNOKAMEN_CLIENT_ASSET_INDEX" else path.is_dir()
             if not available:
                 raise RuntimeError(f"native client content prerequisite {name} is missing: {path}")
+        settings_path = Path(env["KRASNOKAMEN_CLIENT_SETTINGS"])
+        if not settings_path.exists():
+            # A run always starts from a named file: an absent one would leave the
+            # receipt's settings digest empty and a replay ambiguous.
+            settings_path.parent.mkdir(parents=True, exist_ok=True)
+            settings_path.write_text("{}\n")
+        # A receipt must name the settings file and its content: a control and its
+        # restore are only comparable when both read the same managed settings.
         evidence.update(
             {
                 "runtime_dir": str(runtime_dir),
                 "artifact_dir": str(artifact_dir),
                 "log": str(log_path),
-                "settings_path": env["KRASNOKAMEN_CLIENT_SETTINGS"],
+                "settings_path": str(settings_path),
+                "settings_sha256": hashlib.file_digest(settings_path.open("rb"), "sha256").hexdigest(),
             }
         )
         # Title-mode launch (server_addr/username both None): omit --server /

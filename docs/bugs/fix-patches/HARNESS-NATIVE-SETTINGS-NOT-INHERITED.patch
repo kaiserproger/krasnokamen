@@ -1,0 +1,15 @@
+diff --git a/tools/harness/backends/native_client.py b/tools/harness/backends/native_client.py
+--- a/tools/harness/backends/native_client.py
++++ b/tools/harness/backends/native_client.py
+@@ -204,9 +204,8 @@ def launch_environment(
+             raise ValueError("windowed native launch requires an explicit display")
+         env["DISPLAY"] = display
+         env.pop("WAYLAND_DISPLAY", None)
+-    prepared = env.get("KRASNOKAMEN_CLIENT_SETTINGS")
+-    env["KRASNOKAMEN_CLIENT_SETTINGS"] = str(
+-        Path(prepared) if prepared else run_dir / "client-settings.json")
++    env.pop("KRASNOKAMEN_CLIENT_SETTINGS", None)
++    env["KRASNOKAMEN_CLIENT_SETTINGS"] = str(settings or run_dir / "client-settings.json")
+     return env
+ 
+ 

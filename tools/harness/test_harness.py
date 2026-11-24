@@ -116,7 +116,8 @@ class FailedScenarioReceiptTests(unittest.TestCase):
 class NativeLaunchEnvironmentTests(unittest.TestCase):
     def test_a_launch_never_inherits_the_data_roots_managed_settings(self) -> None:
         # The client reads client-settings.json back on every start, so an inherited
-        # file silently changes what a physical key does (HC-2's hotbar_2 rebind).
+        # file silently changes what a physical key does (a client unit test saving a
+        # hotbar_2 rebinding rewrote the operator's file and did exactly that).
         from .backends.native_client import launch_environment
 
         with tempfile.TemporaryDirectory(prefix="native-env-") as directory:
@@ -127,12 +128,23 @@ class NativeLaunchEnvironmentTests(unittest.TestCase):
                              str(run / "client-settings.json"))
             self.assertNotIn("DISPLAY", env)
 
-    def test_a_prepared_settings_file_names_the_run(self) -> None:
+    def test_a_prepared_settings_file_is_passed_explicitly(self) -> None:
         from .backends.native_client import launch_environment
 
-        env = launch_environment({"KRASNOKAMEN_CLIENT_SETTINGS": "/prepared/settings.json"},
-                                 windowed=False, display=None, run_dir=Path("/run"))
+        env = launch_environment({}, windowed=False, display=None, run_dir=Path("/run"),
+                                 settings=Path("/prepared/settings.json"))
         self.assertEqual(env["KRASNOKAMEN_CLIENT_SETTINGS"], "/prepared/settings.json")
+
+    def test_the_operator_environment_never_names_a_run_settings_file(self) -> None:
+        # An operator's `KRASNOKAMEN_CLIENT_SETTINGS` used to be taken as a prepared
+        # file, so a receipt could not tell the run's own settings from a shared,
+        # mutable one. Only an explicit `settings` argument may name a file.
+        from .backends.native_client import launch_environment
+
+        env = launch_environment(
+            {"KRASNOKAMEN_CLIENT_SETTINGS": "/home/owner/client-settings.json"},
+            windowed=False, display=None, run_dir=Path("/run"))
+        self.assertEqual(env["KRASNOKAMEN_CLIENT_SETTINGS"], "/run/client-settings.json")
 
     def test_a_windowed_launch_binds_the_run_display(self) -> None:
         from .backends.native_client import launch_environment

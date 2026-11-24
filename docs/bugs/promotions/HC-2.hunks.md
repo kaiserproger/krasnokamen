@@ -41,23 +41,27 @@ None. The removed call site is exactly the hunk's `+` block, restored verbatim b
 must move the hovered stack. The control's receipt, with the observed server-side cursor and slot
 state, is recorded in `promotions/HC-2.json`.
 
-## Gate hygiene (2026-11-24, why the restore was blocked and what changed)
+## Gate hygiene (2026-11-24, corrected by review ReviewD123Client5 B1)
 
 The pair was already committed on 2026-11-24 but could not be promoted: the registered scene failed
 `survival_number_2_moves_hovered` on every run of every client pin, while the same pins passed the
-whole scene the day before. This was not the fix and not the client. The native client reads
-`client-settings.json` back on every start from its data root, and those runs inherited a file whose
-`hotbar_2` had been rebound to the middle mouse button
-(`receipts/D123/D123Client/negctl/contaminated-client-settings.json`, and the same rebind in
-`~/.local/share/krasnokamen-client/client-settings.json` since 2026-11-15). `Bindings::action` is a
-reverse map from one input to one action, so a physical `Digit2` press resolved to no action:
-an instrumented build logs `window code=Digit2 pressed=true …` and then no `action=` line, while
-`Digit1` logs `action=hotbar_1` and reaches `ui key=1 node=slot/9`. `tools/harness/backends/native_client.py`
-now gives every native run its own settings file (`launch_environment`), so a saved rebind cannot
-change a gate result again; the harness unit ref
-`python:tools.harness.test_harness:NativeLaunchEnvironmentTests.test_a_launch_never_inherits_the_data_roots_managed_settings`
-is on the row. With that isolation the scene passes the survival and creative number steps on both
-the control's client and the re-land (`runs in promotions/HC-2.json`).
+whole scene the day before. The cause was the machine's shared `client-settings.json`, and the file
+was written by the client's own unit test: `controls_native_dispatch_uses_rebound_mouse_button`
+(`src/controls_tests.rs`) captures `Mouse(Middle)` for `hotbar_2`, `App::capture_binding` applies it
+as the managed setting `key_bindings`, and `save_client_settings` persisted that to the data root, so
+every `cargo test` of the client rebound the owner's real `hotbar_2`
+(`receipts/D123/D123Client/negctl/contaminated-client-settings.json`). `Bindings::action` is a
+reverse map from one input to one action, so a physical `Digit2` press then resolved to no action
+at all: an instrumented build logs `window code=Digit2 pressed=true …` and then no `action=` line,
+while `Digit1` logs `action=hotbar_1` and reaches `ui key=1 node=slot/9`. Two guards keep it out of
+a gate now: a test build no longer writes that file (row `CLIENT-SETTINGS-TEST-POLLUTION`), and
+every native run gets its own settings file whose sha256 the receipt records
+(`tools/harness/backends/native_client.py::launch_environment`, which also stopped accepting an
+operator `KRASNOKAMEN_CLIENT_SETTINGS` as a prepared one; row HARNESS-NATIVE-SETTINGS-NOT-INHERITED).
+
+With the isolation in place the scene reaches this row's assertion again: the control's client fails
+`survival_number_1_moves_hovered` by design (the dispatch call site is removed), and the re-land's
+run passes the whole scene, number steps included.
 
 The scene's creative half also carries an unrelated open defect,
 `CLIENT-CREATIVE-PLACEMENT-DROPPED`: the placement click is release-driven and is silently dropped

@@ -431,13 +431,13 @@ class Run:
                 (settings_path.parent / entry).symlink_to((template / entry).resolve(),
                                                           target_is_directory=(template / entry).is_dir())
         settings_path.write_text(json.dumps({"fov": 70, **settings}, indent=2) + "\n")
-        overrides = {"XDG_DATA_HOME": str(settings_path.parent.parent),
-                     "KRASNOKAMEN_CLIENT_SETTINGS": str(settings_path), **env}
+        overrides = {"XDG_DATA_HOME": str(settings_path.parent.parent), **env}
         saved = {key: os.environ.get(key) for key in overrides}
         os.environ.update(overrides)
         try:
             process, log, mcp = native_client.start(sub, native_client.resolve_binary(sub), address, name,
-                                                    self.timeout, display=display)
+                                                    self.timeout, display=display,
+                                                    settings=settings_path)
         finally:
             for key, value in saved.items():
                 if value is None:

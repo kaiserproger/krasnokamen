@@ -1,6 +1,6 @@
 [[bug]]
 id = "CLIENT-CREATIVE-PLACEMENT-DROPPED"
-title = "A creative inventory placement (the second click of a pickup-then-place pair) is silently dropped on some runs: the click's Down/Up edges carry `last_cursor`, the placement happens on the release, and when the release's hover lookup does not resolve an enabled slot the intent is never issued, so the player's stack stays on the cursor and nothing reaches the server."
+title = "A creative inventory placement (the second click of a pickup-then-place pair) is silently dropped on some runs: the player's stack stays on the cursor and nothing reaches the server. HYPOTHESIS, not proven: the placement is release-driven, so when the release's hover lookup does not resolve an enabled slot the intent is never issued - and the harness queues a press with its release in one flush right after it warps the pointer (`native_player_input.py::_input`), so a dropped release is equally plausible; a UI-level press/release trace has to decide between them."
 area = "client"
 repro = "source"
 severity = "major"

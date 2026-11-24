@@ -3,11 +3,20 @@
 Promotion receipt: `promotions/HC-3.json`.
 Client pair: reversal `client:0941d0948f` → re-land `client:45ef47e3cc` (the row's `fix_commit`).
 
-The pair is the same one HC-2 uses: `a35187ca` is a bulk port of the screen/voice/computer surface, and
-`5ef71d56` ("fix(client): restore inventory shortcuts and beacon interaction") is the small commit whose
-`native_item_key` dispatch restores physical gameplay `F`/middle-click (this row) and the inventory
-1-9/F/Q hovered-slot actions (HC-2). One reversal commit removes the dispatch call site; one re-land
-restores it verbatim.
+The pair is the same one HC-2 uses: `5ef71d56` ("fix(client): restore inventory shortcuts and beacon
+interaction") is the small commit whose `native_item_key` dispatch restores physical gameplay
+`F`/middle-click (this row) and the inventory 1-9/F/Q hovered-slot actions (HC-2). One reversal commit
+removes the dispatch call site; one re-land restores it verbatim.
+
+## Fix in several commits
+
+The row's path was closed by more than one commit, in this order:
+
+| commit | part of the path it closes | disposition |
+|---|---|---|
+| `client:d5303246` (2026-10-29) | makes `pick` a rebindable native action (`src/ui/options.rs`, `src/session/actions.rs`) instead of a hard-coded key | NOT reversed — reason (b)/(a): the kept `controls_tests` call the binding surface, and reversing it removes the whole configurable-binding feature, which is other rows' behaviour |
+| `client:83994480` (2026-11-09) | the world-input path that turns a physical middle-click into that binding ("integrate ClientNext slices on RC5", 9,174 insertions) | NOT reversed — reason (a): the input slice is not separable from the other slices the same commit integrates, and its reversal would turn the control red on other rows' assertions |
+| `client:5ef71d56` (2026-10-29) | the `native_item_key` call site that makes the physical press reach `InputIntent::Key` at all | REVERSED — the pair's `0941d0948f`; without it the earlier two have no production effect, because the press falls through to the binding-action path |
 
 ## Original commit
 
@@ -37,8 +46,13 @@ None. The removed call site is exactly the hunk's `+` block, restored verbatim b
 
 ## Proving ref
 
-`harness:entities:native-v2-input-pick` → `creative_picked_block_hotbar`
-(`tools/harness/backends/native_player_input.py`): a physical middle-click on a creative palette entry
-must put that block in the hotbar. Without the dispatch call site the press resolves to `pick`, which
-the gameplay fallthrough has no arm for, so nothing happens. The control's receipt, with the observed
-hotbar slot and the server-side state, is recorded in `promotions/HC-3.json`.
+`harness:entities:native-v2-input-pick` → `survival_picked_block_hotbar`
+(`tools/harness/backends/native_player_input.py::pick`, the survival leg): the player stands aimed at
+a placed `minecraft:diamond_block`, a physical middle-click arrives as one sub-tick press, and the
+server's stack has to land in the hotbar as exactly one stack of 7. Without the dispatch call site
+the press resolves to the `pick` action, which the gameplay fallthrough has no arm for, so nothing
+happens and the hotbar stays empty. The scene runs the survival leg before the creative one and
+stops at the first failing check, so the control records `survival_picked_block_hotbar` false and
+never reaches `creative_picked_block_hotbar`; both legs are the same physical middle-click gesture
+and the restore proves both. The control's receipt, with the observed hotbar slot and the
+server-side state, is recorded in `promotions/HC-3.json`.
