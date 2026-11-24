@@ -769,13 +769,12 @@ pub(crate) fn prepare_edit(
     pos: [f64; 3],
     mut image: Vec<(String, Tag)>,
     changed: &[(String, Tag)],
-    keep_villager: bool,
-    live_villager: Option<&crate::villager::VillagerState>,
+    live: LiveVillager<'_>,
 ) -> Result<Image, CommandError> {
     // A villager's runtime state is the row's own persistence image, not summon NBT:
     // `villager_from_fields` (during `decode`) reads it back and validates it. Those
     // edits go into the image verbatim; the parser is the one that refuses bad data.
-    let owns = |key: &str| live_villager.is_some() && crate::villager::persistence::owns_field(key);
+    let owns = |key: &str| live.state.is_some() && crate::villager::persistence::owns_field(key);
     // Vanilla's `data merge entity {Health:0}` kills a living mob; a summon must be alive, so
     // the edit writes the zero verbatim and the caller puts the mob on the corpse clock.
     let zero_health = |key: &str, value: &Tag| {
@@ -841,11 +840,11 @@ pub(crate) fn prepare_edit(
     edited.variant = variant;
     // An edit that leaves every villager field alone leaves the live villager
     // (and the transient brain state a reload would drop) alone too.
-    edited.keep_villager = keep_villager;
+    edited.keep_villager = live.keep;
     edited.lethal = lethal;
     // Membership and lineage belong to the settlement and the allocator, not to NBT a
     // merge may move: an edit can change what a villager is doing, never who it belongs to.
-    if let (Some(live), Some(merged)) = (live_villager, edited.villager.as_mut()) {
+    if let (Some(live), Some(merged)) = (live.state, edited.villager.as_mut()) {
         merged.settlement = live.settlement;
         merged.household = live.household.clone();
         merged.birth_origin = live.birth_origin.clone();
@@ -854,6 +853,15 @@ pub(crate) fn prepare_edit(
         merged.courtship_started_tick = live.courtship_started_tick;
     }
     Ok(edited)
+}
+
+/// The live villager row an entity edit sees, and whether the edit leaves it alone.
+#[derive(Clone, Copy)]
+pub(crate) struct LiveVillager<'a> {
+    pub(crate) state: Option<&'a crate::villager::VillagerState>,
+    /// True when no edited field is the villager row's own: its runtime state, including the
+    /// transient brain state a reload would drop, then stays exactly as it is.
+    pub(crate) keep: bool,
 }
 
 /// The three kinds whose entity row carries a `VillagerState`: summon NBT and a

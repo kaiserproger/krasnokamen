@@ -160,8 +160,10 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
                 position,
                 image,
                 &changed,
-                keep_villager,
-                live_villager.as_deref(),
+                crate::command_summon::LiveVillager {
+                    state: live_villager.as_deref(),
+                    keep: keep_villager,
+                },
             )
             .map_err(|error| error.message())?,
         );
