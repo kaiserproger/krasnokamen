@@ -732,6 +732,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the torch's two identically textured side faces read the same luminance, so the model's up override replaced both face weights",
         limits="one block model and one camera per face; the vanilla pixel parity and other override directions stay unproven",
     ),
+    "native-decorated-pot": _entry(
+        id="native-decorated-pot", summary="A placed decorated pot draws its received sherd sides",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-decorated-pot", requires=("xvfb",),
+        sources=("tools/harness/decorated_pot_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, one decorated pot set twice at a fixed position and camera: plain, then with the angler sherd on all four sides in the bare-id form the server forwards",
+        proves="the pot's side band changes when the block entity carries bare-id sherds, so the renderer accepts the component shape 26.3 sends",
+        limits="one pot, one camera, the block surface only; the item/pot-in-hand surface is unit-covered by decorated_pot_item_bakes_all_sides_and_received_sherds, and the exact vanilla pattern placement is not asserted",
+    ),
     "native-gait-spider": _entry(
         id="native-gait-spider", summary="The gait spider capture is not occluded by the dying zombie",
         owner="core:harness", evidence="graphical", profile="scene-shot",

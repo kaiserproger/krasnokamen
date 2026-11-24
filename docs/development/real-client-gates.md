@@ -633,6 +633,18 @@ row's `north`/`down` directions have no placeable model on this server
 down face with down), so the up direction carries the proof. Vanilla pixel
 parity still needs the Java oracle.
 
+`run scenario native-decorated-pot --client native --windowed` fails if a placed
+decorated pot's side band does not change when the block entity gains bare-id
+sherds (MODEL-PLACED-POT-DECORATIONS). 26.3 `PotDecorations` is a record of
+optional `back`/`left`/`right`/`front` templates and `ItemStackTemplate.CODEC`
+accepts `{id, …}` or a bare item id; the server forwards the placing item's
+component verbatim, so a pot placed from a bare-form item arrives as bare
+strings. The scene sets the same pot twice at one position and camera, plain then
+with the angler sherd on all four sides, and compares the frames: a renderer that
+reads only `template["id"]` draws brick in both. The pot-item surface is
+unit-covered (`decorated_pot_item_bakes_all_sides_and_received_sherds`); the exact
+vanilla pattern placement is not asserted.
+
 `run scenario native-player-head --client native --windowed` fails if a placed
 or worn player head does not change its frame region (MODEL-OPUS-N3). The hat
 layer itself needs an online skin: the client rejects profile texture URLs whose

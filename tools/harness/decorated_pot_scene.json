@@ -1,0 +1,76 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 994 159 994 1006 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 994 160 994 1006 165 1010 minecraft:air"
+    },
+    {
+      "cmd": "setblock 1000 160 1004 minecraft:decorated_pot"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1002.0,
+        0,
+        20
+      ]
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "shot": "pot-plain"
+    },
+    {
+      "cmd": "setblock 1000 160 1004 minecraft:decorated_pot{sherds:{back:\"minecraft:angler_pottery_sherd\",left:\"minecraft:angler_pottery_sherd\",right:\"minecraft:angler_pottery_sherd\",front:\"minecraft:angler_pottery_sherd\"}}"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "pot-sherds"
+    }
+  ]
+}

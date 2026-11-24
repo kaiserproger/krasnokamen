@@ -261,6 +261,39 @@ def check_shade_override(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("torch_faces_same_shade", 0.94 <= ratio <= 1.06)
 
 
+def check_decorated_pot(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-PLACED-POT-DECORATIONS: a placed pot's sides read the received sherds.
+
+    26.3 `PotDecorations` is a record of optional `back`/`left`/`right`/`front` templates, and
+    `ItemStackTemplate.CODEC` accepts either `{id, ...}` or a bare item id — the server copies the
+    placing item's component verbatim into the block entity's `sherds`, so a pot placed from a
+    bare-form item reaches the client as bare strings. The fixture sets the same block twice at the
+    same position and camera: plain, then with the angler sherd on all four sides. A renderer that
+    reads only `template["id"]` draws brick in both frames (the row's symptom); one that also
+    accepts the bare id draws the pottery pattern in the second frame.
+    """
+    shots = _qa._load_shots(probe, artifact, ("pot-plain", "pot-sherds"))
+    plain_f, sherds_f = shots["pot-plain"][0], shots["pot-sherds"][0]
+    probe.check("pot_camera_at_fixture", all(
+        abs(a - b) < 0.01 for a, b in zip(plain_f["camera_position"], (1000.5, 161.62, 1002.0))
+    ) and abs(plain_f["yaw"]) < 0.01 and abs(plain_f["pitch"] - 20.0) < 0.01)
+    probe.check("pot_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(plain_f["camera_position"], sherds_f["camera_position"])
+    ) and abs(plain_f["yaw"] - sherds_f["yaw"]) < 0.01
+      and abs(plain_f["pitch"] - sherds_f["pitch"]) < 0.01)
+    box = (500, 280, 780, 540)
+    plain, sherds = shots["pot-plain"][1].crop(box), shots["pot-sherds"][1].crop(box)
+    # The pot body against the stone/sky: terracotta browns, not grey or blue.
+    pot = lambda r, g, b: r > g + 12 and r > 60 and b < r
+    visible = [sum(1 for pixel in image.getdata() if pot(*pixel)) for image in (plain, sherds)]
+    changed = _changed(shots["pot-plain"][1], shots["pot-sherds"][1], box)
+    probe.report["decorated_pot_roi"] = list(box)
+    probe.report["decorated_pot_pixels"] = visible
+    probe.report["decorated_pot_changed_pixels"] = changed
+    probe.check("pot_visible_both_frames", all(count > 2000 for count in visible))
+    probe.check("pot_side_pattern_changed", changed > 300)
+
+
 def player_head_skin_pack(artifact: Path) -> Path:
     """An authored offline Steve skin: cyan base, opaque magenta hat with a face window."""
     from PIL import Image, ImageDraw
