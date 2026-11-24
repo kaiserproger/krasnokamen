@@ -1,8 +1,8 @@
 diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-index 52acc954c..90ada21da 100644
+index 52acc954c..bc6fcab23 100644
 --- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
 +++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-@@ -332,7 +332,14 @@ pub(crate) fn recover(
+@@ -332,7 +332,18 @@ pub(crate) fn recover(
      let paused = record.snapshot.state == ScriptStructureState::Paused
          && record.snapshot.pause_reason.as_deref() == Some("footprint_changed");
      let committed = record.snapshot.state == ScriptStructureState::Committed;
@@ -11,14 +11,18 @@ index 52acc954c..90ada21da 100644
 +    // upgrade of SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE did (`stage=2 work=0`,
 +    // `Running`). It has no next cell, so no builder pass can advance it and the project would hold
 +    // its slot forever; recovery is the only pass that can finish it, and the tail below already
-+    // writes `Committed` once the index is terminal.
-+    let terminal = record.snapshot.current_stage_index as usize == record.cells.len()
++    // writes `Committed` once the index is terminal. A record with no cells is the opposite case —
++    // an admitted site whose plan was never generated reads `0 == 0` here — and is left to the
++    // builder pass, which is what admits the House project (three BuildQA house L1 selects failed
++    // with no project while this matched an empty plan).
++    let terminal = !record.cells.is_empty()
++        && record.snapshot.current_stage_index as usize == record.cells.len()
 +        && record.snapshot.completed_work_units == 0;
 +    if !paused && !committed && !terminal {
          return Ok(false);
      }
      let retry = (paused
-@@ -391,7 +398,10 @@ pub(crate) fn recover(
+@@ -391,7 +402,10 @@ pub(crate) fn recover(
              continue;
          }
          let current = record.snapshot.current_stage_index as usize;
@@ -30,7 +34,7 @@ index 52acc954c..90ada21da 100644
              record.cells[index].len()
          } else if current == index {
              record.snapshot.completed_work_units as usize
-@@ -399,7 +409,10 @@ pub(crate) fn recover(
+@@ -399,7 +413,10 @@ pub(crate) fn recover(
              0
          };
          for cell in record.cells[index].iter().take(completed).rev() {
