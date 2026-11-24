@@ -3,10 +3,11 @@ id = "EDGE-REJOIN-OP-SESSION"
 title = "An op change updates only one of multiple registered sessions for the same UUID"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Independent review of 0504a280 operator admission"
 repro = "source"
 regression = ["cargo:mc-edge:server::admin_tests::deop_reaches_rejoining_native_session", "cargo:mc-edge:server::admin_tests::deop_reaches_every_registered_session_for_one_uuid"]
 failing_first = "not recorded"
 # fix commit 878f1535 bundles unrelated API changes its tests need; the control restores the name path's historical reserve of two permits and its lookup after the mutation, keeps the later @selector fanout, and leaves the permission re-check and the inventory hunks out as other rows' work (docs/bugs/fix-patches/EDGE-REJOIN-OP-SESSION.patch)
 fix_commit = "patch:65640ea957d9408ec82970c28e93c8812fc392cc1420dd3287579ac04549ecf7"
+promotion = "docs/bugs/promotions/EDGE-REJOIN-OP-SESSION.json"

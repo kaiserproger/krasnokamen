@@ -45,7 +45,7 @@ pub(crate) fn take_work_counts() -> [usize; 5] {
 /// are `reset` once per `run`; `TickState` retains their capacity between runs.
 ///
 /// `negative` memoizes proven raw geometric absence per dense entity slot as
-/// `world::ContactStamp<2>` (`probes` are the foot-support center cell and the
+/// `world::ContactStamp<3>` (`probes` are the foot-support center cell and the
 /// exact eye cell from the actual height, which can exceed the clamped body
 /// envelope). Slots are fenced by `EntityId` against swap-remove compaction;
 /// the `Vec` retains capacity across ticks. Only true raw absence is stored:
@@ -60,7 +60,7 @@ pub(crate) fn take_work_counts() -> [usize; 5] {
 pub(crate) struct Scratch {
     pub(crate) hazard: crate::world::SectionMatchCache,
     pub(crate) suffocation: crate::world::SectionMatchCache,
-    pub(crate) negative: Vec<Option<crate::world::ContactStamp<2>>>,
+    pub(crate) negative: Vec<Option<crate::world::ContactStamp<3>>>,
     cauldron: Vec<[u8; 2]>,
 }
 
@@ -155,13 +155,64 @@ static LIVING_BY_TYPE: LazyLock<[bool; mc_data::entity_types::ENTITY_TYPE_COUNT]
         living
     });
 
-type ContactCells = ((i32, i32, i32), (i32, i32, i32), [[i32; 3]; 2]);
+type ContactCells = ((i32, i32, i32), (i32, i32, i32), [[i32; 3]; 3]);
+
+/// Vanilla `Entity.getEyeHeight` above the feet: a player's pose height, else
+/// the type contract's eye height scaled to the live body height (`0.9 *
+/// height`, the engine's old rule, when the contract carries none).
+#[inline]
+fn eye_height(kind: crate::entities::EntityKind, pose: u8, height: f64) -> f64 {
+    match kind {
+        crate::entities::EntityKind::Player { .. } => crate::tick::player_eye_height(pose),
+        crate::entities::EntityKind::Mob { type_id }
+        | crate::entities::EntityKind::Item { type_id }
+        | crate::entities::EntityKind::ExperienceOrb { type_id } => {
+            mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(
+                crate::blueprint::wire_type_id(type_id),
+            )
+            .map(mc_data::entity_types::canonical_dimensions)
+            .filter(|dimensions| dimensions.height > 0.0)
+            .and_then(|dimensions| {
+                dimensions
+                    .eye_height
+                    .map(|eye| eye * height / dimensions.height)
+            })
+            .unwrap_or(0.9 * height)
+        }
+    }
+}
+
+/// Vanilla `Entity.isInWall`: `AABB.ofSize(eyePosition, width * 0.8, 1.0E-6,
+/// width * 0.8)` — the eye `eye` blocks above the feet, half-size
+/// `0.4 * width` (i.e. `0.8 * half_width`), and a y span so thin that only the
+/// eye's own cell row is covered. A body standing near a cell boundary has its eye box in two cells
+/// on x and/or z; the pin cell at the foot column is not the whole test.
+#[inline]
+fn eye_box(pos: [f64; 3], shape: [f64; 2], eye: f64) -> ([i32; 3], [i32; 3]) {
+    // `shape[0]` is the body's half width, so vanilla `width * 0.8 / 2` is
+    // `half_width * 0.8` (0.24 for a 0.6-wide player, not 0.12).
+    let half = shape[0].min(2.0) * 0.8;
+    let eye_y = pos[1] + eye;
+    (
+        [
+            floor_i32(pos[0] - half),
+            floor_i32(eye_y - 5.0e-7),
+            floor_i32(pos[2] - half),
+        ],
+        [
+            floor_i32(pos[0] + half),
+            floor_i32(eye_y + 5.0e-7),
+            floor_i32(pos[2] + half),
+        ],
+    )
+}
 
 #[inline]
-fn contact_cells(pos: [f64; 3], shape: [f64; 2], foot_xz: [i32; 2]) -> ContactCells {
+fn contact_cells(pos: [f64; 3], shape: [f64; 2], foot_xz: [i32; 2], eye: f64) -> ContactCells {
     let width = shape[0].min(2.0);
     let height = shape[1].min(6.0);
     let foot_y = floor_i32(pos[1]);
+    let (eye_min, eye_max) = eye_box(pos, shape, eye);
     (
         (floor_i32(pos[0] - width), foot_y, floor_i32(pos[2] - width)),
         (
@@ -169,10 +220,7 @@ fn contact_cells(pos: [f64; 3], shape: [f64; 2], foot_xz: [i32; 2]) -> ContactCe
             floor_i32(pos[1] + height - 1.0e-6),
             floor_i32(pos[2] + width),
         ),
-        [
-            [foot_xz[0], foot_y - 1, foot_xz[1]],
-            [foot_xz[0], floor_i32(pos[1] + shape[1] * 0.9), foot_xz[1]],
-        ],
+        [[foot_xz[0], foot_y - 1, foot_xz[1]], eye_min, eye_max],
     )
 }
 
@@ -265,16 +313,17 @@ pub(crate) fn classify_rows<S: Send, R: Send>(
 fn quiet_proof(
     world: &crate::world::ChunkWorld,
     hazard: &crate::world::SectionMatchCache,
-    stamp: &mut crate::world::ContactStamp<2>,
+    stamp: &mut crate::world::ContactStamp<3>,
     pos: [f64; 3],
     shape: [f64; 2],
     foot_xz: [i32; 2],
+    eye: f64,
 ) -> (bool, Option<ContactCells>) {
     let raw_same = stamp.position == pos && stamp.shape == shape;
     let cells = if raw_same {
         (stamp.min, stamp.max, stamp.probes)
     } else {
-        contact_cells(pos, shape, foot_xz)
+        contact_cells(pos, shape, foot_xz, eye)
     };
     let quiet = (raw_same || cells == (stamp.min, stamp.max, stamp.probes))
         && world.contact_unchanged_since(stamp.min, stamp.max, stamp.revision, hazard);
@@ -374,7 +423,7 @@ fn cauldron_cell(body: &crate::entities::Body, pos: [f64; 3]) -> Option<(i32, i3
 fn classify_row(
     pass: &Pass,
     index: usize,
-    stamp: &mut Option<crate::world::ContactStamp<2>>,
+    stamp: &mut Option<crate::world::ContactStamp<3>>,
 ) -> Option<ContactWork> {
     let entities = pass.entities;
     let body = &entities.bodies()[index];
@@ -436,20 +485,25 @@ fn exactly_clear(
     pass: &Pass,
     min: (i32, i32, i32),
     max: (i32, i32, i32),
-    [support, eye]: [[i32; 3]; 2],
+    [support, eye_min, eye_max]: [[i32; 3]; 3],
 ) -> bool {
     let (world, hazard, registry) = (pass.world, pass.hazard, pass.registry);
     let suffocates = |id: u32| registry.light.suffocating(id) == Some(true);
     if world.may_hold_matching_state_shared(
-        (eye[0], eye[1], eye[2]),
-        (eye[0], eye[1], eye[2]),
+        (eye_min[0], eye_min[1], eye_min[2]),
+        (eye_max[0], eye_max[1], eye_max[2]),
         hazard,
         |seen| suffocates(seen.0),
-    ) && world
-        .block_at(eye[0], eye[1], eye[2])
-        .is_some_and(suffocates)
-    {
-        return false;
+    ) {
+        for x in eye_min[0]..=eye_max[0] {
+            for y in eye_min[1]..=eye_max[1] {
+                for z in eye_min[2]..=eye_max[2] {
+                    if world.block_at(x, y, z).is_some_and(suffocates) {
+                        return false;
+                    }
+                }
+            }
+        }
     }
     let flags = &registry.hazard_flags;
     if !world.may_hold_matching_state_shared((min.0, support[1], min.2), max, hazard, |seen| {
@@ -479,7 +533,7 @@ fn exactly_clear(
 fn classify_contact(
     pass: &Pass,
     index: usize,
-    stamp: &mut Option<crate::world::ContactStamp<2>>,
+    stamp: &mut Option<crate::world::ContactStamp<3>>,
 ) -> Option<Verdict> {
     let (entities, world, hazard) = (pass.entities, pass.world, pass.hazard);
     let row = &entities.bodies()[index];
@@ -526,16 +580,17 @@ fn classify_contact(
     {
         return Some(Verdict::Scan);
     }
+    let eye = eye_height(row.kind, 0, row.height);
     let (quiet, computed) = stamp
         .as_mut()
         .filter(|stamp| stamp.entity == row.id)
         .map_or((false, None), |stamp| {
-            quiet_proof(world, hazard, stamp, pos, shape, foot_xz)
+            quiet_proof(world, hazard, stamp, pos, shape, foot_xz, eye)
         });
     if quiet {
         return Some(Verdict::Quiet);
     }
-    let (min, max, probes) = computed.unwrap_or_else(|| contact_cells(pos, shape, foot_xz));
+    let (min, max, probes) = computed.unwrap_or_else(|| contact_cells(pos, shape, foot_xz, eye));
     if !exactly_clear(pass, min, max, probes) {
         return Some(Verdict::Scan);
     }
@@ -821,6 +876,7 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
     let slot = crate::entities::EntitySlot(index as u32);
     let body = state.entities.body(slot);
     let kind = body.kind;
+    let body_height = body.height;
     let is_player = matches!(kind, crate::entities::EntityKind::Player { .. });
     let living = if is_player {
         true
@@ -899,24 +955,34 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
         return;
     }
     let row = state.entities.row(slot);
+    let eye = eye_height(kind, row.appearance.pose, body_height);
     let (quiet, computed) = scratch.negative[index]
         .as_mut()
         .filter(|stamp| !item && stamp.entity == entity)
-        .map(|stamp| quiet_proof(&state.world, &scratch.hazard, stamp, pos, shape, foot_xz))
+        .map(|stamp| {
+            quiet_proof(
+                &state.world,
+                &scratch.hazard,
+                stamp,
+                pos,
+                shape,
+                foot_xz,
+                eye,
+            )
+        })
         .unwrap_or((false, None));
     if quiet {
         retained_burn(state, slot, false, false, intents);
         return;
     }
-    let (body_min, body_max, [support, eye]) =
-        computed.unwrap_or_else(|| contact_cells(pos, shape, foot_xz));
-    let eye_y = eye[1];
-    // Gate the eye-cell read on resident sections holding any
+    let (body_min, body_max, [support, eye_min, eye_max]) =
+        computed.unwrap_or_else(|| contact_cells(pos, shape, foot_xz, eye));
+    // Gate the eye-box reads on resident sections holding any
     // suffocating state; overlay/missing chunks fail open to the exact
     // read so a fresh wall still suffocates.
     let eye_gate = state.world.may_hold_matching_state_cached(
-        (eye[0], eye_y, eye[2]),
-        (eye[0], eye_y, eye[2]),
+        (eye_min[0], eye_min[1], eye_min[2]),
+        (eye_max[0], eye_max[1], eye_max[2]),
         &mut scratch.suffocation,
         |seen| state.registry.light.suffocating(seen.0) == Some(true),
     );
@@ -960,8 +1026,10 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
             && body_max.2.div_euclid(16) == column.z
             && support[0].div_euclid(16) == column.x
             && support[2].div_euclid(16) == column.z
-            && eye[0].div_euclid(16) == column.x
-            && eye[2].div_euclid(16) == column.z)
+            && eye_min[0].div_euclid(16) == column.x
+            && eye_max[0].div_euclid(16) == column.x
+            && eye_min[2].div_euclid(16) == column.z
+            && eye_max[2].div_euclid(16) == column.z)
             .then(|| state.world.chunk(column))
             .flatten()
     } else {
@@ -982,9 +1050,21 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
             .and_then(|id| state.registry.hazard_flags.get(id as usize).copied())
             .unwrap_or(0)
     };
-    let suffocates = eye_gate
-        && block_at(eye[0], eye_y, eye[2])
-            .is_some_and(|id| state.registry.light.suffocating(id) == Some(true));
+    let mut suffocates = false;
+    if eye_gate {
+        'eye: for x in eye_min[0]..=eye_max[0] {
+            for y in eye_min[1]..=eye_max[1] {
+                for z in eye_min[2]..=eye_max[2] {
+                    if block_at(x, y, z)
+                        .is_some_and(|id| state.registry.light.suffocating(id) == Some(true))
+                    {
+                        suffocates = true;
+                        break 'eye;
+                    }
+                }
+            }
+        }
+    }
     let raw_magma_support =
         gated && flag_at(support[0], support[1], support[2]) & HAZARD_MAGMA != 0;
     let hot = gated && !sneaking && !frost_walker && raw_magma_support;
@@ -1087,7 +1167,7 @@ fn scan_row(state: &mut TickState, scratch: &mut Scratch, intents: &mut Vec<Inte
             shape,
             min: body_min,
             max: body_max,
-            probes: [support, eye],
+            probes: [support, eye_min, eye_max],
             revision: state.world.revision_now(),
         })
     } else {

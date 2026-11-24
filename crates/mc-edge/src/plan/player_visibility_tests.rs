@@ -86,6 +86,71 @@ fn removes(packets: &[PlannedPacket]) -> Vec<i32> {
 }
 
 #[test]
+fn spectator_index_matches_the_roster_scan_and_is_built_once_per_publish() {
+    // The row's fix: the recipient/subject spectator answers come from the
+    // publish-wide set built once, not from two roster scans per visible
+    // player per viewer. This compares the indexed answer with the roster
+    // scan for every (entity, recipient) pair of the mixed-mode fixture.
+    let scan =
+        |snapshot: &mc_core::boundary::WorldSnapshot, entity: &EntityView, recipient: EntityId| {
+            if entity.id == recipient || entity.type_id != player_entity_type_id() {
+                return true;
+            }
+            let spectator_viewer = snapshot
+                .player_roster
+                .iter()
+                .any(|player| player.entity == recipient && player.game_mode == 3);
+            if spectator_viewer {
+                snapshot
+                    .cameras
+                    .get(&entity.id)
+                    .is_none_or(|target| *target == entity.id)
+            } else {
+                !snapshot
+                    .player_roster
+                    .iter()
+                    .any(|player| player.entity == entity.id && player.game_mode == 3)
+            }
+        };
+    // Both counters are process-global; the exact deltas below hold because
+    // nextest gives this test its own process (like the admission counter).
+    let before = tick_index::SPECTATOR_INDEX_BUILDS.load(std::sync::atomic::Ordering::Relaxed);
+    let scans_before = entity_interest::ROSTER_SCANS.load(std::sync::atomic::Ordering::Relaxed);
+    for (recipient_mode, subject_mode) in [(0, 0), (3, 0), (0, 3), (3, 3)] {
+        let mut out = scene();
+        {
+            let snapshot = Arc::get_mut(&mut out.snapshot).unwrap();
+            snapshot.player_roster = roster(recipient_mode, subject_mode);
+            Arc::make_mut(&mut snapshot.cameras).insert(EntityId(2), EntityId(3));
+        }
+        let index = TickPlanIndex::with_previous(&out, None);
+        let snapshot = &*out.snapshot;
+        for entity in snapshot.entities.iter() {
+            for &recipient in &[EntityId(1), EntityId(2), EntityId(4)] {
+                assert_eq!(
+                    entity_interest::broadcast_to(snapshot, entity, recipient, &index.spectators),
+                    scan(snapshot, entity, recipient),
+                    "recipient mode {recipient_mode}, subject mode {subject_mode}: {} -> {}",
+                    entity.id.0,
+                    recipient.0
+                );
+            }
+        }
+    }
+    let builds =
+        tick_index::SPECTATOR_INDEX_BUILDS.load(std::sync::atomic::Ordering::Relaxed) - before;
+    assert_eq!(
+        builds, 4,
+        "one spectator index per publish, not one scan per viewer and entity"
+    );
+    assert_eq!(
+        entity_interest::ROSTER_SCANS.load(std::sync::atomic::Ordering::Relaxed),
+        scans_before,
+        "broadcast_to answers from the publish set, not from a roster scan"
+    );
+}
+
+#[test]
 fn spectator_tracking_wire_matches_vanilla_recipient_and_subject_matrix() {
     for (recipient_mode, recipient_bound) in [(0, false), (3, false), (3, true)] {
         for (subject_mode, subject_bound) in [(0, false), (3, false), (3, true)] {

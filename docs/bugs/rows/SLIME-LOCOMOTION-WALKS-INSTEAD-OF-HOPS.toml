@@ -3,8 +3,16 @@ id = "SLIME-LOCOMOTION-WALKS-INSTEAD-OF-HOPS"
 title = "Slimes and magma cubes use walker-style movement rather than hopping"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "docs/COMPATIBILITY.md:102 and D113 atomic survival catalog W91 document walker-style locomotion for slimes and magma cubes; species lifecycle tests do not establish hopping. This is a documented parity gap, not a new client reproduction."
 repro = "source"
-regression = []
+regression = [
+  "cargo:mc-core:entity_motion_tests::slime_hops_without_walking_between_jumps",
+  "cargo:mc-core:entity_motion_tests::hop_tick_rises_the_vanilla_jump_speed_on_its_first_tick",
+  "cargo:mc-core:entity_motion_tests::an_aggressive_body_divides_its_scaled_jump_delay_by_three",
+  "cargo:mc-core:entity_motion_tests::slime_hop_climbs_a_full_block_step",
+  "cargo:mc-core:tick::entity_phase::entity_phase_tests::far_idle_slime_does_not_rest_on_its_hop_tick",
+]
 failing_first = "reported"
+fix_commit = "patch:184f85c33642e65fe73c65a3b7df34af73176f492da525a61c4aee19a3d93e5c"
+promotion = "docs/bugs/promotions/SLIME-LOCOMOTION-WALKS-INSTEAD-OF-HOPS.json"

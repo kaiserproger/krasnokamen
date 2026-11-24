@@ -257,6 +257,10 @@ pub(crate) struct Work {
     pub distance_samples: u64,
     pub separation_candidates: u64,
     pub push_calls: u64,
+    /// Bodies the separation grid dropped past `CELL_CAP` in the last rebuild,
+    /// so a gate receipt can say whether a heap was measured with candidates
+    /// missing instead of silently under-counting.
+    pub separation_overflow: u64,
 }
 
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]

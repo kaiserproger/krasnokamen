@@ -1,0 +1,30 @@
+{
+  "id": "EDGE-RECIPE-RELOAD-CATALOG-SENT-TWICE",
+  "verdict": "promoted",
+  "fix_commit": "patch:8b8ac42337fbd5b2de83f105991a134dc367b2a1bc00aa46908815ce676f2973",
+  "fix_commit_full": "patch:8b8ac42337fbd5b2de83f105991a134dc367b2a1bc00aa46908815ce676f2973",
+  "promoted_at": "2026-11-23T21:23:06+00:00",
+  "tree_head": "816994b1186f7f17f55065a77251f592eaae96a5",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "8b8ac42337fbd5b2de83f105991a134dc367b2a1bc00aa46908815ce676f2973",
+  "reversed_files": [
+    "crates/mc-edge/src/plan/player_changes.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T212044-ledger-promote-q4olz2jm"
+}

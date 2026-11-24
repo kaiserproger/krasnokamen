@@ -101,6 +101,25 @@ pub(in crate::tick) fn early_entity_rest(
         return false;
     }
     let body = &view.bodies[slot.0 as usize];
+    // A hop tick is a decision tick even in rings that would otherwise rest:
+    // refuse before the ring/footprint shortcut, not only before the memo.
+    if let crate::entities::EntityKind::Mob { type_id } = body.kind
+        && let Some(blueprint) = view.registry.blueprint(type_id)
+        && blueprint.capabilities.hops
+        && !view.entities.row(slot).controls.no_ai
+    {
+        let aggressive = (blueprint.capabilities.hop_lift_per_size > 0.0
+            || view.entities.row(slot).loot.slime_size.unwrap_or(1) > 1)
+            && view.hostile.targets.contains_key(&body.id);
+        if crate::entity_motion::hop_due(
+            body.id.0,
+            view.tick,
+            blueprint.capabilities.hop_delay_scale.max(1),
+            aggressive,
+        ) {
+            return false;
+        }
+    }
     if view.hostile.targets.contains_key(&body.id)
         || body
             .hurt_at
@@ -272,6 +291,10 @@ pub(in crate::tick) fn idle_wander_motion_unchanged(view: &PrepView, slot: Entit
             battle_facing: false,
             legacy_facing: false,
             head_follows_body: capabilities.head_follows_body,
+            hops: false,
+            hop_delay_scale: 1,
+            hop_lift: 0.0,
+            hop_aggressive: false,
             climbs_walls: capabilities.climbs_walls,
             aquatic_control: capabilities.aquatic,
             air_supply: body.air_supply,

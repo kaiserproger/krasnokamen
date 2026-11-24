@@ -10,6 +10,23 @@ use crate::hostile_tests::setup;
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 
+#[test]
+fn slime_and_magma_cube_blueprints_hop_with_the_head_on_the_body() {
+    let registry = CoreRegistry::load(None).expect("registry loads");
+    for name in ["minecraft:slime", "minecraft:magma_cube"] {
+        let id = registry
+            .entity_types
+            .id_of(&mc_data::Identifier::parse(name).expect("id"))
+            .expect("vanilla type");
+        let blueprint = registry.blueprint(id).expect("vanilla blueprint");
+        assert!(blueprint.capabilities.hops, "{name} must hop");
+        assert!(
+            blueprint.capabilities.head_follows_body,
+            "{name} keeps its head on the body (SlimeMoveControl)"
+        );
+    }
+}
+
 /// A creeper that flies and is hurt by water: `Flyer` + `Swell` + capability
 /// flags, shown to clients as a creeper. Fuse, power and griefing differ from
 /// the vanilla creeper so the test proves the blueprint values are read.

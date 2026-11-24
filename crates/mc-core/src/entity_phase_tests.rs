@@ -822,6 +822,65 @@ fn parallel_row_prep_matches_the_serial_prep_including_rare_fixups() {
 }
 
 #[test]
+fn admission_buffers_are_pooled_across_prepares() {
+    // The parallel pass used to build one `Vec<Admission>` set per chunk on every
+    // tick (three inner `Vec`s each), so a repeated prepare constructed every
+    // `AdmissionPart` again. The buffers now live in the phase scratch: over the
+    // whole slot range (nine pool chunks) a repeated prepare of the same
+    // population must construct none of them. The counter is exact and does not
+    // depend on the allocator reusing an address.
+    let (mut state, _) = resting_cow();
+    let cow = state.registry.cow_type_id;
+    for index in 0..64_u32 {
+        state.spawn_mob(cow, [8.5 + f64::from(index % 8), 101.0, 8.5], 10.0);
+    }
+    state.entities.prepare_motion_hints(&state.registry);
+    // Nine pool chunks; only the first holds entities, the empty ones still
+    // exercise the pooled `AdmissionPart` set.
+    let mut periods: Vec<u8> = vec![0; PREP_CHUNK * 8 + 64];
+    let entity_count = state.entities.len();
+    for (index, period) in periods.iter_mut().take(entity_count).enumerate() {
+        *period = u8::from(index % 4 != 0);
+    }
+    let env = PrepEnv {
+        targets_empty: true,
+        villagers_empty: true,
+        unchanged_since: state.entity_phase_revision,
+        rest_proofs: None,
+    };
+    let mut out = PrepChunk::default();
+    let _ = take_admission_parts_constructed();
+    prepare_rows(&state, &periods, &env, true, &mut out);
+    assert!(
+        take_admission_parts_constructed() >= 9,
+        "the first prepare must build every admission buffer of the slot range"
+    );
+    // The phase consumes `rows`/`rare` every tick and re-arms the chunk; only
+    // the pooled admission buffers survive.
+    out.rows.clear();
+    out.rare.clear();
+    prepare_rows(&state, &periods, &env, true, &mut out);
+    // The count is exact because nextest runs each test in its own process, so
+    // no other test constructs an `AdmissionPart` concurrently.
+    assert_eq!(
+        take_admission_parts_constructed(),
+        0,
+        "a repeated prepare must not construct admission buffers: the pool is reused"
+    );
+    // The pooled set is the API the fix adds; checked after the count so a
+    // pre-fix tree reds at the count, not at a preserved-API assertion.
+    assert_eq!(
+        out.parts.len(),
+        9,
+        "the pool must cover the whole nine-chunk slot range"
+    );
+    assert!(
+        out.parts[0].kept.capacity() > 0,
+        "the pool kept its capacity"
+    );
+}
+
+#[test]
 #[ignore = "algorithm-level release timing; run in the perf lane"]
 fn parallel_row_prep_algorithm_micro() {
     let rows: usize = std::env::var("PREP_ROWS")
@@ -942,10 +1001,12 @@ fn full_step_with_period(
     let row = read_row(&view, slot, flags, period, &RarePrep::of(state, slot)).0;
     let targets = [];
     let cow_cells = HashMap::default();
+    let dolphin_targets = std::collections::HashMap::default();
     let world = &state.world;
     let loaded = |x: i32, z: i32| world.has_chunk(x.div_euclid(16), z.div_euclid(16));
     let revision = |x, z| world.chunk_revision(x, z);
     let ctx = StepCtx {
+        dolphin_targets: &dolphin_targets,
         rows: std::slice::from_ref(&row),
         entities: &state.entities,
         retained_targets: &state.hostile.targets,
@@ -977,7 +1038,8 @@ fn full_step_with_period(
             15
         },
     };
-    step_entity(row, &ctx)
+    let reader = state.world.physics_reader();
+    step_entity(&row, &ctx, &reader)
 }
 
 /// The battle facing rule at the phase (receipts/BattleJitterClient): a moving
@@ -1355,6 +1417,101 @@ fn idle_wander_decision_rest_matches_full_step_for_two_episodes() {
             "{species}: {rested_decisions} decision rests"
         );
     }
+}
+
+#[test]
+fn far_idle_slime_does_not_rest_on_its_hop_tick() {
+    let (mut state, slot) = resting_mob("minecraft:slime");
+    let id = state.entities.body(slot).id;
+    state.entities.prepare_motion_hints(&state.registry);
+    let flags = state.entities.motion_flags(slot);
+    let period = MOB_FAR_PERIOD as u8;
+    let tick = (1..400)
+        .find(|&tick| {
+            !motion_thinks(tick, flags, period)
+                && crate::entity_motion::hop_due(id.0, tick, 1, false)
+                && crate::entity_motion::wander(
+                    state.entities.body(slot).movement,
+                    id.0,
+                    tick,
+                    state.entities.row(slot).speed,
+                ) == [0.0; 3]
+        })
+        .expect("a non-decision hop tick");
+    state.tick = tick;
+    let before = state.entities.pos(slot);
+    let _ = run_entity_phase(&mut state, true);
+    assert!(
+        state.entities.vel(slot)[1] > 0.0 || state.entities.pos(slot)[1] > before[1],
+        "a non-decision hop tick must not be swallowed by early_entity_rest"
+    );
+}
+
+#[test]
+fn only_a_damaging_hopper_with_a_target_divides_its_delay() {
+    // `SlimeAttackGoal` makes the move control aggressive only when a target
+    // exists and `isDealsDamage` holds (slime size > 1, any magma size); an idle
+    // magma cube therefore keeps the loop's 40..116 tick delay.
+    for (name, size, target, expected) in [
+        ("minecraft:magma_cube", 1, false, false),
+        ("minecraft:magma_cube", 1, true, true),
+        ("minecraft:slime", 1, true, false),
+        ("minecraft:slime", 4, true, true),
+        ("minecraft:slime", 4, false, false),
+    ] {
+        let (mut state, slot) = resting_mob(name);
+        state.entities.row_mut(slot).loot.slime_size = Some(size);
+        let id = state.entities.body(slot).id;
+        if target {
+            state.hostile.targets.insert(
+                id,
+                (
+                    (crate::boundary::EntityId(id.0 + 1), [8.0, 101.0, 8.0]),
+                    1.5,
+                ),
+            );
+        }
+        state.entities.prepare_motion_hints(&state.registry);
+        let flags = state.entities.motion_flags(slot);
+        let view = PrepView::of(&state);
+        let (row, _) = read_row(&view, slot, flags, 1, &RarePrep::of(&state, slot));
+        assert_eq!(
+            row.hop_aggressive, expected,
+            "{name} size {size} target {target}"
+        );
+    }
+}
+
+#[test]
+fn far_slime_hop_tick_is_an_ai_decision_tick() {
+    // `think |= hop_tick`: without it a mid/far slime whose activation ring does
+    // not decide would hop only on decision phases and some never line up.
+    let (mut state, slot) = resting_mob("minecraft:slime");
+    let id = state.entities.body(slot).id;
+    state.entities.prepare_motion_hints(&state.registry);
+    let flags = state.entities.motion_flags(slot);
+    let period = MOB_FAR_PERIOD as u8;
+    let hop_tick = (1..400)
+        .find(|&tick| {
+            !motion_thinks(tick, flags, period)
+                && crate::entity_motion::hop_due(id.0, tick, 1, false)
+        })
+        .expect("a non-decision hop tick");
+    state.tick = hop_tick;
+    let view = PrepView::of(&state);
+    let (row, _) = read_row(&view, slot, flags, period, &RarePrep::of(&state, slot));
+    assert!(row.think, "a hop tick must be a decision tick");
+    assert!(row.hops);
+    let calm = (1..400)
+        .find(|&tick| {
+            !motion_thinks(tick, flags, period)
+                && !crate::entity_motion::hop_due(id.0, tick, 1, false)
+        })
+        .expect("a calm non-decision tick");
+    state.tick = calm;
+    let view = PrepView::of(&state);
+    let (row, _) = read_row(&view, slot, flags, period, &RarePrep::of(&state, slot));
+    assert!(!row.think, "a calm non-decision tick must stay calm");
 }
 
 #[test]

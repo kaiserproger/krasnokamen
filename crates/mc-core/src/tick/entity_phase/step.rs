@@ -25,6 +25,7 @@ pub(in crate::tick) struct StepCtx<'a> {
     pub(in crate::tick) players: crate::target_grid::TargetGrid<'a>,
     pub(in crate::tick) passive: passive_follow::Context<'a>,
     pub(in crate::tick) dolphin_toys: &'a [[f64; 3]],
+    pub(in crate::tick) dolphin_targets: &'a std::collections::HashMap<EntityId, [f64; 3]>,
     pub(in crate::tick) villagers: crate::target_grid::TargetGrid<'a>,
     pub(in crate::tick) golem_targets: crate::target_grid::TargetGrid<'a>,
     pub(in crate::tick) piglin_targets: crate::target_grid::TargetGrid<'a>,
@@ -42,8 +43,14 @@ pub(in crate::tick) struct StepCtx<'a> {
     pub(in crate::tick) sky_darken: u8,
 }
 
-pub(in crate::tick) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawIntent>) {
-    let reader = ctx.world.physics_reader();
+/// Step one prepared row. The row is borrowed (a `ReadRow` is ~248 B and a
+/// per-entity copy is pure snapshot traffic) and the physics reader belongs to
+/// the calling lane, so its last-chunk/last-section memo survives between rows.
+pub(in crate::tick) fn step_entity(
+    row: &ReadRow,
+    ctx: &StepCtx,
+    reader: &crate::world::PhysicsReader<'_>,
+) -> (MoveWrite, Vec<RawIntent>) {
     let rows = ctx.rows;
     let players = ctx.players.table();
     let cow_cells = ctx.cow_cells;
@@ -501,6 +508,7 @@ pub(in crate::tick) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, V
             row.pos,
             row.air_supply,
             row.speed,
+            ctx.dolphin_targets.get(&row.id).copied(),
             players.iter().map(|(_, pos)| *pos),
             ctx.dolphin_toys.iter().copied(),
             block_at,
@@ -510,6 +518,19 @@ pub(in crate::tick) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, V
         vel = drive;
     }
     let sampler = WorkerSampler { block_at, registry };
+    // Only a hopping body needs its blueprint's delay scale and jump bonus; the
+    // registry lookup and the cold row's slime size would otherwise be paid by
+    // every mob every tick.
+    let hop = row.hops.then(|| {
+        let scale = registry
+            .blueprint(row.type_id)
+            .map_or(1, |bp| bp.capabilities.hop_delay_scale.max(1));
+        let lift = registry.blueprint(row.type_id).map_or(0.0, |bp| {
+            f64::from(ctx.entities.row(row.slot).loot.slime_size.unwrap_or(1))
+                * bp.capabilities.hop_lift_per_size
+        });
+        (scale, lift)
+    });
     let motion = crate::entity_motion::step(
         crate::entity_motion::MotionInput {
             body: mc_physics::EntityBody {
@@ -532,6 +553,10 @@ pub(in crate::tick) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, V
             battle_facing: row.battle && !row.standing,
             legacy_facing: row.battle,
             head_follows_body: row.head_follows_body,
+            hops: row.hops && !row.standing,
+            hop_delay_scale: hop.map_or(1, |(delay, _)| delay),
+            hop_lift: hop.map_or(0.0, |(_, lift)| lift),
+            hop_aggressive: row.hop_aggressive,
             climbs_walls: row.climbs_walls,
             aquatic_control: row.aquatic_control,
             air_supply: row.air_supply,

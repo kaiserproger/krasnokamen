@@ -1664,6 +1664,72 @@ fn stopped_arrow_embedding_is_not_a_living_support_test() {
 }
 
 #[test]
+fn clip_y_snaps_a_body_resting_within_the_contact_tolerance_of_a_face() {
+    // Vanilla `VoxelShape.collide` covers every axis with the 1.0E-7 face
+    // tolerance; `clip_y` used to skip a face it sat within that tolerance of,
+    // so a body resting one ULP inside a floor kept its whole downward step.
+    let floor = WorldAabb {
+        min_x: -10.0,
+        min_y: -1.0,
+        min_z: -10.0,
+        max_x: 10.0,
+        max_y: 0.0,
+        max_z: 10.0,
+    };
+    let body = WorldAabb {
+        min_x: 0.0,
+        min_y: -1.0e-9,
+        min_z: 0.0,
+        max_x: 0.6,
+        max_y: 1.8,
+        max_z: 0.6,
+    };
+    assert!(
+        clip_y(body, -0.1, std::slice::from_ref(&floor)) >= 0.0,
+        "a body resting inside the floor must be snapped out, not stepped through"
+    );
+    // Deeper than the tolerance is not a contact: the step is untouched.
+    let deep = WorldAabb {
+        min_y: -1.0e-3,
+        max_y: 1.8 - 1.0e-3,
+        ..body
+    };
+    assert_eq!(clip_y(deep, -0.1, std::slice::from_ref(&floor)), -0.1);
+    // Clearly above the floor: the full step survives.
+    let clear = WorldAabb {
+        min_y: 0.5,
+        max_y: 2.3,
+        ..body
+    };
+    assert_eq!(clip_y(clear, -0.1, std::slice::from_ref(&floor)), -0.1);
+    // Ceiling: a head one ULP inside blocks the rise, a clear one does not.
+    let ceiling = WorldAabb {
+        min_x: -10.0,
+        min_y: 1.0,
+        min_z: -10.0,
+        max_x: 10.0,
+        max_y: 2.0,
+        max_z: 10.0,
+    };
+    let head_inside = WorldAabb {
+        max_y: 1.0 + 1.0e-9,
+        min_y: 1.0 + 1.0e-9 - 1.8,
+        ..body
+    };
+    assert!(
+        clip_y(head_inside, 0.1, std::slice::from_ref(&ceiling)) <= 0.0,
+        "a head resting inside the ceiling must not rise"
+    );
+    let head_clear = WorldAabb {
+        max_y: 0.5,
+        min_y: 0.5 - 1.8,
+        ..body
+    };
+    // 1.0 - 0.5 is exact in f64, so the clip equals the request.
+    assert_eq!(clip_y(head_clear, 0.1, std::slice::from_ref(&ceiling)), 0.1);
+}
+
+#[test]
 fn living_body_starts_full_block_climb_with_jump() {
     let world = LocalBlocks {
         solids: vec![GridPos::new(0, 63, 0), GridPos::new(1, 64, 0)],
@@ -2414,4 +2480,56 @@ fn a_contact_never_grows_deeper_than_the_tolerance_behind_a_face() {
             }
         }
     }
+}
+
+#[test]
+fn a_sub_epsilon_axis_step_is_zero_on_every_axis() {
+    // Vanilla `VoxelShape.collideX` returns 0.0 for `|d| < 1.0E-7` once the shape
+    // is non-empty (javap, offsets 9..21); `collideY`/`collideZ` reach the same
+    // body through `AxisCycle`. This kernel used to sweep the sub-epsilon step.
+    let wall = WorldAabb {
+        min_x: 1.0,
+        min_y: 0.0,
+        min_z: 0.0,
+        max_x: 2.0,
+        max_y: 1.0,
+        max_z: 1.0,
+    };
+    let floor = WorldAabb {
+        min_x: -10.0,
+        min_y: -1.0,
+        min_z: -10.0,
+        max_x: 10.0,
+        max_y: 0.0,
+        max_z: 10.0,
+    };
+    let body = WorldAabb {
+        min_x: 0.0,
+        min_y: 0.5,
+        min_z: 0.0,
+        max_x: 0.6,
+        max_y: 1.8,
+        max_z: 0.6,
+    };
+    // A wall 0.4 blocks away is not reached by a 1e-8 step, but vanilla still
+    // refuses the motion outright instead of moving by the tiny amount.
+    assert_eq!(clip_x(body, 1.0e-8, std::slice::from_ref(&wall)), 0.0);
+    assert_eq!(clip_x(body, -1.0e-8, std::slice::from_ref(&wall)), 0.0);
+    // A floor 0.5 below the feet: the same refusal on the vertical axis.
+    assert_eq!(clip_y(body, -1.0e-8, std::slice::from_ref(&floor)), 0.0);
+    assert_eq!(clip_y(body, 1.0e-8, std::slice::from_ref(&floor)), 0.0);
+    // And on z, through its own entry point.
+    assert_eq!(clip_z(body, 1.0e-8, std::slice::from_ref(&wall)), 0.0);
+    assert_eq!(clip_z(body, -1.0e-8, std::slice::from_ref(&wall)), 0.0);
+    // The tolerance is strict and applies to a *non-empty* shape: `|d| == 1e-7`
+    // does not take the early return, and just above it a box 0.4 away still
+    // leaves the step alone (a guard `< 1e-3` or `<=` fails these).
+    assert_eq!(clip_x(body, 1.0e-7, std::slice::from_ref(&wall)), 1.0e-7);
+    assert_eq!(clip_x(body, 2.0e-7, std::slice::from_ref(&wall)), 2.0e-7);
+    assert_eq!(clip_y(body, -2.0e-7, std::slice::from_ref(&floor)), -2.0e-7);
+    // An empty shape still returns the motion unchanged (vanilla's empty early
+    // return), sub-epsilon motion included.
+    assert_eq!(clip_x(body, 2.0e-7, &[]), 2.0e-7);
+    assert_eq!(clip_y(body, -2.0e-7, &[]), -2.0e-7);
+    assert_eq!(clip_x(body, 1.0e-8, &[]), 1.0e-8);
 }

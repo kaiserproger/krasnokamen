@@ -3,11 +3,12 @@ id = "EDGE-OP-QUEUE-POLL"
 title = "Operator permission updates poll and clone while the authoritative queue is full"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "External critique of 4d32f28, crates/mc-edge/src/server.rs op/deop admission"
 repro = "source"
 regression = ["cargo:mc-edge:server::admin_tests::operator_updates_wait_for_capacity_before_mutating", "cargo:mc-edge:server::admin_tests::queued_op_is_rejected_after_initiator_is_deopped"]
 failing_first = "not recorded"
-# fix commit d330c4a7 bundles unrelated API changes its tests need; the control reverses only the reserve-before-mutate admission (docs/bugs/fix-patches/EDGE-OP-QUEUE-POLL.patch)
-fix_commit = "patch:a87aecbd97cc31ed39fa8088d00999e6b07d8c728a36386ebc4df654550a5bb5"
+# fix commit d330c4a7 bundles unrelated API changes its tests need; the control reverses only the reserve-before-mutate admission. Re-derived at HEAD 321a2b02d on 2026-11-24 (D123Battle): the recorded patch no longer reversed after the op/deop batch rewrite, so docs/bugs/fix-patches/EDGE-OP-QUEUE-POLL.patch is the HEAD-equivalent patch and its hunk map is docs/bugs/promotions/EDGE-OP-QUEUE-POLL.hunks.md
+fix_commit = "patch:6ab4698a88d665762a76db7825f191c1650846274f6b52e4e41aa166cc6c8baa"
 repro_check = "Stage2X SLICES.md:126-127: the initial control measured premature mutation rather than polling. Test strengthening 33e1184ac asserts dropped_inputs is unchanged; reversing the fix fails that assertion (receipts/XEdgeOps/main-dropped-control.log), restored green in main-dropped-green.log."
+promotion = "docs/bugs/promotions/EDGE-OP-QUEUE-POLL.json"

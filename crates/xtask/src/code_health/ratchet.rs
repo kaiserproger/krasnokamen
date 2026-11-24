@@ -69,7 +69,12 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // canonical extraction-tool data table (31 tools), PrepPortions 2026-11-18:
     // +29, 2663 with MotionYaw; moves to mc-data with typed CoreRegistry
     // resolution after the 19:00 cut (PLAN post-cut queue).
-    vanilla_id_literals: 2_663,
+    // D123Battle 2026-11-23: the slime/magma-cube hop and dolphin
+    // located-treasure regressions name their vanilla fixtures directly
+    // (`minecraft:slime`, `minecraft:magma_cube`, `minecraft:chest`,
+    // `minecraft:shipwreck`): +5, 2668. Resolving them through typed registry
+    // ids in the fixtures is the follow-up that returns this to 2663.
+    vanilla_id_literals: 2_668,
     // Measured 113 on 87c33206, 2026-11-13.
     path_equality: 113,
     panics: 5,
@@ -86,7 +91,11 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // head-controller capability and its initializer: 737. CutTick
         // (ADR 0021 Step 3) moved its owners into `tick/entity_phase/*`:
         // 260 measured on the CutTick merge with main 30418aee2, 2026-11-19.
-        ("tick/entity_phase.rs", 260),
+        // D123Battle 2026-11-23: 261. The step lane now borrows one
+        // dimension-filtered dolphin target map per phase (`let dolphin_targets`
+        // next to its `StepCtx` field) instead of allocating an `Arc<HashMap>`
+        // per tick. Removing the allocation costs the one local binding.
+        ("tick/entity_phase.rs", 261),
         // D8 moved the record's construction fields behind
         // `settlements/construction_access.rs`; 1028 after the split, measured
         // on the D8 branch, 2026-11-17. The store flip and the queue rules

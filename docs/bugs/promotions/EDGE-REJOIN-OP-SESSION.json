@@ -1,0 +1,38 @@
+{
+  "id": "EDGE-REJOIN-OP-SESSION",
+  "verdict": "promoted",
+  "fix_commit": "patch:65640ea957d9408ec82970c28e93c8812fc392cc1420dd3287579ac04549ecf7",
+  "fix_commit_full": "patch:65640ea957d9408ec82970c28e93c8812fc392cc1420dd3287579ac04549ecf7",
+  "promoted_at": "2026-11-23T21:06:39+00:00",
+  "tree_head": "816994b1186f7f17f55065a77251f592eaae96a5",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "65640ea957d9408ec82970c28e93c8812fc392cc1420dd3287579ac04549ecf7",
+  "reversed_files": [
+    "crates/mc-edge/src/server.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:server::admin_tests::deop_reaches_every_registered_session_for_one_uuid": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:server::admin_tests::deop_reaches_rejoining_native_session": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:server::admin_tests::deop_reaches_every_registered_session_for_one_uuid": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::admin_tests::deop_reaches_rejoining_native_session": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T210352-ledger-promote-dnwvd9po"
+}

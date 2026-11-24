@@ -141,6 +141,9 @@ fn submit(state: &mut TickState, key: Key) -> bool {
             skip_existing_chunks: spec.skip_existing_chunks,
             referenced,
             reply: Box::new(move |state, hit| completed(state, key, hit)),
+            on_failure: Some(Box::new(move |state| {
+                state.maps.pending_loot.remove(&key);
+            })),
         },
     )
 }

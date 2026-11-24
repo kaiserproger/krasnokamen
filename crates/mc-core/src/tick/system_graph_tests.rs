@@ -7,6 +7,8 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::tick::ReadRow;
+
 #[derive(Clone, Copy, Debug)]
 enum Mode {
     Scheduled,
@@ -30,11 +32,17 @@ pub(super) fn override_run(ctx: &StepCtx<'_>, output: &mut Vec<RowOutput>) -> bo
     }
     let start = MEASURE.get().then(Instant::now);
     match mode {
+        // The pre-prototype lane: a fresh physics reader for every row. It is
+        // the oracle for the reused-reader lane (a warm memo must not change a
+        // single body bit).
         Mode::Legacy => ctx
             .rows
             .par_iter()
             .with_min_len(256)
-            .map(|row| row.alive.then(|| step_entity(*row, ctx)))
+            .map(|row| {
+                row.alive
+                    .then(|| step_entity(row, ctx, &ctx.world.physics_reader()))
+            })
             .collect_into_vec(output),
         Mode::Serial => execute(ctx, output, false),
         Mode::Parallel => execute(ctx, output, true),
@@ -184,6 +192,50 @@ fn declared_system_matches_legacy_state_hashes_each_tick() {
         "system-graph parity: 48 ticks, 1024 initial mobs, workers=1/2/4, final={:016x}",
         reference.last().unwrap()
     );
+}
+
+#[test]
+fn entity_step_reuses_one_physics_reader_per_lane() {
+    // `ReadRow` used to be copied into `step_entity` by value and the reader was
+    // rebuilt for every row, discarding its last-chunk/last-section memo. One
+    // reader per lane (and a borrowed row) must keep constructions far below the
+    // row count.
+    let registry = Arc::new(CoreRegistry::load(None).unwrap());
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(4)
+        .build()
+        .unwrap();
+    // The counter is a process-global `AtomicUsize` and therefore only sound
+    // under nextest's one-process-per-test model (not a libtest thread pool).
+    pool.install(|| {
+        let mut state = fixture(&registry, 1024);
+        let _ = crate::world::take_physics_reader_count();
+        let _ = run_entity_phase(&mut state, true);
+        let readers = crate::world::take_physics_reader_count();
+        assert!(readers > 0, "the phase must build a reader");
+        assert!(
+            readers < 256,
+            "one reader per row is the bug: {readers} readers for 1024 rows"
+        );
+    });
+}
+
+#[test]
+fn step_entity_borrows_its_row() {
+    // A copied `ReadRow` per entity per tick is pure snapshot traffic: the step
+    // lane takes it by reference. The control of this row is compile-level (the
+    // by-value signature does not exist any more). The row is a scalar bundle
+    // read field by field, not a cache-line-packed struct, so the bound below is
+    // a growth ratchet at the 256 byte worker-snapshot bound asserted in
+    // `entity_phase_tests::worker_snapshot_keeps_rare_state_in_entity_store`.
+    // Its remaining 64 B of inline targets are `ENTITY-READ-ROW-INLINE-TARGETS-64-BYTES`.
+    let step: fn(
+        &ReadRow,
+        &StepCtx<'_>,
+        &crate::world::PhysicsReader<'_>,
+    ) -> (MoveWrite, Vec<RawIntent>) = step_entity;
+    assert!(std::mem::size_of::<ReadRow>() <= 256);
+    let _ = step;
 }
 
 #[test]

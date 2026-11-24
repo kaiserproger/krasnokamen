@@ -1,65 +1,66 @@
 diff --git a/crates/mc-edge/src/server.rs b/crates/mc-edge/src/server.rs
-index 8d8036c3..7148e154 100644
 --- a/crates/mc-edge/src/server.rs
 +++ b/crates/mc-edge/src/server.rs
-@@ -1134,6 +1134,13 @@ impl EdgeServer {
-                 "op" | "deop" => {
-                     let _guard = self.operator_updates.lock().await;
-                     let sessions = self.admin.sessions_for_uuid(uuid);
-+                    let mut permits =
-+                        self.hub
-+                            .reserve_inputs(1 + sessions.len())
-+                            .await
-+                            .map_err(|_| {
-+                                anyhow::anyhow!("authoritative operator update queue stopped")
-+                            })?;
-                     if id != mc_core::command_console::CONNECTION
-                         && (self.hub.session_locked(id)
-                             || !crate::command_tree::permitted(
-@@ -1147,33 +1154,21 @@ impl EdgeServer {
-                     }
-                     let result = self.admin.set_op(uuid, &name, root == "op");
-                     if result.is_ok() {
--                        let snapshot = PlayerInput::SpawnProtectionOperators {
--                            operators: self.admin.operator_ids(),
--                        };
--                        let mut sheds = 0;
--                        while !self.hub.submit(snapshot.clone()) {
--                            sheds += 1;
--                            anyhow::ensure!(
--                                sheds < MAX_SUBMIT_SHEDS,
--                                "spawn protection operator snapshot queue is full"
--                            );
--                            tokio::task::yield_now().await;
--                        }
-+                        permits.next().expect("reserved operator snapshot").send(
-+                            PlayerInput::SpawnProtectionOperators {
-+                                operators: self.admin.operator_ids(),
-+                            },
-+                        );
-+                    }
-+                    if result.is_ok() {
-                         let level = self.admin.level(uuid);
-                         for &other in &sessions {
--                            let permission = PlayerInput::PermissionLevel {
--                                connection: other,
--                                level,
--                            };
--                            let mut permission_sheds = 0;
--                            while !self.hub.submit(permission.clone()) {
--                                permission_sheds += 1;
--                                anyhow::ensure!(
--                                    permission_sheds < MAX_SUBMIT_SHEDS,
--                                    "authoritative permission update queue is full"
--                                );
--                                tokio::task::yield_now().await;
--                            }
-+                            permits.next().expect("reserved permission update").send(
-+                                PlayerInput::PermissionLevel {
-+                                    connection: other,
-+                                    level,
-+                                },
-+                            );
-                         }
-                         for other in sessions {
-                             let level = if self.hub.session_locked(other) {
+@@ -1035,8 +1035,15 @@
+                     (uuid, name, sessions)
+                 })
+                 .collect();
+-            // Pre-fix: the update is applied first and its snapshot and
+-            // permission messages are then polled into the queue.
++            let slots = updates
++                .iter()
++                .map(|(_, _, sessions)| 1 + sessions.len())
++                .sum();
++            let mut permits = self
++                .hub
++                .reserve_inputs(slots)
++                .await
++                .map_err(|_| anyhow::anyhow!("authoritative operator update queue stopped"))?;
+             // Authorize the complete selected batch after both awaited steps.
+             // Deopping the source within this batch must not truncate its targets.
+             if id != mc_core::command_console::CONNECTION
+@@ -1055,33 +1062,19 @@
+                     self.feedback(id, &format!("Command failed: {error}"))?;
+                     return Ok(true);
+                 }
+-                let snapshot = PlayerInput::SpawnProtectionOperators {
+-                    operators: self.admin.operator_ids(),
+-                };
+-                let mut sheds = 0;
+-                while !self.hub.submit(snapshot.clone()) {
+-                    sheds += 1;
+-                    anyhow::ensure!(
+-                        sheds < MAX_SUBMIT_SHEDS,
+-                        "spawn protection operator snapshot queue is full"
+-                    );
+-                    tokio::task::yield_now().await;
+-                }
++                permits.next().expect("reserved operator snapshot").send(
++                    PlayerInput::SpawnProtectionOperators {
++                        operators: self.admin.operator_ids(),
++                    },
++                );
+                 let level = self.admin.level(uuid);
+                 for &other in &sessions {
+-                    let permission = PlayerInput::PermissionLevel {
+-                        connection: other,
+-                        level,
+-                    };
+-                    let mut permission_sheds = 0;
+-                    while !self.hub.submit(permission.clone()) {
+-                        permission_sheds += 1;
+-                        anyhow::ensure!(
+-                            permission_sheds < MAX_SUBMIT_SHEDS,
+-                            "authoritative permission update queue is full"
+-                        );
+-                        tokio::task::yield_now().await;
+-                    }
++                    permits.next().expect("reserved permission update").send(
++                        PlayerInput::PermissionLevel {
++                            connection: other,
++                            level,
++                        },
++                    );
+                 }
+                 for other in sessions {
+                     let level = if self.hub.session_locked(other) {

@@ -15,7 +15,7 @@ pub(super) struct Context<'a> {
     pub locked: Option<&'a BTreeSet<ConnectionId>>,
 }
 
-pub(super) fn idle(row: ReadRow, ctx: &StepCtx, look: &mut Option<[f64; 3]>) -> [f64; 3] {
+pub(super) fn idle(row: &ReadRow, ctx: &StepCtx, look: &mut Option<[f64; 3]>) -> [f64; 3] {
     if let Some((target, stop)) = target(row, ctx) {
         *look = Some(target);
         if distance(row.pos, target) <= stop {
@@ -26,7 +26,7 @@ pub(super) fn idle(row: ReadRow, ctx: &StepCtx, look: &mut Option<[f64; 3]>) -> 
     crate::entity_motion::wander(row.movement, row.id.0, ctx.tick, row.speed)
 }
 
-fn target(row: ReadRow, ctx: &StepCtx) -> Option<([f64; 3], f64)> {
+fn target(row: &ReadRow, ctx: &StepCtx) -> Option<([f64; 3], f64)> {
     let blueprint = ctx.registry.blueprint(row.type_id)?;
     if blueprint.capabilities.temptable
         && !blueprint.breed_food.is_empty()

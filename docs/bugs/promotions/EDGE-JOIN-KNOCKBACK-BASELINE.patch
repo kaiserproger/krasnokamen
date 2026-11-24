@@ -1,0 +1,51 @@
+diff --git a/crates/mc-edge/src/server/registry.rs b/crates/mc-edge/src/server/registry.rs
+--- a/crates/mc-edge/src/server/registry.rs
++++ b/crates/mc-edge/src/server/registry.rs
+@@ -141,11 +141,7 @@
+             inner.joining.remove(&id),
+             "connection admission already closed"
+         );
+-        // Pre-fix: the baseline was not fenced at admission (first sight
+-        // seeded the counter with 0), so a pre-registration impulse counts
+-        // as skipped.
+-        let _ = published_knockback_count;
+-        handles.knockback_baseline = 0;
++        handles.knockback_baseline = published_knockback_count();
+         inner.handles.insert(id, handles);
+         inner.routing_generation += 1;
+         Ok(inner.pending_reliable.remove(&id).unwrap_or_default())
+diff --git a/crates/mc-edge/src/server/pump.rs b/crates/mc-edge/src/server/pump.rs
+--- a/crates/mc-edge/src/server/pump.rs
++++ b/crates/mc-edge/src/server/pump.rs
+@@ -610,8 +610,8 @@
+     connections: &mut HashMap<ConnectionId, ConnectionHandles>,
+ ) {
+     seen.retain(|id, _| connections.contains_key(id));
+-    for (&id, _) in connections.iter() {
+-        seen.entry(id).or_insert(0);
++    for (&id, handles) in connections.iter() {
++        seen.entry(id).or_insert(handles.knockback_baseline);
+     }
+     for (&id, &(count, last_tick)) in out.snapshot.player_knockback_ticks.iter() {
+         if !connections.contains_key(&id) {
+@@ -674,7 +674,19 @@
+     let packets = pool.install(|| {
+         crate::fanout::publish_with_registries(
+             out,
+-            viewers.values_mut(),
++            viewers.values_mut().filter(|viewer| {
++                // A delayed pump may still be draining publications from
++                // before queue registration. Do not replay those impulses
++                // into the new client; its next eligible snapshot reconciles
++                // the world view without advancing it through this old tick.
++                !out.snapshot
++                    .player_knockback_ticks
++                    .get(&viewer.connection)
++                    .is_some_and(|&(count, last_tick)| {
++                        last_tick == out.tick
++                            && count <= connections[&viewer.connection].knockback_baseline
++                    })
++            }),
+             view_distance,
+             &registries,
+             chunk_cache,

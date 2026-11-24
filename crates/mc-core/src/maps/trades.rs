@@ -198,6 +198,9 @@ fn submit(state: &mut TickState, merchant: EntityId) -> bool {
             skip_existing_chunks: true,
             referenced,
             reply: Box::new(move |state, hit| complete(state, merchant, hit)),
+            on_failure: Some(Box::new(move |state| {
+                state.maps.pending_trades.remove(&merchant);
+            })),
         },
     )
 }

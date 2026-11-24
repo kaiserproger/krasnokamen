@@ -54,18 +54,30 @@ pub(in crate::tick) fn prepare_rows(
     laps.lap("view");
     if parallel {
         use rayon::prelude::*;
-        #[derive(Default)]
-        struct Admission {
-            kept: Vec<(EntitySlot, u16)>,
-            specials: Vec<(EntityId, crate::hostile::Special)>,
-            resting: Vec<EntitySlot>,
+        let PrepChunk {
+            specials,
+            resting,
+            parts,
+            ..
+        } = out;
+        // The per-chunk admission vectors live in the phase scratch and are
+        // reused tick to tick: one buffer set per chunk instead of three fresh
+        // `Vec`s per chunk on every tick (about 2 k allocations per tick at
+        // 1M slots). The concat order is still chunk order, i.e. slot order.
+        // `resize_with` keeps the pooled `AdmissionPart`s (and their inner
+        // capacity) across ticks; each is cleared for this tick.
+        parts.resize_with(periods.len().div_ceil(PREP_CHUNK), AdmissionPart::default);
+        for part in parts.iter_mut() {
+            part.kept.clear();
+            part.specials.clear();
+            part.resting.clear();
         }
-        let parts: Vec<Admission> = periods
+        periods
             .par_chunks(PREP_CHUNK)
+            .zip(parts.par_iter_mut())
             .enumerate()
-            .map(|(chunk, periods)| {
+            .for_each(|(chunk, (periods, part))| {
                 let base = chunk * PREP_CHUNK;
-                let mut part = Admission::default();
                 for (offset, &period) in periods.iter().enumerate() {
                     if period != 0
                         && let Some(kept) = admit_slot(
@@ -80,15 +92,13 @@ pub(in crate::tick) fn prepare_rows(
                         part.kept.push(kept);
                     }
                 }
-                part
-            })
-            .collect();
+            });
         laps.lap("admit_parallel");
         let mut kept = Vec::with_capacity(parts.iter().map(|part| part.kept.len()).sum());
-        for part in parts {
-            kept.extend(part.kept);
-            out.specials.extend(part.specials);
-            out.resting.extend(part.resting);
+        for part in parts.iter_mut() {
+            kept.append(&mut part.kept);
+            specials.append(&mut part.specials);
+            resting.append(&mut part.resting);
         }
         laps.lap("admit_concat");
         let mut is_rare = Vec::new();
@@ -238,6 +248,41 @@ pub(in crate::tick) struct PrepChunk {
     pub(in crate::tick) resting: Vec<EntitySlot>,
     pub(in crate::tick) rare: Vec<usize>,
     pub(in crate::tick) summary: PrepSummary,
+    /// One admission buffer set per [`PREP_CHUNK`] of the parallel pass,
+    /// pooled in the phase scratch (kept after the concat).
+    pub(in crate::tick) parts: Vec<AdmissionPart>,
+}
+
+/// Admission output of one [`PREP_CHUNK`] range, pooled across ticks.
+#[cfg_attr(not(test), derive(Default))]
+pub(in crate::tick) struct AdmissionPart {
+    pub(in crate::tick) kept: Vec<(EntitySlot, u16)>,
+    pub(in crate::tick) specials: Vec<(EntityId, crate::hostile::Special)>,
+    pub(in crate::tick) resting: Vec<EntitySlot>,
+}
+
+#[cfg(test)]
+static ADMISSION_PARTS_CONSTRUCTED: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// Test-only: how many [`AdmissionPart`]s were constructed since the last call.
+/// The pooled pass constructs none on a repeated prepare; the pre-fix pass
+/// built a fresh set per chunk per tick.
+#[cfg(test)]
+pub(in crate::tick) fn take_admission_parts_constructed() -> usize {
+    ADMISSION_PARTS_CONSTRUCTED.swap(0, std::sync::atomic::Ordering::Relaxed)
+}
+
+#[cfg(test)]
+impl Default for AdmissionPart {
+    fn default() -> Self {
+        ADMISSION_PARTS_CONSTRUCTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Self {
+            kept: Vec::new(),
+            specials: Vec::new(),
+            resting: Vec::new(),
+        }
+    }
 }
 
 #[derive(Default, Debug, PartialEq, Eq)]
@@ -386,7 +431,6 @@ pub(in crate::tick) fn read_row(
     let body = &view.bodies[slot.0 as usize];
     let battle =
         crate::battle::battle_row(body.faction) && matches!(body.kind, EntityKind::Mob { .. });
-    let think = battle || motion_thinks(view.tick, flags, period);
     let row = view.entities.row(slot);
     let observed = rare.observed;
     // Snapshot predicates share one immutable blueprint lookup per mob.
@@ -394,6 +438,28 @@ pub(in crate::tick) fn read_row(
         EntityKind::Mob { type_id } => view.registry.blueprint(type_id),
         _ => None,
     };
+    // A hop tick must be an AI decision tick even when the activation ring
+    // would not decide: otherwise mid/far slimes hop only on decision phases
+    // and some never line up at all. NoAI keeps the vanilla no-move-control
+    // rule. `MagmaCube` multiplies the delay and lifts by its size.
+    let hops = blueprint.is_some_and(|blueprint| blueprint.capabilities.hops);
+    let hop_delay_scale =
+        blueprint.map_or(1, |blueprint| blueprint.capabilities.hop_delay_scale.max(1));
+    // `Slime$SlimeMoveControl.tick` divides the delay by three only while its
+    // move control is aggressive: `SlimeAttackGoal` sets that when a target
+    // exists and `isDealsDamage` holds (any magma size, slime size > 1;
+    // `Slime.isDealsDamage`, `MagmaCube.canDealDamage`). An idle hopper keeps
+    // the full delay.
+    let has_retained_target = view.hostile.targets.contains_key(&body.id);
+    let aggressive = hops
+        && has_retained_target
+        && blueprint.is_some_and(|blueprint| {
+            blueprint.capabilities.hop_lift_per_size > 0.0 || row.loot.slime_size.unwrap_or(1) > 1
+        });
+    let hop_tick = hops
+        && !row.controls.no_ai
+        && crate::entity_motion::hop_due(body.id.0, view.tick, hop_delay_scale, aggressive);
+    let think = battle || motion_thinks(view.tick, flags, period) || hop_tick;
     let needs_rare = crate::enderman::needs_state(row)
         || crate::plugin_npcs::needs_state(row)
         || crate::creaking::needs_state(body)
@@ -472,7 +538,7 @@ pub(in crate::tick) fn read_row(
     let read = ReadRow {
         think,
         battle,
-        has_retained_target: view.hostile.targets.contains_key(&body.id),
+        has_retained_target,
         retain_target: !battle && blueprint.is_some_and(crate::hostile::retains_target),
         enderman_target: rare.enderman_target,
         plugin_target: rare.plugin_target,
@@ -504,6 +570,8 @@ pub(in crate::tick) fn read_row(
         climbs_walls: blueprint.is_some_and(|blueprint| blueprint.capabilities.climbs_walls),
         head_follows_body: blueprint
             .is_some_and(|blueprint| blueprint.capabilities.head_follows_body),
+        hops: hops && !row.controls.no_ai,
+        hop_aggressive: aggressive,
         avoids_armadillos: blueprint
             .is_some_and(|blueprint| blueprint.capabilities.avoids_armadillos),
         aquatic_control: blueprint.map_or(crate::species::AquaticControl::Other, |blueprint| {

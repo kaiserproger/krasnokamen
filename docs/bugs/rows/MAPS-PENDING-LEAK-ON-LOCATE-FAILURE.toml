@@ -1,0 +1,13 @@
+[[bug]]
+id = "MAPS-PENDING-LEAK-ON-LOCATE-FAILURE"
+title = "A failed locate search left the exploration-map container's pending loot/trade plan in place forever, so reopening the container never re-planned"
+area = "gameplay"
+severity = "major"
+status = "fixed"
+source = "D123Battle pack 2 (independent review of the locate callback work, 2026-11-23): the Callback completion had a reply but no failure continuation, so a metadata error, a wrong-dimension reply or a lost worker dropped the queued search and left `maps.pending_loot`/`pending_trades` populated; `before_open` then treated the container as waiting on a search that would never answer."
+repro = "source"
+regression = [
+  "cargo:mc-core:command_locate::tests::worker_loss_releases_a_map_loot_callback_so_the_container_opens_again",
+  "cargo:mc-core:tick_tests::maps_tests::a_released_locate_plan_lets_the_container_open_again",
+]
+failing_first = "not recorded"

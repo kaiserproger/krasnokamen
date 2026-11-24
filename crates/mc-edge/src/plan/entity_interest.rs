@@ -4,6 +4,14 @@ use std::{cmp::Reverse, collections::BinaryHeap};
 
 type Order = (i32, i32, i32);
 
+/// Test-only: roster rows visited by a `broadcast_to` roster scan. The fixed
+/// path answers the spectator question from the publish-wide set, so a publish
+/// leaves this unchanged; the pre-fix scan visited the whole roster twice per
+/// (entity, recipient) pair.
+#[cfg(test)]
+pub(super) static ROSTER_SCANS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
 #[derive(Debug, Default)]
 pub(super) struct EntityInterest {
     previous: Option<mc_core::boundary::EntityViews>,
@@ -45,6 +53,7 @@ impl EntityInterest {
         scratch: &mut PlanScratch,
         credit: usize,
     ) {
+        let spectators = &index.spectators;
         let position = (
             [viewer.position[0].to_bits(), viewer.position[2].to_bits()],
             distance.max(0),
@@ -75,7 +84,7 @@ impl EntityInterest {
                     == entity_chunk(viewer.position)
         });
         if !contiguous || !window_same || !held_same {
-            entity_candidates::collect(snapshot, viewer, distance, scratch, credit);
+            entity_candidates::collect(snapshot, viewer, distance, scratch, credit, spectators);
             self.ranges.clear();
             self.ranges.extend(scratch.tracking_ranges.iter().copied());
             self.visible.clear();
@@ -127,7 +136,7 @@ impl EntityInterest {
                 // Modes and camera ownership can change without an entity-row
                 // revision. Revisit players only, including hidden/unpaired rows.
                 for player in snapshot.player_roster.iter() {
-                    self.changed(snapshot, viewer, distance, player.entity);
+                    self.changed(snapshot, viewer, distance, player.entity, spectators);
                 }
                 if roster_changed && let Some(old) = self.roster.as_ref().map(Arc::clone) {
                     for player in old.iter() {
@@ -136,14 +145,14 @@ impl EntityInterest {
                             .iter()
                             .any(|now| now.entity == player.entity)
                         {
-                            self.changed(snapshot, viewer, distance, player.entity);
+                            self.changed(snapshot, viewer, distance, player.entity, spectators);
                         }
                     }
                 }
             }
             if !same {
                 index.entity_changes_for(&viewer.loaded_chunks, |delta| {
-                    self.delta(snapshot, viewer, distance, delta);
+                    self.delta(snapshot, viewer, distance, delta, spectators);
                 });
                 // The player's own image need not belong to a held chunk.
                 if !viewer
@@ -155,17 +164,17 @@ impl EntityInterest {
                         .binary_search(&viewer.entity_id)
                         .is_ok()
                 {
-                    self.changed(snapshot, viewer, distance, viewer.entity_id);
+                    self.changed(snapshot, viewer, distance, viewer.entity_id, spectators);
                 }
             }
             if self.position != Some(position) {
                 let (old, _) = self.position.expect("retained interest window");
-                self.enter_leave(snapshot, viewer, distance, old, scratch);
+                self.enter_leave(snapshot, viewer, distance, old, scratch, spectators);
             }
             scratch.visible.sort_unstable_by_key(|id| id.0);
             scratch.visible.dedup();
             for &id in &scratch.visible {
-                self.changed(snapshot, viewer, distance, id);
+                self.changed(snapshot, viewer, distance, id, spectators);
             }
             self.order.clear();
             while let Some(&Reverse((tick, id))) = self.due.peek() {
@@ -240,10 +249,11 @@ impl EntityInterest {
         viewer: &ViewerState,
         distance: i32,
         delta: tick_index::EntityDelta,
+        spectators: &std::collections::HashSet<EntityId>,
     ) {
         let id = delta.id;
         if id == viewer.entity_id {
-            self.changed(snapshot, viewer, distance, id);
+            self.changed(snapshot, viewer, distance, id, spectators);
             return;
         }
         let was_visible = self.visible.contains_key(&id);
@@ -259,7 +269,7 @@ impl EntityInterest {
                     && min[1] + 16.0 <= viewer.position[2] + range
             });
         if !interior {
-            self.changed(snapshot, viewer, distance, id);
+            self.changed(snapshot, viewer, distance, id, spectators);
         } else if delta.appearance_changed {
             self.dirty.insert(id);
         } else if delta.motion_changed {
@@ -295,6 +305,7 @@ impl EntityInterest {
         distance: i32,
         old: [u64; 2],
         scratch: &mut PlanScratch,
+        spectators: &std::collections::HashSet<EntityId>,
     ) {
         let old = [f64::from_bits(old[0]), f64::from_bits(old[1])];
         let new = [viewer.position[0], viewer.position[2]];
@@ -329,7 +340,7 @@ impl EntityInterest {
                 .in_chunk(mc_core::boundary::ChunkPos { x, z })
             {
                 if (entity_trackable(entity, viewer, distance)
-                    && broadcast_to(snapshot, entity, viewer.entity_id))
+                    && broadcast_to(snapshot, entity, viewer.entity_id, spectators))
                     != self.visible.contains_key(&entity.id)
                 {
                     scratch.visible.push(entity.id);
@@ -344,6 +355,7 @@ impl EntityInterest {
         viewer: &ViewerState,
         distance: i32,
         id: EntityId,
+        spectators: &std::collections::HashSet<EntityId>,
     ) {
         let entity = snapshot.entities.get(id).filter(|entity| {
             let chunk = entity_chunk(entity.position);
@@ -358,7 +370,7 @@ impl EntityInterest {
                 && (chunk.1 - center.1).abs() <= distance.max(0)
                 && (id == viewer.entity_id || viewer.loaded_chunks.contains_key(&chunk))
                 && entity_trackable(entity, viewer, distance)
-                && broadcast_to(snapshot, entity, viewer.entity_id)
+                && broadcast_to(snapshot, entity, viewer.entity_id, spectators)
         });
         if let Some(entity) = entity {
             self.visible.insert(id, order(entity));
@@ -484,24 +496,18 @@ pub(super) fn broadcast_to(
     snapshot: &WorldSnapshot,
     entity: &EntityView,
     recipient: EntityId,
+    spectators: &std::collections::HashSet<EntityId>,
 ) -> bool {
     if entity.id == recipient || entity.type_id != player_entity_type_id() {
         return true;
     }
-    let spectator_viewer = snapshot
-        .player_roster
-        .iter()
-        .any(|player| player.entity == recipient && player.game_mode == 3);
-    if spectator_viewer {
+    if spectators.contains(&recipient) {
         snapshot
             .cameras
             .get(&entity.id)
             .is_none_or(|target| *target == entity.id)
     } else {
-        !snapshot
-            .player_roster
-            .iter()
-            .any(|player| player.entity == entity.id && player.game_mode == 3)
+        !spectators.contains(&entity.id)
     }
 }
 

@@ -1,0 +1,10 @@
+[[bug]]
+id = "LOCATE-SHARED-FIFO-STARVES-MAPS-AND-DOLPHINS"
+title = "One FIFO locate worker serves /locate, exploration maps and dolphin treasure leads, so a queued command delays a chest or cartographer open and a failed dolphin lead re-captures a structure snapshot on the tick thread every 200 ticks"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "D123Battle F7 (independent review of the dolphin located-treasure work, 2026-11-23): crates/mc-core/src/command_locate.rs runs every StructureLookupRequest through one worker channel pair (jobs/done) with one `pending` map; maps/loot.rs, maps/trades.rs and dolphin.rs all submit into it. The worker is FIFO: a slow StructureSnapshot::capture for a player `/locate` (radius up to 100 rings) delays a container or cartographer open queued behind it, and a dolphin lead whose search Failed keeps GotFish and retries after 200 ticks (dolphin.rs `DolphinTreasure::Failed`), each retry submitting a fresh capture. Captures run on the worker, not the tick thread; the retry itself is on the tick thread. Not reproduced as a failure: no client-visible or timing receipt exists yet, and the shared queue is inside the existing per-owner job budget (MAX_JOBS_PER_PLAYER, MAX_QUEUED_JOBS)."
+repro = "source"
+regression = []
+failing_first = "not recorded"

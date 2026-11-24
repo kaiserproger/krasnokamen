@@ -1,16 +1,17 @@
 diff --git a/crates/mc-edge/src/server/connection.rs b/crates/mc-edge/src/server/connection.rs
 --- a/crates/mc-edge/src/server/connection.rs
 +++ b/crates/mc-edge/src/server/connection.rs
-@@ -61,15 +61,17 @@
+@@ -63,9 +63,15 @@
      ip: std::net::IpAddr,
      settings: mc_core::boundary::ClientSettings,
  ) -> Result<mc_core::core::PlayerSession, mc_core::CoreError> {
+-    let _ = ip;
 -    let level = server.admin.level(uuid);
+-    let session = server.hub.join_session(id, uuid, name, level, settings);
 +    let _guard = server.operator_updates.lock().await;
 +    server.admin.register(id, uuid, name.clone(), ip);
-     let session = server
-         .hub
--        .join_session(id, uuid, name.clone(), level, settings);
++    let session = server
++        .hub
 +        .join_session(id, uuid, name, server.admin.session_level(id), settings);
 +    if session.is_err() {
 +        server.admin.remove(id);
@@ -18,71 +19,8 @@ diff --git a/crates/mc-edge/src/server/connection.rs b/crates/mc-edge/src/server
 +    drop(_guard);
      #[cfg(test)]
      admit_rendezvous(uuid).await;
--    if session.is_ok() {
--        server.admin.register(id, uuid, name, ip);
--    }
      session
- }
- 
-@@ -78,7 +80,17 @@
-     id: ConnectionId,
-     burst_level: u8,
- ) -> anyhow::Result<()> {
--    let _ = (server, id, burst_level);
-+    let current = if server.hub.session_locked(id) {
-+        0
-+    } else {
-+        server.admin.session_level(id)
-+    };
-+    if current != burst_level {
-+        server.send(
-+            id,
-+            &crate::command_tree::tree(current, server.hub.plugin_commands()),
-+        )?;
-+    }
-     Ok(())
- }
- 
-@@ -372,24 +384,20 @@
-         server.cfg.server.view_distance,
-         recorder,
-     );
--    lifecycle.native = Some(
--        server
--            .hub
--            .join_session(
--                id,
--                outcome.uuid,
--                outcome.name.clone(),
--                server.admin.level(outcome.uuid),
--                mc_core::boundary::ClientSettings {
--                    view_distance: view_distance as u8,
--                    locale: config_outcome.client_language.clone(),
--                    chat_visibility: config_outcome.client_chat_visibility,
--                },
--            )
--            .inspect_err(|error| {
--                warn!(%peer, connection = id.0, stage = "join-submit", name = %outcome.name, %error, "native session refused; connection closed");
--            })?,
--    );
-+    let ip = outcome
-+        .remote_address
-+        .or(stream_peer_ip(&peer))
-+        .ok_or_else(|| anyhow::anyhow!("cannot admit player {peer}: remote IP unavailable"))?;
-+    lifecycle.native = Some(admit_native_session(
-+        &server, id, outcome.uuid, outcome.name.clone(), ip,
-+        mc_core::boundary::ClientSettings {
-+            view_distance: view_distance as u8,
-+            locale: config_outcome.client_language.clone(),
-+            chat_visibility: config_outcome.client_chat_visibility,
-+        },
-+    ).await.inspect_err(|error| {
-+        warn!(%peer, connection = id.0, stage = "join-submit", name = %outcome.name, %error, "native session refused; connection closed");
-+    })?);
- 
-     // --- Wait for our Joined (bounded): the tick loop answers with the
-     // --- entity id + spawn the burst needs.
-@@ -439,6 +447,11 @@
+@@ -443,6 +449,11 @@
      // --- Join burst (compressed from here on). ---
      let simulation_distance = i32::from(server.cfg.server.simulation_distance);
      let latest = latest_output(&server);
@@ -94,7 +32,7 @@ diff --git a/crates/mc-edge/src/server/connection.rs b/crates/mc-edge/src/server
      let recipes = match crate::recipes::for_join(&server.hub.current_registry()) {
          Ok(recipes) => recipes,
          Err(error) => {
-@@ -457,11 +470,7 @@
+@@ -461,11 +472,7 @@
          simulation_distance,
          game_mode,
          recipes: &recipes,
@@ -107,7 +45,7 @@ diff --git a/crates/mc-edge/src/server/connection.rs b/crates/mc-edge/src/server
          plugin_commands: server.hub.plugin_commands(),
          online_mode: server.cfg.auth.online_mode,
      })
-@@ -480,6 +489,7 @@
+@@ -484,6 +491,7 @@
      let (reliable_tx, reliable_rx) =
          mpsc::channel::<bytes::Bytes>(crate::fanout::RELIABLE_QUEUE_BOUND);
      let (world_tx, world_rx) = world_queue_for(&server.cfg.recorder, recorder);
@@ -115,7 +53,7 @@ diff --git a/crates/mc-edge/src/server/connection.rs b/crates/mc-edge/src/server
      let stashed = server.connections.register(
          id,
          server.connection_handles(reliable_tx, world_tx),
-@@ -504,11 +514,8 @@
+@@ -508,11 +516,8 @@
          }
      }
      server.connections.set_name(id, outcome.name.clone());

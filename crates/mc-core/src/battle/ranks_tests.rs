@@ -178,6 +178,7 @@ fn rank_and_heap_table() {
     eprintln!(
         "RANKS tick marching foot_off% foot_err horse_off% horse_err front_wobble heap_foot% heap_horse% densest engaged dead"
     );
+    let mut max_overflow = 0_u64;
     let mut quiet_windows = 0;
     let mut windows = 0;
     let mut window_dead = dead(&state);
@@ -185,6 +186,7 @@ fn rank_and_heap_table() {
     for t in 1..=ticks {
         crate::tick::run_tick(&mut state, &[]);
         let battle = &state.hostile.battle;
+        max_overflow = max_overflow.max(battle.formation.work.separation_overflow);
         contact_ticks += usize::from(
             battle
                 .formation
@@ -262,7 +264,42 @@ fn rank_and_heap_table() {
             contact_ticks = 0;
         }
     }
-    eprintln!("RANKS contact_windows={windows} contact_windows_without_deaths={quiet_windows}");
+    eprintln!(
+        "RANKS contact_windows={windows} contact_windows_without_deaths={quiet_windows} separation_overflow_max={max_overflow}"
+    );
+}
+
+#[test]
+fn a_dense_heap_reports_dropped_separation_candidates() {
+    // The separation grid keeps at most CELL_CAP bodies per sub-cell; the battle
+    // work counters must report how many were dropped, or a heap measurement
+    // cannot say whether neighbours were missing. One `run_tick` prepares the
+    // columns, then this drives `steering::step` directly: it proves the counter
+    // reaches `Work`, NOT that the production tick still calls the pass (a
+    // removed call leaves this green; see HANDOFF-5 H4).
+    let mut state = started(60);
+    crate::tick::run_tick(&mut state, &[]);
+    let mut battle = std::mem::take(&mut state.hostile.battle);
+    for member in &mut battle.formation.members {
+        if member.alive {
+            member.pos = [8.0, 64.0, 8.0];
+        }
+    }
+    let frame = crate::battle::Frame {
+        entities: &state.entities,
+        registry: &state.registry,
+        world: &state.world,
+        tick: state.tick,
+    };
+    crate::battle::steering::step(&frame, &mut battle, &mut crate::battle::Output::default());
+    assert!(
+        battle.formation.neighbours.overflow > 0,
+        "one sub-cell heap must drop candidates past the cap"
+    );
+    assert_eq!(
+        battle.formation.work.separation_overflow, battle.formation.neighbours.overflow,
+        "the dropped-candidate count must reach the battle work counters"
+    );
 }
 
 /// Heaps through the first clash and the pursuit that follows. Run explicitly.
@@ -271,6 +308,7 @@ fn rank_and_heap_table() {
 fn foot_and_horse_do_not_heap_through_contact_and_pursuit() {
     let mut state = started(1000);
     let (mut foot, mut horse) = (0.0_f64, 0.0_f64);
+    let mut overflow = 0_u64;
     let mut pursuit_ticks = 0;
     let mut melee_kills = 0;
     let mut wounds = 0;
@@ -290,6 +328,7 @@ fn foot_and_horse_do_not_heap_through_contact_and_pursuit() {
         }) {
             pursuit_ticks += 1;
         }
+        overflow = overflow.max(state.hostile.battle.formation.work.separation_overflow);
         if t % 100 == 0 {
             let c = census(&state.hostile.battle);
             foot = foot.max(100.0 * c.heaped_foot as f64 / c.foot.max(1) as f64);
@@ -301,7 +340,7 @@ fn foot_and_horse_do_not_heap_through_contact_and_pursuit() {
     }
     let (deaths, removed, native_wounds) = super::tests::native_battle_losses(&state);
     eprintln!(
-        "RANKS max heap foot {foot:.2}% horse {horse:.2}% deaths={deaths:?} removed={removed:?} native_wounds={native_wounds} melee_kills={melee_kills} wounds={wounds} pursuit_ticks={pursuit_ticks}",
+        "RANKS max heap foot {foot:.2}% horse {horse:.2}% separation_overflow_max={overflow} deaths={deaths:?} removed={removed:?} native_wounds={native_wounds} melee_kills={melee_kills} wounds={wounds} pursuit_ticks={pursuit_ticks}",
     );
     assert!(foot < 3.0, "foot heap {foot}%");
     assert!(horse < 15.0, "horse heap {horse}%");

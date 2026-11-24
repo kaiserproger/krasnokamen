@@ -53,9 +53,21 @@ historical name path and the later selector path is the `selector` branch itself
 - `Admin::sessions_for_uuid` stays (category (b)): the fixed fanout, the selector
   path and `admin_tests.rs:312` use it; the control calls it only in the selector
   branch.
-- No other a-side text is introduced: the name branch is the pre-fix statements
-  wrapped around the current `updates` loop, and the selector branch is unchanged
-  from HEAD.
+- The a-side is **not** empty. It introduces, on top of the pre-fix statements
+  (`reserve_inputs(2)` before the mutation, `Admin::find(target).filter(|entry|
+  entry.1 == uuid)` after it, one `PermissionLevel` with `admin.level(uuid)` and
+  one raw-level command tree):
+  - `let selector = target.starts_with('@');` and the four-line comment above it
+    ("Historical name path: two permits reserved up front, … the later selector
+    path keeps its per-UUID fanout") — the split that keeps the post-`878f1535`
+    selector fanout (reason (a)) while the name path is historical;
+  - three `if selector` branches: the session list
+    (`if selector { sessions_for_uuid(uuid) } else { Vec::new() }`), the permit
+    count (`if selector { 1 + sessions.len() … } else { 2 }`) and the update block
+    (`if selector { … per-UUID fanout … } else if let Some(…) = self.admin.find(…)`).
+  These are the selector/name boundary, not behaviour of this row: the selector
+  path is another owner's fanout and stays HEAD's, and the name path is the
+  pre-fix code. The control's red is read on the name path only.
 
 ## Kept out of the control
 

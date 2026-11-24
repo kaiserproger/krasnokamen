@@ -52,6 +52,37 @@ fn suffocation_triggers_on_the_eye_cell_without_requiring_solid_feet() {
 }
 
 #[test]
+fn suffocation_uses_the_vanilla_eye_box_not_the_foot_column_pin() {
+    let (mut state, entity, pos) = flat_player_fixture();
+    let slot = state.entities.slot_of(entity).unwrap();
+    let (x, y, z) = (
+        pos[0].floor() as i32 + 1,
+        pos[1] as i32 + 1,
+        pos[2].floor() as i32,
+    );
+    place(&mut state, [x as f64, y as f64, z as f64], "stone", &[]);
+    // Centred in the cell the `width * 0.8` eye box (half-width 0.24 for a
+    // player) stays in the foot column's cell: the wall next door is not
+    // contact.
+    assert!(
+        !sample(&mut state, entity, DamageKind::Suffocation),
+        "a wall in the next cell is not contact for a centred body"
+    );
+    // 0.3 past the centre the eye is 0.8 into the cell: the vanilla box
+    // (half-size 0.8 * half_width = 0.24) reaches 1.04 and crosses into the
+    // wall's cell while the foot column's eye cell is still air. This is the
+    // discriminating position: a half-size of 0.12 would reach only 0.92 and
+    // stay in the clear cell.
+    let at = [pos[0] + 0.3, pos[1], pos[2]];
+    assert_eq!(at[0].floor(), pos[0].floor());
+    state.entities.set_pos(slot, at);
+    assert!(
+        sample(&mut state, entity, DamageKind::Suffocation),
+        "the eye box crossing into a suffocating cell must suffocate"
+    );
+}
+
+#[test]
 fn berry_seedlings_and_stationary_players_do_not_take_damage() {
     let (mut state, entity, pos) = flat_player_fixture();
     place(&mut state, pos, "sweet_berry_bush", &[("age", "0")]);
@@ -646,11 +677,12 @@ fn support_and_eye_cells_wake_when_body_box_is_unchanged() {
     // half-width keeps xmin/xmax identical.
     state.entities.set_pos(slot, moved);
     assert!(sample(&mut state, mob, DamageKind::HotFloor));
-    // Cow height 1.4 puts the eye at +1.26: a small vertical nudge crosses
-    // the eye cell within an unchanged body box. Plant the wall first so
-    // only the exact eye-probe comparison can wake the re-probe.
-    let tall = [pos[0] - 2.0, 64.7, pos[2]];
-    let risen = [tall[0], 64.8, tall[2]];
+    // A cow is 1.4 tall with vanilla eye height 1.3: 64.69 puts the eye at
+    // 65.99 (cell 65) and 64.71 at 66.01 (cell 66) — a small vertical nudge
+    // crosses the eye cell within an unchanged body box. Plant the wall first
+    // so only the exact eye-box comparison can wake the re-probe.
+    let tall = [pos[0] - 2.0, 64.69, pos[2]];
+    let risen = [tall[0], 64.71, tall[2]];
     place(&mut state, [risen[0], 66.0, risen[2]], "stone", &[]);
     state.entities.set_pos(slot, tall);
     for y in 63..=65 {

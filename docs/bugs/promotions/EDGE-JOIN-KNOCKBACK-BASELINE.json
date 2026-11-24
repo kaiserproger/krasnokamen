@@ -1,0 +1,39 @@
+{
+  "id": "EDGE-JOIN-KNOCKBACK-BASELINE",
+  "verdict": "promoted",
+  "fix_commit": "patch:6f470534ef003f6c663be4ef1a4d556f6392449bcec324bfe815df96816a3cb0",
+  "fix_commit_full": "patch:6f470534ef003f6c663be4ef1a4d556f6392449bcec324bfe815df96816a3cb0",
+  "promoted_at": "2026-11-23T22:05:14+00:00",
+  "tree_head": "816994b1186f7f17f55065a77251f592eaae96a5",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "6f470534ef003f6c663be4ef1a4d556f6392449bcec324bfe815df96816a3cb0",
+  "reversed_files": [
+    "crates/mc-edge/src/server/registry.rs",
+    "crates/mc-edge/src/server/pump.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:server::admin_tests::explosion_queue_tests::published_knockback_epochs_count_ticks_and_fence_delayed_queue_registration": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:server::admin_tests::explosion_queue_tests::first_processed_output_after_registration_still_closes_a_skipped_impulse": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:server::admin_tests::explosion_queue_tests::published_knockback_epochs_count_ticks_and_fence_delayed_queue_registration": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::admin_tests::explosion_queue_tests::first_processed_output_after_registration_still_closes_a_skipped_impulse": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T220056-ledger-promote-js0m308s"
+}

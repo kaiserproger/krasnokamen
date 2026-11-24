@@ -1,0 +1,41 @@
+{
+  "id": "EDGE-ONESHOT-WORLD-PRESSURE",
+  "verdict": "promoted",
+  "fix_commit": "patch:369819164c76bf8efbe48a506fa3ce818ea23e047c9aa915aa2069f217b6657b",
+  "fix_commit_full": "patch:369819164c76bf8efbe48a506fa3ce818ea23e047c9aa915aa2069f217b6657b",
+  "promoted_at": "2026-11-23T21:53:53+00:00",
+  "tree_head": "816994b1186f7f17f55065a77251f592eaae96a5",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "369819164c76bf8efbe48a506fa3ce818ea23e047c9aa915aa2069f217b6657b",
+  "reversed_files": [
+    "crates/mc-edge/src/fanout.rs",
+    "crates/mc-edge/src/plan/tick_index.rs",
+    "crates/mc-edge/src/plan/viewer_plan.rs",
+    "crates/mc-edge/src/server/pump.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:server::admin_tests::explosion_queue_tests::broadcast_lag_closes_only_recipients_of_skipped_knockback": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:server::admin_tests::explosion_queue_tests::six_hundred_explosions_coalesce_knockback_without_disconnect": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:server::admin_tests::explosion_queue_tests::broadcast_lag_closes_only_recipients_of_skipped_knockback": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::admin_tests::explosion_queue_tests::six_hundred_explosions_coalesce_knockback_without_disconnect": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T215226-ledger-promote-khhc6jfp"
+}

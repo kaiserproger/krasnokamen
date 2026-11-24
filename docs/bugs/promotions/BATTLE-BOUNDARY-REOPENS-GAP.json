@@ -1,0 +1,32 @@
+{
+  "id": "BATTLE-BOUNDARY-REOPENS-GAP",
+  "verdict": "promoted",
+  "fix_commit": "eccb06974",
+  "fix_commit_full": "eccb06974b7cf9c3f37f7f4bec9ed2c41602dee3",
+  "promoted_at": "2026-11-23T15:21:04+00:00",
+  "tree_head": "83e919500dffb4d976b8d8e6b5bef3609f6bf6f2",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "fix_commit",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/battle/steering.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/battle/steering_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:battle::steering::tests::boundary_clip_cannot_turn_tangential_foot_or_horse_drive_into_a_neighbour": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:battle::steering::tests::boundary_clip_cannot_turn_tangential_foot_or_horse_drive_into_a_neighbour": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T151801-ledger-promote-kqtbngwb"
+}

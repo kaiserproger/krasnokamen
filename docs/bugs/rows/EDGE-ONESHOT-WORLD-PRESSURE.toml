@@ -3,7 +3,7 @@ id = "EDGE-ONESHOT-WORLD-PRESSURE"
 title = "Explosion knockback can disappear under world queue pressure or skipped tick output"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Stage2Review/terra-edge-events.md finding 1; Stage2X SLICES.md:154-156,161,172"
 repro = "source"
 regression = [
@@ -12,3 +12,10 @@ regression = [
 ]
 repro_check = "The fix spans 40b28f732, 60f1d475b and 9a8fd193e on wt/XEdgeEvents, not merged into wt/M3Server at filing. The same-tick dimension-transfer gap of 9a8fd193e is DIMENSION-SWITCH-KNOCKBACK-DISCONNECT, not this row. The queue-pressure part (40b28f732) is EDGE-ONESHOT-EXPLOSION-QUEUE-PRESSURE; lag detection and coalescing (60f1d475b) still need a patch-mode promote. Branch checks server::admin_tests::explosion_queue_tests::{explosions_deliver_or_explicitly_close_under_queue_pressure,broadcast_lag_closes_only_recipients_of_skipped_knockback,six_hundred_explosions_coalesce_knockback_without_disconnect}; coalescing is a synthetic queue test, not a live TNT burst. Negative controls: receipts/XEdgeEvents/negative-queue.log, round3-lag-red-broadcast_lag_closes_only_recipients_of_skipped_knockback.log and round3-edge-red-same_tick_dimension_switch_explicitly_closes_unprojected_knockback.log. Multi-commit promotion needs a committed fix patch after integration."
 failing_first = "not recorded"
+# A blanket reversal of 60f1d475b does not build: its kept refs call `close_skipped_knockback` and read
+# `WorldSnapshot::player_knockback_ticks`, which the commit's production hunks add. The fix is the curated
+# HEAD-equivalent patch `docs/bugs/promotions/EDGE-ONESHOT-WORLD-PRESSURE.patch` (see its hunks.md): the
+# observation API stays, and the coalescing decision (viewer_plan) plus the lag-detection decision (pump)
+# are reversed for the control.
+fix_commit = "patch:369819164c76bf8efbe48a506fa3ce818ea23e047c9aa915aa2069f217b6657b"
+promotion = "docs/bugs/promotions/EDGE-ONESHOT-WORLD-PRESSURE.json"

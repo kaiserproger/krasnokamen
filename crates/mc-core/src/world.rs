@@ -162,8 +162,10 @@ pub struct ChunkWorld {
     pub(crate) light: crate::light::LightEngine,
 }
 
-/// Entity-step-local resident-column cache. Borrowing the world prevents edits
-/// during its lifetime; it is never retained across entity steps or ticks.
+/// Entity-step-local resident-column cache (last chunk and last 16-high
+/// section). Borrowing the world prevents edits during its lifetime. One reader
+/// per step lane lives across that lane's rows, never across a tick: the world
+/// is immutable for the whole entity phase, so a warm memo cannot go stale.
 pub(crate) struct PhysicsReader<'a> {
     world: &'a ChunkWorld,
     column: std::cell::Cell<Option<(ChunkPos, Option<&'a Chunk>)>>,
@@ -333,6 +335,19 @@ pub(crate) struct ContactStamp<const N: usize = 0> {
     /// Extra exact sample cells (contact uses support and eye); not a union box.
     pub(crate) probes: [[i32; 3]; N],
     pub(crate) revision: u64,
+}
+
+/// Test-only count of `physics_reader()` constructions, so the step lane can
+/// assert it hands one reader per worker instead of one per entity. Process
+/// global: sound only under nextest's one-process-per-test model.
+#[cfg(test)]
+pub(crate) static PHYSICS_READERS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// Test-only: read and reset the reader-construction counter.
+#[cfg(test)]
+pub(crate) fn take_physics_reader_count() -> usize {
+    PHYSICS_READERS.swap(0, std::sync::atomic::Ordering::Relaxed)
 }
 
 impl ChunkWorld {
@@ -1110,8 +1125,10 @@ impl ChunkWorld {
         crate::terrain::DirtySupplement { chunks, overlay }
     }
 
-    /// Fresh per-step cache; missing columns and overlay writes remain exact.
+    /// A new lane-local cache; missing columns and overlay writes remain exact.
     pub(crate) fn physics_reader(&self) -> PhysicsReader<'_> {
+        #[cfg(test)]
+        PHYSICS_READERS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         PhysicsReader {
             world: self,
             column: std::cell::Cell::new(None),

@@ -31,6 +31,10 @@ fn input(movement: MovementClass, position: Vec3) -> MotionInput {
         battle_facing: false,
         legacy_facing: false,
         head_follows_body: false,
+        hops: false,
+        hop_delay_scale: 1,
+        hop_lift: 0.0,
+        hop_aggressive: false,
         climbs_walls: false,
         aquatic_control: AquaticControl::Other,
         air_supply: 300,
@@ -62,6 +66,273 @@ fn ground_moves_on_support_and_stops_at_a_tall_wall() {
     assert!(blocked.body.position.x <= 0.7 + 1.0e-7);
     assert_eq!(blocked.body.velocity.x, 0.0);
     assert_eq!(blocked.body.position.y, 0.0);
+}
+
+#[test]
+fn slime_hops_without_walking_between_jumps() {
+    let world = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    let mut body = input(MovementClass::Walker, Vec3::new(0.5, 0.0, 0.5)).body;
+    let start = body.position.x;
+    let mut airborne = 0;
+    let mut launches = 0;
+    let mut walked_while_grounded = 0;
+    for tick in 0..200 {
+        let mut state = input(MovementClass::Walker, body.position);
+        state.body = body;
+        state.hops = true;
+        state.tick = tick;
+        state.drive = [4.0, 0.0, 0.0];
+        let before = state.body;
+        let moved = step(state, &world, |_, _| true);
+        if !moved.body.on_ground {
+            airborne += 1;
+        }
+        if before.on_ground {
+            if moved.body.velocity.y > 0.0 {
+                launches += 1;
+            } else if (moved.body.position.x - before.position.x).abs() > 1e-12 {
+                // `SlimeMoveControl` has no traction between hops.
+                walked_while_grounded += 1;
+            }
+        }
+        body = moved.body;
+    }
+    assert!(airborne > 5, "a slime must leave the ground: {airborne}");
+    assert!(launches >= 1, "a hop is an upward launch");
+    assert_eq!(
+        walked_while_grounded, 0,
+        "SlimeMoveControl must not walk between hops"
+    );
+    let distance = body.position.x - start;
+    assert!(
+        distance > 0.5,
+        "hops must still advance toward the wanted point: {distance}"
+    );
+}
+
+#[test]
+fn slime_hop_climbs_a_full_block_step() {
+    let world = Habitat(|x, y, _| {
+        if y < 0 || (x == 1 && y == 0) {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    let mut body = input(MovementClass::Walker, Vec3::new(0.5, 0.0, 0.5)).body;
+    let mut highest = 0.0_f64;
+    for tick in 0..250 {
+        let mut state = input(MovementClass::Walker, body.position);
+        state.body = body;
+        state.hops = true;
+        state.tick = tick;
+        state.drive = [4.0, 0.0, 0.0];
+        body = step(state, &world, |_, _| true).body;
+        highest = highest.max(body.position.y);
+    }
+    assert!(
+        highest > 1.0,
+        "a slime jump must clear a full block, peak {highest}"
+    );
+    assert!(
+        body.position.y >= 1.0 && body.position.x > 1.0,
+        "the slime must finish on top of the block: {:?}",
+        body.position
+    );
+}
+
+#[test]
+fn airborne_knockback_is_not_added_twice() {
+    let world = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    let mut state = input(MovementClass::Walker, Vec3::new(0.5, 2.0, 0.5));
+    state.hops = true;
+    state.body.on_ground = false;
+    state.body.velocity = Vec3::new(8.0, 0.0, 0.0);
+    state.impulse = [3.0, 0.0];
+    state.drive = [0.0; 3];
+    let moved = step(state, &world, |_, _| true);
+    assert!(
+        moved.body.velocity.x <= 8.0 + 1.0e-9,
+        "stored impulse was counted again: {}",
+        moved.body.velocity.x
+    );
+}
+
+#[test]
+fn grounded_knockback_lift_survives_a_non_hop_tick() {
+    let world = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    let mut body = input(MovementClass::Walker, Vec3::new(0.5, 0.0, 0.5)).body;
+    body.velocity = Vec3::new(0.0, 3.0, 0.0);
+    let mut checked = false;
+    for tick in 0..200 {
+        let mut state = input(MovementClass::Walker, body.position);
+        state.body = body;
+        state.hops = true;
+        state.tick = tick;
+        if crate::entity_motion::hop_due(state.id, tick, 1, false) {
+            continue;
+        }
+        let moved = step(state, &world, |_, _| true);
+        assert!(
+            moved.body.velocity.y > 0.0 || moved.body.position.y > 0.0,
+            "grounded knockback lift was zeroed"
+        );
+        checked = true;
+        break;
+    }
+    assert!(checked, "found a non-hop tick");
+}
+
+#[test]
+fn magma_cube_hop_delay_is_four_times_longer() {
+    let slime = (0..400)
+        .filter(|tick| crate::entity_motion::hop_due(9, *tick, 1, false))
+        .count();
+    let magma = (0..400)
+        .filter(|tick| crate::entity_motion::hop_due(9, *tick, 4, false))
+        .count();
+    assert!(slime > 0 && magma > 0);
+    assert!(
+        magma * 3 < slime,
+        "MagmaCube.getJumpDelay multiplies the slime delay by four: {magma} vs {slime}"
+    );
+}
+
+#[test]
+fn hop_delay_period_matches_the_blueprint_scale() {
+    // Vanilla draws `random(20)+10` per jump and counts it down only while on
+    // the ground, so its observed period is delay plus flight. This kernel keeps
+    // a deterministic phase on an absolute tick clock: the period between hop
+    // ticks is exactly the delay, and a hop tick that lands mid-flight is simply
+    // not a launch.
+    for scale in [1_u64, 4] {
+        let ticks: Vec<u64> = (0..20_000)
+            .filter(|tick| crate::entity_motion::hop_due(11, *tick, scale, false))
+            .collect();
+        assert!(ticks.len() > 20, "ticks={ticks:?}");
+        let period = ticks[1] - ticks[0];
+        assert!(
+            (10 * scale..=29 * scale).contains(&period),
+            "Slime.getJumpDelay is random(20)+10, MagmaCube x4: period {period}"
+        );
+        assert!(
+            ticks.windows(2).all(|pair| pair[1] - pair[0] == period),
+            "a fixed delay must keep its period: {ticks:?}"
+        );
+    }
+}
+
+#[test]
+fn an_aggressive_body_divides_its_scaled_jump_delay_by_three() {
+    // `Slime$SlimeMoveControl.tick`: `jumpDelay = getJumpDelay(); if (isAggressive)
+    // jumpDelay /= 3`. `MagmaCube.getJumpDelay` already multiplied by four, and
+    // `MagmaCube.canDealDamage` is `isEffectiveAi`, so a chasing cube's delay is
+    // (10..29)*4/3 = 13..38 ticks; a chasing slime's is 3..9.
+    for (scale, low, high) in [(1_u64, 3_u64, 9_u64), (4, 13, 38)] {
+        let ticks: Vec<u64> = (0..20_000)
+            .filter(|tick| crate::entity_motion::hop_due(11, *tick, scale, true))
+            .collect();
+        let period = ticks[1] - ticks[0];
+        assert!(
+            (low..=high).contains(&period),
+            "aggressive delay for scale {scale} out of {low}..={high}: {period}"
+        );
+        let calm: Vec<u64> = (0..20_000)
+            .filter(|tick| crate::entity_motion::hop_due(11, *tick, scale, false))
+            .collect();
+        assert!(
+            ticks.len() >= calm.len() * 2,
+            "aggression must shorten the delay: {} vs {}",
+            ticks.len(),
+            calm.len()
+        );
+        let idle_period = calm[1] - calm[0];
+        assert!(
+            (10 * scale..=29 * scale).contains(&idle_period),
+            "an idle hopper keeps the full delay: {idle_period}"
+        );
+    }
+}
+
+#[test]
+fn a_hop_tick_advances_a_slime_toward_its_drive() {
+    // A hop tick is the only tick a slime moves on the ground: the launch keeps
+    // the wanted horizontal speed, so a mid/far slime's hop tick must displace it.
+    let world = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    let mut body = input(MovementClass::Walker, Vec3::new(0.5, 0.0, 0.5)).body;
+    let tick = (0..400)
+        .find(|tick| crate::entity_motion::hop_due(7, *tick, 1, false))
+        .expect("a hop tick");
+    let mut state = input(MovementClass::Walker, body.position);
+    state.body = body;
+    state.hops = true;
+    state.id = 7;
+    state.tick = tick;
+    state.drive = [4.0, 0.0, 0.0];
+    body = step(state, &world, |_, _| true).body;
+    assert!(
+        body.position.x > 0.5 + 1.0e-9,
+        "the hop tick must move the slime toward its drive: {:?}",
+        body.position
+    );
+}
+
+#[test]
+fn hop_tick_rises_the_vanilla_jump_speed_on_its_first_tick() {
+    let world = Habitat(|_, y, _| {
+        if y < 0 {
+            BlockMaterial::Solid
+        } else {
+            BlockMaterial::Air
+        }
+    });
+    // Vanilla `getJumpPower()` is the float 0.42f, i.e. 0.419_999_986_886_978_15
+    // blocks/tick, plus `MagmaCube`'s `size * 0.1`.
+    let base = mc_physics::LIVING_JUMP_SPEED_BLOCKS_PER_SECOND * mc_physics::TICK_SECONDS;
+    for (lift, expected) in [(0.0, base), (0.4, base + 0.4)] {
+        let mut body = input(MovementClass::Walker, Vec3::new(0.5, 0.0, 0.5)).body;
+        let id = 11;
+        let tick = (0..400)
+            .find(|tick| crate::entity_motion::hop_due(id, *tick, 1, false))
+            .expect("a hop tick");
+        let mut state = input(MovementClass::Walker, body.position);
+        state.body = body;
+        state.hops = true;
+        state.id = id;
+        state.tick = tick;
+        state.hop_lift = lift;
+        body = step(state, &world, |_, _| true).body;
+        assert!(
+            (body.position.y - expected).abs() < 1.0e-9,
+            "vanilla jumpFromGround moves {} blocks on the jump tick, got {}",
+            expected,
+            body.position.y
+        );
+    }
 }
 
 #[test]

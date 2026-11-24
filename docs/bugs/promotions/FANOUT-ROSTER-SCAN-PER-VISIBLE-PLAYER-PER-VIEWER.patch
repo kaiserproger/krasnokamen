@@ -1,0 +1,34 @@
+diff --git a/crates/mc-edge/src/plan/entity_interest.rs b/crates/mc-edge/src/plan/entity_interest.rs
+--- a/crates/mc-edge/src/plan/entity_interest.rs
++++ b/crates/mc-edge/src/plan/entity_interest.rs
+@@ -488,27 +488,18 @@
+     snapshot: &WorldSnapshot,
+     entity: &EntityView,
+     recipient: EntityId,
+-    _spectators: &std::collections::HashSet<EntityId>,
++    spectators: &std::collections::HashSet<EntityId>,
+ ) -> bool {
+     if entity.id == recipient || entity.type_id != player_entity_type_id() {
+         return true;
+     }
+-    #[cfg(test)]
+-    ROSTER_SCANS.fetch_add(snapshot.player_roster.len(), std::sync::atomic::Ordering::Relaxed);
+-    let spectator_viewer = snapshot
+-        .player_roster
+-        .iter()
+-        .any(|player| player.entity == recipient && player.game_mode == 3);
+-    if spectator_viewer {
++    if spectators.contains(&recipient) {
+         snapshot
+             .cameras
+             .get(&entity.id)
+             .is_none_or(|target| *target == entity.id)
+     } else {
+-        !snapshot
+-            .player_roster
+-            .iter()
+-            .any(|player| player.entity == entity.id && player.game_mode == 3)
++        !spectators.contains(&entity.id)
+     }
+ }
+ 
