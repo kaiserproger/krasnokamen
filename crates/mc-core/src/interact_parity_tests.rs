@@ -599,6 +599,179 @@ fn interact_parity_dragon_egg_conserves_block_before_falling() {
 }
 
 #[test]
+fn interact_parity_dragon_egg_requests_a_cold_target_through_the_demand_path() {
+    let (mut state, actor) = setup();
+    // Away from the join chunks, so only the egg's own column is resident.
+    let pos = BlockPos {
+        x: 64,
+        y: Y + 1,
+        z: 64,
+    };
+    state.world.ensure_blocking(
+        &[(
+            crate::boundary::ChunkPos {
+                x: pos.x.div_euclid(16),
+                z: pos.z.div_euclid(16),
+            },
+            0,
+        )]
+        .into_iter()
+        .collect(),
+    );
+    let slot = state.entities.slot_of(actor).unwrap();
+    state.entities.set_pos(
+        slot,
+        [
+            f64::from(pos.x) + 0.5,
+            f64::from(pos.y),
+            f64::from(pos.z) + 2.5,
+        ],
+    );
+    state.entities.set_ground(slot, true);
+    let egg = block(&state, "dragon_egg", &[]);
+    put(&mut state, pos.x, pos.y, pos.z, egg);
+    let stone = block(&state, "stone", &[]);
+    let air = state.registry.states.air;
+    // Only cold cells in the sample box are air, so the search accepts exactly a
+    // target vanilla would have loaded.
+    for dx in -15..=15 {
+        for dz in -15..=15 {
+            let x = pos.x + dx;
+            let z = pos.z + dz;
+            let resident = state.world.has_chunk(x.div_euclid(16), z.div_euclid(16));
+            for dy in -7..=7 {
+                let y = pos.y + dy;
+                if (x, y, z) == (pos.x, pos.y, pos.z) {
+                    continue;
+                }
+                state
+                    .world
+                    .set_block(x, y, z, if resident { stone } else { air });
+            }
+        }
+    }
+    state.world.fold_overlay();
+    // Through the real tick: the click records the request, the chunk phase of the
+    // same tick demands the chunk, and the next tick completes the move once the
+    // admission has landed it. Both wiring points are part of the proof.
+    crate::tick::run_tick(
+        &mut state,
+        &[PlayerInput::UseItemOn {
+            connection: ConnectionId(1),
+            hand: Hand::Main,
+            position: pos,
+            face: 1,
+            cursor: [0.5; 3],
+            sequence: 1,
+        }],
+    );
+    assert_eq!(
+        state.world.block_at(pos.x, pos.y, pos.z),
+        Some(egg),
+        "the egg waits for its target chunk instead of moving into the overlay"
+    );
+    let (origin, record) = state.pending_egg_teleports.first().unwrap();
+    let origin = *origin;
+    assert_eq!(origin, pos);
+    let target = record.target;
+    let chunk = crate::boundary::ChunkPos {
+        x: target.x.div_euclid(16),
+        z: target.z.div_euclid(16),
+    };
+    assert!(!state.world.has_chunk(chunk.x, chunk.z));
+    assert_eq!(
+        state.desired_chunks().get(&chunk).copied(),
+        Some(0),
+        "the request is the highest priority demand"
+    );
+    let admitted = state
+        .world
+        .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+    assert_eq!(
+        admitted,
+        vec![chunk],
+        "the fixture admits the requested chunk"
+    );
+    assert!(state.world.has_chunk(chunk.x, chunk.z));
+    crate::tick::run_tick(&mut state, &[]);
+    assert!(
+        state.pending_egg_teleports.is_empty(),
+        "the completion consumes the record"
+    );
+    let air_state = state.registry.states.air;
+    assert_eq!(
+        state.world.block_at(pos.x, pos.y, pos.z),
+        Some(air_state),
+        "the origin is emptied by the tick that admits the chunk"
+    );
+    // Custody is either the block at the target or the falling entity the same
+    // tick schedules (the egg lands on air, so vanilla drops it) — never lost.
+    let landed = state.world.block_at(target.x, target.y, target.z) == Some(egg);
+    let falling = state.entities.slots().any(|slot| {
+        state
+            .entities
+            .row(slot)
+            .falling
+            .is_some_and(|state| state.block_state == egg)
+    });
+    assert!(
+        landed || falling,
+        "the egg moved to the target chunk (block {landed}, falling {falling})"
+    );
+}
+
+#[test]
+fn interact_parity_dragon_egg_drops_a_stale_request() {
+    let (mut state, actor) = setup();
+    let egg = install(&mut state, "dragon_egg", &[]);
+    state.tick = 3;
+    // A record whose egg was broken before the chunk arrived must not move.
+    state.pending_egg_teleports.push((
+        POS,
+        crate::vanilla_interact::EggTeleport {
+            target: BlockPos {
+                x: POS.x + 200,
+                y: POS.y,
+                z: POS.z,
+            },
+            source: egg,
+            deadline_tick: 20,
+        },
+    ));
+    let air_state = state.registry.states.air;
+    put(&mut state, POS.x, POS.y, POS.z, air_state);
+    state.complete_pending_egg_teleports();
+    assert!(state.pending_egg_teleports.is_empty());
+    // No egg anywhere near the stale target: the record was dropped, not moved.
+    assert!(state.world.block_at(POS.x + 200, POS.y, POS.z) != Some(egg));
+    assert!(
+        state
+            .merge_block_writes
+            .iter()
+            .all(|&(_, state_id)| state_id != egg)
+    );
+    // Out of budget: the egg stays and the demand is dropped.
+    put(&mut state, POS.x, POS.y, POS.z, egg);
+    state.tick = 44;
+    state.pending_egg_teleports.push((
+        POS,
+        crate::vanilla_interact::EggTeleport {
+            target: BlockPos {
+                x: POS.x + 200,
+                y: POS.y,
+                z: POS.z,
+            },
+            source: egg,
+            deadline_tick: 43,
+        },
+    ));
+    state.complete_pending_egg_teleports();
+    assert!(state.pending_egg_teleports.is_empty());
+    assert_eq!(state.world.block_at(POS.x, POS.y, POS.z), Some(egg));
+    let _ = actor;
+}
+
+#[test]
 fn interact_parity_dragon_egg_never_teleports_into_a_cold_overlay() {
     let (mut state, actor) = setup();
     // Away from the join chunks, so only the egg's own column is resident.

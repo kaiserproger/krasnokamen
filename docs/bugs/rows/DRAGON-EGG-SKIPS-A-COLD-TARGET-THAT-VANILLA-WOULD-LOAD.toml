@@ -6,6 +6,9 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "Split from DRAGON-EGG-TELEPORTS-INTO-COLD-CHUNK-OVERLAY (review 7 B2; docs/bugs/README.md 'one row describes one symptom'): the fixed row closes the write into the cold overlay. This row keeps the remaining parity gap at the edge of the resident zone - vanilla's Level.getChunk loads the sampled target and the egg lands there, while HEAD now skips a target whose column is not resident."
-regression = []
+regression = [
+  "cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_requests_a_cold_target_through_the_demand_path",
+  "cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_drops_a_stale_request",
+]
 repro_check = ["Open: OD-1 option 1 approved; the tick-order design is receipts/D123/D123Battle/DRAGON-EGG-TICK-NOTE.md (a derived pending record on TickState, demand through `desired_chunks`, completion before the entity phase, refusal outside the simulation distance). Missing proof: a cargo test through the real tick with chunk admission (chunk becomes resident without a blocking `world.ensure` from the interaction, the egg lands, the origin becomes air, a mid-flight checkpoint reopens without the move) plus its reverse control. No code written yet."]
-failing_first = "not recorded"
+failing_first = "seen 2026-11-25: the demand-path test reds at the emptied origin when the tick completion call is removed"

@@ -155,6 +155,10 @@ fn run_dimension_tick_inner<'a>(
     let want = state.desired_chunks();
     let loaded = state.world.ensure(&want);
     chunk_laps.lap("ensure");
+    // A dragon egg's sampled target may have arrived with this admission; its
+    // move is written through `merge_block_writes` for this tick's block phase.
+    state.complete_pending_egg_teleports();
+    chunk_laps.lap("egg_teleports");
     state.refresh_active_chunks(state.tick + 1);
     state.accumulate_inhabited_time();
     chunk_laps.lap("active_inhabited");

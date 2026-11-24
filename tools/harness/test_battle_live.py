@@ -47,6 +47,16 @@ class MarkerTest(unittest.TestCase):
         # The respawn is the client's own action, as in the crash-recovery kit.
         self.assertIn('holder.driver("respawn")', source)
 
+    def test_judge_fails_the_step_on_any_failed_assertion(self) -> None:
+        good = {"assertions": {"a": True, "b": True}, "passed": True}
+        battle_live.judge(good)
+        self.assertTrue(good["passed"])
+        for bad in ({"assertions": {"a": True, "b": False}},
+                    {"assertions": {"a": True}, "incomplete": ["no position"]},
+                    {"assertions": {}}):
+            with self.assertRaisesRegex(RuntimeError, "assertions failed"):
+                battle_live.judge(dict(bad))
+
     def test_the_profile_and_scenarios_are_registered(self) -> None:
         self.assertIn("battle-live", PROFILES)
         self.assertEqual(battle_live.scenario_ids(),

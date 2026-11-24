@@ -7,9 +7,9 @@ status = "open"
 source = "Stage-3 S3FixBreaker finding F2: returning from the nether while TNT explodes closes the connection with dimension-switch-explosion-knockback"
 repro = "client"
 regression = [
-  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::same_tick_dimension_switch_discards_only_old_world_knockback",
-  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::dimension_reset_fences_queued_old_world_explosions_at_real_writer",
+  "cargo:mc-edge:explosion_queue_tests::same_tick_dimension_switch_discards_only_old_world_knockback",
+  "cargo:mc-edge:explosion_queue_tests::dimension_reset_fences_queued_old_world_explosions_at_real_writer",
 ]
-fix_commit = "patch:be44726c320aba551f99973c44c4061122283f3f7233bafea05f70f5d58740d3"
+fix_commit = "5810902c7"
 failing_first = "reported"
-repro_check = ["Fix patch:be44726 is in tree and both cargo refs are green. Missing proof: the registered graphical scene `native-v2-dimension-switch-knockback` (SWEEP-MANIFEST.md: an explosion knocks the player back on the same tick a portal teleport switches dimension; the connection survives, the client stays in the new dimension, no old-world knockback) and its passed receipt on the promotion tree."]
+repro_check = ["Fix 5810902c7 (re-listed as patch:be44726c on a tree that no longer exists; the commit is 5810902c7) is in tree and both cargo refs are green; the ref paths were stale module paths and are corrected to mc-edge/src/explosion_queue_tests.rs. Missing proof: the registered graphical scene `native-v2-dimension-switch-knockback` (SWEEP-MANIFEST.md: an explosion knocks the player back on the same tick a portal teleport switches dimension; the connection survives, the client stays in the new dimension, no old-world knockback) and its passed receipt on the promotion tree."]

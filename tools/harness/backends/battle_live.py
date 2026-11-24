@@ -53,6 +53,15 @@ def check(report: dict[str, Any], name: str, condition: bool, detail: Any = None
         report.setdefault("observations", {})[name] = detail
 
 
+def judge(report: dict[str, Any]) -> None:
+    """Set `passed` and fail the step: a profile's own report is not evidence by itself."""
+    report["passed"] = bool(report["assertions"]) and all(report["assertions"].values()) \
+        and not report.get("incomplete")
+    if not report["passed"]:
+        failed = [name for name, ok in report["assertions"].items() if not ok]
+        raise RuntimeError(f"battle-live assertions failed: {failed or 'incomplete checklist'}")
+
+
 def _parse_at(line: str) -> list[float] | None:
     for pattern in RESPAWN_MARKERS:
         found = pattern.search(line)
@@ -134,7 +143,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         died_at = _point(dead["state"])
         holder.driver("respawn")
         holder.driver("wait_for", condition="screen", value="playing", timeout=120)
-        respawned = console.wait(rf"Battle live respawned: {HOLDER}", mark, timeout=120)
+        respawned = console.wait(rf"Battle live respawned: {HOLDER}[^\n]*", mark, timeout=120)
         line = respawned.group(0)
         report["observations"]["respawn_line"] = line
         at = _parse_at(line)
@@ -163,7 +172,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         else:
             report.setdefault("incomplete", []).append(
                 "no client position or server at=: the fall distance cannot be measured")
-        report["passed"] = all(report["assertions"].values()) and not report.get("incomplete")
+        judge(report)
     finally:
         for client in clients:
             client.stop()

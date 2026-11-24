@@ -1,5 +1,5 @@
 //! Native vanilla block uses which do not open a screen.
-use crate::boundary::{BlockPos, EntityId, Hand};
+use crate::boundary::{BlockPos, ChunkPos, EntityId, Hand};
 use crate::tick::TickState;
 use mc_data::Identifier;
 use mc_world::BlockStateId;
@@ -100,7 +100,8 @@ pub(crate) fn dragon_egg(state: &mut TickState, actor: EntityId, pos: BlockPos) 
         return true;
     }
     // DragonEggBlock.teleport: 1000 attempts, differences of uniform [0,16)
-    // horizontal and [0,8) vertical samples. Only resident, in-border air wins.
+    // horizontal and [0,8) vertical samples. In-border air wins; a target whose
+    // chunk is not resident yet is requested and landed when it arrives.
     let mut random = mc_data::loot::chest_26_1_2::ChestRng::new(
         state.tick
             ^ (actor.0 as u64)
@@ -125,14 +126,32 @@ pub(crate) fn dragon_egg(state: &mut TickState, actor: EntityId, pos: BlockPos) 
         }
         if !state
             .world
-            .has_chunk(target.x.div_euclid(16), target.z.div_euclid(16))
-            || !state
-                .world
-                .block_at(target.x, target.y, target.z)
-                .is_some_and(|id| id == state.registry.states.air)
+            .block_at(target.x, target.y, target.z)
+            .is_some_and(|id| id == state.registry.states.air)
             || !crate::plugin_player::allows_block(state, actor, target)
         {
             continue;
+        }
+        // Vanilla's `Level.getChunk` loads the sampled target and the egg lands
+        // there. Here residency is the world's own demand path: request the
+        // chunk (it enters `desired_chunks` while the record lives) and land the
+        // egg once it is resident, instead of skipping a cold target.
+        if !state
+            .world
+            .has_chunk(target.x.div_euclid(16), target.z.div_euclid(16))
+        {
+            state
+                .pending_egg_teleports
+                .retain(|(origin, _)| *origin != pos);
+            state.pending_egg_teleports.push((
+                pos,
+                EggTeleport {
+                    target,
+                    source: current,
+                    deadline_tick: state.tick + EGG_TELEPORT_BUDGET_TICKS,
+                },
+            ));
+            return true;
         }
         state.world.set_block(target.x, target.y, target.z, current);
         state
@@ -144,4 +163,72 @@ pub(crate) fn dragon_egg(state: &mut TickState, actor: EntityId, pos: BlockPos) 
         return true;
     }
     true
+}
+
+/// How long a dragon egg's request for a cold target chunk lives. Vanilla has no
+/// visible delay (`Level.getChunk` is synchronous); two seconds keeps the egg
+/// "about to jump" and bounds the demand a click can add.
+pub(crate) const EGG_TELEPORT_BUDGET_TICKS: u64 = 40;
+
+/// One dragon-egg click whose vanilla target was not resident yet.
+pub(crate) struct EggTeleport {
+    pub target: BlockPos,
+    pub source: u32,
+    pub deadline_tick: u64,
+}
+
+impl TickState {
+    /// The residency demand a pending egg teleport adds: its target chunk at the
+    /// highest priority (zero), so the sample it landed on is the first loaded.
+    pub(crate) fn pending_egg_chunks(&self) -> impl Iterator<Item = ChunkPos> + '_ {
+        self.pending_egg_teleports
+            .iter()
+            .map(|(_, pending)| ChunkPos {
+                x: pending.target.x.div_euclid(16),
+                z: pending.target.z.div_euclid(16),
+            })
+    }
+
+    /// Complete the vanilla move for every pending record whose target chunk is
+    /// resident now; drop records whose egg moved, changed state or ran out of
+    /// budget. Runs after chunk admission, so the writes land in the same tick's
+    /// block phase (`merge_block_writes`).
+    pub(crate) fn complete_pending_egg_teleports(&mut self) {
+        if self.pending_egg_teleports.is_empty() {
+            return;
+        }
+        let air = self.registry.states.air;
+        let pending = std::mem::take(&mut self.pending_egg_teleports);
+        for (origin, record) in pending {
+            let target = record.target;
+            let egg_in_place = self
+                .world
+                .block_at(origin.x, origin.y, origin.z)
+                .is_some_and(|id| id == record.source);
+            let resident = self
+                .world
+                .has_chunk(target.x.div_euclid(16), target.z.div_euclid(16));
+            if !egg_in_place || self.tick > record.deadline_tick {
+                continue;
+            }
+            let target_air = self
+                .world
+                .block_at(target.x, target.y, target.z)
+                .is_some_and(|id| id == air);
+            if !resident || !target_air {
+                // Still waiting (the demand keeps the chunk requested) unless the
+                // budget above dropped it; a cell that is no longer air is dropped.
+                if resident {
+                    continue;
+                }
+                self.pending_egg_teleports.push((origin, record));
+                continue;
+            }
+            self.world
+                .set_block(target.x, target.y, target.z, record.source);
+            self.world.set_block(origin.x, origin.y, origin.z, air);
+            self.merge_block_writes
+                .extend([(origin, air), (target, record.source)]);
+        }
+    }
 }
