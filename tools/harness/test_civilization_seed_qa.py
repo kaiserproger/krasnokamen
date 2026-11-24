@@ -1,6 +1,7 @@
 """Evidence scanning must not turn generated/natural geometry into stage proof."""
 import copy
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from .backends import civilization_seed_qa as qa
@@ -598,6 +599,67 @@ class GatedCensusTests(unittest.TestCase):
                          ["minecraft:villager", "minecraft:sheep"])
         self.assertFalse(census["truncated"])
         self.assertEqual(census["census_types"], ["minecraft:villager", "minecraft:sheep"])
+
+
+class ObserverMoveTests(unittest.TestCase):
+    """20261124T170423: the observer's console teleport landed 1.5 blocks off the
+    requested column and 6 below the requested height, the unbounded wait for that
+    landing spent the last 1 h 45 min of the scenario, and the milestones the world
+    completed meanwhile (house L1 at server tick 99 816) were never observed."""
+
+    def _probe(self, states, *, clock=None):
+        probe = Mock()
+        probe.remaining.side_effect = lambda *, limit=120.0: min(1800.0, limit)
+        probe.waits = []
+        sequence = list(states)
+
+        def observe():
+            current = sequence.pop(0) if len(sequence) > 1 else sequence[0]
+            return {"player": dict(current)}
+
+        def wait(predicate, label, *, timeout_seconds=None):
+            probe.waits.append((label, timeout_seconds))
+            return {"player": dict(sequence[0])}
+
+        def call(name, arguments=None):
+            if clock is not None:
+                clock["t"] += 1.0
+            return {"blocks": [], "truncated": False}
+
+        probe.observe.side_effect = observe
+        probe.wait.side_effect = wait
+        probe.call.side_effect = call
+        return probe
+
+    def test_an_observer_that_never_lands_cannot_consume_the_scenario(self):
+        clock = {"t": 0.0}
+        # Requested point of the farm at [78,68,-320]..[84,72,-311] is (81, 75, -315.5);
+        # the server leaves the observer on the field at (82.5, 69, -317).
+        probe = self._probe([{"x": 0.0, "y": 64.0, "z": 0.0},
+                             {"x": 82.5, "y": 69.0, "z": -317.0}], clock=clock)
+        lines = ["Buildings: #7 farm level 1 [78, 68, -320]-[84, 72, -311]"]
+        with patch.object(qa, "time", SimpleNamespace(monotonic=lambda: clock["t"])):
+            evidence = qa.building_blocks(probe, lines, Mock())
+        self.assertEqual(evidence[0].get("observer_moved"), False,
+                         "a landing the server clamps is a recorded miss, not a hang")
+        self.assertEqual(probe.wait.call_count, 0,
+                         f"the observer move must never use an unbounded probe.wait: {probe.waits}")
+        self.assertLessEqual(probe.call.call_count, 2 * int(qa.OBSERVER_MOVE_TIMEOUT) + 8,
+                             "both observer moves are bounded by their own timeout")
+
+    def test_a_landing_below_the_requested_height_is_still_an_arrival(self):
+        clock = {"t": 0.0}
+        probe = self._probe([{"x": 82.5, "y": 69.0, "z": -316.0}], clock=clock)
+        with patch.object(qa, "time", SimpleNamespace(monotonic=lambda: clock["t"])):
+            self.assertTrue(qa.move_observer(probe, {"x": 82.0, "y": 75.0, "z": -316.0}))
+        self.assertEqual(probe.call.call_count, 0)
+
+    def test_an_observer_that_never_lands_stops_at_its_own_timeout(self):
+        clock = {"t": 0.0}
+        probe = self._probe([{"x": 0.0, "y": 64.0, "z": 0.0}], clock=clock)
+        with patch.object(qa, "time", SimpleNamespace(monotonic=lambda: clock["t"])):
+            self.assertFalse(qa.move_observer(probe, {"x": 100.0, "y": 70.0, "z": 100.0}))
+        self.assertLessEqual(probe.call.call_count, int(qa.OBSERVER_MOVE_TIMEOUT) + 1)
 
 
 if __name__ == "__main__":
