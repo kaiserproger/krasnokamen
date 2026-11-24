@@ -70,6 +70,17 @@
       "wait_ticks": 30
     },
     {
+      "assert_block": {
+        "name": "pot-sherds-block",
+        "args": {
+          "x": 1000,
+          "y": 160,
+          "z": 1004
+        },
+        "expect": "minecraft:decorated_pot"
+      }
+    },
+    {
       "shot": "pot-sherds"
     }
   ]
