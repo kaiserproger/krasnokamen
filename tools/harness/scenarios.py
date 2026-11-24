@@ -554,8 +554,8 @@ SCENARIOS: dict[str, Scenario] = {
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_duplicate_login.py",
                  "tools/harness/backends/client_probes.py"),
         fixture="private world; one declared diamond; second headless native client with the same username",
-        proves="the second login enters Play with the same player and exactly one diamond, the first session leaves Play, and the first client's re-login replaces the second in turn",
-        limits="offline-mode identity (same name, same UUID); no online-auth or plugin-login claimant",
+        proves="the second login enters Play with the same player and exactly one diamond, the first session leaves Play, the first client's re-login replaces the second in turn, and a third kick while the incumbent is in the Nether leaves the server's reason on the kicked client instead of its own failed-write error",
+        limits="offline-mode identity (same name, same UUID); no online-auth or plugin-login claimant; the Nether kick is the row's own reported race, so a single run is one sample of it",
     ),
     "native-v2-auth-budget": _entry(
         id="native-v2-auth-budget", summary="krasnokamen-auth /register and /login complete on a native client behind the native login gate",
