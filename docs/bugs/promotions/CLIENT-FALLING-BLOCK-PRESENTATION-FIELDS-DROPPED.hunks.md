@@ -44,6 +44,12 @@ HEAD equivalent (what the pair adds back, `89f2223e`):
      }
 ```
 
+The `predicted_velocity` block above is quoted as the pair left it; the client tip carries
+`style(client): rustfmt …` (`client:50876432c0`, after `89f2223e`) which reflows that assignment to
+`value["predicted_velocity"] =\n            json!(entity.physical.falling_velocity.unwrap_or(entity.velocity));`.
+Formatting only: the pair's own commits are unchanged, so the reversal still removes exactly the ten
+lines this map names, and the re-land restores them (now rustfmt-wrapped).
+
 Adaptations, per the (a)/(b)/(c) classes:
 
 - (a) **`presented_position` formatting.** The real hunk put `presented_transform(...)` on two

@@ -24,6 +24,12 @@ the field and `client:e541641c53a0c2cf452e6f5f694e3758e8550519` re-lands it as t
 No adaptation: the pair's diff is the hunk verbatim (the guard and the presentation fields it sits
 between belong to CLIENT-FALLING-BLOCK-PRESENTATION-FIELDS-DROPPED and stay in both commits).
 
+The client tip carries `style(client): rustfmt …` (`client:50876432c0`, appended after `89f2223e`),
+which reflows these four lines to
+`value["predicted_velocity"] = json!(entity.physical.falling_velocity.unwrap_or(entity.velocity));`
+over two lines. Formatting only: the pre-image `593f7957` / `ffe8a4c1` and the re-land `e541641c`
+are unchanged, so the reversal still removes exactly this assignment.
+
 ## Omitted hunk of `d0337426`: `src/entities/physical.rs`, `@@ -1057,8 +1057,15 @@`
 
 (c) **Not part of this fix.** That hunk made a `DATA_NO_GRAVITY` falling block move on the received
