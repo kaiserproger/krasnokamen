@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from .. import runtime
-from .native_p1 import _aim, _capture
+from .native_p1 import _capture
 from .native_v2 import _block, _click, _echo, _give, _insert, _open, _set, _use
 from .probe_steps import ProbeSteps, item_count
 
@@ -188,38 +188,29 @@ def _frame_insert(steps: ProbeSteps, identity: dict, map_id: int) -> None:
                "map_near_frame_waypoint_received")
 
 
-def _frame(steps: ProbeSteps, origin: tuple[int, int, int], map_id: int) -> dict:
-    identity = _frame_place(steps, origin)
-    _frame_insert(steps, identity, map_id)
-    _aim(steps, identity)
-    _capture(steps, "map-framed-copy-near")
-    steps.report["frame"] = identity
-    return identity
-
-
 def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     map_id = _create(steps)
-    # Drawn-marker predicate: one map id, one camera pose, two captures taken with the *same* world —
-    # the support and the empty frame are already placed — and the same held map; only the map inside
-    # the frame differs (absent, then present). The received colour array is asserted equal across the
-    # two captures, the player pointer is static, so the only rendered difference is the frame's
-    # marker icon: a client that receives the decoration and never draws it produces the same frame
-    # twice.
-    steps.fixture("clear @s minecraft:filled_map")
+    # Drawn-marker predicate on a *locked* map: only an unlocked map samples terrain
+    # (crates/mc-core/src/maps/runtime.rs gates sampling on `!map.locked`; framed copies still
+    # deliver pixels and markers), so the received colour array cannot change while the world does.
+    # Both captures are taken with the support and the empty frame already placed and the same
+    # locked map held; only the map inside the frame differs (absent, then present), so the only
+    # rendered difference is the frame's marker icon: a client that receives the decoration and
+    # never draws it produces the same frame twice.
+    locked = _locked(steps, origin, map_id)
     frame = _frame_place(steps, origin)
-    steps.check("map_unframed_map_has_no_frame_waypoint", _marker_count(steps, map_id, "frame") == 0)
-    _clone(steps, map_id, 0)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
-    colours_before = _map(steps, map_id)["colors"][:]
+    steps.check("map_unframed_map_has_no_frame_waypoint", _marker_count(steps, locked, "frame") == 0)
+    colours_before = _map(steps, locked)["colors"][:]
     _held_shot(steps, "map-held-without-frame-waypoint")
     steps.fixture("clear @s minecraft:filled_map")
-    _frame_insert(steps, frame, map_id)
+    _frame_insert(steps, frame, locked)
     steps.check("map_framed_map_has_exactly_one_frame_waypoint",
-                _marker_count(steps, map_id, "frame") == 1)
-    _clone(steps, map_id, 0)
+                _marker_count(steps, locked, "frame") == 1)
+    _clone(steps, locked, 0)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     _held_shot(steps, "map-held-with-frame-waypoint")
-    colours_after = _map(steps, map_id)["colors"][:]
+    colours_after = _map(steps, locked)["colors"][:]
     steps.report["map_terrain_changed_pixels"] = sum(
         1 for before, after in zip(colours_before, colours_after) if before != after)
     steps.check("map_pair_identical_terrain", colours_after == colours_before)
@@ -235,12 +226,12 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     state = steps.wait(lambda state: state["player"]["x"] > x + 79,
                        "map_only_player_beyond_frame_view_radius")
     steps.check("map_frame_beyond_configured_64_block_view", state["player"]["x"] - x > 64)
-    before = _updates(steps, map_id)
-    steps.wait(lambda _state: _updates(steps, map_id) > before + 2,
+    before = _updates(steps, locked)
+    steps.wait(lambda _state: _updates(steps, locked) > before + 2,
                "map_distant_viewer_fresh_packets")
     _held_shot(steps, "map-distant-held-clone")
     steps.check("map_distant_clone_keeps_exactly_one_frame_waypoint",
-                _marker_count(steps, map_id, "frame") == 1)
+                _marker_count(steps, locked, "frame") == 1)
 
 
 def _locked(steps: ProbeSteps, origin: tuple[int, int, int], map_id: int) -> int:
