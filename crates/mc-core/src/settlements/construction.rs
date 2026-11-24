@@ -1865,6 +1865,13 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     // The first Farm's seeds are gathered even while a priority material
     // worker is out: `assign_builder` keeps that worker out of this project,
     // and another resident clears the meadow.
+    // The F12 ordering below rests on `a_demanded_staffed_lumberjack_does_not_
+    // hold_the_fortification` (red with an empty start list before the order
+    // changed) and the gate fixture's miner-lane log — not on the 1580 s run of
+    // 2026-11-24, whose wall scan read a 25-column ring, nor on its 768
+    // cobblestone, which was the deposit. The comment inside that arm is kept
+    // verbatim because it is the control patch's `+` side (review wave 2,
+    // minor 4).
     let Some(record) = state.settlements.get(id) else {
         return false;
     };

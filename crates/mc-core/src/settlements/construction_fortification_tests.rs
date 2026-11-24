@@ -435,10 +435,13 @@ fn certify_natural(state: &mut TickState, id: SettlementId, kind: BuildingKind) 
     );
 }
 
-/// 2026-11-24 perimeter gate: a staffed gatherer of the demanded profession (a certified natural
-/// zone plus a resident working its job site) made `plan_pass` return before the fortification,
-/// so 1580 s passed with the well standing and 768 cobblestone in storage. The gatherer keeps out
-/// of the optional street work only; the funded fortification list is not held.
+/// F12: a staffed gatherer of the demanded profession (a certified natural zone plus a resident
+/// working its job site) stopped `plan_pass` before the fortification, so the funded wall was
+/// never started. The proof is this test (red with `started=[]` on 20261124T145451 before the
+/// ordering changed) and the live fixture's `miner lane tick=4206` log; the 1580 s gate run that
+/// prompted the fix scanned a 25-column ring, so it could not see the wall line at all and is not
+/// the proof. The gatherer keeps out of the optional street work only: the funded fortification
+/// list is not held, and another resident builds it.
 #[test]
 fn a_demanded_staffed_lumberjack_does_not_hold_the_fortification() {
     let (mut state, id, builder) = town(10, true);
@@ -477,5 +480,83 @@ fn a_demanded_staffed_lumberjack_does_not_hold_the_fortification() {
             || blueprint.starts_with(PERIMETER)
             || blueprint.starts_with(GATE)),
         "a staffed gatherer holds the streets, not the funded fortification: {started:?}"
+    );
+    // The funded wall is not merely admitted: a resident takes the site, and taking it never
+    // rewrites the gatherer's row (docs/settlements/construction.md#builders-and-supplies: miners
+    // and lumberjacks are lent only while the settlement has a single project, and the rotation
+    // restores them). With one project the gatherer itself may be the one lent, which is the
+    // documented rule; `a_second_project_keeps_the_staffed_gatherer_off_the_wall` covers the
+    // protection. What the F12 hole broke was admission, and that is what this test pins.
+    assign_builder(&mut state, id);
+    let bound: Vec<_> = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .projects
+        .iter()
+        .filter_map(|project| project.builder.map(|(uuid, _)| uuid))
+        .collect();
+    assert!(
+        !bound.is_empty(),
+        "the funded fortification gets a builder: {started:?}"
+    );
+    let v = state.entities.row(builder).villager.as_ref().unwrap();
+    assert_eq!(v.data.profession, Profession::Lumberjack, "lending keeps the row's profession");
+    assert_eq!(
+        v.job_site,
+        Some(crate::boundary::BlockPos { x: 3, y: 201, z: 3 }),
+        "lending keeps the job site"
+    );
+}
+
+/// The other half of the borrowing rule: from two projects on, an extraction worker is not lent,
+/// so the wall site goes to another resident while the staffed gatherer keeps its job.
+#[test]
+fn a_second_project_keeps_the_staffed_gatherer_off_the_wall() {
+    let (mut state, id, builder) = town(10, true);
+    certify_natural(&mut state, id, BuildingKind::LumberCamp);
+    {
+        let v = state.entities.row_mut(builder).villager.as_mut().unwrap();
+        v.data.profession = Profession::Lumberjack;
+        v.job_site = Some(crate::boundary::BlockPos { x: 3, y: 201, z: 3 });
+        v.activity = Activity::Work;
+    }
+    plan(&mut state, id);
+    // A second, unfunded project: `may_borrow` turns false, so the gatherer is never recruited.
+    {
+        let record = state.settlements.get_mut(id).unwrap();
+        access::push_project(
+            record,
+            Project {
+                settlement: id,
+                blueprint: "house".into(),
+                level: 1,
+                origin: [24, 201, 24],
+                rotation: 0,
+                building: None,
+                structure: "second".into(),
+                ordered: false,
+                builder: None,
+                order_seq: None,
+            },
+        );
+    }
+    assign_builder(&mut state, id);
+    let lumberjack = state.entities.row(builder).uuid;
+    let bound: Vec<_> = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .projects
+        .iter()
+        .filter_map(|project| project.builder.map(|(uuid, _)| uuid))
+        .collect();
+    assert!(
+        !bound.contains(&lumberjack),
+        "from two projects on the extraction worker is not lent: {bound:?}"
+    );
+    assert!(
+        bound.iter().any(|uuid| *uuid != lumberjack),
+        "another resident builds the fortification: {bound:?}"
     );
 }
