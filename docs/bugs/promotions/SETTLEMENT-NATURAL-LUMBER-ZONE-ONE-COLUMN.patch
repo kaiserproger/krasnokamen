@@ -1,0 +1,56 @@
+diff --git a/crates/mc-core/src/settlements/autonomy.rs b/crates/mc-core/src/settlements/autonomy.rs
+--- a/crates/mc-core/src/settlements/autonomy.rs
++++ b/crates/mc-core/src/settlements/autonomy.rs
+@@ -24,6 +24,9 @@
+ const NATURAL_ZONE_CYCLES: usize = 2;
+ // VillagePlanSource documents a maximum reach of seven chunks plus a margin.
+ const START_SEARCH_RADIUS: i32 = 8;
++/// Columns a natural lumber camp's zone may grow beyond the proved trunk: the
++/// grove a camp is for, not the single column the tree search probes (CIV-6).
++const GROVE_RADIUS: i32 = 6;
+ 
+ #[derive(Debug, Default)]
+ pub(crate) struct AutonomyQueue {
+@@ -727,7 +730,7 @@
+ fn prove_natural(
+     state: &mut TickState,
+     settlement: SettlementId,
+-    _site: Option<&GeneratedVillageSite>,
++    site: Option<&GeneratedVillageSite>,
+     residents: &BTreeSet<uuid::Uuid>,
+     candidates: &mut VecDeque<NaturalCandidate>,
+ ) {
+@@ -840,13 +843,30 @@
+     }
+     if reached {
+         let candidate = candidates.pop_front().expect("proved candidate");
+-        let _ = super::buildings::certify_zone(
++        // A natural lumber camp is the grove it stands in, not the one tree the
++        // probe found: the zone grows sideways at certification time (CIV-6), and
++        // the plain column stays the fallback when the wider rectangle is refused.
++        let grown = match candidate.kind {
++            BuildingKind::LumberCamp => grove_bounds(state, settlement, site, candidate.bounds),
++            _ => candidate.bounds,
++        };
++        if super::buildings::certify_zone(
+             state,
+             settlement,
+             candidate.kind,
+-            candidate.bounds,
++            grown,
+             candidate.entrance,
+-        );
++        )
++        .is_err()
++        {
++            let _ = super::buildings::certify_zone(
++                state,
++                settlement,
++                candidate.kind,
++                candidate.bounds,
++                candidate.entrance,
++            );
++        }
+     } else {
+         // A failed bounded route never installs a job. Try another resident on
+         // a later pass, then let the existing terrain sweep seek another zone.
