@@ -1,0 +1,38 @@
+{
+  "id": "HOT-BACKUP-OFFLINE-RESTORE-UNVERIFIED",
+  "verdict": "promoted",
+  "fix_commit": "patch:7fde9964184cd1b21cfbb23cf918a80d824fb2803923e6a9797375c0751ee571",
+  "fix_commit_full": "patch:7fde9964184cd1b21cfbb23cf918a80d824fb2803923e6a9797375c0751ee571",
+  "promoted_at": "2026-11-24T10:05:10+00:00",
+  "tree_head": "fc667ac6dcb48053e107f6310dfa585615a489aa",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "7fde9964184cd1b21cfbb23cf918a80d824fb2803923e6a9797375c0751ee571",
+  "reversed_files": [
+    "crates/mc-edge/src/backup.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:backup::tests::the_restore_command_accepts_a_hot_backup_verified_with_content": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/backup_tests.rs",
+        "line": 668,
+        "error": "panic",
+        "class": "assertion"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:backup::tests::the_restore_command_accepts_a_hot_backup_verified_with_content": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T095804-ledger-promote-p6erhylq"
+}
