@@ -36,9 +36,15 @@ too and is not evidence.
 
 ## Observed control and restore
 
+Observed control and restore (`20261124T033006-ledger-promote-3d_0qdu4`, `tree_dirty: false`,
+`reversed_files` = `plan/entity_interest.rs`):
+
+- control (`ledger-1-run.log`) **FAIL** — `the publish set, not the roster, decides that player 1 sees
+  the player` (the pre-fix two-scan body answered the roster);
+- restore green (`ledger-3-run.log`).
+
 Earlier control (a declared-but-never-incremented counter; superseded):
-`.analysis/validation/20261124T003341-ledger-promote-4v784ye8`. This regenerated patch's control is
-recorded below once re-promoted.
+`.analysis/validation/20261124T003341-ledger-promote-4v784ye8`.
 
 ## What stays out of the row
 

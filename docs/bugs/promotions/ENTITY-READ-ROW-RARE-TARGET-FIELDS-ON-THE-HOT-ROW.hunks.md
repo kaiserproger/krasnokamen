@@ -53,8 +53,15 @@ unchanged by both sides and is not part of this patch). Every difference:
 
 ## Observed control and restore
 
+Observed control and restore (`20261124T031935-ledger-promote-n1jwq4n8`, `tree_dirty: false`,
+`reversed_files` = `tick/entity_phase.rs`, `tick/entity_phase/prepare.rs`, `tick/entity_phase/step.rs`):
+
+- control (`ledger-1-run.log`) **FAIL** — `assertion \`left == right\` failed: hot combat/breeding scalar
+  snapshot copies 288 bytes; the exact bound is 224`, `left: 288`, `right: 224` — the row's own size
+  assertion, on a tree whose restored readers, initialisers and filter are the real pre-fix code;
+- restore green (`ledger-3-run.log`).
+
 Earlier control (dishonest a/-side; superseded): `.analysis/validation/20261124T011809-ledger-promote-vaqetzwm`.
-This regenerated patch's control is recorded below once re-promoted.
 
 ## What stays out of the row
 

@@ -44,7 +44,13 @@ writers, the dirty-after-refresh path and live vehicle occupancy.
 
 ## Observed control and restore
 
-Recorded below once promoted.
+Observed control and restore (`20261124T033428-ledger-promote-0o7fhbgg`, `tree_dirty: false`,
+`reversed_files` = `tick/entity_phase/prepare.rs`):
+
+- control (`ledger-1-run.log`) **FAIL** — `assertion \`left == right\` failed: a clean plain row is
+  answered by the derived column, not by a cold read (parallel=false)`, `left: 49`, `right: 0` — one
+  real cold read per admitted row of the fixture;
+- restore green (`ledger-3-run.log`).
 
 ## What stays out of the row
 

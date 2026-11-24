@@ -2540,6 +2540,8 @@ fn parallel_resting_writeback_keeps_exactly_the_rows_the_writeback_changes() {
 
 #[test]
 fn read_row_reads_no_cold_row_for_plain_admitted_rows() {
+    // The counter is process-global; the exact deltas below hold because nextest
+    // gives each test its own process (a plain `cargo test` thread pool would not).
     // A plain fixture: cows in love (love != 0 keeps `MOTION_REST` off, so
     // `early_entity_rest` answers before its own cold reads) with no special
     // mob, rider, tamed state, effect or piglin body. The derived hot column
@@ -2633,6 +2635,31 @@ fn hot_row_follows_every_writer() {
     state
         .entities
         .set_riders(slot, vec![uuid::Uuid::from_u128(7)]);
+    assert_hot_read_matches_cold(&mut state, slot);
+    // A body write through `body_mut` marks the slot dirty like every other
+    // writer, so the column is refreshed, not read stale.
+    state.entities.body_mut(slot).alive = true;
+    assert_hot_read_matches_cold(&mut state, slot);
+    // The piglin-body bit lives in the column's `needs_cold`: a kind change to a
+    // piglin type must route the row to the cold path, and back out of it.
+    let piglin = mc_data::entity_types::entity_type_contract_26_1_2_by_name("minecraft:piglin")
+        .expect("piglin type")
+        .protocol_id;
+    state
+        .entities
+        .set_kind(slot, crate::entities::EntityKind::Mob { type_id: piglin });
+    state.entities.prepare_motion_hints(&state.registry);
+    let need = state.entities.hot_row(slot).needs_cold();
+    assert!(need, "a piglin body routes the row to the cold path");
+    let cow_kind = crate::entities::EntityKind::Mob {
+        type_id: state.registry.cow_type_id,
+    };
+    state.entities.set_kind(slot, cow_kind);
+    state.entities.prepare_motion_hints(&state.registry);
+    assert!(
+        !state.entities.hot_row(slot).needs_cold(),
+        "a cow body clears the piglin bit"
+    );
     assert_hot_read_matches_cold(&mut state, slot);
     // Spawn: the new slot's column is derived before its first clean read.
     let cow = state.registry.cow_type_id;

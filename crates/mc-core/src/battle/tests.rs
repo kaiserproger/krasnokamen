@@ -1899,6 +1899,8 @@ fn faction_population_matches_a_btreemap_oracle_at_sixty_four_factions() {
 #[test]
 fn faction_probes_stay_logarithmic_per_sample_and_per_rebuild() {
     use std::sync::atomic::Ordering;
+    // `FACTION_COMPARES` is process-global; the deltas below are exact under
+    // nextest's per-test process isolation, not under a shared thread pool.
     // Both tables answer through `faction_cmp`; the bound is what a sorted probe
     // needs (ceil(log2(len+1)) = 8 for at most 192 rows), not what the pre-fix
     // per-unit faction scan visits.

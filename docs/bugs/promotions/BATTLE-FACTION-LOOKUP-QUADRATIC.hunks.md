@@ -53,8 +53,22 @@ evidence (it is green on both trees).
 
 ## Observed control and restore
 
+The replacement, stated as text: `UnitCounters::record`'s pre-fix `alive_per_faction.iter_mut().find(|c| c.faction == faction)`
+becomes `alive_per_faction.iter().position(|c| faction_cmp(c.faction, faction).is_eq())` plus indexing
+(`let count = &mut self.alive_per_faction[slot]`), and `TargetGrid::rebuild`'s
+`factions.contains(...)`+push+sort becomes a `binary_search_by(|row| faction_cmp(*row, unit.faction))`
+insert into the sorted vector. Both call the one kept, instrumented comparator `faction_cmp`; behaviour
+is identical (`faction_cmp` is `Ord` on the same key, `.is_eq()` is `==`), and the counter therefore
+measures the real visits on BOTH trees.
+
+Observed control and restore (`20261124T032321-ledger-promote-o8t0mqci`, `tree_dirty: false`,
+`reversed_files` = `battle/mod.rs`, `battle/targeting.rs`):
+
+- control (`ledger-1-run.log`) **FAIL** — `4384 faction comparisons for 144 samples; a sorted probe
+  stays within 1296` (the pre-fix scans visit a growing prefix per unit);
+- restore green (`ledger-3-run.log`).
+
 Earlier control (counter increments invented on the a/-side; superseded): `.analysis/validation/20261124T012659-ledger-promote-srkqbp1l`.
-This regenerated patch's control is recorded below once re-promoted.
 
 ## What stays out of the row
 
