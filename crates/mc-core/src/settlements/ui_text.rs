@@ -995,12 +995,26 @@ mod tests {
         // unnamed kind prints "Unknown blueprint" to the player and stops the
         // civilization gate's dialog read (seed 24, 2026-11-24: `furnace`).
         use crate::settlements::layout::{GATE, LAMP, MEADOW, PERIMETER, ROAD, WELL};
-        for id in [ROAD, LAMP, MEADOW, PERIMETER, GATE, WELL, crate::settlements::construction::furnace::NAME] {
+        for id in [
+            ROAD,
+            LAMP,
+            MEADOW,
+            PERIMETER,
+            GATE,
+            WELL,
+            crate::settlements::construction::furnace::NAME,
+        ] {
             assert_ne!(blueprint(Lang::En, id), "Unknown blueprint", "{id}");
             assert_ne!(blueprint(Lang::Ru, id), "Неизвестный чертёж", "{id}");
         }
-        assert_eq!(blueprint(Lang::En, crate::settlements::construction::furnace::NAME), "Furnace");
-        assert_eq!(blueprint(Lang::Ru, crate::settlements::construction::furnace::NAME), "Печь");
+        assert_eq!(
+            blueprint(Lang::En, crate::settlements::construction::furnace::NAME),
+            "Furnace"
+        );
+        assert_eq!(
+            blueprint(Lang::Ru, crate::settlements::construction::furnace::NAME),
+            "Печь"
+        );
     }
 
     #[test]
