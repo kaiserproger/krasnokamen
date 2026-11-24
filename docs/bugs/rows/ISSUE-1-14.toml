@@ -8,8 +8,6 @@ status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = ["harness:entities:native-v2-craft-drag", "harness:entities:native-v2-craft-drag-paced", "harness:entities:native-v2-chest-drag-disconnect"]
 proving_assertions = { "harness:entities:native-v2-craft-drag" = "initial_drag_keeps_server_cursor", "harness:entities:native-v2-craft-drag-paced" = "native_drag_matches_vanilla_cursor", "harness:entities:native-v2-chest-drag-disconnect" = "chest_rejoin_item_exactly_once" }
+fix_commit = "client:f843981bd3"
 failing_first = "reported"
-# Fixed in krasnokamen-client b7c48e1c7de46c34bc6611d438edfec3f37039c5 ("fix(client): keep the cursor
-# across menu drags"); server quick-craft code is unchanged since 1ada2ceb and kept custody with the
-# pre-fix client (receipts/CraftDrag/REPORT.md). fix_commit stays empty until the owner decides how
-# client-repo fixes are promoted (ledger promote resolves fix_commit in this repository only).
+repro_check = "Committed-reversal pair on the post-rename tip (b7c48e1c predates the rename and is a bulk commit): reversal client:5f01c22101 re-adds its a/-side drag-pickup prediction at HEAD (drag_pickup field/resets, pickup prediction, `|| self.drag_pickup` release branch, drag_origin destination filter; cargo check passes, negctl/craft-reversal-check.log), re-land client:f843981bd3 removes it again (the server cursor owns the drag). Map docs/bugs/promotions/ISSUE-1-14.hunks.md. Real gate: harness:entities:native-v2-craft-drag, assertion initial_drag_keeps_server_cursor (control red, restore green); the paced and chest-disconnect refs share the same client path."
