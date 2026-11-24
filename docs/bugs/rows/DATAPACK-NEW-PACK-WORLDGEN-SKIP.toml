@@ -1,0 +1,11 @@
+[[bug]]
+id = "DATAPACK-NEW-PACK-WORLDGEN-SKIP"
+title = "A datapack newly found on disk whose worldgen inputs this server cannot prepare is skipped and named, so it stops neither a start nor a reload, instead of refusing the start"
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "Split from DATAPACK-WORLDGEN-OVERRIDES (final review 10, B4): the original report also claimed that a new pack holding unsupported worldgen is skipped and named. That half was never proven: in the withdrawn control the start-skip assertion stayed green and the real-client ref was unrunnable (docs/bugs/promotions/DATAPACK-WORLDGEN-OVERRIDES.json, negative_control: start_skips_A_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest green; harness ref unrunnable). The behaviour is 1d8e57dd8's PackSet::open trial and the worldgen input validation at datapacks_worldgen.rs:983-990, plus the replay-baseline fence; a new pack joins only when content installs, worldgen inputs prepare and validate, and the fence accepts its identity."
+regression = ["cargo:mc-core:datapacks::worldgen::tests::start_skips_a_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest"]
+failing_first = "not recorded"
+repro_check = "Open: no faithful control. The behaviour is new in 1d8e57dd8 (the caller-trial `PackSet::open` signature and `datapacks_worldgen::open` are introduced by it), so its pre-image has no equivalent to reverse, and a whole reversal is E0425 at game_clock_upgrade.rs:276. A control needs a re-break that keeps the API and restores only the pre-fix outcome (a new pack whose worldgen cannot prepare refuses the start), then a real-client or start-path red; not attempted. The ref is green on this tree."

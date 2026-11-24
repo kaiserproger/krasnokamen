@@ -238,10 +238,17 @@ impl ConnectionRegistry {
             mc_core::boundary::PlayerChange::Joined {
                 entity,
                 position,
+                yaw,
+                pitch,
                 game_mode,
                 dimension,
-                ..
-            } => Some((*entity, *position, *game_mode, *dimension)),
+            } => Some(JoinedSpawn {
+                entity: *entity,
+                position: *position,
+                rotation: [*yaw, *pitch],
+                game_mode: *game_mode,
+                dimension: *dimension,
+            }),
             _ => None,
         });
         {

@@ -62,12 +62,9 @@ async fn read_burst_ids(conn: &mut crate::connection::Connection) -> Vec<(i32, V
     out
 }
 
-#[tokio::test]
-async fn join_burst_carries_load_start_before_center() {
-    let (mut client, mut server) = loopback_pair().await;
-    let data = mc_data::krasnokamen_required_data();
-    let out = empty_output();
-    let recipes = crate::recipes::RecipePackets {
+/// An empty recipe catalog: the burst only needs it to encode.
+fn empty_recipes() -> crate::recipes::RecipePackets {
+    crate::recipes::RecipePackets {
         catalog: std::sync::Arc::new(crate::recipes::RecipeCatalog {
             update: mc_protocol::packets::play::ClientboundUpdateRecipes {
                 item_sets: Vec::new(),
@@ -80,7 +77,15 @@ async fn join_burst_carries_load_start_before_center() {
             replace: true,
         },
         advancements: Default::default(),
-    };
+    }
+}
+
+#[tokio::test]
+async fn join_burst_carries_load_start_before_center() {
+    let (mut client, mut server) = loopback_pair().await;
+    let data = mc_data::krasnokamen_required_data();
+    let out = empty_output();
+    let recipes = empty_recipes();
     let server_task = tokio::spawn(async move {
         super::send_join_burst(JoinBurst {
             conn: &mut server,
@@ -89,6 +94,7 @@ async fn join_burst_carries_load_start_before_center() {
             viewer_entity: EntityId(7),
             dimension: Default::default(),
             pos: [8.0, 80.0, 8.0],
+            rotation: [0.0, 0.0],
             view_distance: 4,
             simulation_distance: 3,
             game_mode: 0,
@@ -160,5 +166,55 @@ async fn join_burst_carries_load_start_before_center() {
     assert!(
         event_at > login_at && event_at > sync_at && event_at < center_at,
         "load-start must sit after Login/SyncPos and before CenterChunk: {ids:02x?}"
+    );
+}
+
+/// A returning player's camera must not reset: the teleport-confirm sync has
+/// to carry the rotation the core restored with the position, so a clean quit
+/// and reopen keeps the look direction (vanilla persists `Rotation`). A new
+/// player's spawn rotation is `0/0`, which is what this test tells apart.
+#[tokio::test]
+async fn join_burst_syncs_the_restored_player_rotation() {
+    let (mut client, mut server) = loopback_pair().await;
+    let data = mc_data::krasnokamen_required_data();
+    let out = empty_output();
+    let recipes = empty_recipes();
+    let server_task = tokio::spawn(async move {
+        super::send_join_burst(JoinBurst {
+            conn: &mut server,
+            data: &data,
+            out: &out,
+            viewer_entity: EntityId(7),
+            dimension: Default::default(),
+            pos: [-12.5, 70.0, 33.5],
+            rotation: [90.0, 20.0],
+            view_distance: 4,
+            simulation_distance: 3,
+            game_mode: 0,
+            recipes: &recipes,
+            op_level: 0,
+            plugin_commands: &[],
+            online_mode: false,
+        })
+        .await
+        .unwrap();
+    });
+    let frames = read_burst_ids(&mut client).await;
+    server_task.await.unwrap();
+    let (_, body) = frames
+        .iter()
+        .find(|(id, _)| *id == mc_protocol::packets::play::SynchronizePlayerPosition::ID)
+        .expect("the burst syncs the player position");
+    let sync = mc_protocol::packets::play::SynchronizePlayerPosition::decode(&mut &body[..])
+        .expect("synchronize-player-position decodes");
+    assert_eq!(
+        (sync.x, sync.y, sync.z),
+        (-12.5, 70.0, 33.5),
+        "the sync still carries the restored position"
+    );
+    assert_eq!(
+        (sync.yaw, sync.pitch),
+        (90.0, 20.0),
+        "the sync must carry the restored Rotation, not the 0/0 default"
     );
 }

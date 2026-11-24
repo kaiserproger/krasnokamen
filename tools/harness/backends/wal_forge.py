@@ -2,9 +2,11 @@
 
 A clean stop leaves an empty `<world>/journal/` and a checkpoint at tick T. The
 next batch must be `batch-<T+1>-<T+1>.bin` (recovery refuses a hole) and replays
-over that checkpoint when the server starts. The frame is
-`[magic u32][version u32][tick_lo u64][tick_hi u64][len u32][crc32 u32][payload]`
-(little endian), the payload JSON lines of `JournalEntry` (crates/mc-core/src/journal.rs).
+over that checkpoint when the server starts. The frame is format 2,
+`[magic u32][version u32][store uuid 16][palette digest 8][tick_lo u64][tick_hi u64][len u32][crc32 u32][payload]`
+(little endian), the payload JSON lines of `JournalEntry` (crates/mc-core/src/journal.rs);
+a batch without the store/palette identity is refused by this build, so
+`capture_identity` takes both from a format-2 batch the server itself wrote.
 
 The batch carries `OpaqueBlockEntity` post-images whose record id is not one the
 replay validator checks, so a record the typed hydration owner (crafter, shelf)
@@ -25,8 +27,6 @@ BATCH_VERSION = 2
 # `[magic][version][store 16][palette 8][tick_lo][tick_hi][len][crc32]`, all little endian.
 HEADER = struct.Struct("<II16s8sQQII")
 HEADER_LEN = HEADER.size
-MARKER_FILE = "checkpoint.marker"
-MARKER_MAGIC = b"KCMARK\x01\x00"
 
 
 def network_compound(fields: list) -> bytes:
@@ -73,17 +73,6 @@ def capture_identity(world: Path) -> tuple[bytes, bytes] | None:
         if identity is not None:
             return identity
     return None
-
-
-def marker_store_uuid(world: Path) -> bytes | None:
-    """The world's immutable store id from `checkpoint.marker` (offset 8..24)."""
-    try:
-        data = (world / MARKER_FILE).read_bytes()
-    except OSError:
-        return None
-    if len(data) < 8 + 16 or data[:8] != MARKER_MAGIC:
-        return None
-    return data[8:24]
 
 
 def publish_opaque_batch(

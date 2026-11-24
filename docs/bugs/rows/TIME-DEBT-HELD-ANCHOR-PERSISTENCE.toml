@@ -1,0 +1,11 @@
+[[bug]]
+id = "TIME-DEBT-HELD-ANCHOR-PERSISTENCE"
+title = "Durable catch-up debt anchors are not restored across a checkpoint or WAL replay, so held frames are re-counted as dormant after a restart"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Split from TIME-FROZEN-CATCHUP-DEBT (final review 10, B3): c4d8c0d01 carries two behaviours, and only the abstract-simulation freeze gate belongs to that row. This row owns the durable held anchor: SimDebtImage.held_anchor and its projection at the native and held anchors together (crates/mc-core/src/journal.rs:1049-1080), the held-prefix accrual in debt.rs:34/:69/:129-168, the ClimateImage.sim_debt_anchored_since epoch and its restore (weather.rs:65-131), the recovery restore (core/recovery.rs:144-149), and the capture/residency plumbing (world/capture.rs:326-358, world/residency.rs:310-395). Reality is in the tree; no promotion receipt."
+regression = ["cargo:mc-core:debt::game_clock_tests::debt_game_clock_held_activation_excludes_its_own_held_tick", "cargo:mc-core:debt::game_clock_tests::debt_game_clock_shared_projection_reanchors_all_dimensions_and_preserves_remaining"]
+failing_first = "not recorded"
+repro_check = "Open: no promotion receipt and no faithful control yet. Every hunk of this behaviour still applies in reverse at this HEAD (`git apply -R --check` of c4d8c0d01's own file diff succeeds for debt.rs, journal.rs, weather.rs, core/recovery.rs, world/capture.rs and world/residency.rs), so a faithful control is buildable: a patch whose a/-side is the real pre-image of those hunks, leaving the abstract-simulation freeze gate on both sides so TIME-FROZEN-CATCHUP-DEBT's assertions stay green. Not attempted yet; a later commit's rewrite of journal/replay.rs, native_checkpoint.rs and world/clocks.rs means those files can only be class (c) if they are needed. The two refs were green in TIME-FROZEN-CATCHUP-DEBT's restore (.analysis/validation/20261124T033121-ledger-promote-fu2j91l7, ledger-3-run.log)."

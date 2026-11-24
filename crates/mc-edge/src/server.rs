@@ -315,13 +315,18 @@ pub struct WireRegistries {
 
 /// Live connection registry: outbound queue handles keyed by connection,
 /// plus the player-name roster for the dashboard.
-/// Stashed join result: (entity, spawn position, game mode, dimension).
-type JoinedSpawn = (
-    mc_core::boundary::EntityId,
-    [f64; 3],
-    u8,
-    mc_core::dimensions::Dimension,
-);
+/// Stashed join result: the authoritative spawn the Play burst announces.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct JoinedSpawn {
+    entity: mc_core::boundary::EntityId,
+    position: [f64; 3],
+    /// Vanilla `Rotation`: the yaw and pitch the restored player last had, so
+    /// a reopen keeps the camera the player quit with (a new player gets the
+    /// spawn rotation, which the core reports as `0/0`).
+    rotation: [f32; 2],
+    game_mode: u8,
+    dimension: mc_core::dimensions::Dimension,
+}
 
 /// The Loader manifest: every plugin bundle plus the native settlements view
 /// bundle. The native bundle is optional, so a deployment whose plugin bundles are

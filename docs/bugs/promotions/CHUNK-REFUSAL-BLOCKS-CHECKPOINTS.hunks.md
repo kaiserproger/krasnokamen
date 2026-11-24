@@ -79,15 +79,15 @@ the old hunk no longer matched its context.
 ## Proving ref
 
 `chunk_loader::tests::refusing_a_resident_chunk_keeps_custody_of_its_unsaved_edits`
-goes red at chunk_loader_tests.rs:885 `assert!(capture.load_error().is_none())`:
+goes red at chunk_loader_tests.rs:886 `assert!(capture.load_error().is_none())`:
 a chunk refused as freshly loaded, with nothing unsaved, declines the
 checkpoint, which is this row's symptom. Not evidence:
-`refused_chunk_never_blocks_other_chunks_and_stays_refused` red at :803
+`refused_chunk_never_blocks_other_chunks_and_stays_refused` red at :804
 (`refused().len() == 1`, left 0) and the unregistered
 `refusing_a_resident_chunk_keeps_custody_of_folded_block_edits` red at :954 only
 assert the kept `refused()` API, which the adaptation leaves empty; the bug
 assertion of the first, :802 `load_error().is_none()`, passes in the control.
-`promote.json` records both registered cargo refs as plain `FAIL`; only :885
+`promote.json` records both registered cargo refs as plain `FAIL`; only :886
 counts.
 
 ## Original non-test hunks
