@@ -768,3 +768,81 @@ fn integrity_reserved_refusal_with_a_cold_open_half_closes_the_menu() {
 fn integrity_reserved_refusal_with_both_halves_cold_closes_the_menu() {
     reserved_refusal_with_a_cold_half(true, [true, true]);
 }
+
+/// An external custody change while a half is cold must close the viewer's
+/// menu instead of republishing an image whose cold half reads empty: the
+/// click, recipe and refusal paths make the same residency check, and this
+/// path (block log, command loot, plugin inventory writes) runs while a viewer
+/// still has the menu open.
+fn refreshed_with_a_cold_half(open_left: bool) -> Rig {
+    let mut rig = Rig::new();
+    // Put the halves across a chunk boundary so they evict separately.
+    rig.left.x = rig.left.x.div_euclid(16) * 16 + 15;
+    rig.right.x = rig.left.x + 1;
+    let slot = rig.state.entities.slot_of(rig.player).unwrap();
+    rig.state.entities.set_pos(
+        slot,
+        [
+            f64::from(rig.left.x),
+            f64::from(Y + 1),
+            f64::from(rig.left.z) + 2.0,
+        ],
+    );
+    let diamond = item(&rig.state, "minecraft:diamond", 3);
+    let gold = item(&rig.state, "minecraft:gold_ingot", 2);
+    rig.double_chest(std::slice::from_ref(&diamond), std::slice::from_ref(&gold));
+    rig.open(if open_left { rig.left } else { rig.right });
+    let window = rig.state.players[&rig.player].open.as_ref().unwrap().window;
+    let connection = rig.state.players[&rig.player].connection;
+    // The partner half goes cold while the menu stays open.
+    let partner = if open_left { rig.right } else { rig.left };
+    evict_halves(&mut rig, &[partner]);
+    let anchor = if open_left { rig.left } else { rig.right };
+    crate::tick::refresh_container_viewers(&mut rig.state, anchor);
+    let queue = rig
+        .state
+        .outbox
+        .get(&connection)
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        !queue.iter().any(|change| matches!(
+            change,
+            PlayerChange::MenuContents { window: sent, .. } if *sent == window
+        )),
+        "a cold half must not be republished as a partial image: {queue:?}"
+    );
+    assert!(
+        queue.iter().any(|change| matches!(
+            change,
+            PlayerChange::MenuClosed { window: closed } if *closed == window
+        )),
+        "the refresh closes window {window}: {queue:?}"
+    );
+    assert!(
+        queue
+            .iter()
+            .any(|change| matches!(change, PlayerChange::MenuContents { window: 0, .. })),
+        "the close resyncs the player's inventory: {queue:?}"
+    );
+    rig
+}
+
+#[test]
+fn external_custody_refresh_with_a_cold_partner_closes_the_menu() {
+    let rig = refreshed_with_a_cold_half(true);
+    assert!(
+        rig.state.players[&rig.player].open.is_none(),
+        "the cold-half refresh closes the menu"
+    );
+    assert!(!rig.state.open_containers.contains(&rig.player));
+}
+
+#[test]
+fn external_custody_refresh_with_a_cold_open_half_closes_the_menu() {
+    // The menu is anchored on the half whose chunk is cold; the partner is
+    // resident. The check must not depend on the partner position.
+    let rig = refreshed_with_a_cold_half(false);
+    assert!(rig.state.players[&rig.player].open.is_none());
+    assert!(!rig.state.open_containers.contains(&rig.player));
+}
