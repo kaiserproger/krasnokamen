@@ -14,22 +14,38 @@ from .native_v2 import _click, _echo, _give, _open, _point, _set
 from .probe_steps import ProbeSteps, item_count
 
 
-def _left_play(client: Any, steps: ProbeSteps, label: str,
-               timeout_seconds: float | None = None) -> dict[str, Any]:
-    """Block on state changes until the client has left Play (bounded by the scenario deadline).
-
-    `timeout_seconds` bounds the wait for a leg whose kick is expected at once, so a server that
-    never replaces the session fails a named assertion instead of the 900 s scenario budget."""
-    deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
+def _left_play(client: Any, steps: ProbeSteps, label: str) -> dict[str, Any]:
+    """Block on state changes until the client has left Play (bounded by the scenario deadline)."""
     while True:
         state = client.call_tool("minecraft_observe")
         if state.get("in_play") is not True:
             steps.check(label, True)
             return state
-        if deadline is not None and time.monotonic() >= deadline:
-            steps.check(label, False)
         client.call_tool("minecraft_wait_for_state_change", {
             "observed_version": state["state_version"], "timeout_seconds": steps.remaining()})
+
+
+def _kicked(client: Any, steps: ProbeSteps, label: str, timeout_seconds: float) -> dict[str, Any]:
+    """The state of a client a duplicate login replaced: out of Play with the session's own error.
+
+    `in_play` alone is not the observation: a world reload also leaves Play for a moment, and a
+    transient would both misread the reason and stand as a false control. The kicked session ends in
+    the client's `error` phase, which is what the row's assertion reads."""
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        state = client.call_tool("minecraft_observe")
+        phase = (state.get("loading_readiness") or {}).get("phase")
+        if state.get("in_play") is not True and phase == "error":
+            steps.check(label, True)
+            return state
+        if time.monotonic() >= deadline:
+            steps.report["kick_wait_state"] = {
+                "in_play": state.get("in_play"), "phase": phase,
+                "disconnect_reason": state.get("disconnect_reason")}
+            steps.check(label, False)
+        client.call_tool("minecraft_wait_for_state_change", {
+            "observed_version": state["state_version"],
+            "timeout_seconds": max(1.0, min(deadline - time.monotonic(), steps.remaining()))})
 
 
 def _peer_diamonds(peer: Any, steps: ProbeSteps, label: str, count: int) -> dict[str, Any]:
@@ -432,8 +448,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             "observed_version": seen["state_version"], "timeout_seconds": steps.remaining()})
     nether = start("nether-login")
     nether.call_tool("minecraft_wait_for_play", {"timeout_seconds": steps.remaining()})
-    kicked = _left_play(first, steps, "nether_session_replaced",
-                        timeout_seconds=min(120.0, steps.remaining()))
+    kicked = _kicked(first, steps, "nether_session_replaced", min(120.0, steps.remaining()))
     steps.report["nether_kick"] = {
         key: kicked.get(key) for key in ("in_play", "disconnect_reason", "disconnected", "state_version")}
     reason = str(kicked.get("disconnect_reason") or "")
