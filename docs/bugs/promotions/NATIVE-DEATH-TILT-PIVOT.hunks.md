@@ -29,10 +29,17 @@ kept around it (`RootStyle` filter, `let vanilla` binding), named under hunk 2 a
 
 ## Proving ref
 
-`harness:scene-shot:native-death-tilt` → `death_tilt_t10`
+`harness:scene-shot:native-death-tilt` → `death_tilt_t00`
 (`tools/harness/backends/death_tilt_oracle.py`): the silhouette's top row and tipping-side column at
-stepped deathTime `t10` must match Java 26.3 `(385, 277)` within `TOLERANCE = 2` px. The scene films
-one zombie killed under `/tick freeze`; a pivot change from the feet to the model origin moves the
-top row by tens of pixels by `t10`, while `t00` (elapsed 0) stays identical. The companion ref
-`entities::animation_tests::death_tilt_turns_about_the_feet_on_the_vanilla_curve` stays green on
-both sides, so it is not evidence here.
+the first dead tick must match Java 26.3 `(159, 548)` within `TOLERANCE = 2` px, and each later step
+`t01..t18` against its own row of the same table (`t10` is `(385, 277)`). The scene films one zombie
+killed under `/tick freeze`.
+
+Observed: on the reversal the scene fails at `death_tilt_t00` — the old
+`clamp((elapsed + partial)/20, 0, 1).sqrt() * 90°` curve already turns the body about the model
+origin on the first dead tick, where vanilla is still upright. The probe stops at the first failed
+step, so the later-step pivot difference is not separately reported; the assertion is still the
+row's own symptom (a body tilted where vanilla is upright, then a wrong pivot and curve). The
+companion ref `entities::animation_tests::death_tilt_turns_about_the_feet_on_the_vanilla_curve`
+exercises the kept `death_tilt()` directly (`animation_tests.rs:3382`, `:3386`), which neither side of
+the pair changes, so it cannot be red on the reversal and is not evidence here.
