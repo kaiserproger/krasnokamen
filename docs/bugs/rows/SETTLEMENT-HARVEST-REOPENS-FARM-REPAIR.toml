@@ -11,5 +11,5 @@ regression = [
   "cargo:mc-core:settlements::construction::fencing_tests::a_harvested_farm_crop_does_not_reopen_a_repair_stage",
   "harness:civilization-seed-qa:new_house",
 ]
-fix_commit = "PENDING"
+fix_commit = "dde9a9e72bdbe5f6c281c37dce1dfdeb9f813745"
 repro_check = "Fix: settlement builds' repair derivation and reopen_emptied skip a cell whose authored block is a farm crop (wheat, carrots, potatoes, beetroots), because a farmer harvests those and the farming pass replants into the same farmland; construction never re-plants them. Negative control: the production hunks reverted alone on this tree make a_harvested_farm_crop_does_not_reopen_a_repair_stage fail in complete() with 'construction did not finish: [\"farm · level 1 · 99%\", \"Remaining materials: minecraft:wheat_seeds: 1\", \"Missing materials: minecraft:wheat_seeds: 1\"]' - .analysis/validation/20261124T203524-test-h5we0792. Green on the candidate: .analysis/validation/20261124T202859-test-ybe194wt. The gate proof is harness:civilization-seed-qa:new_house on a pinned candidate: the farm closes, the slot frees, and the House is admitted and observed. Residual note: a crop cell emptied by a player is also left to the farm's farming, not to construction."
