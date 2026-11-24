@@ -1,0 +1,130 @@
+diff --git a/crates/mc-edge/src/plan/chunk_delta.rs b/crates/mc-edge/src/plan/chunk_delta.rs
+index 5d37b1d..98aebde 100644
+--- a/crates/mc-edge/src/plan/chunk_delta.rs
++++ b/crates/mc-edge/src/plan/chunk_delta.rs
+@@ -118,6 +118,11 @@ impl ChunkDeltaLog {
+         self.seq += 1;
+     }
+ 
++    /// Resident chunks of `dimension` at its last publish through this log.
++    pub(super) fn previous(&self, dimension: Dimension) -> Option<&Arc<Vec<SnapshotChunk>>> {
++        self.previous.get(&dimension).map(|(_, chunks)| chunks)
++    }
++
+     /// Diff `projection`'s resident list against this dimension's previous publish.
+     pub(crate) fn delta(&mut self, projection: &TickOutput) -> Option<ChunkDelta> {
+         if !self.enabled {
+diff --git a/crates/mc-edge/src/plan/viewer.rs b/crates/mc-edge/src/plan/viewer.rs
+index 6acad94..86ac57a 100644
+--- a/crates/mc-edge/src/plan/viewer.rs
++++ b/crates/mc-edge/src/plan/viewer.rs
+@@ -123,8 +123,14 @@ pub struct ViewerState {
+     pub(super) radius_sent: Option<i32>,
+     /// The pump skipped outputs since the last plan: their block changes
+     /// never reached this viewer, so every chunk whose revision moved on is
+-    /// sent again.
++    /// sent again ([`Self::skip_publication`]).
+     pub skipped: bool,
++    /// Resident chunks of this viewer's dimension at the last publish before
++    /// the first skip since the last plan; `None` when unknown. Under
++    /// anti-xray a held chunk whose side neighbour loaded, unloaded or changed
++    /// revision since is sent again: that change of the ore mask across the
++    /// chunk border lived only in the skipped publications.
++    pub(super) skip_base: Option<Arc<Vec<SnapshotChunk>>>,
+     /// Free outbound world-queue frame slots, refreshed by the pump before
+     /// each publish: the plan emits at most this many best-effort frames.
+     pub world_credit: usize,
+@@ -201,6 +207,7 @@ impl ViewerState {
+             center_sent: None,
+             radius_sent: None,
+             skipped: false,
++            skip_base: None,
+             world_credit: usize::MAX,
+             world_bytes: usize::MAX,
+             recorder: false,
+@@ -229,9 +236,12 @@ impl ViewerState {
+         self.chunk_sync = None;
+     }
+ 
+-    /// The pump skipped an output: the pre-image skip flag; every chunk whose
+-    /// own revision moved is sent again by the next plan.
+-    pub(crate) fn skip_publication(&mut self, _chunk_cache: &ChunkPacketCache) {
++    /// The pump skipped an output: the next plan repairs against the
++    /// resident chunks of the last publish of this viewer's dimension.
++    pub(crate) fn skip_publication(&mut self, chunk_cache: &ChunkPacketCache) {
++        if !self.skipped {
++            self.skip_base = chunk_cache.deltas.previous(self.dimension).cloned();
++        }
+         self.skipped = true;
+     }
+ 
+diff --git a/crates/mc-edge/src/plan/viewer_plan.rs b/crates/mc-edge/src/plan/viewer_plan.rs
+index 24abf2d..bb6edda 100644
+--- a/crates/mc-edge/src/plan/viewer_plan.rs
++++ b/crates/mc-edge/src/plan/viewer_plan.rs
+@@ -292,6 +292,7 @@ fn plan_viewer_inner(
+     // explain content revisions without full resends. A changed baked light
+     // baseline covers light-only revisions; skips still require repairs.
+     let skipped = std::mem::take(&mut viewer.skipped);
++    let skip_base = viewer.skip_base.take();
+     scratch.touched.clear();
+     scratch.touched.extend(viewer.block_entity_updates.drain());
+     if let Some(delta) = delta.filter(|_| fast) {
+@@ -376,6 +377,14 @@ fn plan_viewer_inner(
+                 viewer.pending_blocks.extend(revealed.iter().copied());
+             }
+         }
++        // Anti-xray judges an ore by its side neighbours too: a skipped block
++        // change beside a chunk border may have revealed an ore without moving
++        // the ore chunk's own revision (no light change), and that reveal
++        // lived only in the skipped changes.
++        let side_reveals = skipped
++            && chunk_cache
++                .anti_xray()
++                .is_some_and(|policy| policy.enabled(snapshot.dimension));
+         for (pos, held) in &mut viewer.loaded_chunks {
+             chunk_stat!(stats.visited += 1);
+             chunk_stat!(stats.probes += 1);
+@@ -387,6 +396,16 @@ fn plan_viewer_inner(
+                 continue;
+             };
+             if *held == current.revision {
++                if side_reveals {
++                    chunk_stat!(stats.probes += 8);
++                    if side_moved(
++                        skip_base.as_deref().map(Vec::as_slice),
++                        &snapshot.chunks,
++                        *pos,
++                    ) {
++                        viewer.chunk_repairs.insert(*pos);
++                    }
++                }
+                 continue;
+             }
+             chunk_stat!(stats.probes += 1);
+@@ -699,6 +718,25 @@ pub(super) fn own_entity<'a>(
+     snapshot.entities.get(viewer.entity_id)
+ }
+ 
++/// A side neighbour of `pos` that loaded, unloaded or changed revision since
++/// `base`: anti-xray counts an unloaded side as open, so presence changes the
++/// ore mask too. Without a base every side counts as moved.
++fn side_moved(
++    base: Option<&[SnapshotChunk]>,
++    chunks: &[SnapshotChunk],
++    (x, z): (i32, i32),
++) -> bool {
++    let Some(base) = base else {
++        return true;
++    };
++    [(x - 1, z), (x + 1, z), (x, z - 1), (x, z + 1)]
++        .into_iter()
++        .any(|side| {
++            find_chunk(base, side).map(|was| was.revision)
++                != find_chunk(chunks, side).map(|now| now.revision)
++        })
++}
++
+ fn push_block_update(
+     out: &mut Vec<PlannedPacket>,
+     connection: ConnectionId,
