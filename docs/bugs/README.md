@@ -327,8 +327,12 @@ worker, runs the negative control.
    they no longer apply there, onto a worktree at `fix_commit`
    (`control_tree: head|fix_commit` in `promote.json`). Then every ref runs
    and at least one must be **red** at its assertion. A control that stays
-   green, or whose reversal does not build, is refused (split the fix commit
-   so tests do not need its new API, or promote nothing). A hunk straddling
+   green is refused. A ref that cannot build or run in the reversed tree is
+   recorded `unrunnable`, not red — reversing a hunk that removes the API the
+   ref's own test file calls leaves that ref unrunnable — so the control is
+   also refused when no ref reds, which is the same rule seen from the other
+   side. Split the fix commit so tests do not need its new API when nothing
+   else reds, or promote nothing. A hunk straddling
    the test-module boundary is refused. Graphical refs run in the control on
    the real client.
    A deletion at an inline module boundary is ambiguous and is refused.

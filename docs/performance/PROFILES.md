@@ -204,6 +204,30 @@ writes fail; requested work never substitutes for observed work.
 - Each run checks the live player count, successful complete bot schedule,
   movement, clean server/bot exits and saved fixture identities. A low TPS value
   is reported, not converted into a capacity pass or discarded.
+- **`summary.threads`** is a first-to-last per-thread-name sample of
+  `/proc/<pid>/task/<tid>/{stat,schedstat}` (CPU seconds and schedstat field 2,
+  run-queue wait), taken about once a second, with the same-named threads summed.
+  A name missing from either sample, or whose thread count changed, is
+  `unavailable` rather than a lifetime delta read as a window; `tick_thread` is
+  the `mc-core-tick` row and a run without it fails (`require_thread_wait`), so a
+  laps-only receipt cannot pass. The `*_per_tick` fields divide by the ticks of
+  the source samples between the two process samples, not by the whole window.
+  A `--remote-host` session reads them on the host that runs the server.
+- **`summary.journal`** is the window delta of the WAL counters the server
+  reports under `/stats.journal` (bytes written, file and directory fsync counts,
+  cumulative service time), with `fsync_ms_mean` over *both* fsync counts,
+  `fsync_ms_max_since_start` (a process-lifetime `fetch_max`, not a window
+  figure), bytes per source tick and the last batch size. A server without the
+  counters yields a named `unavailable`.
+- **`summary.errors`** is the window delta of the reliable and input drop
+  counters, every abnormal connection-close cause that moved
+  (`reliable-overflow`, `*-write-failed`, `*-reliable-full`, …) and the last
+  warning list. A normal end (client EOF, core-ordered kick, the lifecycle's own
+  removal) is not a cause.
+- **`client_tick_arrival`** is the bot-observed interval between the server's
+  clock heartbeats (p50/p95/p99/max) and the per-tick period derived from the
+  heartbeat's own game-time delta, per open-loop window; a window the bot report
+  leaves out is named unavailable.
 - **Per-profile generated chunks/s: not instrumented.** The production dashboard
   reports resident chunks, which can include reloads and exclude evictions.
   Resident-chunk deltas and received packet counts are not generation throughput.

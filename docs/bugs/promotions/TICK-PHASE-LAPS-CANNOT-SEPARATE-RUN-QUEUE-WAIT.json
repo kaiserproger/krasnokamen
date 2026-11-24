@@ -1,0 +1,87 @@
+{
+  "id": "TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT",
+  "verdict": "promoted",
+  "fix_commit": "695b764e4c37d68bb2e4fd7b8e8492727cd4cbfb",
+  "fix_commit_full": "695b764e4c37d68bb2e4fd7b8e8492727cd4cbfb",
+  "promoted_at": "2026-11-24T20:32:59+00:00",
+  "tree_head": "3f3ee636e94a56261a0072cf0352a68bffaee8a8",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "4668c4918d4fdf71f89e182f27320ee1852ef85f7bd06f295e05c3476cedaab7",
+  "control_tree_head": "3f3ee636e94a56261a0072cf0352a68bffaee8a8",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/bench/remote.py",
+    "tools/coreperf/profiles.py"
+  ],
+  "kept_test_files": [
+    "tools/coreperf/test_profiles.py"
+  ],
+  "negative_control": {
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_a_laps_only_phase_receipt_is_refused": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_a_remote_session_reads_threads_over_its_connection": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/coreperf/test_profiles.py",
+        "line": 1303,
+        "error": "AssertionError"
+      }
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_a_thread_missing_from_one_sample_is_unavailable": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_a_wrapping_server_spawns_the_tick_thread_in_its_child": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/coreperf/test_profiles.py",
+        "line": 1351,
+        "error": "AssertionError"
+      }
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_receipt_records_the_tick_thread_run_queue_wait": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_thread_usage_reads_schedstat_field_two_for_a_fixture_process": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_a_laps_only_phase_receipt_is_refused": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_a_remote_session_reads_threads_over_its_connection": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_a_thread_missing_from_one_sample_is_unavailable": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_a_wrapping_server_spawns_the_tick_thread_in_its_child": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_receipt_records_the_tick_thread_run_queue_wait": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_thread_usage_reads_schedstat_field_two_for_a_fixture_process": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T203252-ledger-promote-lkqg99cj"
+}

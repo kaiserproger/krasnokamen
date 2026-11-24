@@ -297,6 +297,13 @@ _FIXTURE_PANICS = (
     re.compile(r'\bfixture_store\('),
 )
 _ASSERT_LINE = re.compile(r'\b(?:assert(?:_eq|_ne)?!|debug_assert(?:_eq|_ne)?!|panic!\s*\()')
+# A source line that *begins* with an assert macro is the assertion itself whatever message it
+# carries: `assert!(cond, "custom text")` panics with that text, not with "assertion failed"
+# (REVIEW-wave2-10 minor 4). `panic!` is deliberately not line-start evidence: a setup
+# `panic!("world fixture missing")` on its own line must keep the message rule below, or a fixture
+# death would pass as a proving red (REVIEW-wave2-11 minor-6). The message-based rule also stays
+# for an assert nested inside an `expect(...)`, where the line belongs to the unwrap.
+_ASSERT_LINE_START = re.compile(r'^\s*(?:assert(?:_eq|_ne)?!|debug_assert(?:_eq|_ne)?!)')
 _ASSERT_MESSAGE = re.compile(r'^(assertion|assert\b|explicit panic|panicked at)', re.IGNORECASE)
 _UNWRAP_LINE = re.compile(r'\.(?:unwrap|expect)\s*\(')
 
@@ -373,6 +380,10 @@ def _panic_class(tree, location, message):
             # evidence about the oracle: class (c) (ReviewD123Harness3 N3b).
             return 'unknown'
     source = lines[line - 1]
+    # A line that opens with an assert macro is the assertion itself; its custom message is not
+    # "assertion failed" but it is still the macro's own panic (REVIEW-wave2-10 minor 4).
+    if _ASSERT_LINE_START.search(source):
+        return 'assertion'
     # A line that is an unwrap/expect (with #[track_caller] the test's own line) is only an assertion
     # when the panic message says so (an `assert_eq!` inside `expect(...)`); otherwise it is class (c).
     if _UNWRAP_LINE.search(source) and not _ASSERT_MESSAGE.match(message or ''):

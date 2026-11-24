@@ -72,6 +72,32 @@ pub(super) fn prometheus(state: &DashboardState) -> String {
         "krasnokamen_journal_prune_retained_bytes",
         snapshot.journal.prune_retained_bytes,
     );
+    out.push_str("# TYPE krasnokamen_journal_append_bytes_total counter\n");
+    prometheus_gauge(
+        &mut out,
+        "krasnokamen_journal_append_bytes_total",
+        snapshot.journal.append_bytes_total,
+    );
+    out.push_str("# TYPE krasnokamen_journal_fsyncs_total counter\n");
+    prometheus_gauge(
+        &mut out,
+        "krasnokamen_journal_fsyncs_total",
+        snapshot.journal.file_fsyncs_total + snapshot.journal.dir_fsyncs_total,
+    );
+    out.push_str("# TYPE krasnokamen_journal_fsync_nanoseconds_max gauge\n");
+    prometheus_gauge(
+        &mut out,
+        "krasnokamen_journal_fsync_nanoseconds_max",
+        snapshot.journal.fsync_nanos_max,
+    );
+    out.push_str("# TYPE krasnokamen_network_close_causes_total counter\n");
+    for (cause, count) in &snapshot.network.close_causes {
+        out.push_str("krasnokamen_network_close_causes_total{cause=\"");
+        out.push_str(cause);
+        out.push_str("\"} ");
+        out.push_str(&count.to_string());
+        out.push('\n');
+    }
     if let Some(bytes) = crate::host_telemetry::resident_memory_bytes() {
         prometheus_gauge(&mut out, "krasnokamen_process_resident_memory_bytes", bytes);
     }

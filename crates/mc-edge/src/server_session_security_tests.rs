@@ -508,3 +508,53 @@ async fn edge_kick_flushes_terminal_packet_after_an_earlier_reliable_batch() {
     }
     server.hub.shutdown();
 }
+
+/// PERF-RECEIPT-HAS-NO-ERROR-COUNTER-ROLLUP: the socket write failures the row is
+/// about reach the error rollup. A dropped peer is made real by shutting down the
+/// server socket's write half, so the next write fails with EPIPE: no sleep, no
+/// oversized burst, no mock writer.
+#[tokio::test]
+async fn a_play_write_failure_is_counted_by_cause() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let _client = TcpStream::connect(listener.local_addr().unwrap())
+        .await
+        .unwrap();
+    let (socket, _) = listener.accept().await.unwrap();
+    let std_socket = socket.into_std().unwrap();
+    let broken = std_socket.try_clone().unwrap();
+    let (reader, writer) =
+        crate::connection::Connection::new(TcpStream::from_std(std_socket).unwrap())
+            .into_play_halves();
+    let (reply_tx, reply_rx) = mpsc::channel(1);
+    let (reliable_tx, reliable_rx) = mpsc::channel(1);
+    let (world_tx, world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
+    let registry = Arc::new(ConnectionRegistry::new());
+    let task = tokio::spawn(play_writer(
+        writer,
+        Arc::new(NetCounters::new()),
+        Arc::clone(&registry),
+        ConnectionId(1),
+        uuid::Uuid::nil(),
+        PlayReceivers {
+            reliable: reliable_rx,
+            world: world_rx,
+            dh: mpsc::channel(1).1,
+            keepalive: reply_rx,
+        },
+    ));
+    broken.shutdown(std::net::Shutdown::Write).unwrap();
+    reliable_tx
+        .try_send(bytes::Bytes::from_static(b"payload"))
+        .unwrap();
+    let (stage, _) = tokio::time::timeout(Duration::from_secs(10), task)
+        .await
+        .expect("the writer ends")
+        .expect("the writer task did not panic");
+    assert_eq!(stage, "reliable-write-failed");
+    assert_eq!(
+        registry.close_causes().get("reliable-write-failed"),
+        Some(&1),
+        "a real socket write failure reaches the error rollup"
+    );
+    drop((reader, reply_tx, world_tx));
+}

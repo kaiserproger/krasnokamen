@@ -38,7 +38,7 @@ use crate::recorder::RecorderTick;
 use crate::server::ConnectionRegistry;
 use mc_core::boundary::TickTimes;
 use serde::Serialize;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -159,6 +159,12 @@ pub struct DashboardNetwork {
     /// ([`mc_core::Core::dropped_inputs`], read on request). A refused input is
     /// gone: the server corrects the client, so the symptom is rubber-banding.
     pub input_drops: u64,
+    /// Abnormal connection closes by cause since start (`reliable-overflow`, a
+    /// `*-write-failed` socket drop, `*-reliable-full`, …), read from the
+    /// connection registry when the payload is built. A normal end (a client's
+    /// EOF, a core-ordered kick) never appears; that is the per-window error
+    /// rollup.
+    pub close_causes: BTreeMap<&'static str, u64>,
 }
 
 /// Actual production component execution counters, not submissions or bot writes.
@@ -188,13 +194,21 @@ pub struct CorePerfVisibilityProof {
     pub pair_limit: usize,
 }
 
-/// Journal pruning health (process counters, read on demand).
+/// Journal pruning health and WAL write cost (process counters, read on demand).
 #[derive(Debug, Clone, Copy, Serialize, Default)]
 pub struct DashboardJournal {
     /// Failed covered-batch removals since start.
     pub prune_failures_total: u64,
     /// Bytes the latest prune attempt could not remove.
     pub prune_retained_bytes: u64,
+    /// Published WAL batch bytes since start and the last batch's frame size.
+    pub append_bytes_total: u64,
+    pub batch_bytes_last: u64,
+    /// Batch-file and directory fsync counts with their cumulative and worst service time.
+    pub file_fsyncs_total: u64,
+    pub dir_fsyncs_total: u64,
+    pub fsync_nanos_total: u64,
+    pub fsync_nanos_max: u64,
 }
 
 /// The complete `/stats` payload.

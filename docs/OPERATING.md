@@ -1258,6 +1258,16 @@ the directory, the count and the retained bytes, and shows as
 `/stats`). Covered batches stay replay-inert, so the world stays correct while
 the journal grows; the next failed append is what halts the server.
 
+Journal write cost is observable without attaching a profiler: under `/stats`
+`journal` (and on `/metrics` as `krasnokamen_journal_*`) the process reports
+`append_bytes_total`/`batch_bytes_last` (bytes of the batch frames written, not
+yet renamed), `file_fsyncs_total` and `dir_fsyncs_total` with their cumulative
+service time `fsync_nanos_total` and the slowest single fsync since start
+`fsync_nanos_max`. A receipt takes the delta between two samples, so a slow
+fsync shows up as a window figure instead of a hidden stall; see
+[persistence](architecture/persistence.md#write-errors-and-publication-order) for which write
+the counters cover.
+
 `journal_fsync_every_batches` sets only the power-loss window described in
 "What a crash can lose" above; 1 closes it at one directory fsync per tick. The
 process-crash window (the batch being written plus the queued ones) stays.
@@ -1402,6 +1412,27 @@ seconds) with the running total. A non-zero, growing count at a given population
 means the queue no longer holds one tick of arrivals there; its depth is not an
 operator knob (the core's fixed 4096 slots plus one slot per configured
 `max_players`).
+
+Abnormal connection ends (`network.close_causes` in `/stats`, a cause-to-count
+object, and `krasnokamen_network_close_causes_total{cause="…"}` in `/metrics`)
+count each session's end once, by cause: a reliable-queue overflow
+(`reliable-queue-full`, `route-changes-reliable-full`,
+`command-reliable-full`, `disconnect-reliable-full`, `roster-reliable-full`,
+`screen-control-reliable-full`), a socket write failure
+(`reliable-write-failed`, `world-write-failed`, `keepalive-write-failed`,
+`dh-write-failed`), a keepalive fault (`keepalive-timeout`,
+`keepalive-invalid-reply`) or a protocol/edge fault (a decode or administrative
+stage). A normal end counts nothing: a client EOF (`read-frame`), the writer's
+queues closing under it (`pump-closed`), the play loop dropping its keepalive
+sender on cancel (`keepalive-closed`), a core-ordered kick (`core-disconnect`),
+or the lifecycle's own removal (`removed`). A routing site that finds a
+connection's reliable queue already released (`TrySendError::Closed`) treats that
+as the session ending on its own: it leaves the routing view without a close cause
+and without a reliable-drop count, and the registry entry is cleaned up when the
+session's owner finishes. A growing total is therefore a delivery or socket
+problem rather than ordinary turnover. The map is read from the registry when a
+payload is built, like the input drops, and is never on the tick path; a runner
+receipt quotes the delta between two samples.
 
 `/telemetry.jsonl?after_tick=N` (same `wait` and `min_samples` as
 `/load-metrics`) returns one JSON object per retained core tick: the

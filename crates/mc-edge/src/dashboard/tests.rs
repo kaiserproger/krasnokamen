@@ -841,3 +841,81 @@ fn input_drops_are_polled_on_request_and_exported() {
         "Prometheus exports the cumulative drop counter: {text}"
     );
 }
+
+/// WAL-FSYNC-LATENCY-AND-BYTES-UNMEASURED and PERF-RECEIPT-HAS-NO-ERROR-COUNTER-
+/// ROLLUP: the operator surfaces carry the WAL write cost and every abnormal close
+/// cause, so a rung receipt can quote fsync service time and a socket drop.
+#[test]
+fn stats_carry_wal_write_cost_and_close_causes() {
+    let state = test_state();
+    let registry = Arc::new(ConnectionRegistry::new());
+    state.set_queue_source(Arc::clone(&registry));
+    // The writer records its own terminal stage; the payload reads the map on
+    // request, never from a pump sample.
+    registry.record_close_cause("reliable-overflow");
+    registry.record_close_cause("world-write-failed");
+    let snapshot = state.snapshot();
+    assert_eq!(
+        snapshot.network.close_causes.get("reliable-overflow"),
+        Some(&1),
+        "the rollup is read from the registry when the payload is built"
+    );
+    assert_eq!(
+        snapshot.network.close_causes.get("world-write-failed"),
+        Some(&1)
+    );
+    let value = serde_json::to_value(&snapshot).unwrap();
+    assert_eq!(
+        value["network"]["close_causes"]["world-write-failed"], 1,
+        "the rollup is in the JSON receipt: {value}"
+    );
+    let write = mc_core::journal::journal_write_stats();
+    assert_eq!(
+        snapshot.journal.append_bytes_total,
+        write.append_bytes_total
+    );
+    assert_eq!(snapshot.journal.batch_bytes_last, write.batch_bytes_last);
+    assert_eq!(snapshot.journal.file_fsyncs_total, write.file_fsyncs_total);
+    assert_eq!(snapshot.journal.dir_fsyncs_total, write.dir_fsyncs_total);
+    assert_eq!(snapshot.journal.fsync_nanos_total, write.fsync_nanos_total);
+    assert_eq!(snapshot.journal.fsync_nanos_max, write.fsync_nanos_max);
+    for key in [
+        "append_bytes_total",
+        "batch_bytes_last",
+        "file_fsyncs_total",
+        "dir_fsyncs_total",
+        "fsync_nanos_total",
+        "fsync_nanos_max",
+    ] {
+        assert!(
+            value["journal"][key].is_u64(),
+            "missing journal field {key}"
+        );
+    }
+    let metrics = prometheus(&state);
+    for name in [
+        "krasnokamen_journal_append_bytes_total",
+        "krasnokamen_journal_fsyncs_total",
+        "krasnokamen_journal_fsync_nanoseconds_max",
+        "krasnokamen_network_close_causes_total{cause=\"world-write-failed\"}",
+    ] {
+        assert!(metrics.contains(name), "missing {name}: {metrics}");
+    }
+}
+
+/// The rollup counts session ends that are errors and nothing else: a reported
+/// abnormal stage counts, and the lifecycle's ordinary removal adds no cause.
+#[test]
+fn an_abnormal_close_is_counted_by_cause() {
+    let registry = crate::server::ConnectionRegistry::new();
+    let ordinary = registry.joining_id();
+    registry.record_close_cause("reliable-overflow");
+    registry.remove(ordinary);
+    let causes = registry.close_causes();
+    assert_eq!(causes.get("reliable-overflow"), Some(&1));
+    assert_eq!(
+        causes.get("removed"),
+        None,
+        "a normal end is not an error: {causes:?}"
+    );
+}

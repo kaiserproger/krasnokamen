@@ -2449,3 +2449,42 @@ fn a_missing_journal_is_an_empty_tail_only_on_the_root_branch() {
     std::fs::create_dir(&journal).unwrap();
     assert_eq!(visit([0x33; 8]).unwrap(), 7);
 }
+
+/// WAL-FSYNC-LATENCY-AND-BYTES-UNMEASURED: the published batch's bytes and the fsync
+/// service time are counted where a receipt can read them. The counters are
+/// process-wide, so the assertion is on the delta of one append.
+#[test]
+fn append_counts_published_bytes_and_fsync_service_time() {
+    let before = crate::journal::journal_write_stats();
+    let root = tempfile::tempdir().unwrap();
+    let mut writer = JournalWriter::open_test(root.path(), 8).unwrap();
+    writer.append(1, 1, &[]).unwrap();
+    let after_append = crate::journal::journal_write_stats();
+    assert!(
+        after_append.file_fsyncs_total > before.file_fsyncs_total,
+        "one append fsyncs its batch file: {before:?} -> {after_append:?}"
+    );
+    assert!(
+        after_append.append_bytes_total > before.append_bytes_total,
+        "the published frame bytes are counted: {before:?} -> {after_append:?}"
+    );
+    assert!(
+        after_append.batch_bytes_last > 0
+            && after_append.batch_bytes_last
+                <= after_append.append_bytes_total - before.append_bytes_total,
+        "the last batch size is the frame just written: {after_append:?}"
+    );
+    assert!(
+        after_append.fsync_nanos_total > before.fsync_nanos_total
+            && after_append.fsync_nanos_max > 0
+            && after_append.fsync_nanos_max <= after_append.fsync_nanos_total,
+        "fsync service time is summed and its worst case kept: {after_append:?}"
+    );
+    // `fsync_every = 8` leaves the directory fsync to the explicit flush.
+    writer.flush().unwrap();
+    let after_flush = crate::journal::journal_write_stats();
+    assert!(
+        after_flush.dir_fsyncs_total > after_append.dir_fsyncs_total,
+        "flush fsyncs the journal directory: {after_append:?} -> {after_flush:?}"
+    );
+}

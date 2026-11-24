@@ -1344,6 +1344,292 @@ def host_receipt(out: Path, *, cpu_root: Path = Path("/sys/devices/system/cpu"),
             "cgroup": Path("/proc/self/cgroup").read_text()}
 
 
+TICK_THREAD = "mc-core-tick"
+
+
+def schedstat_run_queue_wait_ns(text: str) -> int:
+    """Field 2 of `task/<tid>/schedstat`: nanoseconds the thread waited on a run queue.
+
+    Field 1 is on-CPU nanoseconds and field 3 the slice count. A line with fewer than three
+    fields refuses instead of reading as zero wait (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT)."""
+    fields = text.split()
+    if len(fields) < 3 or not fields[1].isdigit():
+        raise ValueError("schedstat line lacks its three integer fields")
+    return int(fields[1])
+
+
+def thread_row(stat: str, schedstat: str, ticks: int | None = None) -> tuple[str, float, int] | None:
+    """Name, CPU seconds and run-queue wait of one thread, or `None` when either read is unusable.
+
+    `stat` is the `task/<tid>/stat` line and `schedstat` its three-field line. `ticks` is USER_HZ
+    (`getconf CLK_TCK`) of the host that produced `stat`: the local one by default, the remote host's
+    for a `Remote.thread_listing` text, whose stat fields are in that host's clock ticks. A thread
+    that exits between the two reads is skipped, never reported as zero."""
+    try:
+        wait_ns = schedstat_run_queue_wait_ns(schedstat)
+        fields = stat[stat.rindex(")") + 2:].split()
+        cpu_seconds = (int(fields[11]) + int(fields[12])) / (ticks or os.sysconf("SC_CLK_TCK"))
+        return stat[stat.index("(") + 1:stat.rindex(")")], cpu_seconds, wait_ns
+    except (ValueError, IndexError):
+        return None
+
+
+def add_thread_row(result: dict[str, dict[str, Any]], row: tuple[str, float, int]) -> None:
+    """Sum same-named threads, as `capacity_ladder.thread_cpu` does."""
+    name, cpu_seconds, wait_ns = row
+    summed = result.setdefault(name, {"threads": 0, "cpu_seconds": 0.0, "run_queue_wait_ns": 0})
+    summed["threads"] += 1
+    summed["cpu_seconds"] += cpu_seconds
+    summed["run_queue_wait_ns"] += wait_ns
+
+
+def thread_usage(pid: int, *, proc: Path = Path("/proc")) -> dict[str, dict[str, Any]]:
+    """Per thread name: CPU seconds and cumulative run-queue wait, from `task/<tid>/{stat,schedstat}`.
+
+    Same-named threads are summed. `proc` exists so a test drives the production reader from a
+    fixture tree; a thread that exits between the two reads is skipped, never reported as zero."""
+    try:
+        tasks = sorted((proc / str(pid) / "task").iterdir())
+    except OSError:
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for task in tasks:
+        try:
+            stat = (task / "stat").read_text()
+            schedstat = (task / "schedstat").read_text()
+        except OSError:
+            continue
+        row = thread_row(stat, schedstat)
+        if row is not None:
+            add_thread_row(result, row)
+    return result
+
+
+def thread_usage_listing(text: str, ticks: int | None = None) -> dict[str, dict[str, Any]]:
+    """`thread_usage` rows from one `Remote.thread_listing` text (`@@TASK`/`@@SCHED` blocks).
+
+    A `--remote-host` session's server runs on another host, so its `/proc` is read there; the same
+    MainPID on this host is some unrelated process or nothing at all
+    (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT). `ticks` is that host's USER_HZ, not the
+    reader's: `task/<tid>/stat` utime/stime are in the clock ticks of the kernel that wrote them."""
+    result: dict[str, dict[str, Any]] = {}
+    for block in text.split("@@TASK")[1:]:
+        stat, _, schedstat = block.partition("@@SCHED")
+        row = thread_row(stat.strip("\n"), schedstat.strip("\n"), ticks)
+        if row is not None:
+            add_thread_row(result, row)
+    return result
+
+
+def thread_summary(rows: list[dict[str, Any]], start: int, end: int,
+                   tick_starts: list[int]) -> dict[str, Any]:
+    """First-to-last per-thread delta inside the window: CPU seconds and run-queue wait per thread.
+
+    `run_queue_wait_ms_per_tick` is what TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT needs: a
+    phase's wall time minus this wait is work, the remainder is descheduling. A window with fewer
+    than two samples is named unavailable, never zero; so is a thread missing from either sample or
+    whose thread count changed, because its delta would then span the whole process lifetime. The
+    per-tick fields divide by the ticks between the two samples (`[first, last)`), not by the whole
+    window, whose edges the samples do not cover."""
+    window = [row for row in rows
+              if start <= row["captured_unix_ns"] < end and isinstance(row.get("threads"), dict)]
+    if len(window) < 2:
+        return {"status": "unavailable",
+                "reason": "fewer than two per-thread samples inside the measured window"}
+    before, after = window[0], window[-1]
+    ticks = sum(1 for at in tick_starts
+                if before["captured_unix_ns"] <= at < after["captured_unix_ns"])
+    summary: dict[str, Any] = {}
+    for name in sorted(set(before["threads"]) | set(after["threads"])):
+        first, last = before["threads"].get(name), after["threads"].get(name)
+        if (not isinstance(first, dict) or not isinstance(last, dict)
+                or first.get("threads") != last.get("threads")):
+            summary[name] = {"status": "unavailable",
+                             "reason": "thread absent from one sample or its thread count changed"}
+            continue
+        cpu = last["cpu_seconds"] - first["cpu_seconds"]
+        wait_ms = (last["run_queue_wait_ns"] - first["run_queue_wait_ns"]) / 1e6
+        row = {"threads": last["threads"], "cpu_seconds": round(cpu, 3),
+               "run_queue_wait_ms": round(wait_ms, 3)}
+        if ticks > 0:
+            row["cpu_ms_per_tick"] = round(cpu * 1000 / ticks, 3)
+            row["run_queue_wait_ms_per_tick"] = round(wait_ms / ticks, 4)
+        summary[name] = row
+    return summary
+
+
+def require_thread_wait(threads: dict[str, Any]) -> dict[str, Any]:
+    """The tick thread's run-queue wait, or a refusal: laps alone are wall time only.
+
+    No fallback: a receipt whose phases carry only `Instant` laps cannot tell removed work from
+    redistributed waiting (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT)."""
+    if not isinstance(threads, dict) or threads.get("status") == "unavailable":
+        reason = threads.get("reason") if isinstance(threads, dict) else threads
+        raise ValueError(f"tick phase receipt lacks per-thread schedstat sampling: {reason}")
+    tick = threads.get(TICK_THREAD)
+    if not isinstance(tick, dict) or tick.get("status") == "unavailable":
+        reason = tick.get("reason") if isinstance(tick, dict) else None
+        raise ValueError(f"tick phase receipt lacks a usable {TICK_THREAD} run-queue wait "
+                         f"(unavailable: {reason})")
+    if "run_queue_wait_ms" not in tick:
+        raise ValueError(f"tick phase receipt lacks {TICK_THREAD} run-queue wait (schedstat field 2); "
+                         "laps are wall time only")
+    return tick
+
+
+def tick_thread_pid(pid: int, *, proc: Path = Path("/proc"),
+                    name: str = TICK_THREAD) -> int | None:
+    """The process in `pid`'s tree whose task list carries the `name` thread, or `None`.
+
+    `--server-wrapper "perf stat … --"` (and `env A=1`, a launcher script) runs the server as a
+    child, so `session.processes["server"].pid` is the wrapper and its own task list has no
+    `mc-core-tick` thread: sampling it yields no tick row and `require_thread_wait` refuses the
+    window (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT). Walk `/proc/<pid>/task/*/children`
+    breadth-first, as `singleplayer_regressions._server_child` does, and answer the first process
+    that owns the thread. `proc` exists so a test drives it from a fixture tree."""
+    seen: set[int] = set()
+    pending = [pid]
+    while pending:
+        current = pending.pop(0)
+        if current in seen:
+            continue
+        seen.add(current)
+        try:
+            tasks = list((proc / str(current) / "task").iterdir())
+        except OSError:
+            continue
+        for task in tasks:
+            try:
+                if (task / "comm").read_text().strip() == name:
+                    return current
+            except OSError:
+                continue
+        for path in (proc / str(current) / "task").glob("*/children"):
+            try:
+                pending.extend(int(child) for child in path.read_text().split())
+            except (OSError, ValueError):
+                continue
+    return None
+
+
+def server_threads(session: Any, *, proc: Path = Path("/proc")) -> dict[str, dict[str, Any]]:
+    """Per-thread CPU and run-queue sample of the process this session runs as the server.
+
+    A `--server-wrapper` that forks (`perf stat … --`, a launcher) makes the sampled pid the
+    wrapper, so the pid that owns the `mc-core-tick` thread is looked up through
+    [`tick_thread_pid`]; a local session with no wrapper keeps the session's own pid.
+    A `--remote-host` session runs the server on another host, where `session.pid` is the remote
+    unit's MainPID (the server itself, `taskset` execs into it): that host's `/proc` and clock
+    ticks are read over the session's ssh connection instead of the local ones
+    (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT)."""
+    process = getattr(session, "processes", {}).get("server")
+    pid = getattr(process, "pid", None) or getattr(session, "pid", None)
+    if not isinstance(pid, int):
+        return {}
+    remote = getattr(session, "remote", None)
+    if remote is not None:
+        return thread_usage_listing(remote.thread_listing(pid), remote.clk_tck())
+    owner = tick_thread_pid(pid, proc=proc)
+    return thread_usage(owner if owner is not None else pid, proc=proc)
+
+
+def client_tick_arrival(bots: dict[str, Any]) -> dict[str, Any]:
+    """The bot-observed tick arrival distribution per open-loop window.
+
+    The bots report the interval between the server's clock heartbeats (`ClientboundSetTime`,
+    one per 20 ticks) and the per-tick period derived from the heartbeat's own game-time delta
+    (PERF-RECEIPT-HAS-NO-CLIENT-OBSERVED-TICK-ARRIVAL). A window the bot report leaves out is
+    named unavailable, never omitted."""
+    windows = bots.get("open_loop", {}).get("windows") if isinstance(bots, dict) else None
+    if not isinstance(windows, list) or not windows:
+        return {"status": "unavailable", "reason": "bot report carries no open-loop windows"}
+    rows: dict[str, Any] = {}
+    for window in windows:
+        name = str(window.get("name"))
+        arrival = window.get("tick_arrival")
+        if not isinstance(arrival, dict):
+            rows[name] = {"status": "unavailable", "reason": "bot report window lacks tick_arrival"}
+            continue
+        interval = arrival.get("interval_us") or {}
+        rows[name] = {"samples": interval.get("samples", 0),
+                      "p50_us": interval.get("p50_us"), "p95_us": interval.get("p95_us"),
+                      "p99_us": interval.get("p99_us"), "max_us": interval.get("max_us"),
+                      "tick_period_us": arrival.get("tick_period_us")}
+    return {"windows": rows,
+            "scope": "client-observed clock-heartbeat arrival at the bots; period = interval / game-time delta"}
+
+
+def journal_rollup(rows: list[dict[str, Any]], start: int, end: int,
+                   tick_starts: list[int]) -> dict[str, Any]:
+    """WAL fsync service time, fsync count and bytes in the window, from `/stats.journal`.
+
+    The counters are process-cumulative, so the receipt states the window delta and the bytes per
+    source tick (WAL-FSYNC-LATENCY-AND-BYTES-UNMEASURED). A server that reports no write counters
+    yields a named `unavailable`, never a silent absence."""
+    window = [row for row in rows if start <= row["captured_unix_ns"] < end]
+    stats = [row["stats"].get("journal") for row in window if isinstance(row.get("stats"), dict)]
+    stats = [stat for stat in stats if isinstance(stat, dict)]
+    if len(stats) < 2:
+        return {"status": "unavailable", "reason": "fewer than two /stats samples inside the window"}
+    first, last = stats[0], stats[-1]
+    ticks = sum(1 for at in tick_starts
+                if window[0]["captured_unix_ns"] <= at < window[-1]["captured_unix_ns"])
+    counters = ("append_bytes_total", "file_fsyncs_total", "dir_fsyncs_total", "fsync_nanos_total")
+    if any(not isinstance(last.get(name), int) or not isinstance(first.get(name), int)
+           for name in counters):
+        return {"status": "unavailable", "reason": "server /stats carried no WAL write counters"}
+    append_bytes = last["append_bytes_total"] - first["append_bytes_total"]
+    fsyncs = last["file_fsyncs_total"] - first["file_fsyncs_total"]
+    dir_fsyncs = last["dir_fsyncs_total"] - first["dir_fsyncs_total"]
+    nanos = last["fsync_nanos_total"] - first["fsync_nanos_total"]
+    # `fsync_nanos_total` times file AND directory fsyncs, so the mean divides by both counts; a
+    # file-only divisor inflated it by (file + dir) / file, i.e. by every journal flush.
+    service_time = fsyncs + dir_fsyncs
+    result: dict[str, Any] = {
+        "append_bytes": append_bytes,
+        "file_fsyncs": fsyncs,
+        "dir_fsyncs": dir_fsyncs,
+        "fsync_ms_mean": round(nanos / 1e6 / service_time, 4) if service_time else None,
+        # `fetch_max` since process start, never reset per window: a warm-up stall is not this
+        # window's worst fsync, so the field says which scope it has.
+        "fsync_ms_max_since_start": round(last.get("fsync_nanos_max", 0) / 1e6, 4),
+        "batch_bytes_last": last.get("batch_bytes_last"),
+        "scope": "process-cumulative journal counters from /stats; counts and mean over the "
+                 "measured window, the max over the whole process lifetime"}
+    if ticks:
+        result["append_bytes_per_tick"] = round(append_bytes / ticks, 1)
+    return result
+
+
+def error_rollup(rows: list[dict[str, Any]], start: int, end: int) -> dict[str, Any]:
+    """Per-window error rollup: socket drops, short/stalled writes and refused inputs.
+
+    Dashboard network counters are cumulative; the receipt states their window delta and every
+    abnormal close cause by name, which is where reliable-overflow and the `*-write-failed` causes
+    (a dropped or stalled socket) appear (PERF-RECEIPT-HAS-NO-ERROR-COUNTER-ROLLUP)."""
+    window = [row for row in rows if start <= row["captured_unix_ns"] < end]
+    networks = [row["stats"].get("network") for row in window if isinstance(row.get("stats"), dict)]
+    networks = [network for network in networks if isinstance(network, dict)]
+    if len(networks) < 2:
+        return {"status": "unavailable", "reason": "fewer than two /stats samples inside the window"}
+    first, last = networks[0], networks[-1]
+
+    def delta(name: str) -> int | None:
+        a, b = first.get(name), last.get(name)
+        return b - a if isinstance(a, int) and isinstance(b, int) else None
+
+    causes: dict[str, int] = {}
+    for cause in sorted(set(first.get("close_causes") or {}) | set(last.get("close_causes") or {})):
+        counts = (last.get("close_causes") or {}).get(cause, 0) - \
+                 (first.get("close_causes") or {}).get(cause, 0)
+        if counts:
+            causes[cause] = counts
+    warnings = window[-1]["stats"].get("warnings")
+    return {"reliable_drops": delta("reliable_drops"), "input_drops": delta("input_drops"),
+            "close_causes": causes, "warnings_last": warnings,
+            "scope": "cumulative dashboard counters; delta and close-cause counts over the window"}
+
+
 def summarize(samples: list[dict[str, Any]], processes: list[dict[str, Any]],
               start: int, end: int) -> dict[str, Any]:
     ticks = [s for s in samples if start <= s["wall_start_unix_ns"] < end]
@@ -1352,6 +1638,7 @@ def summarize(samples: list[dict[str, Any]], processes: list[dict[str, Any]],
         raise ValueError("measurement lacks exact ticks or process samples")
     seconds = (end - start) / 1e9
     tick = load.tick_metrics(ticks)
+    all_tick_starts = [s["wall_start_unix_ns"] for s in samples]
     return {"duration_seconds": seconds, "ticks": len(ticks), "tps": len(ticks) / seconds,
             "mspt": {key: tick[key + "_us"] / 1000 for key in ("p50", "p95", "p99", "max")},
             "rss": {name: {"peak_lifetime_bytes": max(r["processes"][name]["peak_rss_bytes"] for r in rows),
@@ -1361,7 +1648,10 @@ def summarize(samples: list[dict[str, Any]], processes: list[dict[str, Any]],
             "chunk_generation_per_second": None,
             "chunk_generation_scope": "not instrumented; resident chunk deltas include reloads/unloads",
             "population_observed": {"first": rows[0]["stats"]["entities"], "last": rows[-1]["stats"]["entities"]},
-            "resident_chunks_observed": {"first": rows[0]["stats"]["chunks"], "last": rows[-1]["stats"]["chunks"]}}
+            "resident_chunks_observed": {"first": rows[0]["stats"]["chunks"], "last": rows[-1]["stats"]["chunks"]},
+            "threads": thread_summary(processes, start, end, all_tick_starts),
+            "journal": journal_rollup(processes, start, end, all_tick_starts),
+            "errors": error_rollup(processes, start, end)}
 
 
 def validate_metrics(metric: dict[str, Any], initial: dict[str, Any], cursor: int) -> int:
@@ -1419,21 +1709,34 @@ async def cold_visibility_proof(session: Any, url: str, viewers: int, after_tick
     return proof
 
 
+def server_wrapper_with_regions(wrapper: str, region_file: Path | None) -> str:
+    """The server wrapper with the opt-in region attribution, or unchanged without it.
+
+    The control leg for COREPERF-REGION-ATTRIBUTION-PERTURBS-MEASURED-MEMORY-TRAFFIC runs the same
+    population with `KRASNOKAMEN_COREPERF_REGIONS` unset, so no wrapper is added and the core does
+    no per-slot region probe."""
+    if region_file is None:
+        return wrapper
+    return " ".join(filter(None, [
+        wrapper, "env", shlex.quote(f"KRASNOKAMEN_COREPERF_REGIONS={region_file}")]))
+
+
 async def measure(args: argparse.Namespace, directory: Path, world: Path,
                   recipe: dict[str, Any], prepared: dict[str, Any]) -> dict[str, Any]:
     directory.mkdir()
+    attribution = getattr(args, "coreperf_regions", True)
     if "coverage" in recipe:
         if getattr(args, "remote_host", None):
             raise ValueError("scale telemetry currently requires a local server")
-        region_file = directory / "coreperf-regions.json"
-        load.scale.dump(region_file, {"marker": compare.COHORT_NAME,
-                                      "regions": [row["chunks"] for row in recipe["coverage"]],
-                                      "productive_crops": recipe.get("stress", {}).get("worker_cells", [])})
+        region_file = None
         args = copy.copy(args)
-        args.metrics_bearer_token = secrets.token_urlsafe(32)
-        args.server_wrapper = " ".join(filter(None, [
-            args.server_wrapper,
-            "env", shlex.quote(f"KRASNOKAMEN_COREPERF_REGIONS={region_file}")]))
+        if attribution:
+            region_file = directory / "coreperf-regions.json"
+            load.scale.dump(region_file, {"marker": compare.COHORT_NAME,
+                                          "regions": [row["chunks"] for row in recipe["coverage"]],
+                                          "productive_crops": recipe.get("stress", {}).get("worker_cells", [])})
+            args.metrics_bearer_token = secrets.token_urlsafe(32)
+        args.server_wrapper = server_wrapper_with_regions(args.server_wrapper or "", region_file)
     config, url, game = load.config(args, directory, world, args.clients, operators=True)
     # Idle measures simulation, not the default pause-when-empty policy.
     config.write_text(config.read_text().replace("[server]\n", "[server]\npause_when_empty_seconds = -1\n", 1))
@@ -1483,7 +1786,7 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
         initial = await initial_metrics(session, url)
         cursor = initial["latest_tick"]
         proof = (await cold_visibility_proof(session, url, args.clients, cursor, args.readiness_seconds)
-                 if "coverage" in recipe else None)
+                 if "coverage" in recipe and attribution else None)
         epoch = time.time_ns()
         if args.clients:
             stdin = session.processes["bots"].stdin
@@ -1510,10 +1813,13 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
                     if tick["wall_start_unix_ns"] <= previous_wall_start:
                         raise ValueError("source wall clock regressed")
                     previous_wall_start = tick["wall_start_unix_ns"]
-                    if "coverage" in recipe and start <= tick["wall_start_unix_ns"] < end:
+                    if (attribution and "coverage" in recipe
+                            and start <= tick["wall_start_unix_ns"] < end):
                         coverage_samples.append(validate_scale_sample(recipe, tick, allowed_cells))
                 stats = await session.http(url + "/stats", 2)
-                row = {"captured_unix_ns": time.time_ns() + offset, "processes": session.process_samples(),
+                row = {"captured_unix_ns": time.time_ns() + offset,
+                       "threads": server_threads(session),
+                       "processes": session.process_samples(),
                        "stats": stats, "bots": session.latest_bot}
                 raw.write(json.dumps({"metrics": metric, **row}) + "\n")
                 samples.extend(metric["samples"])
@@ -1525,7 +1831,24 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
                 if metric["samples"] and metric["samples"][-1]["wall_start_unix_ns"] >= end:
                     break
         result["summary"] = summarize(samples, process_rows, start, end)
-        if "coverage" in recipe:
+        result["summary"]["tick_thread"] = require_thread_wait(result["summary"]["threads"])
+        if "coverage" in recipe and not attribution:
+            # COREPERF-REGION-ATTRIBUTION-PERTURBS-MEASURED-MEMORY-TRAFFIC control leg: the same
+            # population and window with the per-slot region probe off. Region-derived gates cannot
+            # be observed by construction; the receipt names every number it cannot report instead
+            # of omitting it, and keeps the measured window (MSPT/RSS/TPS) comparable to the
+            # attributed leg.
+            result["coverage"] = {
+                "status": "unavailable",
+                "reason": "region attribution off (control leg): no source-tick region telemetry "
+                          "and no cold visibility proof"}
+            result["population"] = {
+                **recipe["population"],
+                "resident_observed_saved": sum(prepared["cohort"]["counts"].values()),
+                "visible_unique_entities": None,
+                "visible_unique_scope": "unavailable: region attribution off (control leg)",
+                "source_tick_samples": 0}
+        elif "coverage" in recipe:
             if not coverage_samples:
                 raise ValueError("measurement lacks source-tick region coverage")
             if (recipe["variant"].endswith("-mostly-resting")
@@ -1612,6 +1935,7 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
             raise ValueError("bot schedule failed or incomplete")
         if bots.get("movements_sent", 0) == 0:
             raise ValueError("requested active profile sent no movement")
+        result["client_tick_arrival"] = client_tick_arrival(bots)
         if recipe.get("stress", {}).get("kind") == "xp-orbs":
             result["stress"]["observer_evidence"] = validate_xp_observers(recipe["stress"], bots)
         if args.profile in ("explore-3", "explore-20") and bots.get("chunk_boundaries_crossed", 0) == 0:
@@ -1882,6 +2206,12 @@ def main() -> int:
     parser.add_argument("--observer-stride", type=int, default=1,
                         help="scale profiles only: keep one observer anchor per N active regions "
                              "(cohort and pen coverage unchanged); for measuring the per-client slope")
+    parser.add_argument("--no-coreperf-regions", dest="coreperf_regions", action="store_false",
+                        help="scale profiles only: the control leg for the region-attribution bias "
+                             "(COREPERF-REGION-ATTRIBUTION-PERTURBS-MEASURED-MEMORY-TRAFFIC) — the "
+                             "same population and window with KRASNOKAMEN_COREPERF_REGIONS unset; "
+                             "region-derived gates are recorded unavailable, never omitted")
+    parser.set_defaults(coreperf_regions=True)
     parser.add_argument("--spawn-mobs", choices=("on", "off"))
     parser.add_argument("--spawn-monsters", choices=("on", "off"))
     stress.add_argument("--churn-percent", type=int, choices=(0, 1, 10))
@@ -1895,6 +2225,14 @@ def main() -> int:
         parser.error("--items requires the items-heavy profile")
     if args.items_bots < 1:
         parser.error("--items-bots must be positive")
+    if not args.coreperf_regions:
+        if args.profile not in SCALE_PROFILES:
+            parser.error("--no-coreperf-regions is for a scale profile control leg")
+        if any(value is not None for value in (
+                args.projectiles, args.xp_orbs, args.containers, args.productive_npcs,
+                args.damage_victims, args.map_frames, args.churn_percent, args.daylight_zombies,
+                args.wool_sheep, args.reactive_pairs)):
+            parser.error("--no-coreperf-regions control leg requires a recipe without stress")
     if args.profile in SCALE_PROFILES:
         if args.remote_host:
             parser.error("scale telemetry requires a local server")

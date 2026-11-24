@@ -544,22 +544,19 @@ pub(super) fn route_outbox_batches(
                     .map(|player| player.uuid),
                 _ => None,
             })
-            && server
-                .send(
-                    connection,
-                    &crate::command_tree::tree(
-                        server.admin.level(uuid),
-                        server.hub.plugin_commands(),
-                    ),
-                )
-                .is_err()
+            && let Err(refusal) = server.send(
+                connection,
+                &crate::command_tree::tree(server.admin.level(uuid), server.hub.plugin_commands()),
+            )
         {
-            // Move the registry generation so the next refresh cannot
-            // re-adopt this connection with a viewer that never got its
-            // command tree.
-            server
-                .connections
-                .close(connection, "command-tree-send-failed");
+            // `send` counts a full queue as this session's end. A queue whose
+            // receiver is already gone belongs to a session that is ending on
+            // its own: evict it from the routing view without a second cause.
+            if !matches!(refusal, SendFailure::Closed) {
+                server
+                    .connections
+                    .close(connection, "command-tree-send-failed");
+            }
             connections.remove(&connection);
             viewers.remove(&connection);
             continue;
@@ -586,15 +583,21 @@ pub(super) fn route_changes(
         handles.world_tx.reset();
     }
     for planned in crate::plan::plan_routed_player_changes(changes, viewer) {
-        if handles.reliable_tx.try_send(planned.data).is_err() {
-            server
-                .connections
-                .close(viewer.connection, "route-changes-reliable-full");
-            server
-                .net_counters
-                .reliable_drops
-                .fetch_add(1, Ordering::Relaxed);
-            return false;
+        match handles.reliable_tx.try_send(planned.data) {
+            Ok(()) => {}
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                server
+                    .connections
+                    .close(viewer.connection, "route-changes-reliable-full");
+                server
+                    .net_counters
+                    .reliable_drops
+                    .fetch_add(1, Ordering::Relaxed);
+                return false;
+            }
+            // A receiver the writer already released is a session that is
+            // ending on its own: evict it, count nothing.
+            Err(mpsc::error::TrySendError::Closed(_)) => return false,
         }
     }
     true
@@ -735,16 +738,26 @@ fn route_planned_packets(
         let handles = &connections[&packet.connection];
         let world_refused = match packet.priority {
             Priority::Reliable => {
-                if handles.reliable_tx.try_send(packet.data).is_err() {
-                    server
-                        .connections
-                        .close(packet.connection, "reliable-queue-full");
-                    connections.remove(&packet.connection);
-                    server
-                        .net_counters
-                        .reliable_drops
-                        .fetch_add(1, Ordering::Relaxed);
-                    viewers.remove(&packet.connection);
+                match handles.reliable_tx.try_send(packet.data) {
+                    Ok(()) => {}
+                    Err(mpsc::error::TrySendError::Full(_)) => {
+                        server
+                            .connections
+                            .close(packet.connection, "reliable-queue-full");
+                        server
+                            .net_counters
+                            .reliable_drops
+                            .fetch_add(1, Ordering::Relaxed);
+                        connections.remove(&packet.connection);
+                        viewers.remove(&packet.connection);
+                    }
+                    // The session is already ending (its writer released the
+                    // receivers before the routing view advanced): leave the
+                    // local view and count nothing.
+                    Err(mpsc::error::TrySendError::Closed(_)) => {
+                        connections.remove(&packet.connection);
+                        viewers.remove(&packet.connection);
+                    }
                 }
                 false
             }
@@ -774,7 +787,7 @@ fn route_planned_packets(
 /// to every connection. That is one reliable-queue slot per interval per
 /// connection, not one slot per other connection per keepalive reply: the
 /// per-reply fan-out filled the 512-slot reliable queue of a slow reader in
-/// seconds and the delivery policy disconnected it.
+/// seconds and the delivery policy disconnected it (`roster-reliable-full`).
 pub(super) fn broadcast_latencies(
     registry: &ConnectionRegistry,
     net_counters: &NetCounters,
@@ -823,11 +836,24 @@ pub(super) fn broadcast_latencies(
         return;
     }
     let frame = frame.freeze();
+    let mut ended = Vec::new();
     for (id, handles) in connections.iter() {
-        if handles.reliable_tx.try_send(frame.clone()).is_err() {
-            registry.remove(*id);
-            net_counters.reliable_drops.fetch_add(1, Ordering::Relaxed);
+        match handles.reliable_tx.try_send(frame.clone()) {
+            Ok(()) => {}
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                registry.close(*id, "roster-reliable-full");
+                net_counters.reliable_drops.fetch_add(1, Ordering::Relaxed);
+            }
+            // A receiver the writer released is a session that is ending on
+            // its own: drop it from the routing view, count nothing.
+            Err(mpsc::error::TrySendError::Closed(_)) => ended.push(*id),
         }
+    }
+    for id in ended {
+        // The pump's next publication refills the view from the registry;
+        // adding it here is what keeps this tick from routing to a dead sender
+        // again.
+        connections.remove(&id);
     }
 }
 

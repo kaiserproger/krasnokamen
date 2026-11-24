@@ -25,6 +25,7 @@ class Remote:
         self.scratch = tempfile.mkdtemp(prefix="bench-ssh-")
         self.control = f"{self.scratch}/ctl"
         self.opened = False
+        self._clk_tck: int | None = None
 
     def _ssh(self, *extra: str) -> list[str]:
         return ["ssh", "-S", self.control, "-o", "BatchMode=yes", *self.ssh_options, *extra]
@@ -105,9 +106,26 @@ class Remote:
         status, _, stat = text.partition("---\n")
         values = {m[1]: int(m[2]) * 1024 for m in re.finditer(r"^(VmHWM|VmRSS):\s+(\d+) kB", status, re.M)}
         fields = stat.rsplit(")", 1)[1].split()
-        ticks = int(self.run("getconf CLK_TCK").stdout)
-        values["cpu_seconds"] = (int(fields[11]) + int(fields[12])) / ticks
+        values["cpu_seconds"] = (int(fields[11]) + int(fields[12])) / self.clk_tck()
         return values
+
+    def clk_tck(self) -> int:
+        """This host's USER_HZ: the unit of `task/<tid>/stat` utime/stime (probed once per run)."""
+        if self._clk_tck is None:
+            self._clk_tck = int(self.run("getconf CLK_TCK").stdout)
+        return self._clk_tck
+
+    def thread_listing(self, pid: int) -> str:
+        """Every thread's `stat` then `schedstat`, `@@TASK`/`@@SCHED` delimited, in one round trip.
+
+        A remote session's `pid` is the MainPID on THIS host, so the per-thread counters must be
+        read here (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT); `profiles.thread_usage_listing`
+        parses the text with the same rules as the local reader. A thread that exits mid-listing
+        emits an empty block and is skipped, and the loop's exit status is the last `cat`'s, so the
+        script ends with `; true`: a dead last thread must not abort the whole run."""
+        script = (f'for d in /proc/{pid}/task/*; do echo "@@TASK"; cat "$d/stat" 2>/dev/null; '
+                  'echo "@@SCHED"; cat "$d/schedstat" 2>/dev/null; done; true')
+        return self.run(script).stdout
 
     def clock_offset_ns(self, samples: int = 9) -> dict[str, Any]:
         """Remote wall clock minus local wall clock (median of midpoint estimates) and the round trip."""

@@ -4,7 +4,7 @@ title = "A falling block's automation contract cannot describe the prediction it
 area = "client"
 severity = "major"
 status = "fixed"
-source = "Core sand gate native-v2-input-sand on the current tree failed sand_predicts_between_received_updates (20261124T134021-native-v2-input-sand-c47ps1jh): the harness modelled the received velocity while the client integrates its own; and with DATA_NO_GRAVITY set the client kept moving on a stale local velocity instead of the server's"
+source = "Core sand gate native-v2-input-sand on the current tree failed sand_predicts_between_received_updates (20261124T134021-native-v2-input-sand-c47ps1jh): the harness modelled the received velocity while the client integrates its own, so no consumer could model the prediction the client runs between position packets"
 repro = "client"
 regression = [
   "harness:entities:native-v2-input-sand",

@@ -408,6 +408,13 @@ impl DashboardState {
         // Request-time counter, read before the state lock: the source is one
         // atomic load in its owner and must never run under this mutex.
         let input_drops = self.input_source.get().map_or(0, |source| source());
+        // Same rule for the abnormal-close rollup: the registry owns the map, and
+        // the pump never builds one per tick.
+        let close_causes = self
+            .queue_source
+            .get()
+            .map(|registry| registry.close_causes())
+            .unwrap_or_default();
         let inner = self.inner.lock();
         let tick = summarize(&inner.tick_us, inner.simulation_tick);
         let publish = summarize(&inner.publish_us, inner.simulation_tick);
@@ -429,13 +436,21 @@ impl DashboardState {
             coreperf_visibility_proof: inner.coreperf_visibility_proof.clone(),
             network: DashboardNetwork {
                 input_drops,
+                close_causes,
                 ..inner.network.clone()
             },
             journal: {
-                let stats = mc_core::journal::journal_prune_stats();
+                let prune = mc_core::journal::journal_prune_stats();
+                let write = mc_core::journal::journal_write_stats();
                 DashboardJournal {
-                    prune_failures_total: stats.failures_total,
-                    prune_retained_bytes: stats.retained_bytes,
+                    prune_failures_total: prune.failures_total,
+                    prune_retained_bytes: prune.retained_bytes,
+                    append_bytes_total: write.append_bytes_total,
+                    batch_bytes_last: write.batch_bytes_last,
+                    file_fsyncs_total: write.file_fsyncs_total,
+                    dir_fsyncs_total: write.dir_fsyncs_total,
+                    fsync_nanos_total: write.fsync_nanos_total,
+                    fsync_nanos_max: write.fsync_nanos_max,
                 }
             },
             plugin: self.plugin_snapshot(),

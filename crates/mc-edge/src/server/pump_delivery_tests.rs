@@ -9,6 +9,13 @@ fn packet(connection: ConnectionId, data: &'static [u8], priority: Priority) -> 
     }
 }
 
+/// The closer a real [`ConnectionLifecycle`] owns for its id: without one a
+/// `close` is bookkeeping after the session already ended and counts nothing.
+fn live_session(registry: &ConnectionRegistry, id: ConnectionId) {
+    let (close, _cancelled) = tokio::sync::oneshot::channel();
+    registry.inner.lock().closers.insert(id, close);
+}
+
 #[tokio::test]
 async fn world_refusal_stops_camera_suffix_even_when_writer_frees_capacity() {
     let root = tempfile::tempdir().unwrap();
@@ -117,5 +124,180 @@ async fn refused_atomic_chunk_group_stops_later_camera_frame_without_ack_debt() 
     );
     assert_eq!(pacing.lock().allowance(), 9);
     assert_eq!(connections[&id].world_tx.capacity(), 3);
+    server.hub.shutdown();
+}
+
+/// The pump's routing view is kept between ticks and only refreshed when the
+/// registry generation moves, which happens when the session's lifecycle ends.
+/// In that window a session whose writer already released the receivers answers
+/// `Closed`: it is ending on its own, not a new close, so the rollup takes no
+/// cause (REVIEW-wave2-10 M1).
+#[tokio::test]
+async fn a_closed_reliable_receiver_in_the_routing_view_counts_no_cause() {
+    let root = tempfile::tempdir().unwrap();
+    let server = roster_seed_tests::test_server(root.path());
+    let id = server.connections.joining_id();
+    live_session(&server.connections, id);
+    let (reliable, reliable_rx) = mpsc::channel(4);
+    drop(reliable_rx);
+    let (world, _world_rx) = world_queue(3, WORLD_QUEUE_BYTES);
+    server
+        .connections
+        .register(
+            id,
+            ConnectionHandles::new(reliable, world, crate::plan::CHUNKS_PER_TICK),
+            || 0,
+        )
+        .unwrap();
+    let mut connections = HashMap::from([(id, server.connections.get(id).unwrap())]);
+    let mut viewers =
+        HashMap::from([(id, crate::plan::ViewerState::new(id, EntityId(1), [0.0; 3]))]);
+    route_planned_packets(
+        &server,
+        &mut viewers,
+        &mut connections,
+        [packet(id, b"reliable", Priority::Reliable)],
+    );
+    assert!(
+        !connections.contains_key(&id),
+        "the ended session leaves the routing view"
+    );
+    assert!(
+        server.connections.close_causes().is_empty(),
+        "a receiver the writer already released is a normal end, not an error: {:?}",
+        server.connections.close_causes()
+    );
+    server.hub.shutdown();
+}
+
+/// The other half of the same rule: a reliable queue that is genuinely full is
+/// the delivery policy's own end and this session's single cause.
+#[tokio::test]
+async fn a_full_reliable_receiver_in_the_routing_view_counts_its_cause() {
+    let root = tempfile::tempdir().unwrap();
+    let server = roster_seed_tests::test_server(root.path());
+    let id = server.connections.joining_id();
+    live_session(&server.connections, id);
+    let (reliable, mut reliable_rx) = mpsc::channel(1);
+    let (world, _world_rx) = world_queue(3, WORLD_QUEUE_BYTES);
+    server
+        .connections
+        .register(
+            id,
+            ConnectionHandles::new(reliable, world, crate::plan::CHUNKS_PER_TICK),
+            || 0,
+        )
+        .unwrap();
+    let handles = server.connections.get(id).unwrap();
+    handles
+        .reliable_tx
+        .try_send(bytes::Bytes::from_static(b"queued"))
+        .unwrap();
+    let mut connections = HashMap::from([(id, handles)]);
+    let mut viewers =
+        HashMap::from([(id, crate::plan::ViewerState::new(id, EntityId(1), [0.0; 3]))]);
+    route_planned_packets(
+        &server,
+        &mut viewers,
+        &mut connections,
+        [packet(id, b"reliable", Priority::Reliable)],
+    );
+    assert!(!connections.contains_key(&id));
+    assert_eq!(
+        server.connections.close_causes().get("reliable-queue-full"),
+        Some(&1),
+        "a full reliable queue is the delivery policy's end"
+    );
+    assert_eq!(reliable_rx.try_recv().unwrap().as_ref(), b"queued");
+    server.hub.shutdown();
+}
+
+/// REVIEW-wave2-11 minor-8: `EdgeServer::send` and `kick` must tell a full queue
+/// (the delivery policy's own end, counted) from a queue whose writer already left
+/// (the session is ending on its own, counted nowhere). Both are reachable without
+/// a socket: only the registry and its queue handles are involved.
+#[tokio::test]
+async fn send_and_kick_report_a_released_queue_without_a_cause() {
+    let root = tempfile::tempdir().unwrap();
+    let server = roster_seed_tests::test_server(root.path());
+    let id = server.connections.joining_id();
+    live_session(&server.connections, id);
+    let (reliable, reliable_rx) = mpsc::channel(1);
+    drop(reliable_rx);
+    let (world, _world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
+    server
+        .connections
+        .register(
+            id,
+            ConnectionHandles::new(reliable, world, crate::plan::CHUNKS_PER_TICK),
+            || 0,
+        )
+        .unwrap();
+    assert!(
+        matches!(
+            server.send(
+                id,
+                &mc_protocol::packets::play::ClientboundKeepAlive { id: 1 }
+            ),
+            Err(SendFailure::Closed)
+        ),
+        "a receiver the writer released is not a full queue"
+    );
+    let error = server
+        .kick(id, serde_json::json!({"text": "bye"}))
+        .unwrap_err();
+    assert!(error.to_string().contains("already closed"), "{error}");
+    assert!(
+        server.connections.close_causes().is_empty(),
+        "neither a released queue nor its kick is a close cause: {:?}",
+        server.connections.close_causes()
+    );
+    server.hub.shutdown();
+}
+
+/// REVIEW-wave2-11 minor-8: the latency broadcast is the third caller that must not
+/// turn a released receiver into a close cause (and must not charge a drop).
+#[tokio::test]
+async fn a_closed_latency_receiver_leaves_the_view_without_a_cause() {
+    let root = tempfile::tempdir().unwrap();
+    let server = roster_seed_tests::test_server(root.path());
+    let id = server.connections.joining_id();
+    live_session(&server.connections, id);
+    let (reliable, reliable_rx) = mpsc::channel(1);
+    drop(reliable_rx);
+    let (world, _world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
+    server
+        .connections
+        .register(
+            id,
+            ConnectionHandles::new(reliable, world, crate::plan::CHUNKS_PER_TICK),
+            || 0,
+        )
+        .unwrap();
+    server.connections.set_latency(id, uuid::Uuid::nil(), 42);
+    let mut connections = HashMap::from([(id, server.connections.get(id).unwrap())]);
+    broadcast_latencies(
+        &server.connections,
+        &server.net_counters,
+        &mut connections,
+        LATENCY_BROADCAST_INTERVAL_TICKS,
+    );
+    assert!(
+        !connections.contains_key(&id),
+        "the ended session leaves the view"
+    );
+    assert_eq!(
+        server
+            .net_counters
+            .reliable_drops
+            .load(std::sync::atomic::Ordering::Relaxed),
+        0,
+        "a session ending on its own is not a reliable drop"
+    );
+    assert!(
+        server.connections.close_causes().is_empty(),
+        "{:?}",
+        server.connections.close_causes()
+    );
     server.hub.shutdown();
 }

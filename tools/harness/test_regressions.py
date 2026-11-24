@@ -1246,6 +1246,32 @@ class FixturePanicTests(unittest.TestCase):
         self.assertEqual(ledger._classify_control('B', {'r': entry}, {}, root)['r']['state'],
                          ledger.FIXTURE_FAILURE)
 
+    def test_an_assert_with_a_custom_message_is_an_assertion(self):
+        # REVIEW-wave2-10 minor 4: `assert!(cond, "custom text")` panics with its own message, so
+        # the message alone must not demote the red to unproven-panic.
+        root = self.tree()
+        (root / 'crates/mc-core/src/tick_tests.rs').write_text(
+            'fn tick() {\n'
+            '    assert!(false, "a normal connection end is not an abnormal close");\n'
+            '}\n')
+        self.assertEqual(
+            ledger._panic_class(root, ('crates/mc-core/src/tick_tests.rs', 2),
+                                'a normal connection end is not an abnormal close'),
+            'assertion')
+
+    def test_a_setup_panic_on_its_own_line_stays_unknown(self):
+        # REVIEW-wave2-11 minor-6: only assert*! may be line-start evidence. A `panic!("…")` in a
+        # let-else body is a fixture/setup death, so it still needs the row to name it.
+        root = self.tree()
+        (root / 'crates/mc-core/src/tick_tests.rs').write_text(
+            'fn tick() {\n'
+            '    panic!("world fixture missing");\n'
+            '}\n')
+        self.assertEqual(
+            ledger._panic_class(root, ('crates/mc-core/src/tick_tests.rs', 2),
+                                'world fixture missing'),
+            'unknown')
+
 class TestOnlyEvidenceTests(unittest.TestCase):
     """The evidence a test-only promotion parses out of a run."""
 

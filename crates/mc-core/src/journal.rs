@@ -955,8 +955,13 @@ impl JournalWriter {
                 .map_err(|err| CoreError::Storage(err.to_string()))?;
             #[cfg(test)]
             wal_stage("written");
+            let fsync_start = std::time::Instant::now();
             file.sync_all()
                 .map_err(|err| CoreError::Storage(err.to_string()))?;
+            record_fsync(fsync_start.elapsed());
+            WAL_FILE_FSYNCS.fetch_add(1, Ordering::Relaxed);
+            WAL_APPEND_BYTES.fetch_add(frame.len() as u64, Ordering::Relaxed);
+            WAL_BATCH_BYTES_LAST.store(frame.len() as u64, Ordering::Relaxed);
             #[cfg(test)]
             wal_stage("synced");
         }
@@ -993,7 +998,10 @@ impl JournalWriter {
             }
             *skip -= 1;
         }
+        let fsync_start = std::time::Instant::now();
         fsync_dir(&self.dir).map_err(|err| CoreError::Storage(err.to_string()))?;
+        record_fsync(fsync_start.elapsed());
+        WAL_DIR_FSYNCS.fetch_add(1, Ordering::Relaxed);
         #[cfg(test)]
         self.bind_pending_frames()?;
         self.pending_fsync = 0;
@@ -1645,6 +1653,54 @@ pub struct JournalPruneStats {
 
 static PRUNE_FAILURES: AtomicU64 = AtomicU64::new(0);
 static PRUNE_RETAINED_BYTES: AtomicU64 = AtomicU64::new(0);
+
+/// Process-wide WAL write counters: bytes per batch and fsync service time. One
+/// process serves one world, as with the prune counters the dashboard reads on
+/// demand. `journal_build_us`/`journal_queue_us` measure the tick side; these
+/// measure what the journal thread's file I/O cost (WAL-FSYNC-LATENCY-AND-BYTES-
+/// UNMEASURED: no receipt could name a slow fsync before them).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct JournalWriteStats {
+    /// Bytes of published batch frames written since start (header + payload).
+    pub append_bytes_total: u64,
+    /// Bytes of the batch frame written last: the WAL's per-tick size at the current batch size.
+    pub batch_bytes_last: u64,
+    /// `sync_all` calls on unpublished batch files.
+    pub file_fsyncs_total: u64,
+    /// Journal-directory fsyncs, one per `flush`.
+    pub dir_fsyncs_total: u64,
+    /// Service time of those fsyncs, nanoseconds.
+    pub fsync_nanos_total: u64,
+    /// The slowest single fsync, nanoseconds.
+    pub fsync_nanos_max: u64,
+}
+
+static WAL_APPEND_BYTES: AtomicU64 = AtomicU64::new(0);
+static WAL_BATCH_BYTES_LAST: AtomicU64 = AtomicU64::new(0);
+static WAL_FILE_FSYNCS: AtomicU64 = AtomicU64::new(0);
+static WAL_DIR_FSYNCS: AtomicU64 = AtomicU64::new(0);
+static WAL_FSYNC_NANOS: AtomicU64 = AtomicU64::new(0);
+static WAL_FSYNC_NANOS_MAX: AtomicU64 = AtomicU64::new(0);
+
+/// Read the process-wide WAL write counters; cheap, no allocation.
+#[must_use]
+pub fn journal_write_stats() -> JournalWriteStats {
+    JournalWriteStats {
+        append_bytes_total: WAL_APPEND_BYTES.load(Ordering::Relaxed),
+        batch_bytes_last: WAL_BATCH_BYTES_LAST.load(Ordering::Relaxed),
+        file_fsyncs_total: WAL_FILE_FSYNCS.load(Ordering::Relaxed),
+        dir_fsyncs_total: WAL_DIR_FSYNCS.load(Ordering::Relaxed),
+        fsync_nanos_total: WAL_FSYNC_NANOS.load(Ordering::Relaxed),
+        fsync_nanos_max: WAL_FSYNC_NANOS_MAX.load(Ordering::Relaxed),
+    }
+}
+
+/// One fsync's service time: sum and max are cumulative, the max racy by nature.
+fn record_fsync(elapsed: std::time::Duration) {
+    let nanos = u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX);
+    WAL_FSYNC_NANOS.fetch_add(nanos, Ordering::Relaxed);
+    WAL_FSYNC_NANOS_MAX.fetch_max(nanos, Ordering::Relaxed);
+}
 
 /// Read the process-wide prune counters; cheap, no allocation.
 #[must_use]

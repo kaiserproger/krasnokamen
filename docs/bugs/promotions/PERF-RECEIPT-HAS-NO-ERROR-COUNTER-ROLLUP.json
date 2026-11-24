@@ -1,0 +1,110 @@
+{
+  "id": "PERF-RECEIPT-HAS-NO-ERROR-COUNTER-ROLLUP",
+  "verdict": "promoted",
+  "fix_commit": "1932e8e5857c907fccb1781640d1e527c11a5852",
+  "fix_commit_full": "1932e8e5857c907fccb1781640d1e527c11a5852",
+  "promoted_at": "2026-11-24T20:32:05+00:00",
+  "tree_head": "6d94c6129b1ad687ef5301dcf46a255f0845c4ef",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "bcc0557b9ab51ce9052df0a073eaa92bf4b06d96396b5bc7ea2b0fb9551c1af1",
+  "control_tree_head": "6d94c6129b1ad687ef5301dcf46a255f0845c4ef",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-edge/src/screen_service.rs",
+    "crates/mc-edge/src/server.rs",
+    "crates/mc-edge/src/server/connection.rs",
+    "crates/mc-edge/src/server/pump.rs",
+    "crates/mc-edge/src/server/registry.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-edge/src/dashboard/tests.rs",
+    "crates/mc-edge/src/server/pump_delivery_tests.rs",
+    "crates/mc-edge/src/server/tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-edge:server::lifecycle_tests::an_ordinary_lifecycle_drop_records_no_close_cause": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::session_security_tests::a_play_write_failure_is_counted_by_cause": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:dashboard::tests::an_abnormal_close_is_counted_by_cause": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::pump::delivery_tests::a_closed_reliable_receiver_in_the_routing_view_counts_no_cause": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/server/pump_delivery_tests.rs",
+        "line": 165,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-edge:server::pump::delivery_tests::a_full_reliable_receiver_in_the_routing_view_counts_its_cause": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:dashboard::tests::stats_carry_wal_write_cost_and_close_causes": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::tests::a_session_end_counts_once_and_an_unregistered_id_counts_nothing": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/server/tests.rs",
+        "line": 612,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_receipt_records_the_error_rollup": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:server::lifecycle_tests::an_ordinary_lifecycle_drop_records_no_close_cause": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::session_security_tests::a_play_write_failure_is_counted_by_cause": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:dashboard::tests::an_abnormal_close_is_counted_by_cause": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::pump::delivery_tests::a_closed_reliable_receiver_in_the_routing_view_counts_no_cause": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::pump::delivery_tests::a_full_reliable_receiver_in_the_routing_view_counts_its_cause": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:dashboard::tests::stats_carry_wal_write_cost_and_close_causes": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::tests::a_session_end_counts_once_and_an_unregistered_id_counts_nothing": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_receipt_records_the_error_rollup": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T202332-ledger-promote-fnu4w51u"
+}

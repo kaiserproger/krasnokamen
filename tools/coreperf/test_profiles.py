@@ -1,5 +1,9 @@
 """Unit contracts for public profile receipts; no server launch."""
 import argparse
+import os
+import signal
+import subprocess
+import sys
 import unittest
 import json
 from pathlib import Path
@@ -830,6 +834,15 @@ fi
             profiles.validate_scale_sample(recipe, {"tick": 1, "coreperf": {
                 "tick": 1, "resident_entities": 102, "regions": rows}})
 
+    def test_the_region_attribution_wrapper_is_optional(self):
+        # The un-instrumented control leg must not carry the region probe at all
+        # (COREPERF-REGION-ATTRIBUTION-PERTURBS-MEASURED-MEMORY-TRAFFIC).
+        self.assertEqual(profiles.server_wrapper_with_regions("", None), "")
+        self.assertEqual(profiles.server_wrapper_with_regions("env A=1", None), "env A=1")
+        wrapped = profiles.server_wrapper_with_regions("env A=1", Path("/tmp/regions.json"))
+        self.assertTrue(wrapped.startswith("env A=1 env "), wrapped)
+        self.assertIn("KRASNOKAMEN_COREPERF_REGIONS=/tmp/regions.json", wrapped)
+
 
 class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
     async def test_waits_for_first_pushed_tick_instead_of_sampling_an_empty_ring(self):
@@ -1157,6 +1170,270 @@ class HostReceiptFieldsTests(unittest.TestCase):
             procs.write_text('0::/missing.scope\n')
             self.assertEqual(profiles.memory_pressure(root, procs, root / 'absent-pressure'),
                              {'host': {}, 'cgroup': {}})
+
+
+
+class WindowReceiptFieldsTests(unittest.TestCase):
+    """Receipt fields the perf rows own, driven from fixture rows through the production
+    `summarize`. Each `summarize` test is a registered ref: reversing the fix hunks (which add the
+    field to `summarize`) fails it at the first `assertIn`."""
+
+    def fixture(self):
+        def state(entities, chunks, journal, network):
+            return {"entities": {"total": entities}, "chunks": {"loaded_total": chunks},
+                    "journal": journal, "network": network, "warnings": ["prune failed"]}
+
+        def row(at, threads, journal, network):
+            return {"captured_unix_ns": at, "threads": threads,
+                    "processes": {"server": {"rss_bytes": 10, "peak_rss_bytes": 100}},
+                    "stats": state(1, 2, journal, network)}
+
+        samples = [{"wall_start_unix_ns": 1000, "wall_us": 1000},
+                   {"wall_start_unix_ns": 1500, "wall_us": 1000},
+                   {"wall_start_unix_ns": 2000, "wall_us": 1000}]
+        rows = [
+            row(1000,
+                {"mc-core-tick": {"threads": 1, "cpu_seconds": 1.0, "run_queue_wait_ns": 1_000_000},
+                 "mc-core-journal": {"threads": 1, "cpu_seconds": 0.5, "run_queue_wait_ns": 100_000}},
+                {"append_bytes_total": 1000, "batch_bytes_last": 300, "file_fsyncs_total": 10,
+                 "dir_fsyncs_total": 1, "fsync_nanos_total": 2_000_000, "fsync_nanos_max": 500_000},
+                {"reliable_drops": 1, "input_drops": 2,
+                 "close_causes": {"reliable-overflow": 1}}),
+            row(2000,
+                {"mc-core-tick": {"threads": 1, "cpu_seconds": 3.0, "run_queue_wait_ns": 9_000_000},
+                 "mc-core-journal": {"threads": 1, "cpu_seconds": 0.9, "run_queue_wait_ns": 300_000}},
+                {"append_bytes_total": 1500, "batch_bytes_last": 300, "file_fsyncs_total": 15,
+                 "dir_fsyncs_total": 2, "fsync_nanos_total": 3_500_000, "fsync_nanos_max": 900_000},
+                {"reliable_drops": 3, "input_drops": 5,
+                 "close_causes": {"reliable-overflow": 2, "world-write-failed": 1}}),
+        ]
+        return samples, rows
+
+    def test_receipt_records_the_tick_thread_run_queue_wait(self):
+        # TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT: laps alone cannot split work from waiting.
+        samples, rows = self.fixture()
+        result = profiles.summarize(samples, rows, 1000, 3000)
+        self.assertIn("threads", result)
+        tick = result["threads"][profiles.TICK_THREAD]
+        self.assertEqual(tick["cpu_seconds"], 2.0)
+        self.assertEqual(tick["run_queue_wait_ms"], 8.0)
+        self.assertEqual(tick["run_queue_wait_ms_per_tick"], 4.0)
+        self.assertEqual(tick["cpu_ms_per_tick"], 1000.0)
+        self.assertEqual(result["threads"]["mc-core-journal"]["run_queue_wait_ms"], 0.2)
+
+    def test_a_laps_only_phase_receipt_is_refused(self):
+        # The receipt must fail closed, not read as zero wait, when the tick thread was not sampled.
+        with self.assertRaisesRegex(ValueError, "run-queue wait"):
+            profiles.require_thread_wait({"mc-core-tick": {"cpu_seconds": 1.0}})
+        with self.assertRaisesRegex(ValueError, "schedstat"):
+            profiles.require_thread_wait({"status": "unavailable", "reason": "fewer than two samples"})
+        samples, rows = self.fixture()
+        self.assertEqual(
+            profiles.require_thread_wait(profiles.summarize(samples, rows, 1000, 3000)["threads"]),
+            {"threads": 1, "cpu_seconds": 2.0, "run_queue_wait_ms": 8.0,
+             "cpu_ms_per_tick": 1000.0, "run_queue_wait_ms_per_tick": 4.0})
+
+    def test_thread_usage_reads_schedstat_field_two_for_a_fixture_process(self):
+        import os
+        with tempfile.TemporaryDirectory() as directory:
+            proc = Path(directory)
+            for tid, name, utime, stime, wait in (("7", "mc-core-tick", 300, 100, 2_500_000),
+                                                  ("8", "mc-core-tick", 20, 10, 500_000),
+                                                  ("9", "server-console", 5, 0, 0)):
+                task = proc / "4242" / "task" / tid
+                task.mkdir(parents=True)
+                (task / "stat").write_text(
+                    f"{tid} ({name}) S 1 2 3 4 5 6 7 8 9 10 {utime} {stime} 0 0\n")
+                (task / "schedstat").write_text(f"{utime * 10_000_000} {wait} 5\n")
+            usage = profiles.thread_usage(4242, proc=proc)
+            bad = proc / "4242" / "task" / "10"
+            bad.mkdir()
+            (bad / "stat").write_text("10 (broken) S 0\n")
+            (bad / "schedstat").write_text("12\n")
+            skipped = profiles.thread_usage(4242, proc=proc)
+        ticks = os.sysconf("SC_CLK_TCK")
+        self.assertEqual(usage["mc-core-tick"]["threads"], 2)
+        self.assertEqual(usage["mc-core-tick"]["run_queue_wait_ns"], 3_000_000)
+        self.assertAlmostEqual(usage["mc-core-tick"]["cpu_seconds"], 430 / ticks)
+        self.assertEqual(skipped["mc-core-tick"]["threads"], 2, "a short schedstat line is skipped, not zero")
+        self.assertEqual(profiles.schedstat_run_queue_wait_ns("100 2500 7\n"), 2500)
+        with self.assertRaisesRegex(ValueError, "three integer fields"):
+            profiles.schedstat_run_queue_wait_ns("100 2\n")
+
+    def test_a_thread_missing_from_one_sample_is_unavailable(self):
+        # A thread read in one sample only would report the whole process lifetime as its window:
+        # named unavailable, and the tick thread refuses instead of reading a negative delta.
+        samples, rows = self.fixture()
+        rows[0]["threads"].pop(profiles.TICK_THREAD)
+        threads = profiles.summarize(samples, rows, 1000, 3000)["threads"]
+        self.assertEqual(threads.get(profiles.TICK_THREAD, {}).get("status"), "unavailable")
+        with self.assertRaisesRegex(ValueError, "run-queue wait"):
+            profiles.require_thread_wait(threads)
+
+    def test_a_remote_session_reads_threads_over_its_connection(self):
+        # A --remote-host session's pid is the MainPID on the remote host; reading the local
+        # /proc for it samples nothing (or an unrelated process). The stat fields are in that
+        # host's USER_HZ, not this one's.
+        listing = ("@@TASK\n7 (mc-core-tick) S 1 2 3 4 5 6 7 8 9 10 300 100 0 0\n"
+                   "@@SCHED\n0 2500000 5\n"
+                   "@@TASK\n8 (server-console) S 1 2 3 4 5 6 7 8 9 10 5 0 0 0\n"
+                   "@@SCHED\n0 0 1\n")
+
+        class Remote:
+            def __init__(self):
+                self.pids = []
+                self.probes = 0
+
+            def thread_listing(self, pid):
+                self.pids.append(pid)
+                return listing
+
+            def clk_tck(self):
+                self.probes += 1
+                return 250
+
+        class Session:
+            processes = {}
+            pid = 4_194_303
+            remote = Remote()
+
+        rows = profiles.server_threads(Session())
+        self.assertIn(profiles.TICK_THREAD, rows)
+        self.assertEqual(Session.remote.pids, [4_194_303])
+        self.assertEqual(Session.remote.probes, 1)
+        self.assertEqual(rows[profiles.TICK_THREAD]["run_queue_wait_ns"], 2_500_000)
+        self.assertEqual(rows[profiles.TICK_THREAD]["threads"], 1)
+        self.assertAlmostEqual(rows[profiles.TICK_THREAD]["cpu_seconds"], 400 / 250,
+                               msg="the remote host's USER_HZ, not the reader's")
+
+    def test_a_wrapping_server_spawns_the_tick_thread_in_its_child(self):
+        # `--server-wrapper "perf stat … --"` makes the sampled pid the wrapper, whose own task
+        # list has no tick thread: the sample must come from the child that owns it
+        # (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT). A real wrapper/child pair, no sleep:
+        # the thread prints `ready` *after* its rename, so the sample can never race it
+        # (REVIEW-wave2-11 minor-7).
+        child = ("import ctypes, sys, threading, time\n"
+                 "def hold():\n"
+                 "    ctypes.CDLL(None).prctl(15, b'mc-core-tick', 0, 0, 0)\n"
+                 "    print('ready', flush=True)\n"
+                 "    time.sleep(600)\n"
+                 "threading.Thread(target=hold, daemon=True).start()\n"
+                 "sys.stdin.read()\n")
+        wrapper = ("import subprocess, sys\n"
+                   "subprocess.run([sys.executable, '-c', sys.argv[1]])\n")
+        process = subprocess.Popen([sys.executable, "-c", wrapper, child], stdin=subprocess.PIPE,
+                                   stdout=subprocess.PIPE, text=True, start_new_session=True)
+
+        def cleanup():
+            try:
+                process.stdin.close()
+            except OSError:
+                pass
+            try:
+                process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                process.wait(timeout=30)
+            if process.stdout is not None:
+                process.stdout.close()
+
+        self.addCleanup(cleanup)
+        self.assertEqual(process.stdout.readline().strip(), "ready")
+
+        class Process:
+            pid = process.pid
+
+        class Session:
+            processes = {"server": Process()}
+            pid = process.pid
+
+        rows = profiles.server_threads(Session())
+        self.assertIn(
+            profiles.TICK_THREAD, rows,
+            "the tick thread lives in the wrapper's child, not in the wrapper's own task list")
+        self.assertEqual(rows[profiles.TICK_THREAD]["threads"], 1)
+
+    def test_the_tick_thread_walker_reads_a_fixture_process_tree(self):
+        # The walker itself, on a tree with an extra wrapper level. Not a promotion ref: before the
+        # fix the function does not exist, so a reversal makes this level unrunnable, not red.
+        with tempfile.TemporaryDirectory() as directory:
+            proc = Path(directory)
+
+            def task(pid, tid, name, utime, stime, wait, children=()):
+                path = proc / str(pid) / "task" / str(tid)
+                path.mkdir(parents=True)
+                (path / "comm").write_text(name + "\n")
+                (path / "stat").write_text(f"{tid} ({name}) S 1 2 3 4 5 6 7 8 9 10 {utime} {stime} 0 0\n")
+                (path / "schedstat").write_text(f"{utime * 10_000_000} {wait} 5\n")
+                (path / "children").write_text(" ".join(str(child) for child in children) + "\n")
+
+            task(90, 9001, "perf", 1, 0, 0, children=(91,))
+            task(91, 9101, "taskset", 0, 0, 0, children=(92,))
+            task(92, 9201, "mc-core-tick", 300, 100, 2_500_000)
+            task(92, 9202, "server-console", 5, 0, 0)
+
+            class Process:
+                pid = 90
+
+            class Session:
+                processes = {"server": Process()}
+                pid = 90
+
+            self.assertEqual(profiles.tick_thread_pid(90, proc=proc), 92)
+            self.assertIsNone(profiles.tick_thread_pid(777, proc=proc))
+            rows = profiles.server_threads(Session(), proc=proc)
+            self.assertEqual(rows[profiles.TICK_THREAD]["run_queue_wait_ns"], 2_500_000)
+            self.assertNotIn("perf", rows, "the wrapper's own threads are not the server")
+
+    def test_receipt_records_wal_fsync_service_time_and_bytes(self):
+        # WAL-FSYNC-LATENCY-AND-BYTES-UNMEASURED: service time, count and bytes per source tick.
+        samples, rows = self.fixture()
+        result = profiles.summarize(samples, rows, 1000, 3000)
+        self.assertIn("journal", result)
+        journal = result["journal"]
+        self.assertEqual(journal["append_bytes"], 500)
+        self.assertEqual(journal["file_fsyncs"], 5)
+        self.assertEqual(journal["dir_fsyncs"], 1)
+        # 1.5 ms over 5 file + 1 directory fsyncs: the mean divides by both counts.
+        self.assertEqual(journal["fsync_ms_mean"], 0.25)
+        self.assertEqual(journal["fsync_ms_max_since_start"], 0.9)
+        self.assertNotIn("fsync_ms_max", journal)
+        self.assertEqual(journal["batch_bytes_last"], 300)
+        self.assertEqual(journal["append_bytes_per_tick"], 250.0)
+        # A server without the counters yields the named gap, never a silent absence.
+        self.assertEqual(profiles.journal_rollup([{"captured_unix_ns": 1000, "stats": {}},
+                                                  {"captured_unix_ns": 2000, "stats": {}}],
+                                                 1000, 3000, [1000, 2000])["status"], "unavailable")
+
+    def test_receipt_records_the_error_rollup(self):
+        # PERF-RECEIPT-HAS-NO-ERROR-COUNTER-ROLLUP: drops and short/stalled writes per window.
+        samples, rows = self.fixture()
+        result = profiles.summarize(samples, rows, 1000, 3000)
+        self.assertIn("errors", result)
+        errors = result["errors"]
+        self.assertEqual(errors["reliable_drops"], 2)
+        self.assertEqual(errors["input_drops"], 3)
+        self.assertEqual(errors["close_causes"],
+                         {"reliable-overflow": 1, "world-write-failed": 1})
+        self.assertEqual(errors["warnings_last"], ["prune failed"])
+
+    def test_client_tick_arrival_reports_each_window_distribution(self):
+        # PERF-RECEIPT-HAS-NO-CLIENT-OBSERVED-TICK-ARRIVAL: the bot report's arrival distribution.
+        bots = {"open_loop": {"windows": [
+            {"name": "steady", "tick_arrival": {
+                "interval_us": {"samples": 3, "p50_us": 1_000_000, "p95_us": 1_200_000,
+                                "p99_us": 1_500_000, "max_us": 1_600_000},
+                "tick_period_us": {"p50_us": 50_000}}},
+            {"name": "burst"}]}}
+        arrival = profiles.client_tick_arrival(bots)
+        self.assertEqual(arrival["windows"]["steady"]["samples"], 3)
+        self.assertEqual(arrival["windows"]["steady"]["p99_us"], 1_500_000)
+        self.assertEqual(arrival["windows"]["steady"]["tick_period_us"], {"p50_us": 50_000})
+        self.assertEqual(arrival["windows"]["burst"]["status"], "unavailable")
+        self.assertEqual(profiles.client_tick_arrival({})["status"], "unavailable")
 
 
 if __name__ == "__main__":
