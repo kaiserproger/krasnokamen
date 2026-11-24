@@ -2007,6 +2007,7 @@ PROJECT_LABELS = {
     "Librarian's workshop": "librarian", "Мастерская библиотекаря": "librarian",
     "Toolsmith's workshop": "toolsmith", "Мастерская инструментальщика": "toolsmith",
     "Weaponsmith's workshop": "weaponsmith", "Мастерская оружейника": "weaponsmith",
+    "Furnace": "furnace", "Печь": "furnace",
     "Road": "road", "Дорога": "road",
     "Street lamp": "lamp", "Фонарь": "lamp",
     "Meadow clearing": "meadow", "Расчистка луга": "meadow",

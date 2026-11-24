@@ -174,6 +174,54 @@ fn lumberjack_searches_near_worker_before_cross_village_sweep() {
     );
 }
 
+/// Seed 24, run 20261124T020538: the natural camp's certified zone was one
+/// felled tree column, so the sweep left the village (a worker stood 91 blocks
+/// from its camp at [125,76,-179]) while the settlement had no wood. The owner
+/// design is "a lumberjack plants and harvests within its zone": with no tree
+/// in reach the worker must sow the camp's own zone, not trek for the next one.
+#[test]
+fn lumberjack_sows_its_own_zone_when_the_sweep_finds_no_tree() {
+    let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);
+    crate::settlements::construction::tests::open_plan(&mut state);
+    let settlement = v.settlement.unwrap();
+    let record = state.settlements.get_mut(settlement).unwrap();
+    let camp = record
+        .buildings
+        .values_mut()
+        .find(|b| b.kind == BuildingKind::LumberCamp)
+        .unwrap();
+    camp.natural_zone = true;
+    camp.bounds = ScriptWorldBounds::new([1, 200, 1], [5, 201, 5]).unwrap();
+    // Vacant soil inside the certified zone, no tree anywhere in reach.
+    state.world.set_block(2, 200, 2, block(&state, "dirt"));
+    let sapling = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_sapling").unwrap())
+        .unwrap();
+    v.inventory[0] = Some(ItemStack::new(sapling, 3));
+    let mut changes = ChangeSet::default();
+    for tick in 0..8 {
+        state.tick = tick * 20;
+        lumber::work(&mut state, slot, &mut v, &mut changes);
+    }
+    assert_eq!(
+        path(&state, 2, 201, 2),
+        "oak_sapling",
+        "the camp's zone must be sown when the sweep finds no tree"
+    );
+    assert_eq!(count(&v, sapling), 2, "one carried sapling is spent");
+    assert!(
+        state
+            .settlements
+            .get(settlement)
+            .unwrap()
+            .planted_trees
+            .contains(&[2, 201, 2]),
+        "the sown root is a protected planted tree"
+    );
+}
+
 #[test]
 fn lumberjack_restarts_nearby_search_after_harvest() {
     let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);

@@ -17,6 +17,7 @@ use crate::entities::EntitySlot;
 use crate::settlements::buildings;
 use crate::tick::TickState;
 use mc_data::ItemStack;
+use mc_script::ScriptWorldBounds;
 
 const PERIOD: u64 = 20;
 /// Simulated tree columns scanned per work attempt; the cursor lives in [`Progress`].
@@ -336,6 +337,80 @@ fn drop_target(v: &mut VillagerState) {
     v.lumber_progress.stalled_since = 0;
 }
 
+/// Sow one carried sapling on vacant soil inside the camp's own certified zone.
+///
+/// The cell still needs the ordinary crown/access proof (owner D42 `Replant`):
+/// a `NotYet` or `Refused` verdict skips it this attempt, so a sapling never
+/// takes a lot or the street headroom a house will need. One cell per work
+/// attempt keeps the scan bounded.
+fn plant_zone(
+    state: &mut TickState,
+    changes: &mut ChangeSet,
+    v: &mut VillagerState,
+    bounds: ScriptWorldBounds,
+) {
+    let Some(index) = v.inventory.iter().position(|stack| {
+        stack.as_ref().is_some_and(|stack| {
+            !stack.is_empty()
+                && state
+                    .registry
+                    .items
+                    .name_of(stack.item_id)
+                    .is_some_and(|name| name.path().ends_with("_sapling"))
+        })
+    }) else {
+        return;
+    };
+    let Some(planted) = v.inventory[index]
+        .as_ref()
+        .and_then(|stack| state.registry.items.name_of(stack.item_id))
+        .and_then(|name| {
+            let stem = name.path().strip_suffix("_sapling")?;
+            let id = mc_data::Identifier::parse(format!("minecraft:{stem}_sapling")).ok()?;
+            state
+                .registry
+                .blocks
+                .block(&id)
+                .map(|block| block.default.0)
+        })
+    else {
+        return;
+    };
+    for x in bounds.min[0]..=bounds.max[0] {
+        for z in bounds.min[2]..=bounds.max[2] {
+            for y in bounds.min[1]..bounds.max[1] {
+                if !block_path(state, x, y, z).is_some_and(is_soil)
+                    || !matches!(
+                        block_path(state, x, y + 1, z),
+                        Some("air" | "cave_air" | "void_air")
+                    )
+                {
+                    continue;
+                }
+                let root = [x, y + 1, z];
+                if crate::settlements::construction::replant_verdict(state, root)
+                    != crate::settlements::construction::Replant::Plant
+                {
+                    continue;
+                }
+                mining::replace(state, changes, BlockPos { x, y: y + 1, z }, planted);
+                if let Some(record) = v.settlement.and_then(|id| state.settlements.get_mut(id))
+                    && record.planted_trees.insert(root)
+                {
+                    record.revision = record.revision.saturating_add(1);
+                }
+                if let Some(stack) = v.inventory[index].as_mut() {
+                    stack.count -= 1;
+                    if stack.count == 0 {
+                        v.inventory[index] = None;
+                    }
+                }
+                return;
+            }
+        }
+    }
+}
+
 /// The bound settlement still owns the tree after radius/edit churn.
 fn within_radius(state: &TickState, v: &VillagerState, base: BlockPos) -> bool {
     let Some(settlement) = v.settlement else {
@@ -405,8 +480,8 @@ pub(super) fn work(
     // Owned binding snapshot: the borrow of `state` ends before `v` mutates.
     let bound = buildings::building_for_job(state, v)
         .filter(|building| building.kind == buildings::BuildingKind::LumberCamp)
-        .map(|building| (building.id.0, building.revision));
-    let Some((id, revision)) = bound else {
+        .map(|building| (building.id.0, building.revision, building.bounds));
+    let Some((id, revision, camp_bounds)) = bound else {
         // Unbound or rebound away from the camp: never route to a stale tree.
         drop_target(v);
         return None;
@@ -455,7 +530,7 @@ pub(super) fn work(
         let settlement = v.settlement;
         let wood = settlement
             .and_then(|id| crate::settlements::construction::active_project_wood(state, id));
-        let (base, sapling, height) = search(
+        let found = search(
             state,
             anchor,
             radius,
@@ -466,7 +541,17 @@ pub(super) fn work(
                 [x.floor() as i32, z.floor() as i32]
             },
             &mut v.lumber_progress,
-        )?;
+        );
+        let Some((base, sapling, height)) = found else {
+            // No mature tree in the sweep: sow the camp's own zone instead of
+            // trekking after the next one. A replanted stump only refills the
+            // tree that was cut, so a zone whose tree was felled once would
+            // otherwise never become the grove its certificate describes
+            // (certify_zone: ">= 4 log blocks (a grove)"). Owner design: a
+            // lumberjack plants and harvests within its zone.
+            plant_zone(state, changes, v, camp_bounds);
+            return None;
+        };
         v.lumber_progress.base = base;
         v.lumber_progress.sapling = sapling;
         v.lumber_progress.height = height;

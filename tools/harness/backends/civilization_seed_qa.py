@@ -245,6 +245,31 @@ def _census_pages(probe: ProbeSteps, entity_type: str | None) -> dict[str, Any]:
         arguments["cursor"] = cursor
 
 
+GATED_ENTITY_TYPES = ("minecraft:villager", "minecraft:sheep")
+
+
+def gated_census(probe: ProbeSteps) -> dict[str, Any]:
+    """Census of the only entity types the gate asserts on, each paged whole.
+
+    The census used to page every received entity in 128 blocks. A village that
+    harvests leaves items on the ground, and items spawn and despawn between pages,
+    so `visible_count` almost never matched twice and five retried passes still
+    refused (seed 24, 2026-11-24: ~1100 entities, census never stable). Items,
+    monsters, text displays and companion animals are not what this gate asserts
+    on: the residents (`baseline_villagers`, births, ecology) and the flock
+    (`initial_sheep_count`, ecology) are, and each type's own census is complete
+    without an aggregate limit.
+    """
+    merged: list[dict[str, Any]] = []
+    truncated = False
+    for entity_type in GATED_ENTITY_TYPES:
+        page = entity_census(probe, entity_type)
+        merged.extend(page.get("entities") or [])
+        truncated = truncated or bool(page.get("truncated"))
+    return {"entities": merged, "truncated": truncated, "visible_count": len(merged),
+            "census_types": list(GATED_ENTITY_TYPES), "census_pages_complete": True}
+
+
 def entity_census(probe: ProbeSteps, entity_type: str | None = None) -> dict[str, Any]:
     """Read every page, without shrinking the 128-block received-entity census.
 
@@ -726,8 +751,8 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
              server_log: Path, read_container: Callable[[tuple[int, int, int]], dict[str, int]]) -> None:
     spawn = probe.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
     detail["player_spawn"] = {key: spawn["player"].get(key) for key in ("x", "y", "z")}
-    detail["spawn_entities"] = entity_census(probe)
-    detail["census_coverage"] = "Every received client-visible entity within 128 blocks, paged in groups of 16 without an aggregate limit; membership counts also come from settlement info."
+    detail["spawn_entities"] = gated_census(probe)
+    detail["census_coverage"] = "Every received client-visible villager and sheep within 128 blocks, each type paged whole in groups of 16 without an aggregate limit; membership counts also come from settlement info."
     arrived = walk_to_village(probe, detail)
     detail["player_after_walk"] = {key: arrived["player"].get(key) for key in ("x", "y", "z")}
     detail["spawn_to_target_horizontal_blocks"] = math.dist(
@@ -776,7 +801,7 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
     probe.report["fixture_commands"].append("console: " + command)
     item_merge._console(server, command)
     detail["observer_mode"] = "creative after claim and founding transfer; player survival is not tested"
-    entities = entity_census(probe)
+    entities = gated_census(probe)
     detail["initial_entities"] = entities
     detail["initial_sheep_count"] = sum(
         1 for entity in entities.get("entities", [])
@@ -817,7 +842,7 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
             if project["blueprint"] in blueprints and project not in projects:
                 projects.append(project)
         detail["projects_observed"] = list(projects)
-        entities = entity_census(probe)
+        entities = gated_census(probe)
         ecology = village._probe_ecology(probe, detail, status["buildings_now"], entities=entities)
         blocks = building_blocks(probe, status["buildings_now"], server)
         workstations = workstation_blocks(probe, chest)
