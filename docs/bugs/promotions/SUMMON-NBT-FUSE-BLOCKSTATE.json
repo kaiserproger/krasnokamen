@@ -1,0 +1,60 @@
+{
+  "id": "SUMMON-NBT-FUSE-BLOCKSTATE",
+  "verdict": "promoted",
+  "fix_commit": "patch:13b3dcfa11aee8d3d78b4b89ac4c698db45c8d7ec703284309e88a608b908087",
+  "fix_commit_full": "patch:13b3dcfa11aee8d3d78b4b89ac4c698db45c8d7ec703284309e88a608b908087",
+  "promoted_at": "2026-11-24T03:18:43+00:00",
+  "tree_head": "6fd3089969089bc956ffef4c8c35ca77a217896f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "13b3dcfa11aee8d3d78b4b89ac4c698db45c8d7ec703284309e88a608b908087",
+  "reversed_files": [
+    "crates/mc-core/src/command_summon.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:command_summon::tests::summon_falling_block_accepts_block_state_and_time_and_defaults_to_sand": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_summon::tests::summon_rejects_tnt_and_falling_block_fields_on_wrong_entities_and_bad_values": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_summon::tests::summon_tnt_accepts_fuse_and_explosion_power_and_applies_them": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-summon-nbt": {
+      "state": "unrunnable",
+      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/6fd308996908-server-x86_64-unknown-linux-gnu-incr/krasnokamen: [Errno 2] No such file or directory: '/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/ledger-builds/a8be614ffac04d7574f4fa124465e6856823bfa6560b0a42ac50e04467638d9d.json'. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_summon::tests::summon_falling_block_accepts_block_state_and_time_and_defaults_to_sand": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_summon::tests::summon_rejects_tnt_and_falling_block_fields_on_wrong_entities_and_bad_values": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_summon::tests::summon_tnt_accepts_fuse_and_explosion_power_and_applies_them": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T031405-native-v2-summon-nbt-9pbmsgbg/result.json",
+    "tree_head": "6fd3089969089bc956ffef4c8c35ca77a217896f",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "a8be614ffac04d7574f4fa124465e6856823bfa6560b0a42ac50e04467638d9d",
+    "covers": [
+      "harness:entities:native-v2-summon-nbt"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T031554-ledger-promote-evc_j_f4"
+}
