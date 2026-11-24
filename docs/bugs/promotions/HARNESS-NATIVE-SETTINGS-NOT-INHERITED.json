@@ -1,0 +1,46 @@
+{
+  "id": "HARNESS-NATIVE-SETTINGS-NOT-INHERITED",
+  "verdict": "promoted",
+  "fix_commit": "patch:f7ec71337f2222ceeb8b72de1b066fff4b482e6b66795b4819a99381fc87c0cd",
+  "fix_commit_full": "patch:f7ec71337f2222ceeb8b72de1b066fff4b482e6b66795b4819a99381fc87c0cd",
+  "promoted_at": "2026-11-24T05:34:11+00:00",
+  "tree_head": "84084b8aa95bc26798bff88ad245a7368770627d",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "f7ec71337f2222ceeb8b72de1b066fff4b482e6b66795b4819a99381fc87c0cd",
+  "reversed_files": [
+    "tools/harness/backends/native_client.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.harness.test_harness:NativeLaunchEnvironmentTests.test_a_launch_never_inherits_the_data_roots_managed_settings": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_harness:NativeLaunchEnvironmentTests.test_a_prepared_settings_file_is_passed_explicitly": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_harness:NativeLaunchEnvironmentTests.test_the_operator_environment_never_names_a_run_settings_file": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_harness:NativeLaunchEnvironmentTests.test_a_launch_never_inherits_the_data_roots_managed_settings": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_harness:NativeLaunchEnvironmentTests.test_a_prepared_settings_file_is_passed_explicitly": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_harness:NativeLaunchEnvironmentTests.test_the_operator_environment_never_names_a_run_settings_file": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T053406-ledger-promote-gass7r98"
+}
