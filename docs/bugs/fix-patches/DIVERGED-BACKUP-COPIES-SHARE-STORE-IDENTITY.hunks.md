@@ -171,7 +171,12 @@ Its production hunk reversed on its own tests (the upgrade without the marker wr
   returned `Ok` and archived the WAL: the pre-image writes no marker, so nothing stops the move).
 
 In the full-patch control `a_restored_copy_upgraded_from_a_legacy_clock_keeps_its_journal` is not evidence:
-the base restore mints no branch, so it stops at its setup (`backup_tests.rs:1264`); nor is
-`a_failed_marker_write_leaves_the_wal_in_the_journal` (the pre-image has no marker write to fail).
+the base restore mints no branch, so it stops at its setup (`backup_tests.rs:1265`); nor is
+`a_failed_marker_write_leaves_the_wal_in_the_journal` (`game_clock_upgrade_tests.rs:178`: the pre-image has
+no marker write to fail).
 
-Promotion run: see `docs/bugs/promotions/DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY.json`.
+Promotion run: `.analysis/validation/20261124T100818-ledger-promote-4ar7mzw0` (tree `c9a119d769`, clean,
+`control_tree: head`, nine reversed files); control `ledger-1-run.log` 15 of 19 red (4 green: the two mc-core
+frame/rebind refs, `a_minted_branch_uses_all_64_bits`, `the_crash_window_rewrite_keeps_the_branch`; proving
+reds at `backup_tests.rs:762`, `:865`, `journal_tests.rs:2445`, `store_marker_tests.rs:238`), restore
+`ledger-3-run.log` 19 of 19 green.
