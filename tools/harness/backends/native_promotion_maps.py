@@ -216,10 +216,18 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # difference cannot be map data.
     steps.check("map_pair_frame_marker_absent",
                 _marker_count(steps, without_frame, "frame") == 0)
+    # The second map's data only arrives while it is held: switch first, then wait for its terrain
+    # to equal the framed map's retained terrain (both maps share one centre).
+    steps.call("minecraft_set_hotbar_slot", {"slot": 1})
     steps.wait(lambda _state: _map(steps, without_frame) is not None
+               and _map(steps, map_id) is not None
                and _map(steps, without_frame)["colors"] == _map(steps, map_id)["colors"],
                "map_pair_identical_terrain", timeout_seconds=180)
-    steps.call("minecraft_set_hotbar_slot", {"slot": 1})
+    steps.report["map_pair_terrain"] = {
+        "with_frame_len": len(_map(steps, map_id)["colors"]),
+        "without_frame_len": len(_map(steps, without_frame)["colors"]),
+        "identical": _map(steps, without_frame)["colors"] == _map(steps, map_id)["colors"],
+    }
     _held_shot(steps, "map-distant-held-without-frame-marker")
     changed = _differing_pixels(_shot_path(steps, "map-distant-held-clone"),
                                 _shot_path(steps, "map-distant-held-without-frame-marker"))
