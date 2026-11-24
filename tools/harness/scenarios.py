@@ -186,7 +186,8 @@ SCENARIOS: dict[str, Scenario] = {
                "tag list is accepted and read back by the entity's own `/tag <uuid> list` answer",
         limits="The client chat tool caps a message at 256 characters, so the 1025-element count list and "
                "the 70000-Modified-UTF-8-byte string cannot be typed from a client and rest on the Cargo "
-               "ref; one mob and one experience-orb spawn path.",
+               "ref; one mob and one experience-orb spawn path; the accepted list needs "
+               "`send_command_feedback` on (the fixture sets it), while refusals are errors.",
     ),
 
     "native-v2-ledger-lectern": _entry(

@@ -23,6 +23,7 @@ def _chat(steps: ProbeSteps, label: str, *needles: str, timeout_seconds: float =
 
 def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     name = probe_username("entities")
+    steps.fixture("gamerule send_command_feedback true")
     steps.fixture(f"gamemode survival {name}")
     steps.wait(lambda state: state["player"]["game_mode"] == 0, "player_starts_in_survival")
 

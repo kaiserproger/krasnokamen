@@ -35,6 +35,9 @@ def _cows(steps: ProbeSteps, origin: tuple[int, int, int]) -> int:
 def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = origin
     at = f"{x} {y + 1} {z + 2}"
+    # Success feedback is a gamerule; the refusals below are errors and always show,
+    # but the accepted tag list is a success answer.
+    steps.fixture("gamerule send_command_feedback true")
     before = _cows(steps, origin)
     steps.report["cows_before"] = before
 
