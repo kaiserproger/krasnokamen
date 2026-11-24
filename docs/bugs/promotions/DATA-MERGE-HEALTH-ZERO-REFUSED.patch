@@ -1,0 +1,86 @@
+diff --git a/crates/mc-core/src/command_summon.rs b/crates/mc-core/src/command_summon.rs
+index b4ed0b448..44ea048e6 100644
+--- a/crates/mc-core/src/command_summon.rs
++++ b/crates/mc-core/src/command_summon.rs
+@@ -23,6 +23,9 @@ pub(crate) struct Image {
+     keep_villager: bool,
+     /// Validated once during preflight, then moved into the new appearance.
+     variant: Option<(u8, EntityDataValue)>,
++    /// The edit set `Health` to zero: vanilla accepts it and the mob dies, so the caller
++    /// starts the corpse clock instead of leaving a living zero-health row.
++    pub(crate) lethal: bool,
+ }
+ 
+ impl Image {
+@@ -772,13 +775,23 @@ pub(crate) fn prepare_edit(
+     // A villager's runtime state is the row's own persistence image, not summon NBT:
+     // `villager_from_fields` (during `decode`) reads it back and validates it. Those
+     // edits go into the image verbatim; the parser is the one that refuses bad data.
+-    let owns = |key: &str| {
+-        live_villager.is_some() && crate::villager::persistence::owns_field(key)
++    let owns = |key: &str| live_villager.is_some() && crate::villager::persistence::owns_field(key);
++    // Vanilla's `data merge entity {Health:0}` kills a living mob; a summon must be alive, so
++    // the edit writes the zero verbatim and the caller puts the mob on the corpse clock.
++    let zero_health = |key: &str, value: &Tag| {
++        key == "Health" && number(value, key).is_ok_and(|value| value == 0.0)
+     };
+     let mut authored = Vec::with_capacity(changed.len());
+     let mut owned = Vec::new();
++    let mut lethal = false;
+     for (key, value) in changed {
+-        if owns(key) {
++        if zero_health(key, value) {
++            lethal = true;
++            match image.iter_mut().find(|(seen, _)| *seen == *key) {
++                Some((_, old)) => *old = value.clone(),
++                None => image.push((key.clone(), value.clone())),
++            }
++        } else if owns(key) {
+             match image.iter_mut().find(|(seen, _)| *seen == *key) {
+                 Some((_, old)) => *old = value.clone(),
+                 None => image.push((key.clone(), value.clone())),
+@@ -829,6 +842,7 @@ pub(crate) fn prepare_edit(
+     // An edit that leaves every villager field alone leaves the live villager
+     // (and the transient brain state a reload would drop) alone too.
+     edited.keep_villager = keep_villager;
++    edited.lethal = lethal;
+     // Membership and lineage belong to the settlement and the allocator, not to NBT a
+     // merge may move: an edit can change what a villager is doing, never who it belongs to.
+     if let (Some(live), Some(merged)) = (live_villager, edited.villager.as_mut()) {
+@@ -917,6 +937,7 @@ fn decode(
+         painting,
+         keep_villager: false,
+         variant: None,
++        lethal: false,
+     })
+ }
+ /// Allocate the canonical kind before indexing or publishing a summoned entity.
+diff --git a/crates/mc-core/src/command_data/entity.rs b/crates/mc-core/src/command_data/entity.rs
+index f258ff072..7075e6cf1 100644
+--- a/crates/mc-core/src/command_data/entity.rs
++++ b/crates/mc-core/src/command_data/entity.rs
+@@ -201,6 +198,10 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag,
+             .map(Box::as_mut)
+             .ok_or("Entity dimension unavailable")?
+     };
++    let lethal = match &prepared {
++        Prepared::Mob(image, _) => image.lethal,
++        Prepared::Item(_) => false,
++    };
+     match prepared {
+         Prepared::Mob(image, custody) => {
+             crate::command_summon::apply(world, id, *image);
+@@ -208,6 +209,13 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag,
+         }
+         Prepared::Item(payload) => crate::command_summon::apply_item(world, id, payload),
+     }
++    if lethal {
++        world.entities.row_mut(slot).health = 0.0;
++        if world.entities.body(slot).alive {
++            world.entities.body_mut(slot).alive = false;
++            world.entities.begin_dying(slot);
++        }
++    }
+     if let Some(tags) = retained_tags {
+         world.entities.row_mut(slot).opaque_entity_fields = tags;
+     }
