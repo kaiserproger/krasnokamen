@@ -21,7 +21,7 @@ WEATHERED = "minecraft:weathered_copper_chest"
 MENU_SLOTS = 63  # 27 copper-chest slots + 36 player slots
 # Oxidation needs a random-tick draw with the ~5.7 % change-over-time gate; the
 # default 3 draws per ticking section would need hours for two control stages.
-SPEED = 100
+SPEED = 200
 
 
 def _id(steps: ProbeSteps, point: dict[str, int]) -> str:
@@ -49,14 +49,14 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
 
     # The unopened control advancing twice proves the sampler is rolling on this pad.
     steps.call("minecraft_wait_for_block_state", {
-        **control, "block_id": EXPOSED, "properties": {}, "timeout_seconds": 240})
+        **control, "block_id": EXPOSED, "properties": {}, "timeout_seconds": 110})
     state = steps.observe()
     steps.check("open_copper_chest_stays_unaffected_while_control_reaches_exposed",
                 _id(steps, opened) == CHEST)
     steps.check("open_copper_chest_menu_survives_first_control_stage", _menu(state))
 
     steps.call("minecraft_wait_for_block_state", {
-        **control, "block_id": WEATHERED, "properties": {}, "timeout_seconds": 240})
+        **control, "block_id": WEATHERED, "properties": {}, "timeout_seconds": 110})
     state = steps.observe()
     steps.check("open_copper_chest_stays_unaffected_while_control_reaches_weathered",
                 _id(steps, opened) == CHEST)
@@ -65,7 +65,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # Closing the menu releases custody: the chest must now weather like the control.
     steps.call("minecraft_close_screen")
     steps.call("minecraft_wait_for_block_state", {
-        **opened, "block_id": EXPOSED, "properties": {}, "timeout_seconds": 240})
+        **opened, "block_id": EXPOSED, "properties": {}, "timeout_seconds": 110})
     steps.check("closed_copper_chest_resumes_weathering", _id(steps, opened) == EXPOSED)
     steps.report["limits"] = [
         "One opened and one unopened single chest on one pad, ages 0..2; no double chest, "
