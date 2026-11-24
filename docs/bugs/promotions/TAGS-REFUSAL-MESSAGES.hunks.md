@@ -41,8 +41,9 @@ count-or-type refusal. Re-audit:
   at its own `missing specific refusal {expected}` assertion
   (`crates/mc-core/src/command_summon_scoreboard_tags_tests.rs:122`, entity-count assertion at `:121`).
 - `harness:entities:native-v2-ledger-tag-refusals` — the real client sends the player's own
-  `/summon … {Tags:[1b]}` and reads `Invalid Tags: every list element must be a string` back, then the
-  1025-element list and `expected at most 1024 tags`, with no entity created
+  `/summon … {Tags:[1b]}` and reads `Invalid Tags: every list element must be a string` back on the mob and
+  the experience-orb spawn paths, with no entity created, and reads a valid tag list back
   (`tools/harness/backends/native_ledger_tags.py`). Passed receipt: see the promotion JSON.
-  The 70000-byte string cannot be typed (serverbound command packets are bounded at 32767 bytes), so that
-  class rests on the Cargo ref only and the scenario's `limits` says so.
+  The client chat tool caps a message at 256 characters, so the 1025-element count list and the
+  70000-byte string cannot be typed from a client: those classes rest on the Cargo ref only, and the
+  scenario's `limits` says so.
