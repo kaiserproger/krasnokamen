@@ -71,3 +71,32 @@ the conflict region being exactly the two added functions, then `git diff -R` ag
 to the four production files. The a/- side is therefore the real pre-image (no `occupied_beds`, no
 mirror, no call) and the b/- side is HEAD after `71261486d`. Verified: `git apply -R --check` passes on
 `292c3b7a0`.
+
+## Resident (villager) client proof — review wave2-8 M5 (2026-11-25)
+
+The row is about a *sleeping resident*, but the first scene covered only the player. The resident arm is
+`native-village-occupied-bed` (scene-shot, windowed native): an unbound villager claims the roofed bed,
+its brain sets `sleeping`, and the scene now asserts the server's own block predicate on **both halves**
+(`execute if block ... [part=head,occupied=true]` / `[part=foot,occupied=true]`) plus free after the
+player's one-tick `use` wakes it. Receipt on the promotion tree (pin `660717828dd4`, client
+`530556e864c2`, windowed native):
+
+`.analysis/validation/20261124T182026-native-village-occupied-bed-9mz_u_tp` — PASS 77.5 s;
+`resident_bed_head_occupied_contains_0`, `resident_bed_foot_occupied_contains_0`,
+`resident_bed_head_free_after_contains_0`, `resident_bed_free_after_contains_0`,
+`villager_occupies_bed_*`, `occupied_bed_wakes_villager_*`, `villager_returns_after_cooldown_*` all true.
+
+The player arm was re-taken on the same pin with the new `bed_foot_free_before` predicate (m7):
+`.analysis/validation/20261124T181951-native-bed-occupied-state-bnymsftm` — PASS 31.4 s
+(`bed_head_free_before`, `sleeper_lies_down`, `bed_head_occupied`, `bed_foot_occupied`,
+`day_wakes_the_sleeper`, `bed_head_free_after`, `bed_foot_free_after`, every `*_contains_0` true).
+
+## Graphical control — review wave2-8 m9 (2026-11-25)
+
+The ledger's own control worktree has no registered pin, so `promote.json` records the graphical
+control `unrunnable` (allowed: the cargo reds carry the control). The manual control below supplies the
+missing real-client red: a detached worktree at `660717828dd4` with the four pre-image files (the
+sleep/tick/dimension/state files at `178456759b`, i.e. without the M6 doc lines and the M8 early return,
+neither of which touches bed occupancy) and the fix patch reversed with `git apply -R` (clean), so
+`grep occupied_beds` finds nothing and the mirror call is gone.
+

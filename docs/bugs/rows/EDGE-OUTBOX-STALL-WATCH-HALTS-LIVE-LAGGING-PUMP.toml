@@ -14,3 +14,4 @@ regression = [
 failing_first = "reported"
 fix_commit = "patch:a9098920f0a64040d39be8913ab65bcdcf042080bf53ce17b777702144b113dd"
 promotion = "docs/bugs/promotions/EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP.json"
+repro_check = ["Evidence upgrade after review wave2-8 M3: the candidate arm was re-taken on pin 660717828dd4 with the gate-s stall-window rule. .analysis/validation/20261124T181913-join-lag-gate-rfdoyqwt PASS: join landed in 3.4 s behind 41 publish-budget skips at 3.23 TPS, joiner in play, no halt, and the halt watch ran 17.0 s (ticks 249 -> 300), past the 10 s outbox stall watch plus the 2 s margin. The control reds stand (four 2026-11-24 control runs, live_pump_does_not_halt false with the client in play)."]

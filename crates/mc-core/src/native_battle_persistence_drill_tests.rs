@@ -1153,7 +1153,8 @@ fn checkpoint_reopens(mut drill: Drill) {
     drill.checkpoint();
     let config = drill.config.clone();
     drop(drill);
-    let offline = crate::native_checkpoint::recover_offline(&config).unwrap();
+    let offline = crate::native_checkpoint::recover_offline(&config)
+        .expect("a clean checkpoint reopens after a windup target horse dies");
     assert!(
         offline.dimensions[&crate::dimensions::Dimension::Overworld]
             .battle
