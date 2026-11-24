@@ -4,9 +4,10 @@ title = "Reconnect retains old voice capability/registration/listening and may r
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-1"
 regression = ["harness:screens-voice-qa:native_voice_resets_on_non_voice_server", "client:krasnokamen-client:session::title_connection_tests::disconnect_forgets_the_previous_server_voice_negotiation"]
 fix_commit = "client:a78495f632"
 proving_assertions = { "harness:screens-voice-qa:native_voice_resets_on_non_voice_server" = "native_voice_resets_on_non_voice_server" }
 repro_check = "Committed-reversal pair on the post-rename tip (a35187ca predates the client rename and is a bulk port): reversal client:cce9fb57cb deletes the two disconnect lines (comment + reset_voice(), unit ref red at !voice_net.registered, negctl/hc1-unit-control.log), re-land client:a78495f632 restores them (negctl/hc1-unit-restore.log green). Map docs/bugs/promotions/HC-1.hunks.md. Real gate: screens-voice-qa leg voice (SCREENS_VOICE_QA_LEG=voice), verdict native_voice_resets_on_non_voice_server (voice_reconnect: disconnect observation all-false + no HUD mic, reconnect to [voice] enabled=false stays cleared)."
+promotion = "docs/bugs/promotions/HC-1.json"
