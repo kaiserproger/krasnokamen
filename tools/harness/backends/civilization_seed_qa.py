@@ -350,7 +350,24 @@ def _aim_at_baby(probe: ProbeSteps, entity: dict[str, Any],
     observed: dict[str, Any] = {}
     teleported = False
     for _ in range(BABY_AIM_ATTEMPTS):
-        reply = probe.call("minecraft_approach_entity", {"entity_id": entity["entity_id"], "timeout_seconds": 120.0})
+        try:
+            reply = probe.call("minecraft_approach_entity",
+                               {"entity_id": entity["entity_id"], "timeout_seconds": 120.0})
+        except RuntimeError as error:
+            # A walking baby can leave the client's received set mid-approach
+            # (20261124T035536: "entity identity left client-visible state while
+            # approaching"). Re-read the census and approach again; an identity
+            # that is genuinely gone trips the visibility check below.
+            if "left client-visible state" not in str(error):
+                raise
+            probe.call("minecraft_wait_ticks", {"ticks": 10})
+            seen = entity_census(probe, "minecraft:villager")
+            current = next((e for e in seen.get("entities", [])
+                           if e.get("entity_uuid") == entity["entity_uuid"]), None)
+            if current is None or current.get("received_baby") is not True:
+                raise RuntimeError("baby no longer visible for milestone capture") from error
+            entity = current
+            continue
         seen = entity_census(probe, "minecraft:villager")
         current = next((e for e in seen.get("entities", [])
                         if e.get("entity_uuid") == entity["entity_uuid"]), None)

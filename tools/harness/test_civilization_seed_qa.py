@@ -523,6 +523,41 @@ class CivilizationEvidenceTests(unittest.TestCase):
                          [f"console: gamemode creative {qa.village.USERNAME}"])
 
 
+class ApproachRetryTests(unittest.TestCase):
+    """20261124T035536: a walking villager left the client's received set mid-approach
+    and the client refused with a non-retryable error, aborting the whole gate."""
+
+    def test_a_baby_that_leaves_the_received_set_mid_approach_is_approached_again(self):
+        baby = {"entity_id": 7, "entity_uuid": "b7", "entity_type": "minecraft:villager",
+                "received_baby": True, "x": 130.5, "y": 78.0, "z": -218.5}
+        mover = {**baby, "x": 131.5}
+        calls = {"approach": 0}
+
+        def call(name, arguments):
+            if name == "minecraft_approach_entity":
+                calls["approach"] += 1
+                if calls["approach"] == 1:
+                    raise RuntimeError('minecraft_approach_entity failed: {"code": "entity identity '
+                                       'left client-visible state while approaching", "retryable": false}')
+                return {"in_reach": True}
+            if name == "minecraft_list_entities":
+                return {"entities": [mover], "visible_count": 1, "truncated": False,
+                        "next_cursor": None}
+            if name == "minecraft_wait_ticks":
+                return {}
+            return {}
+
+        probe = Mock()
+        probe.call.side_effect = call
+        probe.observe.return_value = {"player": {"x": 130.0, "y": 78.0, "z": -215.0}}
+        hit = {"type": "entity", "entity_uuid": "b7"}
+        with patch.object(qa, "_aim", return_value=hit):
+            observed, teleported = qa._aim_at_baby(probe, baby, None)
+        self.assertEqual(calls["approach"], 2, "the lost identity is approached again")
+        self.assertEqual(observed, hit)
+        self.assertFalse(teleported)
+
+
 class GatedCensusTests(unittest.TestCase):
     """Seed 24 (2026-11-24): the 128-block all-entity census never stabilised over a
     village that harvests into the world, so the gate refused before its milestones."""

@@ -380,6 +380,15 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     def admitted() -> str:
         return _readback(probe, f"settlement production {SETTLEMENT} status", "Production: jobs=")
 
+    # The order form refuses when `production_workers` is empty (ui.rs:1453).
+    # Record the server's own member view before the first order so a refusal
+    # names who the settlement counts instead of only saying "No free resident"
+    # (20261123T232447: two bound villagers, "строитель" + "безработный", and the
+    # saddle form refused).
+    detail["residents_before_order"] = [
+        line for line in _readback(probe, f"settlement info {SETTLEMENT}", "«").splitlines()
+    ] + _readback(probe, f"settlement residents {SETTLEMENT}", "Residents").splitlines()
+
     form = order_form("saddle")
     labels = _labels(form)
     probe.check("autocraft_checkbox_on", f"{AUTO_LABEL}: ON" in labels)
