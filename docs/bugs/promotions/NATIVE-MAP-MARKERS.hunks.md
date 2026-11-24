@@ -58,12 +58,18 @@ does not rewrite the map: the read region is `(620, 170, 930, 560)`. `_differing
 changed only when one channel moves by more than 24 (the daylight lightmap drift is ~6), and
 `waypoint_marker_drawn` requires at least 150 changed pixels there.
 
-Measured 2026-11-25 (core `99630b29d`, server pin `pins/99630b29d…`):
+Measured 2026-11-25 (first with the earlier head, then re-run for the promotion on core
+`ba20240cb`, server pin `pins/ba20240cbc3e-…`):
 
 | run | client | changed pixels in region0 | assertion |
 |---|---|---|---|
-| `20261124T205630-native-v2-map-frame-waypoint-wqpvck5n` | `55b8374ed7` (restore) | **395** | passed |
-| `20261124T205736-native-v2-map-frame-waypoint-9gun21sq` | `864a757fe9` (control) | **0** | `waypoint_marker_drawn` false |
+| `20261124T205630-…-wqpvck5n` | `55b8374ed7` (restore) | **395** | passed |
+| `20261124T205736-…-9gun21sq` | `864a757fe9` (control) | **0** | `waypoint_marker_drawn` false |
+| `20261124T210350-…-40grn4zr` | `55b8374ed7` (restore, **promotion receipt**) | passed | `waypoint_marker_drawn` true |
+| `20261124T210449-…-g_ro5jis` | `864a757fe9` (control, **promotion receipt**) | red | `waypoint_marker_drawn` false |
+
+Promotion: `20261124T210606-ledger-promote-ftjn0o0f` (row `status = fixed`, both client unit refs
+re-run green against the candidate tree).
 
 Shapes that did not discriminate, kept for the record:
 
