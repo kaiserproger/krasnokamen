@@ -546,10 +546,7 @@ pub(super) fn route_outbox_batches(
             })
             && let Err(refusal) = server.send(
                 connection,
-                &crate::command_tree::tree(
-                    server.admin.level(uuid),
-                    server.hub.plugin_commands(),
-                ),
+                &crate::command_tree::tree(server.admin.level(uuid), server.hub.plugin_commands()),
             )
         {
             // `send` counts a full queue as this session's end. A queue whose
