@@ -1137,6 +1137,14 @@ def _mob_metadata(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     run(steps, origin)
 
 
+def _held_drop_key(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_promotion_held_drop import run
+
+    if not getattr(steps.client, "p4_window", None):
+        raise RuntimeError("the held-drop probe requires the owned native window")
+    run(steps, origin)
+
+
 def _player_input(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from . import native_player_input
 
@@ -1156,6 +1164,7 @@ def _lease_navigation(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
 RUNNERS = {
     "native-v2-happy-ghast-harness": _happy_ghast,
     "native-v2-mob-metadata-spot": _mob_metadata,
+    "native-v2-held-drop-key": _held_drop_key,
     "native-v2-input-menus": _player_input,
     "native-v2-input-camera": _player_input,
     "native-v2-input-pick": _player_input,

@@ -456,6 +456,18 @@ SCENARIOS: dict[str, Scenario] = {
         proves="bare-ghast refusal, harness debit, four distinct passenger ids, fifth refusal and independent dismount",
         limits="the checkpoint codec round trip is covered by the focused core regression, not a restart; screenshots require recorded review",
     ),
+    "native-v2-held-drop-key": _entry(
+        id="native-v2-held-drop-key", summary="One drop per physical Q press, counted as item stacks on the ground",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-held-drop-key", requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_promotion_held_drop.py",
+                 "tools/harness/backends/native_player_input.py",
+                 "tools/harness/backends/menu_observer.py"),
+        fixture="survival player, five diamonds in the selected hotbar slot, empty ground",
+        proves="a physical Q held across three client ticks leaves exactly one item stack (held_drop_once)",
+        limits="native X11; the world is never frozen, so it does not cover a frozen server's drop queue",
+    ),
     "native-v2-mob-metadata-spot": _entry(
         id="native-v2-mob-metadata-spot", summary="Frog, strider, camel and sniffer entity data decode in one native client",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-mob-metadata-spot",

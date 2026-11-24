@@ -28,7 +28,7 @@ def _ground_sum(steps: ProbeSteps) -> int:
                for row in rows if row.get("entity_type") == "minecraft:item")
 
 
-def run(steps: ProbeSteps) -> None:
+def run(steps: ProbeSteps, origin: tuple[int, int, int] | None = None) -> None:
     state = steps.wait(lambda s: s["player"]["on_ground"], "held_drop_grounded")
     origin = tuple(math.floor(state["player"][key]) for key in ("x", "y", "z"))
     steps.fixture("gamemode survival @s")
