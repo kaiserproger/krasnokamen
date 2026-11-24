@@ -16,6 +16,7 @@ from typing import Any
 
 from .probe_steps import ProbeSteps
 from . import scene_shot as _qa
+from . import scene_shot_hold
 from .scene_shot_checks import _capture_dropped_clock
 from .scene_shot_client import tool_wall_pixels, wait_play
 from .scene_shot_steps import (
@@ -35,17 +36,9 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 "remaining_seconds": probe.remaining(),
             }) + "\n")
         if isinstance(step, dict) and set(step) == {"shot", "hold_keys"}:
-            name, keys = step["shot"], step["hold_keys"]
-            args = {"keys": keys, "ticks": 1, "hold": True}
-            probe.call("minecraft_press_inputs", args)
-            try:
-                if "key.keyboard.tab" in keys:
-                    probe.wait(lambda state: any(str(node.get("id", "")).startswith("tab/player/")
-                                                  for node in state.get("ui_nodes", [])),
-                               "tab_list_visible")
-                shots.append(capture(probe, artifact, name))
-            finally:
-                probe.call("minecraft_press_inputs", {**args, "hold": False})
+            # validate_steps refused this for --client java; the native press lives in its own module
+            # so the Java source scan never sees a call its client does not offer.
+            shots.append(scene_shot_hold.shoot(probe, step, capture, artifact))
             continue
         kind, value = next(iter(step.items()))
         if kind in ("shot", "observe"):
@@ -92,29 +85,8 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             (artifact / f"{value['name']}.json").write_text(json.dumps(state, indent=2) + "\n")
             probe.check(value["name"], sleeping is value["sleeping"])
         elif kind == "use_phases":
-            name = value["name"]
-            before = probe.observe()
-            probe.check(f"{name}_initially_idle", before.get("using") is None)
-            args = {"keys": ["use"], "ticks": 1, "hold": True}
-            probe.call("minecraft_press_inputs", args)
-            try:
-                probe.call("minecraft_wait_ticks", {"ticks": 1})
-                started = probe.observe()
-                probe.check(f"{name}_started", started.get("using") is not None)
-                (artifact / f"{name}-start.json").write_text(json.dumps(started, indent=2) + "\n")
-                shots.append(capture(probe, artifact, f"{name}-start"))
-                probe.call("minecraft_wait_ticks", {"ticks": value["ticks"]})
-                held = probe.observe()
-                probe.check(f"{name}_held", held.get("using") is not None)
-                (artifact / f"{name}-hold.json").write_text(json.dumps(held, indent=2) + "\n")
-                shots.append(capture(probe, artifact, f"{name}-hold"))
-            finally:
-                probe.call("minecraft_press_inputs", {**args, "hold": False})
-            probe.call("minecraft_wait_ticks", {"ticks": 1})
-            released = probe.observe()
-            probe.check(f"{name}_released", released.get("using") is None)
-            (artifact / f"{name}-release.json").write_text(json.dumps(released, indent=2) + "\n")
-            shots.append(capture(probe, artifact, f"{name}-release"))
+            # A held "use" observed across ticks is a native-client state; see scene_shot_hold.
+            shots.extend(scene_shot_hold.use_phases(probe, value, capture, artifact))
         elif kind == "resize":
             owned = getattr(probe.client, "p4_window", None)
             if not owned:

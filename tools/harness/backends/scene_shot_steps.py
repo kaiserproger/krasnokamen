@@ -23,11 +23,16 @@ SCENE_TOOLS = {
 }
 
 
-def scene_mcp_calls(steps: list[dict[str, Any]]):
-    """Yield the input-derived MCP calls before launch for schema validation."""
+def scene_mcp_calls(steps: list[dict[str, Any]], client: str = 'native'):
+    """Yield the input-derived MCP calls before launch for schema validation.
+
+    The held screenshot exists only for the native client (the Java press-inputs schema has no
+    `hold`), so it is yielded for `client == 'native'`; `validate_steps` refuses it for java."""
     for step in steps:
         if set(step) == {"shot", "hold_keys"}:
-            yield "minecraft_press_inputs", {"keys": step["hold_keys"], "ticks": 1, "hold": True}
+            if client == 'native':
+                from .scene_shot_hold import mcp_calls
+                yield from mcp_calls(step)
             continue
         kind, value = next(iter(step.items()))
         if kind in ("key", "look", "hotbar", "use_item_on", "click_screen_button"):
