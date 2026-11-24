@@ -1310,13 +1310,14 @@ class WindowReceiptFieldsTests(unittest.TestCase):
         # `--server-wrapper "perf stat … --"` makes the sampled pid the wrapper, whose own task
         # list has no tick thread: the sample must come from the child that owns it
         # (TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT). A real wrapper/child pair, no sleep:
-        # the wrapper relays its child's `ready` line once the named thread exists.
+        # the thread prints `ready` *after* its rename, so the sample can never race it
+        # (REVIEW-wave2-11 minor-7).
         child = ("import ctypes, sys, threading, time\n"
                  "def hold():\n"
                  "    ctypes.CDLL(None).prctl(15, b'mc-core-tick', 0, 0, 0)\n"
+                 "    print('ready', flush=True)\n"
                  "    time.sleep(600)\n"
                  "threading.Thread(target=hold, daemon=True).start()\n"
-                 "print('ready', flush=True)\n"
                  "sys.stdin.read()\n")
         wrapper = ("import subprocess, sys\n"
                    "subprocess.run([sys.executable, '-c', sys.argv[1]])\n")
@@ -1336,6 +1337,8 @@ class WindowReceiptFieldsTests(unittest.TestCase):
                 except ProcessLookupError:
                     pass
                 process.wait(timeout=30)
+            if process.stdout is not None:
+                process.stdout.close()
 
         self.addCleanup(cleanup)
         self.assertEqual(process.stdout.readline().strip(), "ready")
