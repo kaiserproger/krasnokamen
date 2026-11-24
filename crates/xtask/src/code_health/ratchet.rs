@@ -40,7 +40,11 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // container for `boundary::EntityView` records with a single out-edge back
     // to `boundary` and no algorithm of its own; as `boundary::views` it stops
     // being a false top-level cycle node: 186 modules.
-    cycle_modules: 186,
+    // ENTITY-COLD-ROW-READ 2026-11-24: the derived hot column's type moved to
+    // its own owner `entity_hot.rs` (projecting `entities::ColdRow`/`Body`), so
+    // it is a top-level cycle node with one out-edge and no algorithm of its
+    // own; the alternative, raising `entities.rs`, was 952 lines: 187 modules.
+    cycle_modules: 187,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
     // Canonical ITEM_REGISTRY cutover, 2026-11-11: measured 2598, no spare headroom.
@@ -138,7 +142,12 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // D9 motion-gate extraction, 2026-11-17: the native motion gate policy
         // moved byte-for-byte to its owner `entities/motion_gate.rs`; measured
         // 864 on the CutLand integration tree (main 31c50392e + D9), 2026-11-19.
-        ("entities.rs", 864),
+        // ENTITY-COLD-ROW-READ 2026-11-24: the third derived column's own
+        // plumbing (field, spawn push, remove swap_remove, transfer push,
+        // reserve, the dirty-queue refresh in `prepare_motion_hints`, and the
+        // `hot_row`/`motion_dirty` accessors); the `HotRow` type itself is in
+        // `entity_hot.rs`: 885.
+        ("entities.rs", 885),
     ],
 };
 

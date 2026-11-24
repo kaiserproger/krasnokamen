@@ -2581,7 +2581,7 @@ fn read_row_reads_no_cold_row_for_plain_admitted_rows() {
 
 #[test]
 fn hot_row_stays_within_one_cache_line() {
-    let bytes = std::mem::size_of::<crate::entities::HotRow>();
+    let bytes = std::mem::size_of::<crate::entity_hot::HotRow>();
     assert!(
         bytes <= 64,
         "the derived column is one cache line per slot: {bytes} bytes"

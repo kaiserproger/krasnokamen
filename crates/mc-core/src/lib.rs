@@ -113,6 +113,7 @@ mod ender_chest;
 mod enderman;
 pub mod entities;
 pub mod entity_controls;
+mod entity_hot;
 pub mod entity_life;
 pub mod entity_loot;
 pub mod entity_motion;
