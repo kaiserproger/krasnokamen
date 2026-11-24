@@ -160,6 +160,21 @@ pub(super) fn options_match(
 /// as `this`, with its own scores and location, the day time, weather and a fresh
 /// random draw. Vanilla binds `distance` to the candidate itself, so it is zero.
 fn predicate_event(state: &TickState, entity: EntityId) -> serde_json::Value {
+    predicate_event_at(
+        state,
+        entity,
+        crate::advancements::location_snapshot(state, entity),
+    )
+}
+
+/// The same facts with the loot origin supplied by the caller, for
+/// `/execute ... if predicate`: vanilla binds `ORIGIN` to the command context,
+/// which `positioned`/`in` move away from the executor's body.
+pub(crate) fn predicate_event_at(
+    state: &TickState,
+    entity: EntityId,
+    location: serde_json::Value,
+) -> serde_json::Value {
     let mut player = crate::advancements::entity_snapshot(state, entity);
     player["distance"] = serde_json::json!({
         "x":0.0, "y":0.0, "z":0.0, "horizontal":0.0, "absolute":0.0
@@ -200,7 +215,7 @@ fn predicate_event(state: &TickState, entity: EntityId) -> serde_json::Value {
     let draw = ((stream ^ (stream >> 31)) >> 11) as f64 / (1u64 << 53) as f64;
     serde_json::json!({
         "player": player,
-        "location": crate::advancements::location_snapshot(state, entity),
+        "location": location,
         "time": state.day_time,
         "weather": {
             "raining": state.weather.0 != crate::commands::Weather::Clear,

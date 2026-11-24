@@ -440,6 +440,28 @@ fn condition(state: &TickState, context: Context, text: &mut &str) -> Result<i32
             }
             Ok(count)
         }
+        "predicate" => {
+            // Vanilla `ResourceOrIdArgument.lootPredicate` resolves the id while
+            // parsing, so an id no datapack defines fails the command instead of
+            // selecting nothing (`argument.resource_or_id.no_such_element`).
+            let raw = word(text)?;
+            let id = mc_data::Identifier::parse(raw)
+                .map_err(|_| "argument.resource_or_id.invalid".to_owned())?;
+            let Some(predicate) = state.datapacks.packs().predicates.get(id.as_str()) else {
+                return Err("argument.resource_or_id.no_such_element".into());
+            };
+            let location =
+                crate::advancements::location_at(state, context.dimension, context.position);
+            let event =
+                crate::command_execution::predicate_event_at(state, context.executor, location);
+            let evaluation = mc_data::advancements::evaluate_predicate(predicate, &event);
+            if !evaluation.unsupported.is_empty() {
+                // Pack loading refuses these (datapacks.rs keeps only predicates
+                // it can evaluate), so reaching this is a load invariant breach.
+                return Err("Unsupported predicate".into());
+            }
+            Ok(i32::from(evaluation.matches))
+        }
         _ => Err("Unsupported execute condition".into()),
     }
 }
