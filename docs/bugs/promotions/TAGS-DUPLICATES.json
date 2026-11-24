@@ -3,8 +3,8 @@
   "verdict": "promoted",
   "fix_commit": "patch:df4639c038eb3a69d8b66e8bf9a6db3e7fbf0cb48023fc9eeb37eb2e1c0cee47",
   "fix_commit_full": "patch:df4639c038eb3a69d8b66e8bf9a6db3e7fbf0cb48023fc9eeb37eb2e1c0cee47",
-  "promoted_at": "2026-11-24T14:09:03+00:00",
-  "tree_head": "3dd8ddf19d8e9e0f160aa42c1962e348bae8a041",
+  "promoted_at": "2026-11-24T15:00:45+00:00",
+  "tree_head": "b26d3ac4f1c2ad6a8fa7b2d5e37e2e13770014d0",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
@@ -23,42 +23,12 @@
   ],
   "kept_test_files": [],
   "negative_control": {
-    "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_tags_keys_in_wal_refuse_recovery": {
-      "state": "fixture-failure",
-      "detail": "FAIL | fixture panic at crates/mc-core/src/command_summon_scoreboard_tags_disk_tests.rs:197",
-      "assertion": {
-        "file": "crates/mc-core/src/command_summon_scoreboard_tags_disk_tests.rs",
-        "line": 197,
-        "error": "panic",
-        "class": "fixture"
-      }
-    },
-    "cargo:mc-core:core::entity_state_persistence_tests::duplicate_tags_in_legacy_wal_normalize_on_entity_restore": {
-      "state": "red",
-      "detail": "FAIL",
-      "assertion": {
-        "file": "crates/mc-core/src/entity_state_persistence_tests.rs",
-        "line": 1660,
-        "error": "panic",
-        "class": "assertion"
-      }
-    },
     "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_player_tags_keys_in_wal_refuse_offline_export_and_live_recovery": {
-      "state": "unproven-panic",
-      "detail": "FAIL | panic at crates/mc-core/src/command_summon_scoreboard_tags_disk_tests.rs:296 is not an assert macro; name it in proving_assertions",
-      "assertion": {
-        "file": "crates/mc-core/src/command_summon_scoreboard_tags_disk_tests.rs",
-        "line": 296,
-        "error": "panic",
-        "class": "unknown"
-      }
-    },
-    "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_player_tags_in_wal_normalize_before_offline_export_and_live_recovery": {
       "state": "red",
       "detail": "FAIL",
       "assertion": {
         "file": "crates/mc-core/src/command_summon_scoreboard_tags_disk_tests.rs",
-        "line": 261,
+        "line": 302,
         "error": "panic",
         "class": "assertion"
       }
@@ -73,16 +43,6 @@
         "class": "assertion"
       }
     },
-    "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::opaque_wal_trailing_bytes_refuse_offline_and_live_recovery": {
-      "state": "fixture-failure",
-      "detail": "FAIL | fixture panic at crates/mc-core/src/command_summon_scoreboard_tags_disk_tests.rs:218",
-      "assertion": {
-        "file": "crates/mc-core/src/command_summon_scoreboard_tags_disk_tests.rs",
-        "line": 218,
-        "error": "panic",
-        "class": "fixture"
-      }
-    },
     "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_tags_checkpoint_and_wal_recovery_is_idempotent": {
       "state": "red",
       "detail": "FAIL",
@@ -93,14 +53,24 @@
         "class": "assertion"
       }
     },
-    "cargo:mc-world-conversion:export_tests::export_refuses_ambiguous_player_tags_from_real_wal_without_publication": {
-      "state": "fixture-failure",
-      "detail": "FAIL | fixture panic at crates/mc-world-conversion/src/export_tests.rs:684",
+    "cargo:mc-core:core::entity_state_persistence_tests::duplicate_tags_in_legacy_wal_normalize_on_entity_restore": {
+      "state": "red",
+      "detail": "FAIL",
       "assertion": {
-        "file": "crates/mc-world-conversion/src/export_tests.rs",
-        "line": 684,
+        "file": "crates/mc-core/src/entity_state_persistence_tests.rs",
+        "line": 1660,
         "error": "panic",
-        "class": "fixture"
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_tags_keys_in_wal_refuse_recovery": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/command_summon_scoreboard_tags_disk_tests.rs",
+        "line": 200,
+        "error": "panic",
+        "class": "assertion"
       }
     },
     "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_tags_keys_in_checkpoint_refuse_recovery": {
@@ -117,25 +87,43 @@
         "class": "assertion"
       }
     },
+    "cargo:mc-world-conversion:export_tests::export_refuses_ambiguous_player_tags_from_real_wal_without_publication": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-world-conversion/src/export_tests.rs",
+        "line": 687,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_player_tags_in_wal_normalize_before_offline_export_and_live_recovery": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/command_summon_scoreboard_tags_disk_tests.rs",
+        "line": 266,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::opaque_wal_trailing_bytes_refuse_offline_and_live_recovery": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/command_summon_scoreboard_tags_disk_tests.rs",
+        "line": 223,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
     "harness:entities:native-v2-ledger-tag-duplicates": {
       "state": "unrunnable",
-      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/3dd8ddf19d8e-server-x86_64-unknown-linux-gnu-incr/krasnokamen: [Errno 2] No such file or directory: '/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/ledger-builds/6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68.json'. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/b26d3ac4f1c2-server-x86_64-unknown-linux-gnu-incr/krasnokamen: [Errno 2] No such file or directory: '/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/ledger-builds/52c7e9207e3d2bd4efc22f058d54eda7fcb7a7bb3dbeb8bb1f34f8c459ba9576.json'. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
     }
   },
   "restored": {
-    "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_tags_keys_in_wal_refuse_recovery": {
-      "state": "green",
-      "detail": ""
-    },
-    "cargo:mc-core:core::entity_state_persistence_tests::duplicate_tags_in_legacy_wal_normalize_on_entity_restore": {
-      "state": "green",
-      "detail": ""
-    },
     "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_player_tags_keys_in_wal_refuse_offline_export_and_live_recovery": {
-      "state": "green",
-      "detail": ""
-    },
-    "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_player_tags_in_wal_normalize_before_offline_export_and_live_recovery": {
       "state": "green",
       "detail": ""
     },
@@ -143,15 +131,15 @@
       "state": "green",
       "detail": ""
     },
-    "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::opaque_wal_trailing_bytes_refuse_offline_and_live_recovery": {
-      "state": "green",
-      "detail": ""
-    },
     "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_tags_checkpoint_and_wal_recovery_is_idempotent": {
       "state": "green",
       "detail": ""
     },
-    "cargo:mc-world-conversion:export_tests::export_refuses_ambiguous_player_tags_from_real_wal_without_publication": {
+    "cargo:mc-core:core::entity_state_persistence_tests::duplicate_tags_in_legacy_wal_normalize_on_entity_restore": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_tags_keys_in_wal_refuse_recovery": {
       "state": "green",
       "detail": ""
     },
@@ -162,18 +150,30 @@
     "cargo:mc-core:command_summon::tests::scoreboard_tags_tests::duplicate_tags_summon_load_add_and_remove_have_set_semantics": {
       "state": "green",
       "detail": ""
+    },
+    "cargo:mc-world-conversion:export_tests::export_refuses_ambiguous_player_tags_from_real_wal_without_publication": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_player_tags_in_wal_normalize_before_offline_export_and_live_recovery": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::opaque_wal_trailing_bytes_refuse_offline_and_live_recovery": {
+      "state": "green",
+      "detail": ""
     }
   },
   "client_receipt": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T135720-native-v2-ledger-tag-duplicates-_3enoigi/result.json",
-    "tree_head": "3dd8ddf19d8e9e0f160aa42c1962e348bae8a041",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T144936-native-v2-ledger-tag-duplicates-fhh5zpz0/result.json",
+    "tree_head": "b26d3ac4f1c2ad6a8fa7b2d5e37e2e13770014d0",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "server_binary_sha256": "52c7e9207e3d2bd4efc22f058d54eda7fcb7a7bb3dbeb8bb1f34f8c459ba9576",
     "covers": [
       "harness:entities:native-v2-ledger-tag-duplicates"
     ],
     "profile": "entities"
   },
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T140410-ledger-promote-3ffesjtc"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T145246-ledger-promote-i3bg7ppf"
 }
