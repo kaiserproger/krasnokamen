@@ -96,14 +96,16 @@ impl TickPlanIndex {
     }
 
     pub(crate) fn new(output: &TickOutput) -> Self {
-        let mut index = Self::default();
-        index.spectators = output
-            .snapshot
-            .player_roster
-            .iter()
-            .filter(|player| player.game_mode == 3)
-            .map(|player| player.entity)
-            .collect();
+        let mut index = Self {
+            spectators: output
+                .snapshot
+                .player_roster
+                .iter()
+                .filter(|player| player.game_mode == 3)
+                .map(|player| player.entity)
+                .collect(),
+            ..Self::default()
+        };
         #[cfg(test)]
         SPECTATOR_INDEX_BUILDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         for (i, change) in output.changes.blocks.iter().enumerate() {
