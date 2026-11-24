@@ -104,6 +104,14 @@ impl TickState {
                 2.0,
             ));
         let is_item = type_id == self.registry.item_type_id;
+        // Only living bodies can suffocate. Hanging entities (item frames,
+        // paintings, leash knots), items, orbs and other non-living archetypes
+        // legitimately intersect their support: an item frame sits 0.03125 in
+        // front of the face and its 0.25 half width enters the support block.
+        let living = mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id)
+            .is_some_and(|contract| {
+                contract.behavior.archetype == mc_data::entity_types::EntityArchetype::Living
+            });
         let kind = if is_item {
             EntityKind::Item { type_id }
         } else {
@@ -175,7 +183,7 @@ impl TickState {
             crate::dolphin::initialize(self, slot, type_id);
             crate::turtle::initialize(self, slot, type_id);
             crate::mob_equipment::initialize(self, slot, type_id);
-            if self.body_overlaps_collision(pos, half_width, height) {
+            if living && self.body_overlaps_collision(pos, half_width, height) {
                 let entity_type = self
                     .registry
                     .blueprint(type_id)
@@ -239,9 +247,14 @@ impl TickState {
         'scan: for x in cells[0].0..=cells[0].1 {
             for y in cells[1].0..=cells[1].1 {
                 for z in cells[2].0..=cells[2].1 {
-                    // A cell outside the resident world is not evidence either
-                    // way; the motion path's conservative missing-chunk block
-                    // would turn every unloaded spawn into a false report.
+                    // A non-resident column is not evidence either way; the
+                    // motion path's conservative missing-chunk block would turn
+                    // every unloaded spawn into a false report. Residency is the
+                    // column's, while the block read itself includes the cold
+                    // overlay (other residency rules ask `has_chunk` too).
+                    if !self.world.has_chunk(x.div_euclid(16), z.div_euclid(16)) {
+                        continue;
+                    }
                     let Some(state) = self.world.block_at(x, y, z) else {
                         continue;
                     };

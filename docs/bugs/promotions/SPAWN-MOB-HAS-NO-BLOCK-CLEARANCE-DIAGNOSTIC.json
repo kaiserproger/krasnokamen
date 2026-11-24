@@ -1,37 +1,37 @@
 {
   "id": "SPAWN-MOB-HAS-NO-BLOCK-CLEARANCE-DIAGNOSTIC",
   "verdict": "promoted",
-  "fix_commit": "patch:bf1a0ca535bf1096a3a3cab22f9b98eb25404344c277c21412c9b3e0c04cc636",
-  "fix_commit_full": "patch:bf1a0ca535bf1096a3a3cab22f9b98eb25404344c277c21412c9b3e0c04cc636",
-  "promoted_at": "2026-11-24T03:05:35+00:00",
-  "tree_head": "a00741b366e794501cd7f2ba3a921eab22f53b6a",
+  "fix_commit": "patch:7ca5ea378d79cf6b1b238ce7424ceba5a0b15edd8580beadee5a6310ffc9b2a0",
+  "fix_commit_full": "patch:7ca5ea378d79cf6b1b238ce7424ceba5a0b15edd8580beadee5a6310ffc9b2a0",
+  "promoted_at": "2026-11-24T04:39:51+00:00",
+  "tree_head": "6130efff2452a26faaec07eeba865f4f30148904",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
-  "fix_patch_sha256": "bf1a0ca535bf1096a3a3cab22f9b98eb25404344c277c21412c9b3e0c04cc636",
+  "fix_patch_sha256": "7ca5ea378d79cf6b1b238ce7424ceba5a0b15edd8580beadee5a6310ffc9b2a0",
   "reversed_files": [
     "crates/mc-core/src/tick/entity_lifecycle.rs"
   ],
   "kept_test_files": [],
   "negative_control": {
-    "cargo:mc-core:tick::entity_lifecycle_tests::a_body_spawned_inside_a_block_is_created_and_named": {
-      "state": "red",
-      "detail": "FAIL"
-    },
     "cargo:mc-core:tick::entity_lifecycle_tests::a_body_spawned_outside_the_resident_world_is_not_reported": {
       "state": "green",
       "detail": ""
     },
     "cargo:mc-core:tick::entity_lifecycle_tests::a_body_standing_on_the_collision_box_is_not_reported": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::entity_lifecycle_tests::a_body_spawned_inside_a_block_is_created_and_named": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:tick::entity_lifecycle_tests::a_wall_mounted_item_frame_is_not_reported": {
       "state": "green",
       "detail": ""
     }
   },
   "restored": {
-    "cargo:mc-core:tick::entity_lifecycle_tests::a_body_spawned_inside_a_block_is_created_and_named": {
-      "state": "green",
-      "detail": ""
-    },
     "cargo:mc-core:tick::entity_lifecycle_tests::a_body_spawned_outside_the_resident_world_is_not_reported": {
       "state": "green",
       "detail": ""
@@ -39,8 +39,16 @@
     "cargo:mc-core:tick::entity_lifecycle_tests::a_body_standing_on_the_collision_box_is_not_reported": {
       "state": "green",
       "detail": ""
+    },
+    "cargo:mc-core:tick::entity_lifecycle_tests::a_body_spawned_inside_a_block_is_created_and_named": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::entity_lifecycle_tests::a_wall_mounted_item_frame_is_not_reported": {
+      "state": "green",
+      "detail": ""
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T030010-ledger-promote-rg_69oqc"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261124T043400-ledger-promote-oitndrch"
 }

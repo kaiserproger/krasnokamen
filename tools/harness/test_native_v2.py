@@ -310,7 +310,7 @@ class NativeV2ProbeTests(unittest.TestCase):
                 raise Stop
             return {"recent_chat": ["x has the following entity data: minecraft:speed"],
                     "player": {"health": 1, "entity_id": 1}, "client_tick": 1,
-                    "screen": {"open": True}}
+                    "screen": {"open": True}, "in_play": True}
 
         steps = mock.MagicMock()
         steps.wait.side_effect = wait
