@@ -1,0 +1,123 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 995 159 995 1005 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 995 160 995 1005 165 1010 minecraft:air"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "cmd": "clear @s"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "key": {
+        "keys": [
+          "key.keyboard.f5"
+        ],
+        "ticks": 1
+      }
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "cmd": "item replace entity @s weapon.mainhand with minecraft:bow"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "shot": "bow-idle"
+    },
+    {
+      "use_phases": {
+        "name": "bow-draw",
+        "ticks": 20
+      }
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "cmd": "item replace entity @s weapon.mainhand with minecraft:spyglass"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "shot": "spyglass-idle"
+    },
+    {
+      "use_phases": {
+        "name": "spyglass-use",
+        "ticks": 20
+      }
+    },
+    {
+      "cmd": "item replace entity @s weapon.mainhand with minecraft:trident"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "shot": "trident-idle"
+    },
+    {
+      "use_phases": {
+        "name": "trident-hold",
+        "ticks": 20
+      }
+    }
+  ]
+}

@@ -750,6 +750,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the bush's emissive overlay keeps near-white texels at night, so the element emission replaced the sampled light",
         limits="one emissive cross model and one camera; eyeblossom and potted variants and the daytime frame stay unproven. The fixture proves the section's block-light layer arrived (a torch lit behind the camera and read back through the bush cell) and remeshes the section after it, so a load-delayed light packet cannot leave an unknown-light sample in the asserted frame",
     ),
+    "native-use-pose": _entry(
+        id="native-use-pose", summary="Third-person item-use poses differ per item and a drawn bow is two-handed",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-use-pose", requires=("xvfb",),
+        sources=("tools/harness/use_pose_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, own avatar in third person on a stone pad at noon: a bow, a spyglass and a trident held idle and then with the use action held",
+        proves="the trident's use pose raises the arm overhead out of the torso silhouette (`trident_use_pose_raised`), and the drawn-bow and using-spyglass frames differ (`use_poses_differ_by_item`), so per-item use poses replace the single generic raise",
+        limits="one avatar, one camera and three items; the remaining actions (crossbow charge/hold, spear, horn, brush) and the rideable variants stay unit-covered by the animation tests",
+    ),
     "native-pig-saddle": _entry(
         id="native-pig-saddle", summary="A saddled pig draws its saddle layer",
         owner="core:harness", evidence="graphical", profile="scene-shot",

@@ -28,7 +28,7 @@ from .scene_shot_checks import (
     check_element_emission, check_gait_spider, check_item_bars, check_pig_saddle, check_placed_head,
     check_player_head,
     check_player_head_registry, check_shade_override, check_shelf_clock, check_toasts,
-    player_head_skin_pack,
+    check_use_pose, player_head_skin_pack,
 )
 from .scene_shot_client import (
     LatencyProxy, NATIVE_FOV, NATIVE_GUI_SCALE, WINDOW, _validate_java_display,
@@ -55,6 +55,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-decorated-pot": "decorated_pot_scene.json",
         "native-pig-saddle": "pig_saddle_scene.json",
         "native-element-emission": "element_emission_scene.json",
+        "native-use-pose": "use_pose_scene.json",
         "native-player-head": "player_head_scene.json",
         "native-player-head-registry": "player_head_registry_scene.json",
         "native-placed-head": "player_head_scene.json",
@@ -344,6 +345,8 @@ def run(
                 check_decorated_pot(probe, artifact)
             elif ctx.scenario_id == "native-pig-saddle":
                 check_pig_saddle(probe, artifact)
+            elif ctx.scenario_id == "native-use-pose":
+                check_use_pose(probe, artifact)
             elif ctx.scenario_id == "native-element-emission":
                 check_element_emission(probe, artifact)
             elif ctx.scenario_id == "native-player-head":

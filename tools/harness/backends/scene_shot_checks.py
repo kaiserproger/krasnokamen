@@ -423,6 +423,55 @@ def check_gait_spider(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("spider_unobstructed", obstruction <= 100)
 
 
+def check_use_pose(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-USE-POSE: third-person use poses are per item, not one generic raise.
+
+    The own avatar is captured in third person (back view) holding a bow, a spyglass and a
+    trident, idle and with the use action held. 26.3 gives each item its own pose: the trident
+    raise is `-PI` overhead, so it leaves the torso silhouette beside/above the head, and the
+    drawn bow and the using spyglass are different poses. The pre-83994480 client raised the
+    using hand by one generic `-1.35`, which from behind stays inside the torso, so neither
+    assertion can pass on the control. Measured 2026-11-25: the trident's above-shoulder change
+    reads 1667 px on the fix and 125 on the control, and the drawn-bow vs using-spyglass frames
+    differ by 5179 vs 713.
+    """
+    names = ("bow-idle", "bow-draw-start", "bow-draw-hold", "spyglass-idle", "spyglass-use-hold",
+             "trident-idle", "trident-hold-start", "trident-hold-hold")
+    shots = _qa._load_shots(probe, artifact, names)
+    ref = shots["bow-idle"][0]
+    for name in names[1:]:
+        frame = shots[name][0]
+        probe.check(f"{name}_camera_unchanged", all(
+            abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+        ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    box = (540, 280, 740, 500)
+    halves = {"left": (540, 280, 640, 500), "right": (640, 280, 740, 500)}
+    idle = shots["bow-idle"][1]
+    drawn = shots["bow-draw-hold"][1]
+    spy = shots["spyglass-use-hold"][1]
+    # The trident pose raises the arm overhead (`-PI`), which leaves the torso silhouette; the
+    # boxes beside and above the head hold only sky while the arm hangs.
+    above = {"left": (545, 250, 615, 350), "right": (665, 250, 735, 350)}
+    trident_idle = shots["trident-idle"][1]
+    trident_held = shots["trident-hold-hold"][1]
+    probe.report["use_pose_roi"] = list(box)
+    probe.report["use_pose_arm_changed"] = {
+        half: _changed(idle, drawn, region) for half, region in halves.items()
+    }
+    probe.report["use_pose_spyglass_changed"] = {
+        half: _changed(shots["spyglass-idle"][1], spy, region) for half, region in halves.items()
+    }
+    probe.report["use_pose_drawn_vs_spyglass_changed"] = _changed(drawn, spy, box)
+    raised = {half: _changed(trident_idle, trident_held, region) for half, region in above.items()}
+    probe.report["use_pose_trident_raised_changed"] = raised
+    probe.check("trident_use_pose_raised", max(raised.values()) > 800)
+    probe.check("use_poses_differ_by_item", probe.report["use_pose_drawn_vs_spyglass_changed"] > 2500)
+    probe.report["visual_review_required"] = [
+        "Inspect trident-idle / trident-hold-hold for the overhead pose and bow-draw-hold / "
+        "spyglass-use-hold for the per-item difference."
+    ]
+
+
 def check_elytra(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-OPUS-15: a worn elytra draws its wings on the third-person avatar's back."""
     shots = _qa._load_shots(probe, artifact, ("back-plain", "back-elytra", "back-none", "back-chestplate"))
