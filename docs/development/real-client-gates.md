@@ -912,7 +912,10 @@ the Settings dialog or the map territory.
   `harness:settlement-map-qa:localized_text` runs `--client java ... --language ru_ru`
   (the receipt needs the Java prerequisites env, `receipts/BuildHost/java-prereqs.env`);
   `harness:settlement-map-qa:starter_chest_race` runs `--client java ... --scenario quickwins-c1-race`
-  (below); every other verdict runs native with `--timeout-seconds 3600`.
+  (below); `harness:settlement-map-qa:blueprints` runs `--client native ... --scenario blueprints` — the
+  quickwins setup founds the settlement, then the Construction page's list is read page by page
+  (`blueprint_names`: no raw ids, no Unknown, every name in the client language, 26 or more distinct) and
+  published as `blueprints`/`all`; every other verdict runs native with `--timeout-seconds 3600`.
   A Java run whose client could not load the requested language fails before connect
   (`scene_shot_client.check_java_language`, marker `Failed to load translations for
   <locale> from pack vanilla`): such a client still reports the locale to the server but

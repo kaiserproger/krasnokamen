@@ -250,6 +250,7 @@ _BOOLEAN_PROFILE_VERDICTS = {
         'bell_opens_hub', 'dashboard', 'map', 'building_order', 'shortage_icons',
         'storage_transfer', 'project_progress', 'residents', 'resources', 'production_order',
         'localized_text', 'all', 'starter_chest_race', 'selected_card', 'verge_connected',
+        'blueprints',
     }),
 }
 # Run arguments of a profile ref: (client, args after `--`) per verdict that needs another client
@@ -265,6 +266,9 @@ _PROFILE_VERDICT_RUN = {
     ('settlement-map-qa', 'selected_card'): ('native', ['--', '--scenario', 'selected-card']),
     # A road-spanning obstruction must not hide a legally fronting lot (row CIVILIZATION-STREET-VERGE).
     ('settlement-map-qa', 'verge_connected'): ('native', ['--', '--scenario', 'verge']),
+    # The Construction page's blueprint list must show localized names only (row
+    # SETTLEMENT-BLUEPRINT-LIST-SHOWS-RAW-SPANISH-IDS); the quickwins setup founds the settlement.
+    ('settlement-map-qa', 'blueprints'): ('native', ['--', '--scenario', 'blueprints']),
     # The chisel resource-pack admission is a vanilla-Java client behaviour; the native client
     # never asks for the optional pack.
     ('chisel', 'vanilla_optional_admission'): ('java', []),

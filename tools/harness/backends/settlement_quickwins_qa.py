@@ -98,6 +98,8 @@ class StepFailed(RuntimeError):
 # explained by the clocks' own changes, so it never resends the chunk.
 C1_RACE_SCENARIO = "quickwins-c1-race"
 C1_RACE_VERDICT = "starter_chest_race"
+# `--scenario blueprints`: the Construction page must show localized names only.
+BLUEPRINT_VERDICT = "blueprints"
 C1_RACE_CLOCKS = range(1, 7)  # rows 2..12 (or 13..3) of the anchor's chunk
 C1_RACE_TICKS = range(1, 1201)
 
@@ -639,7 +641,13 @@ def run(ctx: Any, args: Any) -> dict[str, Any]:
                 stage.blueprint_walk(walk)
             finally:
                 gui.close()
-                ctx.client_evidence["blueprints"] = walk.results.get("BL")
+                judged = walk.results.get("BL") or {}
+                ctx.client_evidence["blueprints"] = judged
+                # The blueprint list is the only criterion this scenario judges; `all` is that run's
+                # every-verdict answer, so a ledger ref can read the same receipt as a boolean.
+                published = {BLUEPRINT_VERDICT: bool(judged.get("ok")), "all": bool(judged.get("ok"))}
+                probe.report["verdicts"] = published
+                ctx.client_evidence["verdicts"] = published
             return walk.shots
         if stage2:
             from .scene_shot_client import scene_username

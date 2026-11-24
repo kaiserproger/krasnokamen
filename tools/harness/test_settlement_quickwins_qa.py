@@ -184,7 +184,13 @@ class C1RaceTests(unittest.TestCase):
                                         "--", "--scenario", gate.C1_RACE_SCENARIO])
         self.assertEqual(regressions._BOOLEAN_PROFILE_VERDICTS["settlement-map-qa"],
                          {*settlement_map_qa.VERDICTS, *settlement_map_qa.SCENARIO_VERDICTS,
-                          gate.C1_RACE_VERDICT})
+                          gate.C1_RACE_VERDICT, gate.BLUEPRINT_VERDICT})
+
+    def test_the_blueprint_verdict_runs_the_list_on_the_native_client(self):
+        from tools.harness import regressions
+        command = regressions._profile_command("settlement-map-qa", gate.BLUEPRINT_VERDICT)
+        self.assertEqual(command[-8:], ["--client", "native", "--windowed", "--timeout-seconds", "3600",
+                                        "--", "--scenario", "blueprints"])
 
     def race_run(self, block=None, setup=None):
         """Run `--scenario quickwins-c1-race` with the client, the GUI and the walk's fixtures replaced."""
