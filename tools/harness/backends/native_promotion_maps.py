@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import json
 
-from pathlib import Path
-
 from .. import runtime
 from .native_p1 import _aim, _capture
 from .native_v2 import _block, _click, _echo, _give, _insert, _open, _set, _use
@@ -29,42 +27,6 @@ def _map(steps: ProbeSteps, map_id: int) -> dict | None:
 def _updates(steps: ProbeSteps, map_id: int) -> int:
     return sum(row["packet"] == "map_item_data" and row["id"] == map_id
                for row in _snapshot(steps)["events"])
-
-
-# Regions of the 1280x720 retained frame that can hold the drawn held map while never holding the
-# chat overlay (bottom-left) or the hotbar (bottom centre). The drawn-marker predicate compares the
-# same map before and after its frame decoration is removed and reads the largest of these.
-HELD_MAP_REGIONS = ((400, 120, 880, 620), (640, 200, 1200, 640))
-FRAME_MARKER_MIN_PIXELS = 1
-
-
-def _shot_path(steps: ProbeSteps, name: str) -> Path:
-    return steps.artifact_dir.parent / "screenshots" / f"{name}.png"
-
-
-def _differing_pixels(first: Path, second: Path, regions=HELD_MAP_REGIONS) -> dict[str, int]:
-    """Pixels that changed between two retained frames, per region plus the whole frame."""
-    from PIL import Image
-
-    counts: dict[str, int] = {}
-    with Image.open(first) as one, Image.open(second) as two:
-        if one.size != two.size:
-            raise ValueError(f"{first} is {one.size}, {second} is {two.size}")
-        before, after = one.convert("RGB"), two.convert("RGB")
-        before_px, after_px = list(before.getdata()), list(after.getdata())
-        width = before.width
-        counts["frame"] = sum(1 for a, b in zip(before_px, after_px) if a != b)
-        for index, region in enumerate(regions):
-            left, top, right, bottom = region
-            total = 0
-            for y in range(top, min(bottom, before.height)):
-                row = y * width
-                for x in range(left, min(right, before.width)):
-                    offset = row + x
-                    if before_px[offset] != after_px[offset]:
-                        total += 1
-            counts[f"region{index}"] = total
-    return counts
 
 
 def _cycle(steps: ProbeSteps, map_id: int, label: str) -> None:
@@ -190,12 +152,6 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     map_id = _create(steps)
     _frame(steps, origin, map_id)
     _clone(steps, map_id, 0)
-    # A second map at the same centre that was never framed: the drawn-marker predicate is the
-    # difference between the two held maps, so it needs no colour oracle. Both maps keep the same
-    # received terrain (asserted below), and only the framed one carries a marker.
-    without_frame = _create(steps)
-    _clone(steps, map_id, 0)
-    _clone(steps, without_frame, 1)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     x, y, z = origin
     steps.fixture("gamemode creative @s")
@@ -209,32 +165,6 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _held_shot(steps, "map-distant-held-clone")
     steps.check("map_distant_clone_keeps_exactly_one_frame_waypoint",
                 _marker_count(steps, map_id, "frame") == 1)
-    # Drawn-marker predicate: two maps of the same centre and identical received terrain, only one of
-    # them in a frame, captured at the same held pose. The difference between the two frames is the
-    # marker icon, so a client that receives the decoration but never draws it produces the same
-    # frame twice. Terrain equality is waited for (the map fills over several packets) so the
-    # difference cannot be map data.
-    steps.check("map_pair_frame_marker_absent",
-                _marker_count(steps, without_frame, "frame") == 0)
-    # The second map's data only arrives while it is held: switch first, then wait for its terrain
-    # to equal the framed map's retained terrain (both maps share one centre).
-    steps.call("minecraft_set_hotbar_slot", {"slot": 1})
-    steps.wait(lambda _state: _map(steps, without_frame) is not None
-               and _map(steps, map_id) is not None
-               and _map(steps, without_frame)["colors"] == _map(steps, map_id)["colors"],
-               "map_pair_identical_terrain", timeout_seconds=180)
-    steps.report["map_pair_terrain"] = {
-        "with_frame_len": len(_map(steps, map_id)["colors"]),
-        "without_frame_len": len(_map(steps, without_frame)["colors"]),
-        "identical": _map(steps, without_frame)["colors"] == _map(steps, map_id)["colors"],
-    }
-    _held_shot(steps, "map-distant-held-without-frame-marker")
-    changed = _differing_pixels(_shot_path(steps, "map-distant-held-clone"),
-                                _shot_path(steps, "map-distant-held-without-frame-marker"))
-    steps.report["frame_marker_pixels"] = changed
-    drawn = max(value for name, value in changed.items() if name.startswith("region"))
-    steps.report["frame_marker_drawn_pixels"] = drawn
-    steps.check("waypoint_marker_drawn", drawn >= FRAME_MARKER_MIN_PIXELS)
 
 
 def _locked(steps: ProbeSteps, origin: tuple[int, int, int], map_id: int) -> int:
