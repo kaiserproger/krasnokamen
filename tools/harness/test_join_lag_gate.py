@@ -127,6 +127,46 @@ class JoinVerdictTest(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("2.5 s", why)
 
+    def test_a_join_landed_after_the_halt_was_drained_by_it(self) -> None:
+        # The four wave-2 controls: the halt line precedes `join landed`, so the landing is the
+        # halt's own queue drain — row 1's deadline was never exercised (review wave2-8 M2).
+        from datetime import datetime, timedelta, timezone
+
+        admitted = datetime(2026, 11, 24, 14, 59, 0, tzinfo=timezone.utc)
+        ok, why = join_lag.join_verdict(
+            record(landed_seconds=9.2, landed_at=admitted + timedelta(seconds=9.264), knockout="landed"),
+            True, 3.0, 0, halt_at=admitted + timedelta(seconds=9.240))
+        self.assertIsNone(ok)
+        self.assertIn("halt", why)
+        self.assertIn("drained", why)
+
+    def test_a_join_landed_before_the_halt_still_reads_its_own_deadline(self) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        admitted = datetime(2026, 11, 24, 14, 59, 0, tzinfo=timezone.utc)
+        ok, why = join_lag.join_verdict(
+            record(landed_seconds=2.0, landed_at=admitted + timedelta(seconds=2.0), knockout="landed"),
+            True, 3.0, 0, halt_at=admitted + timedelta(seconds=9.240))
+        self.assertTrue(ok)
+        self.assertIn("2.0 s", why)
+
+    def test_a_join_whose_client_never_reached_play_is_not_a_pass(self) -> None:
+        # 145907 recorded `joiner_entered_play: false`: a landing without a client in play is not
+        # evidence that the pump served the join.
+        ok, why = join_lag.join_verdict(record(landed_seconds=9.3, knockout="landed"), True, 3.0, 0,
+                                        joiner_in_play=False)
+        self.assertIsNone(ok)
+        self.assertIn("never reached play", why)
+
+    def test_a_witness_rate_from_another_phase_does_not_witness_the_delay(self) -> None:
+        # The witness joined at 20 TPS before `/tick rate`; its own record carries that rate, and
+        # the target applied rate must not lend the 3 TPS verdict (review wave2-8 M4).
+        ok, why = join_lag.join_verdict(
+            record(rate=20.0, lag=31, landed_seconds=2.0, knockout="landed",
+                   landed_at=None), True, 3.0, 0)
+        self.assertIsNone(ok)
+        self.assertIn("neither", why)
+
 
 class HaltVerdictTest(unittest.TestCase):
     def test_a_ticking_core_behind_a_witnessed_delay_passes(self) -> None:
@@ -141,6 +181,18 @@ class HaltVerdictTest(unittest.TestCase):
         ok, why = join_lag.halt_verdict(True, record(), 3.0, 4, 100, 100, None)
         self.assertFalse(ok)
         self.assertIn("did not advance", why)
+
+    def test_a_halt_watch_shorter_than_the_stall_window_is_inconclusive(self) -> None:
+        # The PASS 151525 window was ~3 s at ~3 TPS, shorter than the 10 s outbox stall watch: that
+        # core was never given the chance to halt, so the pass proved nothing (review wave2-8 M3).
+        ok, why = join_lag.halt_verdict(True, record(), 3.0, 4, 100, 110, None, window_start=100)
+        self.assertIsNone(ok)
+        self.assertIn("stall window", why)
+
+    def test_a_full_stall_window_passes(self) -> None:
+        # 40 ticks at 3 TPS = 13.3 s: past the 10 s watch plus the margin.
+        ok, _ = join_lag.halt_verdict(True, record(), 3.0, 4, 100, 140, None, window_start=100)
+        self.assertTrue(ok)
 
     def test_an_unwitnessed_delay_proves_nothing(self) -> None:
         ok, why = join_lag.halt_verdict(True, record(lag=0), 3.0, 0, 100, 160, None)
@@ -323,11 +375,13 @@ class WitnessRateFallbackTest(unittest.TestCase):
         self.assertFalse(ok, "a join that missed the deadline behind the witnessed delay is row 1")
         self.assertIn("3 TPS", why)
 
-    def test_the_confirmed_rate_still_wins_over_the_records(self) -> None:
+    def test_the_records_own_rate_wins_over_the_target_rate(self) -> None:
+        # The witness joined before `/tick rate`; its own record's measured rate is the only one
+        # that belongs to its wait (review wave2-8 M4).
         rec = record(lag=32, timed_out=True, knockout="timeout", rate=20.0)
         ok, why = join_lag.join_verdict(rec, True, 3.0, 0)
-        self.assertFalse(ok)
-        self.assertIn("3 TPS", why)
+        self.assertIsNone(ok)
+        self.assertIn("20 TPS", why)
 
     def test_a_record_without_any_interval_stays_inconclusive(self) -> None:
         ok, why = join_lag.join_verdict(record(lag=32, timed_out=True, knockout="timeout"), True, None, 0)
@@ -342,13 +396,17 @@ class FakeSteps:
     later observation fails the `in_play` check exactly as `ProbeSteps.observe` records it.
     """
 
-    def __init__(self, states: dict, events: list[str], *, halt_after: str | None = None) -> None:
+    def __init__(self, states: dict, events: list[str], *, halt_after: str | None = None,
+                 halt_log: Path | None = None, halt_text: str = "") -> None:
         self.states = states
         self.events = events
         self.halt_after = halt_after
+        self.halt_log = halt_log
+        self.halt_text = halt_text
         self.halted = False
         self.deadline = 900.0
         self.client = None
+        self.game_time = 400
         self.report = {"id": "native-join-lag-witness", "passed": False, "assertions": {},
                        "fixture_commands": [], "details": {}}
 
@@ -360,12 +418,34 @@ class FakeSteps:
     def _observe(self) -> None:
         self.check("in_play", not self.halted)
 
-    def wait(self, predicate, label: str, *, timeout_seconds: float | None = None):
+    def observe(self, *, wait_for_play: bool = False, outside_play: bool = False):
+        self.events.append("observe")
+        self.game_time += 4
+        if not outside_play:
+            self._observe()
+        return {"time": {"game_time": self.game_time}, "in_play": not self.halted}
+
+    def _halt(self) -> None:
+        if self.halted or self.halt_log is None:
+            return
+        self.halted = True
+        # The real server writes its halt line before the disconnect that follows it.
+        self.halt_log.write_text(self.halt_log.read_text() + self.halt_text)
+
+    def wait(self, predicate, label: str, *, timeout_seconds: float | None = None,
+             wait_for_play: bool = False, outside_play: bool = False, record: bool = True):
         self.events.append(f"wait:{label}")
-        self._observe()
+        if not outside_play:
+            self._observe()
+        if label == "halt_window_elapsed":
+            # The core is gone the moment it halted: the window wait must not pretend otherwise.
+            if self.halted:
+                raise TimeoutError(f"timed out waiting for {label}")
+            self.game_time += 40
+            return self.observe(outside_play=True)
         value = self.states.get(label, TimeoutError(f"timed out waiting for {label}"))
         if label == self.halt_after:
-            self.halted = True
+            self._halt()
         if isinstance(value, Exception):
             if "in_play" in str(value):
                 self.check("in_play", False)
@@ -433,7 +513,8 @@ class GateWalkTest(unittest.TestCase):
         artifact = Path(root.name)
         log = artifact / "server.log"
         log.write_text("WARN " + join_lag.ENGAGED_LINE + " lag_ticks=8\n" + self.WITNESS)
-        a = FakeSteps(states, events, halt_after=halt_after)
+        a = FakeSteps(states, events, halt_after=halt_after,
+                      halt_log=log if halt else None, halt_text=self.HALT)
         joiner_box: list[FakeJoiner] = []
 
         def wait_for_path(path, timeout, condition, process=None):
@@ -473,8 +554,9 @@ class GateWalkTest(unittest.TestCase):
                                  states={"player_present": {"player": {"x": 0.5}}},
                                  halt_after=None, events=events)
         self.assertEqual([name for name in events if name != "event:10.0"],
-                         ["wait:player_present", "fixture:tick rate 3", "launch:joiner",
-                          "fixture:tick query", "wait:tick_rate_applied"])
+                         ["wait:player_present", "fixture:tick rate 3", "observe",
+                          "launch:joiner", "fixture:tick query", "wait:tick_rate_applied",
+                          "wait:halt_window_elapsed", "observe"])
 
     def test_a_held_rate_reply_is_tolerated_and_its_verdict_comes_from_the_joiner(self) -> None:
         events: list[str] = []
@@ -510,9 +592,11 @@ class GateWalkTest(unittest.TestCase):
             join_lines="", halt=True,
             states={"player_present": {"player": {"x": 0.5}}}, halt_after="player_present",
             events=events)
+        # Row 2 reads the joiner's own record only: the witness joined before `/tick rate`, so its
+        # 20 TPS lag cannot witness a 3 TPS delay (review wave2-8 M4).
         self.assertIsNone(verdicts["join_behind_slow_pump"])
-        self.assertEqual(verdicts["live_pump_does_not_halt"], False,
-                         "the witness's own landing record still witnesses the delay")
+        self.assertIsNone(verdicts["live_pump_does_not_halt"])
+        self.assertIn("never reached the server", detail["halt_verdict"])
 
 
 class FailedReceiptVerdictTest(unittest.TestCase):
@@ -557,6 +641,36 @@ class RegistrationTest(unittest.TestCase):
 
         self.assertFalse(regressions.is_graphical_ref("harness:join-lag-gate:not_a_verdict"))
         self.assertFalse(regressions.is_graphical_ref("client:join-lag-gate:join_behind_slow_pump"))
+
+
+class PlayLostTest(unittest.TestCase):
+    """Only the core halt excuses a lost play check; any other disconnect stays the client's own."""
+
+    def _steps(self) -> mock.Mock:
+        steps = mock.Mock()
+        steps.report = {"assertions": {"in_play": False}}
+        return steps
+
+    def test_a_lost_play_without_a_halt_keeps_its_failed_check(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "server.log"
+            log.write_text("2026-11-24T14:59:00Z INFO kicked JoinLagJoiner keepalive\n")
+            steps = self._steps()
+            detail: dict = {}
+            join_lag._note_play_lost(steps, detail, RuntimeError("gone"), log)
+            self.assertIs(steps.report["assertions"]["in_play"], False)
+            self.assertNotIn("play_lost", detail)
+
+    def test_the_core_halt_excuses_the_lost_play(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            log = Path(temp) / "server.log"
+            log.write_text("2026-11-24T14:59:00Z ERROR edge pump not draining: halted\n")
+            steps = self._steps()
+            detail: dict = {}
+            join_lag._note_play_lost(steps, detail, RuntimeError("gone"), log)
+            self.assertNotIn("in_play", steps.report["assertions"])
+            self.assertTrue(steps.report["assertions"]["client_reached_play"])
+            self.assertEqual(detail["play_lost"], ["gone"])
 
 
 if __name__ == "__main__":
