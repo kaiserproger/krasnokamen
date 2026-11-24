@@ -40,3 +40,28 @@ None. The removed call site is exactly the hunk's `+` block, restored verbatim b
 (`tools/harness/backends/native_player_input.py`): with the inventory open, a physical `1` press
 must move the hovered stack. The control's receipt, with the observed server-side cursor and slot
 state, is recorded in `promotions/HC-2.json`.
+
+## Gate hygiene (2026-11-24, why the restore was blocked and what changed)
+
+The pair was already committed on 2026-11-24 but could not be promoted: the registered scene failed
+`survival_number_2_moves_hovered` on every run of every client pin, while the same pins passed the
+whole scene the day before. This was not the fix and not the client. The native client reads
+`client-settings.json` back on every start from its data root, and those runs inherited a file whose
+`hotbar_2` had been rebound to the middle mouse button
+(`receipts/D123/D123Client/negctl/contaminated-client-settings.json`, and the same rebind in
+`~/.local/share/krasnokamen-client/client-settings.json` since 2026-11-15). `Bindings::action` is a
+reverse map from one input to one action, so a physical `Digit2` press resolved to no action:
+an instrumented build logs `window code=Digit2 pressed=true …` and then no `action=` line, while
+`Digit1` logs `action=hotbar_1` and reaches `ui key=1 node=slot/9`. `tools/harness/backends/native_client.py`
+now gives every native run its own settings file (`launch_environment`), so a saved rebind cannot
+change a gate result again; the harness unit ref
+`python:tools.harness.test_harness:NativeLaunchEnvironmentTests.test_a_launch_never_inherits_the_data_roots_managed_settings`
+is on the row. With that isolation the scene passes the survival and creative number steps on both
+the control's client and the re-land (`runs in promotions/HC-2.json`).
+
+The scene's creative half also carries an unrelated open defect,
+`CLIENT-CREATIVE-PLACEMENT-DROPPED`: the placement click is release-driven and is silently dropped
+on some runs (trace: the pickup's `prediction_click_slot slot=10` has no `slot=11` successor and the
+cursor still holds the stack). It does not touch this row's proving assertion: the scene stops at
+the first failure and the survival number steps run before it, so the control's red stays
+`survival_number_1_moves_hovered`.
