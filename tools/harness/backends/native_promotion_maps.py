@@ -230,11 +230,12 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                 steps.call("minecraft_read_item_components", {"source": "selected"}).get("item_id")
                 == "minecraft:filled_map")
     colours_before = _map(steps, locked)["colors"][:]
-    # No command runs between the two captures (the insertion is a hand interaction), so the chat
-    # overlay cannot scroll while they are taken; command feedback is off as a safety net, and the
-    # read region starts right of the chat's longest line. F1 would hide the held item itself.
-    steps.fixture("gamerule send_command_feedback false")
-    _echo(steps, "map_captures_command_feedback_off")
+    # No command runs between the two captures (the insertion is a hand interaction), and both are
+    # taken with the chat empty: a line that expires between them rewrites the text drawn over the
+    # map (the marker sits under the chat's longest line), which reads as a change. F1 cannot help,
+    # it hides the held item itself.
+    steps.wait(lambda state: not state.get("recent_chat"), "map_captures_chat_cleared",
+               timeout_seconds=30)
     _held_shot(steps, "map-held-without-frame-waypoint")
     steps.call("minecraft_set_hotbar_slot", {"slot": 1})
     steps.call("minecraft_interact_entity", {**frame, "hand": "main_hand"})
@@ -248,8 +249,6 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                 steps.call("minecraft_read_item_components", {"source": "selected"}).get("item_id")
                 == "minecraft:filled_map")
     _held_shot(steps, "map-held-with-frame-waypoint")
-    steps.fixture("gamerule send_command_feedback true")
-    _echo(steps, "map_captures_command_feedback_restored")
     colours_after = _map(steps, locked)["colors"][:]
     steps.report["map_terrain_changed_pixels"] = sum(
         1 for before, after in zip(colours_before, colours_after) if before != after)
