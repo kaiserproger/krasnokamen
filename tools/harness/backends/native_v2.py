@@ -209,31 +209,43 @@ def _ledger_summon_nbt(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture(f"summon minecraft:falling_block {x + .5} {y + 2} {z + 5.5} "
                   '{BlockState:{Name:"minecraft:sand"},NoGravity:1b}')
 
-    def received(kind: str, px: float, pz: float) -> dict:
-        found: dict = {}
+    def at(kind: str, px: float, pz: float) -> dict | None:
+        return next((row for row in _rows(steps, 16) if row["entity_type"] == kind
+                     and abs(row["x"] - px) < .6 and abs(row["z"] - pz) < .6), None)
 
-        def hit(_: dict) -> bool:
-            row = next((row for row in _rows(steps, 16) if row["entity_type"] == kind
-                        and abs(row["x"] - px) < .6 and abs(row["z"] - pz) < .6), None)
-            if row is None:
-                return False
-            found.update(row)
-            return True
+    # A refused summon is the row's symptom, so it is also a settled outcome:
+    # waiting for it keeps a reverted server failing at the assertion below
+    # instead of at a wait timeout.
+    refusal = "Unknown or unsupported summon NBT field"
 
-        steps.wait(hit, f"received_{kind}_{px}_{pz}")
-        return found
+    def settled(state: dict) -> bool:
+        return ((at("minecraft:tnt", x + .5, z + 2.5) is not None
+                 and at("minecraft:falling_block", x + .5, z + 5.5) is not None)
+                or any(refusal in line for line in state["recent_chat"]))
 
-    tnt = received("minecraft:tnt", x + .5, z + 2.5)
-    falling = received("minecraft:falling_block", x + .5, z + 5.5)
+    steps.wait(settled, "summon_nbt_settled", timeout_seconds=20)
+    tnt = at("minecraft:tnt", x + .5, z + 2.5)
+    falling = at("minecraft:falling_block", x + .5, z + 5.5)
+    steps.check("tnt_summon_accepts_fuse", tnt is not None)
+    steps.check("falling_block_summon_accepts_block_state", falling is not None)
+    if tnt is None or falling is None:
+        steps.report["summon_nbt"] = {"tnt": None, "falling_block": None}
+        return
     _capture(steps, "summon-nbt-entities")
+    # `data get` renders "<name> has the following entity data: <snbt>": wait for
+    # the answer, then assert the authored value (a wrong value still answers).
     steps.fixture(f"data get entity {tnt['entity_uuid']} fuse")
-    steps.wait(lambda s: any((m := re.search(r"fuse:\s*(\d+)", line)) and int(m.group(1)) == 1000
-                             for line in s["recent_chat"]),
-               "tnt_authored_fuse_read_back", timeout_seconds=20)
+    state = steps.wait(lambda s: any("entity data:" in line for line in s["recent_chat"]),
+                       "tnt_fuse_query_answered", timeout_seconds=20)
+    steps.check("tnt_authored_fuse_read_back",
+                any((m := re.search(r"entity data: (-?\d+)s", line)) and int(m.group(1)) == 1000
+                    for line in state["recent_chat"]))
     steps.fixture(f"data get entity {falling['entity_uuid']} BlockState")
-    steps.wait(lambda s: any("BlockState" in line and "minecraft:sand" in line
-                             for line in s["recent_chat"]),
-               "falling_block_authored_block_state_read_back", timeout_seconds=20)
+    state = steps.wait(lambda s: any("entity data:" in line and "Name" in line
+                                     for line in s["recent_chat"]),
+                       "falling_block_block_state_query_answered", timeout_seconds=20)
+    steps.check("falling_block_authored_block_state_read_back",
+                any("minecraft:sand" in line for line in state["recent_chat"]))
     steps.report["summon_nbt"] = {"tnt": tnt["entity_uuid"], "falling_block": falling["entity_uuid"]}
 
 
