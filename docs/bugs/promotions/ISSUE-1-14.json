@@ -1,0 +1,77 @@
+{
+  "id": "ISSUE-1-14",
+  "verdict": "promoted",
+  "fix_commit": "client:f843981bd3",
+  "fix_commit_full": "f843981bd320edfac6af221640d82481165abde0",
+  "promoted_at": "2026-11-24T13:45:24+00:00",
+  "tree_head": "3c5c5f747e3185c4ca22ad4e0bb54f9c3e3d92eb",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T134126-native-v2-chest-drag-disconnect-cx9rkbif/result.json",
+    "client_head": "5f01c22101016a14c5ea8eaf141ab2278ec21927",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "red": [
+      "harness:entities:native-v2-chest-drag-disconnect"
+    ],
+    "states": {
+      "harness:entities:native-v2-craft-drag": null,
+      "harness:entities:native-v2-craft-drag-paced": null,
+      "harness:entities:native-v2-chest-drag-disconnect": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T134202-native-v2-chest-drag-disconnect-yjyrnzgg/result.json",
+    "client_head": "f843981bd320edfac6af221640d82481165abde0",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "green": [
+      "harness:entities:native-v2-chest-drag-disconnect"
+    ],
+    "states": {
+      "harness:entities:native-v2-craft-drag": null,
+      "harness:entities:native-v2-craft-drag-paced": null,
+      "harness:entities:native-v2-chest-drag-disconnect": "green"
+    },
+    "tree_head": "3c5c5f747e3185c4ca22ad4e0bb54f9c3e3d92eb",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T134202-native-v2-chest-drag-disconnect-yjyrnzgg/result.json",
+    "client_head": "f843981bd320edfac6af221640d82481165abde0",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "green": [
+      "harness:entities:native-v2-chest-drag-disconnect"
+    ],
+    "states": {
+      "harness:entities:native-v2-craft-drag": null,
+      "harness:entities:native-v2-craft-drag-paced": null,
+      "harness:entities:native-v2-chest-drag-disconnect": "green"
+    },
+    "tree_head": "3c5c5f747e3185c4ca22ad4e0bb54f9c3e3d92eb",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "809e9325a2cfada9edd0de8405d8b2bcb9b37fe7",
+    "paths": [
+      "src/ui/state.rs"
+    ]
+  },
+  "candidate_refs": {
+    "harness:entities:native-v2-craft-drag": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T134421-native-v2-craft-drag-pf_8vs3a/result.json"
+    },
+    "harness:entities:native-v2-craft-drag-paced": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T134450-native-v2-craft-drag-paced-tk7q62_0/result.json"
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T134421-ledger-promote-i_7z5lv6"
+}

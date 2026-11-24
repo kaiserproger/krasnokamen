@@ -3,10 +3,12 @@ id = "COMMAND-FILL-SUCCESS-FEEDBACK"
 title = "Successful fill replies with generic Changed feedback instead of vanilla fill success"
 area = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "HzClientQA consume-1/2 fail the unchanged filled assertion; consume-2.log captures Changed 1230 block(s). Local vanilla 26.3 commands.fill.success is Successfully filled %s block(s)."
 repro = "client"
-regression = []
-fix_commit = "patch:2a7ddc99d90fa10e8ab04b3ed9f04ff5cf42ccc26deba1d9bd02ce8f1057ca21"
+regression = ["harness:scene-shot:native-command-feedback"]
+fix_commit = "patch:67b9f371ec9f30fba375acd1d22a174c8cd9031d88bd42fee5bb84abf9112fc7"
 failing_first = "reported"
-repro_check = "Work-root receipts/HzClientQA/consume-2.log: original consume scenario must pass unchanged on Main's integrated pin; no permanent English-wording test. SCENE 2026-11-23: no registered scene observes /fill feedback text (native-command-feedback tests the gamerule only), and the recorded patch identity cannot be reconstructed from the tree (bd7a05a64's non-test patch hash is 01ca1afa..., not 2a7ddc99...). A forward-ported patch file or a fill-feedback scene step is needed before promotion."
+proving_assertions = { "harness:scene-shot:native-command-feedback" = "fill-success" }
+repro_check = "Origin commit 3d4893773's command_world.rs hunk routes a successful /fill through commands.fill.success; docs/bugs/promotions/COMMAND-FILL-SUCCESS-FEEDBACK.patch is a git-format diff of exactly that hunk (reverse-applies at HEAD; the a/-side equals the pre-fix wt/BattleLiveCrash command_world.rs:435). Map docs/bugs/promotions/COMMAND-FILL-SUCCESS-FEEDBACK.hunks.md. Scene: native-command-feedback fills four blocks, waits for the reply by event and asserts fill-success (Successfully filled 4 block(s), not Changed 4 block(s)); on the reversed control the raw text remains and fill-success_contains_0 is the red (20261124T131618)."
+promotion = "docs/bugs/promotions/COMMAND-FILL-SUCCESS-FEEDBACK.json"

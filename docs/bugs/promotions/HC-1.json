@@ -1,0 +1,65 @@
+{
+  "id": "HC-1",
+  "verdict": "promoted",
+  "fix_commit": "client:a78495f632",
+  "fix_commit_full": "a78495f632423584760c339451900c5d018f7f71",
+  "promoted_at": "2026-11-24T11:36:23+00:00",
+  "tree_head": "3ef57c78d124e7ff277856ff41160c67e2c2d0c6",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T112132-screens-voice-qa-8jojp2_n/result.json",
+    "client_head": "cce9fb57cbb258b23303861561d3a3154eb67057",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "red": [
+      "harness:screens-voice-qa:native_voice_resets_on_non_voice_server"
+    ],
+    "states": {
+      "harness:screens-voice-qa:native_voice_resets_on_non_voice_server": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T112447-screens-voice-qa-7hw6_wbb/result.json",
+    "client_head": "a78495f632423584760c339451900c5d018f7f71",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "green": [
+      "harness:screens-voice-qa:native_voice_resets_on_non_voice_server"
+    ],
+    "states": {
+      "harness:screens-voice-qa:native_voice_resets_on_non_voice_server": "green"
+    },
+    "tree_head": "3ef57c78d124e7ff277856ff41160c67e2c2d0c6",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T112447-screens-voice-qa-7hw6_wbb/result.json",
+    "client_head": "a78495f632423584760c339451900c5d018f7f71",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "green": [
+      "harness:screens-voice-qa:native_voice_resets_on_non_voice_server"
+    ],
+    "states": {
+      "harness:screens-voice-qa:native_voice_resets_on_non_voice_server": "green"
+    },
+    "tree_head": "3ef57c78d124e7ff277856ff41160c67e2c2d0c6",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "7601a01606d8795c32ab97f937e2fe86def6ef15",
+    "paths": [
+      "src/session.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:session::title_connection_tests::disconnect_forgets_the_previous_server_voice_negotiation": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T113439-ledger-promote-zegmotc0"
+}

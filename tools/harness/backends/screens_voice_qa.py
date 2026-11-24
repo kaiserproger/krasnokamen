@@ -223,6 +223,11 @@ def _run_in_private_graph(ctx: ProfileContext, timeout: float) -> dict[str, Any]
     for key in ("commands", "cwds", "exits", "logs"):
         getattr(ctx, key).extend(result[key])
     ctx.client_evidence.update(result["client_evidence"])
+    if isinstance(result.get("details"), dict):
+        # The child records its per-verdict result (a failed leg writes verdicts.json and returns
+        # an error), and the ledger reads a client row's red from those verdicts: adopt them
+        # before raising so a failed control still carries the observation.
+        ctx.client_evidence.update(result["details"])
     if result.get("error"):
         raise RuntimeError(f"private-graph run failed: {result['error']}")
     return result["details"]
@@ -238,6 +243,11 @@ def _main(argv: list[str]) -> int:
         result["details"] = run(ctx)
     except BaseException as error:  # the parent adopts the failure with every receipt
         result["error"] = f"{type(error).__name__}: {error}"
+        # `run` writes the per-verdict result before it refuses a failed leg; keep it in the
+        # child's details so the parent's failure receipt reports which verdict was false.
+        verdicts = artifact / "verdicts.json"
+        if verdicts.is_file():
+            result["details"] = {"verdicts": json.loads(verdicts.read_text())}
     result.update(commands=ctx.commands, cwds=ctx.cwds, exits=ctx.exits, logs=ctx.logs,
                   client_evidence=ctx.client_evidence)
     (artifact / "result.json").write_text(json.dumps(result, indent=2, default=str) + "\n")
@@ -551,6 +561,20 @@ def native_shot(probe: ProbeSteps, name: str) -> str:
     return native_client.capture(probe.client, probe.artifact_dir.parent, name)["retained_path"]
 
 
+def consent_dialog_open(state: dict[str, Any]) -> bool:
+    """A consent dialog is open by its structure, never by its wording.
+
+    The wording is what the row measures (`owner_consent_names_app_audio`), so a detector that
+    matches the fixed title can never see the pre-fix dialog: the control would wait out its
+    whole deadline instead of observing the old strings. The Deny/Allow shape also excludes the
+    monitor's Test-pattern picker, which carries a `desktop/title` and `desktop/choice/*` entries
+    too but whose first choice is `Test pattern`.
+    """
+    nodes = dialog_nodes(state)
+    return nodes.get("desktop/choice/0") == "Deny" \
+        and str(nodes.get("desktop/choice/1", "")).startswith("Allow")
+
+
 def java_shot(probe: ProbeSteps, name: str) -> str:
     from .java_p5 import capture
     return capture(probe, name)
@@ -608,8 +632,7 @@ def screens_leg(ctx: ProfileContext, binary: Path, timeout: float, verdicts: dic
                 fabric.call("minecraft_use_item_on", {"x": MONITOR[0], "y": MONITOR[1], "z": MONITOR[2], "face": "north"})
             else:
                 click(requester.client.p4_window, WINDOW[0] // 2, WINDOW[1] // 2, button=3)
-            asked = owner.wait(lambda s: dialog_nodes(s).get("desktop/title") == "Allow screen and audio sharing?",
-                               f"{label}_consent_dialog")
+            asked = owner.wait(consent_dialog_open, f"{label}_consent_dialog")
             nodes = dialog_nodes(asked)
             leg.setdefault("consent_dialogs", {})[label] = {"nodes": nodes, "screenshot": native_shot(owner, f"{label}-consent")}
             keys(owner.client.p4_window["display"], *(("Down", "Return") if allow else ("Return",)))

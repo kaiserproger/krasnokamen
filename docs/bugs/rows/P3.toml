@@ -4,8 +4,10 @@ title = "Same-dimension death/respawn clears active-screen catalog; server does 
 area = "client"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P3"
 regression = ["harness:screens-voice-qa:viewer_keeps_screen_after_same_dimension_respawn", "client:krasnokamen-client:session::packets::tests::same_dimension_respawn_keeps_active_screen_catalog"]
-fix_commit = "client:a35187ca"
-repro_check = "real-hunk control (a35187ca's dimension guard reversed -> catalog cleared); real gate harness:screens-voice-qa:viewer_keeps_screen_after_same_dimension_respawn; area=client, candidate BLOCKER 2026-11-23: screens-voice-qa cannot start on core f9a8d455 (staged basic-economy [services.runtime] refused, receipt 20261123T154550-screens-voice-qa-g2kwy5rz); blocked external: plugin ABI. PLUGIN ABI RESOLVED 2026-11-23: the ../solaris-default-plugins checkout (api 0.9.0, no [services.*]) loads on core e1cb1a3e0c (probe 20261123T160136-native-263-entity-rigs-jmzuw6f9, only the auth plugin's login gate remains); the pre-rename restore client then cannot start inside screens-voice-qa's private graph (missing <xdg>/solaris-client/facts, 20261123T160300-screens-voice-qa-b2sqb17x). A committed-reversal control with the current krasnokamen-client on f5c929f7 is the route."
+fix_commit = "client:0e0b9d887d"
+proving_assertions = { "harness:screens-voice-qa:viewer_keeps_screen_after_same_dimension_respawn" = "viewer_keeps_screen_after_same_dimension_respawn" }
+repro_check = "Committed-reversal pair on the post-rename tip: reversal client:03419ef4c4 restores a7c504dc's unconditional screen_relay reset in spawn_info (unit ref red at the catalog assertion, negctl/p3-unit-control.log), re-land client:0e0b9d887d restores a35187ca's dimension guard (negctl/p3-unit-restore.log green). Map docs/bugs/promotions/P3.hunks.md. Real gate: screens-voice-qa leg screens, verdict viewer_keeps_screen_after_same_dimension_respawn (len(respawned screens) == 1)."
+promotion = "docs/bugs/promotions/P3.json"

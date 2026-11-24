@@ -1,0 +1,44 @@
+{
+  "id": "COMMAND-FILL-SUCCESS-FEEDBACK",
+  "verdict": "promoted",
+  "fix_commit": "patch:67b9f371ec9f30fba375acd1d22a174c8cd9031d88bd42fee5bb84abf9112fc7",
+  "fix_commit_full": "patch:67b9f371ec9f30fba375acd1d22a174c8cd9031d88bd42fee5bb84abf9112fc7",
+  "promoted_at": "2026-11-24T13:17:29+00:00",
+  "tree_head": "3b1ad1fbf43d8d002e6e6becf87ad306cef9188f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "67b9f371ec9f30fba375acd1d22a174c8cd9031d88bd42fee5bb84abf9112fc7",
+  "reversed_files": [
+    "crates/mc-core/src/command_world.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "harness:scene-shot:native-command-feedback": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-command-feedback --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T131618-ledger-promote-wggcurgg/regressions-client-0.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T131618-ledger-promote-wggcurgg/client-artifacts/20261124T131625-native-command-feedback-xoh7ybwg/result.json"
+    }
+  },
+  "restored": {
+    "harness:scene-shot:native-command-feedback": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T131618-ledger-promote-wggcurgg/client-artifacts/20261124T131656-native-command-feedback-gwfipcc6/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T130626-native-command-feedback-clqc48zi/result.json",
+    "tree_head": "3b1ad1fbf43d8d002e6e6becf87ad306cef9188f",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "8f3fd1ee128afad3f842b1f01f86c71e20d0591bfe559e890b0b1a06f4c11740",
+    "covers": [
+      "harness:scene-shot:native-command-feedback"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T131618-ledger-promote-wggcurgg"
+}
