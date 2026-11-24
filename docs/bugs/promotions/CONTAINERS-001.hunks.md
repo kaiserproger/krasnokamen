@@ -53,6 +53,8 @@ a tamed mount opens no inventory and a chest is never attached. Re-audit:
 - `harness:entities:native-v2-ledger-donkey-cargo` — a real client attaches a chest to a tamed donkey,
   receives `HorseInventoryMenu` with 53 slots, and moves seven diamonds into the first cargo slot and back
   through the received menu (`tools/harness/backends/native_ledger_donkey_cargo.py`). Passed receipt: see
-  the promotion JSON. The older `native-v2-custody-mount-export` entry is unrunnable on this host: its
-  backend requires a client hook (`promotion_mount_export_reimport`) that the client repository does not
-  implement.
+  the promotion JSON. The row does not cite the older `native-v2-custody-mount-export` entry because this
+  gate is the row's own symptom (menu present, cargo moves) and needs no world conversion;
+  `native-v2-custody-mount-export` does run — the harness supplies its `promotion_mount_export_reimport`
+  hook (`tools/harness/backends/client_probes.py:649-657`) and it passed in 101 s on 27fbf5c24bf0
+  (`.analysis/validation/20261124T124744-native-v2-custody-mount-export-tp8r598k`).

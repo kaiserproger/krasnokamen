@@ -3,8 +3,8 @@
 The row says the chest-equipped donkey/mule cargo menu is absent.  This scenario
 attaches a chest with the client's own interaction, opens the cargo menu with a
 sneaking use, and moves seven diamonds in and out through the received menu — all
-with the ordinary client tools (the registered custody scenario needs an offline
-export/reimport hook the client does not implement).
+with the ordinary client tools (the custody scenario's export/reimport half also runs, but it costs two
+world conversions and belongs to CUSTODY-MOUNT-EXPORT).
 
 Tools used: wait_for_visible_entity, approach_entity, set_hotbar_slot,
 interact_entity, press_inputs, quick_move_container_slot, wait_for_inventory.
@@ -87,6 +87,6 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.call("minecraft_close_screen")
     steps.report["limits"] = [
         "One tamed NoAI donkey and one chest; the mule comparison, death drop and llama columns rest on "
-        "the cargo test. No offline export/reimport (the registered custody scenario needs a client hook "
-        "that does not exist).",
+        "the cargo test. No offline export/reimport here: that half belongs to "
+        "native-v2-custody-mount-export, which does run, and it costs two world conversions.",
     ]
