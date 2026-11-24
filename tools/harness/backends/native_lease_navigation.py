@@ -14,6 +14,21 @@ def _controller(client):
     resource = client._request("resources/read", {"uri": "krasnokamen-client://capabilities"})
     return json.loads(resource["contents"][0]["text"])["controller"]
 
+
+def _arrived(steps, name, arguments):
+    """One bounded navigation request; a client that refuses the route is this row's assertion false.
+
+    `minecraft_navigate_to_block` reports an exhausted planner as a tool error, so the row's own
+    `*_navigation_arrived` has to carry the verdict (a tool error would otherwise leave the
+    assertion unreported and unhelpful as a negative control)."""
+    try:
+        result = steps.call("minecraft_navigate_to_block", arguments)
+    except Exception as error:
+        steps.report.setdefault("navigation_errors", {})[name] = str(error)
+        result = {}
+    steps.check(name, result.get("arrived") is True)
+    return result
+
 def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     a = steps.client
     b = McpClient(a.endpoint, a.token, 140)
@@ -45,10 +60,16 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         worker = threading.Thread(target=approach)
         worker.start()
         worker.join(timeout=135)
-        steps.check("long_action_completed", not worker.is_alive())
-        steps.check("active_writer_survived_idle_deadline", time.monotonic() - started >= 119
-                    and result.get("approach", {}).get("entity_uuid") == target["entity_uuid"]
+        # The row's own claim comes first: a client that loses the controller at the idle deadline
+        # never returns the bounded action, so `active_writer_survived_idle_deadline` is the
+        # assertion that has to flip, and the generic completion check follows it.
+        completed = not worker.is_alive()
+        approach = result.get("approach") or {}
+        steps.check("active_writer_survived_idle_deadline",
+                    time.monotonic() - started >= 119 and completed
+                    and approach.get("entity_uuid") == target["entity_uuid"]
                     and _controller(b).get("active") is True)
+        steps.check("long_action_completed", completed)
         steps.check("long_action_released_input", not b.call_tool("minecraft_observe")["inputs"]["held"])
         result.clear()
         def old_action():
@@ -63,7 +84,22 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         steps.check("old_action_in_flight", worker.is_alive())
         a._post({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {
             "requestId": a.request_id, "reason": "handoff regression"}}, expect_json=False)
-        b.call_tool("minecraft_press_inputs", {"keys": ["forward"], "ticks": 1, "hold": True})
+        # The cancelled writer unwinds asynchronously; a press that arrives while the client still
+        # reports writer_action_busy is a harness race, not the row. Retry on the client's own state
+        # (bounded), and record the last error so a permanent busy writer is still visible.
+        press_error = None
+        for _attempt in range(25):
+            try:
+                b.call_tool("minecraft_press_inputs", {"keys": ["forward"], "ticks": 1, "hold": True})
+                press_error = None
+                break
+            except RuntimeError as error:
+                press_error = str(error)
+                if "writer_action_busy" not in press_error:
+                    break
+                b.call_tool("minecraft_observe")
+        if press_error is not None:
+            steps.report.setdefault("replacement_press_errors", []).append(press_error)
         replacement = _controller(b)
         worker.join(timeout=20)
         steps.check("old_action_cancelled", not worker.is_alive() and "cancel" in result.get("old_error", ""))
@@ -85,8 +121,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     state = steps.wait(lambda s: s["player"]["on_ground"] and abs(s["player"]["x"] - (x + .85)) < .03,
                        "grounded_edge_pose")
     steps.check("edge_center_over_air", int(state["player"]["x"] // 1) == x)
-    edge = steps.call("minecraft_navigate_to_block", {"x": x + 4, "y": y, "z": z, "timeout_seconds": 30.0})
-    steps.check("edge_navigation_arrived", edge.get("arrived") is True)
+    _arrived(steps, "edge_navigation_arrived", {"x": x + 4, "y": y, "z": z, "timeout_seconds": 30.0})
     edge_after = steps.observe()["player"]
     steps.check("edge_grounded_movement", edge_after["on_ground"] and edge_after["x"] > x + 2)
 
@@ -103,8 +138,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture(f"tp @s {x + .416} {y} {z - .498}")
     steps.wait(lambda s: s["player"]["on_ground"] and abs(s["player"]["x"] - (x + .416)) < .03
                and abs(s["player"]["z"] - (z - .498)) < .03, "door_offset_pose")
-    route = steps.call("minecraft_navigate_to_block", {"x": x, "y": y, "z": z - 5, "timeout_seconds": 60.0})
-    steps.check("open_door_navigation_arrived", route.get("arrived") is True)
+    _arrived(steps, "open_door_navigation_arrived", {"x": x, "y": y, "z": z - 5, "timeout_seconds": 60.0})
     door_after = steps.observe()["player"]
     steps.check("door_grounded_crossing", door_after["on_ground"] and door_after["z"] < z - 2)
     _echo(steps, "lease_navigation_complete")

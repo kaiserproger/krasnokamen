@@ -78,7 +78,10 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _disable_gamerule(steps, "spawn_mobs")
     with ProbeSteps(mcp, steps.artifact_dir / "peer", steps.remaining(), "native-v2-team-deaths-peer") as peer:
         for command in ("team add red", "team add blue", f"team join red {VICTIM}", f"team join blue {PEER}"):
-            steps.fixture(command)
+            try:
+                steps.fixture(command)
+            except Exception as error:  # the session can end on the first of these
+                steps.report.setdefault("team_command_errors", []).append(f"{command}: {error}")
         # A client that decodes Play 0x6f in the pre-26.3 order ends its session on the first team
         # packet, and an ended session is an assertion here, not a later marker timeout: the check
         # reads the state the client still reports and records the outcome instead of raising out of
