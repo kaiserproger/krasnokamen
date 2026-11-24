@@ -5,9 +5,6 @@
       "wait_play": true
     },
     {
-      "cmd": "gamerule send_command_feedback false"
-    },
-    {
       "cmd": "datapack create hoverprobe HoverProbeDescription"
     },
     {

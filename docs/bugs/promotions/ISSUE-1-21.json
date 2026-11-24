@@ -1,19 +1,19 @@
 {
   "id": "ISSUE-1-21",
   "verdict": "promoted",
-  "fix_commit": "client:de9fde8dd9",
-  "fix_commit_full": "de9fde8dd92b1983cc2d9c524116fd3c472038e4",
-  "promoted_at": "2026-11-24T15:30:00+00:00",
-  "tree_head": "ec0be0a5c55724a7e623c1fb8191d90e1c94f4b3",
+  "fix_commit": "client:3c3d9fba9a",
+  "fix_commit_full": "3c3d9fba9a80b0de906f428815d59bb524075763",
+  "promoted_at": "2026-11-24T16:27:51+00:00",
+  "tree_head": "f1e61cb286a2d5273e209f364e0abf521c0e8436",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "client_fix": true,
   "control_tree": "client",
   "control": "client_receipt_pair",
   "negative_control": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T152911-issue1-21-tool-clip-x6b9ktdb/result.json",
-    "client_head": "6cd212a514834e9bd9702309b11431b89e1484da",
-    "server_binary_sha256": "c11ee2723befd2ee4cd0964936d95ef051179dc502fee5b1f76fe611e9828a38",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T162352-issue1-21-tool-clip-gcr1cj_q/result.json",
+    "client_head": "e4a470fb7c6b168208c1b53e0dc936fc37dc4b11",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
     "red": [
       "harness:scene-shot:issue1-21-tool-clip"
     ],
@@ -22,39 +22,39 @@
     }
   },
   "restored": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T152831-issue1-21-tool-clip-jvwy6g0a/result.json",
-    "client_head": "de9fde8dd92b1983cc2d9c524116fd3c472038e4",
-    "server_binary_sha256": "c11ee2723befd2ee4cd0964936d95ef051179dc502fee5b1f76fe611e9828a38",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T162258-issue1-21-tool-clip-ujxwerro/result.json",
+    "client_head": "3c3d9fba9a80b0de906f428815d59bb524075763",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
     "green": [
       "harness:scene-shot:issue1-21-tool-clip"
     ],
     "states": {
       "harness:scene-shot:issue1-21-tool-clip": "green"
     },
-    "tree_head": "ec0be0a5c55724a7e623c1fb8191d90e1c94f4b3",
+    "tree_head": "f1e61cb286a2d5273e209f364e0abf521c0e8436",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "client_receipt": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T152831-issue1-21-tool-clip-jvwy6g0a/result.json",
-    "client_head": "de9fde8dd92b1983cc2d9c524116fd3c472038e4",
-    "server_binary_sha256": "c11ee2723befd2ee4cd0964936d95ef051179dc502fee5b1f76fe611e9828a38",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T162258-issue1-21-tool-clip-ujxwerro/result.json",
+    "client_head": "3c3d9fba9a80b0de906f428815d59bb524075763",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
     "green": [
       "harness:scene-shot:issue1-21-tool-clip"
     ],
     "states": {
       "harness:scene-shot:issue1-21-tool-clip": "green"
     },
-    "tree_head": "ec0be0a5c55724a7e623c1fb8191d90e1c94f4b3",
+    "tree_head": "f1e61cb286a2d5273e209f364e0abf521c0e8436",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "client_control_delta": {
-    "fix_patch_id": "69c900fc92429bc0211c5f5aede2fcc4032d06b6",
+    "fix_patch_id": "321f061492cd0f8e60e464cbab19d1be68ace71e",
     "paths": [
-      "src/render/frame.rs"
+      "src/player/visual.rs"
     ]
   },
   "candidate_refs": {},
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T153000-ledger-promote-0osc_v08"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261124T162751-ledger-promote-mwiuv4w4"
 }
