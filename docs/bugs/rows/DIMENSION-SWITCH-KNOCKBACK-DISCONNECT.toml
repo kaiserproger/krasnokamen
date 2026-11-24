@@ -12,4 +12,4 @@ regression = [
 ]
 fix_commit = "patch:be44726c320aba551f99973c44c4061122283f3f7233bafea05f70f5d58740d3"
 failing_first = "reported"
-repro_check = "FixBatchB/F1-red.log and amendments/F1-queue-red.log fail respectively on the connection close and the real writer leaking an old visual explosion after respawn. F1-green.log and amendments/F1-queue-green.log pass. Cumulative patch docs/bugs/fix-patches/DIMENSION-SWITCH-KNOCKBACK-DISCONNECT.patch combines 5810902c7 and 0c51b3a44; the control keeps only the reset API state/method for retained tests, with base send/receive behavior. Both same-tick destination impulse cases pass. Explicit drop policy is not vanilla motion-reset parity."
+repro_check = ["Fix patch:be44726 is in tree and both cargo refs are green. Missing proof: the registered graphical scene `native-v2-dimension-switch-knockback` (SWEEP-MANIFEST.md: an explosion knocks the player back on the same tick a portal teleport switches dimension; the connection survives, the client stays in the new dimension, no old-world knockback) and its passed receipt on the promotion tree."]

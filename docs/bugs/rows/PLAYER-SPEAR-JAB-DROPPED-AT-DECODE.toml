@@ -16,3 +16,4 @@ regression = [
   "cargo:mc-data:item_components::tests::loads_component_report_fixture",
 ]
 failing_first = "reported"
+repro_check = ["Fix be976b139 is in tree and seven cargo refs are green. Missing proof: the registered graphical scene `native-v2-spear-jab-decode` / the G2L real-client stab hit-test (SWEEP-MANIFEST.md: the jab animation plays and the attack packet is accepted with no decode drop) plus its passed receipt on the promotion tree."]

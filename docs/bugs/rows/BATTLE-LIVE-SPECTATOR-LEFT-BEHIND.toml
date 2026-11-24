@@ -9,3 +9,4 @@ source = "G2R calibration trial-7: CamSpec ('battle spectate CamSpec PovRed') st
 regression = ["cargo:mc-core:battle::live_players::tests::the_bound_spectator_follows_the_holder_after_a_respawn_and_a_rearm", "cargo:mc-core:tick::spectator::tests::spectator_tick_follows_target_and_publishes_tracking_anchor_without_teleport_spam", "cargo:mc-edge:plan::plan_tests::camera_tests::camera_binding_follows_pairing_and_release_precedes_target_removal"]
 failing_first = "reported"
 fix_commit = "c6fa94da3eb7d41830992e6e2a00818e2813e9f4"
+repro_check = ["Fix c6fa94da3 is in tree and its cargo refs are green. Missing proof: the registered graphical scene `battle-live-spectator-follows-respawn` (SWEEP-MANIFEST.md: CamSpec bound to PovRed across death and respawn, Set Camera rebind, position within tracking range) and its passed receipt on the promotion tree."]

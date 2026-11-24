@@ -8,3 +8,4 @@ source = "Perf1M R3k-6 leg c: tick 73449 at 26 viewers rose from 3 to 26 full re
 repro = "source"
 regression = []
 failing_first = "reported"
+repro_check = ["Open: the per-viewer rescan redesign (carry the last delivered base per viewer, rebuild candidates only for the chunks whose revision moved) plus a candidate-scan counter test; the old isolated candidate 2d4f3a620 was never integrated and must be re-derived on current main. No code written this wave; design note in PROGRESS.md."]

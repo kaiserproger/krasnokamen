@@ -1,8 +1,9 @@
 # BED-OCCUPIED-PROPERTY-NOT-MIRRORED — fix-hunk map
 
 The production patch `BED-OCCUPIED-PROPERTY-NOT-MIRRORED.patch` is the fix's non-test hunks,
-`patch:06c5dace1735a3c911934b460aba6dd11d71183184d6533ba798334bb733fd65`. It reverse-applies on the
-candidate (`git apply -R --check`).
+`patch:d3314283f18e37fb9f16a99418f5d8b3b8f15f17a3820e42440cb79d3950bac3` (regenerated after the N4
+review; the earlier `patch:06c5dace…` carried the v1 linear scan and no longer reversed). It
+reverse-applies on the candidate (`git apply -R --check`).
 
 ## The fix
 
@@ -31,9 +32,10 @@ tests live in `sleep_tests.rs` and are not part of the patch.
 ## Control
 
 Reversing the patch reds the two proving refs at their own assertions
-(`crates/mc-core/src/sleep_tests.rs:1298` "the sleeper's bed must read occupied" and `:1322`
-"the resident's bed must read occupied"; observed `20261124T100301-test-6_b51pwu` on the first
-version of the reverse tree). The B1 regression now also proves the CAS direction:
+(`crates/mc-core/src/sleep_tests.rs:1300` "the sleeper's bed must read occupied" and `:1321`
+"the resident's bed must read occupied"; the multi-line `assert!` macro's panic line is its opening
+line; observed `20261124T100301-test-6_b51pwu` on the first version of the reverse tree). The B1
+regression now also proves the CAS direction:
 
 - `a_bed_broken_in_the_tick_its_player_lies_down_is_not_restored` — one tick with the lie-down and a
   `Dig::Finish` on the head; the break is accepted and the next tick does not restore the bed;

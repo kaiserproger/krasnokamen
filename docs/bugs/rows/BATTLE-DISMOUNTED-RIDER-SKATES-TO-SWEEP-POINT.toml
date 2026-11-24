@@ -9,3 +9,4 @@ repro = "client"
 regression = ["cargo:mc-core:battle::cavalry::tests::a_dismounted_rider_keeps_his_foot_drive_under_a_chase", "cargo:mc-core:battle::cavalry::tests::a_dismounted_rider_keeps_his_foot_drive_under_a_flank", "cargo:mc-core:battle::cavalry::tests::a_rider_whose_horse_dies_walks_from_the_next_battle_tick"]
 failing_first = "reported"
 fix_commit = "9176f32745de0bb4933212569efa643f0ec68874"
+repro_check = ["Fix 9176f3274 is in tree and its three cargo refs are green. Missing proof: the registered graphical scene `battle-live-dismounted-rider-walk` (SWEEP-MANIFEST.md: a cavalry husk whose horse dies mid-charge, 100 ticks, ground speed <= walk speed) and its passed receipt on the promotion tree; the client must be in play, which no cargo test produces."]
