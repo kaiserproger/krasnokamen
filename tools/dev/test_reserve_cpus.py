@@ -12,6 +12,9 @@ import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+# Under mem-run the harness environment carries MIMALLOC_* switches whose banner lands on the
+# child's stderr; the tests read the script's own first line, so the children get a clean env.
+CLEAN_ENV = {key: value for key, value in os.environ.items() if not key.startswith('MIMALLOC_')}
 
 
 def protocol():
@@ -45,12 +48,13 @@ class ReserveCpusTests(unittest.TestCase):
         shutil.copy(HERE / 'reserved_cpus.py', self.root)
 
     def reserve(self, *args, **kwargs):
-        return subprocess.run([str(self.script), *args], capture_output=True, text=True, **kwargs)
+        return subprocess.run([str(self.script), *args], capture_output=True, text=True, env=CLEAN_ENV, **kwargs)
 
     def holder(self):
         """A command that outlives the reservation-file check until the test closes its stdin."""
         return subprocess.Popen([str(self.script), '6,7', '--', 'python3', '-c', 'import sys; sys.stdin.read()'],
-                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                env=CLEAN_ENV)
 
     def test_a_reservation_records_its_live_owner(self):
         proc = self.holder()
