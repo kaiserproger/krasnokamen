@@ -688,10 +688,29 @@ class OrderDialogTest(unittest.TestCase):
         with self.assertRaisesRegex(TimeoutError, "projects_menu_open"):
             self._order(page)
 
+    def test_the_result_dialog_is_the_answer_not_the_review_it_came_from(self):
+        review = {"screen": {"class": "net.minecraft.client.gui.screens.dialog.MultiButtonDialogScreen",
+                             "title": "Order: House"},
+                  "ui_nodes": [{"id": "dialog/body/0", "label": "Request policy"}]}
+        accepted = {"screen": {"class": "net.minecraft.client.gui.screens.dialog.MultiButtonDialogScreen",
+                               "title": "Construction"},
+                    "ui_nodes": [{"id": "dialog/body/0", "label": "Started House construction."}]}
+        predicate = buildings_qa_project_order_result("Order: House")
+        self.assertFalse(predicate(review))
+        self.assertTrue(predicate(accepted))
+        self.assertFalse(predicate({"screen": {"class": buildings_qa.CONTAINER_CLASS,
+                                               "title": "Construction"},
+                                    "ui_nodes": [{"id": "dialog/body/0", "label": "x"}]}))
+
 
 def buildings_qa_project_catalogue(state):
     from tools.harness.backends import buildings_qa_project as project
     return project._catalogue_page(state)
+
+
+def buildings_qa_project_order_result(label):
+    from tools.harness.backends import buildings_qa_project as project
+    return project._order_result(label)
 
 
 if __name__ == "__main__":

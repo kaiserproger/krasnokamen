@@ -272,6 +272,23 @@ def _menu_click_named(probe: ProbeSteps, title: str, name: str) -> None:
     _click_row(probe, lambda s: _container_titled(s, title), name, f"{title}_menu_open")
 
 
+def _order_result(label: str):
+    """The dialog after the confirmation click: any dialog body except the review just clicked.
+
+    The product answers an order with `Dialog::multi_action` (class `MultiButtonDialogScreen`,
+    title Construction) carrying `Started <blueprint> construction.` / `Order accepted:
+    <blueprint>.`; the review page it came from is titled `Order: <label>` and can still be
+    mounted while the click is delivered, so it is excluded by title. The old wait accepted only
+    `SimpleDialogScreen` and timed out after a successful order (20261124T185742)."""
+    def predicate(state: dict[str, Any]) -> bool:
+        screen = state.get("screen") or {}
+        return (str(screen.get("class") or "").endswith("DialogScreen")
+                and str(screen.get("title") or "") != label
+                and any(str(node.get("id", "")).startswith("dialog/body/")
+                        for node in state.get("ui_nodes", [])))
+    return predicate
+
+
 def _confirm_project(probe: ProbeSteps, label: str) -> str:
     # The container icon opens a real server confirmation, not the retired
     # Projects dialog. Do not bypass that confirmation with a chat command.
@@ -281,10 +298,7 @@ def _confirm_project(probe: ProbeSteps, label: str) -> str:
     probe.call("minecraft_click_screen_button", {"expected_screen_class": DIALOG_CLASS,
                                                 "expected_title": opened["screen"]["title"],
                                                 "button_label": label})
-    result = probe.wait(
-        lambda s: (s.get("screen") or {}).get("class", "").endswith("SimpleDialogScreen")
-        and any(str(node.get("id", "")).startswith("dialog/body/") for node in s.get("ui_nodes", [])),
-        "project_confirmation_result", timeout_seconds=60)
+    result = probe.wait(_qa._order_result(label), "project_confirmation_result", timeout_seconds=60)
     return " | ".join(str(node.get("label", "")) for node in result.get("ui_nodes", [])
                       if str(node.get("id", "")).startswith("dialog/body/"))
 
