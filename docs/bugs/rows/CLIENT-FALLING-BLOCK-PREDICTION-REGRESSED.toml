@@ -3,7 +3,7 @@ id = "CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED"
 title = "A falling block's automation contract cannot describe the prediction it runs: no predicted velocity, and a no-gravity block drifted on a stale local one"
 area = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Core sand gate native-v2-input-sand on the current tree failed sand_predicts_between_received_updates (20261124T134021-native-v2-input-sand-c47ps1jh): the harness modelled the received velocity while the client integrates its own; and with DATA_NO_GRAVITY set the client kept moving on a stale local velocity instead of the server's"
 repro = "client"
 regression = [
@@ -15,3 +15,4 @@ fix_commit = "client:d0337426"
 failing_first = "reported"
 proving_assertions = { "harness:entities:native-v2-input-sand" = "sand_predicts_between_received_updates" }
 repro_check = "Prediction itself is NOT lost (debug on client d0337426's parent: one tick after 10.0 the predicted y is 9.96, then 9.9208 - exactly vanilla's 0.04 gravity, move, 0.98 drag). Two contract gaps were fixed in client:d0337426 (control commit 0a4c9a37 differs from it by exactly those hunks): (1) a no-gravity falling block moved on its own stale falling_velocity; it now uses the received velocity, matching FallingBlockEntity.tick where a no-gravity block keeps the server's delta; (2) minecraft_list_entities now exposes predicted_velocity (the client's integrator state), because between position packets the received velocity is the stale base and no automation consumer could model the prediction. Harness side (_vanilla_fall) consumes predicted_velocity when the row has it (test test_a_stale_received_velocity_does_not_change_the_prediction_model). Fence tests: falling_block_predicts_between_packets... and falling_block_freeze_and_no_gravity... pass; falling_block_prediction_tracks_horizontal_query_padding... still fails on motion_spans.len()==1 - that fence was never compiled before this session and the code has never registered a span for a predicted block, so it is a separate aspiration, not this row. Scene: sand_predicts_between_received_updates is the proving assertion; real-client receipts recorded with the promotion."
+promotion = "docs/bugs/promotions/CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED.json"
