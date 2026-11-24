@@ -73,6 +73,7 @@ Known limitations (REVIEW-wave2-12 m6):
 - The hand-ported `leg_swing` hunks are **not** exercised by this gate: the scene's villager is NoAI,
   so its walk speed — and therefore the leg amplitude the factor scales — is zero. The pair is a
   faithful pre-image of those lines, but only the model hunks are checked by pixels.
-- The scene is static and was measured with **one run per side** (candidate 756 px, pre-image 242 px,
-  threshold 500, a roughly twofold margin). Re-measure both pins before changing the window, the
-  colour box or the client lighting.
+- The scene is static: the promotion pair measured candidate 756 px and pre-image 242 px against a
+  threshold of 500 (a roughly threefold margin), and this pack re-ran the candidate three times at the
+  tip (20261124T221450-family and 20261124T224104) without the arm window moving. Re-measure both pins
+  before changing the window, the colour box or the client lighting.

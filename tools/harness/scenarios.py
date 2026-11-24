@@ -917,7 +917,7 @@ SCENARIOS: dict[str, Scenario] = {
         client="native",
     ),
     "issue1-19-hostile-motion": _entry(
-        id="issue1-19-hostile-motion", summary="A spider and a zombie move at the Java 26.3 gaits (ISSUE-1-19)",
+        id="issue1-19-hostile-motion", summary="A zombie chases at the Java 26.3 pace and the fixture kinds move (ISSUE-1-19)",
         owner="core:harness", evidence="graphical", profile="scene-shot",
         scenario_id="issue1-19-hostile-motion", requires=("xvfb",),
         sources=("tools/harness/issue1_19_hostile_motion_scene.json",),

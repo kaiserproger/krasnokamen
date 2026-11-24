@@ -83,8 +83,7 @@ period is 3 ticks, so only a window many periods long measures a rate rather tha
 | `chase_identity_zombie` | one uuid | one uuid |
 
 The band comes from those numbers: the candidate sits at 0.1182-0.1200 (`2.4 / 20` per tick), the
-control at 0.1807-0.1814 (`3.8 / 20`), so 0.105..0.128 keeps a 0.014 margin below the candidate
-maximum and 0.052 above the control minimum. The approach and aggressive-bit checks are what stop a
+control at 0.1807-0.1814 (`3.8 / 20`), so 0.105..0.128 keeps a 0.008 margin below the candidate maximum (0.1200 vs 0.128) and 0.053 above the control minimum (0.1807-0.128). The approach and aggressive-bit checks are what stop a
 wanderer or a NoAI fixture from passing the speed band by luck.
 
 - candidate core `ca398831a`, server pin `ca398831afbb-server`; receipts

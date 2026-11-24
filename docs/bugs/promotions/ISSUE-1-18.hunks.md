@@ -67,7 +67,6 @@ lean, which is the pre-fix geometry the row reports.
 
 ### What this does not prove (review m3)
 
-The same scene also renders a sheep (`sheep_in_play`, a presence check only): no hunk, no assertion and
+The same scene also renders a sheep (`sheep_present_minecraft:sheep`, a presence check only): no hunk, no assertion and
 no control covers the sheep model, so the row no longer claims it. It is
-`SHEEP-MODEL-UNPROVEN`, and the scene's `limits` says so. The scene is also **one run per side**; a
-static rest pose is deterministic, but re-measure both pins before moving the box or the threshold.
+`SHEEP-MODEL-UNPROVEN`, and the scene's `limits` says so. The scene ran **three times per side** (fix 468/468/468, pre-image 465..462 in each); a static rest pose is deterministic, but re-measure both pins before moving the box or the threshold.
