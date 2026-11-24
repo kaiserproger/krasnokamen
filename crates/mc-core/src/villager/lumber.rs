@@ -394,10 +394,10 @@ fn plant_zone(
                     continue;
                 }
                 mining::replace(state, changes, BlockPos { x, y: y + 1, z }, planted);
-                if let Some(record) = v.settlement.and_then(|id| state.settlements.get_mut(id)) {
-                    if record.planted_trees.insert(root) {
-                        record.revision = record.revision.saturating_add(1);
-                    }
+                if let Some(record) = v.settlement.and_then(|id| state.settlements.get_mut(id))
+                    && record.planted_trees.insert(root)
+                {
+                    record.revision = record.revision.saturating_add(1);
                 }
                 if let Some(stack) = v.inventory[index].as_mut() {
                     stack.count -= 1;
