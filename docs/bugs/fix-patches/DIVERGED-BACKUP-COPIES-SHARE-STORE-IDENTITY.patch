@@ -84,7 +84,7 @@ index 3bb11b5f1ddc435d42a1b20f424c34fdf0579955..dbb24d5a161bdd7e9bc41ded9d2f0dd6
      world_dir: &Path,
      checkpoint_tick: u64,
 diff --git a/crates/mc-edge/src/backup.rs b/crates/mc-edge/src/backup.rs
-index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..be120415fa4b01375a8476466fe574ee5255311d 100644
+index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..9e525ff25914d94f111fb83f1309c07cb6becb9a 100644
 --- a/crates/mc-edge/src/backup.rs
 +++ b/crates/mc-edge/src/backup.rs
 @@ -1,6 +1,8 @@
@@ -180,11 +180,13 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..be120415fa4b01375a8476466fe574ee
      for (name, source) in &files {
          let actual = if name == NATIVE_DATABASE {
              digest_reader(&mut database_lease.0)?
-@@ -444,62 +487,52 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+@@ -444,62 +487,53 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
              );
          }
      }
 -    std::fs::create_dir_all(&target)?;
+-    let created_target = target_lease.is_none();
+-    let _target_lease = match target_lease {
 +    // A staging directory is never reused or removed silently: it holds what an
 +    // interrupted restore copied, which the operator may still want to inspect.
 +    if std::fs::symlink_metadata(&staging).is_ok() {
@@ -194,9 +196,9 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..be120415fa4b01375a8476466fe574ee
 +            target.display()
 +        );
 +    }
-+    mc_world::atomic_file::create_dir_all_durable(&target)?;
-     let created_target = target_lease.is_none();
--    let _target_lease = match target_lease {
++    // Only a target this restore's own exclusive mkdir created is its own; one
++    // that appeared since the check above belongs to someone else.
++    let created_target = target_lease.is_none() && create_target(&target)?;
 +    let target_lease = match target_lease {
          Some(lease) => lease,
          None => ExclusiveLease::acquire(&target)?,
@@ -280,7 +282,7 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..be120415fa4b01375a8476466fe574ee
      println!(
          "restore of {} into {} complete: {} files verified",
          from.display(),
-@@ -509,6 +542,181 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+@@ -509,6 +543,196 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
      Ok(())
  }
  
@@ -294,6 +296,21 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..be120415fa4b01375a8476466fe574ee
 +        .to_os_string();
 +    name.push(mc_world::store_marker::RESTORE_STAGING_SUFFIX);
 +    Ok(target.with_file_name(name))
++}
++
++/// Create `target` with an exclusive mkdir, its parents durably first, and
++/// report whether this call created it: an existing directory is not ours.
++fn create_target(target: &Path) -> Result<bool> {
++    let parent = target.parent().context("destination has no parent")?;
++    mc_world::atomic_file::create_dir_all_durable(parent)?;
++    match std::fs::create_dir(target) {
++        Ok(()) => {
++            mc_world::atomic_file::sync_parent_dir(target)?;
++            Ok(true)
++        }
++        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
++        Err(error) => Err(error).with_context(|| format!("creating {}", target.display())),
++    }
 +}
 +
 +/// The restored world is published by renaming a directory beside the target
@@ -462,6 +479,19 @@ index 22e4984fb0f0e95f8f0d39ac2cf2da1b685e6d64..be120415fa4b01375a8476466fe574ee
  #[cfg(test)]
  #[path = "backup_tests.rs"]
  mod tests;
+diff --git a/crates/mc-world-conversion/src/census.rs b/crates/mc-world-conversion/src/census.rs
+index 3cd7a3e92be86b4ce992764d957e3161471b8b1a..db0563b028a36c3f9107b04e306bc91211a42231 100644
+--- a/crates/mc-world-conversion/src/census.rs
++++ b/crates/mc-world-conversion/src/census.rs
+@@ -137,6 +137,8 @@ fn census(
+     if !source.is_dir() {
+         return Err(fail("source must be a directory"));
+     }
++    // A staging directory is no world: refuse it before a lease file is created.
++    mc_world::store_marker::refuse_unpublished(&source).map_err(fail)?;
+     let lease = mc_world::storage::open_for_lease(&source).map_err(fail)?;
+     lease.try_lock().map_err(fail)?;
+     receipt.input_hashes = hashes(&source)?;
 diff --git a/crates/mc-world-conversion/src/lib.rs b/crates/mc-world-conversion/src/lib.rs
 index b771410e5c3b54d6bc195df3d6fd67874b06cc3a..06d1f1be403ef8f21ccea11cd07533af69bb4117 100644
 --- a/crates/mc-world-conversion/src/lib.rs
@@ -496,6 +526,75 @@ index b771410e5c3b54d6bc195df3d6fd67874b06cc3a..06d1f1be403ef8f21ccea11cd07533af
          fs::create_dir(&stage).map_err(fail)?;
          staging = Some(stage.clone());
          let stats = adapter(config, &source, &stage)?;
+diff --git a/crates/mc-world-conversion/src/probe.rs b/crates/mc-world-conversion/src/probe.rs
+index c4b0a7933f089c66f93b5af43119f8fdcac5a3e7..0d84c97eec49186f8efff7c6eeb5ac919d59ef27 100644
+--- a/crates/mc-world-conversion/src/probe.rs
++++ b/crates/mc-world-conversion/src/probe.rs
+@@ -135,6 +135,8 @@ fn probe(
+     if !source.is_dir() {
+         return Err(fail("source must be a directory"));
+     }
++    // A staging directory is no world: refuse it before a lease file is created.
++    mc_world::store_marker::refuse_unpublished(&source).map_err(fail)?;
+     let lease = mc_world::storage::open_for_lease(&source).map_err(fail)?;
+     lease.try_lock().map_err(fail)?;
+     receipt.input_hashes = hashes(&source)?;
+diff --git a/crates/mc-world-tools/src/game_clock_upgrade.rs b/crates/mc-world-tools/src/game_clock_upgrade.rs
+index feddf7fcb00897e9c304ea37d4858ce1c40426b5..fc74ef4a04edcdce00d35ac20fd5ee75be163bec 100644
+--- a/crates/mc-world-tools/src/game_clock_upgrade.rs
++++ b/crates/mc-world-tools/src/game_clock_upgrade.rs
+@@ -8,6 +8,8 @@ use mc_world::native::NativeStore;
+ 
+ /// The caller must supply a disposable copy, never a live or original world.
+ /// Holds the exclusive world lease through recovery, commit and WAL archive.
++/// The archive takes the files of `journal/`, never the directory itself: a
++/// restored copy (a branch of its own) is refused without `journal/`.
+ pub fn upgrade_game_clock(config: &CoreConfig, copy: &Path) -> Result<Conversion, CoreError> {
+     let storage = |error: &dyn std::fmt::Display| {
+         CoreError::Storage(format!("game-clock upgrade {}: {error}", copy.display()))
+@@ -21,6 +23,7 @@ pub fn upgrade_game_clock(config: &CoreConfig, copy: &Path) -> Result<Conversion
+     }
+     let mut config = config.clone();
+     config.world_dir = copy.to_path_buf();
++    mc_world::store_marker::refuse_unpublished(copy).map_err(|error| storage(&error))?;
+     let lease = mc_world::storage::open_for_lease(copy).map_err(|error| storage(&error))?;
+     lease.try_lock().map_err(|error| storage(&error))?;
+     let store = Arc::new(
+@@ -40,14 +43,28 @@ pub fn upgrade_game_clock(config: &CoreConfig, copy: &Path) -> Result<Conversion
+     }
+     let report =
+         mc_core::native_checkpoint::game_clock_upgrade::write_converted_checkpoint(&config, store)?;
++    archive_covered_journal(copy, &archive).map_err(|error| storage(&error))?;
++    Ok(report)
++}
++
++/// Move every file of `journal/` unchanged into `archive`, keeping `journal/`
++/// itself, now empty. The committed checkpoint covers every batch, and replay
++/// skips a covered batch, so an interruption between two moves leaves a copy
++/// that opens: no window exists in which the directory is missing. The archive
++/// is made durable before the first move and both directories after the last.
++fn archive_covered_journal(copy: &Path, archive: &Path) -> std::io::Result<()> {
+     let journal = copy.join("journal");
+-    if journal.exists() {
+-        std::fs::rename(&journal, &archive).map_err(|error| storage(&error))?;
+-        std::fs::File::open(copy)
+-            .and_then(|dir| dir.sync_all())
+-            .map_err(|error| storage(&error))?;
++    if !journal.is_dir() {
++        return Ok(());
+     }
+-    Ok(report)
++    std::fs::create_dir(archive)?;
++    mc_world::atomic_file::sync_parent_dir(archive)?;
++    for entry in std::fs::read_dir(&journal)? {
++        let name = entry?.file_name();
++        std::fs::rename(journal.join(&name), archive.join(&name))?;
++    }
++    mc_core::journal::fsync_dir(archive)?;
++    mc_core::journal::fsync_dir(&journal)
+ }
+ 
+ #[cfg(test)]
 diff --git a/crates/mc-world/src/native.rs b/crates/mc-world/src/native.rs
 index 487f7fa2f97c85024e2b95b94eefba649d437ee5..96cbcde4395d0729b3554e01448fca931c247e41 100644
 --- a/crates/mc-world/src/native.rs

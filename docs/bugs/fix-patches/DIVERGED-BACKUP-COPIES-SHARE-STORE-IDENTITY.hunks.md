@@ -1,12 +1,13 @@
 # DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY — negative-control patch
 
 Fix: `docs/bugs/fix-patches/DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY.patch`
-(`fix_commit = "patch:c1165a63ef16ef9f120c7d5f50c235d2d2069ac818faf97b56ee2f88033674eb"`, sha256 of its
+(`fix_commit = "patch:5f4184a9f25813aba9bf2f6d3fcc3fc0604097a8aac77a03a244ca26331d41fe"`, sha256 of its
 non-test hunks, here the whole file). It is a diff from the pre-fix form to the candidate; `git apply -R`
 restores the pre-fix form. The row was promoted on `01ac685ba7` alone, then on `01ac685ba7` + `cee142f323`
-(patch `0ec63ae4…`). Two persistence reviews (`receipts/D123PersistDiv/review/REVIEW-ReviewD123Diverged-Sol1.md`
-and `-Sol2.md`) found paths to the row's symptom that those commits left open, so the row was reopened each
-time with the completed fix.
+(patch `0ec63ae4…`), then with `f0d7f039d` (patch `c1165a63…`). Three persistence reviews
+(`receipts/D123PersistDiv/review/REVIEW-ReviewD123Diverged-Sol1.md`, `-Sol2.md`, `REVIEW-sol-2.md`) found
+paths to the row's symptom that those commits left open, so the row was reopened each time with the
+completed fix.
 
 ## Commits covered
 
@@ -30,6 +31,11 @@ time with the completed fix.
   restore's own staging directory and a target it created with `remove_dir`; the Windows
   release-remove-rename publication is gone and restore refuses on non-Unix hosts); (3) backup and restore
   without a content cache turned a restored copy's lost `journal/` into a fresh empty one (both refuse it).
+- `5ae472035` "persist: keep journal/ through the game-clock upgrade; own only a target restore created" —
+  closes the third review's path: `world upgrade-game-clock` renamed a restored copy's whole `journal/` away,
+  leaving a copy that every open, backup and restore refuses (the `journal/` rule of `cee142f323`); it now
+  moves the batch files and keeps the directory. Also: `created_target` comes from restore's own exclusive
+  mkdir, and census, probe and the upgrade refuse a staging directory before creating a lease file.
 
 ## Carried hunks
 
@@ -40,14 +46,14 @@ sides, so no a/-side text outside the original pre-image):
 - module doc (`cee142f323`): "builds the world in a staging directory … one rename";
 - `run_backup` (`cee142f323`, `f0d7f039d`): staging-name refusal, the non-root `journal/` refusal, keeps an
   empty `journal/`;
-- `run_restore` (`01ac685ba7` call of `start_branch`, rewritten by `cee142f323` and `f0d7f039d`): a/ = the
-  base in-place copy, pair check against the copied marker and cleanup; b/ = non-Unix refusal, staging-name
-  target refusal, staging path, mount-point refusal, leftover-staging refusal, `stage_world`, `publish`
-  under the kept target lease, ownership-safe cleanup, post-rename parent fsync and the
-  `Publishing`/`Published` interruption points;
-- `staging_path`, `refuse_mount_point`, `stage_world` (incl. the non-root `journal/` refusal of `f0d7f039d`),
-  `start_branch` (`01ac685ba7`, rewritten to take the backup's marker from memory and run in the staging
-  directory), `sync_tree`, `publish` (a/: absent).
+- `run_restore` (`01ac685ba7` call of `start_branch`, rewritten by `cee142f323`, `f0d7f039d` and
+  `5ae472035`): a/ = the base in-place copy, pair check against the copied marker and cleanup; b/ = non-Unix
+  refusal, staging-name target refusal, staging path, mount-point refusal, leftover-staging refusal, target
+  creation through `create_target`, `stage_world`, `publish` under the kept target lease, ownership-safe
+  cleanup, post-rename parent fsync and the `Publishing`/`Published` interruption points;
+- `staging_path`, `create_target` (`5ae472035`), `refuse_mount_point`, `stage_world` (incl. the non-root
+  `journal/` refusal of `f0d7f039d`), `start_branch` (`01ac685ba7`, rewritten to take the backup's marker
+  from memory and run in the staging directory), `sync_tree`, `publish` (a/: absent).
 
 `crates/mc-core/src/journal.rs`, a/-side = the blob at `742550fb0f` (no a/-side adaptation):
 
@@ -65,6 +71,12 @@ sides, so no a/-side text outside the original pre-image):
   sentence;
 - `crates/mc-world-conversion/src/lib.rs` `convert`: the destination refusal through `refuse_unpublished`
   and the stage name from `CONVERSION_STAGING_PREFIX` (a/: the literal prefix check).
+
+`5ae472035`, a/-side = each file at its parent `c1f366056` (no a/-side adaptation):
+
+- `crates/mc-world-tools/src/game_clock_upgrade.rs`: the early staging refusal and `archive_covered_journal`
+  (a/: rename of the whole `journal/` directory);
+- `crates/mc-world-conversion/src/census.rs`, `probe.rs`: the early staging refusal before the lease.
 
 ## Not carried, with the ground (docs/bugs/README.md classes)
 
@@ -125,7 +137,19 @@ Its production hunks reversed on its own tests (everything else at `f0d7f039d`; 
 - not evidence: `a_restore_interrupted_before_its_first_rebind_*` and `*_inside_its_tail_rebind_*` at
   `:879`, refused there by the missing marker instead of the reserved name.
 
-Promotion run: `.analysis/validation/20261124T090455-ledger-promote-xbaqiogo` (tree `323586146f`, clean,
-`control_tree: head`, six reversed files); control `ledger-1-run.log` 13 of 17 red (4 green: the two mc-core
-frame/rebind refs, `a_minted_branch_uses_all_64_bits`, `the_crash_window_rewrite_keeps_the_branch`),
-restore `ledger-3-run.log` 17 of 17 green.
+## Control of `5ae472035` reversed on its own
+
+Its production hunks reversed on its own tests: `receipts/D123PersistDiv/rework3/rework3-control.patch`, run
+`.analysis/validation/20261124T092808-test-6iac4qv_` (log `receipts/D123PersistDiv/rework3/rework3-control-test.log`):
+
+- `a_restored_copy_upgraded_from_a_legacy_clock_keeps_its_journal` (`backup_tests.rs:1282`, "the upgraded
+  restored copy does not open": "journal … is missing, but this world is a restored copy on branch …") — the
+  third review's blocker;
+- not a row ref: `game_clock_upgrade::tests::copy_command_checkpoints_legacy_tail_then_archives_identical_wal`
+  (`game_clock_upgrade_tests.rs:94`, the root copy's `journal/` was renamed away; the test now pins the kept,
+  empty directory).
+
+In the full-patch control `a_restored_copy_upgraded_from_a_legacy_clock_keeps_its_journal` is not evidence:
+the base restore mints no branch, so it stops at its setup (`backup_tests.rs:1263`).
+
+Promotion run: see `docs/bugs/promotions/DIVERGED-BACKUP-COPIES-SHARE-STORE-IDENTITY.json`.
