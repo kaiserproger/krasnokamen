@@ -374,6 +374,13 @@ def sand(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # long before the next update; one an update still interrupts restarts from it.
     steps.fixture("tick rate 1")
     start = sample()
+    # The client's automation contract for a falling block: both poses and the presentation tick.
+    # The oracle below reads them, so a client that stops exposing them must fail here with its
+    # own assertion, not with a KeyError inside a wait predicate (client 54b79f73 dropped the
+    # fields from minecraft_list_entities and this gate then failed as `'presentation_tick'`).
+    steps.check("falling_block_presentation_fields",
+                all(field in start for field in
+                    ("presentation_tick", "predicted_position", "presented_position")))
     received = step_two(start, "sand_client_step_prime")
 
     def updated(_: dict) -> bool:

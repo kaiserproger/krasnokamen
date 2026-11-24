@@ -27,8 +27,8 @@ class FrozenFall:
     observations are the native client's `recent_chat`: the last 20 lines, newest first.
     """
 
-    def __init__(self, latency: float, phase: int, holds: bool = True) -> None:
-        self.latency, self.phase, self.holds = latency, phase, holds
+    def __init__(self, latency: float, phase: int, holds: bool = True, fields: bool = True) -> None:
+        self.latency, self.phase, self.holds, self.fields = latency, phase, holds, fields
         self.now = self.next_tick = 0.
         self.rate, self.loop = 20., 0
         self.commands: list[str] = []
@@ -82,9 +82,12 @@ class FrozenFall:
         self.loop += 1
 
     def row(self) -> dict:
-        return {"entity_uuid": "sand", "y": self.received, "presentation_tick": self.tick,
-                "predicted_position": [0., self.client[0], 0.], "velocity": {"y": self.client[1]},
-                "presented_position": [0., self.presented, 0.]}
+        row = {"entity_uuid": "sand", "y": self.received, "velocity": {"y": self.client[1]}}
+        if self.fields:
+            # The falling-block automation contract (predicted/presented pose + presentation tick).
+            row.update({"presentation_tick": self.tick, "predicted_position": [0., self.client[0], 0.],
+                        "presented_position": [0., self.presented, 0.]})
+        return row
 
     # ProbeSteps surface used by native_player_input.sand.
     def remaining(self) -> float:
@@ -130,8 +133,9 @@ def fall(body: list[float]) -> None:
 
 
 class SandGateTests(unittest.TestCase):
-    def run_gate(self, latency: float, phase: int, holds: bool = True) -> FrozenFall:
-        world = FrozenFall(latency, phase, holds)
+    def run_gate(self, latency: float, phase: int, holds: bool = True,
+                 fields: bool = True) -> FrozenFall:
+        world = FrozenFall(latency, phase, holds, fields)
         with tempfile.TemporaryDirectory() as directory:
             frames = []
             for color in ("red", "blue"):
@@ -161,6 +165,13 @@ class SandGateTests(unittest.TestCase):
             with self.subTest(latency=latency), \
                     self.assertRaisesRegex(RuntimeError, "sand_server_holds_frozen_block"):
                 self.run_gate(latency, 7, holds=False)
+
+    def test_a_client_without_the_presentation_fields_turns_the_gate_red(self) -> None:
+        # client 54b79f73 dropped presentation_tick/predicted_position/presented_position from
+        # minecraft_list_entities; the gate then failed as KeyError('presentation_tick'). It must
+        # name its own assertion instead.
+        with self.assertRaisesRegex(RuntimeError, "falling_block_presentation_fields"):
+            self.run_gate(.05, 0, fields=False)
 
     def test_prediction_check_is_vanilla_falling_block_integration(self) -> None:
         # Receipt 20261111T163719-native-v2-input-sand-2gazssgv: two client-predicted ticks.
