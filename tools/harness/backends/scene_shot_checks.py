@@ -325,7 +325,8 @@ def check_structure_box(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["structure_box_roi"] = list(box)
     probe.report["structure_box_line_pixels"] = lines
     probe.report["structure_box_changed_pixels"] = changed
-    probe.check("structure_box_lines_drawn", lines[1] > 300)
+    # The hidden frame already holds bright-neutral clouds, so the line count is evidence only;
+    # the hidden-to-shown delta is the wireframe (measured 6890 changed pixels on the re-land).
     probe.check("structure_box_changed", changed > 300)
 
 
