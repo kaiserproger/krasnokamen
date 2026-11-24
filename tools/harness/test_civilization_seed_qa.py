@@ -739,5 +739,42 @@ class ObserverMoveTests(unittest.TestCase):
         self.assertLessEqual(probe.call.call_count, int(qa.OBSERVER_MOVE_TIMEOUT) + 1)
 
 
+
+class IronEvidenceTests(unittest.TestCase):
+    """CIV-B2 (1) review: which observation proves the town smelted iron."""
+
+    def test_a_town_furnace_counter_proves_a_smelt(self) -> None:
+        furnace = {"container_totals": {}, "recipes_used": {"minecraft:iron_ingot_from_smelting_raw_iron": 2}}
+        self.assertEqual(qa.iron_evidence(furnace, baseline=False), "furnace_recipes")
+
+    def test_a_stored_ingot_is_the_stronger_evidence(self) -> None:
+        furnace = {"container_totals": {"minecraft:iron_ingot": 1},
+                   "recipes_used": {"minecraft:iron_ingot_from_smelting_raw_iron": 1}}
+        self.assertEqual(qa.iron_evidence(furnace, baseline=False), "output_slot")
+
+    def test_a_baseline_furnace_with_a_prewritten_counter_proves_nothing(self) -> None:
+        # A furnace that stood before the fixture can carry a counter an earlier
+        # world or a reviewer fixture wrote, so only the output slot would count.
+        furnace = {"container_totals": {}, "recipes_used": {"minecraft:iron_ingot_from_smelting_raw_iron": 7}}
+        self.assertIsNone(qa.iron_evidence(furnace, baseline=True))
+        self.assertIsNone(qa.iron_evidence({"container_totals": {"minecraft:iron_ingot": 1}}, baseline=True))
+
+    def test_empty_zero_and_blasting_only_counters_are_no_evidence(self) -> None:
+        for furnace in ({}, {"container_totals": {}, "recipes_used": {}},
+                        {"recipes_used": {"minecraft:iron_ingot_from_smelting_raw_iron": 0}},
+                        {"recipes_used": {"minecraft:iron_ingot_from_blasting_raw_iron": 3}}):
+            with self.subTest(furnace=furnace):
+                self.assertIsNone(qa.iron_evidence(furnace, baseline=False))
+
+    def test_a_fixture_command_that_writes_block_entity_nbt_fails_closed(self) -> None:
+        qa.assert_no_evidence_writes(["console: gamemode creative VillageAuto",
+                                      "console: time set day", "console: weather clear 24000"])
+        for command in ("console: data merge block 132 78 -222 {RecipesUsed: {}}",
+                        "console: setblock 132 78 -222 minecraft:furnace{RecipesUsed: {\"minecraft:iron_ingot_from_smelting_raw_iron\": 9}}",
+                        "console: data modify block 132 78 -222 recipes_used set value 9"):
+            with self.subTest(command=command):
+                with self.assertRaisesRegex(RuntimeError, "NBT"):
+                    qa.assert_no_evidence_writes([command])
+
 if __name__ == "__main__":
     unittest.main()

@@ -23,6 +23,39 @@ FOUNDING_STOCK = {"minecraft:oak_log": 32, "minecraft:bread": 16,
 
 STAGES = ("new_house", "births", "second_building", "iron_smelted")
 BIRTHS_LIMITATION = "Birth proof requires retained server claim/birth audit events and a current clean checkpoint."
+IRON_INGOT = "minecraft:iron_ingot"
+NBT_WRITE_TOKENS = ("data merge", "data modify", "recipes_used", "recipesused")
+
+
+def iron_evidence(furnace: dict[str, Any], *, baseline: bool) -> str | None:
+    """Which observation proves the town smelted iron, or `None`.
+
+    `output_slot` is the stronger evidence (a menu capture with a screenshot);
+    `furnace_recipes` is the block entity's persistent RecipesUsed counter, which
+    survives the resident collecting an ingot between samples. A furnace that
+    stood before the fixture (`baseline`) may carry a counter an earlier world
+    wrote, so it proves nothing; only a furnace the town built does.
+    """
+    if baseline:
+        return None
+    if (furnace.get("container_totals") or {}).get(IRON_INGOT, 0) > 0:
+        return "output_slot"
+    if village.iron_smelted_by_recipes(furnace.get("recipes_used")):
+        return "furnace_recipes"
+    return None
+
+
+def assert_no_evidence_writes(commands: list[str]) -> None:
+    """Fail closed when a fixture command writes block-entity NBT.
+
+    `data merge`, `data modify` or `setblock{...}` would forge a furnace's
+    RecipesUsed counter (and with it the iron proof), so the gate refuses to run
+    with such a command in its own transcript.
+    """
+    for command in commands:
+        text = str(command).lower()
+        if any(token in text for token in NBT_WRITE_TOKENS):
+            raise RuntimeError(f"fixture writes block-entity NBT, the iron proof would be forged: {command!r}")
 
 
 def acceptance_verdict(stages: dict[str, bool], *, stalled: bool) -> dict[str, bool]:
@@ -922,6 +955,7 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
     iron_captured: set[tuple[int, int, int]] = set()
     advanced = 0
     while True:
+        assert_no_evidence_writes(probe.report.get("fixture_commands") or [])
         project_shot: dict[str, Any] = {}
         def capture_project() -> None:
             project_shot.update(native_client.capture(probe.client, artifact, f"civilization-project-{advanced:06d}"))
@@ -967,9 +1001,9 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                 workstation_shots.append(native_client.capture(
                     probe.client, artifact, f"civilization-workstation-{advanced:06d}"))
                 seen_furnaces.add(pos)
-            if pos not in baseline_furnaces and "iron_smelted" not in detail["milestones"]:
-                stored = (furnace.get("container_totals") or {}).get("minecraft:iron_ingot", 0)
-                if stored > 0 and pos not in iron_captured:
+            if "iron_smelted" not in detail["milestones"]:
+                evidence = iron_evidence(furnace, baseline=pos in baseline_furnaces)
+                if evidence == "output_slot" and pos not in iron_captured:
                     iron_menu = capture_iron_menu(probe, server, read_container, artifact, pos, advanced)
                     if iron_menu is None:
                         furnace["iron_menu_skipped"] = "output collected before the simulation hold"
@@ -979,9 +1013,9 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                         detail["milestones"]["iron_smelted"] = {
                             "sprint_ticks": advanced, "screenshot": iron_menu["screenshot"],
                             "furnace": pos, "menu": iron_menu["container"],
+                            "source": "output_slot",
                         }
-                if "iron_smelted" not in detail["milestones"] \
-                        and village.iron_smelted_by_recipes(furnace.get("recipes_used")):
+                if "iron_smelted" not in detail["milestones"] and evidence == "furnace_recipes":
                     detail["milestones"]["iron_smelted"] = {
                         "sprint_ticks": advanced, "furnace": pos,
                         "recipes_used": furnace["recipes_used"],

@@ -475,10 +475,6 @@ class ServerStorageReadTests(unittest.TestCase):
                     qa._read_storage_container(server, log, (12, 64, 1), 15.0)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class IronSmeltCounterTests(unittest.TestCase):
     """CIV-B2 (1): the furnace's persistent RecipesUsed counter proves a smelt.
 
@@ -523,3 +519,7 @@ class IronSmeltCounterTests(unittest.TestCase):
             with patch.object(qa.runtime, "wait_for_path_condition", side_effect=refused):
                 with self.assertRaisesRegex(RuntimeError, "not a block entity"):
                     qa.read_recipes(server, log, (12, 64, 1), 15.0)
+
+
+if __name__ == "__main__":
+    unittest.main()
