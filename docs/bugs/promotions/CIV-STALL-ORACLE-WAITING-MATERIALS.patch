@@ -1,29 +1,7 @@
 diff --git a/tools/harness/backends/civilization_seed_qa.py b/tools/harness/backends/civilization_seed_qa.py
-index f9059d30b..5453853ae 100644
 --- a/tools/harness/backends/civilization_seed_qa.py
 +++ b/tools/harness/backends/civilization_seed_qa.py
-@@ -87,6 +87,20 @@ def merge_seed_parts(blocks: list[dict[str, Any]],
-                    and all(part["verdicts"].get("all") is True for part in parts)}
- 
- 
-+def stall_signature(status: dict[str, Any]) -> tuple[Any, ...]:
-+    """What must change within a day: the active project's own progress and the buildings.
-+
-+    The status dialog also lists waiting projects. While a project holds the
-+    slot their gathered materials are unrelated resource growth and must not
-+    conceal its stall; without an active project they are the progress.
-+    """
-+    project = status.get("project")
-+    ui = status.get("project_ui") or []
-+    if project:
-+        ui = [node for node in ui if node.get("id") == "dialog/body/0"]
-+    return project, ui, village._listed_buildings(status["buildings_now"])
-+
-+
- def population(lines: list[str], name: str) -> int:
-     match = re.search(rf"(?m)^{re.escape(name)} \|[^\n]*\bmembers=(\d+)\b", "\n".join(lines))
-     if match is None:
-@@ -870,10 +884,7 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server:
+@@ -959,10 +959,7 @@
          candidate = acceptance_verdict({name: name in detail["milestones"] for name in STAGES}, stalled=False)
          verdicts.update(candidate)
          verdicts["births"] = verdicts["all"] = False

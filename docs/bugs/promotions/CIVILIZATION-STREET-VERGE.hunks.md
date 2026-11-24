@@ -25,16 +25,29 @@ a/-side text is `Cell::Road | Cell::Plaza` (identical to the real pre-fix blob f
 `git apply -R --check docs/bugs/promotions/CIVILIZATION-STREET-VERGE.patch` on the committed
 tree succeeds, and the reversed tree builds (`pins/a8667a74ae84-c6c9232c-server-…`).
 
-## Result: the narrowed control is GREEN, so this scene does not discriminate
+## Result: a real reversed-tree run exists and it is GREEN (2026-11-24)
 
-`settlement-map-qa --scenario verge` on the narrowed control passed
-(`20261124T035833-settlement-map-qa-moan3xgz`, tree `a8667a74a` + the reversed hunk). With the
-verge excluded from the walk, the funded Mine is still admitted at the same lot: the wall spans
-one road column at the storage's z, but the street grid reaches every frontage column around it,
-so no frontage is hidden. The unit test that made this a defect uses `street_plateau`: every
-lot column except one is stone to the sky, so the only frontage is the one behind the wall.
-A client fixture would have to reproduce that plateau *and* its one open lot, which this scene
-does not.
+Correction (Main, 2026-11-24; confirmed by D123CivGatesF): the earlier quoted run
+`20261124T035833-settlement-map-qa-moan3xgz` is **not** a reversed-tree control. Its
+`result.json` records `tree.head = a8667a74a`, `tree.dirty = false` and
+`tree.sha256 = e3b0c442…` (the empty diff), the same clean tree and client binary as the
+candidate pass `…T035325`; an earlier draft of this file and the row called it "tree
+a8667a74a + the reversed hunk", which was wrong.
+
+A real reversed-tree run was then made here: this patch reversed on `a57a56706e`
+(`wt/D123Civ-ctl-verge`, fingerprint `5123419d…`, server pin
+`a57a56706e85-5123419d-server-…`) and `settlement-map-qa --scenario verge` run against it —
+**PASSED**, `verge_connected = true` and
+`verge_project_admitted_on_the_status_page = true`
+(`wt/D123Civ-ctl-verge/.analysis/validation/20261124T113936-settlement-map-qa-oali0iw_`,
+tree dirty, diff sha `5123419dcb6f`).
+
+So the scene does not discriminate: with the verge excluded from the walk the funded Mine
+is still admitted at the same lot, because the wall spans one road column at the storage's
+z while the street grid reaches every frontage column around it. The unit test that made
+this a defect uses `street_plateau`: every lot column except one is stone to the sky, so the
+only frontage is the one behind the wall. A client fixture would have to reproduce that
+plateau *and* its one open lot, which this scene does not.
 
 Consequence: the row stays `open`. The candidate receipt `20261124T035325` is real client
 evidence that the behaviour is present on this tree (Mine admitted, status page

@@ -1,21 +1,48 @@
-# CIV-STALL-ORACLE-WAITING-MATERIALS — HEAD re-break control patch
+# CIV-STALL-ORACLE-WAITING-MATERIALS — HEAD re-break (2026-11-24, D123CivE)
 
-Patch: `docs/bugs/promotions/CIV-STALL-ORACLE-WAITING-MATERIALS.patch` (`patch:2376e539be37f932a488d5809095410de40b951f29e7ed3f36b7e97b24d14ac2`), the row's
-`fix_commit`. It reverses on the committed tree `6ef75a905` (`git apply -R
---check`, plain context) and is what a promotion passes as `--fix-patch`.
+Patch: `docs/bugs/promotions/CIV-STALL-ORACLE-WAITING-MATERIALS.patch`
+(`patch:b3538e8718f36b34509a7cfa6b5eb13e8e5786ef5e8e41300c33e9530012db6f`), the
+row's `fix_commit`. Reverse-applies at `978d656826` (`git apply -R --check`).
 
-## What the fix is (origin `7ed4d504`)
+## Origin and pre-image
 
-Files: tools/harness/backends/civilization_seed_qa.py.
+Fix `7ed4d504` changed the civilization gate's stall oracle in
+`tools/harness/backends/civilization_seed_qa.py`: it added `stall_signature()`
+and replaced the diagnosis expression with a call to it. The pre-image
+(`7ed4d504^`) at that call site is verbatim:
 
-`stall_signature` keeps only the active project's own dialog line while a project holds the slot; without one the waiting lists still count as progress.
+```
+        # Unrelated resource growth must not conceal a stalled project.
+        # Project UI retains its actual material blocker and progress.
+        signature = (status.get("project"), status.get("project_ui"),
+                     village._listed_buildings(status["buildings_now"]))
+```
 
-## HEAD equivalents and omissions
+The patch restores exactly those four lines at HEAD's call site (line 959) and
+changes nothing else.
 
-One file, one function. The commit's python test additions are excluded as test files. The original patch needed context reduction on the candidate; this patch was re-derived from the reversed HEAD tree with default context.
+## Why `stall_signature` is kept (class b)
 
-## Reverse-apply evidence
+A later 2026-11-24 commit (review D123Civ6 / N1) rewrote the *body* of
+`stall_signature` to read `status["projects"]` and to sign every parsed project;
+its test `test_a_visible_project_reaches_the_completion_match` calls
+`qa.stall_signature(...)` directly. Deleting the function would break that kept
+test at import/attribute level (not at an assertion), so the function stays with
+its HEAD body and the call site carries the reversal. That later body is class
+(c) drift relative to the origin hunk and is named here, not reversed.
 
-`git apply -R --check docs/bugs/promotions/CIV-STALL-ORACLE-WAITING-MATERIALS.patch` on `6ef75a905`
-succeeds (clean tree); the real-client red is the later integrated sweep's
-control run, not claimed here.
+## Red and green
+
+- Reversed tree: `test_waiting_project_materials_do_not_hide_a_stalled_active_project`
+  fails — the run reaches `bounded observation limit reached; missing
+  milestones: new_house, births, second_building, iron_smelted` instead of the
+  one-day stall it asserts (`receipts/D123/D123Civ/neg-civ-stall-oracle.log`,
+  exit 1). That is the row's own symptom: a waiting project's gathered materials
+  hide the stalled slot holder again.
+- Restored tree: both waiting-material tests pass.
+
+## What is still missing (not a control problem)
+
+`harness:civilization-seed-qa:all` has no passed real-client receipt: the gate
+stops on the progression rule (CIV-6 wood bootstrap,
+`../OWNER-DECISIONS-NEEDED.md`). The row stays `open`.

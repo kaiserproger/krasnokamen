@@ -1,13 +1,22 @@
 diff --git a/tools/harness/backends/village_autonomy_qa.py b/tools/harness/backends/village_autonomy_qa.py
-index 7f010b085..016b8d9d8 100644
 --- a/tools/harness/backends/village_autonomy_qa.py
 +++ b/tools/harness/backends/village_autonomy_qa.py
-@@ -614,6 +614,9 @@ def server_config_text(source: str, *, port: int, world_dir: str, plugins_dir: s
+@@ -614,11 +614,14 @@
          ('directory = "plugins"', f"directory = {json.dumps(plugins_dir)}"),
          ("seed = 0", f"seed = {seed}"),
      )
+-    # Known limitation (review N6): the civilization gate's primary player is an
+-    # operator level 4 for the whole run, because the founding fixture certifies the
+-    # chest's storage with explicit bounds (`settlement building certify storage
+-    # <bounds>`), an operator-only capability. The ordinary in-game "Проверить здесь"
+-    # path (certify the room the player stands in) is not exercised by this fixture.
 +    if civilization:
 +        # The village's mine must tick beyond the four-chunk presentation window.
++        # Known limitation (review N6): the civilization gate's primary player is an
++        # operator level 4 for the whole run, because the founding fixture certifies the
++        # chest's storage with explicit bounds (`settlement building certify storage
++        # <bounds>`), an operator-only capability. The ordinary in-game "Проверить здесь"
++        # path (certify the room the player stands in) is not exercised by this fixture.
 +        replacements += (("simulation_distance = 4", "simulation_distance = 6"),)
      for old_tok, new_tok in replacements:
          if source.count(old_tok) != 1:
