@@ -239,6 +239,9 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
     probe.check(f"{FIXTURE}_founded", founded)
     ax, ay, az = px, py, pz
     sub["bell"] = [ax, ay, az]
+    # The buyer's own way into the hub: a bell on the anchor, as the civil fixture has. Without it
+    # the D63 client offers no route to the Construction status page, where project_named reads.
+    probe.fixture(f"setblock {ax} {ay} {az} minecraft:bell")
     # The storage shell sits off the plaza and off the wall line, inside the ring.
     probe.fixture(f"tp @s {ax + 0.5} {ay + 1.0} {az + 0.5}")
     shell = _hand_storage_at(probe, sub, FIXTURE, sname, (ax - 14, ay, az - 14))
