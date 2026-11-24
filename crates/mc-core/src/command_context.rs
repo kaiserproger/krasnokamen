@@ -786,7 +786,10 @@ fn execute_branches(
                     .split_once(ERROR_ARGS)
                     .filter(|(key, _)| crate::command_feedback::is_translation_key(key))
                 {
-                    let arguments = rest.split(ERROR_ARGS).map(crate::command_feedback::text).collect();
+                    let arguments = rest
+                        .split(ERROR_ARGS)
+                        .map(crate::command_feedback::text)
+                        .collect();
                     state.push_player(
                         context.connection,
                         crate::boundary::PlayerChange::StyledChat {
