@@ -1,16 +1,18 @@
-# Reopened by D123BattleD: commit 94410e6d4 carries the code fix and both tests, but the row was
-# flipped to `fixed` by that commit without a promotion receipt, and only `ledger promote` may set
-# fixed. The real-commit control does NOT work here: reversing 94410e6d4's hunks removes the
-# test-only accessor `command_locate::take_pending_callback_release`, so the control tree does not
-# compile (receipt 20261124T050849-ledger-promote-fblm3xz0: `cannot find function
-# take_pending_callback_release`). A patch-mode control must KEEP that accessor and reverse only the
-# release guard, with the red on one of the two registered tests.
+# Reopened by D123BattleD, then re-promoted in patch mode: the row was flipped to `fixed` by
+# 94410e6d4 (the test-hook + test commit) without a promotion receipt, and only `ledger promote`
+# may set fixed. The behaviour fix is 8499f457a (the three terminal callback paths call the
+# caller's `on_failure`), but neither real-commit control builds: reversing 8499f457a removes the
+# `on_failure`/`reply` fields the kept tests use (receipt 20261124T051238-ledger-promote-ryvf34zi:
+# `variant Callback has no field named on_failure`), and reversing 94410e6d4 removes the hook those
+# tests call (receipt 20261124T050849-ledger-promote-fblm3xz0). The patch therefore reverses only
+# the three `release(state)` calls, keeping the fields, the hook and the tests, so the red is the
+# tests' own release assertion.
 [[bug]]
 id = "MAPS-PENDING-LEAK-ON-LOCATE-FAILURE"
 title = "A failed locate search left the exploration-map container's pending loot/trade plan in place forever, so reopening the container never re-planned"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "D123Battle pack 2 (independent review of the locate callback work, 2026-11-23): the Callback completion had a reply but no failure continuation, so a metadata error, a wrong-dimension reply or a lost worker dropped the queued search and left `maps.pending_loot`/`pending_trades` populated; `before_open` then treated the container as waiting on a search that would never answer."
 repro = "source"
 regression = [
@@ -18,4 +20,5 @@ regression = [
   "cargo:mc-core:tick_tests::maps_tests::a_released_locate_plan_lets_the_container_open_again",
 ]
 failing_first = "not recorded"
-fix_commit = "94410e6d4"
+fix_commit = "patch:e469b131c4a80a7c1f26daa02370320b07747b15db41fd6dd03de60098d73fc5"
+promotion = "docs/bugs/promotions/MAPS-PENDING-LEAK-ON-LOCATE-FAILURE.json"

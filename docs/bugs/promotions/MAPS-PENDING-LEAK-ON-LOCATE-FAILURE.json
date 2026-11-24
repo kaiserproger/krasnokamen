@@ -1,0 +1,38 @@
+{
+  "id": "MAPS-PENDING-LEAK-ON-LOCATE-FAILURE",
+  "verdict": "promoted",
+  "fix_commit": "patch:e469b131c4a80a7c1f26daa02370320b07747b15db41fd6dd03de60098d73fc5",
+  "fix_commit_full": "patch:e469b131c4a80a7c1f26daa02370320b07747b15db41fd6dd03de60098d73fc5",
+  "promoted_at": "2026-11-24T05:19:46+00:00",
+  "tree_head": "bb01751d9d58dd0dafc1c5ff9b12a064838ca88a",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "e469b131c4a80a7c1f26daa02370320b07747b15db41fd6dd03de60098d73fc5",
+  "reversed_files": [
+    "crates/mc-core/src/command_locate.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:tick_tests::maps_tests::a_released_locate_plan_lets_the_container_open_again": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_locate::tests::worker_loss_releases_a_map_loot_callback_so_the_container_opens_again": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick_tests::maps_tests::a_released_locate_plan_lets_the_container_open_again": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_locate::tests::worker_loss_releases_a_map_loot_callback_so_the_container_opens_again": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T051510-ledger-promote-ck54oi3x"
+}
