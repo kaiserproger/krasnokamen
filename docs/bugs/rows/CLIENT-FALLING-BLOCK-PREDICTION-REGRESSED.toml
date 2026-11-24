@@ -1,0 +1,11 @@
+[[bug]]
+id = "CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED"
+title = "A falling block no longer advances between received position updates: the client's own falling tests and the native sand gate's prediction assertions fail on the current tree"
+area = "client"
+severity = "major"
+status = "open"
+source = "Core sand gate native-v2-input-sand on the current tree fails `sand_predicts_between_received_updates` (receipt 20261124T134021-native-v2-input-sand-c47ps1jh) even with the falling-block presentation fields restored (client:60f277bb); the client's three falling-prediction tests from e6b66e1d do not compile at all because the stage0 merge drift dropped `#[cfg(test)] mod falling_tests;`"
+repro = "client"
+regression = []
+failing_first = "reported"
+repro_check = "Observed 2026-11-24 on client 62de38d3 (+60f277bb fields restore +0a4c9a37 module restore): `cargo test -p krasnokamen-client --lib falling_block` runs the three restored tests and two fail - entities::falling_tests::falling_block_freeze_and_no_gravity_preserve_pose_until_a_step at src/entities/falling_tests.rs:124 (transform.position[1] is not 9.96 after one unfrozen tick) and entities::falling_tests::falling_block_prediction_tracks_horizontal_query_padding_without_accumulating_spans at :135 (motion_spans.len() is 0, expected 1). Root cause path: tick_falling_block (src/entities/physical.rs) returns early on collision::gather's `unloaded_collision_neighborhood` (physical.rs:1076) instead of predicting, and that early return also records no motion span; gather raises it because world.block(p) answers None for the queried cells (src/player/collision.rs:530) where e6b66e1d's fixture world answered a state, so the merged tree no longer predicts the fall at all. The gate agrees: with the presentation fields restored the scene reaches sand_predicts_between_received_updates and records False (predicted y does not advance by vanilla's two-tick fall from the last received pose); sand_presents_predicted_descent is never reached. Fix direction: make the falling path predict between updates again (move with the predicted velocity and keep the span; decide whether unloaded cells are air for this query) and make the three restored tests pass, then re-run the scene."
