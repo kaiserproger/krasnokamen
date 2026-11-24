@@ -22,13 +22,22 @@ hand-weakened variant.
 (b): the registered refs read them). No counter or assertion text is invented:
 both sides run the registered tests unchanged.
 
+## Excluded
+
+- (a) the offline/CLI path, a different behaviour of the same fix series:
+  `92a28e7186` (verify the copy from the copy's own one open) and
+  `57f90fd920` (backup and restore read the operator's `--config`). They are
+  HOT-BACKUP-OFFLINE-RESTORE-UNVERIFIED (open), and its ref
+  `mc-edge backup::tests::the_restore_command_accepts_a_hot_backup_verified_with_content`
+  was green in this control, so it proved nothing here and the ref lives on
+  that row.
+
 ## The control
 
 `hot_backup_tests::backup_refuses_a_copy_that_does_not_restore` fails at
 `hot_backup_tests.rs:352` with `an unrestorable copy is not a backup` for both
 `test_hooks` modes (`DATABASE`, `UNREPLAYABLE_BATCH`): the pre-fix backup
-reported the unrestorable copy as a success. Log `/tmp/hot_break_tests.log`.
-
-`mc-edge backup::tests::the_restore_command_accepts_a_hot_backup_verified_with_content`
-is green in that control (it exercises the restore command) and is a green
-regression, not control evidence.
+reported the unrestorable copy as a success. Receipt
+`.analysis/validation/20261124T042601-ledger-promote-24i6p8zj/ledger-1-run.log:385`
+(the control run of the promotion recorded in
+`docs/bugs/promotions/HOT-BACKUP-STATE-DATABASE-COPY-UNVERIFIED.json`).
