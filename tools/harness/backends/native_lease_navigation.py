@@ -73,6 +73,9 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         steps.wait(received_target, "stationary_out_of_reach_target", timeout_seconds=30)
         started = time.monotonic()
         hold = _approach_hold(a)
+        # The harness MCP client has its own request timeout (130 s when the native client starts):
+        # a longer action must not be aborted by the transport before the tool's own bound.
+        a.request_timeout_seconds = max(a.request_timeout_seconds, hold + 20.0)
         def approach():
             try:
                 result["approach"] = a.call_tool("minecraft_approach_entity", {
@@ -91,6 +94,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         steps.report["idle_deadline"] = {
             "elapsed_seconds": round(time.monotonic() - started, 3),
             "approach_timeout_seconds": hold,
+            "mcp_request_timeout_seconds": a.request_timeout_seconds,
             "completed": completed,
             "approach_entity_uuid": approach.get("entity_uuid"),
             "target_entity_uuid": target.get("entity_uuid"),
