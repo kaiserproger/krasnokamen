@@ -25,7 +25,7 @@
       "cmd": "gamerule advance_time false"
     },
     {
-      "cmd": "time set 8000"
+      "cmd": "time set 6000"
     },
     {
       "tp": [
@@ -40,46 +40,43 @@
       "wait_play": true
     },
     {
-      "cmd": "fill 995 159 995 1005 159 1010 minecraft:stone"
+      "cmd": "fill 994 159 994 1006 159 1010 minecraft:stone"
     },
     {
-      "cmd": "fill 995 160 995 1005 165 1010 minecraft:air"
+      "cmd": "fill 994 160 994 1006 165 1010 minecraft:air"
     },
     {
-      "cmd": "setblock 1000 159 1004 minecraft:grass_block"
-    },
-    {
-      "cmd": "setblock 1000 160 1004 minecraft:poppy"
+      "cmd": "setblock 1000 160 1004 minecraft:torch"
     },
     {
       "tp": [
         1000.5,
         160,
-        1000.5,
+        1002.5,
         0,
-        0
+        33
       ]
     },
     {
       "wait_ticks": 40
     },
     {
-      "shot": "shade-north"
+      "shot": "torch-north"
     },
     {
       "tp": [
-        1004.5,
+        1002.5,
         160,
         1004.5,
         90,
-        0
+        33
       ]
     },
     {
       "wait_ticks": 30
     },
     {
-      "shot": "shade-east"
+      "shot": "torch-east"
     }
   ]
 }

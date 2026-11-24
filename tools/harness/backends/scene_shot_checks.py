@@ -223,28 +223,42 @@ def check_item_bars(probe: ProbeSteps, artifact: Path) -> None:
 
 
 def check_shade_override(probe: ProbeSteps, artifact: Path) -> None:
-    """MODEL-SHADE-OVERRIDE: cross plants get no directional face shading in 26.3."""
-    shots = _qa._load_shots(probe, artifact, ("shade-north", "shade-east"))
-    north_f, east_f = shots["shade-north"][0], shots["shade-east"][0]
-    probe.check("shade_north_camera", all(
-        abs(a - b) < 0.01 for a, b in zip(north_f["camera_position"], (1000.5, 161.62, 1000.5))
-    ) and abs(north_f["yaw"]) < 0.01)
-    probe.check("shade_east_camera", all(
-        abs(a - b) < 0.01 for a, b in zip(east_f["camera_position"], (1004.5, 161.62, 1004.5))
-    ) and abs(east_f["yaw"] - 90.0) < 0.01)
-    plant = lambda r, g, b: (r > 120 and g < 100 and b < 100) or (g > 90 and r < 120 and b < 120)
-    box = (560, 440, 720, 580)
-    lums = []
-    counts = []
-    for name in ("shade-north", "shade-east"):
-        image = shots[name][1]
-        pixels = [p for p in image.crop(box).getdata() if plant(*p)]
+    """MODEL-SHADE-OVERRIDE: a face named by the model's shade override takes the up weight.
+
+    `template_torch` carries `shade_direction_override: "up"` on its only element and its
+    four side faces share one texture region, so two frames of the same torch — from the
+    north and from the east — must read the same luminance: 26.3's override replaces each
+    quad's own cardinal weight with the named one (up, 1.0). Without the override the
+    mesher shades each side by its face (north 0.8, east 0.6 in the overworld table), so
+    the ratio is 4:3 and the row's symptom is present. Noon keeps the sun term equal on
+    both vertical faces; the torch's own light is identical in both frames.
+    """
+    shots = _qa._load_shots(probe, artifact, ("torch-north", "torch-east"))
+    north_f, east_f = shots["torch-north"][0], shots["torch-east"][0]
+    probe.check("torch_north_camera", all(
+        abs(a - b) < 0.01 for a, b in zip(north_f["camera_position"], (1000.5, 161.62, 1002.5))
+    ) and abs(north_f["yaw"]) < 0.01 and abs(north_f["pitch"] - 33.0) < 0.01)
+    probe.check("torch_east_camera", all(
+        abs(a - b) < 0.01 for a, b in zip(east_f["camera_position"], (1002.5, 161.62, 1004.5))
+    ) and abs(east_f["yaw"] - 90.0) < 0.01 and abs(east_f["pitch"] - 33.0) < 0.01)
+    probe.check("torch_frames_at_noon",
+                north_f["environment"]["time_of_day"] == "6000"
+                and east_f["environment"]["time_of_day"] == "6000")
+    # The torch's warm texels against the grey stone and blue sky behind it.
+    torch = lambda r, g, b: r - b >= 12 and r >= 25
+    box = (600, 290, 680, 445)
+    lums, counts = [], []
+    for name in ("torch-north", "torch-east"):
+        pixels = [p for p in shots[name][1].crop(box).getdata() if torch(*p)]
         counts.append(len(pixels))
         lums.append(sum(sum(p) for p in pixels) / len(pixels) / 3 if pixels else 0.0)
-    probe.report["poppy_plant_pixels"] = counts
-    probe.report["poppy_mean_luminance"] = [round(v, 2) for v in lums]
-    probe.check("poppy_visible_both_views", all(c > 3000 for c in counts))
-    probe.check("poppy_no_directional_shading", abs(lums[0] - lums[1]) < 8.0)
+    probe.report["torch_face_roi"] = list(box)
+    probe.report["torch_face_pixels"] = counts
+    probe.report["torch_face_mean_luminance"] = [round(v, 2) for v in lums]
+    probe.check("torch_face_visible_both_views", all(c > 1500 for c in counts))
+    ratio = lums[0] / lums[1] if lums[1] else 0.0
+    probe.report["torch_face_luminance_ratio"] = round(ratio, 3)
+    probe.check("torch_faces_same_shade", 0.94 <= ratio <= 1.06)
 
 
 def player_head_skin_pack(artifact: Path) -> Path:

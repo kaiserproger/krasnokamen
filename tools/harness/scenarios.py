@@ -728,9 +728,9 @@ SCENARIOS: dict[str, Scenario] = {
         owner="core:harness", evidence="graphical", profile="scene-shot",
         scenario_id="native-shade-override", requires=("xvfb",),
         sources=("tools/harness/shade_override_scene.json",),
-        fixture="private native client on the scene's own fixture world, windowed capture",
-        proves="checks the captured frame against the expected shade",
-        limits="one fixture and one camera per shot; the visual review of each frame stays with the operator",
+        fixture="private native client, one torch on a stone floor seen from its north and its east face",
+        proves="the torch's two identically textured side faces read the same luminance, so the model's up override replaced both face weights",
+        limits="one block model and one camera per face; the vanilla pixel parity and other override directions stay unproven",
     ),
     "native-gait-spider": _entry(
         id="native-gait-spider", summary="The gait spider capture is not occluded by the dying zombie",

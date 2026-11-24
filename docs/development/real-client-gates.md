@@ -621,10 +621,17 @@ unresolved placed head stops drawing the default skin
 (MODEL-PLACED-HEAD-UNRESOLVED); the authored hat layer needs the skin pack and
 is checked by the scenario's own pixel region.
 
-`run scenario native-shade-override --client native --windowed` fails if the
-poppy's plant pixels differ in mean luminance between the north and east views
-(26.3 `shade_direction_override` must suppress per-face directional shading;
-MODEL-SHADE-OVERRIDE). Vanilla pixel parity still needs the Java oracle.
+`run scenario native-shade-override --client native --windowed` fails if one
+torch's north and east side faces read different mean luminance. `template_torch`
+carries `shade_direction_override: "up"` on its only element and its four side
+faces share one texture region, so 26.3 shades both by the up weight (1.0); a
+mesher that uses each quad's own face weights reads them at 0.8 and 0.6 (4:3),
+which is the MODEL-SHADE-OVERRIDE symptom. Noon keeps the sun term equal on the
+two vertical faces and the torch's own light is identical in both frames. The
+row's `north`/`down` directions have no placeable model on this server
+(`flowerbed_*` is absent from the block data and `snow_height2` overrides its own
+down face with down), so the up direction carries the proof. Vanilla pixel
+parity still needs the Java oracle.
 
 `run scenario native-player-head --client native --windowed` fails if a placed
 or worn player head does not change its frame region (MODEL-OPUS-N3). The hat
