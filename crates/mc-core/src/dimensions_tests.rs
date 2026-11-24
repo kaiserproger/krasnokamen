@@ -2941,6 +2941,77 @@ fn data_edit_of_a_villager_keeps_trades_gossip_inventory_and_replays_from_the_wa
     assert_eq!(replayed.inventory, before.inventory);
 }
 
+/// A `data merge` of a villager's runtime image journals the live row, not the merged
+/// NBT: membership stays the settlement allocator's through the merge and through the
+/// WAL, so a reload cannot move the villager to the number the edit named.
+#[test]
+fn data_merge_of_a_villager_journals_the_live_membership_from_the_wal() {
+    use crate::settlements::SettlementId;
+    let (mut state, _, _) = worlds();
+    let (_, summoned) = command(
+        &mut state,
+        1,
+        "summon minecraft:villager 9 150 9 {VillagerData:{type:'minecraft:plains',profession:'minecraft:farmer',level:3}}",
+    );
+    drop(summoned);
+    let slot = state
+        .entities
+        .slots()
+        .find(|slot| {
+            crate::command_execution::entity_type_name(&state, state.entities.body(*slot).id)
+                == Some("minecraft:villager")
+        })
+        .expect("the villager");
+    let id = state.entities.body(slot).id;
+    {
+        let row = state.entities.row_mut(slot).villager.as_mut().unwrap();
+        row.settlement = Some(SettlementId(7));
+        row.household = Some("Baker".into());
+    }
+    // One merge moves what the villager carries and does, and names a foreign
+    // membership the allocator must override.
+    let (output, drains) = command(
+        &mut state,
+        1,
+        "data merge entity @e[type=minecraft:villager,limit=1] {Inventory:[{Slot:0b,id:'minecraft:wheat',count:2}],Brain:{memories:{\"minecraft:home\":{value:{pos:[I;11,150,9],dimension:'minecraft:overworld'}}}},\"krasnokamen:VillagerRuntime\":{last_gossip:5L,settlement:99L,household:'Other'}}",
+    );
+    assert!(drains.iter().any(|(_, changes)| !changes.is_empty()));
+    let live = state.entities.row(slot).villager.clone().unwrap();
+    assert_eq!(live.inventory[0].as_ref().unwrap().count, 2);
+    assert_eq!(
+        live.home,
+        Some(mc_world::BlockPos {
+            x: 11,
+            y: 150,
+            z: 9
+        })
+    );
+    assert_eq!(live.last_gossip, 5, "the runtime clock is editable");
+    assert_eq!(
+        live.settlement,
+        Some(SettlementId(7)),
+        "the merge cannot move the villager to the settlement it names"
+    );
+    assert_eq!(live.household.as_deref(), Some("Baker"));
+
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
+    let replay = crate::journal::replay_batches(Default::default(), &[(1, output.tick, entries)]);
+    let replayed = replay
+        .entities
+        .get(&id.0)
+        .and_then(|entity| entity.villager.as_ref())
+        .expect("the merge journals the villager's image");
+    assert_eq!(
+        replayed.settlement,
+        Some(SettlementId(7)),
+        "the WAL replays the live membership, not the merged NBT's"
+    );
+    assert_eq!(replayed.household.as_deref(), Some("Baker"));
+    assert_eq!(replayed.last_gossip, 5);
+    assert_eq!(replayed.home, live.home);
+    assert_eq!(replayed.inventory, live.inventory);
+}
+
 // B6 (CS341 REPORT-B.md): the knockback epoch publication turned the "tick
 // output snapshot is unique" assumption into an `.expect` panic. The fix
 // rebuilds a shared snapshot instead of panicking, and keeps the epoch

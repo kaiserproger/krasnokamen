@@ -1254,6 +1254,171 @@ fn data_entity_merge_refuses_foreign_and_private_fields_by_name() {
     );
     assert!(reported(&mut state));
     assert_eq!(state.entities.row(slot).villager.as_ref().unwrap(), &before);
+
+    // Place and identity: `Pos` and `id` are refused by name with `/tp` as the remedy.
+    for (field, value) in [("Pos", "[0.5d,61.0d,0.5d]"), ("id", "\"minecraft:cow\"")] {
+        assert_eq!(
+            data(
+                &mut state,
+                context,
+                &format!("data merge entity {villager} {{{field}:{value}}}")
+            ),
+            -1,
+            "{field} must be refused"
+        );
+        let said = said(&mut state);
+        assert!(
+            said.contains(&format!("Editing {field} is not supported; use /tp")),
+            "{field} refusal must name the field and the remedy: {said}"
+        );
+        assert_eq!(state.entities.row(slot).villager.as_ref().unwrap(), &before);
+    }
+    // `UUID` is silently kept, as vanilla keeps it: a merge naming another UUID
+    // changes nothing, and removing it is refused.
+    let uuid = state.entities.row(slot).uuid;
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {villager} {{UUID:[I;9,9,9,9]}}")
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    assert_eq!(
+        state.entities.row(slot).uuid,
+        uuid,
+        "the UUID is kept, never rewritten by a merge"
+    );
+    assert_eq!(state.entities.row(slot).villager.as_ref().unwrap(), &before);
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data remove entity {villager} UUID")
+        ),
+        -1
+    );
+    assert!(
+        said(&mut state).contains("Removing UUID is not supported"),
+        "removing the UUID is refused"
+    );
+}
+
+/// A repeated identical edit of a villager-owned field is a no-op: the merge compares
+/// the edited image with what `data get entity` prints, so the same `Xp` merge says
+/// "Nothing changed" instead of re-authoring the row.
+#[test]
+fn a_repeated_identical_owned_merge_reports_nothing_changed() {
+    let (mut state, _, context) = fixture();
+    run(
+        &mut state,
+        context,
+        "summon minecraft:villager 4 60 4 {VillagerData:{type:\"minecraft:plains\",profession:\"minecraft:farmer\",level:2}}",
+    );
+    let villager = "@e[type=minecraft:villager,limit=1]";
+    let slot = state
+        .entities
+        .slots()
+        .find(|slot| {
+            crate::command_execution::entity_type_name(&state, state.entities.body(*slot).id)
+                == Some("minecraft:villager")
+        })
+        .expect("the summoned villager");
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {villager} {{Xp:7}}")
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    let merged = state.entities.row(slot).villager.clone().unwrap();
+    assert_eq!(merged.xp, 7);
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {villager} {{Xp:7}}")
+        ),
+        -1,
+        "the identical second merge must not modify the row"
+    );
+    let said = said(&mut state);
+    assert!(
+        said.contains("Nothing changed. The specified properties already have these values"),
+        "the identical merge says nothing changed: {said}"
+    );
+    assert_eq!(state.entities.row(slot).villager.as_ref().unwrap(), &merged);
+}
+
+/// A `Brain` edit is a POI move: the claim maps follow the live row in the same
+/// frame, so no stale claim keeps another resident out of the old bed or desk.
+#[test]
+fn data_merge_of_a_brain_moves_the_poi_claims() {
+    let (mut state, _, context) = fixture();
+    run(
+        &mut state,
+        context,
+        "summon minecraft:villager 4 60 4 {VillagerData:{type:\"minecraft:plains\",profession:\"minecraft:farmer\"}}",
+    );
+    let villager = "@e[type=minecraft:villager,limit=1]";
+    let slot = state
+        .entities
+        .slots()
+        .find(|slot| {
+            crate::command_execution::entity_type_name(&state, state.entities.body(*slot).id)
+                == Some("minecraft:villager")
+        })
+        .expect("the summoned villager");
+    let id = state.entities.body(slot).id;
+    let mut changes = ChangeSet::default();
+    crate::villager::brain::tick(&mut state, &mut changes);
+    let home = BlockPos { x: 6, y: 61, z: 6 };
+    let job = BlockPos { x: 8, y: 61, z: 4 };
+    assert!(state.villager_pois.homes.get(&home).is_none());
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!(
+                "data merge entity {villager} {{Brain:{{memories:{{\
+                 \"minecraft:home\":{{value:{{pos:[I;{},{},{}],dimension:\"minecraft:overworld\"}}}},\
+                 \"minecraft:job_site\":{{value:{{pos:[I;{},{},{}],dimension:\"minecraft:overworld\"}}}}}}}}}}",
+                home.x, home.y, home.z, job.x, job.y, job.z
+            )
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    let row = state.entities.row(slot).villager.clone().unwrap();
+    assert_eq!(row.home, Some(home), "the home memory lands in the row");
+    assert_eq!(
+        row.job_site,
+        Some(job),
+        "the job-site memory lands in the row"
+    );
+    crate::villager::brain::tick(&mut state, &mut changes);
+    assert!(
+        state
+            .villager_pois
+            .homes
+            .get(&home)
+            .is_some_and(|owners| owners.contains(&id)),
+        "the merged home is claimed in the same frame"
+    );
+    assert!(
+        state
+            .villager_pois
+            .jobs
+            .get(&job)
+            .is_some_and(|owners| owners.contains(&id)),
+        "the merged job site is claimed in the same frame"
+    );
 }
 
 fn item_entity(state: &TickState) -> crate::entities::EntitySlot {

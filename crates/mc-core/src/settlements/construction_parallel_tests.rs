@@ -571,6 +571,67 @@ fn a_converting_builder_never_holds_its_project() {
     );
 }
 
+/// A `data` edit can change what a resident is. When it drops the runtime Builder
+/// role, or authors the vanilla profession place (which drops the stale runtime
+/// role), the next construction pass frees the project instead of wedging it on a
+/// resident who can never build.
+#[test]
+fn a_data_merge_that_drops_the_builder_role_frees_its_project() {
+    for (line, role) in [
+        (
+            "data merge entity @e[type=minecraft:villager,limit=1] {\"krasnokamen:VillagerRuntime\":{profession:\"miner\"}}",
+            "the runtime role change",
+        ),
+        (
+            "data merge entity @e[type=minecraft:villager,limit=1] {VillagerData:{type:\"minecraft:plains\",profession:\"minecraft:none\",level:1}}",
+            "the vanilla profession place",
+        ),
+    ] {
+        let (mut state, id, slot) = fixture();
+        open_plan(&mut state);
+        start(&mut state, id, "house", 1, None);
+        let handle = handles(&state, id)[0].clone();
+        bind_project(&mut state, id, &handle, slot);
+        super::rebind_lost_builders(&mut state, id);
+        assert!(
+            project_for_structure(state.settlements.get(id).unwrap(), &handle)
+                .is_some_and(|project| project.builder.is_some()),
+            "{role}: the Builder is the incumbent before the edit"
+        );
+        let context = crate::command_context::Context::source(
+            &state,
+            crate::command_console::CONNECTION,
+            state.entities.body(slot).id,
+            2,
+        );
+        crate::command_context::run(
+            &mut state,
+            line,
+            context,
+            &mut crate::boundary::ChangeSet::default(),
+        );
+        let profession = state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .data
+            .profession;
+        assert_ne!(
+            profession,
+            Profession::Builder,
+            "{role} must leave the Builder role, not keep it: {profession:?}"
+        );
+        super::rebind_lost_builders(&mut state, id);
+        assert!(
+            project_for_structure(state.settlements.get(id).unwrap(), &handle)
+                .is_some_and(|project| project.builder.is_none()),
+            "{role}: the project is freed, never wedged on a non-builder"
+        );
+    }
+}
+
 /// R4-1: an infected builder frees its project at once. Its carried materials
 /// become a recorded return duty that survives the project being cancelled and
 /// a cure delivers them exactly once; another resident's own load is not taken.
