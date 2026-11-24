@@ -29,9 +29,14 @@ owner's behaviour, API the kept tests call, or code a later commit rewrote.
   replaces the spawn defaults, then `tnt::restore` and `falling::configure` run for the authored state.
   HEAD `:1025-1041`.
 
-The a/-side is the exact HEAD pre-image (each carried region deleted); there is **no** a/-side
-adaptation. The `-R` and forward checks were both run: the patch reverses on HEAD and does not apply
-forward there.
+The a/-side is the candidate with exactly those four guarded regions removed; there is **no** invented
+code, counter or oracle on it, and no test-visible API line. `69650602b` rewrote the module around them,
+so a historical blob (`3be486570b^:crates/mc-core/src/command_summon.rs`) is not byte-comparable; the
+forward-port is per-hunk and the differences are only formatting from that rewrite (for example
+`explosion_power`'s arm was a two-line body before `b2b442ded6` and is one line at HEAD). The oracle the
+control reds on is the kept gate's own acceptance assertion over the real summoned entities; the pre-fix
+tree refuses the fields in `supports()` and creates no body, which is the shape the patch restores. The
+`-R` and forward checks were both run: the patch reverses on HEAD and does not apply forward there.
 
 ## Original non-test hunks (complete)
 
@@ -45,10 +50,12 @@ forward there.
 
 ## Not carried
 
-- `crates/mc-core/src/command_summon_tests.rs` — (b) kept: the row's three cargo refs live there.
-- `tools/harness/backends/native_v2.py`, `client_probes.py`, `scenarios.py` — (b) the registered gate
-  (`harness:entities:native-v2-summon-nbt`) the row's real-client ref runs; reversing it would delete the
-  scenario instead of failing at its assertion. These files are gate code, not product behaviour.
+- `crates/mc-core/src/command_summon_tests.rs` — (b) kept test API: the row's three cargo refs live there
+  and call the summon path the patch guards.
+- `tools/harness/backends/native_v2.py`, `client_probes.py`, `scenarios.py` — (b) kept gate API: the row's
+  real-client ref `harness:entities:native-v2-summon-nbt` is the scenario these files define and the
+  assertion the control reds lives in them; reversing them would delete the scenario instead of failing
+  at its assertion. They are the kept gate, not product behaviour, and they run identically on both sides.
 
 ## Proving refs (file:line of the failing assertion)
 

@@ -29,6 +29,13 @@ patch below is the production half of that hunk, ported to the candidate.
   and the `tracing::warn!`) and `:199-268` (the helper). The a/-side is the exact pre-image
   (`git show a6a30c6694^:crates/mc-core/src/tick/entity_lifecycle.rs`); there is **no** a/-side adaptation.
 
+  Verified: the patch's a/-blob is byte-identical to that real pre-image blob
+  (`diff /tmp/real_pre_el.rs /tmp/pre_el.rs` → no output), so the only difference between the pre-image and
+  HEAD is the reversed fix. No counter, oracle, helper text or test-visible API exists on the a/- side:
+  the kept test's only observable is the real `tracing::warn!` the fix adds, and the pre-fix code emits
+  none. Reversing the patch therefore removes behaviour the pre-fix tree genuinely lacked, not a probe
+  invented for the control.
+
 ## Original non-test hunks (complete)
 
 ```
