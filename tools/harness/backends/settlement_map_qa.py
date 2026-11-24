@@ -1220,9 +1220,17 @@ def _verge_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]
         _enter_dashboard(probe, gui, label("Management", "Управление"), label("Management", "Управление"))
         shot("verge-dashboard")
         gui.slot_named(r"^Construction$", "dashboard Construction")
-        blueprints = probe.wait(lambda s: (s.get("screen") or {}).get("class") == CONTAINER
-                                and (s.get("container") or {}).get("slot_count") == 90,
-                                "verge_blueprints_GUI", timeout_seconds=30)
+
+        def blueprint_page(state: dict[str, Any]) -> bool:
+            # The catalogue, not the dashboard it was opened from: the dashboard has no blueprint
+            # rows, so a bare 90-slot check would pass on the page meant to be left.
+            names = [str(row.get("name")) for row in (state.get("container") or {}).get("slots", [])
+                     if row.get("name")]
+            return ((state.get("screen") or {}).get("class") == CONTAINER
+                    and (state.get("container") or {}).get("slot_count") == 90
+                    and any(label("House L1", "Дом L1") in name for name in names))
+
+        blueprints = probe.wait(blueprint_page, "verge_blueprints_GUI", timeout_seconds=30)
         probe.report["verge"] = {"blueprint_slots": [str(row.get("name")) for row in
                                                      (blueprints.get("container") or {}).get("slots", [])
                                                      if row.get("name")][:16]}
