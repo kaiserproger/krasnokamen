@@ -1386,6 +1386,31 @@ fn a_repeated_identical_owned_merge_reports_nothing_changed() {
         "the identical runtime merge says nothing changed: {message}"
     );
     assert_eq!(state.entities.row(slot).villager.as_ref().unwrap(), &merged);
+
+    // The native image also holds the engine-private key, so a removal is now visible to the
+    // edit path: it stays refused rather than resetting the runtime to its defaults.
+    let before = state.entities.row(slot).villager.clone().unwrap();
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data remove entity {villager} \"krasnokamen:VillagerRuntime\"")
+        ),
+        -1,
+        "removing the engine-private runtime is refused"
+    );
+    assert!(
+        said(&mut state).contains(
+            "Removing krasnokamen:VillagerRuntime of minecraft:villager is not supported"
+        ),
+        "the refusal names the key: {}",
+        said(&mut state)
+    );
+    assert_eq!(
+        state.entities.row(slot).villager.as_ref().unwrap(),
+        &before,
+        "the refused removal leaves the runtime alone"
+    );
 }
 
 /// A `Brain` edit is a POI move: the claim maps follow the live row in the same
@@ -1442,7 +1467,7 @@ fn data_merge_of_a_brain_moves_the_poi_claims() {
             .homes
             .get(&home)
             .is_some_and(|owners| owners.contains(&id)),
-        "the merged home is claimed in the same frame"
+        "the merged home is claimed by the tick that applies the merge"
     );
     assert!(
         state
@@ -1450,7 +1475,74 @@ fn data_merge_of_a_brain_moves_the_poi_claims() {
             .jobs
             .get(&job)
             .is_some_and(|owners| owners.contains(&id)),
-        "the merged job site is claimed in the same frame"
+        "the merged job site is claimed by the tick that applies the merge"
+    );
+    // Moving the villager on releases the claims it held: the old home and job site stop
+    // listing it, and the new ones list it after the next tick.
+    let home2 = BlockPos {
+        x: 12,
+        y: 61,
+        z: 12,
+    };
+    let job2 = BlockPos {
+        x: 14,
+        y: 61,
+        z: 10,
+    };
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!(
+                "data merge entity {villager} {{Brain:{{memories:{{\
+                 \"minecraft:home\":{{value:{{pos:[I;{},{},{}],dimension:\"minecraft:overworld\"}}}},\
+                 \"minecraft:job_site\":{{value:{{pos:[I;{},{},{}],dimension:\"minecraft:overworld\"}}}}}}}}}}",
+                home2.x, home2.y, home2.z, job2.x, job2.y, job2.z
+            )
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    let row = state.entities.row(slot).villager.clone().unwrap();
+    assert_eq!(row.home, Some(home2), "the new home lands in the row");
+    assert_eq!(
+        row.job_site,
+        Some(job2),
+        "the new job site lands in the row"
+    );
+    crate::villager::brain::tick(&mut state, &mut changes);
+    assert!(
+        !state
+            .villager_pois
+            .homes
+            .get(&home)
+            .is_some_and(|owners| owners.contains(&id)),
+        "the old home claim is released"
+    );
+    assert!(
+        !state
+            .villager_pois
+            .jobs
+            .get(&job)
+            .is_some_and(|owners| owners.contains(&id)),
+        "the old job-site claim is released"
+    );
+    assert!(
+        state
+            .villager_pois
+            .homes
+            .get(&home2)
+            .is_some_and(|owners| owners.contains(&id)),
+        "the new home is claimed"
+    );
+    assert!(
+        state
+            .villager_pois
+            .jobs
+            .get(&job2)
+            .is_some_and(|owners| owners.contains(&id)),
+        "the new job site is claimed"
     );
 }
 
