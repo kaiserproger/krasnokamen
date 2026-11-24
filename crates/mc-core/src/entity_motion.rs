@@ -133,6 +133,19 @@ pub(crate) fn unit(id: i32, epoch: u64) -> f64 {
 }
 
 pub(crate) fn wander(movement: MovementClass, id: i32, tick: u64, speed: f32) -> [f64; 3] {
+    let phase = tick.wrapping_add((id as u64).wrapping_mul(0x9E37_79B9));
+    if phase % WANDER_EPISODE >= WANDER_WALK {
+        return [0.0; 3];
+    }
+    wander_heading(movement, id, tick, speed)
+}
+
+/// [`wander`] without the walker walk/dwell phase: a hopping body has no ground
+/// traction between hops (`SlimeMoveControl`), so the heading its hops carry is
+/// its only translation and must not be gated by the walker clock. Vanilla
+/// keeps a wanted direction for the whole stroll, so every hop of a strolling
+/// slime moves it.
+pub(crate) fn wander_heading(movement: MovementClass, id: i32, tick: u64, speed: f32) -> [f64; 3] {
     if matches!(
         movement,
         MovementClass::Stationary
@@ -143,9 +156,6 @@ pub(crate) fn wander(movement: MovementClass, id: i32, tick: u64, speed: f32) ->
         return [0.0; 3];
     }
     let phase = tick.wrapping_add((id as u64).wrapping_mul(0x9E37_79B9));
-    if phase % WANDER_EPISODE >= WANDER_WALK {
-        return [0.0; 3];
-    }
     let epoch = phase / WANDER_EPISODE;
     let angle = unit(id, epoch) * std::f64::consts::TAU;
     let speed = f64::from(speed) * 0.25;

@@ -23,6 +23,12 @@ pub(super) fn idle(row: &ReadRow, ctx: &StepCtx, look: &mut Option<[f64; 3]>) ->
         }
         return crate::entity_motion::steer(row.movement, row.pos, target, f64::from(row.speed));
     }
+    if row.hops {
+        // `SlimeMoveControl` has no traction between hops, so a hop is a
+        // hopper's only translation: the walker dwell phase must not silence
+        // the direction it carries.
+        return crate::entity_motion::wander_heading(row.movement, row.id.0, ctx.tick, row.speed);
+    }
     crate::entity_motion::wander(row.movement, row.id.0, ctx.tick, row.speed)
 }
 

@@ -1,6 +1,8 @@
 //! Behavior tests for the production native movement/control kernels.
 use crate::blueprint::MovementClass;
-use crate::entity_motion::{MotionInput, MotionResult, breathe, look, panic, steer, step, wander};
+use crate::entity_motion::{
+    MotionInput, MotionResult, breathe, look, panic, steer, step, wander, wander_heading,
+};
 use crate::species::AquaticControl;
 use mc_physics::{Aabb, BlockMaterial, BlockSampler, EntityBody, Vec3};
 

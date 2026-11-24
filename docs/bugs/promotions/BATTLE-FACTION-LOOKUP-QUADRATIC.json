@@ -1,0 +1,39 @@
+{
+  "id": "BATTLE-FACTION-LOOKUP-QUADRATIC",
+  "verdict": "promoted",
+  "fix_commit": "patch:61946875bf4fba8fca2e96d719d5748d160fc0399248ea2ee6f198104b3a3672",
+  "fix_commit_full": "patch:61946875bf4fba8fca2e96d719d5748d160fc0399248ea2ee6f198104b3a3672",
+  "promoted_at": "2026-11-24T01:35:48+00:00",
+  "tree_head": "5f34157699735bb1f292fefc0b1dc6b704baa231",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "61946875bf4fba8fca2e96d719d5748d160fc0399248ea2ee6f198104b3a3672",
+  "reversed_files": [
+    "crates/mc-core/src/battle/mod.rs",
+    "crates/mc-core/src/battle/targeting.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:battle::tests::faction_population_matches_a_btreemap_oracle_at_sixty_four_factions": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::tests::faction_tables_build_with_one_lookup_per_unit_at_sixty_four_factions": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:battle::tests::faction_population_matches_a_btreemap_oracle_at_sixty_four_factions": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::tests::faction_tables_build_with_one_lookup_per_unit_at_sixty_four_factions": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T012659-ledger-promote-srkqbp1l"
+}
