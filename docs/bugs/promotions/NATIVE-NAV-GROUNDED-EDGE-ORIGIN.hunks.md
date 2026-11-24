@@ -27,6 +27,32 @@ None: the reversed lines are the pre-fix loop text from `895c63f3^`, the reverse
 intact context, and `git diff 520f524b1b 62de38d313` is exactly this patch
 (patch-id `0912994e12200a52984a517ddf223541ce5ce952`).
 
+## Line-by-line reconciliation with the origin hunk (review B-M3)
+
+The patch-id above compares the pair with itself; this is the comparison with the historical hunk
+that B1(b) of wave 2-1 asks for:
+
+```
+git show 895c63f3 -- src/minecraft/navigation/planner.rs | sed -n '/@@ -207,16/,/@@ -441,6/p'
+git diff 520f524b1b 62de38d313 -U0 -- src/minecraft/navigation/planner.rs
+```
+
+Both sets of `+`/`-` lines (28 lines each) were extracted and sorted; `diff` between them is empty —
+the pair's producer lines are **every** line of the historical hunk and nothing else. The two headers
+differ only by the tip's line offset (`@@ -210 +210,8 @@`, `@@ -212,8 +219,11 @@` against
+`@@ -207,16 +207,26 @@`), because three lines were added earlier in the file at the tip.
+
+`-` lines (pre-image, restored by the reversal): `self.column(space, x, z, low, high)?;` ·
+`let length = self.columns[&[x, z]].len();` · `for i in 0..length {` ·
+`let node = self.columns[&[x, z]][i];` · `if (node.position()[1] - start[1]).abs() < 0.6` ·
+`&& self.transition(space, start, node.position())?` · `{` · `root = Some(node);` · `break;`.
+
+`+` lines (the fix): the comment pair · `let (min, max) = self.body(start);` · `min_x`/`max_x` ·
+`let footprint = (min[2] …` · `.flat_map(…)` · `.filter(…)` · `'anchor: for [x, z] in std::iter::once([x, z]).chain(footprint) {` ·
+`self.column(space, x, z, low, high)?;` · `let length = …` · `for i in 0..length {` · `let node = …` ·
+`if …` · `&& self.transition(…)` · `{` · `root = Some(node);` · `break 'anchor;`.
+```
+
 ## Proving ref
 
 `harness:entities:native-v2-lease-navigation` → `edge_navigation_arrived`: with the client's center

@@ -1,7 +1,11 @@
-# NATIVE-MAP-MARKERS — hunk map for the committed reversal pair
+# NATIVE-MAP-MARKERS — DRAFT hunk map for a committed reversal pair (no promotion)
 
-Promotion receipt: `promotions/NATIVE-MAP-MARKERS.json`.
-Client pair: reversal `client:864a757fe9` → re-land `client:55b8374ed7` (the row's `fix_commit`).
+**Status: draft. There is no `promotions/NATIVE-MAP-MARKERS.json`; the row is `status = "open"` and
+its `fix_commit` is `client:e1b22a5a` (`docs/bugs/rows/NATIVE-MAP-MARKERS.toml:7,10`).** The pair
+below is committed on `wt/D123ClientNativeF` and waits for a drawn-marker predicate that
+discriminates; the re-land `55b8374ed7` is a *candidate* `fix_commit`, not the row's.
+
+Client pair: reversal `client:864a757fe9` → re-land `client:55b8374ed7`.
 
 ## The pair's own diff
 

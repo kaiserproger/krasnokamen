@@ -9,6 +9,6 @@ source = "An isolated actual native approach to an unreachable entity ended at 1
 regression = ["harness:entities:native-v2-lease-navigation", "client:krasnokamen-client:automation::tests::active_writer_action_survives_idle_expiry_then_returns_to_idle"]
 proving_assertions = { "harness:entities:native-v2-lease-navigation" = "active_writer_survived_idle_deadline" }
 failing_first = "reported"
-fix_commit = "client:88a5f4f0c4"
-repro_check = "Committed reversal pair client:0051108980 (restores the pre-fix lease_verdict arm from 895c63f3^; the active_actions bookkeeping stays) -> client:88a5f4f0c4 (re-land, the row's fix_commit); git diff 0051108980 88a5f4f0c4 is exactly the fix patch. Stage-3 control/restore: harness:entities:native-v2-lease-navigation on the reversed and the re-landed client; hunks map promotions/NATIVE-ACTIVE-WRITER-IDLE-EXPIRY.hunks.md"
+fix_commit = "client:7ac3be5d7c27f9ae9163461db6b37249e48abd0a"
+repro_check = "Committed reversal pair client:2e4f355e59 -> client:7ac3be5d7c (re-land, the row's fix_commit): the reversal restores the full pre-image lease_verdict (all three arms, from 895c63f3^) and the pre-image controller() report, so the control differs from the pre-image in nothing; git diff 2e4f355e59 7ac3be5d7c is byte-for-byte non_test_patch of the re-land (1 786 bytes). Stage-3 control/restore: harness:entities:native-v2-lease-navigation (action now 150 s, elapsed >= 125) on the reversed and the re-landed client; hunks map promotions/NATIVE-ACTIVE-WRITER-IDLE-EXPIRY.hunks.md"
 promotion = "docs/bugs/promotions/NATIVE-ACTIVE-WRITER-IDLE-EXPIRY.json"
