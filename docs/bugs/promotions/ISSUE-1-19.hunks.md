@@ -67,26 +67,38 @@ covers the animation as well as the speed:
   hand-ported pair would test the port rather than the commit; the speed hunk is the row's observable
   symptom and is what the control reverses.
 
-## Gate
+## Gate (REVIEW-wave2-12 M1/M4 rework, 2026-11-25)
 
-The scene now drives a real AI chase (the earlier window stepped a NoAI zombie with fixture
-teleports, so its `mob_speed_*` verdict measured the teleports). The player drops to survival, a
-helmeted zombie is summoned 20 blocks out, and two 11-tick segments are sampled after it reaches
-cruising speed; `zombie_chase_speed` requires both segments inside `0.09..0.14` blocks per client tick
-(the Java 26.3 interval the core test fences at `0.105..0.13`).
+The scene drives one real AI chase: the player drops to survival, a helmeted zombie is summoned 20
+blocks out, and three samples 30 ticks apart span **61-69 client ticks** (the server's position sample
+period is 3 ticks, so only a window many periods long measures a rate rather than the period).
+`mob_chase` records four verdicts from that one window; the row's proving assertion is
+`chase_speed_zombie`.
 
-- candidate core `e25d40529`, server pin `e25d40529511-bd5b19a3-server`, receipt
-  `.analysis/validation/20261124T204901-issue1-19-hostile-motion-6zhvrc47`: PASSED, both segments inside
-  the band (0.1000 and 0.1271 blocks per client tick; 18 and 17 elapsed client ticks, 1.80 and 2.16
-  blocks).
-- control = the same tree with `speed: 3.8` (`wt/D123ClientRestI-ctrl119`, server pin
-  `e25d40529511-dcc5e8fe-server`, built by pin-release with `KRASNOKAMEN_LEDGER_ROOT` at the candidate),
-  run by the promotion itself: the scene FAILED at `zombie_chase_mob_speed_zombie` with 0.2073 and
-  0.1425 blocks per client tick (both outside 0.09..0.14; receipt
-  `.analysis/validation/20261124T210051-ledger-promote-wfjjbw68/client-artifacts/20261124T210759-issue1-19-hostile-motion-b1oldph8/result.json`),
-  and `cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval` panicked at
-  `hostile_tests.rs:156`. The arm window stayed green on both pins (1776 / 1878 px), which is why the
-  animation half is carried by its own unit refs and not by a pixel control.
+| assertion | candidate (3 runs) | control (3 runs) |
+|---|---|---|
+| `chase_speed_zombie` (0.105..0.128 blocks/client tick) | **0.1200, 0.1200, 0.1182** | 0.1807, 0.1814, 0.1807 — all outside |
+| `chase_approach_zombie` (>= 3 blocks closed) | 7.56, 8.28, 7.92 | 9.01, 9.92, 9.26 |
+| `chase_aggressive_zombie` (mob-flags bit 2) | set (flags 4) on first and last | set — a 3.8-speed chaser still hunts |
+| `chase_identity_zombie` | one uuid | one uuid |
+
+The band comes from those numbers: the candidate sits at 0.1182-0.1200 (`2.4 / 20` per tick), the
+control at 0.1807-0.1814 (`3.8 / 20`), so 0.105..0.128 keeps a 0.014 margin below the candidate
+maximum and 0.052 above the control minimum. The approach and aggressive-bit checks are what stop a
+wanderer or a NoAI fixture from passing the speed band by luck.
+
+- candidate core `ca398831a`, server pin `ca398831afbb-server`; receipts
+  `.analysis/validation/20261124T221450-issue1-19-hostile-motion-f0r_70x4`,
+  `20261124T221613-…-2w7sgs15`, `20261124T221712-…-uk0v9ty0` — all PASSED.
+- control = the same tree with the patch reversed (`speed: 3.8`), server pin
+  `ca398831afbb-dcc5e8fe-server` (built with `KRASNOKAMEN_LEDGER_ROOT` at the candidate); receipts
+  `20261124T221822-…-6tzipx6a`, `20261124T221923-…-3s0ps2g2`, `20261124T222033-…-wtf181vm` — each
+  FAILED at `chase_speed_zombie`.
+- full audit (control and restore, client receipt included):
+  `.analysis/validation/20261124T222831-ledger-promote-9b4ctk2m/promote.json` (`dry-run ok`): the
+  control side is red on both refs (`chase_speed_zombie` and `hostile_tests.rs:156` FAIL), the
+  restore side green. The ledger builds its own control pin, so `KRASNOKAMEN_SERVER_BINARY` must be
+  **unset** for a re-audit: an explicit candidate binary is refused against the control tree.
 
 Why the block was needed: the fixture window alone passed a 3.8-speed server (the teleports dominate
 the displacement), which is exactly the state the row was left in after wave 1.

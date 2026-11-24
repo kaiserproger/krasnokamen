@@ -1,6 +1,7 @@
 # ISSUE-1-18 — hunk map
 
-Row: `ISSUE-1-18` (client, major) — "Sheep and goat models wrong". Refs:
+Row: `ISSUE-1-18` (client, major) — now "Goat horns lean back instead of standing upright"
+(REVIEW-wave2-12 M3 narrowed it from "Sheep and goat models wrong"). Refs:
 `harness:scene-shot:issue1-18-sheep-goat` (`goat_horns_upright`).
 
 ## Real fix and its pre-image
@@ -63,3 +64,10 @@ the committed-reversal pair on the current tip:
 The goat oracle raises when the horn silhouette is missing rather than recording a false assertion, so a
 control that removed the horns would not be evidence; this control keeps the horns and restores their
 lean, which is the pre-fix geometry the row reports.
+
+### What this does not prove (review m3)
+
+The same scene also renders a sheep (`sheep_in_play`, a presence check only): no hunk, no assertion and
+no control covers the sheep model, so the row no longer claims it. It is
+`SHEEP-MODEL-UNPROVEN`, and the scene's `limits` says so. The scene is also **one run per side**; a
+static rest pose is deterministic, but re-measure both pins before moving the box or the threshold.

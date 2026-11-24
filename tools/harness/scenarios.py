@@ -912,7 +912,7 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="issue1-18-sheep-goat", requires=("xvfb",),
         sources=("tools/harness/issue1_18_sheep_goat_scene.json",),
         fixture="private native client on a frozen-day fixture with a spawned goat and sheep, side and front camera",
-        proves="the goat-horn oracle (upright, body aligned, ear coverage, side horn) passes on the received frames",
+        proves="the goat-horn oracle (upright, body aligned, ear coverage, side horn) passes on the received frames and `sheep_in_play` sees the sheep rendered (in play only: no sheep hunk is claimed — SHEEP-MODEL-UNPROVEN)",
         limits="one goat and one sheep per shot; other horned mobs are not covered",
         client="native",
     ),
