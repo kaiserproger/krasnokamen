@@ -1053,7 +1053,7 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="native-v2-input-menus", requires=("xvfb",),
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_player_input.py"),
         fixture="declared diamond/emerald stacks in survival and creative menus on a private pad",
-        proves="physical 1-9, F, Q, Ctrl+Q, short press/release, cursor pixels and authoritative move after reopen",
+        proves="physical 1-9, F, Q, Ctrl+Q, short press/release, cursor pixels, the swap-while-carrying guard and authoritative move after reopen",
         limits="native X11; not Windows/VNC transport",
     ),
     "native-v2-input-camera": _entry(

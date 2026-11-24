@@ -123,6 +123,34 @@ def _physical_short_click(steps: ProbeSteps, origin: tuple[int, int, int]) -> No
     _shot(steps, "short-click-broken")
 
 
+def _swap_while_carrying(steps: ProbeSteps, state: dict) -> None:
+    """HC-2-SWAP-WHILE-CARRYING: a container number or F press while a stack rides the
+    cursor leaves the hovered slot untouched (vanilla keeps the slot until the cursor is
+    placed); `ui/state.rs` guards the Swap mode with a non-empty cursor.
+    """
+    seeded = observe_menu(steps, "survival_swap_seeded")
+    steps.check("survival_swap_fixture_slots",
+                holds(seeded["slots"][9], "minecraft:diamond", 12)
+                and holds(seeded["slots"][10], "minecraft:emerald", 3))
+    _input(steps, button=1, point=center(state, 9))
+    carrying = observe_menu(steps, "survival_swap_picked")
+    steps.check("survival_swap_cursor_holds_the_pickup",
+                holds(carrying["carried"], "minecraft:diamond", 12)
+                and carrying["slots"][9]["count"] == 0)
+    for key, name in ((ord("1"), "swap_while_carrying_keeps_slot"),
+                      (ord("f"), "offhand_swap_while_carrying_keeps_slot")):
+        _input(steps, key=key, point=center(state, 10))
+        image = observe_menu(steps, "survival_" + name)
+        steps.check(name, holds(image["slots"][10], "minecraft:emerald", 3)
+                    and holds(image["carried"], "minecraft:diamond", 12))
+    _input(steps, button=1, point=center(state, 9))
+    returned = observe_menu(steps, "survival_swap_returned")
+    steps.check("survival_swap_returned",
+                holds(returned["slots"][9], "minecraft:diamond", 12)
+                and returned["carried"]["count"] == 0
+                and holds(returned["slots"][10], "minecraft:emerald", 3))
+
+
 def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from PIL import Image, ImageChops
     _physical_short_click(steps, origin)
@@ -133,10 +161,16 @@ def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         steps.fixture(f"gamemode {mode}")
         steps.fixture("clear @s")
         _seed_main(steps, "minecraft:diamond", 12, 9)
+        if not creative:
+            # HC-2-SWAP-WHILE-CARRYING needs a second occupied slot to hover while the
+            # diamond stack rides the cursor (the first empty player slot after 9).
+            steps.fixture("give @s minecraft:emerald 3")
         _echo(steps, mode + "_fixture")
         state = _open_inventory(steps, creative)
         seeded = observe_menu(steps, mode + "_seeded")
         steps.check(mode + "_fixture_slot", holds(seeded["slots"][9], "minecraft:diamond", 12))
+        if not creative:
+            _swap_while_carrying(steps, state)
         # Each number key exchanges precisely the hovered slot, not the selected hand.
         for number in range(1, 10):
             point = center(state, 9)
