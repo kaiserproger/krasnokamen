@@ -960,6 +960,123 @@ fn worker_loss_releases_a_map_loot_callback_so_the_container_opens_again() {
     assert!(state.locate.jobs.is_none() && state.locate.done.is_none());
 }
 
+/// A queued container search whose success reply and failure release each flip
+/// a flag, so a test can tell which terminal path the completion took.
+fn callback_plan(
+    owner: super::LocateOwner,
+    dimension: crate::dimensions::Dimension,
+    released: &Arc<std::sync::atomic::AtomicBool>,
+    replied: &Arc<std::sync::atomic::AtomicBool>,
+) -> super::PendingLocate {
+    let released = Arc::clone(released);
+    let replied = Arc::clone(replied);
+    super::PendingLocate {
+        owner,
+        kind: super::LocateKind::Structure,
+        origin: (0, 64, 0),
+        dimension,
+        completion: super::LocateCompletion::Callback {
+            reply: Box::new(move |_, _| {
+                replied.store(true, std::sync::atomic::Ordering::SeqCst);
+            }),
+            on_failure: Some(Box::new(move |_| {
+                released.store(true, std::sync::atomic::Ordering::SeqCst);
+            })),
+        },
+    }
+}
+
+#[test]
+fn a_metadata_error_releases_a_map_loot_callback_so_the_container_opens_again() {
+    // The worker could not read the structure metadata: it answers with an
+    // error and no hit. The container's pending loot/trade plan must be
+    // released instead of waiting for a reply that will never consume it.
+    let (mut state, connection) = locate_fixture();
+    let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    state.locate.jobs = Some(jobs_tx);
+    state.locate.done = Some(done_rx);
+    let released = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let replied = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    state.locate.queued = 1;
+    state.locate.pending.insert(
+        1,
+        callback_plan(
+            super::LocateOwner::Connection(connection),
+            state.dimension,
+            &released,
+            &replied,
+        ),
+    );
+    done_tx
+        .send(super::LocateDone {
+            id: 1,
+            hit: None,
+            error: Some("structure metadata unreadable".into()),
+            elapsed_ms: 0,
+        })
+        .unwrap();
+    super::drain(&mut state);
+    assert!(
+        released.load(std::sync::atomic::Ordering::SeqCst),
+        "a metadata error must release the pending loot/trade plan"
+    );
+    assert!(
+        !replied.load(std::sync::atomic::Ordering::SeqCst),
+        "the success reply must not consume an unopened container"
+    );
+    assert!(state.locate.pending.is_empty());
+    assert_eq!(state.locate.queued, 0);
+}
+
+#[test]
+fn a_wrong_dimension_reply_releases_a_map_loot_callback_so_the_container_opens_again() {
+    // The owner changed dimension while the search ran: the completion cannot
+    // answer this dimension, so the pending plan is released and the container
+    // re-plans when reopened instead of staying wedged.
+    let (mut state, connection) = locate_fixture();
+    let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    state.locate.jobs = Some(jobs_tx);
+    state.locate.done = Some(done_rx);
+    let released = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let replied = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let elsewhere = if state.dimension == crate::dimensions::Dimension::Nether {
+        crate::dimensions::Dimension::Overworld
+    } else {
+        crate::dimensions::Dimension::Nether
+    };
+    state.locate.queued = 1;
+    state.locate.pending.insert(
+        1,
+        callback_plan(
+            super::LocateOwner::Connection(connection),
+            elsewhere,
+            &released,
+            &replied,
+        ),
+    );
+    done_tx
+        .send(super::LocateDone {
+            id: 1,
+            hit: None,
+            error: None,
+            elapsed_ms: 0,
+        })
+        .unwrap();
+    super::drain(&mut state);
+    assert!(
+        released.load(std::sync::atomic::Ordering::SeqCst),
+        "a wrong-dimension reply must release the pending loot/trade plan"
+    );
+    assert!(
+        !replied.load(std::sync::atomic::Ordering::SeqCst),
+        "the success reply must not consume an unopened container"
+    );
+    assert!(state.locate.pending.is_empty());
+    assert_eq!(state.locate.queued, 0);
+}
+
 #[test]
 fn a_lost_worker_terminates_dolphin_and_command_jobs() {
     let (mut state, connection) = locate_fixture();

@@ -1,35 +1,155 @@
 diff --git a/crates/mc-core/src/command_locate.rs b/crates/mc-core/src/command_locate.rs
-index ed5bf0b..ba7dcd6 100644
 --- a/crates/mc-core/src/command_locate.rs
 +++ b/crates/mc-core/src/command_locate.rs
-@@ -1457,14 +1457,17 @@ fn deliver(state: &mut TickState, done: LocateDone) {
+@@ -695,9 +695,7 @@
+             LocateOwner::Connection(connection) => {
+                 self.in_flight.get(&connection).copied().unwrap_or(0)
+             }
+-            LocateOwner::Entity(entity) => {
+-                self.entity_in_flight.get(&entity).copied().unwrap_or(0)
+-            }
++            LocateOwner::Entity(entity) => self.entity_in_flight.get(&entity).copied().unwrap_or(0),
+         }
+     }
+ 
+@@ -1189,7 +1187,7 @@
+     pub on_failure: Option<StructureLookupFailure>,
+ }
+ 
+-enum LocateCompletion {
++pub(crate) enum LocateCompletion {
+     Command(String),
+     Eye(crate::projectiles::eye::EyeUse),
+     Callback {
+@@ -1279,9 +1277,7 @@
+         LocateOwner::Entity(_) => 1,
+     };
+     if state.locate.busy(owner) >= limit {
+-        if !quiet
+-            && let LocateOwner::Connection(connection) = owner
+-        {
++        if !quiet && let LocateOwner::Connection(connection) = owner {
+             state.push_player(
+                 connection,
+                 PlayerChange::Chat {
+@@ -1301,14 +1297,11 @@
+         MAX_QUEUED_JOBS
+     };
+     if state.locate.queued >= capacity {
+-        if !quiet
+-            && let LocateOwner::Connection(connection) = owner
+-        {
++        if !quiet && let LocateOwner::Connection(connection) = owner {
+             state.push_player(
+                 connection,
+                 PlayerChange::Chat {
+-                    message: "Too many locate searches are running; try again in a moment"
+-                        .into(),
++                    message: "Too many locate searches are running; try again in a moment".into(),
+                 },
+             );
+         }
+@@ -1317,9 +1310,7 @@
+     // Readiness before the expensive resident-chunk metadata snapshot.
+     if let Err(error) = state.locate.worker() {
+         tracing::error!(%error, "locate worker thread could not start");
+-        if !quiet
+-            && let LocateOwner::Connection(connection) = owner
+-        {
++        if !quiet && let LocateOwner::Connection(connection) = owner {
+             state.push_player(
+                 connection,
+                 PlayerChange::Chat {
+@@ -1349,9 +1340,7 @@
+         Err(error) => {
+             // A thread that cannot start is a command failure, not a tick panic.
+             tracing::error!(%error, "locate worker thread could not start");
+-            if !quiet
+-                && let LocateOwner::Connection(connection) = owner
+-            {
++            if !quiet && let LocateOwner::Connection(connection) = owner {
+                 state.push_player(
+                     connection,
+                     PlayerChange::Chat {
+@@ -1379,9 +1368,7 @@
+             Some(id)
+         }
+         Err(TrySendError::Full(_)) => {
+-            if !quiet
+-                && let LocateOwner::Connection(connection) = owner
+-            {
++            if !quiet && let LocateOwner::Connection(connection) = owner {
+                 state.push_player(
+                     connection,
+                     PlayerChange::Chat {
+@@ -1393,9 +1380,7 @@
+             None
+         }
+         Err(TrySendError::Disconnected(_)) => {
+-            if !quiet
+-                && let LocateOwner::Connection(connection) = owner
+-            {
++            if !quiet && let LocateOwner::Connection(connection) = owner {
+                 state.push_player(
+                     connection,
+                     PlayerChange::Chat {
+@@ -1472,12 +1457,17 @@
                  crate::projectiles::eye::complete(state, request, hit.pos);
              }
          }
 -        LocateCompletion::Callback { reply, .. } => {
--            // A metadata/read failure is not "no destination": the caller's
--            // pending loot/trade plan is released so its container opens again
+-            // A metadata/read failure is not "no destination": invoking the
+-            // callback with None consumes an unopened loot table and loses its
+-            // map. Drop the continuation and leave the container untouched.
 +        LocateCompletion::Callback { reply, on_failure } => {
 +            // A metadata/read failure is not "no destination": release the
 +            // caller's pending loot/trade plan so its container opens again
-             // (a fresh search next time) instead of waiting forever.
++            // (a fresh search next time) instead of waiting forever.
              if done.error.is_some() {
-                 tracing::warn!(
-                     "locate callback refused: metadata unreadable; pending plan released"
-                 );
+-                tracing::warn!("locate callback refused: metadata unreadable; container left unopened");
++                tracing::warn!(
++                    "locate callback refused: metadata unreadable; pending plan released"
++                );
 +                if let Some(release) = on_failure {
 +                    release(state);
 +                }
                  return;
              }
              let hit = done.hit.map(|hit| mc_world::BlockPos {
-@@ -1609,9 +1612,12 @@ fn terminal_wrong_dimension(state: &mut TickState, pending: PendingLocate) {
+@@ -1531,7 +1521,14 @@
+             state.locate.dolphin.insert(dolphin, treasure);
+         }
+         LocateCompletion::Command(display) => {
+-            command_result(state, pending.owner, pending.kind, pending.origin, display, done);
++            command_result(
++                state,
++                pending.owner,
++                pending.kind,
++                pending.origin,
++                display,
++                done,
++            );
+         }
+     }
+ }
+@@ -1554,7 +1551,10 @@
+         return;
+     }
+     if done.error.is_some() {
+-        tracing::warn!(connection = connection.0, "locate search failed to read metadata");
++        tracing::warn!(
++            connection = connection.0,
++            "locate search failed to read metadata"
++        );
+         state.push_player(
+             connection,
+             PlayerChange::Chat {
+@@ -1612,8 +1612,12 @@
                  );
              }
          }
 -        LocateCompletion::Callback { .. } => {
--            // Cross-world: the search cannot answer this dimension; the
--            // container re-plans when reopened.
+-            // Cross-world: preserve an unopened container instead of consuming it.
 +        LocateCompletion::Callback { on_failure, .. } => {
 +            // Cross-world: the search cannot answer this dimension, so release
 +            // the pending plan; the container re-plans when reopened.
@@ -39,17 +159,17 @@ index ed5bf0b..ba7dcd6 100644
          }
          LocateCompletion::Dolphin(dolphin) => {
              state.locate.dolphin.remove(&dolphin);
-@@ -1662,10 +1668,13 @@ fn fail_worker(state: &mut TickState) {
+@@ -1664,9 +1668,13 @@
                      );
                  }
              }
 -            LocateCompletion::Callback { .. } => {
--                // Infrastructure loss must not wedge the container: the next
--                // open plans a new search.
+-                // Infrastructure loss must not consume unopened loot.
+-                tracing::warn!("locate worker lost: map/loot callback left unopened");
 +            LocateCompletion::Callback { on_failure, .. } => {
 +                // Infrastructure loss must not wedge the container: release the
 +                // pending loot/trade plan so the next open plans a new search.
-                 tracing::warn!("locate worker lost: pending map/loot plan released");
++                tracing::warn!("locate worker lost: pending map/loot plan released");
 +                if let Some(release) = on_failure {
 +                    release(state);
 +                }
