@@ -1,0 +1,19 @@
+diff --git a/tools/harness/backends/scene_shot_execute.py b/tools/harness/backends/scene_shot_execute.py
+--- a/tools/harness/backends/scene_shot_execute.py
++++ b/tools/harness/backends/scene_shot_execute.py
+@@ -407,6 +407,15 @@
+             probe.check(f"{value['name']}_min", len(found) >= value["min"])
+             if "max" in value:
+                 probe.check(f"{value['name']}_max", len(found) <= value["max"])
++        elif kind == "require_entities":
++            result = probe.call("minecraft_list_entities", value["args"])
++            (artifact / f"{value['name']}.json").write_text(json.dumps(result, indent=2) + "\n")
++            entities = result.get("entities")
++            if not isinstance(entities, list) or any(not isinstance(row, dict) for row in entities):
++                raise RuntimeError("entity snapshot omitted entities")
++            present = {row.get("entity_type") for row in entities}
++            for entity_type in value["types"]:
++                probe.check(f"{value['name']}_{entity_type}", entity_type in present)
+         elif kind == "timed_entities":
+             result = probe.call("minecraft_list_entities", value["args"])
+             if type(result.get("game_time")) is not int:

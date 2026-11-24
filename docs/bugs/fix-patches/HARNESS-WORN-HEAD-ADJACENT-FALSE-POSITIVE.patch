@@ -1,0 +1,12 @@
+diff --git a/tools/harness/backends/scene_shot_checks.py b/tools/harness/backends/scene_shot_checks.py
+--- a/tools/harness/backends/scene_shot_checks.py
++++ b/tools/harness/backends/scene_shot_checks.py
+@@ -357,7 +357,7 @@
+     probe.report["placed_head_changed_pixels"] = placed
+     probe.report["worn_head_changed_pixels"] = worn
+     magenta = lambda r, g, b: r > 60 and b > 60 and r > g * 2 and b > g * 2
+-    worn_hat = _count(shots["head-worn"][1], (580, 280, 700, 400), magenta)
++    worn_hat = _count(shots["head-worn"][1], (600, 280, 680, 375), magenta)
+     probe.report["worn_head_hat_layer_pixels"] = worn_hat
+     hat = _count(shots["head-block"][1], head_box, magenta)
+     probe.report["placed_head_hat_layer_pixels"] = hat

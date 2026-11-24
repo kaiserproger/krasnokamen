@@ -3,9 +3,12 @@ id = "LOADER-PACK-DECLINED-CONNECTION"
 title = "The pack-loaded check accepts success on two connections while a third connection declines the pack"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Stage3 LoaderObs: success-only filtering accepted success on connections 11/12 plus a decline on 13 and did not bind the intended actors (receipts/LoaderObs/REPORT.md)"
 repro = "source"
-regression = []
+regression = ["loader:python:tools:test_battle_scenario.PackLoadedOncePerConnectionTest.test_successful_pair_does_not_hide_declined_third_connection"]
 failing_first = "reported"
-repro_check = "Fixed in Loader commit 7343bd38 (no ledger fix_commit kind for the Loader repository): pack_loaded_once_per_connection checks every connection per actor. Loader test PackLoadedOncePerConnectionTest.test_successful_pair_does_not_hide_declined_third_connection plus actor/sequence cases: red receipts/LoaderObs/pack-isolated-red.log, green pack-green.log. Real endpoint traces show PovRed and CamSpec each sending 3,4,0 on their own connection; no live three-connection decline run. Not promoted."
+repro_check = "Fixed in Loader commit 7343bd38 (no ledger fix_commit kind for the Loader repository): pack_loaded_once_per_connection checks every connection per actor. Loader test PackLoadedOncePerConnectionTest.test_successful_pair_does_not_hide_declined_third_connection plus actor/sequence cases: red receipts/LoaderObs/pack-isolated-red.log, green pack-green.log. Real endpoint traces show PovRed and CamSpec each sending 3,4,0 on their own connection; no live three-connection decline run. Promoted 2026-11-24 on 80d1807fb74c as a loader:7343bd38 fix: the Loader test above is the recorded red control with the fix's production hunks reversed (control_files = the one file) and green on the Loader that contains it; the rules that refused the row earlier predate the loader:<sha> kind."
+fix_commit = "loader:7343bd38"
+control_files = ["tools/battle_scenario.py"]
+promotion = "docs/bugs/promotions/LOADER-PACK-DECLINED-CONNECTION.json"

@@ -1,0 +1,52 @@
+{
+  "id": "CLIENT-SETTINGS-TEST-POLLUTION",
+  "verdict": "promoted",
+  "fix_commit": "client-test:4022844b",
+  "fix_commit_full": "4022844bc4984892950e12c397b6c091b27369ff",
+  "promoted_at": "2026-11-24T09:52:37+00:00",
+  "tree_head": "db414aa9b08924058d1d4662559e3586a1cbb40f",
+  "tree_dirty": true,
+  "tree_sha256": "87f50bf4219ba2ef57ead5653289f7c043004c5a84ae76bdb7fb6b8b582500e7",
+  "client_fix": true,
+  "control": "client_test_reversal",
+  "control_tree": "client_head",
+  "fix_patch_sha256": "63a2631d21d54b474e697845ba5156648d8baeca1ddf20526494d683eb1722d8",
+  "reversed_files": [
+    "src/local_config.rs"
+  ],
+  "kept_test_files": [],
+  "client_checkout": {
+    "path": "/run/media/kaiserroman/games/solaris-work/solaris-client",
+    "head": "530556e864c25bbf23a940aa13e81665442b7d3b",
+    "untracked": [
+      "src/entities/render_special/text_display.rs"
+    ]
+  },
+  "negative_control": {
+    "client:krasnokamen-client:controls_tests::controls_native_dispatch_uses_rebound_mouse_button": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:local_config::tests::a_test_build_never_writes_the_data_roots_settings_file": {
+      "state": "red",
+      "detail": "1 failed of 1",
+      "assertion": {
+        "file": "src/local_config.rs",
+        "line": 399,
+        "error": "panic"
+      }
+    }
+  },
+  "restored": {
+    "client:krasnokamen-client:controls_tests::controls_native_dispatch_uses_rebound_mouse_button": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:local_config::tests::a_test_build_never_writes_the_data_roots_settings_file": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T094908-ledger-promote-07q2qjtu"
+}
