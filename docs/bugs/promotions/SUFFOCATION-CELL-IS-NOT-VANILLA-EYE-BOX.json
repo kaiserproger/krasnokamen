@@ -1,14 +1,14 @@
 {
   "id": "SUFFOCATION-CELL-IS-NOT-VANILLA-EYE-BOX",
   "verdict": "promoted",
-  "fix_commit": "patch:e2ef8001aaf76d8a47e34559d1555617a4fd165625683a35a809b62a19861bad",
-  "fix_commit_full": "patch:e2ef8001aaf76d8a47e34559d1555617a4fd165625683a35a809b62a19861bad",
-  "promoted_at": "2026-11-24T00:01:38+00:00",
-  "tree_head": "e984a1118eeaa160591bc782776565b84f3652d3",
+  "fix_commit": "patch:6f5fe4656060008923efa33a2493547b48c6e6c97913ddcb9658a52b843db06a",
+  "fix_commit_full": "patch:6f5fe4656060008923efa33a2493547b48c6e6c97913ddcb9658a52b843db06a",
+  "promoted_at": "2026-11-24T00:11:58+00:00",
+  "tree_head": "dde2bd0ed4268694004ada3bcab18ae9cc9bca04",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
-  "fix_patch_sha256": "e2ef8001aaf76d8a47e34559d1555617a4fd165625683a35a809b62a19861bad",
+  "fix_patch_sha256": "6f5fe4656060008923efa33a2493547b48c6e6c97913ddcb9658a52b843db06a",
   "reversed_files": [
     "crates/mc-core/src/contact_hazards.rs"
   ],
@@ -26,5 +26,5 @@
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261123T235513-ledger-promote-0o0fijy3"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T000949-ledger-promote-1_y52ba3"
 }
