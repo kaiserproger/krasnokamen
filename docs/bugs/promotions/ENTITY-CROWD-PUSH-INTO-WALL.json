@@ -1,0 +1,98 @@
+{
+  "id": "ENTITY-CROWD-PUSH-INTO-WALL",
+  "verdict": "promoted",
+  "fix_commit": "patch:ad7b2e86f3610630cc57e5f052180737aeab7b831e1c884ac370893568838529",
+  "fix_commit_full": "patch:ad7b2e86f3610630cc57e5f052180737aeab7b831e1c884ac370893568838529",
+  "promoted_at": "2026-11-24T10:26:55+00:00",
+  "tree_head": "34af8faf864d0c8966ccbc9b9dce23dc37fc582f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "ad7b2e86f3610630cc57e5f052180737aeab7b831e1c884ac370893568838529",
+  "reversed_files": [
+    "crates/mc-physics/src/lib.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:blueprint_tests::body_sizes_come_from_the_vanilla_entity_contract": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:sleep::tests::a_woken_player_carries_the_player_contract_body": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick_tests::elytra_tests::an_unsolvable_reported_move_is_refused_instead_of_teleporting_the_player": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::crowd_pen_tests::crowded_pen_bodies_never_enter_the_wall": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/crowd_pen_tests.rs",
+        "line": 155,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "cargo:mc-physics:tests::wall_face_snap_never_lets_a_body_cross_the_face": {
+      "state": "unproven-panic",
+      "detail": "FAIL | panic at crates/mc-physics/src/physics_tests.rs:2321 is not an assert macro; name it in proving_assertions",
+      "assertion": {
+        "file": "crates/mc-physics/src/physics_tests.rs",
+        "line": 2321,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "cargo:mc-physics:tests::a_contact_never_grows_deeper_than_the_tolerance_behind_a_face": {
+      "state": "unproven-panic",
+      "detail": "FAIL | panic at crates/mc-physics/src/physics_tests.rs:2474 is not an assert macro; name it in proving_assertions",
+      "assertion": {
+        "file": "crates/mc-physics/src/physics_tests.rs",
+        "line": 2474,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "cargo:mc-core:blueprint_tests::a_summoned_villager_keeps_the_contract_body_through_the_appearance_refresh": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-core:blueprint_tests::body_sizes_come_from_the_vanilla_entity_contract": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:sleep::tests::a_woken_player_carries_the_player_contract_body": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick_tests::elytra_tests::an_unsolvable_reported_move_is_refused_instead_of_teleporting_the_player": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::crowd_pen_tests::crowded_pen_bodies_never_enter_the_wall": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-physics:tests::wall_face_snap_never_lets_a_body_cross_the_face": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-physics:tests::a_contact_never_grows_deeper_than_the_tolerance_behind_a_face": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:blueprint_tests::a_summoned_villager_keeps_the_contract_body_through_the_appearance_refresh": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T102413-ledger-promote-qgzrrjpt"
+}

@@ -1,0 +1,68 @@
+{
+  "id": "ANTI-XRAY-BORDER-REVEAL-LOST-ACROSS-SKIPPED-PUBLISH",
+  "verdict": "promoted",
+  "fix_commit": "patch:5aa0532138099cdaa0d3ee6aab7cdce18bae540de4898edecced65b03120f1d6",
+  "fix_commit_full": "patch:5aa0532138099cdaa0d3ee6aab7cdce18bae540de4898edecced65b03120f1d6",
+  "promoted_at": "2026-11-24T10:36:11+00:00",
+  "tree_head": "34af8faf864d0c8966ccbc9b9dce23dc37fc582f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "5aa0532138099cdaa0d3ee6aab7cdce18bae540de4898edecced65b03120f1d6",
+  "reversed_files": [
+    "crates/mc-edge/src/plan/chunk_delta.rs",
+    "crates/mc-edge/src/plan/viewer.rs",
+    "crates/mc-edge/src/plan/viewer_plan.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:anti_xray::anti_xray_tests::a_neighbour_loaded_inside_a_skipped_publish_hides_the_border_ore": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/anti_xray_tests.rs",
+        "line": 515,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "cargo:mc-edge:anti_xray::anti_xray_tests::a_neighbour_unloaded_inside_a_skipped_publish_reveals_the_border_ore": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/anti_xray_tests.rs",
+        "line": 496,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "cargo:mc-edge:anti_xray::anti_xray_tests::a_border_reveal_inside_a_skipped_publish_reaches_the_client": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/anti_xray_tests.rs",
+        "line": 480,
+        "error": "panic",
+        "class": "unknown"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:anti_xray::anti_xray_tests::a_neighbour_loaded_inside_a_skipped_publish_hides_the_border_ore": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:anti_xray::anti_xray_tests::a_neighbour_unloaded_inside_a_skipped_publish_reveals_the_border_ore": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:anti_xray::anti_xray_tests::a_border_reveal_inside_a_skipped_publish_reaches_the_client": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T103228-ledger-promote-qannwxy7"
+}

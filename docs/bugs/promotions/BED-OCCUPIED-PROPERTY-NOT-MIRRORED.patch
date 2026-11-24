@@ -1,0 +1,107 @@
+diff --git a/crates/mc-core/src/sleep.rs b/crates/mc-core/src/sleep.rs
+index 6e21fd7..18ea253 100644
+--- a/crates/mc-core/src/sleep.rs
++++ b/crates/mc-core/src/sleep.rs
+@@ -295,6 +295,58 @@ pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
+     }
+ }
+ 
++/// Vanilla `LivingEntity#startSleeping` / `stopSleeping` set the bed block's
++/// `occupied` property while a sleeper lies in it. Solaris derives occupancy
++/// from its sleepers, so one pass per tick mirrors it: a player in
++/// [`TickState::sleepers`] and a resident whose brain set `sleeping` both own
++/// their bed's cell, and a bed that lost its sleeper is cleared again. Doing it
++/// here covers every wake path (leave-bed, morning, hit, death, resident
++/// reassignment, dimension travel), not just [`wake`]. The tick calls it after
++/// the phases that can start or end a sleep and before the merge, so its writes
++/// land in the same block phase and a block break staged by the same tick wins.
++pub(crate) fn mirror_occupied_beds(state: &mut TickState) {
++    let dimension = state.dimension.name();
++    let previous = std::mem::take(&mut state.occupied_beds);
++    let mut wanted: rustc_hash::FxHashSet<BlockPos> =
++        state.sleepers.values().map(|sleeper| sleeper.bed).collect();
++    for ids in state.entities.villager_chunks().values() {
++        for &id in ids {
++            let Some(slot) = state.entities.slot_of_any(id) else {
++                continue;
++            };
++            let row = state.entities.row(slot);
++            let Some(resident) = row.villager.as_ref() else {
++                continue;
++            };
++            if resident.sleeping
++                && resident.home_dimension == dimension
++                && let Some(home) = resident.home
++            {
++                wanted.insert(home);
++            }
++        }
++    }
++    for bed in previous.difference(&wanted) {
++        set_bed_occupied(state, *bed, false);
++    }
++    for bed in &wanted {
++        set_bed_occupied(state, *bed, true);
++    }
++    state.occupied_beds = wanted;
++}
++
++/// Write a bed's `occupied` property when it differs; a cell that no longer
++/// holds a bed (or is unloaded) is left alone because `property` finds no such
++/// state.
++fn set_bed_occupied(state: &mut TickState, head: BlockPos, occupied: bool) {
++    let value = if occupied { "true" } else { "false" };
++    if let Some(next) = crate::bees::property(state, head, "occupied", value)
++        && state.world.block_at(head.x, head.y, head.z) != Some(next)
++    {
++        state.write_block(head, next);
++    }
++}
++
+ /// Once per tick: count sleep time, wake those whose bed is gone, whose
+ /// night is over or who were hurt, and skip the night when the gamerule's
+ /// percentage of active non-spectator players sleeps soundly.
+diff --git a/crates/mc-core/src/tick.rs b/crates/mc-core/src/tick.rs
+index 60ef9b2..9a4d140 100644
+--- a/crates/mc-core/src/tick.rs
++++ b/crates/mc-core/src/tick.rs
+@@ -442,6 +442,10 @@ pub struct TickState {
+     pub(crate) shriekers: crate::shrieker::Shriekers,
+     /// Players lying in a bed ([`crate::sleep`]).
+     pub sleepers: HashMap<EntityId, crate::sleep::Sleeper>,
++    /// Bed head cells whose block `occupied` property this tick mirrored
++    /// ([`crate::sleep::run`]). Derived from the sleepers and sleeping
++    /// residents every tick, never persisted.
++    pub(crate) occupied_beds: HashSet<BlockPos>,
+     /// Last journaled player / block-entity post-images. Images are
+     /// absolute, so the journal writes one only when it differs from the
+     /// last; an unchanged record is still covered by an earlier batch or
+diff --git a/crates/mc-core/src/tick/dimension.rs b/crates/mc-core/src/tick/dimension.rs
+index 38bf46f..927511c 100644
+--- a/crates/mc-core/src/tick/dimension.rs
++++ b/crates/mc-core/src/tick/dimension.rs
+@@ -270,6 +270,12 @@ fn run_dimension_tick_inner<'a>(
+     }
+     let entity_tail_time = entity_tail_start.elapsed();
+ 
++    // Beds follow their sleeper (vanilla `LivingEntity.startSleeping`): derived
++    // after the phases that can start or end a sleep this tick and before the
++    // merge, so the write lands in this tick's block phase and a break staged by
++    // the same tick is applied after it.
++    crate::sleep::mirror_occupied_beds(state);
++
+     // 3. Merge (deterministic, fixed order, whole-intent rejection).
+     let merge_start = std::time::Instant::now();
+     state.merge(&mut intents);
+diff --git a/crates/mc-core/src/tick/state.rs b/crates/mc-core/src/tick/state.rs
+index 65a3340..4b9cd37 100644
+--- a/crates/mc-core/src/tick/state.rs
++++ b/crates/mc-core/src/tick/state.rs
+@@ -151,6 +151,7 @@ impl TickState {
+             vaults: Default::default(),
+             shriekers: Default::default(),
+             sleepers: HashMap::default(),
++            occupied_beds: HashSet::default(),
+             journaled_players: HashMap::default(),
+             journaled_block_entities: HashMap::default(),
+             block_log: Default::default(),

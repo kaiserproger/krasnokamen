@@ -66,6 +66,21 @@ the `viewer_plan` hunks reversed there is no side repair at all, so a held chunk
 not move is skipped and the client keeps the old (wrong) ore mask. Each test then fails at its own
 `contains(...)` assertion — an observed assertion failure, not a compile error.
 
+## Observed control and restore
+
+Control `head` (dry-run `20261124T093710-ledger-promote-a11y0wla`, `ledger-1-run.log`), each ref red at
+its own assertion (the triple-quoted macro starts on the named line, hence `proving_assertions`):
+
+| ref | `file:line` | message |
+|---|---|---|
+| `…::a_border_reveal_inside_a_skipped_publish_reaches_the_client` | `anti_xray_tests.rs:480` | `the ore chunk is sent again with the real ore (1 chunk frames)` |
+| `…::a_neighbour_unloaded_inside_a_skipped_publish_reveals_the_border_ore` | `anti_xray_tests.rs:496` | `the ore chunk is sent again with the real ore (0 chunk frames)` |
+| `…::a_neighbour_loaded_inside_a_skipped_publish_hides_the_border_ore` | `anti_xray_tests.rs:515` | `the ore chunk is sent again with the stand-in (1 chunk frames)` |
+
+The row's `proving_assertions` names those three locations. The restore is the real promotion receipt's
+`ledger-3-run` on the candidate (all three green); see `promote.json` under
+`.analysis/validation/<stamp>-ledger-promote-*/`.
+
 ## Not covered
 
 The row's source notes a real client cannot discriminate this repair (the plain block-update path

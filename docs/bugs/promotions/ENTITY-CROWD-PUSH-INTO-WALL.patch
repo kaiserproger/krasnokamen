@@ -1,43 +1,66 @@
 diff --git a/crates/mc-physics/src/lib.rs b/crates/mc-physics/src/lib.rs
-index 12235dc38..078cd9c7e 100644
+index 641f9cb..4270274 100644
 --- a/crates/mc-physics/src/lib.rs
 +++ b/crates/mc-physics/src/lib.rs
-@@ -1662,28 +1662,9 @@ fn resolve_horizontal_sweep(
+@@ -1623,10 +1623,16 @@ fn clip_x(body: WorldAabb, mut dx: f64, collision_boxes: &[WorldAabb]) -> f64 {
+         if overlaps_across(body.min_y, body.max_y, obstacle.min_y, obstacle.max_y)
+             && overlaps_across(body.min_z, body.max_z, obstacle.min_z, obstacle.max_z)
+         {
+-            if dx > 0.0 && body.max_x <= obstacle.min_x {
+-                dx = dx.min(obstacle.min_x - body.max_x);
+-            } else if dx < 0.0 && body.min_x >= obstacle.max_x {
+-                dx = dx.max(obstacle.max_x - body.min_x);
++            if dx > 0.0 {
++                let clip = obstacle.min_x - body.max_x;
++                if clip >= -COLLISION_EPSILON && clip < dx {
++                    dx = clip;
++                }
++            } else if dx < 0.0 {
++                let clip = obstacle.max_x - body.min_x;
++                if clip <= COLLISION_EPSILON && clip > dx {
++                    dx = clip;
++                }
+             }
+         }
+     }
+@@ -1644,10 +1650,16 @@ fn clip_z(body: WorldAabb, mut dz: f64, collision_boxes: &[WorldAabb]) -> f64 {
+         if overlaps_across(body.min_x, body.max_x, obstacle.min_x, obstacle.max_x)
+             && overlaps_across(body.min_y, body.max_y, obstacle.min_y, obstacle.max_y)
+         {
+-            if dz > 0.0 && body.max_z <= obstacle.min_z {
+-                dz = dz.min(obstacle.min_z - body.max_z);
+-            } else if dz < 0.0 && body.min_z >= obstacle.max_z {
+-                dz = dz.max(obstacle.max_z - body.min_z);
++            if dz > 0.0 {
++                let clip = obstacle.min_z - body.max_z;
++                if clip >= -COLLISION_EPSILON && clip < dz {
++                    dz = clip;
++                }
++            } else if dz < 0.0 {
++                let clip = obstacle.max_z - body.min_z;
++                if clip <= COLLISION_EPSILON && clip > dz {
++                    dz = clip;
++                }
+             }
+         }
+     }
+@@ -1662,6 +1674,10 @@ fn resolve_horizontal_sweep(
      let mut resolved = Vec3::ZERO;
      let mut remaining = desired;
  
--    // Vanilla contact tolerance first (R6 G2): a face the body is within
--    // `COLLISION_EPSILON` of is a contact *now*, so that axis may not advance —
--    // and a side up to 1e-7 past the face snaps back out to it. The clip result
--    // is taken only when its own magnitude is inside the tolerance: a larger
--    // clip is a normal wall stop that stays with the sweep's axis order, so a
--    // body leaving an edge it overlaps on the cross axis keeps diagonal
--    // resolution. `(clip - desired).abs()` would be wrong here: an outward snap
--    // of 5.7e-14 for a 0.0115 step differs from the request by the whole step.
--    let snap_x = clip_x(body, desired.x, collision_boxes);
--    let snap_z = clip_z(body, desired.z, collision_boxes);
--    let contact_x = snap_x.abs() <= COLLISION_EPSILON;
--    let contact_z = snap_z.abs() <= COLLISION_EPSILON;
--    if contact_x {
--        resolved.x = snap_x;
--        remaining.x = desired.x - snap_x;
--        body = body.moved(Vec3::new(snap_x, 0.0, 0.0));
--    }
--    if contact_z {
--        resolved.z = snap_z;
--        remaining.z = desired.z - snap_z;
--        body = body.moved(Vec3::new(0.0, 0.0, snap_z));
--    }
 +    // The contact tolerance is applied inside `sweep_axis_interval` (one
 +    // comparison per axis per box), so an axis whose near face the body sits
 +    // up to `COLLISION_EPSILON` past comes back as `entry = 0.0` and blocks.
- 
++
      // At most two horizontal normals can be removed. A third pass only applies
      // the remaining tangent movement after the second contact.
-@@ -1783,6 +1764,23 @@ fn first_sweep_hit(
+     for _ in 0..3 {
+@@ -1760,10 +1776,21 @@ fn first_sweep_hit(
      nearest
  }
  
+-/// The pre-image entry time, kept for the registered tests: the raw signed
+-/// face gap over the movement, with no contact tolerance.
 +/// Vanilla `Shapes.collide` tolerance (`javap -c` of server-26.1.2.jar): a face
 +/// the leading side sits up to `COLLISION_EPSILON` past is a contact *now*, so
 +/// its entry time is exactly `0`. The test takes the signed face gap in blocks
@@ -47,29 +70,13 @@ index 12235dc38..078cd9c7e 100644
 +/// obstacle the body reaches now or later and keeps its own time; a body deeper
 +/// than the tolerance keeps the negative entry, which the caller's
 +/// `-TIME_EPSILON..=1.0` window rejects rather than teleporting it out.
-+fn contact_entry(gap: f64, movement: f64) -> f64 {
+ fn contact_entry(gap: f64, movement: f64) -> f64 {
+-    gap / movement.abs()
 +    if (-COLLISION_EPSILON..0.0).contains(&gap) {
 +        0.0
 +    } else {
 +        gap / movement.abs()
 +    }
-+}
-+
+ }
+ 
  fn sweep_axis_interval(
-     body_min: f64,
-     body_max: f64,
-@@ -1792,12 +1790,12 @@ fn sweep_axis_interval(
- ) -> Option<(f64, f64)> {
-     if movement > 0.0 {
-         Some((
--            (obstacle_min - body_max) / movement,
-+            contact_entry(obstacle_min - body_max, movement),
-             (obstacle_max - body_min) / movement,
-         ))
-     } else if movement < 0.0 {
-         Some((
--            (obstacle_max - body_min) / movement,
-+            contact_entry(body_min - obstacle_max, movement),
-             (obstacle_min - body_max) / movement,
-         ))
-     } else if overlaps_across(body_min, body_max, obstacle_min, obstacle_max) {
