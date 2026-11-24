@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 
+from pathlib import Path
+
 from .. import runtime
 from .native_p1 import _aim, _capture
 from .native_v2 import _block, _click, _echo, _give, _insert, _open, _set, _use
@@ -11,6 +13,54 @@ from .probe_steps import ProbeSteps, item_count
 
 SCENARIO_KINDS = ("frame-waypoint", "banner-removal", "locked-banners", "pumpkin-hiding",
                   "terrain-shading", "nether-terrain", "inventory-player-markers")
+
+
+# Regions of the 1280x720 retained frame that hold the drawn held map while never holding the chat
+# overlay (left of the map) or the top-right message box. Both are inside the map in every capture.
+HELD_MAP_REGIONS = ((400, 120, 880, 620), (640, 200, 1200, 640))
+# The frame-marker icon is ~12x15 drawn pixels (measured on the fixed client: see the hunks map);
+# 0 on a client that receives the decoration and never draws it.
+FRAME_MARKER_MIN_PIXELS = 20
+
+
+def _shot_path(steps: ProbeSteps, name: str) -> Path:
+    return steps.artifact_dir.parent / "screenshots" / f"{name}.png"
+
+
+def _differing_pixels(first: Path, second: Path, regions=HELD_MAP_REGIONS) -> dict[str, int]:
+    """Pixels that changed between two retained frames, per region plus the whole frame."""
+    from PIL import Image
+
+    counts: dict[str, int] = {}
+    with Image.open(first) as one, Image.open(second) as two:
+        if one.size != two.size:
+            raise ValueError(f"{first} is {one.size}, {second} is {two.size}")
+        before, after = one.convert("RGB"), two.convert("RGB")
+        before_px, after_px = list(before.getdata()), list(after.getdata())
+        width = before.width
+        counts["frame"] = sum(1 for a, b in zip(before_px, after_px) if a != b)
+        for index, region in enumerate(regions):
+            left, top, right, bottom = region
+            total = 0
+            for y in range(top, min(bottom, before.height)):
+                row = y * width
+                for x in range(left, min(right, before.width)):
+                    offset = row + x
+                    if before_px[offset] != after_px[offset]:
+                        total += 1
+            counts[f"region{index}"] = total
+    return counts
+
+
+def _quiescent(steps: ProbeSteps, map_id: int) -> None:
+    """Wait until the map stops producing wire updates, so a later capture cannot differ by terrain."""
+    before = _updates(steps, map_id)
+    while True:
+        steps.call("minecraft_wait_ticks", {"ticks": 40})
+        now = _updates(steps, map_id)
+        if now == before:
+            return
+        before = now
 
 
 def _snapshot(steps: ProbeSteps) -> dict:
@@ -150,9 +200,28 @@ def _frame(steps: ProbeSteps, origin: tuple[int, int, int], map_id: int) -> dict
 
 def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     map_id = _create(steps)
+    # Drawn-marker predicate: one map id, one camera pose, two captures — the map held before a frame
+    # exists and the same map held once a clone of it is in a frame. The terrain cannot differ (same
+    # id, and the map stops receiving updates first) and the player pointer is static, so the only
+    # rendered difference is the frame's marker icon: a client that receives the decoration but never
+    # draws it produces the same frame twice.
+    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    steps.check("map_unframed_map_has_no_frame_waypoint", _marker_count(steps, map_id, "frame") == 0)
+    _quiescent(steps, map_id)
+    _held_shot(steps, "map-held-without-frame-waypoint")
+    steps.fixture("clear @s minecraft:filled_map")
     _frame(steps, origin, map_id)
+    steps.check("map_framed_map_has_exactly_one_frame_waypoint",
+                _marker_count(steps, map_id, "frame") == 1)
     _clone(steps, map_id, 0)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    _held_shot(steps, "map-held-with-frame-waypoint")
+    changed = _differing_pixels(_shot_path(steps, "map-held-without-frame-waypoint"),
+                                _shot_path(steps, "map-held-with-frame-waypoint"))
+    steps.report["frame_marker_pixels"] = changed
+    drawn = max(value for name, value in changed.items() if name.startswith("region"))
+    steps.report["frame_marker_drawn_pixels"] = drawn
+    steps.check("waypoint_marker_drawn", drawn >= FRAME_MARKER_MIN_PIXELS)
     x, y, z = origin
     steps.fixture("gamemode creative @s")
     steps.fixture(f"tp @s {x + 80.5} {y} {z + .5}")
