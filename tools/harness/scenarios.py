@@ -923,7 +923,7 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="command-selector-permission", requires=("xvfb",),
         sources=("tools/harness/command_selector_permission_scene.json",),
         fixture="private native client joined to the scene server as an operator, no world fixture",
-        proves="the client observation's `command.permission_level` is 2 while the player is an "
+        proves="the client observation's `command.permission_level` is 4 while the player is an "
                "operator and 0 within 40 ticks of `deop @s`, so `@s` selector completion can be "
                "asserted from what the server actually granted (never inferred from the local menu)",
         limits="one permission change per run; the suggestion list itself is not asserted because the "
