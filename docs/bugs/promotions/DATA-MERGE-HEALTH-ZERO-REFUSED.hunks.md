@@ -1,8 +1,8 @@
 # DATA-MERGE-HEALTH-ZERO-REFUSED — HEAD re-break control patch
 
 Patch: `docs/bugs/promotions/DATA-MERGE-HEALTH-ZERO-REFUSED.patch`, the fix hunks of `42ae17014`
-(`data: accept Health: 0 in a merge and put the mob on the corpse clock`). It reverses on that tree
-(`git apply -R --check` clean) and reverses the real fix only, not a test or a comment.
+with the `LiveVillager` refactor of `0cf289c5c` folded in, i.e. every hunk that makes a zero `Health`
+land (and nothing else). It reverses on the current tree (`git apply -R --check` clean).
 
 ## What reverses (4 hunks in `command_summon.rs`, 2 in `command_data/entity.rs`)
 
