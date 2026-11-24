@@ -1,6 +1,6 @@
 [[bug]]
 id = "CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED"
-title = "A falling block's automation contract cannot describe the prediction it runs: no predicted velocity, and a no-gravity block drifted on a stale local one"
+title = "A falling block's automation contract cannot describe the prediction it runs: list_entity_value exposed no predicted velocity, so no consumer could model the integrator state the client uses between position packets"
 area = "client"
 severity = "major"
 status = "fixed"
@@ -9,10 +9,10 @@ repro = "client"
 regression = [
   "harness:entities:native-v2-input-sand",
   "client:krasnokamen-client:entities::falling_tests::falling_block_predicts_between_packets_then_lands_without_moving_received_base",
-  "client:krasnokamen-client:entities::falling_tests::falling_block_freeze_and_no_gravity_preserve_pose_until_a_step",
 ]
-fix_commit = "client:d0337426"
+fix_commit = "client:bf54c2417480ebf56dfbf228d6f3fcbd1b38129a"
 failing_first = "reported"
-proving_assertions = { "harness:entities:native-v2-input-sand" = "sand_predicts_between_received_updates" }
-repro_check = "Prediction itself is NOT lost (debug on client d0337426's parent: one tick after 10.0 the predicted y is 9.96, then 9.9208 - exactly vanilla's 0.04 gravity, move, 0.98 drag). Two contract gaps were fixed in client:d0337426 (control commit 0a4c9a37 differs from it by exactly those hunks): (1) a no-gravity falling block moved on its own stale falling_velocity; it now uses the received velocity, matching FallingBlockEntity.tick where a no-gravity block keeps the server's delta; (2) minecraft_list_entities now exposes predicted_velocity (the client's integrator state), because between position packets the received velocity is the stale base and no automation consumer could model the prediction. Harness side (_vanilla_fall) consumes predicted_velocity when the row has it (test test_a_stale_received_velocity_does_not_change_the_prediction_model). Fence tests: falling_block_predicts_between_packets... and falling_block_freeze_and_no_gravity... pass; falling_block_prediction_tracks_horizontal_query_padding... still fails on motion_spans.len()==1 - that fence was never compiled before this session and the code has never registered a span for a predicted block, so it is a separate aspiration, not this row. Scene: sand_predicts_between_received_updates is the proving assertion; real-client receipts recorded with the promotion."
+proving_assertions = { "harness:entities:native-v2-input-sand" = "falling_block_predicted_velocity_field" }
+repro_check = "Narrowed after review REVIEW-wave2-8 M1: the row's real gap is the contract field, not a no-gravity drift. list_entity_value now reports predicted_velocity (the client's own integrator state) beside the two poses; the red is the scene's named `falling_block_predicted_velocity_field` on a client without it (the model has no fallback to the stale received velocity), and `sand_predicts_between_received_updates` stays the candidate-side oracle. The pair is client:f1168d66 (reversal) -> client:bf54c241 (fix), whose diff is exactly d0337426's four-line contract hunk; the reversed blob ffe8a4c1 is the pre-image that commit started from. d0337426's physical.rs hunk is NOT part of this fix and is removed by client:a5769870: the server zeroes only the gravity term and still applies 0.98 drag, so a no-gravity block keeps integrating (falling_block_no_gravity_keeps_air_drag_without_gravity pins it), and the stale-local-velocity cause cannot occur on the packet path because SET_ENTITY_MOTION and move_to(velocity) already clear falling_velocity. The old freeze fence wrote entity.velocity directly; it now sends its stop through SET_ENTITY_MOTION. docs/bugs/promotions/CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED.hunks.md maps the hunks."
+
 promotion = "docs/bugs/promotions/CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED.json"
