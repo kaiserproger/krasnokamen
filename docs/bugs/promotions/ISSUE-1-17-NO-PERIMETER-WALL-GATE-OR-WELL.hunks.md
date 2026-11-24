@@ -5,7 +5,7 @@ Patch: `docs/bugs/promotions/ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL.patch`
 committed tree at `b67e1b0612` (`git apply -R --check`, plain context) and is
 what a promotion passes as `--fix-patch`.
 
-## What the fix is (origin `patch:fba7b70b…`, HEAD form of `Stage2Edge`)
+## What the fix is (origin `patch:fba7b70b…`, kept whole in `promotions/ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL.origin.patch`, HEAD form of `Stage2Edge`)
 
 `fortification_site` is consulted before street work: from `FORTIFY_RESIDENTS`
 (10) residents the planner admits the next funded piece of the perimeter wall,

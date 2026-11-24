@@ -15,7 +15,7 @@ is red.
 ## Original patch and HEAD equivalent
 
 The recorded fix patch (`docs/bugs/fix-patches/ISSUE-1-16.patch`, digest
-`patch:a3d1b2cd…`) expects `SOURCES: [&str; 9] -> 10` plus the wall line. HEAD
+`patch:a3d1b2cd…`, the pre-fix record kept whole in `promotions/ISSUE-1-16.origin.patch`) expects `SOURCES: [&str; 9] -> 10` plus the wall line. HEAD
 has grown the array to 26 entries, so that patch no longer reverses; this patch
 is the same change at HEAD (`25 -> 26` and the wall line), derived by removing
 wall.json from the current array and re-emitting the fix direction. Test files

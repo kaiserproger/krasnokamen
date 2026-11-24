@@ -1,9 +1,11 @@
 # SETTLEMENT-MAP-SITE-CLICK-LOSES-PROJECT — fix and re-break control
 
-Fix commit: `f8f27afda8` (this branch). Control patch:
-`docs/bugs/promotions/SETTLEMENT-MAP-SITE-CLICK-LOSES-PROJECT.patch`
-(`patch:5099c724385fda24…`), which reverses the fix's UI production hunks on
-the committed tree (`git apply -R --check`).
+Fix commit: `f8f27afda8` (this branch). There is no stored control patch: the
+hand-written one that was here had an invented a/-side (`selected_project_screen`
+did not exist before the fix), so it was deleted. The honest control is the one
+`ledger promote` ran for the promotion (`20261124T030635-ledger-promote-hto7rv_j`):
+it reverses the fix's real UI hunks on the candidate tree, and the real-client gate
+then reads `selected_card_site_only=false` from the aggregate screen.
 
 ## Provenance
 

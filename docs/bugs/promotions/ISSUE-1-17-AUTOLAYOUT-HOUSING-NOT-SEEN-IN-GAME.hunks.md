@@ -5,7 +5,7 @@ Patch: `docs/bugs/promotions/ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME.patc
 committed tree at `b67e1b0612` (`git apply -R --check`, plain context) and is
 what a promotion passes as `--fix-patch`.
 
-## What the fix is (origin `patch:5f50f42f…`)
+## What the fix is (origin `patch:5f50f42f…`, kept whole in `promotions/ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME.origin.patch`)
 
 The settlement planned storage, workshops, roads and lamps by itself but never
 completed a new house or grew: the first Farm billed 30 dirt while the quarry

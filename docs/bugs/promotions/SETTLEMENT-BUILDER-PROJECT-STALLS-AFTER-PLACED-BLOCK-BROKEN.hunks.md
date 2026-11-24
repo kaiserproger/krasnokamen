@@ -5,7 +5,7 @@ Patch: `docs/bugs/promotions/SETTLEMENT-BUILDER-PROJECT-STALLS-AFTER-PLACED-BLOC
 committed tree at `b67e1b0612` (`git apply -R --check`, plain context) and is
 what a promotion passes as `--fix-patch`.
 
-## What the fix is (origin `patch:7212599e…`, HEAD form of the breaker fix)
+## What the fix is (origin `patch:7212599e…`, kept whole in `promotions/SETTLEMENT-BUILDER-PROJECT-STALLS-AFTER-PLACED-BLOCK-BROKEN.origin.patch`, HEAD form of the breaker fix)
 
 A player breaking an already-placed cell of an active project left a hole that
 was never re-placed: the project stayed active at 250/250 and held the only
