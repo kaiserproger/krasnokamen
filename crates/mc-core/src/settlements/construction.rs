@@ -1871,15 +1871,20 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     if let Some(site) = meadow_site(state, record, residents, &images) {
         return begin_cells(state, site.project, site.bounds, site.cells);
     }
+    // The wall, its gates and the well come before street work: the streets
+    // reach every standing building in the radius and owe work without end,
+    // the fortification is a bounded list that the world itself shortens. A
+    // staffed gatherer holds back the streets only, never the fortification:
+    // that list is bounded and funded, and another resident can build it. The
+    // 2026-11-24 perimeter gate stood still for 1580 s with a staffed Miner (a
+    // certified natural Mine) while 768 cobblestone waited in storage.
+    if let Some(site) = fortification_site(state, record, residents, &images) {
+        return begin_cells(state, site.project, site.bounds, site.cells);
+    }
     if gathering {
         return false;
     }
-    // The wall, its gates and the well come before street work: the streets
-    // reach every standing building in the radius and owe work without end,
-    // the fortification is a bounded list that the world itself shortens.
-    let Some(site) = fortification_site(state, record, residents, &images)
-        .or_else(|| street_site(state, record, &images))
-    else {
+    let Some(site) = street_site(state, record, &images) else {
         return false;
     };
     begin_cells(state, site.project, site.bounds, site.cells)
