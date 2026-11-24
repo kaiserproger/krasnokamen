@@ -857,6 +857,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="render_drawn_index_bounded at each yaw: the drawn index count stays under the absolute bound and within max_growth of the first sample; the dropped per-frame FrameStats reset accumulates indices and fails",
         limits="one small scene at low preset; the bounds are calibrated on the fixed and reversal clients",
     ),
+    "issue1-21-tool-clip": _entry(
+        id="issue1-21-tool-clip", summary="The first-person tool clips through a wall when it should not (ISSUE-1-21)",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="issue1-21-tool-clip", requires=("xvfb",),
+        sources=("tools/harness/tool_clipping_scene.json",),
+        fixture="private native client facing an obsidian wall with a diamond pickaxe, far and close held frames",
+        proves="tool_wall_visible: the received target, selected tool and eye distance are the fixture's, the close frame shows a dark wall behind the turquoise tool, and the tool pixels stay in front of the wall; the world-depth-load control draws them behind",
+        limits="one wall, one tool, rest and attack frames; the colour window comes from the fixed frames",
+    ),
     "issue1-18-sheep-goat": _entry(
         id="issue1-18-sheep-goat", summary="Goat horns and sheep wyther rigs render upright and aligned (ISSUE-1-18)",
         owner="core:harness", evidence="graphical", profile="scene-shot",

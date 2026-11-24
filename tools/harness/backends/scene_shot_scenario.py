@@ -81,6 +81,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "issue1-01-villager-leg": "issue1_01_villager_leg_scene.json",
         "issue1-02-held-tool": "held_tool_rest_scene.json",
         "issue1-03-drawn-index": "issue1_03_drawn_index_scene.json",
+        "issue1-21-tool-clip": "tool_clipping_scene.json",
         "issue1-18-sheep-goat": "issue1_18_sheep_goat_scene.json",
         "issue1-19-hostile-motion": "issue1_19_hostile_motion_scene.json",
     }
