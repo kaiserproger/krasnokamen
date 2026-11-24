@@ -20,11 +20,16 @@ Main authorized reading it and this commit ports it onto `wt/D123Civ`
 
 ## Reverse and red
 
-Reversed, `selected_project_screen` renders the settlement-wide status again
-(aggregate) while every routing symbol stays, so the control tree builds. On the
-reversed tree the five DV5 tests fail by assertion ("exactly the selected native
-facts, not an aggregate", artifact `.analysis/validation/20261123T191740-test-_gm7ipne`);
-the candidate's 104 `settlements::ui` tests pass
-(`.analysis/validation/20261123T191304-test-okwmmwow`). The graphical control
-(the aggregate dialog) belongs to the integrated sweep; the
-`harness:settlement-map-qa:selected_card` step is still to be authored.
+The only control is the one `ledger promote` ran for the promotion
+(`20261124T030635-ledger-promote-hto7rv_j`): it reverses the fix's real UI hunks on the
+candidate tree — `selected_project_screen` renders the settlement-wide status again
+(aggregate) while every routing symbol stays — and the real-client gate then reads the
+row's own fact `selected_card_site_only=false` from the aggregate screen. The candidate's
+104 `settlements::ui` tests pass (`.analysis/validation/20261123T191304-test-okwmmwow`).
+
+There is no cargo control for this row: the reversed non-test hunks remove
+`ui::menus::Target::Project`, which the kept DV5 tests call, so the reversed tree cannot
+build (E0599, promote run `20261124T022007`, `ledger-0-list.log`) and the real-client ref
+carries the control alone. The `harness:settlement-map-qa:selected_card` step is written
+(native windowed, civil fixture plus a second ordered House), its candidate receipt is
+`20261124T021057-settlement-map-qa-56yktcf4`, and the row is promoted on it.

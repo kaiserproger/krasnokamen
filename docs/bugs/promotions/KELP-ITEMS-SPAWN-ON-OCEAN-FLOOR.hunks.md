@@ -24,7 +24,8 @@ One hunk of the `enter` hunk-set is the HEAD equivalent: HEAD carries later
 lava-bucket and spreading branches (other rows) which the re-break keeps, and the
 reversal restores the pre-fix collision-shape decision at the same place.
 
-The two `registry.rs` hunks are **reversed too** (the earlier control omitted the
+The four `registry.rs` hunks (the field, its tag build, its per-state assignment and
+its struct initialiser) are **reversed too** (the earlier control omitted the
 field hunk with a wrong (b) reason — nothing but `fluids.rs` read the table, and
 the reversed `enter` does not, so the field could not stop the control from
 compiling). This patch removes the field, its tag build, its per-state assignment
@@ -60,8 +61,10 @@ on the committed tree at the promotion head succeeds (plain context, two files).
 
 ## a/-side audit (B5, 2026-11-24)
 
-Script and full output: `receipts/D123/D123CivGates/a-side-audit.md`. Against the origin
-`af58aeb92`, the `enter` hunk is the origin's own change at HEAD's merged function (the
+Script and full output: `receipts/D123/D123CivGates/a-side-audit.md`. Against the origins
+`af58aeb92` and `b2b442ded` (the audit's origin column for this patch: `af58aeb92` for the
+`enter`/tag-build lines the reversal rewrites, `b2b442ded` for the `registry.rs` table
+itself), the `enter` hunk is the origin's own change at HEAD's merged function (the
 origin changed `flow_into`, HEAD has one `enter`), and the flagged lines of the
 reversed `registry.rs` hunk are HEAD's later multi-line tag build (`9710e4356`
 rewrote the call as `tags\n.raw_ids(mc_data::tags::BLOCK_REGISTRY, …)`), i.e. the HEAD
