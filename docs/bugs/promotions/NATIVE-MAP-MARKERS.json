@@ -1,0 +1,69 @@
+{
+  "id": "NATIVE-MAP-MARKERS",
+  "verdict": "promoted",
+  "fix_commit": "client:e1b22a5a",
+  "fix_commit_full": "e1b22a5a8777eca5a986fb2fd911b2f08e855a7a",
+  "promoted_at": "2026-11-24T21:10:01+00:00",
+  "tree_head": "ba20240cbc3e815704bcd80519a9d602a4e404b3",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T210449-native-v2-map-frame-waypoint-g_ro5jis/result.json",
+    "client_head": "864a757fe92184ccf914cfec15b924209e0c31f4",
+    "server_binary_sha256": "0c952281a2db2c5057d956ceade003afbe5457573d2c74f8215f968e8aa740e2",
+    "red": [
+      "harness:entities:native-v2-map-frame-waypoint"
+    ],
+    "states": {
+      "harness:entities:native-v2-map-frame-waypoint": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T210350-native-v2-map-frame-waypoint-40grn4zr/result.json",
+    "client_head": "55b8374ed7cce548cac2244bfdcf3e731a35ac91",
+    "server_binary_sha256": "0c952281a2db2c5057d956ceade003afbe5457573d2c74f8215f968e8aa740e2",
+    "green": [
+      "harness:entities:native-v2-map-frame-waypoint"
+    ],
+    "states": {
+      "harness:entities:native-v2-map-frame-waypoint": "green"
+    },
+    "tree_head": "ba20240cbc3e815704bcd80519a9d602a4e404b3",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T210350-native-v2-map-frame-waypoint-40grn4zr/result.json",
+    "client_head": "55b8374ed7cce548cac2244bfdcf3e731a35ac91",
+    "server_binary_sha256": "0c952281a2db2c5057d956ceade003afbe5457573d2c74f8215f968e8aa740e2",
+    "green": [
+      "harness:entities:native-v2-map-frame-waypoint"
+    ],
+    "states": {
+      "harness:entities:native-v2-map-frame-waypoint": "green"
+    },
+    "tree_head": "ba20240cbc3e815704bcd80519a9d602a4e404b3",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "937a7fcfa5aa1c5cdd3f0a4749d56dfd302128df",
+    "paths": [
+      "src/ui/packets.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:ui::packets::held_map_tests::received_map_decorations_face_the_map_and_use_their_atlas_regions": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:ui::packets::map_lifecycle_tests::received_map_marker_replacements_remove_old_icons_and_omitted_updates_preserve_them": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261124T210606-ledger-promote-ftjn0o0f"
+}

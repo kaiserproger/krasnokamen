@@ -4,9 +4,10 @@ title = "The native client receives correct map decorations (frame marker, off-m
 area = "client"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Promote gate 20261104T213104-native-v2-map-frame-waypoint-lhku9sjo (promotion-wire-receipts.json, screenshots/map-distant-held-clone.png)"
 regression = ["client:krasnokamen-client:ui::packets::held_map_tests::received_map_decorations_face_the_map_and_use_their_atlas_regions", "client:krasnokamen-client:ui::packets::map_lifecycle_tests::received_map_marker_replacements_remove_old_icons_and_omitted_updates_preserve_them", "harness:entities:native-v2-map-frame-waypoint"]
 fix_commit = "client:e1b22a5a"
-repro_check = "real-hunk control receipts/XClientUi/controls-2.log: reversing e1b22a5a's non-test hunk reds held_map_tests at src/ui/packets.rs:1196 ('decoration must face the map viewer'), i.e. the cause (marker winding/UV flip), not the held-map pixels; repro=client, candidate: real-client check required"
+repro_check = "Committed pair client:864a757fe9 -> client:55b8374ed7 (re-land) restores e1b22a5a's production hunk; git patch-id of the pair equals non_test_patch(e1b22a5a) (937a7fcfa5). The scene now measures the drawn marker: one locked map id, the support and the empty frame placed, capture with the map held, insert a prepared copy into the frame by hand, capture again; the received colour arrays must be equal and the read region (620,170,930,560) must change. Fixed client 55b8374ed7 20261124T210350 (40grn4zr) passed at waypoint_marker_drawn; pre-fix 864a757fe9 20261124T210449 (g_ro5jis) is red there with 0 changed pixels against 395 measured on the fixed client, threshold 150. Promotion 20261124T210606-ledger-promote-ftjn0o0f."
 proving_assertions = { "harness:entities:native-v2-map-frame-waypoint" = "waypoint_marker_drawn" }
+promotion = "docs/bugs/promotions/NATIVE-MAP-MARKERS.json"
