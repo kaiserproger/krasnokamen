@@ -58,3 +58,14 @@ palette has `part=foot, occupied=true` states (`crates/mc-data/data/required_blo
   would remove the scan and is left as an optimisation.
 - The property is client-visible: promotion still needs a scene that reads the bed head during sleep
   (`OWNER-DECISIONS-NEEDED.md` item 2).
+
+## Regenerated 2026-11-24 (`patch:d3314283…`, was `patch:06c5dace…`)
+
+The recorded patch stopped reversing on the candidate: its `accepted()` helper was the v1 linear scan,
+while `71261486d` (review N4) made it one pass-local `FxHashSet<BlockPos>`. A stale patch is refused by
+the ledger ("does not apply in reverse on the candidate"), so the patch was regenerated from git
+history, not edited: `git apply -R --3way` of the old patch (three files clean, `sleep.rs` conflicted),
+the conflict region being exactly the two added functions, then `git diff -R` against HEAD restricted
+to the four production files. The a/- side is therefore the real pre-image (no `occupied_beds`, no
+mirror, no call) and the b/- side is HEAD after `71261486d`. Verified: `git apply -R --check` passes on
+`292c3b7a0`.
