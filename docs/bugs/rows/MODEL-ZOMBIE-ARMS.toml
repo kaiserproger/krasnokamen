@@ -6,4 +6,7 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/todo-active/TodoIssueSonnet/REPORT.md"
-regression = []
+regression = ["harness:scene-shot:issue1-19-hostile-motion", "client:krasnokamen-client:entities::animation_tests::zombie_arm_rotation_matches_the_26_3_animate_zombie_arms_formula"]
+fix_commit = "client:3ad9f80b293d5eb1798b1a5b82c3766011a6e678"
+proving_assertions = { "harness:scene-shot:issue1-19-hostile-motion" = "zombie_arm_raised_pixels" }
+repro_check = "Committed reversal pair at HEAD: control client 929e6e9eba deletes the zombie arm pose (the guarded behaviour client:43362918 introduced, refined by 83994480 and ebe56023), re-land 3ad9f80b29 restores the HEAD lines verbatim. The registered issue1-19-hostile-motion scene's `zombie_arm_raised` pixel window counts zombie-skin pixels in the raised forearm's anchor of a fixed side frame: hanging arms leave that window empty and red `zombie_arm_raised_pixels`. The unit ref checks the 26.3 formula (swing 1.2/0.4, bob 0.067) on the candidate."
