@@ -1729,3 +1729,25 @@ fn a_battle_head_off_its_body_returns_without_a_target() {
     let on_body = battle_step(battle([20.0, 0.0, 20.0], [0.0, 0.0], [0.0, 0.0]), false);
     assert_eq!(bits(on_body.rotation), bits([20.0, 0.0, 20.0]));
 }
+
+#[test]
+fn a_hoppers_wander_heading_survives_the_walker_dwell_phase() {
+    // Vanilla keeps a wanted direction for a whole stroll and `SlimeMoveControl`
+    // has no ground traction between hops, so a hop is a hopper's only
+    // translation. A dwell-phase heading of zero therefore freezes a slime
+    // wherever its jump clock happens not to line up with the walker window.
+    let mut dwell = 0;
+    for tick in 0..240 {
+        let heading = wander_heading(MovementClass::Walker, 7, tick, 0.52);
+        let walker = wander(MovementClass::Walker, 7, tick, 0.52);
+        assert_eq!(heading[1], 0.0, "a walker hop keeps its feet level: {tick}");
+        if walker == [0.0; 3] {
+            dwell += 1;
+            assert_ne!(
+                heading, [0.0; 3],
+                "tick {tick}: a dwell-phase hop still carries the stroll heading"
+            );
+        }
+    }
+    assert!(dwell > 0, "the fixture must cover dwell ticks");
+}
