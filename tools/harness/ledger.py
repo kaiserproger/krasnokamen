@@ -1329,10 +1329,26 @@ def _materialize(root, tree, expected):
 
 
 def _register_server(sha256, tree):
-    """Record which tree (fingerprint) a release server binary was built from by this tooling."""
+    """Record which tree (fingerprint) a release server binary was built from by this tooling.
+
+    One file per (binary, tree): a harness-only fix leaves the release server byte-identical on the
+    candidate and on its reverted control tree, so both fingerprints must be citable at once
+    (FINDINGS-20261124 F1). The legacy `<sha256>.json` name is still read, never written."""
     registry = REPO_ROOT / '.analysis/ledger-builds'
     registry.mkdir(parents=True, exist_ok=True)
-    (registry / f'{sha256}.json').write_text(json.dumps({'sha256': sha256, 'tree': {'head': tree['head'], 'sha256': tree['sha256']}}) + '\n')
+    (registry / f'{sha256}-{tree["sha256"]}.json').write_text(json.dumps({'sha256': sha256, 'tree': {'head': tree['head'], 'sha256': tree['sha256']}}) + '\n')
+
+
+def _registration(registry, sha256, tree):
+    """The registry entry for this binary and tree fingerprint, or None (legacy names included)."""
+    for entry in sorted(registry.glob('*.json')) if registry.is_dir() else []:
+        try:
+            build = json.loads(entry.read_text())
+        except (OSError, ValueError):
+            continue
+        if build.get('sha256') == sha256 and build.get('tree') == {'head': tree['head'], 'sha256': tree['sha256']}:
+            return build
+    return None
 
 
 def _server_built_from(root, receipt_text, tree):

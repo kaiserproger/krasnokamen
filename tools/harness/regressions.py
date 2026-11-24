@@ -490,9 +490,8 @@ def _release_server(ctx, profiles, tree=None):
                 origin = json.loads((manifest.parent.parent / str(source) / 'manifest.json').read_text())
                 if (origin.get('head'), origin.get('diff_sha256')) != (info['head'], info['diff_sha256']):
                     raise ValueError(f'{manifest} is a relabelled pin of {source}')
-            registration = json.loads((registry / f'{digest}.json').read_text())
-            if (info.get('head') != fingerprint['head'] or registration.get('sha256') != digest
-                    or registration.get('tree') != {key: fingerprint[key] for key in ('head', 'sha256')}):
+            registration = ledger._registration(registry, digest, fingerprint)
+            if info.get('head') != fingerprint['head'] or registration is None:
                 raise ValueError(f'{manifest} pins a different tree (not {fingerprint["head"][:12]}/{fingerprint["sha256"][:12]})')
             if not os.access(binary, os.X_OK):
                 raise ValueError(f'pin is not executable: {binary}')
