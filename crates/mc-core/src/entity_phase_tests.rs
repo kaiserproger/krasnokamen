@@ -2640,30 +2640,39 @@ fn hot_row_follows_every_writer() {
     // writer, so the column is refreshed, not read stale.
     state.entities.body_mut(slot).alive = true;
     assert_hot_read_matches_cold(&mut state, slot);
-    // The piglin-body bit lives in the column's `needs_cold`: a kind change to a
-    // piglin type must route the row to the cold path, and back out of it.
+    // The piglin-body bit lives in the column's `needs_cold`. The row above has
+    // been tamed and seated by its writer cases (both force the cold path on
+    // their own), so the kind round-trip runs on a fresh cow row.
+    let cow = state.registry.cow_type_id;
+    let fresh = state.spawn_mob(cow, [11.5, 101.0, 8.5], 10.0);
+    let fresh_slot = state.entities.slot_of(fresh).unwrap();
+    state.entities.prepare_motion_hints(&state.registry);
+    assert!(
+        !state.entities.hot_row(fresh_slot).needs_cold(),
+        "a plain cow body stays on the column"
+    );
     let piglin = mc_data::entity_types::entity_type_contract_26_1_2_by_name("minecraft:piglin")
         .expect("piglin type")
         .protocol_id;
-    state
-        .entities
-        .set_kind(slot, crate::entities::EntityKind::Mob { type_id: piglin });
-    state.entities.prepare_motion_hints(&state.registry);
-    let need = state.entities.hot_row(slot).needs_cold();
-    assert!(need, "a piglin body routes the row to the cold path");
-    let cow_kind = crate::entities::EntityKind::Mob {
-        type_id: state.registry.cow_type_id,
-    };
-    // The seat above still holds a rider, which alone forces the cold path;
-    // clear it so the assertion below reads the kind bit, not the riders bit.
-    state.entities.set_riders(slot, Vec::new());
-    state.entities.set_kind(slot, cow_kind);
+    state.entities.set_kind(
+        fresh_slot,
+        crate::entities::EntityKind::Mob { type_id: piglin },
+    );
     state.entities.prepare_motion_hints(&state.registry);
     assert!(
-        !state.entities.hot_row(slot).needs_cold(),
+        state.entities.hot_row(fresh_slot).needs_cold(),
+        "a piglin body routes the row to the cold path"
+    );
+    state.entities.set_kind(
+        fresh_slot,
+        crate::entities::EntityKind::Mob { type_id: cow },
+    );
+    state.entities.prepare_motion_hints(&state.registry);
+    assert!(
+        !state.entities.hot_row(fresh_slot).needs_cold(),
         "a cow body clears the piglin bit"
     );
-    assert_hot_read_matches_cold(&mut state, slot);
+    assert_hot_read_matches_cold(&mut state, fresh_slot);
     // Spawn: the new slot's column is derived before its first clean read.
     let cow = state.registry.cow_type_id;
     let born = state.spawn_mob(cow, [9.5, 101.0, 8.5], 10.0);
