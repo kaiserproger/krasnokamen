@@ -1,0 +1,74 @@
+{
+  "id": "MODEL-PLACED-POT-DECORATIONS",
+  "verdict": "promoted",
+  "fix_commit": "client:57d14c63167cd1161e8b4dc88922dfe6d0391781",
+  "fix_commit_full": "57d14c63167cd1161e8b4dc88922dfe6d0391781",
+  "promoted_at": "2026-11-24T13:11:27+00:00",
+  "tree_head": "649b4c3eb2c8d1bd33a717eea6b68addcece11f8",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T130456-native-decorated-pot-ghvcg8hi/result.json",
+    "client_head": "3faa03bb6c9845737e1723ef677d2d898b20e254",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "red": [
+      "harness:scene-shot:native-decorated-pot"
+    ],
+    "states": {
+      "harness:scene-shot:native-decorated-pot": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T130355-native-decorated-pot-i09iavj5/result.json",
+    "client_head": "57d14c63167cd1161e8b4dc88922dfe6d0391781",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "green": [
+      "harness:scene-shot:native-decorated-pot"
+    ],
+    "states": {
+      "harness:scene-shot:native-decorated-pot": "green"
+    },
+    "tree_head": "649b4c3eb2c8d1bd33a717eea6b68addcece11f8",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T130355-native-decorated-pot-i09iavj5/result.json",
+    "client_head": "57d14c63167cd1161e8b4dc88922dfe6d0391781",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "green": [
+      "harness:scene-shot:native-decorated-pot"
+    ],
+    "states": {
+      "harness:scene-shot:native-decorated-pot": "green"
+    },
+    "tree_head": "649b4c3eb2c8d1bd33a717eea6b68addcece11f8",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "b492e2e668a394e1895fcf9601ee7943f31634f2",
+    "paths": [
+      "src/entities/presentation.rs",
+      "src/entities/render_blocks/surfaces.rs"
+    ]
+  },
+  "candidate_refs": {
+    "cargo:mc-core:block_entity_defaults::tests::placed_head_and_pot_preserve_their_item_components": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::presentation::tests::decorated_pot_item_bakes_all_sides_and_received_sherds": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::render_blocks::village_tests::static_decorated_pot_uses_received_sherd_textures": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T130559-ledger-promote-ji2u3py7"
+}
