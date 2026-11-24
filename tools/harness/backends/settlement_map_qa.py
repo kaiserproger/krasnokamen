@@ -239,6 +239,8 @@ NAME = "mapqa"
 RADIUS = 64
 PALETTE = {
     "territory": (0x4C, 0x7A, 0x34),
+    # A live construction site's own map colour (the D63 map legend's construction marker).
+    "site": (0xFF, 0x88, 0x00),
     "you": (0xFF, 0x55, 0xFF),
     "storage": (0x9C, 0x6B, 0x30),
     "house": (0xE3, 0xC0, 0x8D),
@@ -252,8 +254,7 @@ MIN_CELL = 8 * 8
 # `label(...)`; test_settlement_map_qa checks that every pair there is listed here.
 PAGES = {
     "hub": (f"Settlement {NAME}", f"Поселение {NAME}"),
-    "settlement": ("Settlement", "Поселение"),
-    "management": ("Management", "Управление"),
+    "settlement": ("Management", "Управление"),
     "help": ("Help", "Помощь"),
     "map": ("Map ·", "Карта ·"),
     "house": ("House", "Дом"),
@@ -372,7 +373,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     parser.add_argument("--size", choices=("1280x720", "1920x1080"), default="1280x720")
     parser.add_argument("--wrong-click", action="store_true",
                         help="negative control: click Help instead of Settlement")
-    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race", "stage2", "stage2op", "blueprints"), default="civil",
+    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race", "stage2", "stage2op", "blueprints", "selected-card"), default="civil",
                         help="quickwins: the owner-path acceptance of the D63 quick wins (native, ru_ru); "
                              "quickwins-c1-race: the starter chest (C1) founded under block churn in its chunk")
     parser.add_argument("--survey", action="store_true",
@@ -390,6 +391,24 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         return settlement_quickwins_qa.run(ctx, args)
     if args.survey:
         raise ValueError("--survey belongs to --scenario quickwins")
+    if args.scenario == "selected-card":
+        # One live construction site and the storage; the site marker must open that project alone.
+        settings = {"gui_scale": args.gui_scale, "language": args.language,
+                    "screen_size": list(map(int, args.size.split("x")))} if ctx.client == "java" else {}
+
+        def selected_script(probe, artifact, steps, client):
+            try:
+                return _selected_card_script(probe, artifact, steps, client, args)
+            finally:
+                checks = probe.report["assertions"]
+                required = [name for name in checks
+                            if name.startswith(("selected_card_", "map_features_"))]
+                ok = bool(required) and all(checks[name] for name in required)
+                published = {"selected_card": ok, "all": ok}
+                probe.report["verdicts"] = published
+                ctx.client_evidence["verdicts"] = published
+        return scene_shot.run(ctx, scenario={"steps": [], "java_plain": ctx.client == "java",
+                                             "client_settings": settings}, script=selected_script)
     if ctx.client != "java" and (args.gui_scale != 3 or args.language != "en_us" or args.size != "1280x720"):
         # The civil walk reads English page titles; the native client takes its language from
         # KRASNOKAMEN_CLIENT_LANGUAGE and only the quickwins scenario sets it.
@@ -504,10 +523,23 @@ def _dialog(probe: ProbeSteps, title: str) -> dict[str, Any]:
 
 
 def _menu(probe: ProbeSteps, title: str) -> dict[str, Any]:
-    return probe.wait(lambda state: (state.get("screen") or {}).get("class") == CONTAINER
-                      and str(state["screen"].get("title", "")).startswith(title)
-                      and (state.get("container") or {}).get("slot_count") == 90,
-                      f"GUI menu {title}", timeout_seconds=30)
+    try:
+        return probe.wait(lambda state: (state.get("screen") or {}).get("class") == CONTAINER
+                          and str(state["screen"].get("title", "")).startswith(title)
+                          and (state.get("container") or {}).get("slot_count") == 90,
+                          f"GUI menu {title}", timeout_seconds=30)
+    except Exception:
+        # A page that never opened is a failed GUI check; its observed payload names what was there.
+        observe = getattr(probe, "observe", None)
+        if observe is None:
+            raise
+        state = observe()
+        container = state.get("container") or {}
+        names = [str(row.get("name")) for row in container.get("slots", []) if row.get("name")][:16]
+        raise RuntimeError(f"GUI menu {title} never opened; screen="
+                           f"{(state.get('screen') or {}).get('title')!r} "
+                           f"class={(state.get('screen') or {}).get('class')!r} "
+                           f"slots={container.get('slot_count')} names={names}")
 
 
 def _enter_dashboard(probe: ProbeSteps, gui: Gui, label: str, title: str,
@@ -905,6 +937,121 @@ def _production(probe: ProbeSteps, gui: Gui, label: Callable[[str, str], str],
     probe.check("production_order_resident_crafted", bool(current["receipts"]) and current["done"] >= 1)
 
 
+def _fund_chest(probe: ProbeSteps, chest: list[int], blueprint: str) -> None:
+    """Privileged fixture: put one L1 bill of `blueprint` into the funding chest."""
+    materials = subprocess.run(
+        [sys.executable, str(scene_shot.runtime.REPO_ROOT / "tools/blueprints.py"), "materials", blueprint],
+        check=True, capture_output=True, text=True, cwd=scene_shot.runtime.REPO_ROOT,
+    )
+    base = next(ast.literal_eval(line.split("base", 1)[1].strip())
+                for line in materials.stdout.splitlines() if "L1:" in line and "base" in line)
+    slot = 0
+    for item, count in sorted(base.items()):
+        remaining = math.ceil(count * 1.5) + 1
+        while remaining:
+            amount = min(64, remaining)
+            if slot >= 27:
+                raise RuntimeError(f"{blueprint} L1 fixture exceeds the physical funding chest")
+            probe.fixture(f"item replace block {' '.join(map(str, chest))} container.{slot} "
+                          f"with minecraft:{item} {amount}")
+            remaining -= amount
+            slot += 1
+
+
+def _visible_text(state: dict[str, Any]) -> str:
+    """Every text a screen shows: title, dialog bodies/buttons and chest slot names."""
+    screen = state.get("screen") or {}
+    parts = [str(screen.get("title") or "")]
+    parts += [str(node.get("label")) for node in state.get("ui_nodes") or [] if node.get("label")]
+    parts += [str(row.get("name")) for row in (state.get("container") or {}).get("slots", []) if row.get("name")]
+    return "\n".join(parts)
+
+
+def _selected_card_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
+                          args: argparse.Namespace) -> list[str]:
+    """`--scenario selected-card` (SETTLEMENT-MAP-SITE-CLICK-LOSES-PROJECT): the civil fixture plus one
+    more ordered House, so the map carries a live construction site beside the certified storage. Two
+    different markers must open their own card: the site opens that project alone and the storage opens
+    the storage card; on the aggregate-screen control both carry the settlement's whole project set."""
+    size = tuple(map(int, args.size.split("x")))
+    scene_shot.resize_window(probe.client.p4_window, size)
+    gui = Gui(probe, artifact, client, args.gui_scale, size)
+    ru = args.language == "ru_ru"
+    label = lambda en, russian: russian if ru else en
+
+    def shot(name: str) -> str:
+        probe.call("minecraft_wait_ticks", {"ticks": 2})
+        path = gui.capture(probe, artifact, name)
+        probe.check(f"{name}_dimensions", scene_shot.png_size(path) == size)
+        return path
+
+    try:
+        bell, seq, _bounds = _setup(probe)
+        chest = probe.report["fixture"]["funding_chest"]
+        # A second, live House project: its site must appear on the map beside the finished House.
+        _fund_chest(probe, chest, "house")
+        probe.fixture("settlement build house")
+        deadline_ticks = 0
+        while True:
+            probe.fixture("settlement building list")
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
+            chat = "\n".join(str(line) for line in probe.observe().get("recent_chat", []))
+            if len(re.findall(r"#\d+\s+house\s+level\s+1", chat, re.IGNORECASE)) >= 2:
+                break
+            deadline_ticks += 20
+            if deadline_ticks > 1200:
+                raise RuntimeError("the second House order never reached the building list")
+        _enter_hub(probe, gui, bell, label(f"Settlement {NAME}", f"Поселение {NAME}"))
+        _enter_dashboard(probe, gui, label("Management", "Управление"), label("Management", "Управление"))
+        shot("selected-dashboard")
+        gui.slot(10)
+        state = probe.wait(lambda s: (s.get("screen") or {}).get("class") == DIALOG
+                           and str(s["screen"].get("title", "")).startswith(label("Map ·", "Карта ·")),
+                           "selected_map_GUI", timeout_seconds=30)
+        map_title = state["screen"]["title"]
+        frame = shot("selected-map")
+        counts = _pixels(frame)
+        probe.check("map_features_house_and_site", counts["site"] > 0 and counts["storage"] > 0
+                    and counts["house"] > 0)
+        site = _palette_point(frame, PALETTE["site"])
+        storage = _palette_point(frame, PALETTE["storage"])
+        probe.report["selected_card"] = {"map_title": map_title, "site_pixel": site,
+                                         "storage_pixel": storage, "palette_counts": counts}
+        # The site marker opens that project alone: its own facts, never the storage's.
+        gui.input.move(*site)
+        gui.input.click(site)
+        landed = probe.wait(lambda s: (s.get("screen") or {}).get("open")
+                            and s["screen"].get("title") != map_title,
+                            "selected_card_site_GUI", timeout_seconds=30)
+        shot("selected-site-card")
+        site_text = _visible_text(landed)
+        probe.report["selected_card"]["site_card"] = site_text[:1200]
+        probe.check("selected_card_site_only",
+                    label("House", "Дом") in site_text and label("Storage", "Склад") not in site_text)
+        gui.button(label("Back", "Назад"))
+        restored = probe.wait(lambda s: str((s.get("screen") or {}).get("title", ""))
+                              .startswith(label("Map ·", "Карта ·")),
+                              "selected_card_back_GUI", timeout_seconds=30)
+        probe.check("selected_card_back_returns_map",
+                    str((restored.get("screen") or {}).get("title", "")).startswith(label("Map ·", "Карта ·")))
+        shot("selected-map-restored")
+        # The storage marker opens the storage card alone: never the live House project's facts.
+        gui.input.move(*storage)
+        gui.input.click(storage)
+        card = probe.wait(lambda s: (s.get("screen") or {}).get("open")
+                          and s["screen"].get("title") != map_title,
+                          "selected_card_storage_GUI", timeout_seconds=30)
+        shot("selected-storage-card")
+        storage_text = _visible_text(card)
+        probe.report["selected_card"]["storage_card"] = storage_text[:1200]
+        probe.check("selected_card_building_only",
+                    label("Storage", "Склад") in storage_text
+                    and not re.search(label("Order construction", "Заказать стройку"), storage_text))
+        return [frame]
+    finally:
+        gui.close()
+
+
 def _script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
             args: argparse.Namespace) -> list[str]:
     size = tuple(map(int, args.size.split("x")))
@@ -927,7 +1074,7 @@ def _script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], cli
         _enter_hub(probe, gui, _bell, f"Поселение {NAME}" if ru else f"Settlement {NAME}")
 
     def dashboard() -> None:
-        _enter_dashboard(probe, gui, label("Management", "Управление"), label("Settlement", "Поселение"),
+        _enter_dashboard(probe, gui, label("Management", "Управление"), label("Management", "Управление"),
                          args.wrong_click, label("Help", "Помощь"))
 
     def project() -> dict[str, Any]:

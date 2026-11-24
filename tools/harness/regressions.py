@@ -155,7 +155,7 @@ _BOOLEAN_PROFILE_VERDICTS = {
     'settlement-map-qa': frozenset({
         'bell_opens_hub', 'dashboard', 'map', 'building_order', 'shortage_icons',
         'storage_transfer', 'project_progress', 'residents', 'resources', 'production_order',
-        'localized_text', 'all', 'starter_chest_race',
+        'localized_text', 'all', 'starter_chest_race', 'selected_card',
     }),
 }
 # Run arguments of a profile ref: (client, args after `--`) per verdict that needs another client
