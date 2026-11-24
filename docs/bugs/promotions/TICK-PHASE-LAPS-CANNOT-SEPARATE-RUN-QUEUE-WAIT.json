@@ -1,0 +1,68 @@
+{
+  "id": "TICK-PHASE-LAPS-CANNOT-SEPARATE-RUN-QUEUE-WAIT",
+  "verdict": "promoted",
+  "fix_commit": "2941bc91f88f537c0bf113c43cbac46717ac2b79",
+  "fix_commit_full": "2941bc91f88f537c0bf113c43cbac46717ac2b79",
+  "promoted_at": "2026-11-24T17:46:48+00:00",
+  "tree_head": "f5391ae66da4aced47939d4b9d108b9e96f11d14",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "560fa142d2b14891aaed63bc6874807b56f52ee1e90f305e1d95d7468b7f07ef",
+  "control_tree_head": "f5391ae66da4aced47939d4b9d108b9e96f11d14",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/journal.rs",
+    "crates/mc-edge/src/dashboard.rs",
+    "crates/mc-edge/src/dashboard/prometheus.rs",
+    "crates/mc-edge/src/dashboard/state.rs",
+    "crates/mc-edge/src/server/pump.rs",
+    "crates/mc-edge/src/server/registry.rs",
+    "crates/mc-test-harness/src/bin/player_scale_bots.rs",
+    "tools/coreperf/profiles.py"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/journal_tests.rs",
+    "crates/mc-edge/src/dashboard/tests.rs",
+    "crates/mc-edge/src/server_lock_tests.rs",
+    "crates/mc-test-harness/src/bin/player_scale_bots_tests.rs",
+    "tools/coreperf/test_profiles.py"
+  ],
+  "negative_control": {
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_a_laps_only_phase_receipt_is_refused": {
+      "state": "unrunnable",
+      "detail": "no executed test or unittest error; see log"
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_receipt_records_the_tick_thread_run_queue_wait": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/coreperf/test_profiles.py",
+        "line": 1202,
+        "error": "AssertionError"
+      }
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_thread_usage_reads_schedstat_field_two_for_a_fixture_process": {
+      "state": "unrunnable",
+      "detail": "no executed test or unittest error; see log"
+    }
+  },
+  "restored": {
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_a_laps_only_phase_receipt_is_refused": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_receipt_records_the_tick_thread_run_queue_wait": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:WindowReceiptFieldsTests.test_thread_usage_reads_schedstat_field_two_for_a_fixture_process": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T174638-ledger-promote-zhlpqvsu"
+}
