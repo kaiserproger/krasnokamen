@@ -27,6 +27,27 @@ row was scene-gated, not server-gated (review B2 corrected this lane's earlier c
 | `e8fe40c2` | `src/entities/equipment.rs` | `@@ -284,6 +357,33 @@ fn armor_rig` | adds `fn animal_overlay(species, slot)` with the fifteen-species table | REVERSED — deleted in the control, restored by the re-land; it has no other caller |
 | `83994480` | `src/entities/equipment.rs` | `@@ -174,6 +174,10 @@ impl Cache` | `if baby && overlay.is_some_and(\|(_, kind)\| matches!(kind, "wolf_body" \| "llama_body")) { return Ok(true) }` (HEAD: `Ok(Worn::Omitted)`) | REVERSED — deleted in the control together with the table it reads; the pre-fix tree returned the baby error for a wolf, which is what the control does |
 
+## Pair-only lines (measured 2026-11-25, review A-B1)
+
+`git diff 50a177c0 4d98dcdd -U0` in the client repo, compared line by line with
+`git show e8fe40c2 -- <path>` for the same path: 194 changed lines, 54 not byte-equal to an origin
+line, of which 2 are indentation-only (`equipment_tests.rs`) and 52 are real. Provenance is
+`git blame -C -C <range> 530556e8` — the pair's net tree — because blame at the pair commits names the
+pair by construction.
+
+| pair lines (fix-tree numbers) | blame at `530556e8` | class |
+|---|---|---|
+| `equipment.rs:212` comment, `:213` `if baby && overlay.is_some_and(\|(_, kind)\| matches!(kind, "wolf_body" \| "llama_body")) {` | `83994480` | (a) another row's behaviour: the baby wolf/llama body omission this pair also reverses (it is in the carried table above). Inert for the row's subject — an adult pig is neither `wolf_body` nor `llama_body` |
+| `equipment.rs:214` `return Ok(Worn::Omitted);` | `a89b5664d` | (a) the refusal line of that same guard (the commit reshaped `Worn`); inert for the pig as above |
+| `equipment.rs:583-584, 586-591, 593-596, 601-604, 607-614` (24 lines: llama, happy_ghast, nautilus body/saddle, camel_husk, skeleton_horse, zombie_horse entries) | `9a645aa99` | (a) another row's behaviour: the 2026-11-14 sync added these species to the table `e8fe40c2` created. The reversal cannot be smaller — the table's existence is the fix — so the control also withholds those species (they fall through to the humanoid lookup). No registered gate covers them: no llama/nautilus/camel_husk equipment scene exists, and `entity_visuals` summons an unequipped happy_ghast, so no other row's assertion moves |
+| `equipment_tests.rs:83, 96-98, 126-128` (`Content::test_cube()`, `p::EquipmentPose {…}`) | `83994480` | (b) API the kept tests call: the re-land restores the two animal tests in their later signature; the control deletes them, so its suite stays coherent |
+| `equipment_tests.rs:285-307` `received_animal_body_equipment_follows_supported_adult_baby_transition` | `4d98dcdd` (the re-land) | test-only: the regression test this lane wrote for the carried baby omission; it is not in `e8fe40c2` and changes no production behaviour |
+
+Consequence stated plainly: the pair's diff is the forward-ported fix **plus** these named lines.
+Every one is either test-only or inert on the pig path the row asserts (`pig` slot 7, adult), and the
+control's red lands on `pig_saddle_drawn`. Blame found no behavioural edit that the row's assertion
+depends on, so the promotion receipts stand; no gate was re-run for this section.
+
 ## a/-side adaptation
 
 The control keeps HEAD's function shape and every later addition around the selection: the

@@ -25,8 +25,11 @@ reaches the client as bare strings, and the item renderer meanwhile read a four-
 
 ## Pair-only lines (Main's mechanical check: 8 of 53)
 
-`git diff 3faa03bb6c 57d14c6316 -U0` changes 54 lines (27 added, 27 removed). Eight of them are
-absent from `6e541f96`'s own diff; `git blame -C -C 530556e8` names each:
+`git diff 3faa03bb6c 57d14c6316 -U0` changes 54 lines (27 added, 27 removed across
+`presentation.rs` 23/14 and `render_blocks/surfaces.rs` 4/13). One of those pairs is the
+`mod tests` fixture line, so 52 are production lines — the earlier "54 lines" and "8 of 53"
+phrasings counted different denominators, and the set is the same: **eight production lines are
+absent from `6e541f96`'s own diff**, and `git blame -C -C 530556e8` names each:
 
 | pair-only line | blame commit | class |
 |---|---|---|
@@ -35,7 +38,11 @@ absent from `6e541f96`'s own diff; `git blame -C -C 530556e8` names each:
 
 No pair-only line is behavioural, so no second fix commit joins the map. The scene was re-run after
 `assert_block pot-sherds-block` was added: `20261124T154028-native-decorated-pot-28oieq22` passed on
-the re-land's own pin at core `b3493773a` (`pot_side_pattern_changed` and the block read both true).
+the re-land's own pin at core `b3493773a` (`pot_side_pattern_changed` and the block read both true),
+and the N4-modified gate was also run on the control's own pin `3faa03bb6c` at
+`20261124T171624-native-decorated-pot-_uxvzm5z` (server pin `e665a7d6967a`): failed at
+`pot_side_pattern_changed` only — 0 changed pot pixels, while `pot_visible_both_frames` and the new
+block read passed — so the added `assert_block` step does not change which assertion reds.
 
 ## How the reversal was produced, and what "byte-exact" means here
 

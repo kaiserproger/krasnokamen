@@ -363,7 +363,7 @@ def check_pig_saddle(probe: ProbeSteps, artifact: Path) -> None:
     # The body against the stone floor and sky: pig skin is a desaturated pink, and the saddle's
     # leather is the only brown in the frame (the stone is grey, the sky blue). The two frames are
     # the same pig one summon apart, so an animation or shading difference between them stays pink
-    # and cannot pass this count; measured 0 on the control and 3978 brown pixels on the re-land.
+    # and cannot pass this count; measured 0 on the control and 3810 brown pixels on the re-land.
     box = (500, 260, 780, 560)
     pig = lambda r, g, b: r > 120 and r > g + 25 and r > b + 25
     leather = lambda r, g, b: r > 70 and r > g + 35 and g > b + 15 and b < 90

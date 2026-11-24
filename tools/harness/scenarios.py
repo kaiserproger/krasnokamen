@@ -890,7 +890,7 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="issue1-19-hostile-motion", requires=("xvfb",),
         sources=("tools/harness/issue1_19_hostile_motion_scene.json",),
         fixture="private native client on a grass pad, frozen day, one NoAI zombie and one NoAI spider stepped by fixture teleports, side camera on the zombie",
-        proves="each declared kind moves more than 0.1 blocks and every segment's client-visible rate sits inside its declared blocks-per-client-tick range, and a pixel window over the zombie's raised-arm anchor counts the rendered sleeve, so a frozen animation or a wrong pace fails",
+        proves="each teleport segment moves exactly the fixture's step (`mob_step_*` inside min_blocks/max_blocks; the client-tick rate is only a coarse band against command and snapshot latency), and a pixel window over the zombie's raised-arm anchor counts the rendered sleeve (`zombie_arm_raised_pixels`), so a frozen animation or a lost step fails",
         limits="tp-driven NoAI mobs on a flat pad, one speed range per kind measured against that trajectory rather than an AI walk; the spider's moving leg swing has no pose anchor and is covered by its motion rate only",
     ),
     "native-village-idle-stroll": _entry(
