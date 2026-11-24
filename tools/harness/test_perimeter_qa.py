@@ -1,5 +1,6 @@
 """Unit tests of the buildings-qa `perimeter` scenario's pure reading of the client's block scan."""
 import unittest
+from unittest import mock
 
 from . import regressions
 from .backends import perimeter_qa as qa
@@ -88,6 +89,29 @@ class PerimeterProjectNames(unittest.TestCase):
         self.assertTrue(qa.project_named(qa.project_labels_from(names)))
         unknown = qa.project_labels_from(["Unknown blueprint L1 · Prepared 0/24"])
         self.assertFalse(qa.project_named(unknown))
+
+
+class PerimeterStatusRead(unittest.TestCase):
+    def test_status_page_names_are_read_without_a_window(self):
+        from tools.harness.backends import buildings_qa
+
+        class Probe:
+            def __init__(self):
+                self.calls = []
+
+            def call(self, name, args=None):
+                self.calls.append(name)
+                return {}
+
+        page = {"container": {"slots": [{"slot": 0, "name": "Wall section L1 · Prepared"},
+                                       {"slot": 10, "name": "Active projects: 1/8"},
+                                       {"slot": 99}]}}
+        probe = Probe()
+        with mock.patch.object(buildings_qa, "_project_page", return_value=page):
+            names = qa._status_names(probe)
+        self.assertEqual(names, ["Wall section L1 · Prepared", "Active projects: 1/8"])
+        self.assertEqual(probe.calls, ["minecraft_close_screen"])
+        self.assertEqual(qa.project_labels_from(names), {"Wall section"})
 
 
 if __name__ == "__main__":

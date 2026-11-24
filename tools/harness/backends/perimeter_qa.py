@@ -30,7 +30,8 @@ from pathlib import Path
 from typing import Any
 
 from ..profiles import ProfileContext
-from . import native_client, scene_shot
+from . import buildings_qa as _qa
+from . import native_client
 from .buildings_qa import (
     _block_id, _chat_lines, _chest_totals, _deposit_all_at, _echo, _hand_storage_at,
     _open_chest_at, _props, _read, _scan_box, _summon_bind, _verdict, _villagers,
@@ -189,29 +190,20 @@ def _page_names(probe: ProbeSteps, marker: str, check: str,
             if row.get("name")]
 
 
-def _status_names(probe: ProbeSteps, artifact: Path, ax: int, ay: int, az: int,
-                  sname: str) -> list[str]:
-    """The Construction status page's slot names through the D63 client UI.
+def _status_names(probe: ProbeSteps) -> list[str]:
+    """The Construction status page's slot names, opened by the product's own menu route.
 
-    Hub (bell) -> Management -> Construction catalogue -> Status. The retired
-    `settlement menu projects` chest walk cannot open these pages on the D63 client,
-    so the gate reads them where a player does, and only when it runs windowed.
+    `settlement menu projects` opens the blueprint catalogue; the Status action slot opens the
+    project page in the same window. Both are 90-slot chests and the clicks go through MCP, so no
+    window handle is needed (buildings-qa's probe is not a scene-shot client and has no
+    `p4_window`; the earlier Gui-based read failed with exactly that, 20261124T125551). The page
+    driver is the shared one the per-kind checks use.
     """
-    from . import settlement_map_qa as ui
-
-    probe.fixture(f"tp @s {ax + 0.5} {ay + 1.0} {az - 2.5}")
-    size = (1280, 720)
-    scene_shot.resize_window(probe.client.p4_window, size)
-    gui = ui.Gui(probe, artifact, "native", 3, size)
-    try:
-        ui._enter_hub(probe, gui, [ax, ay, az], f"Settlement {sname}")
-        ui._enter_dashboard(probe, gui, "Management", "Management")
-        gui.slot_named(r"^Construction$", "dashboard Construction")
-        _page_names(probe, "L1", "perimeter_blueprints_GUI")
-        gui.slot_named(r"^Status$", "blueprints Status")
-        return _page_names(probe, "Active projects", "perimeter_status_GUI")
-    finally:
-        gui.close()
+    page = _qa._project_page(probe)
+    names = [str(row.get("name")) for row in (page.get("container") or {}).get("slots", [])
+             if row.get("name")]
+    probe.call("minecraft_close_screen", {})
+    return names
 
 
 def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, artifact: Path) -> None:
@@ -320,14 +312,12 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
     # retired `settlement menu projects` command route.
     from .village_autonomy_qa import PROJECT_LABELS
     labels: set[str] = set()
-    if ctx.windowed:
-        try:
-            names = _status_names(probe, artifact, ax, ay, az, sname)
-            sub["status_slots"] = names[:16]
-            labels = project_labels_from(names)
-            probe.fixture(f"tp @s {ax + 0.5} {ay + 1.0} {az + 0.5}")
-        except Exception as error:  # a GUI the run could not open is recorded, never a false pass
-            sub["status_error"] = str(error)[:300]
+    try:
+        names = _status_names(probe)
+        sub["status_slots"] = names[:16]
+        labels = project_labels_from(names)
+    except Exception as error:  # a page the run could not open is recorded, never a false pass
+        sub["status_error"] = str(error)[:300]
     layout = labels & set(LAYOUT_INFRASTRUCTURE)
     named = project_named(labels)
     sub["project_labels"] = sorted(labels)
