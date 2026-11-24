@@ -217,16 +217,21 @@ fn deliver(server: &EdgeServer, relay: &mut Relay, effects: Vec<Effect>) {
             },
         };
         if let Some(handles) = server.connections.get(effect.to)
-            && handles.reliable_tx.try_send(framed).is_err()
+            && let Err(error) = handles.reliable_tx.try_send(framed)
         {
+            let full = matches!(error, tokio::sync::mpsc::error::TrySendError::Full(_));
             if !effect.is_media() {
-                tracing::warn!(
-                    connection = effect.to.0,
-                    "screen control queue full; connection retired"
-                );
-                server
-                    .connections
-                    .close(effect.to, "screen-control-reliable-full");
+                // A receiver the writer already released is a session that is
+                // ending on its own: it is not retired here a second time.
+                if full {
+                    tracing::warn!(
+                        connection = effect.to.0,
+                        "screen control queue full; connection retired"
+                    );
+                    server
+                        .connections
+                        .close(effect.to, "screen-control-reliable-full");
+                }
             } else if let Some(screen) = effect.video_screen() {
                 queue.extend(relay.frame_dropped(effect.to, screen));
             }

@@ -1380,6 +1380,21 @@ means the queue no longer holds one tick of arrivals there; its depth is not an
 operator knob (the core's fixed 4096 slots plus one slot per configured
 `max_players`).
 
+Abnormal connection ends (`network.close_causes` in `/stats`, a cause-to-count
+object, and `krasnokamen_network_close_causes_total{cause="…"}` in `/metrics`)
+count each session's end once, by cause: a reliable-queue overflow
+(`reliable-queue-full`, `route-changes-reliable-full`,
+`command-reliable-full`, `disconnect-reliable-full`, `roster-reliable-full`,
+`screen-control-reliable-full`), a socket write failure
+(`reliable-write-failed`, `world-write-failed`, `keepalive-write-failed`,
+`dh-write-failed`), a keepalive fault (`keepalive-timeout`,
+`keepalive-invalid-reply`) or a protocol/edge fault (a decode or administrative
+stage). A normal end — a client EOF, a keepalive-driven close, a core-ordered
+kick, or the lifecycle's own removal — counts nothing, so a growing total is a
+delivery or socket problem rather than ordinary turnover. The map is read from
+the registry when a payload is built, like the input drops, and is never on the
+tick path; a runner receipt quotes the delta between two samples.
+
 `/telemetry.jsonl?after_tick=N` (same `wait` and `min_samples` as
 `/load-metrics`) returns one JSON object per retained core tick: the
 `/load-metrics` sample plus `host`, a host sample taken on the first tick of

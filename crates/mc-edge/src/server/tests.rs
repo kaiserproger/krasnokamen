@@ -594,3 +594,29 @@ async fn close_wakes_the_connection_owner_with_its_cause() {
     registry.remove(id);
     assert_eq!(cancelled.await, Ok("removed"));
 }
+
+/// REVIEW-wave2-10 M1: one session contributes one cause. A second close of the
+/// same id (a stale routing view, a second stage) and a close of an id that never
+/// had a live session are bookkeeping after the end, not new errors.
+#[test]
+fn a_session_end_counts_once_and_an_unregistered_id_counts_nothing() {
+    let registry = ConnectionRegistry::new();
+    let id = ConnectionId(7);
+    let (close, _cancelled) = tokio::sync::oneshot::channel();
+    registry.inner.lock().closers.insert(id, close);
+    registry.close(id, "reliable-overflow");
+    registry.close(id, "reliable-queue-full");
+    registry.close(ConnectionId(9), "world-write-failed");
+    let causes = registry.close_causes();
+    assert_eq!(causes.get("reliable-overflow"), Some(&1), "{causes:?}");
+    assert_eq!(
+        causes.get("reliable-queue-full"),
+        None,
+        "the same session's end was already counted: {causes:?}"
+    );
+    assert_eq!(
+        causes.get("world-write-failed"),
+        None,
+        "an id no live session owned is not an error: {causes:?}"
+    );
+}

@@ -641,8 +641,10 @@ async fn run_connection(
     )));
     let writer_task = lifecycle.writer.as_mut().expect("one writer owner");
     let mut writer_finished = false;
-    // The writer records its own terminal stage; the loop records only a stage it
-    // produced, so one session counts its end exactly once.
+    // The writer records its own terminal stage; the loop records only a stage the
+    // writer did not count, judged by the registry's own rule, so one session counts
+    // its end exactly once and an abnormal loop stage (a protocol fault, an
+    // undeliverable kick) still stands when the writer's own end was a normal one.
     let mut writer_recorded = false;
     let exit_stage: &'static str = 'play_loop: loop {
         tokio::select! {
@@ -650,12 +652,12 @@ async fn run_connection(
                 writer_finished = true;
                 match ended {
                     Ok((stage, Some(reason))) => {
-                        writer_recorded = true;
+                        writer_recorded = ConnectionRegistry::close_cause_counts(stage);
                         warn!(%peer, connection = id.0, stage = "play", name = %outcome.name, reason = %reason, "core-ordered disconnect flushed; connection closed");
                         break 'play_loop stage;
                     }
                     Ok((stage, None)) => {
-                        writer_recorded = true;
+                        writer_recorded = ConnectionRegistry::close_cause_counts(stage);
                         break 'play_loop stage;
                     }
                     Err(_) => break 'play_loop "writer-panicked",
@@ -828,7 +830,9 @@ async fn run_connection(
                     warn!(%peer, connection = id.0, stage = "play-decode", name = %outcome.name, frame = frame.id, reason = %reason, "connection closed");
                     if reason == crate::decode::ILLEGAL_CHAT_CHARACTERS {
                         server.kick(id, serde_json::json!({"translate":"multiplayer.disconnect.illegal_characters"}))?;
-                        let _ = (&mut *writer_task).await;
+                        if let Ok((stage, _)) = (&mut *writer_task).await {
+                            writer_recorded = ConnectionRegistry::close_cause_counts(stage);
+                        }
                         writer_finished = true;
                         break 'play_loop "illegal-chat-characters";
                     }
@@ -869,7 +873,7 @@ async fn run_connection(
                                 writer_finished = true;
                                 match ended {
                                     Ok((stage, _)) => {
-                                        writer_recorded = true;
+                                        writer_recorded = ConnectionRegistry::close_cause_counts(stage);
                                         break 'play_loop stage;
                                     }
                                     Err(_) => break 'play_loop "writer-panicked",
@@ -888,7 +892,9 @@ async fn run_connection(
                             Err(error) if error.is::<PendingPlayOverflow>() || error.is::<PendingPlayRateLimit>() => {
                                 warn!(%error, connection = id.0, "administrative input rejected; disconnecting");
                                 server.kick(id, serde_json::json!({"text": error.to_string()}))?;
-                                let _ = (&mut *writer_task).await;
+                                if let Ok((stage, _)) = (&mut *writer_task).await {
+                                    writer_recorded = ConnectionRegistry::close_cause_counts(stage);
+                                }
                                 writer_finished = true;
                                 break 'play_loop "admin-input-overflow";
                             }
@@ -941,7 +947,11 @@ async fn run_connection(
         // session's end (which re-opens accept after fd exhaustion) really
         // means the socket is released.
         writer_task.abort();
-        let _ = writer_task.await;
+        if let Ok((stage, _)) = writer_task.await {
+            // The writer finished before the abort: it may have counted its own
+            // abnormal stage, so the loop must not add a second cause.
+            writer_recorded = ConnectionRegistry::close_cause_counts(stage);
+        }
     }
     lifecycle.writer.take();
     if !writer_recorded {
@@ -1070,8 +1080,9 @@ pub(super) async fn play_writer(
     .await;
     // A socket write failure is known here and nowhere else: record it before
     // the stage becomes a log line (PERF-RECEIPT-HAS-NO-ERROR-COUNTER-ROLLUP).
-    // The play loop reads this stage from the join handle and does not count it
-    // again.
+    // The play loop reads this stage from the join handle and decides with
+    // `ConnectionRegistry::close_cause_counts` whether it was counted here, so
+    // the session's end enters the rollup once.
     connections.record_close_cause(ended.0);
     ended
 }

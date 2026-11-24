@@ -850,13 +850,14 @@ fn stats_carry_wal_write_cost_and_close_causes() {
     let state = test_state();
     let registry = Arc::new(ConnectionRegistry::new());
     state.set_queue_source(Arc::clone(&registry));
-    registry.close(mc_core::boundary::ConnectionId(3), "reliable-overflow");
-    registry.close(mc_core::boundary::ConnectionId(3), "reliable-overflow");
-    registry.close(mc_core::boundary::ConnectionId(4), "world-write-failed");
+    // The writer records its own terminal stage; the payload reads the map on
+    // request, never from a pump sample.
+    registry.record_close_cause("reliable-overflow");
+    registry.record_close_cause("world-write-failed");
     let snapshot = state.snapshot();
     assert_eq!(
         snapshot.network.close_causes.get("reliable-overflow"),
-        Some(&2),
+        Some(&1),
         "the rollup is read from the registry when the payload is built"
     );
     assert_eq!(
@@ -902,13 +903,13 @@ fn stats_carry_wal_write_cost_and_close_causes() {
     }
 }
 
-/// The rollup counts session ends that are errors, once, and nothing else: a
-/// delivery-policy close counts, the lifecycle's ordinary end does not.
+/// The rollup counts session ends that are errors and nothing else: a reported
+/// abnormal stage counts, and the lifecycle's ordinary removal adds no cause.
 #[test]
 fn an_abnormal_close_is_counted_by_cause() {
     let registry = crate::server::ConnectionRegistry::new();
     let ordinary = registry.joining_id();
-    registry.close(mc_core::boundary::ConnectionId(3), "reliable-overflow");
+    registry.record_close_cause("reliable-overflow");
     registry.remove(ordinary);
     let causes = registry.close_causes();
     assert_eq!(causes.get("reliable-overflow"), Some(&1));

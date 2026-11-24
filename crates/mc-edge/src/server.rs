@@ -500,21 +500,39 @@ impl EdgeServer {
         })
     }
 }
+/// Why a cold reliable send did not enqueue.
+#[derive(Debug, thiserror::Error)]
+pub(super) enum SendFailure {
+    /// The queue is full: [`EdgeServer::send`] closed this session with its own
+    /// cause, so a second `close` must not count it again.
+    #[error("reliable command queue full")]
+    Full,
+    /// The writer already released the receiver: the session is ending on its
+    /// own (a client EOF, a delivery-policy close), so nothing is counted.
+    #[error("connection already closed")]
+    Closed,
+    /// The packet did not encode: a programming error, not a session end.
+    #[error(transparent)]
+    Encode(#[from] anyhow::Error),
+}
+
 impl EdgeServer {
     fn send<P: mc_protocol::packets::Packet>(
         &self,
         id: ConnectionId,
         packet: &P,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), SendFailure> {
         let mut body = Vec::new();
-        crate::vanilla_items::encode(id, packet, &mut body)?;
+        crate::vanilla_items::encode(id, packet, &mut body)
+            .map_err(|error| SendFailure::Encode(error.into()))?;
         let mut frame = bytes::BytesMut::new();
         mc_protocol::frame::append_frame(
             &mut frame,
             P::ID,
             &body,
             mc_protocol::frame::Compression::Threshold(256),
-        )?;
+        )
+        .map_err(|error| SendFailure::Encode(error.into()))?;
         // Cold command delivery needs only the reliable sender, not a copy
         // of both queue handles. Release the registry before enqueueing.
         let sender = self
@@ -524,13 +542,14 @@ impl EdgeServer {
             .handles
             .get(&id)
             .map(|handles| handles.reliable_tx.clone());
-        if let Some(sender) = sender
-            && sender.try_send(frame.freeze()).is_err()
-        {
-            self.connections.close(id, "command-reliable-full");
-            anyhow::bail!("reliable command queue full");
+        match sender.map(|sender| sender.try_send(frame.freeze())) {
+            None | Some(Ok(())) => Ok(()),
+            Some(Err(mpsc::error::TrySendError::Full(_))) => {
+                self.connections.close(id, "command-reliable-full");
+                Err(SendFailure::Full)
+            }
+            Some(Err(mpsc::error::TrySendError::Closed(_))) => Err(SendFailure::Closed),
         }
-        Ok(())
     }
 
     /// A command's success reply: shown to the console always, to a player only
@@ -562,7 +581,8 @@ impl EdgeServer {
                 content_nbt,
                 overlay: false,
             },
-        )
+        )?;
+        Ok(())
     }
 
     pub(crate) fn kick(&self, id: ConnectionId, reason: serde_json::Value) -> anyhow::Result<()> {
@@ -605,10 +625,19 @@ impl EdgeServer {
             .handles
             .get(&id)
             .ok_or_else(|| anyhow::anyhow!("connection closed before disconnect"))?;
-        if handles.reliable_tx.try_send(frame.freeze()).is_err() {
-            drop(inner);
-            self.connections.close(id, "disconnect-reliable-full");
-            anyhow::bail!("reliable command queue full");
+        match handles.reliable_tx.try_send(frame.freeze()) {
+            Ok(()) => {}
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                drop(inner);
+                self.connections.close(id, "disconnect-reliable-full");
+                anyhow::bail!("reliable command queue full");
+            }
+            // A receiver the writer already released belongs to a session that
+            // is ending on its own: no second cause.
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                drop(inner);
+                anyhow::bail!("connection already closed");
+            }
         }
         inner.disconnect_reasons.insert(id, reason.to_string());
         Ok(())

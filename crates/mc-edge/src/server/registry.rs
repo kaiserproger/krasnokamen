@@ -106,12 +106,20 @@ impl ConnectionRegistry {
         self.close_causes.lock().clone()
     }
 
+    /// Whether a cause enters the rollup at all: an abnormal cause does, a normal end does
+    /// not. [`record_close_cause`](Self::record_close_cause) and the play loop's
+    /// `writer_recorded` decision read this one rule, so exactly one of them counts a
+    /// session's end.
+    pub(crate) fn close_cause_counts(cause: &str) -> bool {
+        !NORMAL_CLOSE_CAUSES.contains(&cause)
+    }
+
     /// Count one session-ending cause, once, where it is known: a delivery-policy
     /// [`close`](Self::close), the play writer's own terminal stage, or the play
     /// loop's exit stage. A normal end (see [`NORMAL_CLOSE_CAUSES`]) is not an
     /// error and never enters the rollup.
     pub(crate) fn record_close_cause(&self, cause: &'static str) {
-        if NORMAL_CLOSE_CAUSES.contains(&cause) {
+        if !Self::close_cause_counts(cause) {
             return;
         }
         *self.close_causes.lock().entry(cause).or_insert(0) += 1;
@@ -348,8 +356,12 @@ impl ConnectionRegistry {
     /// [`Self::remove`] naming why: the connection owner logs `cause`, and an
     /// abnormal cause counts once in [`close_causes`](Self::close_causes). A
     /// normal end (`removed`) counts nothing.
+    ///
+    /// The cause counts only when this call takes the session's live closer:
+    /// one bare `close` per id is a session end, while a second close (or a
+    /// close of an id that never had a live session) is bookkeeping after the
+    /// end was already counted somewhere else.
     pub fn close(&self, id: ConnectionId, cause: &'static str) {
-        self.record_close_cause(cause);
         crate::vanilla_items::unmark(id);
         let closer = {
             let mut inner = self.inner.lock();
@@ -379,6 +391,7 @@ impl ConnectionRegistry {
             inner.closers.remove(&id)
         };
         if let Some(closer) = closer {
+            self.record_close_cause(cause);
             let _ = closer.send(cause);
         }
     }
