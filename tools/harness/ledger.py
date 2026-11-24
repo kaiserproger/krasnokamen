@@ -299,9 +299,11 @@ _FIXTURE_PANICS = (
 _ASSERT_LINE = re.compile(r'\b(?:assert(?:_eq|_ne)?!|debug_assert(?:_eq|_ne)?!|panic!\s*\()')
 # A source line that *begins* with an assert macro is the assertion itself whatever message it
 # carries: `assert!(cond, "custom text")` panics with that text, not with "assertion failed"
-# (REVIEW-wave2-10 minor 4). The message-based rule below stays for an assert nested inside an
-# `expect(...)`, where the line belongs to the unwrap.
-_ASSERT_LINE_START = re.compile(r'^\s*(?:assert(?:_eq|_ne)?!|debug_assert(?:_eq|_ne)?!|panic!\s*\()')
+# (REVIEW-wave2-10 minor 4). `panic!` is deliberately not line-start evidence: a setup
+# `panic!("world fixture missing")` on its own line must keep the message rule below, or a fixture
+# death would pass as a proving red (REVIEW-wave2-11 minor-6). The message-based rule also stays
+# for an assert nested inside an `expect(...)`, where the line belongs to the unwrap.
+_ASSERT_LINE_START = re.compile(r'^\s*(?:assert(?:_eq|_ne)?!|debug_assert(?:_eq|_ne)?!)')
 _ASSERT_MESSAGE = re.compile(r'^(assertion|assert\b|explicit panic|panicked at)', re.IGNORECASE)
 _UNWRAP_LINE = re.compile(r'\.(?:unwrap|expect)\s*\(')
 
