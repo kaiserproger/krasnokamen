@@ -28,9 +28,16 @@ def _shot_path(steps: ProbeSteps, name: str) -> Path:
     return steps.artifact_dir.parent / "screenshots" / f"{name}.png"
 
 
-def _differing_pixels(first: Path, second: Path, regions=HELD_MAP_REGIONS) -> dict[str, int]:
-    """Pixels that changed between two retained frames, per region plus the whole frame."""
+def _differing_pixels(first: Path, second: Path, regions=HELD_MAP_REGIONS,
+                      tolerance: int = 24) -> dict[str, int]:
+    """Pixels that changed between two retained frames, per region plus the whole frame.
+
+    A per-channel tolerance, not equality: the daylight lightmap moves a few units between two
+    captures of an outdoor scene, while the marker sprite changes at least one channel by far more."""
     from PIL import Image
+
+    def changed(a: tuple[int, int, int], b: tuple[int, int, int]) -> bool:
+        return max(abs(a[0] - b[0]), abs(a[1] - b[1]), abs(a[2] - b[2])) > tolerance
 
     counts: dict[str, int] = {}
     with Image.open(first) as one, Image.open(second) as two:
@@ -39,7 +46,7 @@ def _differing_pixels(first: Path, second: Path, regions=HELD_MAP_REGIONS) -> di
         before, after = one.convert("RGB"), two.convert("RGB")
         before_px, after_px = list(before.getdata()), list(after.getdata())
         width = before.width
-        counts["frame"] = sum(1 for a, b in zip(before_px, after_px) if a != b)
+        counts["frame"] = sum(1 for a, b in zip(before_px, after_px) if changed(a, b))
         for index, region in enumerate(regions):
             left, top, right, bottom = region
             total = 0
@@ -47,7 +54,7 @@ def _differing_pixels(first: Path, second: Path, regions=HELD_MAP_REGIONS) -> di
                 row = y * width
                 for x in range(left, min(right, before.width)):
                     offset = row + x
-                    if before_px[offset] != after_px[offset]:
+                    if changed(before_px[offset], after_px[offset]):
                         total += 1
             counts[f"region{index}"] = total
     return counts
@@ -211,6 +218,10 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                 steps.call("minecraft_read_item_components", {"source": "selected"}).get("item_id")
                 == "minecraft:filled_map")
     colours_before = _map(steps, locked)["colors"][:]
+    # The chat overlay is drawn over the left part of the held map and grows with every fixture line,
+    # so both captures are taken with the HUD hidden (F1); the map rendering itself is unaffected.
+    steps.call("minecraft_press_inputs", {"keys": ["key.keyboard.f1"], "ticks": 1})
+    steps.wait(lambda state: state["client_settings"]["hide_hud"] is True, "map_captures_hud_hidden")
     _held_shot(steps, "map-held-without-frame-waypoint")
     steps.fixture("clear @s minecraft:filled_map")
     _frame_insert(steps, frame, locked)
@@ -222,6 +233,9 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                 steps.call("minecraft_read_item_components", {"source": "selected"}).get("item_id")
                 == "minecraft:filled_map")
     _held_shot(steps, "map-held-with-frame-waypoint")
+    steps.call("minecraft_press_inputs", {"keys": ["key.keyboard.f1"], "ticks": 1})
+    steps.wait(lambda state: state["client_settings"]["hide_hud"] is False,
+               "map_captures_hud_restored")
     colours_after = _map(steps, locked)["colors"][:]
     steps.report["map_terrain_changed_pixels"] = sum(
         1 for before, after in zip(colours_before, colours_after) if before != after)
