@@ -48,5 +48,12 @@ real pre-image and nothing is invented. The b/-side is the tip text
 `frozen_game_age_scene.json` `assert_same_game_time`): with `tick freeze` held,
 a teleport and a `time add 1000`, the client's received game age must not move.
 Reversed, the scene sends `snapshot.tick`, which advances while frozen, and the
-assertion is red. The three cargo refs are green in that control and are
-coverage, not control evidence.
+assertion is red (artifact `.analysis/validation/20261124T073200-ledger-promote-likvplju`).
+Two cargo refs are red in the same control and count as evidence:
+`play::tests::join_burst_carries_load_start_before_center` at
+`play_tests.rs:120` and
+`clock_queue_tests::queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer`
+at `clock_queue_tests.rs:147` (their clock expectations see the WAL counter).
+`tick_control::tests::game_time_stands_still_while_frozen_and_counts_stepped_ticks`
+is green there (it reads the source-level `game_time`, not the wire) and is a
+green regression, not control evidence.
