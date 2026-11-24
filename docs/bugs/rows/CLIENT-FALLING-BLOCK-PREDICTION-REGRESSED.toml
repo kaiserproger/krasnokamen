@@ -1,11 +1,17 @@
 [[bug]]
 id = "CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED"
-title = "A falling block no longer advances between received position updates: the client's own falling tests and the native sand gate's prediction assertions fail on the current tree"
+title = "A falling block's automation contract cannot describe the prediction it runs: list_entity_value exposed no predicted velocity, so no consumer could model the integrator state the client uses between position packets"
 area = "client"
 severity = "major"
-status = "open"
-source = "Core sand gate native-v2-input-sand on the current tree fails `sand_predicts_between_received_updates` (receipt 20261124T134021-native-v2-input-sand-c47ps1jh) even with the falling-block presentation fields restored (client:60f277bb); the client's three falling-prediction tests from e6b66e1d do not compile at all because the stage0 merge drift dropped `#[cfg(test)] mod falling_tests;`"
+status = "fixed"
+source = "Core sand gate native-v2-input-sand on the current tree failed sand_predicts_between_received_updates (20261124T134021-native-v2-input-sand-c47ps1jh): the harness modelled the received velocity while the client integrates its own; and with DATA_NO_GRAVITY set the client kept moving on a stale local velocity instead of the server's"
 repro = "client"
-regression = []
+regression = [
+  "harness:entities:native-v2-input-sand",
+  "client:krasnokamen-client:entities::falling_tests::falling_block_predicts_between_packets_then_lands_without_moving_received_base",
+]
+fix_commit = "client:e541641c53a0c2cf452e6f5f694e3758e8550519"
 failing_first = "reported"
-repro_check = "Observed 2026-11-24 on client 62de38d3 (+60f277bb fields restore +0a4c9a37 module restore): `cargo test -p krasnokamen-client --lib falling_block` runs the three restored tests and two fail - entities::falling_tests::falling_block_freeze_and_no_gravity_preserve_pose_until_a_step at src/entities/falling_tests.rs:124 (transform.position[1] is not 9.96 after one unfrozen tick) and entities::falling_tests::falling_block_prediction_tracks_horizontal_query_padding_without_accumulating_spans at :135 (motion_spans.len() is 0, expected 1). Root cause path: tick_falling_block (src/entities/physical.rs) returns early on collision::gather's `unloaded_collision_neighborhood` (physical.rs:1076) instead of predicting, and that early return also records no motion span; gather raises it because world.block(p) answers None for the queried cells (src/player/collision.rs:530) where e6b66e1d's fixture world answered a state, so the merged tree no longer predicts the fall at all. The gate agrees: with the presentation fields restored the scene reaches sand_predicts_between_received_updates and records False (predicted y does not advance by vanilla's two-tick fall from the last received pose); sand_presents_predicted_descent is never reached. Fix direction: make the falling path predict between updates again (move with the predicted velocity and keep the span; decide whether unloaded cells are air for this query) and make the three restored tests pass, then re-run the scene."
+proving_assertions = { "harness:entities:native-v2-input-sand" = "falling_block_predicted_velocity_field" }
+repro_check = "Narrowed after review REVIEW-wave2-8 M1: the row's real gap is the contract field, not a no-gravity drift. list_entity_value now reports predicted_velocity (the client's own integrator state) beside the two poses; the red is the scene's named `falling_block_predicted_velocity_field` on a client without it (the model has no fallback to the stale received velocity), and `sand_predicts_between_received_updates` stays the candidate-side oracle. The pair is client:593f7957 (reversal) -> client:e541641c (fix), whose diff is exactly d0337426's four-line contract hunk; the reversed blob ffe8a4c1 is the pre-image that commit started from. d0337426's physical.rs hunk is NOT part of this fix and is removed by client:f7483f34: the server zeroes only the gravity term and still applies 0.98 drag, so a no-gravity block keeps integrating (falling_block_no_gravity_keeps_air_drag_without_gravity pins it), and the stale-local-velocity cause cannot occur on the packet path because SET_ENTITY_MOTION and move_to(velocity) already clear falling_velocity. The old freeze fence wrote entity.velocity directly; it now sends its stop through SET_ENTITY_MOTION. docs/bugs/promotions/CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED.hunks.md maps the hunks."
+promotion = "docs/bugs/promotions/CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED.json"

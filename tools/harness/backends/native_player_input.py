@@ -337,8 +337,14 @@ _FALL_DRAG = c.c_float(.98).value
 
 
 def _vanilla_fall(row: dict, ticks: int) -> float:
-    """Open-air 26.3 FallingBlockEntity.tick: 0.04 gravity, move, then air drag."""
-    y, velocity = row["predicted_position"][1], row["velocity"]["y"]
+    """Open-air 26.3 FallingBlockEntity.tick: 0.04 gravity, move, then air drag.
+
+    The integrator starts from the client's own predicted velocity (`predicted_velocity`): between
+    position packets the received `velocity` is the stale base, so consuming it would model a
+    different tick sequence than the client actually ran. There is no fallback: a client without the
+    field fails the `falling_block_predicted_velocity_field` contract check before the model runs."""
+    y = row["predicted_position"][1]
+    velocity = row["predicted_velocity"][1]
     for _ in range(ticks):
         velocity -= .04
         y += velocity
@@ -424,6 +430,9 @@ def sand(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.check("falling_block_presentation_fields",
                 all(field in start for field in
                     ("presentation_tick", "predicted_position", "presented_position")))
+    # The integrator state is its own field and its own assertion: `_vanilla_fall` has no fallback to
+    # the stale received velocity, so a client without it must name the gap, not fail the model.
+    steps.check("falling_block_predicted_velocity_field", "predicted_velocity" in start)
     received = step_two(start, "sand_client_step_prime")
 
     def updated(_: dict) -> bool:

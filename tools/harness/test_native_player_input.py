@@ -27,8 +27,11 @@ class FrozenFall:
     observations are the native client's `recent_chat`: the last 20 lines, newest first.
     """
 
-    def __init__(self, latency: float, phase: int, holds: bool = True, fields: bool = True) -> None:
+    def __init__(self, latency: float, phase: int, holds: bool = True, fields: bool = True,
+                 stale: bool = False, velocity_field: bool = True) -> None:
         self.latency, self.phase, self.holds, self.fields = latency, phase, holds, fields
+        self.velocity_field = velocity_field
+        self.stale = stale
         self.now = self.next_tick = 0.
         self.rate, self.loop = 20., 0
         self.commands: list[str] = []
@@ -82,11 +85,15 @@ class FrozenFall:
         self.loop += 1
 
     def row(self) -> dict:
-        row = {"entity_uuid": "sand", "y": self.received, "velocity": {"y": self.client[1]}}
+        # `stale` models a client whose received velocity is older than its own integrator state.
+        received = self.client[1] + (1. if self.stale else 0.)
+        row = {"entity_uuid": "sand", "y": self.received, "velocity": {"y": received}}
         if self.fields:
-            # The falling-block automation contract (predicted/presented pose + presentation tick).
+            # The falling-block automation contract (predicted pose + presentation tick).
             row.update({"presentation_tick": self.tick, "predicted_position": [0., self.client[0], 0.],
                         "presented_position": [0., self.presented, 0.]})
+        if self.fields and self.velocity_field:
+            row["predicted_velocity"] = [0., self.client[1], 0.]
         return row
 
     # ProbeSteps surface used by native_player_input.sand.
@@ -134,8 +141,9 @@ def fall(body: list[float]) -> None:
 
 class SandGateTests(unittest.TestCase):
     def run_gate(self, latency: float, phase: int, holds: bool = True,
-                 fields: bool = True) -> FrozenFall:
-        world = FrozenFall(latency, phase, holds, fields)
+                 fields: bool = True, stale: bool = False,
+                 velocity_field: bool = True) -> FrozenFall:
+        world = FrozenFall(latency, phase, holds, fields, stale, velocity_field)
         with tempfile.TemporaryDirectory() as directory:
             frames = []
             for color in ("red", "blue"):
@@ -173,11 +181,30 @@ class SandGateTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "falling_block_presentation_fields"):
             self.run_gate(.05, 0, fields=False)
 
+    def test_a_stale_received_velocity_does_not_change_the_prediction_model(self) -> None:
+        # Between position packets the received velocity is the stale base; the client integrates its
+        # own. The gate must model the integrator (`predicted_velocity`), not the received base.
+        for latency in (.05, .25):
+            with self.subTest(latency=latency):
+                world = self.run_gate(latency, 7, stale=True)
+                self.assertTrue(all(world.report["assertions"].values()))
+
     def test_prediction_check_is_vanilla_falling_block_integration(self) -> None:
-        # Receipt 20261111T163719-native-v2-input-sand-2gazssgv: two client-predicted ticks.
+        # Receipt 20261111T163719-native-v2-input-sand-2gazssgv: two client-predicted ticks. The
+        # model reads only the integrator field; a stale received velocity cannot stand in for it.
         before = {"predicted_position": [192.5, 106.88076093673706, -444.5],
-                  "velocity": {"y": -0.0776160022583008}}
+                  "predicted_velocity": [0., -0.0776160022583008, 0.],
+                  "velocity": {"y": 0.9223839977416992}}
         self.assertEqual(native_player_input._vanilla_fall(before, 2), 106.60788125002227)
+        with self.assertRaises(KeyError):
+            native_player_input._vanilla_fall({"predicted_position": [0., 107., 0.],
+                                               "velocity": {"y": -0.04}}, 1)
+
+    def test_a_client_without_the_predicted_velocity_field_turns_the_gate_red(self) -> None:
+        # The prediction model has no fallback to the stale received velocity, so a client that
+        # drops only predicted_velocity must fail this row's own contract assertion.
+        with self.assertRaisesRegex(RuntimeError, "falling_block_predicted_velocity_field"):
+            self.run_gate(.05, 0, velocity_field=False)
 
 
 if __name__ == "__main__":
