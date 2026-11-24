@@ -255,7 +255,7 @@ def run(ctx: ProfileContext) -> dict:
                 _play(probe, state)
             elif ctx.scenario_id == ROTATION:
                 _play(probe, state)
-                probe.call("minecraft_look", {"yaw_deg": 90.0, "pitch_deg": 20.0})
+                probe.call("minecraft_look", {"yaw_deg": 90, "pitch_deg": 20})
                 looked = probe.wait(
                     lambda s: abs(s["player"]["yaw"] - 90.0) < 0.1
                     and abs(s["player"]["pitch"] - 20.0) < 0.1,
