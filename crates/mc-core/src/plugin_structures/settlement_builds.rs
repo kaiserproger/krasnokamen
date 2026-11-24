@@ -336,8 +336,12 @@ pub(crate) fn recover(
     // upgrade of SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE did (`stage=2 work=0`,
     // `Running`). It has no next cell, so no builder pass can advance it and the project would hold
     // its slot forever; recovery is the only pass that can finish it, and the tail below already
-    // writes `Committed` once the index is terminal.
-    let terminal = record.snapshot.current_stage_index as usize == record.cells.len()
+    // writes `Committed` once the index is terminal. A record with no cells is the opposite case —
+    // an admitted site whose plan was never generated reads `0 == 0` here — and is left to the
+    // builder pass, which is what admits the House project (three BuildQA house L1 selects failed
+    // with no project while this matched an empty plan).
+    let terminal = !record.cells.is_empty()
+        && record.snapshot.current_stage_index as usize == record.cells.len()
         && record.snapshot.completed_work_units == 0;
     if !paused && !committed && !terminal {
         return Ok(false);
