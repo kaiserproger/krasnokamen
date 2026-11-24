@@ -115,6 +115,12 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
             if matches!(key.as_str(), "Pos" | "id" | "UUID") {
                 return Err(format!("Removing {key} is not supported"));
             }
+            if crate::command_data::private_field(key) {
+                // The published compound never prints engine-private state, so a removal can
+                // only come from a guessed name; loading a default there would reset the
+                // runtime (clocks, lineages, POI memberships) instead of a summon field.
+                return Err(format!("Removing {key} of {name} is not supported"));
+            }
             image.retain(|(k, _)| k != key);
             touched.push(key.clone());
         }
