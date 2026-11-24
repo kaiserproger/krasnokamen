@@ -307,6 +307,13 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
     started = time.monotonic()
     first = None
     samples: list[dict[str, Any]] = []
+    # SETTLEMENT-LAYOUT-PROJECT-SHOWS-UNKNOWN-BLUEPRINT needs an ACTIVE layout project: the
+    # status page shows `Active projects: 0/8` and no card once the bounded fortification list is
+    # complete (20261124T163621: 212 wall columns, 28 gate columns and the well stood, then the
+    # page had nothing to name and the verdict read false). Read it while the wall is being built,
+    # once for the well and again once a wall/gate column stands.
+    labels: set[str] = set()
+    status_reads: list[list[str]] = []
     counts = before
     while True:
         probe.call("minecraft_wait_ticks", {"ticks": SCAN_TICKS})
@@ -323,6 +330,18 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
             sub.setdefault("villagers", {})[str(len(samples))] = [
                 [round(float(v["x"]), 1), round(float(v["y"]), 1), round(float(v["z"]), 1)]
                 for v in _villagers(probe)]
+        missing = not labels & set(LAYOUT_INFRASTRUCTURE) or (
+            counts["ring_blocks"] > 0 and not labels & {"Wall section", "Gate"})
+        if (missing and len(status_reads) < 4
+                and counts["ring_blocks"] + counts["well_blocks"] > 0
+                and probe.deadline - time.monotonic() > 300.0):
+            try:
+                names = _status_names(probe)
+                status_reads.append(names[:16])
+                labels |= project_labels_from(names)
+            except Exception as error:  # a page the run could not open is recorded, never a pass
+                sub["status_error"] = str(error)[:300]
+                probe.call("minecraft_close_screen", {})
         if first is None and counts["ring_blocks"] + counts["well_blocks"] > 0:
             first = elapsed
         if complete(counts):
@@ -343,13 +362,15 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
     # way the D63 client offers it (hub -> Management -> Construction -> Status), never by the
     # retired `settlement menu projects` command route.
     from .village_autonomy_qa import PROJECT_LABELS
-    labels: set[str] = set()
-    try:
-        names = _status_names(probe)
-        sub["status_slots"] = names[:16]
-        labels = project_labels_from(names)
-    except Exception as error:  # a page the run could not open is recorded, never a false pass
-        sub["status_error"] = str(error)[:300]
+    if not labels & set(LAYOUT_INFRASTRUCTURE):
+        try:
+            names = _status_names(probe)
+            status_reads.append(names[:16])
+            labels |= project_labels_from(names)
+        except Exception as error:  # a page the run could not open is recorded, never a false pass
+            sub["status_error"] = str(error)[:300]
+    sub["status_reads"] = status_reads
+    sub["status_slots"] = status_reads[-1] if status_reads else []
     layout = labels & set(LAYOUT_INFRASTRUCTURE)
     named = project_named(labels)
     sub["project_labels"] = sorted(labels)
