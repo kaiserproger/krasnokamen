@@ -149,3 +149,21 @@ files at `178456759b`, patch reversed; server binary sha256 `054800eb3094…`), 
 resident (`villager_occupies_bed_*` passed) and the server's own `execute if block …
 [part=head,occupied=true]` predicate did not match, i.e. the resident's bed stayed free with the fix
 removed. Both split branches of the row (player and resident) now have their own real-client red.
+
+## Re-generated again for the control (review wave2-9 Minor-1 closure, 2026-11-25)
+
+The five-commit patch (`2d890e2a…`) reversed cleanly but its control tree did not compile:
+`51e8c1c77` added a test that reads `rig.state.occupied_beds`, and reversing `tick.rs`/`tick/state.rs`
+removes the field, so the kept test file fails `E0609` (two errors; the promote's
+`ledger-0-list` log `20261124T203802-ledger-promote-3h627vx9`). The patch is therefore the fix's
+**behaviour** only:
+
+```
+git diff 34af8faf86^..HEAD -- crates/mc-core/src/sleep.rs crates/mc-core/src/tick/dimension.rs
+```
+
+sha256 `fb6d7c78c3ad229b655fddb7960cb96e47224e53c7e3a24c960eec760c079361`; a/- side = the pre-image of
+both files (no `mirror_occupied_beds`, no `set_bed_occupied`, no call in `tick/dimension.rs`), b/- side
+= HEAD. The `occupied_beds` field and its `HashSet::default()` initialiser stay (they are derived state
+the kept tests read; the field without the mirror is inert), and that is the only adaptation — named
+here per the review's rule. `git apply -R --check` passes on the promotion tree.

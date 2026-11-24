@@ -90,21 +90,6 @@ index 6e21fd7c7..a4ffda0cf 100644
  /// Once per tick: count sleep time, wake those whose bed is gone, whose
  /// night is over or who were hurt, and skip the night when the gamerule's
  /// percentage of active non-spectator players sleeps soundly.
-diff --git a/crates/mc-core/src/tick.rs b/crates/mc-core/src/tick.rs
-index 60ef9b2c5..9c2fb4d41 100644
---- a/crates/mc-core/src/tick.rs
-+++ b/crates/mc-core/src/tick.rs
-@@ -442,6 +442,10 @@ pub struct TickState {
-     pub(crate) shriekers: crate::shrieker::Shriekers,
-     /// Players lying in a bed ([`crate::sleep`]).
-     pub sleepers: HashMap<EntityId, crate::sleep::Sleeper>,
-+    /// Bed head cells whose block `occupied` property this tick mirrored
-+    /// ([`crate::sleep::mirror_occupied_beds`]). Derived from the sleepers and sleeping
-+    /// residents every tick, never persisted.
-+    pub(crate) occupied_beds: HashSet<BlockPos>,
-     /// Last journaled player / block-entity post-images. Images are
-     /// absolute, so the journal writes one only when it differs from the
-     /// last; an unchanged record is still covered by an earlier batch or
 diff --git a/crates/mc-core/src/tick/dimension.rs b/crates/mc-core/src/tick/dimension.rs
 index 38bf46f8a..15a4a35c6 100644
 --- a/crates/mc-core/src/tick/dimension.rs
@@ -121,15 +106,3 @@ index 38bf46f8a..15a4a35c6 100644
      let block_prepare_start = std::time::Instant::now();
  
      // 4. Block phase: ordered merge writes, retained falling lifecycle.
-diff --git a/crates/mc-core/src/tick/state.rs b/crates/mc-core/src/tick/state.rs
-index 65a334078..4b9cd3728 100644
---- a/crates/mc-core/src/tick/state.rs
-+++ b/crates/mc-core/src/tick/state.rs
-@@ -151,6 +151,7 @@ impl TickState {
-             vaults: Default::default(),
-             shriekers: Default::default(),
-             sleepers: HashMap::default(),
-+            occupied_beds: HashSet::default(),
-             journaled_players: HashMap::default(),
-             journaled_block_entities: HashMap::default(),
-             block_log: Default::default(),
