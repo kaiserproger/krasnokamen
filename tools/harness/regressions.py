@@ -19,6 +19,10 @@ from .runtime import REPO_ROOT
 
 REQUIRED = {'id', 'title', 'area', 'repro', 'severity', 'status', 'source', 'regression'}
 OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_proof', 'proving_assertions',
+            # The refs whose red must prove the fix when the row also carries a check that cannot flip
+            # (a metadata fence, an elided client test); every ref is proving when the list is absent
+            # (LEDGER-CONTROL-COVERS-ONE-REF).
+            'proving_refs',
             # A fix whose every hunk is in test files: the corrected oracle IS the guard. The promotion
             # runs two controls (docs/bugs/README.md): the pre-fix test hunks restored must go red on
             # current code, and a committed defect-injection patch must turn the corrected test red.

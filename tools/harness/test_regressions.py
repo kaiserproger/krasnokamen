@@ -2522,3 +2522,54 @@ class ReleasePinTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'checksum mismatch.*pin-release'):
                 regressions._release_server(self.ctx, profiles)
         self.build.assert_not_called()
+
+
+class ControlCoversEveryProvingRefTests(unittest.TestCase):
+    """A row's control must be red on every ref it claims as proof (LEDGER-CONTROL-COVERS-ONE-REF).
+
+    The hole this closes: a promoted row of two refs passed the control because ONE of them was red —
+    a scene whose control run crashed (`failed`, no assertion verdict) still counted once the cargo
+    ref flipped, and at e25d40529 that accepted a control which proved nothing about the scene."""
+
+    ROW = {'id': 'ROW', 'regression': ['cargo:t::flip', 'harness:scene-shot:scene']}
+
+    def states(self, **overrides):
+        base = {'cargo:t::flip': {'state': 'red', 'detail': 'FAIL'},
+                'harness:scene-shot:scene': {'state': 'red', 'detail': 'assertion failed: speed'}}
+        base.update(overrides)
+        return base
+
+    def test_every_ref_red_passes_without_a_proving_list(self):
+        ledger._require_control_red('ROW', self.states(), ledger.proving_refs(self.ROW))
+
+    def test_an_unrunnable_run_never_counts_as_red(self):
+        for state in ('unrunnable', 'needs-real-client', 'unproven-panic', 'fixture-failure'):
+            with self.subTest(state=state):
+                with self.assertRaisesRegex(ledger.Refused, 'not red on every proving ref'):
+                    ledger._require_control_red('ROW', self.states(**{'harness:scene-shot:scene': {'state': state}}),
+                                                ledger.proving_refs(self.ROW))
+
+    def test_a_missing_entry_is_not_red(self):
+        with self.assertRaisesRegex(ledger.Refused, 'no result for this ref'):
+            ledger._require_control_red('ROW', {'cargo:t::flip': {'state': 'red'}}, ledger.proving_refs(self.ROW))
+
+    def test_a_row_may_name_the_refs_that_prove_it(self):
+        row = {**self.ROW, 'proving_refs': ['harness:scene-shot:scene']}
+        control = self.states(**{'harness:scene-shot:scene': {'state': 'red', 'detail': 'assertion failed: speed'},
+                                 'cargo:t::flip': {'state': 'green', 'detail': ''}})
+        ledger._require_control_red('ROW', control, ledger.proving_refs(row))
+
+    def test_a_named_ref_still_has_to_be_red(self):
+        row = {**self.ROW, 'proving_refs': ['harness:scene-shot:scene']}
+        with self.assertRaisesRegex(ledger.Refused, 'harness:scene-shot:scene=unrunnable'):
+            ledger._require_control_red('ROW', self.states(**{'harness:scene-shot:scene': {'state': 'unrunnable'}}),
+                                        ledger.proving_refs(row))
+
+    def test_proving_refs_must_name_registered_refs(self):
+        for named in (['harness:scene-shot:other'], [], 'harness:scene-shot:scene'):
+            with self.subTest(named=named):
+                with self.assertRaisesRegex(ledger.Refused, 'proving_refs'):
+                    ledger.proving_refs({**self.ROW, 'proving_refs': named})
+
+    def test_the_default_is_every_ref(self):
+        self.assertEqual(ledger.proving_refs(self.ROW), self.ROW['regression'])
