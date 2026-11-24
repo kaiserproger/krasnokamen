@@ -69,7 +69,13 @@ def read_published(journal: Path, checkpoint_tick: int) -> dict:
             raise ValueError(f'{path}: invalid frame identity')
         data = path.read_bytes()
         if len(data) < HEADER_LEN:
-            raise ValueError(f'{path}: truncated frame')
+            # A format-1 frame is 32 bytes; calling it "truncated" hides that this build refuses
+            # its whole format, not a torn tail (review wave2-8 m3).
+            magic_version = struct.unpack_from('<II', data) if len(data) >= 8 else None
+            if magic_version == (_MAGIC, 1):
+                raise ValueError(f'{path}: format-1 frame ({len(data)} bytes); this build writes '
+                                 f'and reads format {_VERSION} only')
+            raise ValueError(f'{path}: truncated frame ({len(data)} < {HEADER_LEN} bytes)')
         decoded = frame(path.name, data)
         if decoded is None:
             raise ValueError(f'{path}: invalid frame identity, version or checksum '

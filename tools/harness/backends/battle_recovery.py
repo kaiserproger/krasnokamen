@@ -1423,9 +1423,19 @@ class WindupObserver:
 
     def update(self) -> None:
         for path in sorted(self.archive.glob("batch-*.bin")):
-            decoded = wal_frame(path.name, path.read_bytes())
+            data = path.read_bytes()
+            decoded = wal_frame(path.name, data)
             if decoded is None:
-                break  # torn tail or a format this build refuses: the fold stops before it
+                # The archive holds os.link'ed *published* files (run-battle.py publishes with a
+                # link), so a frame that does not decode is a foreign or old-format file, not a
+                # torn tail: stopping silently burned a 600 s deadline with no diagnosis in the
+                # A11 rerun (review wave2-8 m3).
+                magic, version = (struct.unpack_from("<II", data) if len(data) >= 8
+                                  else (None, None))
+                raise Incomplete(
+                    f"windup event: {path.name} is not a format-2 frame (magic "
+                    f"{'unreadable' if magic is None else hex(magic)}, version {version}, "
+                    f"{len(data)} bytes) in {self.archive}")
             low, high, body = decoded
             if high <= self.last_tick:
                 continue

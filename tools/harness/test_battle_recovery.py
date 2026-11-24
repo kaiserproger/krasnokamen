@@ -38,11 +38,13 @@ def history(first, last, spawns=(), removals=()):
 
 
 def batch(directory: Path, low: int, high: int, lines: list[dict], *, corrupt: bool = False) -> Path:
-    """One published format-2 batch (`crates/mc-core/src/journal.rs`)."""
+    """One published batch packed with the *writer's* struct (`journal.rs::frame_batch`)."""
+    from tools.harness.backends.wal_forge import BATCH_MAGIC, BATCH_VERSION, HEADER
+
     body = b"".join(json.dumps(line).encode() + b"\n" for line in lines)
     crc = zlib.crc32(body) ^ (1 if corrupt else 0)
     path = directory / f"batch-{low:020d}-{high:020d}.bin"
-    header = struct.pack("<II16s8sQQII", 0x534F4C4A, 2, bytes(range(16)), bytes(range(8)),
+    header = HEADER.pack(BATCH_MAGIC, BATCH_VERSION, bytes(range(16)), bytes(range(8)),
                          low, high, len(body), crc)
     path.write_bytes(header + body)
     return path
@@ -237,19 +239,20 @@ class RearmScenarioTests(unittest.TestCase):
             parent[leaf] = []
         return header
 
-    def test_a_format_one_archive_stops_the_fold_instead_of_guessing(self):
-        # The observer never accepted a format-1 frame after the store-identity bump: last_tick
-        # stayed -1 and every wait_through() burned its deadline (`wal-archive/published` timeout).
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            path = root / f"batch-{1:020d}-{1:020d}.bin"
-            path.write_bytes(struct.pack("<IIQQII", 0x534F4C4A, 1, 1, 1, 0, 0))
-            observer = br.WindupObserver(root, 67)
-            observer.update()
-            self.assertEqual(observer.last_tick, -1, "a refused frame is not folded as published")
-            batch(root, 2, 2, [{"Entity": {"id": 3, "uuid": "horse-id", "type_id": 67}}])
-            observer.update()
-            self.assertEqual(observer.last_tick, -1, "the fold stops before the first refused frame")
+    def test_a_format_one_archive_fails_loudly_instead_of_stopping_silently(self):
+        # A refused frame must name itself: the silent `break` burned a 600 s `published` deadline
+        # in the A11 rerun with no diagnosis (review wave2-8 m3). A real v1 frame is 32 bytes; a
+        # v1 frame padded past the header must fail on its version, not on its length (m4).
+        for size in (32, 56):
+            with self.subTest(bytes=size), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                path = root / f"batch-{1:020d}-{1:020d}.bin"
+                frame = struct.pack("<IIQQII", 0x534F4C4A, 1, 1, 1, 0, 0)
+                path.write_bytes(frame + bytes(max(0, size - len(frame))))
+                observer = br.WindupObserver(root, 67)
+                with self.assertRaisesRegex(br.Incomplete, r"not a format-2 frame.*version 1"):
+                    observer.update()
+                self.assertEqual(observer.last_tick, -1, "a refused frame is never folded as published")
 
     def test_windup_observer_folds_battle_patches_after_the_full_image(self):
         guard = {"action": {"Guard": {"until": 0}}}

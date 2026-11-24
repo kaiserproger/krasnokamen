@@ -73,13 +73,43 @@ class CustodyVerdictTests(unittest.TestCase):
 
 
 class WalTests(unittest.TestCase):
+    STORE, PALETTE = bytes(range(16)), bytes(range(8))
+
+    def test_the_frame_layout_is_the_writer_s(self):
+        # Bound to the writer (`journal.rs::frame_batch`), not to a copy of the reader's struct:
+        # a fixture that mirrors the reader proves only that the reader agrees with itself
+        # (review wave2-8 m4).
+        from .backends.wal_forge import HEADER, HEADER_LEN
+
+        self.assertEqual(HEADER_LEN, 56)
+        self.assertEqual(HEADER_LEN, len(HEADER.pack(0, 0, bytes(16), bytes(8), 0, 0, 0, 0)))
+        # [magic 0][version 4][store 8..24][palette 24..32][lo 32][hi 40][len 48][crc 52]
+        import struct as raw
+
+        packed = HEADER.pack(0x534F4C4A, 2, bytes(range(16)), bytes(range(8)), 11, 12, 99, 77)
+        self.assertEqual(raw.unpack_from("<I", packed, 0)[0], 0x534F4C4A)
+        self.assertEqual(raw.unpack_from("<I", packed, 4)[0], 2)
+        self.assertEqual(raw.unpack_from("<Q", packed, 32)[0], 11)
+        self.assertEqual(raw.unpack_from("<Q", packed, 40)[0], 12)
+        self.assertEqual(raw.unpack_from("<I", packed, 48)[0], 99)
+        self.assertEqual(raw.unpack_from("<I", packed, 52)[0], 77)
+
+    def test_a_batch_without_the_world_identity_is_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with self.assertRaisesRegex(RuntimeError, "store id"):
+                publish_batch(Path(temp), 5, [])
+            with self.assertRaisesRegex(RuntimeError, "16/8"):
+                publish_batch(Path(temp), 5, [], (b"short", b"palette!"))
+            self.assertEqual(list(Path(temp).iterdir()), [], "a refused identity writes no frame")
+
     def test_forged_batch_is_a_valid_published_frame_with_the_member_body(self):
         member = {"uuid": B, "type_id": 1, "pos": [0.5, 201.0, 0.5], "ground": True, "tick": 3}
         with tempfile.TemporaryDirectory() as temp:
             journal = Path(temp)
             publish_batch(journal, 5, [{"Transit": {"id": RECORD, "tick": 5,
-                                                    "record": json.dumps(record([A, B]))}}])
-            publish_batch(journal, 6, [body_entry(member, 99, 6)])
+                                                    "record": json.dumps(record([A, B]))}}],
+                          (self.STORE, self.PALETTE))
+            publish_batch(journal, 6, [body_entry(member, 99, 6)], (self.STORE, self.PALETTE))
             self.assertEqual(published_through(journal, 4), 6)
             self.assertEqual(published_through(journal, 6), 6)
             wal = read_published(journal, 4)
@@ -93,8 +123,8 @@ class WalTests(unittest.TestCase):
     def test_published_through_stops_at_a_gap(self):
         with tempfile.TemporaryDirectory() as temp:
             journal = Path(temp)
-            publish_batch(journal, 5, [])
-            publish_batch(journal, 7, [])
+            publish_batch(journal, 5, [], (self.STORE, self.PALETTE))
+            publish_batch(journal, 7, [], (self.STORE, self.PALETTE))
             self.assertEqual(published_through(journal, 4), 5)
 
     def test_uuid_array_matches_vanilla_signed_words(self):

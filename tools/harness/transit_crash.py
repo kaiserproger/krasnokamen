@@ -39,7 +39,6 @@ import os
 import re
 import shutil
 import signal
-import struct
 import subprocess
 import uuid
 import zlib
@@ -47,6 +46,7 @@ from pathlib import Path
 from typing import Any
 
 from . import runtime
+from .backends import wal_forge
 from .backends.protocol_lifecycle import ProtocolServer, reserve_matrix_port
 from .crash_wal import read_published
 
@@ -204,10 +204,25 @@ def census_verdict(cut: str, census: dict, destination_name: str) -> list[str]:
     return failures
 
 
-def publish_batch(journal: Path, tick: int, entries: list[dict]) -> Path:
-    """Publish one complete one-tick WAL batch (format of crates/mc-core/src/journal.rs)."""
+def publish_batch(journal: Path, tick: int, entries: list[dict],
+                  identity: tuple[bytes, bytes] | None = None) -> Path:
+    """Publish one complete one-tick WAL batch in the build's format 2 (journal.rs `frame_batch`).
+
+    `identity` is `(store uuid, palette digest)` taken from a batch the server itself wrote
+    (`wal_forge.capture_identity`): after 2026-11-18 the frame carries the store identity and the
+    build's palette, and a frame without them is refused by `crash_wal.frame` and by recovery —
+    a forged batch that cannot exist would make the `forged-duplicate` control vacuous.
+    """
+    if identity is None:
+        raise RuntimeError(
+            "forged WAL batch needs the world's store id and this build's palette: "
+            "capture them from a format-2 batch the server wrote (wal_forge.capture_identity)")
+    store, palette = identity
+    if len(store) != 16 or len(palette) != 8:
+        raise RuntimeError(f"forged WAL identity is {len(store)}/{len(palette)} bytes, not 16/8")
     payload = "".join(json.dumps(entry, separators=(",", ":")) + "\n" for entry in entries).encode()
-    header = struct.pack("<IIQQII", 0x534F4C4A, 1, tick, tick, len(payload), zlib.crc32(payload))
+    header = wal_forge.HEADER.pack(wal_forge.BATCH_MAGIC, wal_forge.BATCH_VERSION,
+                                   store, palette, tick, tick, len(payload), zlib.crc32(payload))
     path = journal / f"batch-{tick:020}-{tick:020}.bin"
     path.write_bytes(header + payload)
     return path
@@ -541,7 +556,8 @@ def forged_duplicate(run: Path, binary: Path, config: Path, facts: dict) -> dict
     forged.mkdir()
     tick = wal["published_through"] + 1
     world = copy_world(crash, forged / "census" / "world")
-    publish_batch(world / "journal", tick, [body_entry(member, FORGED_WIRE_ID, tick)])
+    publish_batch(world / "journal", tick, [body_entry(member, FORGED_WIRE_ID, tick)],
+                  wal_forge.capture_identity(world))
     code, custody = run_tool(forged, binary, config, "custody", ["custody-census", "--copy", str(world)])
     census_red = (code != 0 and custody.get("status") == "FAIL"
                   and f"member {member['uuid']} of transit record" in (custody.get("error") or ""))
