@@ -13,6 +13,10 @@ describes. The pair forward-ports only the second.
 
 ## Hunks
 
+Of the commit's 25 production lines on this path, the pair carries **3** (the world-context
+application it deletes and restores) and keeps **22** for the reasons below — every hunk of the
+commit is listed, so the count is checkable.
+
 | file | original hunk | content | disposition |
 |---|---|---|---|
 | `src/entities/render_special/items.rs` | `@@ -81,10 +83,30 @@ pub(crate) fn append_observed_item(` | the `world_context` construction (position, facing yaw, sun angle, moon phase, per-block-slot `block_clock_needles`) and `..world_context.unwrap_or_default()` | REVERSED — `698fe4a947` deletes the block and restores the pre-fix `..Default::default()`; `4f8d72692d` restores both verbatim. This is the row's symptom: without it the observed item's `ItemContext` never sees the world and the shelf clock/compass face is frozen |
