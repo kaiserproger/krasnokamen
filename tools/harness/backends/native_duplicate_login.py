@@ -7,19 +7,27 @@ and the first client then logs back in to replace the second (the same rule both
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 from .native_v2 import _click, _echo, _give, _open, _point, _set
 from .probe_steps import ProbeSteps, item_count
 
 
-def _left_play(client: Any, steps: ProbeSteps, label: str) -> dict[str, Any]:
-    """Block on state changes until the client has left Play (bounded by the scenario deadline)."""
+def _left_play(client: Any, steps: ProbeSteps, label: str,
+               timeout_seconds: float | None = None) -> dict[str, Any]:
+    """Block on state changes until the client has left Play (bounded by the scenario deadline).
+
+    `timeout_seconds` bounds the wait for a leg whose kick is expected at once, so a server that
+    never replaces the session fails a named assertion instead of the 900 s scenario budget."""
+    deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
     while True:
         state = client.call_tool("minecraft_observe")
         if state.get("in_play") is not True:
             steps.check(label, True)
             return state
+        if deadline is not None and time.monotonic() >= deadline:
+            steps.check(label, False)
         client.call_tool("minecraft_wait_for_state_change", {
             "observed_version": state["state_version"], "timeout_seconds": steps.remaining()})
 
@@ -424,10 +432,15 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             "observed_version": seen["state_version"], "timeout_seconds": steps.remaining()})
     nether = start("nether-login")
     nether.call_tool("minecraft_wait_for_play", {"timeout_seconds": steps.remaining()})
-    kicked = _left_play(first, steps, "nether_session_replaced")
+    kicked = _left_play(first, steps, "nether_session_replaced",
+                        timeout_seconds=min(120.0, steps.remaining()))
     steps.report["nether_kick"] = {
         key: kicked.get(key) for key in ("in_play", "disconnect_reason", "disconnected", "state_version")}
     reason = str(kicked.get("disconnect_reason") or "")
     steps.check("kick_reason_preserved", "You logged in from another location" in reason)
     steps.check("kick_reason_not_broken_pipe", "Broken pipe" not in reason)
+    # Leave the scenario on a live incumbent session: the ordered chat echo that closes
+    # `native_v2.run` must run on a client that is in play, on either side of the fix.
+    first.call_tool("minecraft_connect", {"server_addr": address})
+    first.call_tool("minecraft_wait_for_play", {"timeout_seconds": steps.remaining()})
 
