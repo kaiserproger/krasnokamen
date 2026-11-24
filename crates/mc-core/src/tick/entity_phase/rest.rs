@@ -204,6 +204,10 @@ fn idle_rest_proved(view: &PrepView, slot: EntitySlot, flags: u16) -> bool {
     else {
         return idle_wander_motion_unchanged(view, slot);
     };
+    // The slime driver steers through `wander_heading`; `wander` is the same
+    // walker's next step, and between hops the hop block leaves the horizontal
+    // velocity alone (entity_motion.rs), so a non-zero `wander` here is exactly
+    // a non-zero horizontal drive.
     if crate::entity_motion::wander(
         body.movement,
         body.id.0,

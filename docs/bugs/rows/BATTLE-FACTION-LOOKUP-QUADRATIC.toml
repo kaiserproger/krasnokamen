@@ -3,16 +3,16 @@ id = "BATTLE-FACTION-LOOKUP-QUADRATIC"
 title = "Battle faction population and target lookups scale quadratically with faction count"
 area = "gameplay"
 severity = "minor"
-status = "fixed"
+status = "open"
 source = "Stage2Review/astra-core.md P2-3, static review of a70133113"
 repro = "source"
-regression = ["cargo:mc-core:battle::tests::faction_tables_build_with_one_lookup_per_unit_at_sixty_four_factions", "cargo:mc-core:battle::tests::faction_population_matches_a_btreemap_oracle_at_sixty_four_factions"]
+regression = ["cargo:mc-core:battle::tests::faction_probes_stay_logarithmic_per_sample_and_per_rebuild", "cargo:mc-core:battle::tests::faction_population_matches_a_btreemap_oracle_at_sixty_four_factions"]
 failing_first = "not recorded"
 # Narrow form only (Opus design verdict review/REVIEW-ReviewD123BattleDesign-Opus-perf.md section 3):
-# a slot index in UnitCounters::record and a BTreeSet membership scratch in TargetGrid::rebuild; the
-# per-faction loop of nearest_enemy/any_enemy is untouched because its visit order is observable.
+# a binary_search_by insert in UnitCounters::record and in TargetGrid::rebuild, both probing through the
+# one shared faction_cmp, so the registered test counts real comparisons; the per-faction loop of
+# nearest_enemy/any_enemy is untouched because its visit order is observable.
 # Fix landed in 5f3415769, contained in this tree; the patch is its non-test hunks at HEAD, map
 # docs/bugs/promotions/BATTLE-FACTION-LOOKUP-QUADRATIC.hunks.md
-fix_commit = "patch:61946875bf4fba8fca2e96d719d5748d160fc0399248ea2ee6f198104b3a3672"
-repro_check = "Inspect battle/mod.rs population counting: linear faction lookup per body and PopulationCache::sample over the whole faction population yield N(N-1)/2 comparisons per sample for N distinct factions; targeting.rs nearest_enemy also visits every faction. Faction is u16, not limited to two sides. TPS impact has not been measured. The registered lookup-count test pins one faction lookup per unit at F=64; the residual per-faction loop of a retarget stays O(F)."
-promotion = "docs/bugs/promotions/BATTLE-FACTION-LOOKUP-QUADRATIC.json"
+fix_commit = "patch:85042237055dcf093fbf01ae0bf0701a55acbb9d927a2bee1242df8785b0bca2"
+repro_check = "Inspect battle/mod.rs population counting: linear faction lookup per body and PopulationCache::sample over the whole faction population yield N(N-1)/2 comparisons per sample for N distinct factions; targeting.rs nearest_enemy also visits every faction. Faction is u16, not limited to two sides. TPS impact has not been measured. The registered test pins the faction comparisons per sample and per rebuild at F=64 to ceil(log2(len+1))+1 (at most 9 per unit) through the shared faction_cmp; the residual per-faction loop of a retarget stays O(F)."

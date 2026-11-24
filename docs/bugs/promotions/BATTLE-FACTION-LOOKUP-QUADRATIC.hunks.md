@@ -1,95 +1,62 @@
 # BATTLE-FACTION-LOOKUP-QUADRATIC — fix-hunk map
 
-The production-only patch `BATTLE-FACTION-LOOKUP-QUADRATIC.patch` is the fix's non-test hunks at HEAD,
-SHA-256 of its non-test hunks
-`patch:61946875bf4fba8fca2e96d719d5748d160fc0399248ea2ee6f198104b3a3672`. It reverse-applies on the
-candidate (`git apply -R --check` on `5f3415769`, clean tree).
+The production-only patch `BATTLE-FACTION-LOOKUP-QUADRATIC.patch` is the fix's non-test hunks, SHA-256
+`patch:85042237055dcf093fbf01ae0bf0701a55acbb9d927a2bee1242df8785b0bca2`. It reverse-applies on the
+candidate (`git apply -R --check` on `071a68f8e4`, clean tree).
 
-## Scope of the fix (narrow form, Opus design verdict)
-
-`review/REVIEW-ReviewD123BattleDesign-Opus-perf.md` §3 rejected the row's original faction table and
-narrowed the fix to the three real quadratic spots: one linear `find` per body in `UnitCounters::record`
-and one linear `contains` per body in `TargetGrid::rebuild`. The per-faction loop in `nearest_enemy` /
-`any_enemy` is **not** touched: its visit order is observable in combat (`combat.rs:634`, `:775`,
-`live_players.rs:599`). The residual O(F) per retarget is recorded on the row.
-
-## The fix commit and the hunks the patch carries
-
-The fix is `5f3415769`, contained in this tree. For this row it touched:
+## The fix and the hunks the patch carries
 
 | file | hunk | in the patch? |
 |---|---|---|
-| `crates/mc-core/src/battle/mod.rs` | `UnitCounters::record` linear `find` → `index` hash probe | **yes** |
-| `crates/mc-core/src/battle/targeting.rs` | `TargetGrid::rebuild` `factions.contains` → `present` `BTreeSet` insert, published list from the sorted set | **yes** |
-| `crates/mc-core/src/battle/tests.rs` | the BTreeMap oracle test and the registered one-lookup-per-unit test | no — test file (kept whole by the splitter) |
+| `crates/mc-core/src/battle/mod.rs` | `UnitCounters::record` scans `alive_per_faction` with `.iter_mut().find(...)`; the fix probes it with `binary_search_by` through `faction_cmp` and inserts at the slot; `finish`'s sort becomes a no-op and the doc states the ascending invariant | **yes** |
+| `crates/mc-core/src/battle/targeting.rs` | `TargetGrid::rebuild` checked `factions.contains(...)` per unit then sorted; the fix `binary_search_by`-inserts at the slot through the same `faction_cmp` and drops the sort and the scratch set | **yes** |
+| `crates/mc-core/src/battle/tests.rs` | the registered comparison-count test and the ascending-set test | no — test file (kept whole by the splitter) |
 
-Not carried by the patch (both sides identical, so they never reverse):
+## The shared counted comparator (the seam both sides carry)
 
-- the `UnitCounters::index` field and its maintenance in `clear`/`finish`;
-- the `TargetGrid::present` field and its `clear`;
-- the test-only `RECORD_LOOKUPS` / `REBUILD_LOOKUPS` statics and the `#[cfg(test)]` blocks that count.
+`faction_cmp(row, faction) -> Ordering` beside `FactionAlive` is one function with one text in the a/-
+and b/-side; it is where every faction comparison of both tables happens:
+
+- fixed `record`: `binary_search_by(|count| faction_cmp(count.faction, faction))` — at most
+  ⌈log2(len+1)⌉ comparisons per sample;
+- fixed `rebuild`: `binary_search_by(|row| faction_cmp(*row, unit.faction))` — same bound per unit;
+- pre-fix `record`: `.position(|c| faction_cmp(c.faction, faction).is_eq())` — one comparison per visited
+  faction;
+- pre-fix `rebuild`: `.any(|row| faction_cmp(*row, unit.faction).is_eq())` — one per visited faction.
+
+The counter (`FACTION_COMPARES`, `#[cfg(test)]`) lives inside `faction_cmp`, so it counts what each
+implementation actually does on BOTH trees; there is no increment that exists only on the a/-side.
 
 ## The a/-side against the real pre-image
 
-Compared with the file at `5f3415769^`, the reversed tree differs in exactly these ways:
+The reversed tree is compared with `5f3415769^:crates/mc-core/src/battle/{mod,targeting}.rs`. Every
+difference:
 
-1. **Kept derived state.** The control keeps the `index` map (declared, cleared, rebuilt in `finish`)
-   and the `present` set (declared, cleared) but `record`/`rebuild` no longer read them, so the
-   lookup work is the pre-fix linear scan while the struct layout and every other method are HEAD's.
-   This is the a/-side adaptation: dead state that changes no behaviour, kept so the patch is the
-   lookup hunk only and the kept refs compile unchanged.
-2. **Test-only counters, class (b).** `RECORD_LOOKUPS` / `REBUILD_LOOKUPS` and their `#[cfg(test)]`
-   increments are API the registered refs read, so the control keeps them (rule (b)); the increments
-   are placed where the pre-fix work happens:
-   - `record`: `+1` on the linear-find hit, `+len+1` on the miss (the miss scans the whole published
-     vector and then pushes one more entry, which is why the miss arm is not `+len`);
-   - `rebuild`: `+factions.len()` per qualifying unit (the pre-fix `contains` has to visit the factions
-     already present; it stops at a match, so this is an upper-bound count on comparisons, not the
-     exact comparison count).
-3. **Test-only accessor.** `TargetGrid::factions()` (`#[cfg(test)]`) is kept — the registered test reads
-   it. It is a pure getter and does not exist in the pre-image.
-4. `UnitCounters::record`'s `let Some(count) = self.alive_per_faction.iter_mut().find(…)` is spelled on
-   one line in the a/-side (rustfmt collapsed the pre-image's five-line chain). Same expression, same
-   order; formatting only.
+1. **`faction_cmp` + `FACTION_COMPARES`** (the seam above) and the pre-fix call sites routed through it —
+   the only adaptation (README rule (b): the registered test reads the counter, so the control needs the
+   same seam). No `#[allow]`, no invented comment, no counter increment outside `faction_cmp`.
+2. **`#[cfg(test)] impl TargetGrid { fn factions() }`** — the test-only accessor the registered test
+   reads; identical text on both sides, no behaviour.
+3. Nothing else: `record`'s body is the pre-fix scan, `rebuild`'s is the pre-fix `contains`+push+sort,
+   `finish` keeps the pre-fix sort, and `UnitCounters`/`TargetGrid` keep exactly their pre-fix fields
+   (no index map, no scratch set, no sorted-Vec bookkeeping beyond what the pre-fix table had).
 
-## What the counters prove
+## Why this control is honest
 
-- `UnitCounters::record`: the fixed tree performs **one** faction lookup per counted unit
-  (`RECORD_LOOKUPS` grows by exactly `units`), the control performs a linear scan per unit, so its
-  total is the sum of `len+1` over the first-arrival misses plus one per hit — O(F²) for F distinct
-  factions, far above `units` at F=64.
-- `TargetGrid::rebuild`: the fixed tree performs exactly one lookup per qualifying unit
-  (`REBUILD_LOOKUPS` grows by `units.len()`); the control adds the present-faction count per unit, so
-  its total is the sum of that count over every unit — again O(F²) in the arrival order, not
-  `units.len()`.
-- The oracle test `faction_population_matches_a_btreemap_oracle_at_sixty_four_factions` is an
-  independent `BTreeMap` comparison (never `UnitCounters::sample`, which calls `record` itself) and is
-  green on both sides: it proves the published `(faction, alive)` vector and `units` are unchanged by
-  the index.
-- Asserts are on counts, not wall clock. No insertion-order or sort claim beyond `finish`'s existing
-  `sort_unstable_by_key`, which the index rebuild follows.
-
-## Expected red
-
-`crates/mc-core/src/battle/tests.rs:1909-1914` (`assert_eq!(grid_work, units.len(), "one faction lookup
-per unit, not one per visited faction")`), and, if the grid assert is passed,
-`tests.rs:1925-1929` for `record`. The oracle test stays green in the control — a green oracle is the
-proof the reversal changes lookup work, not the answer.
+The registered ref is `cargo:mc-core:battle::tests::faction_probes_stay_logarithmic_per_sample_and_per_rebuild`.
+At 64 factions with 1..=3 shuffled units each it asserts, for `record` and for `rebuild` separately,
+`units.len() <= compares <= units.len() * 9` (⌈log2(192+1)⌉ = 8, so 9 with margin). On the control the
+pre-fix scans visit a growing prefix of rows per unit (the first pass alone misses ~2016 rows), so the
+upper bound fails by an order of magnitude — a real red on the algorithm, not on an increment. The
+`faction_population_matches_a_btreemap_oracle_at_sixty_four_factions` oracle test stays and is not
+evidence (it is green on both trees).
 
 ## Observed control and restore
 
-`ledger promote BATTLE-FACTION-LOOKUP-QUADRATIC`, receipt
-`.analysis/validation/20261124T012659-ledger-promote-srkqbp1l` on `5f3415769` (`tree_dirty: false`,
-`control_tree: head`, `reversed_files` = `battle/mod.rs`, `battle/targeting.rs`):
-
-- control (`ledger-1-run.log:567-569`) **FAIL** on the registered lookup test —
-  `assertion `left == right` failed: one faction lookup per unit, not one per visited faction`,
-  `left: 6153`, `right: 144` — the grid's per-unit present-faction count against `units.len()`
-  (144), i.e. the quadratic scan, at its own assertion; the oracle test stays **green**;
-- restore green (`ledger-3-run.log`, exit 0; both refs).
+Earlier control (counter increments invented on the a/-side; superseded): `.analysis/validation/20261124T012659-ledger-promote-srkqbp1l`.
+This regenerated patch's control is recorded below once re-promoted.
 
 ## What stays out of the row
 
-`nearest_enemy`/`any_enemy` keep their per-faction loop (observable order); `Search`'s cell walk and the
-`stable_id` tie-break are untouched. `population` and `grid` are `serde(skip)`, so no persistence
-surface changes.
+`nearest_enemy`/`any_enemy` still walk the published factions in order (observable visit order); the fix
+removes only the per-unit faction scan of the two tables. No wall-clock claim is made.

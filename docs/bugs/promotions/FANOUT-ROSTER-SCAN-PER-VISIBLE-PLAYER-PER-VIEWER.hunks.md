@@ -1,51 +1,46 @@
-# FANOUT-ROSTER-SCAN-PER-VISIBLE-PLAYER-PER-VIEWER — patch and hunks
+# FANOUT-ROSTER-SCAN-PER-VISIBLE-PLAYER-PER-VIEWER — fix-hunk map
 
-Promoted in patch mode from `docs/bugs/promotions/FANOUT-ROSTER-SCAN-PER-VISIBLE-PLAYER-PER-VIEWER.patch`;
-SHA-256 of its non-test hunks is the row's `fix_commit`.
+The production-only patch `FANOUT-ROSTER-SCAN-PER-VISIBLE-PLAYER-PER-VIEWER.patch` is the fix's non-test
+hunks, SHA-256 `patch:a35b728f2d281b21e524365956149097c565b3341366f70e979d13e2924242c2`. Reverse-applies
+on the candidate (`git apply -R --check` on `071a68f8e4`, clean tree).
 
-## What the fix is (commit `e984a1118`)
+## The fix and the hunk the patch carries
 
-The publish already has every input of the answer: `TickPlanIndex` builds one `HashSet<EntityId>` of
-spectator entities per publish and `broadcast_to` reads it instead of scanning `player_roster` (whose
-`RosterPlayer` carries a 56-byte name) twice per visible player entity per viewer. The set is threaded
-through `broadcast_to`, `changed`, `enter_leave`, `delta` and `entity_candidates::collect`; the
-planner's `prepare` passes `&index.spectators`.
+`crates/mc-edge/src/plan/entity_interest.rs`, `broadcast_to`: the pre-fix body scanned
+`snapshot.player_roster` twice (once for the recipient's mode, once for the subject's) on every call for a
+visible player entity of every viewer. The fix answers both questions from the publish-wide
+`HashSet<EntityId>` built once per publish in `TickPlanIndex::spectators`. The patch reverses the body
+only; the 4-parameter signature and the set itself stay (the kept test reads `index.spectators`).
 
-## The control patch (README:185, 219-245)
+## The a/-side against the real pre-image
 
-A blanket reversal of `e984a1118` is a compile break (README:203): the kept test calls
-`entity_candidates::collect(..., &spectators(&out))` and `broadcast_to(..., &index.spectators)`, and the
-reversed signatures would not accept them. The patch is therefore a **control adapter** that keeps every
-call signature and reverses only the scanning function to the pre-fix body:
+`git show e984a1118^:crates/mc-edge/src/plan/entity_interest.rs` has the pre-fix two-scan body with a
+three-parameter signature. The a/-side is the real body with the kept fourth parameter
+(`spectators`), which it does not read — a warning, not an error. Every difference:
 
-```rust
-pub(super) fn broadcast_to(
-    snapshot: &WorldSnapshot,
-    entity: &EntityView,
-    recipient: EntityId,
-    _spectators: &std::collections::HashSet<EntityId>,   // kept for the call sites
-) -> bool {
-    …
-    #[cfg(test)]
-    ROSTER_SCANS.fetch_add(snapshot.player_roster.len(), std::sync::atomic::Ordering::Relaxed);
-    let spectator_viewer = snapshot.player_roster.iter().any(…);   // pre-fix scan 1
-    if spectator_viewer { … } else { !snapshot.player_roster.iter().any(…) }   // pre-fix scan 2
-}
-```
+1. the kept `spectators` parameter (README rule (b): the kept tests pass `&index.spectators`);
+2. nothing else; the body is the pre-image text, no counter, no `#[allow]`.
 
-- (a) pre-fix behaviour: the two roster scans are the code that was on `f9a8d4559669`; the a-side is
-  verbatim from `entity_interest.rs` before `e984a1118`, except the parameter name.
-- (b) signature: the fourth parameter stays (renamed `_spectators`) so every kept call site compiles
-  unchanged; the call sites are not part of the bug.
-- (c) instrumentation: the `ROSTER_SCANS` counter exists in both trees (`#[cfg(test)]` static in the
-  production file since the fix commit, `pub(super)`); the a-side adds the one `fetch_add` line. The
-  counter is test-only, so it cannot change production behaviour.
+## Why this control is honest
 
-## The red
+The registered ref is
+`cargo:mc-edge:plan::plan_tests::player_visibility_tests::broadcast_to_answers_from_the_publish_set_not_the_roster`.
+It calls `broadcast_to` directly with a roster that contradicts the publish set (`roster(3, 3)`: both the
+recipient and the subject are game mode 3) and an empty set: the fixed answer is `true` (the set decides
+player 1 sees the player), the pre-fix scan answers `false`. Red on the control is the row's own symptom —
+the answer came from the roster instead of the publish index — not a counter increment. The equivalence
+test (`spectator_index_matches_the_roster_scan_and_is_built_once_per_publish`) stays; its roster-scan
+counter and its counter assertion are deleted, so it is green on both trees and is not evidence. The one
+remaining assertion, `SPECTATOR_INDEX_BUILDS == 4`, pins one index per publish; it is green on both trees
+too and is not evidence.
 
-The kept test
-`tick_tests::player_visibility_tests::spectator_index_matches_the_roster_scan_and_is_built_once_per_publish`
-publishes the mixed-mode fixture (recipient/subject modes 0/0, 3/0, 0/3, 3/3) and asserts
-`ROSTER_SCANS` did not move; with the a-side `broadcast_to` every call adds `player_roster.len()` (5), so
-the assertion fails. The equivalence half of the same test (index answer == roster scan) stays green on
-both sides by construction — it is the guard that the set answer is the scan answer, not the red.
+## Observed control and restore
+
+Earlier control (a declared-but-never-incremented counter; superseded):
+`.analysis/validation/20261124T003341-ledger-promote-4v784ye8`. This regenerated patch's control is
+recorded below once re-promoted.
+
+## What stays out of the row
+
+`plan_player_changes` and the wire matrix are untouched; the fix changes only which input answers the
+spectator question inside the fanout. No wall-clock claim is made.
