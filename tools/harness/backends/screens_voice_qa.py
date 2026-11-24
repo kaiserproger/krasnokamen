@@ -566,10 +566,13 @@ def consent_dialog_open(state: dict[str, Any]) -> bool:
 
     The wording is what the row measures (`owner_consent_names_app_audio`), so a detector that
     matches the fixed title can never see the pre-fix dialog: the control would wait out its
-    whole deadline instead of observing the old strings.
+    whole deadline instead of observing the old strings. The Deny/Allow shape also excludes the
+    monitor's Test-pattern picker, which carries a `desktop/title` and `desktop/choice/*` entries
+    too but whose first choice is `Test pattern`.
     """
     nodes = dialog_nodes(state)
-    return "desktop/title" in nodes and any(key.startswith("desktop/choice/") for key in nodes)
+    return nodes.get("desktop/choice/0") == "Deny" \
+        and str(nodes.get("desktop/choice/1", "")).startswith("Allow")
 
 
 def java_shot(probe: ProbeSteps, name: str) -> str:

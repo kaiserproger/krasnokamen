@@ -99,7 +99,7 @@
       "cmd": "fill ~2 ~2 ~2 ~3 ~2 ~3 minecraft:stone"
     },
     {
-      "wait_ticks": 30
+      "wait_chat": "block(s)"
     },
     {
       "assert_chat": {

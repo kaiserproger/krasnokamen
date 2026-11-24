@@ -102,6 +102,14 @@ class ConsentDialogDetectorTests(unittest.TestCase):
         self.assertFalse(svq.consent_dialog_open({'ui_nodes': []}))
         self.assertFalse(svq.consent_dialog_open({'ui_nodes': [{'id': 'desktop/title', 'label': 'x'}]}))
 
+    def test_the_monitor_picker_is_not_a_consent_dialog(self):
+        picker = {'ui_nodes': [
+            {'id': 'desktop/title', 'label': 'Choose a screen source'},
+            {'id': 'desktop/choice/0', 'label': 'Test pattern'},
+            {'id': 'desktop/choice/1', 'label': 'Desktop'},
+        ]}
+        self.assertFalse(svq.consent_dialog_open(picker))
+
 
 if __name__ == '__main__':
     unittest.main()

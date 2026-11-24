@@ -59,12 +59,12 @@ features and are owned by other rows, so they are (b)/(c) here:
 
 | group (files) | what it adds | reason |
 |---|---|---|
-| `src/voice.rs`, `src/voice/app.rs`, `src/audio/voicemix.rs`, `src/audio.rs` | the voice transport, jitter/render mixer and its audio hooks | (b) the voice feature itself (rows: `NATIVE-SCREEN-AUDIO-CONSENT`, voice sessions); the row only needs the disconnect reset |
-| `src/computer/{audio,loopback,mod,native,native/sharing,nested,relay,texture,testsource,wayland,windows}.rs`, `src/computer/native/*` | the screen-share relay and per-backend capture | (b) `P3` and the screen-share rows |
-| `src/ui/desktop.rs`, `src/ui/screens.rs`, `src/ui/state.rs`, `src/ui/options.rs`, `src/render.rs`, `src/render/frame.rs` | consent dialogs, monitor faces, voice HUD | (b) consent (`NATIVE-SCREEN-AUDIO-CONSENT`) and HUD rows |
-| `src/loader/*`, `src/protocol/content/{loader_blocks,loader_resources}.rs`, `src/lib.rs`, `src/session/actions.rs`, `src/session/observation.rs` | Loader channel/capability plumbing and observations | (b) protocol/Loader rows; the row's observation (`voice`) already existed |
+| `src/voice.rs`, `src/voice/app.rs`, `src/audio/voicemix.rs`, `src/audio.rs` | the voice transport, jitter/render mixer and its audio hooks | (a) the voice feature itself (rows: `NATIVE-SCREEN-AUDIO-CONSENT`, voice sessions); the row only needs the disconnect reset |
+| `src/computer/{audio,loopback,mod,native,native/sharing,nested,relay,texture,testsource,wayland,windows}.rs`, `src/computer/native/*` | the screen-share relay and per-backend capture | (a) `P3` and the screen-share rows |
+| `src/ui/desktop.rs`, `src/ui/screens.rs`, `src/ui/state.rs`, `src/ui/options.rs`, `src/render.rs`, `src/render/frame.rs` | consent dialogs, monitor faces, voice HUD | (a) consent (`NATIVE-SCREEN-AUDIO-CONSENT`) and HUD rows |
+| `src/loader/*`, `src/protocol/content/{loader_blocks,loader_resources}.rs`, `src/lib.rs`, `src/session/actions.rs`, `src/session/observation.rs` | Loader channel/capability plumbing and observations | (a) protocol/Loader rows; the row's observation (`voice`) already existed |
 | `src/session/packets.rs` `@@ -600,6 +621,9` | resets screen + voice on `START_CONFIGURATION` | (a) kept: same commit, different event; not the disconnect path and not needed to reproduce the row |
-| new files (`src/voice/*`, `src/computer/*`) | created by this commit — no pre-image | (c) nothing to reverse |
+| new files (`src/voice/*`, `src/computer/*`) | created by this commit — no pre-image | (c) created by this commit: nothing to reverse |
 
 `Cargo.lock`/`Cargo.toml`/docs hunks of the commit are dependency and documentation lines: (c)
 unrelated to behaviour.

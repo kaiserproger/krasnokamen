@@ -48,21 +48,21 @@ the guard the client sends a Swap click and the server exchanges cursor and hove
 
 | file | hunk | what it does | reason |
 |---|---|---|---|
-| `src/ui/state.rs` | `@@ -17,6 +17,7` | imports `Duration, Instant` for double-click timing | (b) other half of the fix (collect-on-double-click, HC-2/other rows); the guard needs no timing |
-| `src/ui/state.rs` | `@@ -437,6 +438,8` | `last_slot_click`, `collect_on_release` fields | (b) collect-on-release path |
-| `src/ui/state.rs` | `@@ -593,6 +596,8` | initializes those fields | (b) |
-| `src/ui/state.rs` | `@@ -1130,6 +1135,8` | clears them in `clear_session` | (b) |
-| `src/ui/state.rs` | `@@ -1981,6 +1988,8` | pointer-down bookkeeping for double click | (b) |
-| `src/ui/state.rs` | `@@ -2007,6 +2016,15` | double-click detection (250 ms, same slot/button) | (b) |
-| `src/ui/state.rs` | `@@ -2139,7 +2157,13` | `PickupAll` on collect release | (b) |
-| `src/ui/state.rs` | `@@ -2172,6 +2196,7` | resets `collect_on_release` on pointer up | (b) |
-| `src/ui/screens.rs` | `@@ -422,7 +422,7` | screen label/window title line changed | (c) unrelated UI text in the same bulk commit |
-| `src/ui/screens.rs` | `@@ -568,8 +568,6` | removes two hover lines | (c) unrelated UI cleanup |
-| `src/inventory.rs` | `@@ -14,6 +14,8`, `@@ -725,6 +727,15`, `@@ -793,7 +804,9` | cursor/pending-stack handling for the short-click path | (b) the physical-key dispatch half of HC-2 (its own pair `0941d0948f -> 45ef47e3cc`) |
+| `src/ui/state.rs` | `@@ -17,6 +17,7` | imports `Duration, Instant` for double-click timing | (a) other half of the fix (collect-on-double-click, another row's behaviour); the guard needs no timing |
+| `src/ui/state.rs` | `@@ -437,6 +438,8` | `last_slot_click`, `collect_on_release` fields | (a) another behaviour of the same bulk commit (collect-on-release) |
+| `src/ui/state.rs` | `@@ -593,6 +596,8` | initializes those fields | (a) another behaviour of the same bulk commit |
+| `src/ui/state.rs` | `@@ -1130,6 +1135,8` | clears them in `clear_session` | (a) another behaviour of the same bulk commit |
+| `src/ui/state.rs` | `@@ -1981,6 +1988,8` | pointer-down bookkeeping for double click | (a) another behaviour of the same bulk commit |
+| `src/ui/state.rs` | `@@ -2007,6 +2016,15` | double-click detection (250 ms, same slot/button) | (a) another behaviour of the same bulk commit |
+| `src/ui/state.rs` | `@@ -2139,7 +2157,13` | `PickupAll` on collect release | (a) another behaviour of the same bulk commit |
+| `src/ui/state.rs` | `@@ -2172,6 +2196,7` | resets `collect_on_release` on pointer up | (a) another behaviour of the same bulk commit |
+| `src/ui/screens.rs` | `@@ -422,7 +422,7` | screen label/window title line changed | (a) another row's UI text in the same bulk commit |
+| `src/ui/screens.rs` | `@@ -568,8 +568,6` | removes two hover lines | (a) another row's UI cleanup in the same bulk commit |
+| `src/inventory.rs` | `@@ -14,6 +14,8`, `@@ -725,6 +727,15`, `@@ -793,7 +804,9` | cursor/pending-stack handling for the short-click path | (a) the physical-key dispatch half of HC-2 (its own pair `0941d0948f -> 45ef47e3cc`) |
 | `src/inventory/policies.rs` | `@@ -1372,3 +1372,7` | inside `mod fraction_tests` — a test hunk | test hunk; excluded by `non_test_patch` |
-| `src/protocol/content.rs` | `@@ -2155,6 +2155,10` | menu permission/slot metadata from content | (b) beacon/inventory shortcut data, not the swap guard |
+| `src/protocol/content.rs` | `@@ -2155,6 +2155,10` | menu permission/slot metadata from content | (a) another row's beacon/inventory data, not the swap guard |
 | `src/ui.rs` | `@@ -32,6 +32,8` | test-module registration (`#[cfg(test)] mod inventory_input_tests;`) | test wiring; excluded by `non_test_patch` |
-| `src/lib.rs` | `@@ -44,6 +44,55`, `@@ -1129,6 +1178,12`, `@@ -1205,7 +1260,6`, `@@ -1214,23 +1268,6` | input plumbing and test-module lines | (b) physical-key dispatch half of HC-2; reversed and mapped in HC-2's own pair |
+| `src/lib.rs` | `@@ -44,6 +44,55`, `@@ -1129,6 +1178,12`, `@@ -1205,7 +1260,6`, `@@ -1214,23 +1268,6` | input plumbing and test-module lines | (a) physical-key dispatch half of HC-2; reversed and mapped in HC-2's own pair |
 
 The row was split from HC-2 precisely because one pair cannot carry both halves: HC-2's pair reverses
 only the physical-key dispatch hunk and leaves this guard in place
