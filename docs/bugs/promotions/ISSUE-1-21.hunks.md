@@ -16,11 +16,11 @@ instead of clearing it") uses `wgpu::LoadOp::Load` there: the hand pass inherits
 tool held over a wall is depth-tested behind it. That commit is a child of `34a85940` and predates the
 26.3 cutover, so the pre-image is rebuilt as a committed reversal at HEAD:
 
-- reversal `3ad35fe51984d1c426d0d925f759d3e8c7a9b41b` — `Load` (scene red);
-- re-land `e7c8a46a5dc148c4ead5037fbfeddcb52069ae5e` — `Clear(1.)`;
-- repair `c01ad27a024c1f90140df618d094ea664aa5221f` — the re-land's replace clobbered the
-  identifier to `wgpu::Clear(1.)Op`; this restores `wgpu::LoadOp::Clear(1.)` and builds. Row `fix_commit`.
-- `git diff 3ad35fe519 c01ad27a02` is that one line.
+- reversal `6cd212a514834e9bd9702309b11431b89e1484da` — `Load` (scene red);
+- re-land `de9fde8dd92b1983cc2d9c524116fd3c472038e4` — `Clear(1.)`;
+  (an earlier pair `3ad35fe519`/`c01ad27a02` carried the same trees but split the re-land in two;
+  the tree-identical one-commit pair is the one promoted). Row `fix_commit`.
+- `git diff 6cd212a514 de9fde8dd9` is that one line.
 
 ## Gate
 
