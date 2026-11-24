@@ -100,3 +100,19 @@ sleep/tick/dimension/state files at `178456759b`, i.e. without the M6 doc lines 
 neither of which touches bed occupancy) and the fix patch reversed with `git apply -R` (clean), so
 `grep occupied_beds` finds nothing and the mirror call is gone.
 
+Pin: `pins/660717828dd4-1be2cc9d-server-x86_64-unknown-linux-gnu` (built by `tools/dev/pin-release
+--no-incremental` on that worktree, server binary sha256 `054800eb3094…`). Run on the same client pin
+(`530556e864c2`, windowed native):
+
+`.analysis/validation/20261124T200149-native-bed-occupied-state-o1dd47nk` — **FAIL** 37.6 s at
+`native-bed-occupied-state assertion failed: bed_head_occupied_contains_0`; the client's own
+`read_block` of the head while the sleeper lies reports `properties.occupied = "false"`
+(`bed_head_during_sleep.json`), and the pre-sleep `bed_head_free_before` / `sleeper_lies_down`
+assertions still pass — the scene ran, the bed state did not follow the sleeper. That is the row's
+symptom on a real client with the fix removed.
+
+So the row's proof now has: cargo red at `sleep_tests.rs:1300`/`:1321`, the manual graphical red above,
+and the passing candidate receipts for both the player arm
+(`20261124T181951-native-bed-occupied-state-bnymsftm`) and the resident arm
+(`20261124T182026-native-village-occupied-bed-9mz_u_tp`).
+
