@@ -938,6 +938,19 @@ SCENARIOS: dict[str, Scenario] = {
         proves="received player sleeping metadata is false after occupied use, villager wakes and later sleeps again",
         limits="one bed, one unbound villager; no occupied blockstate parity claim",
     ),
+    "native-bed-occupied-state": _entry(
+        id="native-bed-occupied-state",
+        summary="A sleeper's bed reads occupied on both halves while he lies and free after the day wakes him",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-bed-occupied-state", requires=("xvfb",),
+        sources=("tools/harness/backends/scene_shot.py", "tools/harness/bed_occupied_state_scene.json"),
+        fixture="a bare flat platform at night, a two-half red bed, one use of the vacant bed, then daylight",
+        proves="the player really lies down (received sleeping metadata), and the server's own block predicate "
+               "matches occupied=true on the head and the foot while he lies and occupied=false after the wake, "
+               "with the client's read_block receipts beside each step",
+        limits="one bed and one sleeper on a private world; the predicate is the server's state, the client's own "
+               "read_block is recorded evidence, not a rendering-parity claim",
+    ),
     "native-village-open-air-home": _entry(
         id="native-village-open-air-home", summary="A resident leaves an outdoor bed for an unbound villager that claims and uses it",
         owner="core:harness", evidence="graphical", profile="scene-shot",

@@ -71,6 +71,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-village-breeding": "village_breeding_scene.json",
         "native-village-moved-workstation": "village_moved_workstation_scene.json",
         "native-village-occupied-bed": "village_occupied_bed_scene.json",
+        "native-bed-occupied-state": "bed_occupied_state_scene.json",
         "native-village-open-air-home": "village_open_air_home_scene.json",
         "native-village-stair-penetration": "village_stair_penetration_scene.json",
         "native-village-exit-foliage": "village_exit_foliage_scene.json",
