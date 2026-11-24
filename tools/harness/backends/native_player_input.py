@@ -241,7 +241,9 @@ def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         row = steps.call("minecraft_read_item_components", {"source": "selected"})
         return row if row.get("count") == 5 else None
 
-    fixture = steps.wait(selected_five, "held_q_fixture_selected")
+    steps.wait(selected_five, "held_q_fixture_selected")
+    # `wait` returns the observation, not the predicate's row: read the stack again.
+    fixture = steps.call("minecraft_read_item_components", {"source": "selected"})
     steps.report["held_q_fixture"] = {"item_id": fixture.get("item_id"),
                                       "count": fixture.get("count"),
                                       "items_before": ground_items(None)}
