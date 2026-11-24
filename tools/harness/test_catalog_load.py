@@ -2,6 +2,7 @@
 import asyncio
 import io
 import json
+import os
 import tempfile
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -19,7 +20,11 @@ class CatalogLoadTests(unittest.TestCase):
             with self.subTest(separator=separator), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 out = root / "classified"
-                with patch.object(cli, "ARTIFACT_ROOT", root / "canonical"), redirect_stdout(io.StringIO()):
+                # The owner host injects MIMALLOC_VERBOSE/SHOW_STATS into every child process, so the
+                # child's JSON reads back with allocator banners in front of it. They are host
+                # decoration, not the backend's payload, so the child environment pins them off.
+                with patch.object(cli, "ARTIFACT_ROOT", root / "canonical"), redirect_stdout(io.StringIO()), \
+                        patch.dict(os.environ, {"MIMALLOC_VERBOSE": "0", "MIMALLOC_SHOW_STATS": "0"}):
                     result = cli.cmd_run(["catalog-load", *separator,
                                           "--smoke", "--scenario", "plugin-heavy", "--out", str(out)])
                 self.assertEqual(result, 0)

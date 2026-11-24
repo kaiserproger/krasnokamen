@@ -279,8 +279,15 @@ class ReceiptContractTests(unittest.TestCase):
         spec = {"scope": "harness", "run": run_commands, "prerequisites": profiles._NONE}
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):
-                with mock.patch.dict(profiles.PROFILES, {"failing-commands": spec}):
-                    code = cli.cmd_run(["failing-commands"])
+                # The owner host injects MIMALLOC_VERBOSE/SHOW_STATS into every child process, so the
+                # children's stderr carries the allocator banner and the captured log is no longer the
+                # step's own text. The banner is host decoration, not the step's output, so the child
+                # environment pins it off; the receipt contract still stores each step's log verbatim.
+                with mock.patch.dict(
+                    os.environ, {"MIMALLOC_VERBOSE": "0", "MIMALLOC_SHOW_STATS": "0"}
+                ):
+                    with mock.patch.dict(profiles.PROFILES, {"failing-commands": spec}):
+                        code = cli.cmd_run(["failing-commands"])
             self.assertEqual(code, 1)
             receipt = next(Path(tmp).glob("*/result.json"))
             payload = json.loads(receipt.read_text())
