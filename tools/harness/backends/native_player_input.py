@@ -228,7 +228,12 @@ def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             # selected one: no screen exchange stands between the fixture and the key.
             steps.fixture("give @s minecraft:diamond 5")
             steps.call("minecraft_set_hotbar_slot", {"slot": 0})
-            fixture = steps.call("minecraft_read_item_components", {"source": "selected"})
+
+            def selected_five(_: dict) -> dict | None:
+                row = steps.call("minecraft_read_item_components", {"source": "selected"})
+                return row if row.get("count") == 5 else None
+
+            fixture = steps.wait(selected_five, "held_q_fixture_selected")
             steps.check("held_q_fixture_selected",
                         fixture.get("item_id") == "minecraft:diamond" and fixture.get("count") == 5)
             _hold_key(steps, ord("q"), 3)
