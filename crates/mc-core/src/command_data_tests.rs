@@ -1412,7 +1412,7 @@ fn data_merge_of_a_brain_moves_the_poi_claims() {
     crate::villager::brain::tick(&mut state, &mut changes);
     let home = BlockPos { x: 6, y: 61, z: 6 };
     let job = BlockPos { x: 8, y: 61, z: 4 };
-    assert!(state.villager_pois.homes.get(&home).is_none());
+    assert!(!state.villager_pois.homes.contains_key(&home));
     assert_eq!(
         data(
             &mut state,
