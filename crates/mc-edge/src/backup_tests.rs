@@ -667,7 +667,7 @@ async fn the_restore_command_accepts_a_hot_backup_verified_with_content() {
     let outcome = crate::operator_cli::run_offline(&cli, &mut cfg).await;
     assert!(
         outcome.as_ref().is_ok_and(|offline| *offline),
-        "assertion failed: the restore command verifies and restores a hot backup: {:?}",
+        "the restore command verifies and restores a hot backup: {:?}",
         outcome.err()
     );
 

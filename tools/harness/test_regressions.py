@@ -1172,6 +1172,15 @@ class FixturePanicTests(unittest.TestCase):
             ledger._panic_class(root, ('crates/mc-core/src/core_journal_backpressure_tests.rs', 22),
                                 'assertion failed: backpressure'), 'assertion')
 
+    def test_an_assert_macro_with_a_custom_message_is_an_assertion(self):
+        # Wave-2 review N2: `assert!(cond, "msg")` panics with exactly "msg"; the source line decides.
+        root = self.tree()
+        self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/tick_tests.rs', 8),
+                                             'the tick keeps its registry'), 'assertion')
+        self.assertEqual(
+            ledger._panic_class(root, ('crates/mc-core/src/core_journal_backpressure_tests.rs', 22),
+                                'queued batches must stay within the budget'), 'assertion')
+
     def test_an_unknown_helper_panic_needs_the_row_to_name_it(self):
         root = self.tree()
         location = ('crates/mc-core/src/core_journal_backpressure_tests.rs', 21)

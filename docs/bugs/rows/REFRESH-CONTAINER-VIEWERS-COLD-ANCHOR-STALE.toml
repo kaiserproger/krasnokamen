@@ -1,0 +1,11 @@
+[[bug]]
+id = "REFRESH-CONTAINER-VIEWERS-COLD-ANCHOR-STALE"
+title = "A viewer whose menu is anchored on a half that went cold is never matched by a custody refresh of the resident half, so its menu keeps the old image until the first click closes it"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Filed from the independent review of wave 2 (receipts/D123/D123Persist/review/REVIEW-wave2-1.md N1), after REFRESH-CONTAINER-VIEWERS-COLD-FORK fixed the partial-image case. `tick/containers.rs` `refresh_container_viewers` matches viewers by `container_cells(state, open) == cells`, so a viewer anchored on a now-cold half `H` is not matched when the mutation is on the resident half `R` (`[H] != [R]`): no partial image and no duplicate is sent (the reviewer checked custody), but the menu keeps its previous image until the first click closes it through the residency check in `tick/input/inventory.rs` `container_click`."
+regression = []
+failing_first = "not recorded"
+repro_check = "Open: not reproduced as a wrong image. Needs a test where the chest's two halves are in different chunks, the viewer opens the menu on the half that is then evicted, the other (resident) half is mutated, and `refresh_container_viewers(state, resident_pos)` is called: today nothing is pushed for that viewer and the menu stays open with the old state. The fix is to match viewers by any shared custody cell (or by the menu's recorded anchor) and then apply the existing cold/shape close. No control has been built."

@@ -769,12 +769,13 @@ fn integrity_reserved_refusal_with_both_halves_cold_closes_the_menu() {
     reserved_refusal_with_a_cold_half(true, [true, true]);
 }
 
-/// An external custody change while a half is cold must close the viewer's
-/// menu instead of republishing an image whose cold half reads empty: the
-/// click, recipe and refusal paths make the same residency check, and this
-/// path (block log, command loot, plugin inventory writes) runs while a viewer
-/// still has the menu open.
-fn refreshed_with_a_cold_half(open_left: bool) -> Rig {
+/// An external custody change while the menu's partner half is cold must close
+/// the viewer's menu instead of republishing an image whose cold half reads
+/// empty: the click, recipe and refusal paths make the same residency check,
+/// and this path (block log, command loot, plugin inventory writes) runs while
+/// a viewer still has the menu open. `open_left` mirrors the case; the helper
+/// always evicts the partner of the anchor.
+fn refreshed_with_a_cold_partner(open_left: bool) -> Rig {
     let mut rig = Rig::new();
     // Put the halves across a chunk boundary so they evict separately.
     rig.left.x = rig.left.x.div_euclid(16) * 16 + 15;
@@ -810,39 +811,41 @@ fn refreshed_with_a_cold_half(open_left: bool) -> Rig {
             change,
             PlayerChange::MenuContents { window: sent, .. } if *sent == window
         )),
-        "assertion failed: a cold half must not be republished as a partial image: {queue:?}"
+        "a cold half must not be republished as a partial image: {queue:?}"
     );
     assert!(
         queue.iter().any(|change| matches!(
             change,
             PlayerChange::MenuClosed { window: closed } if *closed == window
         )),
-        "assertion failed: the refresh closes window {window}: {queue:?}"
+        "the refresh closes window {window}: {queue:?}"
     );
     assert!(
         queue
             .iter()
             .any(|change| matches!(change, PlayerChange::MenuContents { window: 0, .. })),
-        "assertion failed: the close resyncs the player's inventory: {queue:?}"
+        "the close resyncs the player's inventory: {queue:?}"
     );
     rig
 }
 
 #[test]
 fn external_custody_refresh_with_a_cold_partner_closes_the_menu() {
-    let rig = refreshed_with_a_cold_half(true);
+    let rig = refreshed_with_a_cold_partner(true);
     assert!(
         rig.state.players[&rig.player].open.is_none(),
-        "assertion failed: the cold-half refresh closes the menu"
+        "the cold-partner refresh closes the menu"
     );
     assert!(!rig.state.open_containers.contains(&rig.player));
 }
 
 #[test]
-fn external_custody_refresh_with_a_cold_open_half_closes_the_menu() {
-    // The menu is anchored on the half whose chunk is cold; the partner is
-    // resident. The check must not depend on the partner position.
-    let rig = refreshed_with_a_cold_half(false);
+fn external_custody_refresh_with_a_cold_partner_of_a_right_anchor_closes_the_menu() {
+    // The mirror of the case above: the menu is anchored on the right half and
+    // the left half — its partner — goes cold. A viewer anchored on a cold half
+    // is never matched by a refresh of the resident half (that residual is
+    // REFRESH-CONTAINER-VIEWERS-COLD-ANCHOR-STALE).
+    let rig = refreshed_with_a_cold_partner(false);
     assert!(rig.state.players[&rig.player].open.is_none());
     assert!(!rig.state.open_containers.contains(&rig.player));
 }
