@@ -1208,10 +1208,11 @@ fn intact_bed_with_its_whole_exit_ring_sealed_uses_the_vanilla_above_fallback() 
         "minecraft:red_bed",
         &[("facing", "east"), ("part", "foot")],
     );
+    // The sleeper owns the head cell: vanilla sets the bed's `occupied` state.
     let head_state = block(
         &rig.state,
         "minecraft:red_bed",
-        &[("facing", "east"), ("part", "head")],
+        &[("facing", "east"), ("part", "head"), ("occupied", "true")],
     );
     let stone = rig.state.registry.states.stone;
     let halves = [
@@ -1315,10 +1316,7 @@ fn a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it() {
     rig.state.day_time = NIGHT;
     let (slot, _villager) = sleeping_villager(&mut rig);
     rig.run(1);
-    assert!(
-        villager_sleeping(&rig, slot),
-        "the resident still sleeps"
-    );
+    assert!(villager_sleeping(&rig, slot), "the resident still sleeps");
     assert!(
         bed_occupied(&rig.state, rig.head),
         "the resident's bed must read occupied"
@@ -1329,10 +1327,7 @@ fn a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it() {
         "the resident asleep in the bed is woken"
     );
     rig.run(1);
-    assert!(
-        !villager_sleeping(&rig, slot),
-        "the resident stays up"
-    );
+    assert!(!villager_sleeping(&rig, slot), "the resident stays up");
     assert!(
         !bed_occupied(&rig.state, rig.head),
         "the bed is free once its resident is up"
