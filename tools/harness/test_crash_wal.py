@@ -8,9 +8,14 @@ from pathlib import Path
 from tools.harness.crash_wal import classify_observation, read_published
 
 
-def frame(directory, lo, hi, entries):
+STORE, PALETTE = bytes(range(16)), bytes(range(8))
+
+
+def frame(directory, lo, hi, entries, *, version=2):
+    """One published format-2 batch (`crates/mc-core/src/journal.rs`); `version` for the refusals."""
     payload = b''.join(json.dumps(entry).encode() + b'\n' for entry in entries)
-    data = struct.pack('<IIQQII', 0x534F4C4A, 1, lo, hi, len(payload), zlib.crc32(payload)) + payload
+    data = struct.pack('<II16s8sQQII', 0x534F4C4A, version, STORE, PALETTE, lo, hi,
+                       len(payload), zlib.crc32(payload)) + payload
     path = directory / f'batch-{lo:020}-{hi:020}.bin'
     path.write_bytes(data)
     return path
@@ -48,6 +53,15 @@ class CrashWalTest(unittest.TestCase):
             path.write_bytes(path.read_bytes() + b'x')
             with self.assertRaisesRegex(ValueError, 'checksum'):
                 read_published(journal, 6)
+
+    def test_a_format_one_frame_is_refused_not_replayed(self):
+        # The server refuses format 1 by name (no store identity); a gate that read it would call a
+        # world this build cannot open healthy.
+        with tempfile.TemporaryDirectory() as temp:
+            journal = Path(temp)
+            frame(journal, 5, 5, [{'Player': {'inventory': ['marker']}}], version=1)
+            with self.assertRaisesRegex(ValueError, 'format 2'):
+                read_published(journal, 4)
 
 
 if __name__ == '__main__':

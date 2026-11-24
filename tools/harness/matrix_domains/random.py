@@ -9,10 +9,8 @@ from collections import Counter
 import json
 import copy
 import re
-import struct
-import zlib
 
-from .. import runtime
+from .. import crash_wal, runtime
 from ..matrix_api import Adapter, Check, MissingCapability
 from ..backends.village_autonomy_qa import _container_totals, _snbt_fields, _snbt_parts
 from .session import data
@@ -140,11 +138,10 @@ def _published(ctx, through):
             except FileNotFoundError:
                 # A checkpoint can retire a batch between enumeration and read.
                 continue
-            if len(raw) < 32:
-                raise AssertionError('truncated published WAL header')
-            magic, version, low, high, size, crc = struct.unpack_from('<IIQQII', raw)
-            if magic != 0x534F4C4A or version != 1 or len(raw) != size + 32 or zlib.crc32(raw[32:]) != crc:
-                raise AssertionError('invalid published WAL batch')
+            decoded = crash_wal.frame(path.name, raw)
+            if decoded is None:
+                raise AssertionError('invalid published WAL batch (format 2 only)')
+            low, high, _payload = decoded
             if high >= through:
                 return True, {'path': str(path), 'low': low, 'high': high}
         return False, None

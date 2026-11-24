@@ -2,6 +2,13 @@
 
 This does not establish that a particular command was in a frame: callers must
 match the actual post-image, not just compare a command's tick to the watermark.
+
+One frame format, format 2, `crates/mc-core/src/journal.rs`:
+`[magic u32][version u32][store uuid 16][palette digest 8][tick_lo u64][tick_hi u64][len u32][crc32 u32][payload]`
+(little endian). The store/palette binding is the server's to verify on replay — a gate reads a
+world and a copy of that same world — so this reader finds the payload and refuses everything else.
+Format 1 has no store identity and this build refuses it by name; a gate that accepted it would
+report a world the server cannot open as healthy.
 """
 from __future__ import annotations
 
@@ -12,9 +19,31 @@ import struct
 import zlib
 from pathlib import Path
 
-_HEADER = struct.Struct('<IIQQII')
-_NAME = re.compile(r'batch-(\d+)-(\d+)\.bin\Z')
+_FRAME = struct.Struct('<II16s8sQQII')
 _MAGIC = 0x534F4C4A
+_VERSION = 2
+_NAME = re.compile(r'batch-(\d+)-(\d+)\.bin\Z')
+# Offset of the payload in a published frame; callers that already validated the frame use it.
+HEADER_LEN = _FRAME.size
+
+
+def frame(name: str, data: bytes) -> tuple[int, int, bytes] | None:
+    """`(tick_lo, tick_hi, payload)` of one published batch, or None for a torn/foreign file.
+
+    The name must be `batch-<lo>-<hi>.bin` and must agree with the header, the payload length must
+    match and its CRC must hold: a `.tmp` still being written, a truncated tail and a format-1
+    frame all read as None, never as committed bytes.
+    """
+    found = _NAME.fullmatch(name)
+    if found is None or len(data) < HEADER_LEN:
+        return None
+    magic, version, _store, _palette, lo, hi, length, crc = _FRAME.unpack_from(data)
+    if (magic, version, lo, hi) != (_MAGIC, _VERSION, int(found[1]), int(found[2])):
+        return None
+    payload = data[HEADER_LEN:]
+    if len(payload) != length or zlib.crc32(payload) != crc:
+        return None
+    return lo, hi, payload
 
 
 def read_published(journal: Path, checkpoint_tick: int) -> dict:
@@ -36,20 +65,20 @@ def read_published(journal: Path, checkpoint_tick: int) -> dict:
     frames = []
     next_tick = checkpoint_tick + 1
     for lo, hi, path in sorted(batches):
-        data = path.read_bytes()
-        if len(data) < _HEADER.size:
-            raise ValueError(f'{path}: truncated frame')
-        magic, version, header_lo, header_hi, length, crc = _HEADER.unpack_from(data)
-        payload = data[_HEADER.size:]
-        if (magic, version, header_lo, header_hi) != (_MAGIC, 1, lo, hi) or lo > hi:
+        if lo > hi:
             raise ValueError(f'{path}: invalid frame identity')
-        if len(payload) != length or zlib.crc32(payload) != crc:
-            raise ValueError(f'{path}: invalid frame length or checksum')
+        data = path.read_bytes()
+        if len(data) < HEADER_LEN:
+            raise ValueError(f'{path}: truncated frame')
+        decoded = frame(path.name, data)
+        if decoded is None:
+            raise ValueError(f'{path}: invalid frame identity, version or checksum '
+                             f'(format {_VERSION} frames only)')
         if hi > checkpoint_tick:
             if lo != next_tick:
                 raise ValueError(f'{path}: replay gap or overlap at tick {next_tick}')
             next_tick = hi + 1
-        entries = [json.loads(line) for line in payload.splitlines() if line]
+        entries = [json.loads(line) for line in decoded[2].splitlines() if line]
         frames.append({'file': path.name, 'lo': lo, 'hi': hi,
                        'sha256': hashlib.sha256(data).hexdigest(), 'entries': entries})
     return {'checkpoint_tick': checkpoint_tick, 'published_through': next_tick - 1,

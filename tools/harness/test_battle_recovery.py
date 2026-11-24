@@ -38,10 +38,13 @@ def history(first, last, spawns=(), removals=()):
 
 
 def batch(directory: Path, low: int, high: int, lines: list[dict], *, corrupt: bool = False) -> Path:
+    """One published format-2 batch (`crates/mc-core/src/journal.rs`)."""
     body = b"".join(json.dumps(line).encode() + b"\n" for line in lines)
     crc = zlib.crc32(body) ^ (1 if corrupt else 0)
     path = directory / f"batch-{low:020d}-{high:020d}.bin"
-    path.write_bytes(struct.pack("<IIQQII", 0x534F4C4A, 1, low, high, len(body), crc) + body)
+    header = struct.pack("<II16s8sQQII", 0x534F4C4A, 2, bytes(range(16)), bytes(range(8)),
+                         low, high, len(body), crc)
+    path.write_bytes(header + body)
     return path
 
 
@@ -233,6 +236,20 @@ class RearmScenarioTests(unittest.TestCase):
             parent, leaf = br._battle_list(header, name)
             parent[leaf] = []
         return header
+
+    def test_a_format_one_archive_stops_the_fold_instead_of_guessing(self):
+        # The observer never accepted a format-1 frame after the store-identity bump: last_tick
+        # stayed -1 and every wait_through() burned its deadline (`wal-archive/published` timeout).
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / f"batch-{1:020d}-{1:020d}.bin"
+            path.write_bytes(struct.pack("<IIQQII", 0x534F4C4A, 1, 1, 1, 0, 0))
+            observer = br.WindupObserver(root, 67)
+            observer.update()
+            self.assertEqual(observer.last_tick, -1, "a refused frame is not folded as published")
+            batch(root, 2, 2, [{"Entity": {"id": 3, "uuid": "horse-id", "type_id": 67}}])
+            observer.update()
+            self.assertEqual(observer.last_tick, -1, "the fold stops before the first refused frame")
 
     def test_windup_observer_folds_battle_patches_after_the_full_image(self):
         guard = {"action": {"Guard": {"until": 0}}}

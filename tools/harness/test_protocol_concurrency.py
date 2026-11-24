@@ -120,7 +120,8 @@ class ConcurrentAdmissionTests(unittest.TestCase):
             ctx = SimpleNamespace(server=SimpleNamespace(world_dir=Path(tmp)))
             def write(records):
                 payload = (json.dumps({'BlockLog': {'value': {'records': records}}}) + '\n').encode()
-                header = struct.pack('<IIQQII', 0x534F4C4A, 1, 25, 25, len(payload), zlib.crc32(payload))
+                header = struct.pack('<II16s8sQQII', 0x534F4C4A, 2, bytes(range(16)), bytes(range(8)),
+                                     25, 25, len(payload), zlib.crc32(payload))
                 (directory / 'batch-25-25.bin').write_bytes(header + payload)
             write([block, container])
             self.assertEqual(committed_destroy_records(ctx, 25, 'A', (1, 2, 3)),

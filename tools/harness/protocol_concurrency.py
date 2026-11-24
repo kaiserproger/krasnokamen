@@ -3,11 +3,9 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 import json
-import struct
-import zlib
 import threading
 
-from . import runtime
+from . import crash_wal, runtime
 from .matrix_api import MissingCapability
 
 
@@ -135,14 +133,13 @@ def committed_destroy_records(ctx, tick, actor, position):
         covered = False
         for path in directory.glob('batch-*-*.bin'):
             raw = path.read_bytes()
-            if len(raw) < 32:
-                raise RuntimeError(f'truncated published WAL: {path}')
-            magic, version, low, high, size, crc = struct.unpack_from('<IIQQII', raw)
-            if magic != 0x534F4C4A or version != 1 or len(raw) != size + 32 or zlib.crc32(raw[32:]) != crc:
-                raise RuntimeError(f'invalid published WAL: {path}')
+            decoded = crash_wal.frame(path.name, raw)
+            if decoded is None:
+                raise RuntimeError(f'invalid published WAL (format 2 only): {path}')
+            low, high, payload = decoded
             if low <= tick <= high:
                 covered = True
-                entries = [json.loads(line) for line in raw[32:].splitlines()]
+                entries = [json.loads(line) for line in payload.splitlines()]
                 found.extend(record for record in collect(entries)
                              if record.get('actor') == actor and record.get('pos') == list(position))
         if not covered:
