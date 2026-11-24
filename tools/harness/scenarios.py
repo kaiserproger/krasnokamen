@@ -748,7 +748,7 @@ SCENARIOS: dict[str, Scenario] = {
         sources=("tools/harness/element_emission_scene.json", "tools/harness/backends/scene_shot_checks.py"),
         fixture="private native client, one firefly bush in a roofed stone cell at midnight, fixed camera, HUD hidden",
         proves="the bush's emissive overlay keeps near-white texels at night, so the element emission replaced the sampled light",
-        limits="one emissive cross model and one camera; eyeblossom and potted variants and the daytime frame stay unproven, and a heavily loaded host can mesh the cell unlit (recorded in the row's map)",
+        limits="one emissive cross model and one camera; eyeblossom and potted variants and the daytime frame stay unproven. The fixture proves the section's block-light layer arrived (a torch lit behind the camera and read back through the bush cell) and remeshes the section after it, so a load-delayed light packet cannot leave an unknown-light sample in the asserted frame",
     ),
     "native-pig-saddle": _entry(
         id="native-pig-saddle", summary="A saddled pig draws its saddle layer",

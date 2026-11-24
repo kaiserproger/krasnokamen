@@ -71,13 +71,22 @@ The two unit refs stay green on the candidate: the baker test (emission is baked
 bounded) and the mesher test (the emissive quad's vertices carry light 15). The latter reds on the
 control by design — it is the row's own assertion.
 
-**Flake observed and its cause.** Two runs of the same pinned client read 0 near-white pixels while
-a `ledger promote`'s cargo test held a build token: the frame showed the overlay dim, i.e. the
-section was meshed with the unlit `[-1.; 2]` light sample, which `light_with_emission` deliberately
-passes through. Six other runs (including both promotion receipts) read 306. The fixture therefore
-needs a forced section remesh after the bush appears, or a client-side vertex-light probe; until then
-a heavily loaded host can false-red it. This is recorded, not hidden: the promotion receipts are from
-runs on an unloaded client.
+**Flake observed, its cause, and the fixture fix.** Two runs of the same pinned client read 0
+near-white pixels while a `ledger promote`'s cargo test held a build token. The measured cause is
+the unknown-light sentinel, not a missing application: the section was meshed while one of the
+bush quad's light samples was still `[-1.; 2]` (light packet not yet applied), and
+`light_with_emission` deliberately passes that sample through, so the quad's vertices mixed `15`
+with `-1`; the interpolated fragments land on intermediate lightmap coordinates and the brightest
+texel of the overlay read (178,173,135) / (213,211,178) instead of (254,254,224) — a continuum
+between the control's (52,49,40) and the fixed frame, which is exactly why it is a false red rather
+than a wrong pass. The scene now removes the race: it lights a torch behind the camera in the same
+section, waits for that section's remesh (`wait_terrain`), reads the bush cell with
+`minecraft_read_block` (block light 7 is only readable once the client received the section's
+block-light layer — the positive control), removes the torch, waits for the remesh again and reads
+the cell back (sky 0, block 0). Both reads are asserted in `check_element_emission`
+(`bush_cell_block_light_received`, `bush_cell_dark_before_shot`), so the asserted frame is drawn
+from a mesh built after the light layer was proven present; the near-white count stays the row's
+own assertion, measured 306 on the re-land and 0 on the control.
 
 ## a/-side adaptation
 

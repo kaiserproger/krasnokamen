@@ -310,13 +310,33 @@ def check_element_emission(probe: ProbeSteps, artifact: Path) -> None:
         abs(a - b) < 0.01 for a, b in zip(frame["camera_position"], (1000.5, 161.62, 1002.3))
     ) and abs(frame["yaw"]) < 0.01 and abs(frame["pitch"] - 27.0) < 0.01)
     probe.check("bush_frame_at_night", frame["environment"]["time_of_day"] == "18000")
+    # Light delivery probe. `minecraft_read_block` reports the mesher's own source light, so the
+    # bush cell reads 7 only after the client received this section's block-light layer; a section
+    # meshed before that keeps the `[-1.; 2]` unknown sample, whose vertices interpolate to a dim
+    # overlay under load (the measured false red this probe removes). The scene lights a torch
+    # behind the camera, waits for the section's remesh, reads the cell, removes the torch, waits
+    # again and reads it back, so the frame that is asserted is drawn from a mesh built after the
+    # layer was proven present and dark.
+    def light(name: str) -> tuple[int, int]:
+        row = json.loads((artifact / f"{name}.json").read_text())
+        probe.report[name.replace("-", "_")] = {
+            "sky_light": row["sky_light"], "block_light": row["block_light"],
+        }
+        return int(row["sky_light"]), int(row["block_light"])
+    before_probe = light("bush-cell-before-probe")
+    under_torch = light("bush-cell-under-torch")
+    before_shot = light("bush-cell-before-shot")
+    probe.check("bush_cell_block_light_received", under_torch[1] > 0)
+    probe.check("bush_cell_dark_before_shot", before_shot[0] == 0 and before_shot[1] == 0)
     # The bush's crossed planes against the night floor and sky.
     box = (520, 240, 760, 480)
     image = shots["bush-night"][1].crop(box)
     bright = sum(1 for r, g, b in image.getdata() if min(r, g, b) > 200)
     probe.report["element_emission_roi"] = list(box)
     probe.report["element_emission_bright_pixels"] = bright
-    # Measured 441 near-white pixels on the fixed client and 0 on the control.
+    # Measured 306 near-white pixels on the fixed client and 0 on the control; the pre-probe read
+    # is evidence only (unknown and dark block light both report 0 to `read_block`).
+    probe.report["element_emission_light_before_probe"] = list(before_probe)
     probe.check("emissive_overlay_full_bright", bright > 60)
 
 

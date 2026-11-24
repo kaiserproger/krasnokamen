@@ -81,6 +81,72 @@
       }
     },
     {
+      "read_block": {
+        "name": "bush-cell-before-probe",
+        "args": {
+          "x": 1000,
+          "y": 160,
+          "z": 1004
+        }
+      }
+    },
+    {
+      "cmd": "setblock 1000 160 997 minecraft:torch"
+    },
+    {
+      "wait_terrain": {
+        "name": "probe-terrain",
+        "args": {
+          "sections": [
+            [
+              62,
+              10,
+              62
+            ]
+          ],
+          "timeout_seconds": 60
+        }
+      }
+    },
+    {
+      "read_block": {
+        "name": "bush-cell-under-torch",
+        "args": {
+          "x": 1000,
+          "y": 160,
+          "z": 1004
+        }
+      }
+    },
+    {
+      "cmd": "setblock 1000 160 997 minecraft:air"
+    },
+    {
+      "wait_terrain": {
+        "name": "remesh-after-probe",
+        "args": {
+          "sections": [
+            [
+              62,
+              10,
+              62
+            ]
+          ],
+          "timeout_seconds": 60
+        }
+      }
+    },
+    {
+      "read_block": {
+        "name": "bush-cell-before-shot",
+        "args": {
+          "x": 1000,
+          "y": 160,
+          "z": 1004
+        }
+      }
+    },
+    {
       "key": {
         "keys": [
           "key.keyboard.f1"
