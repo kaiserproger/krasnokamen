@@ -84,13 +84,20 @@ deadline never returns the bounded action, so the row's own assertion is the one
 
 The scene's action is now **150 s** with `elapsed >= hold - 25` and `join(hold + 15)` (review B-M2):
 the approach used to be 120 s, exactly `WRITER_IDLE_TTL`, so a revocation and the action's own timeout
-were indistinguishable. The tool had to accept a longer bound first: `client:f91b021c` widened
+were indistinguishable. The transport also had to stop aborting the call: the native launch sets a
+130 s request timeout, so the scene raises the harness MCP timeout to `hold + 20` (restore
+`20261124T182031` failed with `timed out` at 130.2 s before that). The tool had to accept a longer
+bound first: `client:f91b021c` widened
 `minecraft_approach_entity`'s `timeout_seconds` to 300 s in the catalogue and in the internal range
 (`src/minecraft/entities.rs`), and both sides of this pair contain it. The scene asks the client for
 its bound (`_approach_hold`) and records `approach_timeout_seconds`, so a client that still caps at
 120 s runs the other legs but cannot carry the idle margin.
 
-Controls: <control receipts, ≥3>; restore: <restore receipt>.
+Controls (client `9ff891766b`, three runs): `20261124T183250-native-v2-lease-navigation-bsw4nagp`
+(elapsed 165.2 s, `completed` false, lease revoked at 120 s), plus two more in `notes/idle2.tsv`;
+restore (client `20943b0e6f`): `20261124T183710-native-v2-lease-navigation-qfnfbxc_` — passed,
+elapsed 150.2 s, `completed` true, `controller_active` true. Head `7a350bfca`, server pin
+`pins/7a350bfcacd3-server-…`. Re-audit artifact: `<promote dry-run>`.
 
 ## Gate hygiene note (review N8)
 
