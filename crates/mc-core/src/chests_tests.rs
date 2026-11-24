@@ -810,20 +810,20 @@ fn refreshed_with_a_cold_half(open_left: bool) -> Rig {
             change,
             PlayerChange::MenuContents { window: sent, .. } if *sent == window
         )),
-        "a cold half must not be republished as a partial image: {queue:?}"
+        "assertion failed: a cold half must not be republished as a partial image: {queue:?}"
     );
     assert!(
         queue.iter().any(|change| matches!(
             change,
             PlayerChange::MenuClosed { window: closed } if *closed == window
         )),
-        "the refresh closes window {window}: {queue:?}"
+        "assertion failed: the refresh closes window {window}: {queue:?}"
     );
     assert!(
         queue
             .iter()
             .any(|change| matches!(change, PlayerChange::MenuContents { window: 0, .. })),
-        "the close resyncs the player's inventory: {queue:?}"
+        "assertion failed: the close resyncs the player's inventory: {queue:?}"
     );
     rig
 }
@@ -833,7 +833,7 @@ fn external_custody_refresh_with_a_cold_partner_closes_the_menu() {
     let rig = refreshed_with_a_cold_half(true);
     assert!(
         rig.state.players[&rig.player].open.is_none(),
-        "the cold-half refresh closes the menu"
+        "assertion failed: the cold-half refresh closes the menu"
     );
     assert!(!rig.state.open_containers.contains(&rig.player));
 }
