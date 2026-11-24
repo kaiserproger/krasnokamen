@@ -131,7 +131,7 @@
       "wait_ticks": 10
     },
     {
-      "cmd": "tp @e[type=minecraft:zombie,distance=..8,limit=1,sort=nearest] 999.5 160 1005.5"
+      "cmd": "tp @e[type=minecraft:zombie,distance=..8,limit=1,sort=nearest] 999.5 160 1006.5"
     },
     {
       "wait_ticks": 10
@@ -149,7 +149,7 @@
       "wait_ticks": 10
     },
     {
-      "cmd": "tp @e[type=minecraft:zombie,distance=..8,limit=1,sort=nearest] 999.5 160 1006.5"
+      "cmd": "tp @e[type=minecraft:zombie,distance=..8,limit=1,sort=nearest] 999.5 160 1008.5"
     },
     {
       "wait_ticks": 10
@@ -174,8 +174,10 @@
         "types": [
           {
             "id": "minecraft:zombie",
-            "min_speed": 0.025,
-            "max_speed": 0.08
+            "min_speed": 0.02,
+            "max_speed": 0.12,
+            "min_blocks": 1.5,
+            "max_blocks": 2.5
           }
         ]
       }
@@ -193,7 +195,7 @@
       "wait_ticks": 10
     },
     {
-      "cmd": "tp @e[type=minecraft:spider,distance=..8,limit=1,sort=nearest] 1004.5 160 1007.5"
+      "cmd": "tp @e[type=minecraft:spider,distance=..8,limit=1,sort=nearest] 1005.5 160 1007.5"
     },
     {
       "wait_ticks": 10
@@ -211,7 +213,7 @@
       "wait_ticks": 10
     },
     {
-      "cmd": "tp @e[type=minecraft:spider,distance=..8,limit=1,sort=nearest] 1005.5 160 1007.5"
+      "cmd": "tp @e[type=minecraft:spider,distance=..8,limit=1,sort=nearest] 1007.5 160 1007.5"
     },
     {
       "wait_ticks": 10
@@ -236,8 +238,10 @@
         "types": [
           {
             "id": "minecraft:spider",
-            "min_speed": 0.025,
-            "max_speed": 0.08
+            "min_speed": 0.02,
+            "max_speed": 0.12,
+            "min_blocks": 1.5,
+            "max_blocks": 2.5
           }
         ]
       }

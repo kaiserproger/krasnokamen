@@ -223,28 +223,161 @@ def check_item_bars(probe: ProbeSteps, artifact: Path) -> None:
 
 
 def check_shade_override(probe: ProbeSteps, artifact: Path) -> None:
-    """MODEL-SHADE-OVERRIDE: cross plants get no directional face shading in 26.3."""
-    shots = _qa._load_shots(probe, artifact, ("shade-north", "shade-east"))
-    north_f, east_f = shots["shade-north"][0], shots["shade-east"][0]
-    probe.check("shade_north_camera", all(
-        abs(a - b) < 0.01 for a, b in zip(north_f["camera_position"], (1000.5, 161.62, 1000.5))
-    ) and abs(north_f["yaw"]) < 0.01)
-    probe.check("shade_east_camera", all(
-        abs(a - b) < 0.01 for a, b in zip(east_f["camera_position"], (1004.5, 161.62, 1004.5))
-    ) and abs(east_f["yaw"] - 90.0) < 0.01)
-    plant = lambda r, g, b: (r > 120 and g < 100 and b < 100) or (g > 90 and r < 120 and b < 120)
-    box = (560, 440, 720, 580)
-    lums = []
-    counts = []
-    for name in ("shade-north", "shade-east"):
-        image = shots[name][1]
-        pixels = [p for p in image.crop(box).getdata() if plant(*p)]
+    """MODEL-SHADE-OVERRIDE: a face named by the model's shade override takes the up weight.
+
+    `template_torch` carries `shade_direction_override: "up"` on its only element and its
+    four side faces share one texture region, so two frames of the same torch — from the
+    north and from the east — must read the same luminance: 26.3's override replaces each
+    quad's own cardinal weight with the named one (up, 1.0). Without the override the
+    mesher shades each side by its face (north 0.8, east 0.6 in the overworld table), so
+    the ratio is 4:3 and the row's symptom is present. Noon keeps the sun term equal on
+    both vertical faces; the torch's own light is identical in both frames.
+    """
+    shots = _qa._load_shots(probe, artifact, ("torch-north", "torch-east"))
+    north_f, east_f = shots["torch-north"][0], shots["torch-east"][0]
+    probe.check("torch_north_camera", all(
+        abs(a - b) < 0.01 for a, b in zip(north_f["camera_position"], (1000.5, 161.62, 1002.5))
+    ) and abs(north_f["yaw"]) < 0.01 and abs(north_f["pitch"] - 33.0) < 0.01)
+    probe.check("torch_east_camera", all(
+        abs(a - b) < 0.01 for a, b in zip(east_f["camera_position"], (1002.5, 161.62, 1004.5))
+    ) and abs(east_f["yaw"] - 90.0) < 0.01 and abs(east_f["pitch"] - 33.0) < 0.01)
+    probe.check("torch_frames_at_noon",
+                north_f["environment"]["time_of_day"] == "6000"
+                and east_f["environment"]["time_of_day"] == "6000")
+    # The torch's warm texels against the grey stone and blue sky behind it.
+    torch = lambda r, g, b: r - b >= 12 and r >= 25
+    box = (600, 290, 680, 445)
+    lums, counts = [], []
+    for name in ("torch-north", "torch-east"):
+        pixels = [p for p in shots[name][1].crop(box).getdata() if torch(*p)]
         counts.append(len(pixels))
         lums.append(sum(sum(p) for p in pixels) / len(pixels) / 3 if pixels else 0.0)
-    probe.report["poppy_plant_pixels"] = counts
-    probe.report["poppy_mean_luminance"] = [round(v, 2) for v in lums]
-    probe.check("poppy_visible_both_views", all(c > 3000 for c in counts))
-    probe.check("poppy_no_directional_shading", abs(lums[0] - lums[1]) < 8.0)
+    probe.report["torch_face_roi"] = list(box)
+    probe.report["torch_face_pixels"] = counts
+    probe.report["torch_face_mean_luminance"] = [round(v, 2) for v in lums]
+    probe.check("torch_face_visible_both_views", all(c > 1500 for c in counts))
+    ratio = lums[0] / lums[1] if lums[1] else 0.0
+    probe.report["torch_face_luminance_ratio"] = round(ratio, 3)
+    probe.check("torch_faces_same_shade", 0.94 <= ratio <= 1.06)
+
+
+def check_decorated_pot(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-PLACED-POT-DECORATIONS: a placed pot's sides read the received sherds.
+
+    26.3 `PotDecorations` is a record of optional `back`/`left`/`right`/`front` templates, and
+    `ItemStackTemplate.CODEC` accepts either `{id, ...}` or a bare item id — the server copies the
+    placing item's component verbatim into the block entity's `sherds`, so a pot placed from a
+    bare-form item reaches the client as bare strings. The fixture sets the same block twice at the
+    same position and camera: plain, then with the angler sherd on all four sides. A renderer that
+    reads only `template["id"]` draws brick in both frames (the row's symptom); one that also
+    accepts the bare id draws the pottery pattern in the second frame.
+    """
+    shots = _qa._load_shots(probe, artifact, ("pot-plain", "pot-sherds"))
+    plain_f, sherds_f = shots["pot-plain"][0], shots["pot-sherds"][0]
+    probe.check("pot_camera_at_fixture", all(
+        abs(a - b) < 0.01 for a, b in zip(plain_f["camera_position"], (1000.5, 161.62, 1002.0))
+    ) and abs(plain_f["yaw"]) < 0.01 and abs(plain_f["pitch"] - 20.0) < 0.01)
+    probe.check("pot_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(plain_f["camera_position"], sherds_f["camera_position"])
+    ) and abs(plain_f["yaw"] - sherds_f["yaw"]) < 0.01
+      and abs(plain_f["pitch"] - sherds_f["pitch"]) < 0.01)
+    box = (500, 280, 780, 540)
+    plain, sherds = shots["pot-plain"][1].crop(box), shots["pot-sherds"][1].crop(box)
+    # The pot body against the stone/sky: terracotta browns, not grey or blue.
+    pot = lambda r, g, b: r > g + 12 and r > 60 and b < r
+    visible = [sum(1 for pixel in image.getdata() if pot(*pixel)) for image in (plain, sherds)]
+    changed = _changed(shots["pot-plain"][1], shots["pot-sherds"][1], box)
+    probe.report["decorated_pot_roi"] = list(box)
+    probe.report["decorated_pot_pixels"] = visible
+    probe.report["decorated_pot_changed_pixels"] = changed
+    probe.check("pot_visible_both_frames", all(count > 2000 for count in visible))
+    probe.check("pot_side_pattern_changed", changed > 300)
+
+
+def check_element_emission(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-ELEMENT-EMISSION: a model element with `light_emission` draws full-bright at night.
+
+    26.3 `cross_emissive` (the parent of `firefly_bush` and `open_eyeblossom`) carries two extra
+    elements with `light_emission: 15` over a separate emissive texture, so at night the overlay's
+    texels must ignore the world light. `firefly_bush_emissive.png` has 9 texels with every channel
+    above 200 and the base texture has none, so a near-white pixel in the bush's region can only be
+    the emissive overlay: a baker that drops the per-element emission shades those texels with the
+    night light and the frame holds none.
+    """
+    shots = _qa._load_shots(probe, artifact, ("bush-night",))
+    frame = shots["bush-night"][0]
+    probe.check("bush_camera_at_fixture", all(
+        abs(a - b) < 0.01 for a, b in zip(frame["camera_position"], (1000.5, 161.62, 1002.3))
+    ) and abs(frame["yaw"]) < 0.01 and abs(frame["pitch"] - 27.0) < 0.01)
+    probe.check("bush_frame_at_night", frame["environment"]["time_of_day"] == "18000")
+    # Light delivery probe. `minecraft_read_block` reports the mesher's own source light, so the
+    # bush cell reads 7 only after the client received this section's block-light layer; a section
+    # meshed before that keeps the `[-1.; 2]` unknown sample, whose vertices interpolate to a dim
+    # overlay under load (the measured false red this probe removes). The scene lights a torch
+    # behind the camera, waits for the section's remesh, reads the cell, removes the torch, waits
+    # again and reads it back, so the frame that is asserted is drawn from a mesh built after the
+    # layer was proven present and dark.
+    def light(name: str) -> tuple[int, int]:
+        row = json.loads((artifact / f"{name}.json").read_text())
+        probe.report[name.replace("-", "_")] = {
+            "sky_light": row["sky_light"], "block_light": row["block_light"],
+        }
+        return int(row["sky_light"]), int(row["block_light"])
+    before_probe = light("bush-cell-before-probe")
+    under_torch = light("bush-cell-under-torch")
+    before_shot = light("bush-cell-before-shot")
+    probe.check("bush_cell_block_light_received", under_torch[1] > 0)
+    probe.check("bush_cell_dark_before_shot", before_shot[0] == 0 and before_shot[1] == 0)
+    # The bush's crossed planes against the night floor and sky.
+    box = (520, 240, 760, 480)
+    image = shots["bush-night"][1].crop(box)
+    bright = sum(1 for r, g, b in image.getdata() if min(r, g, b) > 200)
+    probe.report["element_emission_roi"] = list(box)
+    probe.report["element_emission_bright_pixels"] = bright
+    # Measured 306 near-white pixels on the fixed client and 0 on the control; the pre-probe read
+    # is evidence only (unknown and dark block light both report 0 to `read_block`).
+    probe.report["element_emission_light_before_probe"] = list(before_probe)
+    probe.check("emissive_overlay_full_bright", bright > 60)
+
+
+def check_pig_saddle(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-3: a pig with a saddle in equipment slot 7 draws its saddle layer.
+
+    The server sends the saddle as its own equipment slot (`equipment:{saddle:{…}}` on
+    `minecraft:pig` is the mount slot 7, which `command_summon` accepts and
+    `entity_appearance` forwards), so the fixture needs no second client: one pig stands at a
+    fixed position and camera, is captured plain, then is replaced by the same pig with the
+    saddle. A client that resolves only the horse/wolf animal overlays draws two identical
+    pigs (the row's symptom); one whose animal overlay table carries the pig draws the saddle
+    in the second frame. Both frames must show the pig, so a missing entity cannot pass.
+    """
+    shots = _qa._load_shots(probe, artifact, ("pig-plain", "pig-saddled"))
+    plain_f, saddled_f = shots["pig-plain"][0], shots["pig-saddled"][0]
+    probe.check("pig_camera_at_fixture", all(
+        abs(a - b) < 0.01 for a, b in zip(plain_f["camera_position"], (1000.5, 161.62, 1002.0))
+    ) and abs(plain_f["yaw"]) < 0.01 and abs(plain_f["pitch"] - 20.0) < 0.01)
+    probe.check("pig_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(plain_f["camera_position"], saddled_f["camera_position"])
+    ) and abs(plain_f["yaw"] - saddled_f["yaw"]) < 0.01
+      and abs(plain_f["pitch"] - saddled_f["pitch"]) < 0.01)
+    # The body against the stone floor and sky: pig skin is a desaturated pink, and the saddle's
+    # leather is the only brown in the frame (the stone is grey, the sky blue). The two frames are
+    # the same pig one summon apart, so an animation or shading difference between them stays pink
+    # and cannot pass this count; measured 0 on the control and 3810 brown pixels on the re-land.
+    box = (500, 260, 780, 560)
+    pig = lambda r, g, b: r > 120 and r > g + 25 and r > b + 25
+    leather = lambda r, g, b: r > 70 and r > g + 35 and g > b + 15 and b < 90
+    bodies = [sum(1 for pixel in shots[name][1].crop(box).getdata() if pig(*pixel))
+              for name in ("pig-plain", "pig-saddled")]
+    saddles = [sum(1 for pixel in shots[name][1].crop(box).getdata() if leather(*pixel))
+               for name in ("pig-plain", "pig-saddled")]
+    changed = _changed(shots["pig-plain"][1], shots["pig-saddled"][1], box)
+    probe.report["pig_saddle_roi"] = list(box)
+    probe.report["pig_visible_pixels"] = bodies
+    probe.report["pig_saddle_leather_pixels"] = saddles
+    probe.report["pig_saddle_changed_pixels"] = changed
+    probe.check("pig_visible_both_frames", all(count > 1500 for count in bodies))
+    probe.check("pig_saddle_drawn", saddles[0] < 100 and saddles[1] > 300)
 
 
 def player_head_skin_pack(artifact: Path) -> Path:
@@ -288,6 +421,55 @@ def check_gait_spider(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["spider_capture_pixels"] = {"body": spider, "zombie": obstruction, "image": image}
     probe.check("spider_body_visible", spider > 1000)
     probe.check("spider_unobstructed", obstruction <= 100)
+
+
+def check_use_pose(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-USE-POSE: third-person use poses are per item, not one generic raise.
+
+    The own avatar is captured in third person (back view) holding a bow, a spyglass and a
+    trident, idle and with the use action held. 26.3 gives each item its own pose: the trident
+    raise is `-PI` overhead, so it leaves the torso silhouette beside/above the head, and the
+    drawn bow and the using spyglass are different poses. The pre-83994480 client raised the
+    using hand by one generic `-1.35`, which from behind stays inside the torso, so neither
+    assertion can pass on the control. Measured 2026-11-25: the trident's above-shoulder change
+    reads 1667 px on the fix and 125 on the control, and the drawn-bow vs using-spyglass frames
+    differ by 5179 vs 713.
+    """
+    names = ("bow-idle", "bow-draw-start", "bow-draw-hold", "spyglass-idle", "spyglass-use-hold",
+             "trident-idle", "trident-hold-start", "trident-hold-hold")
+    shots = _qa._load_shots(probe, artifact, names)
+    ref = shots["bow-idle"][0]
+    for name in names[1:]:
+        frame = shots[name][0]
+        probe.check(f"{name}_camera_unchanged", all(
+            abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+        ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    box = (540, 280, 740, 500)
+    halves = {"left": (540, 280, 640, 500), "right": (640, 280, 740, 500)}
+    idle = shots["bow-idle"][1]
+    drawn = shots["bow-draw-hold"][1]
+    spy = shots["spyglass-use-hold"][1]
+    # The trident pose raises the arm overhead (`-PI`), which leaves the torso silhouette; the
+    # boxes beside and above the head hold only sky while the arm hangs.
+    above = {"left": (545, 250, 615, 350), "right": (665, 250, 735, 350)}
+    trident_idle = shots["trident-idle"][1]
+    trident_held = shots["trident-hold-hold"][1]
+    probe.report["use_pose_roi"] = list(box)
+    probe.report["use_pose_arm_changed"] = {
+        half: _changed(idle, drawn, region) for half, region in halves.items()
+    }
+    probe.report["use_pose_spyglass_changed"] = {
+        half: _changed(shots["spyglass-idle"][1], spy, region) for half, region in halves.items()
+    }
+    probe.report["use_pose_drawn_vs_spyglass_changed"] = _changed(drawn, spy, box)
+    raised = {half: _changed(trident_idle, trident_held, region) for half, region in above.items()}
+    probe.report["use_pose_trident_raised_changed"] = raised
+    probe.check("trident_use_pose_raised", max(raised.values()) > 800)
+    probe.check("use_poses_differ_by_item", probe.report["use_pose_drawn_vs_spyglass_changed"] > 2500)
+    probe.report["visual_review_required"] = [
+        "Inspect trident-idle / trident-hold-hold for the overhead pose and bow-draw-hold / "
+        "spyglass-use-hold for the per-item difference."
+    ]
 
 
 def check_elytra(probe: ProbeSteps, artifact: Path) -> None:
@@ -407,6 +589,51 @@ def check_player_head(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("placed_head_hat_layer_pixels", hat > 100)
     probe.check("worn_head_renders", worn > 500 and worn_hat > 100)
     probe.check("worn_head_back_unchanged", added_back_hat <= 100)
+
+
+def check_player_head_registry(probe: ProbeSteps, artifact: Path) -> None:
+    """PLAYER-HEAD-FAILED-PROFILE-REGISTRY-EXHAUSTION: 261 malformed profiles must not deny a
+    newly demanded valid one.
+
+    Both heads are worn by the same avatar in the same fixed third-person frame, demanded after
+    the flood, so the only difference between the frames is the profile: `flood-steve` carries an
+    offline name (default skin) and `flood-valid` the public Notch texture property. A client whose
+    head registry keeps failed keys at its cap refuses the valid key and renders the same default
+    skin; the fixed client evicts a failed entry and publishes Notch, changing the avatar's head.
+    The promotion receipts measure 51 changed pixels on the pre-fix client (mean colour unchanged:
+    the same default skin) against 6765 on the fixed one, so the threshold sits between them.
+
+    The texture fetch is a real network read, so the same run demands a **second** valid key
+    (`pre-valid`, the same document re-serialized) before the flood: a broken fetch reds
+    `pre_flood_valid_head_renders` instead of leaving the row's red ambiguous.
+    """
+    shots = _qa._load_shots(probe, artifact, ("empty", "pre-valid", "flood-steve", "flood-valid"))
+    ref = shots["empty"][0]
+    for name in ("pre-valid", "flood-steve", "flood-valid"):
+        frame = shots[name][0]
+        probe.check(f"{name}_camera_unchanged", all(
+            abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+        ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    # The avatar's worn head at the fixed third-person camera; the same ROI `check_player_head`
+    # samples for `worn_head_renders`.
+    head_box = (600, 280, 680, 375)
+    pre = _changed(shots["pre-valid"][1], shots["empty"][1], head_box)
+    steve = _changed(shots["flood-steve"][1], shots["empty"][1], head_box)
+    valid = _changed(shots["flood-valid"][1], shots["empty"][1], head_box)
+    profile = _changed(shots["flood-valid"][1], shots["flood-steve"][1], head_box)
+    probe.report["flood_head_roi"] = list(head_box)
+    probe.report["pre_flood_valid_changed_pixels"] = pre
+    probe.report["flood_steve_changed_pixels"] = steve
+    probe.report["flood_valid_changed_pixels"] = valid
+    probe.report["flood_profile_changed_pixels"] = profile
+    probe.check("pre_flood_valid_head_renders", pre > 2000)
+    probe.check("flood_steve_head_renders", steve > 100)
+    probe.check("flood_valid_head_renders", valid > 100)
+    probe.check("valid_head_after_flood", profile > 2000)
+    probe.report["visual_review_required"] = [
+        "Inspect flood-valid against flood-steve: the pixels prove a different skin was published, "
+        "not the exact Notch face."
+    ]
 
 
 def _clock_face_samples(image: Any, box: tuple[int, ...]) -> tuple[int, list, int, int]:

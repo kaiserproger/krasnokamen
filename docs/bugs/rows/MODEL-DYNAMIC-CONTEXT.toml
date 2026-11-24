@@ -4,8 +4,10 @@ title = "Clock/compass: item frames, dropped items, shelves, mob/other-player ha
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:32"
 regression = ["harness:scene-shot:native-shelf-clock", "harness:scene-shot:native-dynamic-context"]
+fix_commit = "client:4f8d72692d2958fd006da51485d16d0a19c51993"
 proving_assertions = { "harness:scene-shot:native-shelf-clock" = "clock_face_changed", "harness:scene-shot:native-dynamic-context" = "dropped_clock_face_changed" }
-repro_check = "Scenario checks cover shelf and dropped clock changes; full item-frame, mob and other-player hand coverage remains unproven."
+repro_check = "Committed reversal pair at HEAD: control client 698fe4a947 deletes the block-item world context client:9096a86b applied (the item state falls back to ItemContext::default(), the pre-fix line), re-land 4f8d72692d restores it verbatim. `clock_face_changed` measures the shelf clock's blue face pattern in a fixed ROI at received day and night time: a frozen shelf clock keeps the same pattern and reds the row. The dropped-clock surface (`dropped_clock_face_changed`) goes through the entity path and is unchanged by the pair; item frames, mob hands and other players' hands remain unproven (see the hunk map)."
+promotion = "docs/bugs/promotions/MODEL-DYNAMIC-CONTEXT.json"

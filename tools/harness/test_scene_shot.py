@@ -446,6 +446,46 @@ class SceneShotTests(unittest.TestCase):
             }}])
             self.assertEqual(probe.checks, {"mob_moved_zombie": True, "mob_speed_zombie": False})
 
+    def test_mob_motion_gate_checks_the_teleport_step_not_only_the_rate(self):
+        """The hostile-motion fixture teleports a fixed number of blocks per segment; the
+        client-tick rate divides by round-trip ticks, so the step is the measurement the
+        fixture controls and the rate is only a coarse band."""
+        class Probe:
+            def __init__(self):
+                self.checks = {}
+                self.report = {}
+            def check(self, name, value):
+                self.checks[name] = value
+        steps = [{"mob_motion": {"samples": ["a", "b", "c"], "name": "motion", "types": [
+            {"id": "minecraft:zombie", "min_speed": 0.02, "max_speed": 0.12,
+             "min_blocks": 1.5, "max_blocks": 2.5}]}}]
+        for xs, step_ok in (((0., 2., 4.), True), ((0., 1., 3.), False)):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                for name, tick, x in zip(("a", "b", "c"), (100, 125, 150), xs):
+                    (root / f"{name}.json").write_text(json.dumps({
+                        "game_time": tick,
+                        "snapshot": {"entities": [
+                            {"entity_type": "minecraft:zombie", "entity_uuid": "z", "x": x, "z": 0},
+                        ]},
+                    }))
+                probe = Probe()
+                scene_shot.execute(probe, root, steps)
+                with self.subTest(xs=xs):
+                    self.assertEqual(probe.checks, {"mob_moved_zombie": True,
+                                                    "mob_speed_zombie": True,
+                                                    "mob_step_zombie": step_ok})
+        step = steps[0]["mob_motion"]
+        scene_shot.validate_steps([{"mob_motion": step}], "native")
+        del step["types"][0]["min_blocks"]
+        del step["types"][0]["max_blocks"]
+        for bad in ({"min_blocks": 1.5}, {"max_blocks": 2.5},
+                    {"min_blocks": 2.5, "max_blocks": 1.5},
+                    {"min_blocks": -1, "max_blocks": 2.5}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                scene_shot.validate_steps([{"mob_motion": {
+                    **step, "types": [{**step["types"][0], **bad}]}}], "native")
+
     def test_mob_motion_gate_requires_the_kinds_it_measures(self):
         step = {"mob_motion": {"samples": ["a", "b", "c"], "name": "motion"}}
         with self.assertRaises(ValueError):
@@ -680,6 +720,78 @@ class PlayerHeadTests(unittest.TestCase):
             heads = [step["cmd"] for step in scene["steps"] if "profile" in step.get("cmd", "")]
             self.assertEqual(len(heads), 4)
             self.assertTrue(all("HarnessHat" in command for command in heads))
+
+
+class PlayerHeadRegistryTests(unittest.TestCase):
+    """PLAYER-HEAD-FAILED-PROFILE-REGISTRY-EXHAUSTION: a full registry must not deny new demand."""
+
+    class Probe:
+        def __init__(self):
+            self.report = {}
+
+        def check(self, name, value):
+            if not value:
+                raise AssertionError(name)
+
+    def store_frames(self, root, *, valid_differs=True):
+        from PIL import Image, ImageDraw
+
+        shots = root / "screenshots"
+        shots.mkdir(exist_ok=True)
+        frame = {"gpu_completion": True, "camera_position": [1000.5, 161.62, 1001.5],
+                 "yaw": 0, "pitch": 0}
+        for name in ("empty", "pre-valid", "flood-steve", "flood-valid"):
+            image = Image.new("RGB", scene_shot.WINDOW, (70, 70, 70))
+            if name != "empty":
+                draw = ImageDraw.Draw(image)
+                draw.rectangle((610, 290, 680, 370), fill=(160, 120, 90))
+                if name == "flood-valid" and valid_differs:
+                    draw.rectangle((610, 290, 680, 370), fill=(210, 180, 170))
+            image.save(shots / f"{name}.png")
+            (shots / f"{name}.json").write_text(json.dumps(frame))
+
+    def test_valid_head_after_flood_requires_a_published_skin(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.store_frames(root)
+            probe = self.Probe()
+            scene_shot.check_player_head_registry(probe, root)
+            self.assertGreater(probe.report["flood_profile_changed_pixels"], 2000)
+            self.store_frames(root, valid_differs=False)
+            probe = self.Probe()
+            with self.assertRaisesRegex(AssertionError, "valid_head_after_flood"):
+                scene_shot.check_player_head_registry(probe, root)
+            self.assertEqual(probe.report["flood_profile_changed_pixels"], 0)
+
+    def test_scene_is_the_generated_261_property_flood(self):
+        from tools.harness import gen_player_head_registry_scene as gen
+
+        scene = json.loads(Path(__file__).with_name("player_head_registry_scene.json").read_text())
+        self.assertEqual(scene["steps"], gen.steps())
+        self.assertEqual(scene["seed"], 100)
+        malformed = [step["cmd"] for step in scene["steps"]
+                     if "cmd" in step and 'value:"bad0' in step["cmd"]]
+        self.assertEqual(len(malformed), 261)
+        self.assertEqual(len(set(malformed)), 261)
+        valid = [step["cmd"] for step in scene["steps"]
+                 if "cmd" in step and step["cmd"].startswith("give") and "eyJ0ZXh0" in step["cmd"]]
+        # The pre-flood positive control and the post-flood demand: two distinct registry keys
+        # (the key hashes the value bytes) that resolve the same public texture.
+        self.assertEqual(len(valid), 2)
+        import base64
+        values = [cmd.rsplit('value:"', 1)[1].split('"')[0] for cmd in valid]
+        self.assertNotEqual(values[0], values[1])
+        urls = [json.loads(base64.b64decode(value))["textures"]["SKIN"]["url"] for value in values]
+        self.assertTrue(urls[0].startswith("http://textures.minecraft.net/texture/"))
+        self.assertEqual(urls[0], urls[1])
+        pre = scene["steps"].index(next(step for step in scene["steps"] if step.get("cmd") == valid[0]))
+        flood = min(index for index, step in enumerate(scene["steps"])
+                    if "cmd" in step and 'value:"bad0' in step["cmd"])
+        self.assertLess(pre, flood)
+        order = [index for index, step in enumerate(scene["steps"])
+                 if "shot" in step and step["shot"] in ("flood-steve", "flood-valid")]
+        self.assertEqual([scene["steps"][index]["shot"] for index in order],
+                         ["flood-steve", "flood-valid"])
 
 
 class ElytraTests(unittest.TestCase):

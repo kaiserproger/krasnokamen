@@ -1,0 +1,69 @@
+{
+  "id": "MODEL-USE-POSE",
+  "verdict": "promoted",
+  "fix_commit": "client:2563ce9514",
+  "fix_commit_full": "2563ce9514b60ce7a94d30d1bd291859561ae283",
+  "promoted_at": "2026-11-24T18:13:32+00:00",
+  "tree_head": "ff3d2ba8b046a89dd5dc33a9279d331530a148ac",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T180348-native-use-pose-dbo4amf1/result.json",
+    "client_head": "250f7822a53dff27e41d36ccecdf811db7f263da",
+    "server_binary_sha256": "52c7e9207e3d2bd4efc22f058d54eda7fcb7a7bb3dbeb8bb1f34f8c459ba9576",
+    "red": [
+      "harness:scene-shot:native-use-pose"
+    ],
+    "states": {
+      "harness:scene-shot:native-use-pose": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T180418-native-use-pose-xiunrgic/result.json",
+    "client_head": "2563ce9514b60ce7a94d30d1bd291859561ae283",
+    "server_binary_sha256": "52c7e9207e3d2bd4efc22f058d54eda7fcb7a7bb3dbeb8bb1f34f8c459ba9576",
+    "green": [
+      "harness:scene-shot:native-use-pose"
+    ],
+    "states": {
+      "harness:scene-shot:native-use-pose": "green"
+    },
+    "tree_head": "ff3d2ba8b046a89dd5dc33a9279d331530a148ac",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T180418-native-use-pose-xiunrgic/result.json",
+    "client_head": "2563ce9514b60ce7a94d30d1bd291859561ae283",
+    "server_binary_sha256": "52c7e9207e3d2bd4efc22f058d54eda7fcb7a7bb3dbeb8bb1f34f8c459ba9576",
+    "green": [
+      "harness:scene-shot:native-use-pose"
+    ],
+    "states": {
+      "harness:scene-shot:native-use-pose": "green"
+    },
+    "tree_head": "ff3d2ba8b046a89dd5dc33a9279d331530a148ac",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "a4aad210df2c0879fedec0b4eb1936ad4ae2a810",
+    "paths": [
+      "src/entities/presentation.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::animation_tests::animation_aimed_and_single_hand_use_actions_have_distinct_silhouettes": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::animation_tests::animation_drowned_trident_pose_takes_precedence_on_the_actual_main_arm": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientCore/.analysis/validation/20261124T181235-ledger-promote-43gmq5se"
+}

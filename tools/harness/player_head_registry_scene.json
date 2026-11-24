@@ -1,0 +1,999 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 995 159 995 1005 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 995 160 995 1005 165 1010 minecraft:air"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1001.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "key": {
+        "keys": [
+          "key.keyboard.f5"
+        ],
+        "ticks": 1
+      }
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "shot": "empty"
+    },
+    {
+      "cmd": "give @s player_head[profile={properties:[{name:\"textures\",value:\"eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMjkyMDA5YTQ5MjViNThmMDJjNzdkYWRjM2VjZWYwN2VhNGM3NDcyZjY0ZTBmZGMzMmNlNTUyMjQ4OTM2MjY4MCJ9IH19\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s armor.head from entity @s weapon.mainhand"
+    },
+    {
+      "wait_ticks": 200
+    },
+    {
+      "shot": "pre-valid"
+    },
+    {
+      "cmd": "clear @s"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0000\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0001\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0002\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0003\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0004\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0005\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0006\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0007\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0008\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "shot": "flood-0"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0009\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0010\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0011\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0012\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0013\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0014\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0015\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0016\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0017\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0018\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0019\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0020\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0021\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0022\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0023\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0024\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0025\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0026\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0027\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0028\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0029\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0030\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0031\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0032\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0033\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0034\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0035\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0036\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0037\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0038\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0039\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0040\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0041\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0042\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0043\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0044\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0045\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0046\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0047\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0048\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0049\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0050\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0051\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0052\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0053\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0054\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0055\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0056\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0057\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0058\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0059\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0060\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0061\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0062\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0063\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0064\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0065\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0066\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0067\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0068\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0069\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0070\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0071\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0072\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0073\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0074\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0075\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0076\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0077\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0078\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0079\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0080\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0081\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0082\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0083\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0084\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0085\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0086\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0087\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0088\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0089\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0090\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0091\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0092\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0093\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0094\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0095\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0096\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0097\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0098\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0099\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0100\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0101\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0102\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0103\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0104\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0105\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0106\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0107\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0108\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0109\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0110\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0111\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0112\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0113\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0114\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0115\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0116\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0117\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0118\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0119\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0120\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0121\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0122\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0123\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0124\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0125\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0126\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0127\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0128\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0129\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0130\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0131\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0132\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0133\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0134\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0135\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0136\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0137\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0138\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0139\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0140\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0141\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0142\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0143\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0144\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0145\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0146\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0147\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0148\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0149\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0150\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0151\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0152\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0153\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0154\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0155\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0156\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0157\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0158\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0159\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0160\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0161\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0162\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0163\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0164\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0165\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0166\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0167\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0168\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0169\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0170\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0171\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0172\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0173\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0174\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0175\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0176\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0177\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0178\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0179\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0180\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0181\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0182\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0183\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0184\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0185\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0186\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0187\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0188\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0189\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0190\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0191\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0192\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0193\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0194\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0195\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0196\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0197\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0198\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0199\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0200\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0201\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0202\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0203\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0204\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0205\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0206\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0207\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0208\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0209\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0210\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0211\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0212\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0213\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0214\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0215\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0216\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0217\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0218\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0219\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0220\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0221\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0222\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0223\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0224\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0225\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0226\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0227\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0228\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0229\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0230\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0231\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0232\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0233\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0234\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0235\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0236\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0237\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0238\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0239\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0240\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0241\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0242\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0243\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0244\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0245\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0246\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0247\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0248\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0249\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0250\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0251\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "cmd": "item replace entity @s hotbar.0 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0252\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.1 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0253\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.2 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0254\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.3 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0255\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.4 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0256\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.5 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0257\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.6 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0258\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.7 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0259\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s hotbar.8 with minecraft:player_head[profile={properties:[{name:\"textures\",value:\"bad0260\"}]}]"
+    },
+    {
+      "wait_ticks": 4
+    },
+    {
+      "shot": "flood-28"
+    },
+    {
+      "cmd": "clear @s"
+    },
+    {
+      "cmd": "give @s minecraft:player_head[profile={name:\"zzunresolved\"}]"
+    },
+    {
+      "cmd": "item replace entity @s armor.head from entity @s weapon.mainhand"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "shot": "flood-steve"
+    },
+    {
+      "cmd": "clear @s"
+    },
+    {
+      "cmd": "give @s player_head[profile={properties:[{name:\"textures\",value:\"eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMjkyMDA5YTQ5MjViNThmMDJjNzdkYWRjM2VjZWYwN2VhNGM3NDcyZjY0ZTBmZGMzMmNlNTUyMjQ4OTM2MjY4MCJ9fX0=\"}]}]"
+    },
+    {
+      "cmd": "item replace entity @s armor.head from entity @s weapon.mainhand"
+    },
+    {
+      "wait_ticks": 200
+    },
+    {
+      "shot": "flood-valid"
+    },
+    {
+      "observe": "flood-valid-observe"
+    }
+  ]
+}

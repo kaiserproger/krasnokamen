@@ -4,6 +4,10 @@ title = "Third-person item-use poses collapse to one"
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/todo-active/TodoIssueSonnet/REPORT.md"
-regression = []
+regression = ["harness:scene-shot:native-use-pose", "client:krasnokamen-client:entities::animation_tests::animation_aimed_and_single_hand_use_actions_have_distinct_silhouettes", "client:krasnokamen-client:entities::animation_tests::animation_drowned_trident_pose_takes_precedence_on_the_actual_main_arm"]
+fix_commit = "client:2563ce9514"
+repro_check = "client:250f7822a5 control (83994480's per-item table deleted: `equipped_arm_rotations` raises the using hand by the pre-image -1.35, everything else kept) vs re-land 2563ce9514 (tree = lane tip 3cf928ed); native-use-pose holds a bow, a spyglass and a trident in third person idle and with use held: control 20261124T180348-native-use-pose-dbo4amf1 red at trident_use_pose_raised (42/101 px above the shoulders, floor 800, drawn-vs-spyglass 531), re-land 20261124T180418-native-use-pose-xiunrgic green (1715 and 5131). Unit refs animation_aimed_and_single_hand_use_actions_have_distinct_silhouettes and animation_drowned_trident_pose_takes_precedence_on_the_actual_main_arm red on the control and green on the candidate. Hunk map promotions/MODEL-USE-POSE.hunks.md; the earlier credit of ad0fd066 to this row and of this row to ad0fd066 was wrong (ad0fd066 is MODEL-ITEM-POSE). area=client"
+proving_assertions = { "harness:scene-shot:native-use-pose" = "trident_use_pose_raised" }
+promotion = "docs/bugs/promotions/MODEL-USE-POSE.json"

@@ -1,0 +1,164 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 18000"
+    },
+    {
+      "cmd": "weather clear"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 994 159 994 1006 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 994 160 994 1006 165 1010 minecraft:air"
+    },
+    {
+      "cmd": "fill 995 160 995 1005 163 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 996 160 996 1004 162 1009 minecraft:air"
+    },
+    {
+      "cmd": "setblock 1000 160 1004 minecraft:firefly_bush"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1002.3,
+        0,
+        27
+      ]
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "assert_block": {
+        "name": "firefly-bush-block",
+        "args": {
+          "x": 1000,
+          "y": 160,
+          "z": 1004
+        },
+        "expect": "minecraft:firefly_bush"
+      }
+    },
+    {
+      "read_block": {
+        "name": "bush-cell-before-probe",
+        "args": {
+          "x": 1000,
+          "y": 160,
+          "z": 1004
+        }
+      }
+    },
+    {
+      "cmd": "setblock 1000 160 997 minecraft:torch"
+    },
+    {
+      "wait_terrain": {
+        "name": "probe-terrain",
+        "args": {
+          "sections": [
+            [
+              62,
+              10,
+              62
+            ]
+          ],
+          "timeout_seconds": 60
+        }
+      }
+    },
+    {
+      "read_block": {
+        "name": "bush-cell-under-torch",
+        "args": {
+          "x": 1000,
+          "y": 160,
+          "z": 1004
+        }
+      }
+    },
+    {
+      "cmd": "setblock 1000 160 997 minecraft:air"
+    },
+    {
+      "wait_terrain": {
+        "name": "remesh-after-probe",
+        "args": {
+          "sections": [
+            [
+              62,
+              10,
+              62
+            ]
+          ],
+          "timeout_seconds": 60
+        }
+      }
+    },
+    {
+      "read_block": {
+        "name": "bush-cell-before-shot",
+        "args": {
+          "x": 1000,
+          "y": 160,
+          "z": 1004
+        }
+      }
+    },
+    {
+      "key": {
+        "keys": [
+          "key.keyboard.f1"
+        ],
+        "ticks": 1
+      }
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "shot": "bush-night"
+    }
+  ]
+}

@@ -4,9 +4,10 @@ title = "26.3 `shade_direction_override` is not implemented. 190/1,288 blockstat
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:84"
 regression = ["harness:scene-shot:native-shade-override", "client:krasnokamen-client:terrain::border_tests::shade_direction_override_replaces_the_faces_cardinal_weight", "client:krasnokamen-client:terrain::border_tests::shade_direction_override_wins_over_the_legacy_flat_shade_flag", "client:krasnokamen-client:terrain::border_tests::shade_direction_override_reads_the_dimensions_weights"]
-fix_commit = "client:43362918"
-proving_assertions = { "harness:scene-shot:native-shade-override" = "poppy_no_directional_shading" }
-repro_check = "Real shade-expression revert reds the emitted per-face shade refs (receipts/XClientBlocks/10-negative-control.log); the scene compares poppy luminance."
+fix_commit = "client:858518eb7ffa7f9364b6493c8521b33110d79e79"
+proving_assertions = { "harness:scene-shot:native-shade-override" = "torch_faces_same_shade" }
+repro_check = "Committed reversal pair at HEAD: control client da965e30aa08 puts the pre-43362918 shade expression back (the a/-side is the code before the fix), re-land 858518eb restores the override match. The torch scene reds torch_faces_same_shade on the control (north 0.8 vs east 0.6 face weights) and passes on the re-land; the three terrain border_tests cover the weight selection. The earlier registered poppy scene could not discriminate: every view of a cross shows one north/south quad (0.8) and one east/west quad (0.6), so its two-view mean is view-invariant; the subject is now a torch, whose north and east faces share one texture region."
+promotion = "docs/bugs/promotions/MODEL-SHADE-OVERRIDE.json"
