@@ -26,13 +26,31 @@ OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_
 PROMOTION_DIR = 'docs/bugs/promotions'
 
 
-def _patch_file(ident):
-    """The committed patch a re-audit passes: fix-patches/ or promotions/, whichever exists."""
-    for rel in (f'docs/bugs/fix-patches/{ident}.patch', f'docs/bugs/promotions/{ident}.patch'):
-        path = REPO_ROOT / rel
-        if path.is_file():
-            return path
-    return None
+def _non_test_digest(path):
+    """sha256 of a committed patch's non-test hunks, the identity `ledger promote` records; None when unparseable."""
+    from . import ledger as ledger_tool
+    try:
+        hunks, _, _ = ledger_tool._split_non_test(
+            path.read_text(errors='surrogateescape'),
+            lambda rel: (REPO_ROOT / rel).read_text(errors='surrogateescape'))
+    except Exception:
+        return None
+    return hashlib.sha256(hunks.encode(errors='surrogateescape')).hexdigest()
+
+
+def _patch_file(ident, digest=None):
+    """The committed patch a re-audit passes: fix-patches/ and promotions/ may both hold one.
+
+    A row's `fix_commit` names a digest; the file whose non-test hunks hash to it is the row's patch,
+    even when the other location keeps an older patch of the same row. With no match (or no digest) the
+    first present file is returned, so the caller reports the mismatch."""
+    present = [path for rel in (f'docs/bugs/fix-patches/{ident}.patch', f'docs/bugs/promotions/{ident}.patch')
+               if (path := REPO_ROOT / rel).is_file()]
+    if digest is not None:
+        for path in present:
+            if _non_test_digest(path) == digest:
+                return path
+    return present[0] if present else None
 
 
 def _patch_reverses(path):
@@ -50,7 +68,7 @@ def _stale_rows(bugs):
         fix = bug.get('fix_commit')
         if not isinstance(fix, str) or not fix.startswith('patch:') or bug['id'] in BASE_FIXED:
             continue
-        patch = _patch_file(bug['id'])
+        patch = _patch_file(bug['id'], fix[len('patch:'):])
         if patch is None:
             stale.append((bug['id'], 'no committed patch'))
         elif not _patch_reverses(patch)[0]:
@@ -72,7 +90,7 @@ def _promotion_errors(ident, bug):
         # (a curated --fix-patch may carry a test hunk too). Hashing the raw file would reject rows
         # promote accepts (Main X1).
         from . import ledger as ledger_tool
-        patch = _patch_file(ident)
+        patch = _patch_file(ident, fix_commit[len('patch:'):])
         if patch is not None:
             try:
                 hunks, _, _ = ledger_tool._split_non_test(

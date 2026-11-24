@@ -1086,6 +1086,25 @@ promotion = "docs/bugs/promotions/X.json"
         self.assertEqual(errors, [], 'staleness must not fail the L2 gate')
         self.assertEqual(stale, [('X', 'does not reverse')], 'it is still reported as the backlog')
 
+    def test_the_patch_matching_the_digest_wins_over_an_older_one_of_the_other_location(self):
+        # Both docs/bugs/fix-patches/ and docs/bugs/promotions/ may hold a patch for one row (a re-promotion
+        # on a real pre-image left the first, invented-side file behind). The row names one digest: the file
+        # that hashes to it is the row's patch, so the older file must not fail L2.
+        root = self.root()
+        (root / 'nope.rs').write_text('b\n')  # the post-change text the hunk classifier reads
+        (root / 'docs/bugs/promotions/X.patch').write_text((root / 'docs/bugs/fix-patches/X.patch').read_text())
+        (root / 'docs/bugs/fix-patches/X.patch').write_text(
+            'diff --git a/nope.rs b/nope.rs\n--- a/nope.rs\n+++ b/nope.rs\n@@ -1 +1 @@\n-a\n+invented\n')
+        with patch.object(regressions, 'REPO_ROOT', root):
+            row = next(row for row in ledger.load_rows(root) if row['id'] == 'X')
+            errors = regressions._promotion_errors('X', row)
+        self.assertEqual(errors, [])
+        (root / 'docs/bugs/promotions/X.patch').write_text(
+            'diff --git a/nope.rs b/nope.rs\n--- a/nope.rs\n+++ b/nope.rs\n@@ -1 +1 @@\n-a\n+other\n')
+        with patch.object(regressions, 'REPO_ROOT', root):
+            errors = regressions._promotion_errors('X', row)
+        self.assertEqual(len(errors), 1, 'with no file matching the digest the mismatch is still fatal')
+
 class FixturePanicTests(unittest.TestCase):
     """A control red must be an assertion, not a fixture that panicked before the test body ran.
 
