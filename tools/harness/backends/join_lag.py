@@ -25,6 +25,16 @@ Criteria:
   advancing its simulation tick and the server log carries no
   `edge pump not draining`.
 
+Walk order (review REVIEW-wave2-2 B1/N3): the joiner is launched right after `/tick rate` and
+before the `/tick query` reply is awaited, because at 3 TPS that reply travels through the same
+lagging pump — awaiting it first spent the whole join deadline before any join was attempted, so
+the pre-fix tree's control recorded no join outcome at all. The rate confirmation is best effort
+(a reply the pump held past `RATE_WAIT_SECONDS` leaves the interval to the joiner record's own
+ticks: `join_record` reads the core ticks the server itself printed around the wait). Both verdicts
+are read from the joiner's record; a halt that disconnects the witness after `player_present` is
+recorded in `details`, never as the client's `in_play` check (the ledger refuses a receipt whose
+client never reached play, which is exactly the halt's own disconnect).
+
 A verdict whose condition never occurred is `null` (inconclusive: the run ends
 failed with that reason), never `false` — `ledger._failing_verdict` reads
 `false` as the row's symptom, so an unreached condition must not look like a red
@@ -58,6 +68,8 @@ WITNESS = "JoinLagWitness"
 JOINER = "JoinLagJoiner"
 TIMEOUT = 1800.0
 JOIN_BOUND_SECONDS = 10.0      # the server's join deadline the row names
+JOIN_RECORD_SECONDS = JOIN_BOUND_SECONDS + 15.0  # the server's own kick/landing line lands late
+RATE_WAIT_SECONDS = 12.0       # `/tick query`'s reply shares the pump queue it describes
 PUBLISH_BUDGET_SECONDS = 1.6
 ENGAGED_LINE = "pump lag enabled"  # the server's warn line for the test/dev knob
 CRITERIA = ("join_behind_slow_pump", "live_pump_does_not_halt")
@@ -80,10 +92,13 @@ def join_record(log_path: Path, username: str) -> dict[str, Any]:
     `admitted` is the server's own admission line; `landed_seconds` the interval to its
     `join landed`; `timed_out` the server's deadline kick with the ticks it names; `lag` the pump's
     distance behind the core at that moment (`core_tick_seen - pump_tick`), which is the witness
-    that the pump really was delayed — the knob's warn line alone proves nothing.
+    that the pump really was delayed — the knob's warn line alone proves nothing. `rate` is the
+    core rate the server itself printed around this client's wait: the ticks it advanced divided by
+    the wait's own seconds, so a join whose `/tick query` reply the pump held still carries the
+    interval the row is about.
     """
     record: dict[str, Any] = {"admitted": False, "landed_seconds": None, "timed_out": False,
-                              "lag": None, "knockout": None}
+                              "lag": None, "rate": None, "knockout": None}
     try:
         text = log_path.read_text(errors="replace")
     except OSError:
@@ -116,6 +131,10 @@ def join_record(log_path: Path, username: str) -> dict[str, Any]:
             pump = _int(r"pump_tick=(\d+)", line)
             if core is not None and pump is not None:
                 record["lag"] = max(0, core - pump)
+            rate = _wait_rate(line, r"core_tick_seen_at_wait=Some\((\d+)\)",
+                              r"core_tick_seen=Some\((\d+)\)", record.get("landed_seconds"))
+            if rate is not None:
+                record["rate"] = rate
             record["knockout"] = "landed"
             continue
         if "timed out waiting for join" in line:
@@ -125,7 +144,23 @@ def join_record(log_path: Path, username: str) -> dict[str, Any]:
             pump = _int(r"pump published tick (\d+)", line)
             if now is not None and pump is not None:
                 record["lag"] = max(0, now - pump)
+            rate = _wait_rate(line, r"core tick (\d+) seen when the wait began",
+                              r"\b(\d+) now\b", JOIN_BOUND_SECONDS)
+            if rate is not None:
+                record["rate"] = rate
     return record
+
+
+def _wait_rate(line: str, start: str, end: str, seconds: float | None) -> float | None:
+    """The core rate over one join wait: ticks between its two printed marks, over its seconds."""
+    if seconds is None or seconds <= 0:
+        return None
+    first = re.search(start, line)
+    last = re.search(end, line)
+    if first is None or last is None:
+        return None
+    ticks = int(last.group(1)) - int(first.group(1))
+    return ticks / seconds if ticks > 0 else None
 
 
 def witness(record: dict[str, Any], knob_on: bool, applied_rate: float | None,
@@ -134,28 +169,31 @@ def witness(record: dict[str, Any], knob_on: bool, applied_rate: float | None,
 
     The fixed pump proves it with `pump_stale_skipped_ticks`: that counter moves only at the queue
     budget (`stale`), never for a broadcast `Lagged` run. A pump without the budget skip proves it
-    by its measured lag behind the core (`core_tick_seen - pump_tick`) over the confirmed rate. A
-    `Lagged`-only skip, the knob's warn line alone, a missing admission or an unconfirmed rate are
-    inconclusive, never a symptom.
+    by its measured lag behind the core (`core_tick_seen - pump_tick`) over the join's rate: the
+    `/tick query` confirmation when it arrived, otherwise the rate the server's own join record
+    prints for that wait (its ticks over its seconds). A `Lagged`-only skip, the knob's warn line
+    alone, a missing admission or a wait with no printed interval are inconclusive, never a symptom.
     """
     if not knob_on:
         return False, "the pump lag knob never ran: the lagging condition did not occur"
-    if applied_rate is None or applied_rate <= 0:
-        return False, "the server never confirmed an applied tick rate: the delay age in seconds is unknown"
+    rate = applied_rate if applied_rate is not None and applied_rate > 0 else record.get("rate")
+    if rate is None or rate <= 0:
+        return False, ("neither an applied tick rate nor the join's own printed interval "
+                       "was witnessed: the delay age in seconds is unknown")
     if not record.get("admitted"):
         return False, "the joining client never reached the server (no admission line): infrastructure, not a verdict"
     if stale_skips > 0:
         return True, (f"the pump skipped {stale_skips} outputs on the publish budget at "
-                      f"{applied_rate:g} TPS")
+                      f"{rate:g} TPS")
     lag = record.get("lag")
-    if lag is not None and applied_rate > 0 and lag / applied_rate > PUBLISH_BUDGET_SECONDS:
-        return True, (f"the pump was {lag} ticks = {lag / applied_rate:.2f} s behind at "
-                      f"{applied_rate:g} TPS, past the {PUBLISH_BUDGET_SECONDS:.1f} s budget")
+    if lag is not None and lag / rate > PUBLISH_BUDGET_SECONDS:
+        return True, (f"the pump was {lag} ticks = {lag / rate:.2f} s behind at "
+                      f"{rate:g} TPS, past the {PUBLISH_BUDGET_SECONDS:.1f} s budget")
     if lagged_skips > 0:
         return False, (f"only broadcast Lagged skips were counted ({lagged_skips}), not one on the "
                        f"{PUBLISH_BUDGET_SECONDS:.1f} s budget: the condition did not occur")
     return False, (f"neither a budget skip nor a delay past the {PUBLISH_BUDGET_SECONDS:.1f} s budget "
-                   f"was witnessed (lag {lag}, rate {applied_rate:g} TPS): the condition did not occur")
+                   f"was witnessed (lag {lag}, rate {rate:g} TPS): the condition did not occur")
 
 
 def join_verdict(record: dict[str, Any], knob_on: bool, applied_rate: float | None,
@@ -394,6 +432,10 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             detail["pump_lag_ticks"] = lag_ticks
             a.report["details"] = detail
             outcome, names_out = disposition(verdicts)
+            # A failed receipt must carry the gate's own verdicts: the aggregate assertion below
+            # fails first and, without them, a promotion control cannot read the row's own red
+            # (ledger._failing_verdict reads details.verdicts for a boolean profile).
+            evidence["verdicts"] = dict(verdicts)
             reasons = detail.get("verdicts", {})
             if outcome == "failed":
                 for name in names_out:
@@ -422,10 +464,34 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             os.environ["XDG_DATA_HOME"] = previous_xdg
 
 
+def _note_play_lost(a: ProbeSteps, detail: dict[str, Any], error: Exception) -> None:
+    """Keep a tolerated post-play failure from reading as "the client never reached play".
+
+    `ProbeSteps.observe` records an `in_play` check on every observation, so an observation taken
+    after the halt fails it. The client did reach play (`player_present`), and the ledger refuses
+    every receipt whose client never reached play — exactly the halt's own disconnect. The loss is
+    recorded in `details` and the verdict-hiding check is dropped; a client still in play keeps its
+    own green check and no note.
+    """
+    assertions = a.report["assertions"]
+    if assertions.get("in_play") is not False:
+        return
+    detail.setdefault("play_lost", []).append(str(error))
+    assertions.pop("in_play", None)
+    assertions["client_reached_play"] = True
+
+
 def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: float, address: str,
           server_log_path: Path, dashboard_port: int, server: subprocess.Popen[Any],
           launch_joiner: Any) -> tuple[dict[str, Any], dict[str, bool | None]]:
-    """The walk: the pump runs behind the tick, then a fresh client joins."""
+    """The walk: the pump runs behind the tick, a fresh client joins while it is behind.
+
+    Order (review REVIEW-wave2-2 B1): `/tick rate`, then the joiner is launched, then the
+    `/tick query` reply is awaited as best effort, then the joiner's own record is judged. Awaiting
+    the reply first spent the whole join deadline inside the lagging pump, so the pre-fix control
+    never attempted a join. Both verdicts read the joiner's record; the witness's own record
+    witnesses the delay when the joiner never got admitted.
+    """
     verdicts: dict[str, bool | None] = {}
     detail: dict[str, Any] = {"tick_rate": tick_rate}
     a.report["details"] = detail  # kept even when a later step fails
@@ -434,67 +500,57 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: float, 
     delayed = runtime.wait_for_path_condition(
         server_log_path, 10.0, lambda: (engaged(server_log_path), engaged(server_log_path)), server)
     detail["pump_lag_enabled"] = delayed
-    applied_rate: float | None = None
     try:
         a.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
         a.fixture(f"tick rate {tick_rate:g}")
-        # The server confirms the applied rate in its own `/tick query` reply; the delay age in
-        # seconds can only be computed against a confirmed rate.
-        a.fixture("tick query")
-        applied = a.wait(lambda s: applied_tick_rate(s.get("recent_chat") or []) is not None,
-                         "tick_rate_applied")
-        applied_rate = applied_tick_rate(applied.get("recent_chat") or [])
     except Exception as error:
-        # A pump that never drains halts the core before any join: that is row 2's symptom, judged
-        # from the witness client's own landing record and the halt line, not an infrastructure error.
-        # The halt line can land a moment after the client's own disconnect: wait for it as an event.
-        try:
-            early_halt = runtime.wait_for_path_condition(
-                server_log_path, 20.0,
-                lambda: (halt_line(server_log_path) is not None, halt_line(server_log_path)), server)
-        except (TimeoutError, runtime.ChildExited):
-            early_halt = halt_line(server_log_path)
-        if early_halt is None:
-            raise
-        detail["early_error"] = str(error)
-        detail["halt_line"] = early_halt
-        record = join_record(server_log_path, WITNESS)
-        detail["witness_record"] = record
-        witnessed, info = witness(record, delayed, tick_rate, 0)
-        ok, why = (None, info) if not witnessed else (False, f"the core halted before the join: {early_halt}")
-        detail["halt_verdict"] = why
-        detail.setdefault("verdicts", {})["live_pump_does_not_halt"] = why
-        verdicts["live_pump_does_not_halt"] = ok
-        detail["join_verdict"] = "no join was attempted before the halt: row 1 has no outcome here"
-        detail.setdefault("verdicts", {})["join_behind_slow_pump"] = detail["join_verdict"]
-        verdicts["join_behind_slow_pump"] = None
-        return detail, verdicts
-    detail["applied_tick_rate"] = applied_rate
+        # Before `/tick rate` is even sent a halt is row 2's symptom, judged from the witness's own
+        # landing record and the halt line; row 1 has no join outcome because none was attempted.
+        return _early_halt(detail, verdicts, a, error, server_log_path, delayed, tick_rate, server)
     tick_before = _safe_tick(dashboard_port)
-
     skips_before = _skip_counters(dashboard_port)
-    joiner_process, joiner_mcp = launch_joiner()
+    joiner: ProbeSteps | None = None
     try:
+        _joiner_process, joiner_mcp = launch_joiner()
         joiner = ProbeSteps(joiner_mcp, artifact / "join-lag-joiner",
                             max(60.0, a.deadline - time.monotonic()), "native-join-lag-joiner")
         joiner.__enter__()
-        joiner.call("minecraft_wait_for_play", {"timeout_seconds": JOIN_BOUND_SECONDS})
-        joiner.check("joiner_entered_play", joiner.call("minecraft_observe").get("in_play") is True)
+    except Exception as error:  # a client that cannot start is not a verdict
+        detail["join_launch_error"] = str(error)
+    # `/tick query` while the join is in flight: its reply shares the pump queue it describes, so it
+    # is best effort — the row's own interval then comes from the joiner record's core ticks.
+    applied_rate: float | None = None
+    try:
+        a.fixture("tick query")
+        applied = a.wait(lambda s: applied_tick_rate(s.get("recent_chat") or []) is not None,
+                         "tick_rate_applied", timeout_seconds=RATE_WAIT_SECONDS)
+        applied_rate = applied_tick_rate(applied.get("recent_chat") or [])
     except Exception as error:
-        # A kicked or stalled join is the symptom, not an infrastructure failure.
-        detail["join_error"] = str(error)
+        detail["rate_wait_error"] = str(error)
+        _note_play_lost(a, detail, error)
+    detail["applied_tick_rate"] = applied_rate
+    if joiner is not None:
+        try:
+            joiner.call("minecraft_wait_for_play", {"timeout_seconds": JOIN_BOUND_SECONDS})
+            joiner.check("joiner_entered_play", joiner.call("minecraft_observe").get("in_play") is True)
+        except Exception as error:
+            # A kicked or stalled join is the symptom, not an infrastructure failure.
+            detail["join_error"] = str(error)
+
     def settled() -> tuple[bool, dict[str, Any]]:
         current = join_record(server_log_path, JOINER)
         return current.get("knockout") is not None or current.get("timed_out") is True, current
 
     try:
-        # The server's own kick line may be written just after the client's tool deadline: wait for
-        # the log event (inotify) with the server pidfd, then judge.
-        record = runtime.wait_for_path_condition(server_log_path, JOIN_BOUND_SECONDS + 15.0,
+        # The server's own landing/kick line may be written just after the client's tool deadline:
+        # wait for the log event (inotify) with the server pidfd, then judge.
+        record = runtime.wait_for_path_condition(server_log_path, JOIN_RECORD_SECONDS,
                                                  settled, server)
     except (TimeoutError, runtime.ChildExited):
         record = join_record(server_log_path, JOINER)
+    witness_record = join_record(server_log_path, WITNESS)
     detail["join"] = record
+    detail["witness_join"] = witness_record
     detail["join_elapsed_seconds"] = (None if record.get("landed_seconds") is None
                                       else round(float(record["landed_seconds"]), 2))
     tick_after = _safe_tick(dashboard_port)
@@ -517,11 +573,43 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: float, 
     detail["join_verdict"] = why
     detail.setdefault("verdicts", {})["join_behind_slow_pump"] = why
     verdicts["join_behind_slow_pump"] = ok
-    ok2, why2 = halt_verdict(delayed, record, applied_rate, stale_delta, tick_before, tick_after, halt)
+    evidence_record = record if record.get("admitted") else witness_record
+    ok2, why2 = halt_verdict(delayed, evidence_record, applied_rate, stale_delta,
+                             tick_before, tick_after, halt)
     detail["halt_verdict"] = why2
     detail.setdefault("verdicts", {})["live_pump_does_not_halt"] = why2
     verdicts["live_pump_does_not_halt"] = ok2
     if ctx.windowed:
-        native_client.capture(a.client, artifact, "join-lag-after-join")
-        native_client.capture(a.client, artifact, "join-lag-final")
+        try:
+            native_client.capture(a.client, artifact, "join-lag-after-join")
+            native_client.capture(a.client, artifact, "join-lag-final")
+        except Exception as error:  # a halted core closed the screen; the verdicts stand
+            _note_play_lost(a, detail, error)
+    return detail, verdicts
+
+
+def _early_halt(detail: dict[str, Any], verdicts: dict[str, bool | None], a: ProbeSteps,
+                error: Exception, server_log_path: Path, delayed: bool, tick_rate: float,
+                server: subprocess.Popen[Any]) -> tuple[dict[str, Any], dict[str, bool | None]]:
+    """The core halted before `/tick rate`: row 2's symptom, and row 1 never had a join to judge."""
+    try:
+        early_halt = runtime.wait_for_path_condition(
+            server_log_path, 20.0,
+            lambda: (halt_line(server_log_path) is not None, halt_line(server_log_path)), server)
+    except (TimeoutError, runtime.ChildExited):
+        early_halt = halt_line(server_log_path)
+    if early_halt is None:
+        raise error
+    detail["early_error"] = str(error)
+    detail["halt_line"] = early_halt
+    record = join_record(server_log_path, WITNESS)
+    detail["witness_record"] = record
+    witnessed, info = witness(record, delayed, tick_rate, 0)
+    ok, why = (None, info) if not witnessed else (False, f"the core halted before the join: {early_halt}")
+    detail["halt_verdict"] = why
+    detail.setdefault("verdicts", {})["live_pump_does_not_halt"] = why
+    verdicts["live_pump_does_not_halt"] = ok
+    detail["join_verdict"] = "no join was attempted before the halt: row 1 has no outcome here"
+    detail.setdefault("verdicts", {})["join_behind_slow_pump"] = detail["join_verdict"]
+    verdicts["join_behind_slow_pump"] = None
     return detail, verdicts
