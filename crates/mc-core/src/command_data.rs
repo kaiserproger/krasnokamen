@@ -263,7 +263,11 @@ pub(crate) fn block(state: &TickState, pos: BlockPos) -> Result<Tag, String> {
     Ok(Tag::Compound(fields))
 }
 
-/// Whether `key` is a native field no `data` command shows or edits.
+/// Whether `key` belongs to the engine's own bookkeeping (`krasnokamen*`,
+/// `Krasnokamen*`, `DataVersion`), which `data` hides and refuses unless
+/// [`crate::villager::persistence::owns_field`] says the entity's row owns it: a
+/// villager's `krasnokamen:VillagerRuntime` is editable, no other entity's private
+/// field is.
 pub(crate) fn private_field(key: &str) -> bool {
     key.starts_with("krasnokamen") || key.starts_with("Krasnokamen") || key == "DataVersion"
 }
