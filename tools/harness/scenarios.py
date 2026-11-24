@@ -765,7 +765,7 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="native-structure-box", requires=("xvfb",),
         sources=("tools/harness/structure_box_scene.json", "tools/harness/backends/scene_shot_checks.py"),
         fixture="private native client in spectator mode, one structure block set twice at a fixed cell and camera in LOAD mode: `showboundingbox` off (block model only), then on (block model plus the received 4x3x3 box)",
-        proves="the structure block's overlay wireframe appears only when the received block entity asks for it (`structure_box_lines_drawn`, `structure_box_changed`), so a static block-entity scene draws the spectator-only overlay geometry",
+        proves="the structure block's overlay wireframe appears only when the received block entity asks for it (`structure_box_changed`), so a static block-entity scene draws the spectator-only overlay geometry",
         limits="one block entity, one camera and the wireframe only; the test-instance box and error markers, the `showair` block silhouettes and the box's exact vanilla colour stay unit-covered",
     ),
     "native-pig-saddle": _entry(

@@ -1,6 +1,6 @@
 [[bug]]
 id = "MODEL-BLOCK-ENTITY-DRAW"
-title = "The production native scene draws only 22 of the 27 block-entity types that have a factory. `shelf`, `brushable_block`, `structure_block`, `test_instance_block` (and the dynamic path that handles them) are never drawn"
+title = "The production native scene never draws `structure_block` or `test_instance_block`: both have a factory and an append arm, but the static scene filter and the geometry dispatch skip them (the credit's `shelf`/`brushable_block` half was already drawn at the pre-image)"
 area = "client"
 repro = "source"
 severity = "major"
