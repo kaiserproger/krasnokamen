@@ -350,13 +350,14 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     def order_form(recipe: str) -> dict[str, Any]:
         """Production menu -> New order icon -> recipe icon -> the order dialog, box set ON.
 
-        The form refuses with "No free resident" while no settler is free in the
-        server's live view (ui.rs:1453); a bound villager that has wandered out of
-        the loaded chunks is not in `people()` at that instant (20261123T232447 and
-        20261124T043521 wedged there with two bound villagers, 20261124T043115
-        passed with the same binding). Retry the recipe click instead of failing on
-        one instant of a wandering settler; a settlement that never reports a free
-        resident still fails here with its own view recorded.
+        The form refuses with "No free resident" while `production_workers` is
+        empty (ui.rs:1453): it excludes Builder and Nitwit residents, residents
+        occupied by an unfinished job, and wandering traders (ui_menus.rs:317-327,
+        1300-1304). The scenario summons random villagers, so runs whose two are a
+        Builder and a Nitwit refuse the form by design (20261123T232447,
+        20261124T043521: "строитель" + "безработный"/"нитовит"; 20261124T043115
+        passed with an unemployed + a cartographer). Retry, then fail naming the
+        settlement's own view; never widen the product's eligibility rule.
         """
         for attempt in range(6):
             form = _order_form_once(recipe)

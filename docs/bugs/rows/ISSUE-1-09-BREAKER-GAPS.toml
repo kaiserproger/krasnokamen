@@ -5,6 +5,6 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "Split out of ISSUE-1-09 (owner decision, 2026-11-24): its real-client promotion chain is correct (scene-shot native-settlement-buildings-upgrade passed on caf5ce7c48, the reversed control patch went red at settlements::buildings::tests::workshop_certifies_upgrades_and_caps_distinct_slots, the restore was green), but the qa-breaker verdict is blocked and names the gaps this row owns - receipts/Issue1Breaker/REPORT.md: 'Two certificate L2 upgrade cases and one graphical L2 order/shortage exercised; all-kinds/order/recovery coverage incomplete'; receipts/Issue1Breaker2 QA_RESULT=BLOCKED. docs/QA_AGENT_PROTOCOL.md forbids `fixed` without a breaker report on these behaviours."
+source = "Split out of ISSUE-1-09 (review B1, ReviewD123Civ5): its real-client promotion chain is correct (scene-shot native-settlement-buildings-upgrade passed on caf5ce7c48, the reversed control patch went red at settlements::buildings::tests::workshop_certifies_upgrades_and_caps_distinct_slots, the restore was green), but the qa-breaker verdict is blocked and names the gaps this row owns - receipts/Issue1Breaker/REPORT.md: 'Two certificate L2 upgrade cases and one graphical L2 order/shortage exercised; all-kinds/order/recovery coverage incomplete'; receipts/Issue1Breaker2 QA_RESULT=BLOCKED. docs/QA_AGENT_PROTOCOL.md forbids `fixed` without a breaker report on these behaviours."
 regression = []
 failing_first = "not recorded"

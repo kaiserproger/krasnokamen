@@ -386,10 +386,12 @@ class CivilizationEvidenceTests(unittest.TestCase):
         # Only authored blueprints can be matched to a certificate; the street
         # project is recorded as visible but never becomes a completion candidate.
         self.assertEqual(detail["projects_observed"], [house])
-        # The slot holder is the first project on the dialog; a waiting project's
-        # gathered materials never own the stall signature while it holds the slot.
+        # Every parsed project is signed, not only the slot holder: a completion may
+        # be any of them (review D123Civ6 note a), so a waiting project's progress
+        # also keeps the day from counting as a stall.
         self.assertEqual(qa.stall_signature(
-            {"projects": [house, lamp], "project_ui": [], "buildings_now": []})[0], house)
+            {"projects": [house, lamp], "project_ui": [], "buildings_now": []})[0],
+            (house, lamp))
 
     def test_civilization_sprint_wait_can_outlast_one_mcp_request(self):
         def sprint(server, log, ticks, timeout):

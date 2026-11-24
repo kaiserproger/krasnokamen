@@ -7,7 +7,7 @@ Patch: `docs/bugs/promotions/VILLAGER-RESIDENT-HOLDS-OPEN-AIR-BED.patch` (`patch
 ## What the fix is (origin: the fixed row's original patch file, now retired)
 
 The original patch file `docs/bugs/fix-patches/VILLAGER-RESIDENT-HOLDS-OPEN-AIR-BED.patch`
-was deleted on 2026-11-24 (review N4): its `patch:2c325bc0...` digest no longer matched the
+was deleted on 2026-11-24 (review N4): its `patch:493fa248...` digest no longer matched the
 row's `fix_commit`, and this promotions/ patch is the HEAD re-break the promotion uses. The
 fix itself is the allocator `bed_allowed` change in `crates/mc-core/src/settlements/allocator.rs`
 (row source: BreakIssue1x11 finding F4); no commit carries it, so the patch is the identity.
