@@ -198,3 +198,329 @@ class RowFileTests(unittest.TestCase):
                 ledger._record_promotion(root, 'BUG-0', {'id': 'BUG-0'})
         self.assertEqual(ledger.show(root, 'BUG-0'), original)
 
+
+
+def _git(repo, *args):
+    import subprocess
+    return subprocess.run(['git', '-C', str(repo), *args], check=True, capture_output=True, text=True).stdout
+
+
+def _commit(repo, message):
+    _git(repo, '-c', 'user.email=t@example', '-c', 'user.name=t', 'commit', '-qam', message)
+    return _git(repo, 'rev-parse', 'HEAD').strip()
+
+
+CLIENT_LIB = '''pub fn save(value: &str) -> usize {
+    value.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::save;
+
+    #[test]
+    fn a_save_never_writes_when_the_guard_is_present() {
+        assert_eq!(save("x"), 0, "the guard kept the value");
+    }
+}
+'''
+
+CLIENT_LIB_FIXED = '''pub fn save(value: &str) -> usize {
+    #[cfg(test)]
+    {
+        if std::env::var_os("SAVE_TO_A_PATH").is_none() {
+            return 0;
+        }
+    }
+    value.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::save;
+
+    #[test]
+    fn a_save_never_writes_when_the_guard_is_present() {
+        assert_eq!(save("x"), 0, "the guard kept the value");
+    }
+}
+'''
+
+
+class ClientTestPromotionTests(unittest.TestCase):
+    """`client-test:<sha>`: the registered client unit ref flips on the fix's reversed production hunks."""
+
+    def setUp(self):
+        import os
+        import subprocess
+        import tempfile
+
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.base = Path(directory.name)
+        self.root = self.base / 'core'
+        self.root.mkdir()
+        subprocess.run(['git', 'init', '-q', str(self.root)], check=True)
+        (self.root / 'README.md').write_text('core\n')
+        _git(self.root, 'add', '-A')
+        _commit(self.root, 'base')
+        self.client = self.base / 'client'
+        self.client.mkdir()
+        subprocess.run(['git', 'init', '-q', str(self.client)], check=True)
+        (self.client / 'Cargo.toml').write_text('[package]\nname = "krasnokamen-client"\nversion = "0.1.0"\n')
+        (self.client / 'src').mkdir()
+        (self.client / 'src/lib.rs').write_text(CLIENT_LIB)
+        _git(self.client, 'add', '-A')
+        _commit(self.client, 'before')
+        (self.client / 'src/lib.rs').write_text(CLIENT_LIB_FIXED)
+        _git(self.client, 'add', '-A')
+        self.fix = _commit(self.client, 'fix: keep a test save out of the data root')
+        self.env = patch.dict('os.environ', {'KRASNOKAMEN_CLIENT_ROOT': str(self.client)})
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        self.ledger_write(
+            f'id = "CLIENT-TEST-ROW"\ntitle = "t"\narea = "client"\nrepro = "source"\nseverity = "major"\n'
+            f'status = "open"\nsource = "s"\nfix_commit = "client-test:{self.fix[:12]}"\n'
+            'regression = ["client:krasnokamen-client:tests::a_save_never_writes_when_the_guard_is_present"]\n')
+
+    def ledger_write(self, body):
+        (self.root / 'docs/bugs/rows').mkdir(parents=True, exist_ok=True)
+        (self.root / 'docs/bugs/rows/CLIENT-TEST-ROW.toml').write_text('[[bug]]\n' + body)
+
+    def ctx(self):
+        artifact = self.base / 'artifacts'
+        artifact.mkdir(exist_ok=True)
+        return profiles.ProfileContext(artifact)
+
+    def assertion_line(self, text=None):
+        source = (text if text is not None else (self.client / 'src/lib.rs').read_text()).splitlines()
+        for index, line in enumerate(source, 1):
+            if 'the guard kept the value' in line:
+                return index
+        raise AssertionError('fixture has no assert line')
+
+    def test_promotes_on_a_real_pre_image_reversal_and_records_the_kind(self):
+        calls = []
+
+        def run(refs, tree):
+            text = (Path(tree) / 'src/lib.rs').read_text()
+            reversed_now = 'SAVE_TO_A_PATH' not in text
+            calls.append(reversed_now)
+            if not reversed_now:
+                return {ref: {'state': ledger.GREEN, 'detail': ''} for ref in refs}
+            return {ref: {'state': ledger.RED, 'detail': '1 failed',
+                          'assertion': {'file': 'src/lib.rs', 'line': self.assertion_line(text),
+                                        'error': 'panic'}} for ref in refs}
+
+        receipt = ledger.promote('CLIENT-TEST-ROW', root=self.root, ctx=self.ctx(), client_runner=run)
+        self.assertEqual(receipt['control'], 'client_test_reversal')
+        self.assertEqual(receipt['reversed_files'], ['src/lib.rs'])
+        self.assertEqual(calls, [True, False])
+        row = ledger.load_rows(self.root)[0]
+        self.assertEqual(row['status'], 'fixed')
+        self.assertEqual(row['promotion'], 'docs/bugs/promotions/CLIENT-TEST-ROW.json')
+
+    def test_refuses_a_control_that_stays_green(self):
+        green = {'client:krasnokamen-client:tests::a_save_never_writes_when_the_guard_is_present':
+                 {'state': ledger.GREEN, 'detail': ''}}
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('CLIENT-TEST-ROW', root=self.root, ctx=self.ctx(),
+                           client_runner=lambda refs, tree: {ref: dict(green[ref]) for ref in refs})
+        self.assertIn('stayed green', str(refused.exception))
+        self.assertEqual(ledger.load_rows(self.root)[0]['status'], 'open')
+
+    def test_refuses_a_red_outside_test_code(self):
+        line = 1  # `pub fn save(...)`, production code, not an assert
+        red = {'client:krasnokamen-client:tests::a_save_never_writes_when_the_guard_is_present':
+               {'state': ledger.RED, 'detail': '1 failed',
+                'assertion': {'file': 'src/lib.rs', 'line': line, 'error': 'panic'}}}
+        green = {ref: {'state': ledger.GREEN, 'detail': ''} for ref in red}
+
+        def run(refs, tree):
+            reversed_now = 'SAVE_TO_A_PATH' not in (Path(tree) / 'src/lib.rs').read_text()
+            return {ref: dict((red if reversed_now else green)[ref]) for ref in refs}
+
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('CLIENT-TEST-ROW', root=self.root, ctx=self.ctx(), client_runner=run)
+        self.assertIn('stayed green', str(refused.exception))
+
+    def test_refuses_when_the_fix_no_longer_reverses(self):
+        # A later client commit rewrites the guarded lines: no real pre-image, so no control.
+        (self.client / 'src/lib.rs').write_text(CLIENT_LIB_FIXED.replace('value.len()', 'value.len() + 1'))
+        _git(self.client, 'add', '-A')
+        _commit(self.client, 'later: change the save')
+        green = {'client:krasnokamen-client:tests::a_save_never_writes_when_the_guard_is_present':
+                 {'state': ledger.GREEN, 'detail': ''}}
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('CLIENT-TEST-ROW', root=self.root, ctx=self.ctx(),
+                           client_runner=lambda refs, tree: {ref: dict(green[ref]) for ref in refs})
+        self.assertIn('does not reverse', str(refused.exception))
+
+    def test_refuses_a_dirty_client_source(self):
+        (self.client / 'src/lib.rs').write_text(CLIENT_LIB_FIXED + '\n// local edit\n')
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('CLIENT-TEST-ROW', root=self.root, ctx=self.ctx(),
+                           client_runner=lambda refs, tree: {})
+        self.assertIn('modified source files', str(refused.exception))
+
+    def test_refuses_a_client_test_fix_without_a_client_ref(self):
+        self.ledger_write(
+            f'id = "CLIENT-TEST-ROW"\ntitle = "t"\narea = "client"\nrepro = "source"\nseverity = "major"\n'
+            f'status = "open"\nsource = "s"\nfix_commit = "client-test:{self.fix[:12]}"\n'
+            'regression = ["python:tools.x:Y.test_z"]\n')
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('CLIENT-TEST-ROW', root=self.root, ctx=self.ctx(),
+                           client_runner=lambda refs, tree: {})
+        self.assertIn('needs a client:', str(refused.exception))
+
+
+class GraphicalControlBackfillTests(unittest.TestCase):
+    """`ledger graphical-control`: record a promoted row's graphical red later, never promote."""
+
+    ROW = ('id = "GRAPHICAL-ROW"\ntitle = "t"\narea = "harness"\nrepro = "source"\nseverity = "major"\n'
+           'status = "fixed"\nsource = "s"\nfix_commit = "{fix}"\n'
+           'regression = ["harness:scene-shot:native-dynamic-context"]\n'
+           'promotion = "docs/bugs/promotions/GRAPHICAL-ROW.json"\n')
+    REF = 'harness:scene-shot:native-dynamic-context'
+
+    def setUp(self):
+        import subprocess
+        import tempfile
+
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.base = Path(directory.name)
+        self.root = self.base / 'core'
+        self.root.mkdir()
+        subprocess.run(['git', 'init', '-q', str(self.root)], check=True)
+        (self.root / 'f.txt').write_text('old\n')
+        _git(self.root, 'add', '-A')
+        _commit(self.root, 'base')
+        (self.root / 'f.txt').write_text('new\n')
+        _git(self.root, 'add', '-A')
+        self.fix = _commit(self.root, 'fix: the row')
+        (self.root / 'docs/bugs/rows').mkdir(parents=True)
+        (self.root / 'docs/bugs/rows/GRAPHICAL-ROW.toml').write_text('[[bug]]\n' + self.ROW.format(fix=self.fix))
+        (self.root / 'docs/bugs/promotions').mkdir(parents=True)
+        self.promotion = {
+            'id': 'GRAPHICAL-ROW', 'verdict': 'promoted', 'fix_commit': self.fix,
+            'tree_head': self.fix, 'tree_sha256': 'a' * 64, 'control': 'reversed_fix_hunks',
+            'reversed_files': ['f.txt'],
+            'negative_control': {self.REF: {'state': 'unrunnable', 'detail': 'no build token'}},
+        }
+        self.write_promotion()
+
+    def write_promotion(self):
+        import json
+        (self.root / 'docs/bugs/promotions/GRAPHICAL-ROW.json').write_text(
+            json.dumps(self.promotion, indent=2) + '\n')
+
+    def read_promotion(self):
+        import json
+        return json.loads((self.root / 'docs/bugs/promotions/GRAPHICAL-ROW.json').read_text())
+
+    def control_tree(self, reverse=True):
+        import subprocess
+        tree = self.base / 'control'
+        subprocess.run(['git', '-C', str(self.root), 'worktree', 'add', '--detach', str(tree), 'HEAD'],
+                       check=True, capture_output=True)
+        if reverse:
+            patch, _, _ = ledger.non_test_patch(self.root, self.fix)
+            subprocess.run(['git', '-C', str(tree), 'apply', '-R', '-'], input=patch, text=True, check=True)
+        return tree
+
+    def ctx(self):
+        artifact = self.base / 'artifacts'
+        artifact.mkdir(exist_ok=True)
+        return profiles.ProfileContext(artifact)
+
+    def runner(self, state=ledger.RED, detail='native-dynamic-context assertion failed: animated_face'):
+        return lambda ctx, refs, tree, client: {
+            ref: {'state': state, 'detail': detail, 'receipt': '/tmp/run/result.json'} for ref in refs}
+
+    def test_records_a_red_on_the_reversed_tree(self):
+        updated = ledger.graphical_control('GRAPHICAL-ROW', root=self.root, control_tree=self.control_tree(),
+                                           ctx=self.ctx(), runner=self.runner())
+        entry = updated['negative_control'][self.REF]
+        self.assertEqual(entry['state'], 'red')
+        self.assertEqual(entry['assertion'], 'animated_face')
+        self.assertEqual(len(updated['graphical_control_backfill']), 1)
+        on_disk = self.read_promotion()
+        self.assertEqual(on_disk['negative_control'][self.REF]['state'], 'red')
+        self.assertEqual(ledger.load_rows(self.root)[0]['status'], 'fixed')
+
+    def test_refuses_a_tree_without_the_reversal(self):
+        tree = self.control_tree(reverse=False)
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.graphical_control('GRAPHICAL-ROW', root=self.root, control_tree=tree, ctx=self.ctx(),
+                                     runner=self.runner())
+        self.assertIn('not the reversed control', str(refused.exception))
+
+    def test_refuses_a_green_run(self):
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.graphical_control('GRAPHICAL-ROW', root=self.root, control_tree=self.control_tree(),
+                                     ctx=self.ctx(), runner=self.runner(state=ledger.GREEN, detail=''))
+        self.assertIn('not red on the reversed tree', str(refused.exception))
+        self.assertEqual(self.read_promotion()['negative_control'][self.REF]['state'], 'unrunnable')
+
+    def test_dry_run_leaves_the_receipt_alone(self):
+        ledger.graphical_control('GRAPHICAL-ROW', root=self.root, control_tree=self.control_tree(),
+                                 ctx=self.ctx(), runner=self.runner(), dry_run=True)
+        self.assertEqual(self.read_promotion()['negative_control'][self.REF]['state'], 'unrunnable')
+
+    def test_refuses_a_receipt_of_the_candidate_tree(self):
+        import json
+        receipt = self.base / 'result.json'
+        receipt.write_text(json.dumps({
+            'status': 'failed', 'tree': {'head': self.fix, 'sha256': 'a' * 64},
+            'details': {'named_scenario': {'id': 'native-dynamic-context', 'assertions': {'animated_face': False}}},
+        }))
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.graphical_control('GRAPHICAL-ROW', root=self.root, receipt=receipt, ctx=self.ctx(),
+                                     runner=self.runner())
+        self.assertIn('not the reversed control', str(refused.exception))
+
+    def test_refuses_an_open_row(self):
+        (self.root / 'docs/bugs/rows/GRAPHICAL-ROW.toml').write_text(
+            '[[bug]]\n' + self.ROW.format(fix=self.fix).replace('status = "fixed"', 'status = "open"')
+            .replace('promotion = "docs/bugs/promotions/GRAPHICAL-ROW.json"\n', ''))
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.graphical_control('GRAPHICAL-ROW', root=self.root, control_tree=self.control_tree(),
+                                     ctx=self.ctx(), runner=self.runner())
+        self.assertIn('it never promotes', str(refused.exception))
+
+    def test_records_a_validated_receipt_of_the_reversed_tree(self):
+        import hashlib
+        import json
+        import subprocess
+
+        client = self.base / 'client'
+        client.mkdir()
+        subprocess.run(['git', 'init', '-q', str(client)], check=True)
+        (client / 'src.rs').write_text('fn main() {}\n')
+        _git(client, 'add', '-A')
+        client_head = _commit(client, 'client')
+        binary = self.base / 'krasnokamen-client'
+        binary.write_bytes(b'client-binary')
+        digest = hashlib.sha256(b'client-binary').hexdigest()
+        (self.base / 'manifest.json').write_text(json.dumps({
+            'kind': 'client', 'repo': 'client', 'head': client_head, 'dirty': False, 'binary_sha256': digest}))
+        (self.root / 'docs/bugs/rows/GRAPHICAL-ROW.toml').write_text(
+            '[[bug]]\n' + self.ROW.format(fix=self.fix)
+            + f'proving_assertions = {{ "{self.REF}" = "animated_face" }}\n')
+        receipt = self.base / 'result.json'
+        receipt.write_text(json.dumps({
+            'status': 'failed', 'tree': {'head': self.fix, 'sha256': 'b' * 64},
+            'client_binary': {'path': str(binary), 'sha256': digest,
+                              'manifest_path': str(self.base / 'manifest.json'), 'head': client_head,
+                              'dirty': False},
+            'details': {'named_scenario': {'id': 'native-dynamic-context',
+                                           'assertions': {'animated_face': False, 'set_up': True}}},
+        }))
+        with patch.dict('os.environ', {'KRASNOKAMEN_CLIENT_ROOT': str(client)}):
+            updated = ledger.graphical_control('GRAPHICAL-ROW', root=self.root, receipt=receipt, ctx=self.ctx(),
+                                               runner=self.runner())
+        entry = updated['negative_control'][self.REF]
+        self.assertEqual(entry['state'], 'red')
+        self.assertEqual(entry['assertion'], 'animated_face')
+        self.assertEqual(entry['receipt'], str(receipt.resolve()))

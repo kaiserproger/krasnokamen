@@ -37,6 +37,12 @@ class Refused(Exception):
     """A promotion precondition failed; the message is the stated reason."""
 
 
+# A client-repository fix whose guard a client unit test observes: no scene assertion can flip on it,
+# so its pair is the test red with the fix's production hunks reversed and green on the fix
+# (OWNER-DECISIONS-NEEDED CL-7 option (a)).
+CLIENT_TEST_PREFIX = 'client-test:'
+
+
 # ----------------------------------------------------------------- ledger rows
 
 ROW_DIR = 'docs/bugs/rows'
@@ -441,15 +447,30 @@ def _client_test_target(packages, crate):
     raise ValueError(f'client package {crate}: no unambiguous lib or bin unit-test target in cargo metadata')
 
 
-def _run_client(ctx, tests, root):
-    """Run exact client-crate tests {(crate, name)} in the client checkout -> {(crate, name): (state, detail)}.
+def _client_failure(text):
+    """(file, line, message) of the first panic cargo test printed, or None.
+
+    Cargo prints `thread '<name>' panicked at <path>:<line>:` and the message on the next line; a test
+    that asserts on a child process' output carries the child's own text in that message, so the first
+    occurrence is the test's own assert (order of printing, the child's text is inside the message)."""
+    match = _PANIC_LINE.search(text)
+    if match is None:
+        return None
+    rest = text[match.end():].splitlines()
+    message = rest[0].strip() if rest else ''
+    return match.group(1), int(match.group(2)), message
+
+
+def _run_client(ctx, tests, root, repo=None):
+    """Run exact client-crate tests {(crate, name)} in the client checkout -> {(crate, name): (state, detail, assertion)}.
 
     A `client:<crate>:<test>` ref is a fix in the client repository: it never builds here, so the
-    checkout is `runtime.sibling_root('client')` (KRASNOKAMEN_CLIENT_ROOT or the sibling repo)."""
+    checkout is `runtime.sibling_root('client')` (KRASNOKAMEN_CLIENT_ROOT or the sibling repo).
+    `repo` selects another tree of that repository (the reversed client-test control copy)."""
     # Cargo metadata is one JSON line; mem-run can prepend its scope diagnostic.
-    repo = client_repo(root)
+    repo = Path(repo) if repo is not None else client_repo(root)
     if not repo.is_dir():
-        return {test: (UNRUNNABLE, f'no client checkout at {repo} (set KRASNOKAMEN_CLIENT_ROOT)') for test in tests}
+        return {test: (UNRUNNABLE, f'no client checkout at {repo} (set KRASNOKAMEN_CLIENT_ROOT)', None) for test in tests}
     argv, env = regressions.tree_build_command(
         repo, ['cargo', 'metadata', '--no-deps', '--format-version', '1'])
     ok, text = _exec(ctx, argv, 'client-metadata', repo, env)
@@ -465,12 +486,12 @@ def _run_client(ctx, tests, root):
             except ValueError as error:
                 errors[crate] = str(error)
     except (ValueError, StopIteration, KeyError, TypeError, AttributeError):
-        return {test: (UNRUNNABLE, f'client package {test[0]}: cargo metadata failed or was invalid; see log')
+        return {test: (UNRUNNABLE, f'client package {test[0]}: cargo metadata failed or was invalid; see log', None)
                 for test in tests}
     results = {}
     for crate, name in sorted(tests):
         if crate in errors:
-            results[(crate, name)] = (UNRUNNABLE, errors[crate])
+            results[(crate, name)] = (UNRUNNABLE, errors[crate], None)
             continue
         # A ref may name one test or a whole module (`ui::toasts::tests`): cargo's filter selects it
         # either way, and `--exact` would find nothing for the module form. Green needs at least one
@@ -480,15 +501,19 @@ def _run_client(ctx, tests, root):
         ok, text = _exec(ctx, argv, f'client-{name.rsplit("::", 1)[-1][:24]}', repo, env)
         summary = re.search(r'test result: (\w+)\. (\d+) passed; (\d+) failed', text)
         if summary is None:
-            results[(crate, name)] = (UNRUNNABLE, 'no test summary (build error?)')
+            results[(crate, name)] = (UNRUNNABLE, 'no test summary (build error?)', None)
             continue
         passed, failed = int(summary.group(2)), int(summary.group(3))
         if passed + failed == 0:
-            results[(crate, name)] = (UNRUNNABLE, 'ran no matching test')
+            results[(crate, name)] = (UNRUNNABLE, 'ran no matching test', None)
         elif failed or not ok:
-            results[(crate, name)] = (RED, f'{failed} failed of {passed + failed}')
+            failure = _client_failure(text)
+            assertion = None
+            if failure is not None:
+                assertion = {'file': failure[0], 'line': failure[1], 'error': 'panic'}
+            results[(crate, name)] = (RED, f'{failed} failed of {passed + failed}', assertion)
         else:
-            results[(crate, name)] = (GREEN, '')
+            results[(crate, name)] = (GREEN, '', None)
     return results
 
 
@@ -719,8 +744,10 @@ def run_refs(ctx, refs, tree, client):
                 out[f'python:{module}:{test}'] = {'state': state, 'detail': detail,
                                                   **({'assertion': assertion} if assertion else {})}
         if client_tests:
-            for (crate, name), (state, detail) in _run_client(ctx, client_tests, tree).items():
-                out[f'client:{crate}:{name}'] = {'state': state, 'detail': detail}
+            for (crate, name), entry in _run_client(ctx, client_tests, tree).items():
+                assertion = entry[2] if len(entry) > 2 else None
+                out[f'client:{crate}:{name}'] = {'state': entry[0], 'detail': entry[1],
+                                                 **({'assertion': assertion} if assertion else {})}
     return out
 
 
@@ -1359,17 +1386,30 @@ def _server_built_from(root, receipt_text, tree):
 
 
 def client_repo(root=REPO_ROOT):
-    """The client checkout a `client:<sha>` fix_commit is resolved in (the sibling repo, or its env override)."""
+    """The client checkout a `client:<sha>`/`client-test:<sha>` fix_commit is resolved in (sibling repo or env)."""
     from . import runtime
 
     return runtime.sibling_root('client', root)
 
 
+def client_fix_kind(fix):
+    """'client' | 'client-test' | None for a fix_commit text; Refused on a malformed client prefix."""
+    for kind in (CLIENT_TEST_PREFIX.rstrip(':'), 'client'):
+        if fix.startswith(kind + ':'):
+            return kind
+    return None
+
+
 def client_fix_commit(fix, root=REPO_ROOT):
-    """Full sha of a `client:<sha>` fix_commit in the client repository; Refused when it is unknown."""
-    sha = fix[len('client:'):]
+    """Full sha of a `client:<sha>`/`client-test:<sha>` fix_commit in the client repository.
+
+    Refused when the sha is not a commit there."""
+    kind = client_fix_kind(fix)
+    if kind is None:
+        raise Refused(f'fix_commit {fix}: expected client:<sha> or {CLIENT_TEST_PREFIX}<sha>')
+    sha = fix[len(kind) + 1:]
     if not re.fullmatch(r'[0-9a-f]{7,40}', sha):
-        raise Refused(f'fix_commit {fix}: expected client:<sha>')
+        raise Refused(f'fix_commit {fix}: expected {kind}:<sha>')
     repo = client_repo(root)
     if not repo.is_dir():
         raise Refused(f'fix_commit {fix}: no client checkout at {repo} (set KRASNOKAMEN_CLIENT_ROOT)')
@@ -1710,8 +1750,184 @@ def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client
     return receipt
 
 
+_CLIENT_COPY_IGNORE = shutil.ignore_patterns('.git', 'target', 'dist', 'logs', '.analysis', 'model-audit',
+                                              'node_modules', '*.log')
+
+
+def _client_source_state(root):
+    """(repo, head, untracked source files) of the client checkout, Refused when its source is dirty.
+
+    The pair has to run on one client revision: a tracked edit under `src/` or a manifest would mean the
+    control copy and the checkout are not the same source, so the reversal could prove the local edit."""
+    repo = client_repo(root)
+    if not repo.is_dir():
+        raise Refused(f'no client checkout at {repo} (set KRASNOKAMEN_CLIENT_ROOT)')
+    _, head = _git(repo, 'rev-parse', 'HEAD')
+    _, status = _git(repo, 'status', '--porcelain')
+    dirty, untracked = [], []
+    for line in status.splitlines():
+        state, path = line[:2], line[3:].strip('"')
+        if not (path.endswith(('.rs', '.toml', '.lock')) or path == 'build.rs'):
+            continue
+        (untracked if state == '??' else dirty).append(path)
+    if dirty:
+        raise Refused(f'the client checkout {repo} has modified source files ({", ".join(dirty[:5])}): '
+                      'commit or revert them first; a client-test pair must run on one client revision')
+    return repo, head.strip(), sorted(untracked)
+
+
+def _client_control_copy(repo, root, slot='ledger-client-control'):
+    """A disposable copy of the client checkout the fix's production hunks are reversed in.
+
+    The client checkout itself is never edited: a promotion reverses the real pre-image in a copy that
+    carries the same source (every file except build output, `.git` and logs)."""
+    parent = _worktree_parent(root) or Path(tempfile.mkdtemp(prefix='ledger-client-control-'))
+    tree = parent / slot
+    if tree.exists():
+        shutil.rmtree(tree, ignore_errors=True)
+    try:
+        shutil.copytree(repo, tree, ignore=_CLIENT_COPY_IGNORE, symlinks=True)
+    except OSError as error:
+        raise Refused(f'cannot copy the client checkout {repo} for the control: {error}')
+    return tree
+
+
+def _client_test_assertion(tree, entry, changed_files):
+    """Classify one client control red: an assertion inside test code of a file the fix changed.
+
+    A client unit test lives either in a test file or in an inline `#[cfg(test)]` module of a production
+    file, and `_panic_class` treats the latter as class (c) because the path is not a test path. Here the
+    inline range is read from the control tree's own source, and the assert macro has to be on the line
+    the panic names. A fixture/setup panic or an assertion elsewhere in the same file never counts."""
+    assertion = entry.get('assertion') or {}
+    file, line = assertion.get('file'), assertion.get('line')
+    if not isinstance(file, str) or not isinstance(line, int):
+        return 'unproven'
+    if not os.path.isabs(file):
+        file = str((Path(tree) / file).resolve())
+    try:
+        relative = Path(file).resolve().relative_to(Path(tree).resolve()).as_posix()
+    except ValueError:
+        return 'unproven'
+    if relative not in changed_files:
+        return 'unproven'
+    try:
+        source = Path(file).read_text(errors='surrogateescape')
+    except OSError:
+        return 'unproven'
+    lines = source.splitlines()
+    if not 1 <= line <= len(lines):
+        return 'unproven'
+    in_test = bool(_TEST_PATH.search(relative))
+    if not in_test and relative.endswith('.rs'):
+        in_test = any(first <= line <= last for first, last in _rust_test_ranges(source))
+    if not in_test or not _ASSERT_LINE.search(lines[line - 1]):
+        return 'unproven'
+    return 'assertion'
+
+
+def _promote_client_test_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client_runner=None):
+    """A `client-test:<sha>` fix: the client unit ref is red with the fix's real production hunks
+    reversed, and green on the client that contains the fix.
+
+    The reversal is `git apply -R` of the fix commit's own non-test hunks in a copy of the client
+    checkout: the a/- side is the commit's pre-image, never a hand-written re-break, and a hunk that no
+    longer reverses refuses instead of falling back to another tree."""
+    fix_full = client_fix_commit(fix, root)
+    refs = row['regression']
+    if not refs:
+        raise Refused(f'{ident}: no registered check (regression is empty)')
+    for ref in refs:
+        try:
+            regressions._parse_ref(ref)
+        except ValueError as error:
+            raise Refused(f'{ident}: {error}')
+    client_refs = [ref for ref in refs if ref.startswith('client:')]
+    if not client_refs:
+        raise Refused(f'{ident}: a {CLIENT_TEST_PREFIX}<sha> fix needs a client:<crate>:<test> ref to carry '
+                      'the pair (a harness ref would need a real-client control)')
+    repo, head, untracked = _client_source_state(root)
+    if not client_contains(root, head, fix_full):
+        raise Refused(f'{ident}: the client checkout {repo} at {head[:12]} does not contain the fix '
+                      f'{fix_full[:12]}: check out the client revision the row was fixed on')
+    patch, reversed_files, kept_test_files = non_test_patch(repo, fix_full)
+    if not patch:
+        raise Refused(f'{ident}: fix commit {fix} changes no production hunk, so there is no pre-image to '
+                      f'reverse: a {CLIENT_TEST_PREFIX} row proves a guard a client test observes')
+    repair = f'client-test control of {ident}: the fix does not reverse on {repo} at {head[:12]}; commit the ' \
+             'client revision that carries its pre-image (a hand-ported re-break is not a control)'
+    control = restored = None
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(_control_lock(root))
+        tree = _client_control_copy(repo, root)
+        stack.callback(shutil.rmtree, tree, True)
+        check = _git(tree, 'apply', '-R', '--check', '--whitespace=nowarn', '-',
+                     stdin=patch.encode(errors='surrogateescape'), check=False)
+        if check[0]:
+            raise Refused(repair)
+        _git(tree, 'apply', '-R', '--whitespace=nowarn', '-', stdin=patch.encode(errors='surrogateescape'))
+        runner = client_runner or (lambda refs, tree: _client_ref_states_of(_run_client(ctx, {
+            _client_test(key, ref): key for key in refs}, root, tree)))
+        control = runner(client_refs, tree)
+        changed = set(reversed_files) | set(kept_test_files)
+        for ref, entry in control.items():
+            if entry.get('state') != RED:
+                continue
+            if _client_test_assertion(tree, entry, changed) != 'assertion':
+                entry['detail'] = (entry.get('detail', '') + ' | the red is not an assertion inside test code '
+                                   'of a file the fix changed').strip(' |')
+                entry['state'] = UNPROVEN_PANIC
+        red = {ref for ref, entry in control.items() if entry['state'] == RED}
+        if not red:
+            raise Refused(f'{ident}: the client unit refs stayed green with the fix reversed: '
+                          + '; '.join(f"{ref}={entry['state']} ({entry['detail']})" for ref, entry in control.items())
+                          + ' (a control that stays green does not test the fix)')
+        restored = runner(refs, repo) if client_runner else _client_ref_states_of(
+            _run_client(ctx, {_client_test(ref): ref for ref in refs}, root, repo))
+        if not client_runner:
+            others = [ref for ref in refs if not ref.startswith('client:')]
+            if others:
+                restored.update(run_refs(ctx, others, root, True))
+        bad = {ref: entry for ref, entry in restored.items() if entry.get('state') != GREEN}
+        if bad:
+            raise Refused(f'{ident}: refs not green on the client that contains the fix: '
+                          + '; '.join(f"{ref}={entry['state']} ({entry['detail']})" for ref, entry in bad.items()))
+    receipt = {
+        'id': ident, 'verdict': 'promoted', 'fix_commit': fix, 'fix_commit_full': fix_full,
+        'promoted_at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
+        'tree_head': tree_now['head'], 'tree_dirty': tree_now['dirty'], 'tree_sha256': tree_now['sha256'],
+        'client_fix': True, 'control': 'client_test_reversal', 'control_tree': 'client_head',
+        'fix_patch_sha256': hashlib.sha256(patch.encode(errors='surrogateescape')).hexdigest(),
+        'reversed_files': reversed_files, 'kept_test_files': kept_test_files,
+        'client_checkout': {'path': str(repo), 'head': head, 'untracked': untracked},
+        'negative_control': control, 'restored': restored, 'client_receipt': None,
+        'artifact_dir': str(ctx.artifact_dir),
+    }
+    (ctx.artifact_dir / 'promote.json').write_text(json.dumps(receipt, indent=2) + '\n')
+    if dry_run:
+        return receipt
+    _record_promotion(root, ident, receipt)
+    return receipt
+
+
+def _client_test(ref):
+    """(crate, test) of a `client:` ref."""
+    _, crate, test = ref.split(':', 2)
+    return crate, test
+
+
+def _client_ref_states_of(results):
+    """{ref: {state, detail, assertion?}} from `_run_client` results keyed by (crate, test)."""
+    out = {}
+    for (crate, test), entry in results.items():
+        assertion = entry[2] if len(entry) > 2 else None
+        out[f'client:{crate}:{test}'] = {'state': entry[0], 'detail': entry[1],
+                                         **({'assertion': assertion} if assertion else {})}
+    return out
+
+
 def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receipt=None, fix_patch=None,
-            dry_run=False, ctx, runner=run_refs):
+            dry_run=False, ctx, runner=run_refs, client_runner=None):
     """Run every promotion check for `ident`; on success (and not dry_run) flip it to fixed. Refused on any failure.
 
     The candidate is the exact tree: HEAD plus uncommitted diff and untracked files (docs/bugs aside).
@@ -1730,6 +1946,15 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
     if fix.startswith('client:') and row.get('test_only_fix') is True:
         raise Refused(f'{ident}: test_only_fix is for a committed core test fix; a client:<sha> fix is proved '
                       'by real-client receipts, never by a reversed test oracle')
+    if fix.startswith(CLIENT_TEST_PREFIX):
+        if row.get('test_only_fix') is True:
+            raise Refused(f'{ident}: test_only_fix (a core test oracle plus its defect patch) is not the '
+                           f'{CLIENT_TEST_PREFIX} kind; drop the flag and let the reversal prove the client fix')
+        if client_receipt or client_control_receipt:
+            raise Refused(f'{ident}: a {CLIENT_TEST_PREFIX}<sha> fix is proved by reversing its own production '
+                          'hunks for the registered client unit ref, not by real-client receipts')
+        return _promote_client_test_fix(ident, row=row, fix=fix, root=root, tree_now=tree_now, dry_run=dry_run,
+                                        ctx=ctx, client_runner=client_runner)
     if fix.startswith('client:'):
         return _promote_client_fix(ident, row=row, fix=fix, root=root, tree_now=tree_now, dry_run=dry_run,
                                    ctx=ctx, client_receipt=client_receipt,
@@ -1941,6 +2166,144 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
     return receipt
 
 
+# ------------------------------------------------- graphical control (backfill)
+
+
+def _reversed_patch(root, row, promotion):
+    """The patch a promoted row's control reversed: its committed patch, or the fix commit's production hunks."""
+    fix = row['fix_commit']
+    if fix.startswith('patch:'):
+        path = regressions._patch_file(row['id'], fix[len('patch:'):])
+        if path is None:
+            raise Refused(f"{row['id']}: no committed patch for {fix}; nothing to reverse for the control")
+        return path.read_text(errors='surrogateescape')
+    fix_full = client_fix_commit(fix, root) if client_fix_kind(fix) else None
+    if fix_full is not None:
+        raise Refused(f"{row['id']}: a client fix carries its own receipt pair; nothing to backfill")
+    code, full = _git(root, 'rev-parse', '--verify', '--quiet', f'{fix}^{{commit}}', check=False)
+    if code:
+        raise Refused(f"{row['id']}: fix_commit {fix} is not a commit of this repository")
+    patch, _, _ = non_test_patch(root, full.strip())
+    if not patch:
+        raise Refused(f"{row['id']}: fix commit {fix} has no production hunk to reverse")
+    return patch
+
+
+def _graphical_backfill(ident, promotion, entries, recorded):
+    """The promotion receipt's backfill record with `recorded` appended (old dict shape normalised)."""
+    base = promotion.get('graphical_control_backfill')
+    history = list(base) if isinstance(base, list) else ([base] if isinstance(base, dict) else [])
+    history.append(recorded)
+    new = dict(promotion)
+    new['negative_control'] = entries
+    new['graphical_control_backfill'] = history
+    return new
+
+
+def graphical_control(ident, *, root=REPO_ROOT, receipt=None, control_tree=None, dry_run=False, ctx, runner=run_refs):
+    """Record the graphical negative control of an already promoted row (backfill).
+
+    Promotion of a client-visible row records its graphical control `unrunnable` when no build token
+    allowed a reverted-pin run (`docs/bugs/README.md`). This re-runs only those graphical refs against
+    the reversed tree, or validates a receipt of such a run, and writes the red into the row's
+    promotion receipt. It never changes a row's status and never accepts a green or a non-assertion."""
+    row = next((bug for bug in load_rows(root) if bug['id'] == ident), None)
+    if row is None:
+        raise Refused(f'unknown ledger id {ident}')
+    if row['status'] != 'fixed':
+        raise Refused(f'{ident} is {row["status"]}, not fixed: backfill records the control of a promotion, '
+                      'it never promotes')
+    promotion_rel = row.get('promotion')
+    promotion_path = root / str(promotion_rel)
+    try:
+        promotion = json.loads(promotion_path.read_text())
+    except (OSError, ValueError) as error:
+        raise Refused(f'{ident}: promotion receipt {promotion_rel} unreadable: {error}')
+    if promotion.get('id') != ident or promotion.get('fix_commit') != row.get('fix_commit'):
+        raise Refused(f'{ident}: {promotion_rel} does not describe this row and fix_commit')
+    if promotion.get('client_fix'):
+        raise Refused(f'{ident}: a client fix already records its receipt pair; there is no unrunnable '
+                      'graphical control to backfill')
+    if bool(receipt) == bool(control_tree):
+        raise Refused(f'{ident}: give exactly one of --receipt <result.json> (record a run) or '
+                      '--control-tree <dir> (run the graphical refs there)')
+    graphical = [ref for ref in row['regression'] if regressions.is_graphical_ref(ref)]
+    if not graphical:
+        raise Refused(f'{ident}: the row registers no graphical ref, so it has no graphical control')
+    entries = dict(promotion.get('negative_control') or {})
+    pending = [ref for ref in graphical if (entries.get(ref) or {}).get('state') != RED]
+    if not pending:
+        raise Refused(f'{ident}: every graphical ref already records a red control; nothing to backfill')
+    proving = row.get('proving_assertions') if isinstance(row.get('proving_assertions'), dict) else {}
+    record = {'at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
+              'refs': pending, 'tree_head': promotion.get('tree_head')}
+    if receipt:
+        path = Path(receipt).resolve()
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, ValueError) as error:
+            raise Refused(f'{ident}: receipt {receipt} unreadable: {error}')
+        if data.get('status') != 'failed':
+            raise Refused(f"{ident}: receipt {receipt} is {data.get('status')!r}, not a failed control run")
+        recorded_tree = data.get('tree')
+        if not isinstance(recorded_tree, dict) or recorded_tree.get('head') != promotion.get('tree_head'):
+            raise Refused(f"{ident}: receipt {receipt} ran at "
+                          f"{(recorded_tree or {}).get('head')!r}, not the promoted tree {promotion.get('tree_head')!r}")
+        if recorded_tree.get('sha256') == promotion.get('tree_sha256'):
+            raise Refused(f'{ident}: receipt {receipt} ran the candidate tree itself, not the reversed control '
+                          '(the reversal changes the tree fingerprint)')
+        client_head = _client_pin_of_receipt(root, data, path)
+        states = _client_ref_states(data, pending, proving)
+        red = [ref for ref in pending if states.get(ref) == RED]
+        if not red:
+            raise Refused(f'{ident}: receipt {receipt} is not red on any pending graphical ref ('
+                          + ', '.join(f'{ref}={states.get(ref) or "unreported"}' for ref in pending)
+                          + '); a missing mapping, timeout or launch error cannot carry the control')
+        for ref in red:
+            assertion = _failed_assertion(data.get('details', {}), proving.get(ref))
+            entries[ref] = {'state': 'red', 'detail': f'backfilled from {path}', 'receipt': str(path),
+                            **({'assertion': assertion} if assertion else {})}
+        record.update({'receipt': str(path), 'refs': red,
+                       'control_tree': {'head': recorded_tree.get('head'), 'sha256': recorded_tree.get('sha256')},
+                       'client_head': client_head})
+    else:
+        tree = Path(control_tree).resolve()
+        if not (tree / '.git').exists():
+            raise Refused(f'{ident}: --control-tree {tree} is not a git worktree of this repository')
+        fingerprint = tree_fingerprint(tree)
+        if fingerprint['head'] != promotion.get('tree_head'):
+            raise Refused(f"{ident}: control tree {tree} is at {fingerprint['head'][:12]}, not the promoted "
+                          f"{str(promotion.get('tree_head'))[:12]}")
+        if fingerprint['sha256'] == promotion.get('tree_sha256'):
+            raise Refused(f'{ident}: control tree {tree} is the candidate itself; the fix has to be reversed in it')
+        patch = _reversed_patch(root, row, promotion)
+        if _git(tree, 'apply', '--check', '--whitespace=nowarn', '-', stdin=patch.encode(errors='surrogateescape'),
+                check=False)[0]:
+            raise Refused(f'{ident}: the fix does not apply to {tree}, so that tree is not the reversed control '
+                          '(reverse the fix hunks in it, not a hand-written re-break)')
+        ran = _classify_control(ident, runner(ctx, pending, tree, True), row, tree)
+        red = [ref for ref in pending if ran.get(ref, {}).get('state') == RED]
+        if not red:
+            raise Refused(f'{ident}: the graphical refs are not red on the reversed tree '
+                          + '; '.join(f'{ref}={ran.get(ref, {}).get("state")} '
+                                      f'({ran.get(ref, {}).get("detail")})' for ref in pending))
+        for ref in red:
+            detail = str(ran[ref].get('detail', ''))
+            assertion = proving.get(ref) or re.search(r'assertion failed: (\S+)', detail)
+            if not isinstance(assertion, str) and assertion is not None:
+                assertion = assertion.group(1)
+            entries[ref] = {'state': 'red', 'detail': detail, 'receipt': ran[ref].get('receipt'),
+                            **({'assertion': assertion} if isinstance(assertion, str) else {})}
+        record.update({'control_tree': {'head': fingerprint['head'], 'sha256': fingerprint['sha256']},
+                       'refs': red, 'artifact_dir': str(ctx.artifact_dir)})
+    updated = _graphical_backfill(ident, promotion, entries, record)
+    (ctx.artifact_dir / 'graphical-control.json').write_text(json.dumps(updated, indent=2) + '\n')
+    if dry_run:
+        return updated
+    promotion_path.write_text(json.dumps(updated, indent=2) + '\n')
+    return updated
+
+
 # -------------------------------------------------------------------------- CLI
 
 
@@ -1960,6 +2323,14 @@ def main(argv):
     promote_parser.add_argument('--fix-patch', type=Path, default=None,
                                 help="git diff of an uncommitted fix, for a fix_commit of the form patch:<sha256> of its non-test hunks")
     promote_parser.add_argument('--dry-run', action='store_true', help='run every check, write nothing to the ledger')
+    control_parser = sub.add_parser('graphical-control',
+                                    help='backfill the graphical control of an already promoted row (never promotes)')
+    control_parser.add_argument('id')
+    control_parser.add_argument('--receipt', type=Path, default=None,
+                                help='failed real-client result.json of the reversed-tree control to record')
+    control_parser.add_argument('--control-tree', type=Path, default=None,
+                                help='a worktree at the promoted head with the fix reversed: run only its graphical refs')
+    control_parser.add_argument('--dry-run', action='store_true', help='validate, write nothing')
     show_parser = sub.add_parser('show', help='print one row (no id: every row as one document)')
     show_parser.add_argument('id', nargs='?', default=None)
     show_parser.add_argument('--field', default=None, help='print only this field of the row')
@@ -2044,6 +2415,19 @@ def main(argv):
             print('[ledger] probe tree changed during execution; results are not attributable to one tree',
                   file=sys.stderr)
             return 2
+        return 0
+    if args.action == 'graphical-control':
+        ctx = _artifact_ctx('graphical-control')
+        try:
+            updated = graphical_control(args.id, receipt=args.receipt, control_tree=args.control_tree,
+                                        dry_run=args.dry_run, ctx=ctx)
+        except (Refused, ValueError) as error:
+            print(f'[ledger] refused: {error}')
+            print(f'[ledger] artifact={ctx.artifact_dir}')
+            return 1
+        red = [ref for ref, entry in updated['negative_control'].items() if entry.get('state') == 'red']
+        print(f"[ledger] {'dry-run: ' if args.dry_run else ''}graphical control of {args.id} recorded for "
+              f"{', '.join(red)} artifact={ctx.artifact_dir}")
         return 0
     ctx = _artifact_ctx('promote')
     try:

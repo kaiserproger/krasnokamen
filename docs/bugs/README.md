@@ -185,7 +185,12 @@ worker, runs the negative control.
    must still apply in reverse on the candidate, so a later edit or re-break of
    it refuses). A **client** fix is `client:<sha>` instead: the commit of the
    client repository (`KRASNOKAMEN_CLIENT_ROOT`, else `solaris-client` beside
-   the core checkout), resolved there and refused when unknown. It is a client
+   the core checkout), resolved there and refused when unknown. A fix whose only
+   observable is a client unit test — no scene assertion can flip on it — is
+   `client-test:<sha>` instead, proved by reversing the fix's own production
+   hunks (see [client fixes proved by a unit-test
+   reversal](#client-fixes-proved-by-a-unit-test-reversal-client-testsha)). A
+   `client:<sha>` fix is a client
    behaviour change, so it is proved by receipts, not by reversing server
    hunks: `--client-control-receipt` is a real-client `result.json` of the
    candidate client with only the fix's non-test hunks reversed, whose client ref
@@ -370,6 +375,7 @@ A refusal prints the reason and exits 1.
 
 ```
 python3 -m tools.harness ledger promote ID [--client-receipt PATH] [--fix-patch PATH] [--dry-run]
+python3 -m tools.harness ledger graphical-control ID (--receipt PATH | --control-tree DIR) [--dry-run]
 ```
 
 Heavy: on the owner host run it under `mem-run.sh` (`mem-run.sh -m 12G python3
@@ -416,7 +422,7 @@ the row lacks `repro_check`. Stricter still:
   mapping, never by a bare function name.
 - **Control A always runs on current code** (`control_tree: head`): a test-only fix whose test hunks do
   not reverse onto the candidate refuses instead of falling back to a `fix_commit` worktree. A
-  `client:<sha>` fix can never be `test_only_fix`.
+  `client:<sha>` or `client-test:<sha>` fix can never be `test_only_fix`.
 - **A row may narrow control A to its own file.** One commit often corrects several oracles; a row
   names them in `control_a_files` and control A reverses only those hunks, with every listed file
   required to be a test file of the fix commit and to hold a ref's test. Without the field control A
@@ -425,6 +431,57 @@ the row lacks `repro_check`. Stricter still:
 evidence (vanilla data/bytecode, spec, arithmetic) that the new one is right; the review of a test-only
 batch lists old versus new assertions and justifies every removed or loosened one. A row whose defect
 cannot be injected stays `fixed-unpromoted(test-only: oracle unproven)` — control A alone never promotes.
+
+### Client fixes proved by a unit-test reversal (`client-test:<sha>`)
+
+A client-repository fix whose guard only a client unit test observes (a `#[cfg(test)]` save path, a
+test-build-only guard) has no scene assertion that can flip on it: a scene run reads the client it
+launched, so the same pinned client passes with the guard reverted
+(`CLIENT-SETTINGS-TEST-POLLUTION`, owner decision CL-7 option (a)). Such a row records
+`fix_commit = "client-test:<sha>"` and is proved by a reversal pair in the client repository:
+
+- **Control A (real pre-image).** The fix commit's own non-test hunks are `git apply -R`'d in a
+  disposable copy of the client checkout. The copy is the same source as the checkout (a dirty
+  `src/`, `Cargo.toml`, `Cargo.lock` or `build.rs` refuses), the checkout's `HEAD` must contain the
+  fix, and a hunk that no longer reverses refuses: the a/- side is the commit's pre-image, never a
+  hand-written re-break and never another tree. The registered `client:` ref must go **red**, and the
+  red must be an assert macro inside test code — a test file, or an inline `#[cfg(test)]` module of a
+  production file, whose path the fix changed (a fixture panic, a production panic or an assert in
+  another file refuses).
+- **Restore.** Every ref runs in the client checkout that contains the fix and must be green.
+
+The receipt records `control = client_test_reversal`, the reversed files, the patch digest of the
+reversed hunks and the client checkout head; `regressions` refuses the receipt on a row that is not
+`client-test:` and refuses a row whose receipt does not carry it. `--client-receipt` and
+`--client-control-receipt` are refused here (they prove a behaviour a real client observes), and
+`test_only_fix` is refused as well: that flag is a core oracle plus a defect patch.
+`CLIENT-SETTINGS-TEST-POLLUTION` is the first row promoted this way.
+
+### Recording a graphical control later (backfill)
+
+A client-visible row promoted without a build token for a reverted-pin run records its graphical refs
+`unrunnable` in `promotions/<ID>.json` (see rule 3). The control can be recorded afterwards without
+promoting anything:
+
+```
+python3 -m tools.harness ledger graphical-control <ID> --receipt <result.json> [--dry-run]
+python3 -m tools.harness ledger graphical-control <ID> --control-tree <worktree> [--dry-run]
+```
+
+Only an already `fixed` row qualifies, and only its graphical refs still recorded `unrunnable` (or
+missing) are touched. `--control-tree` is a worktree at the row's promotion `tree_head` with the fix
+hunks reversed: the tool checks that reversal by applying the row's patch **forward** to it (a tree
+the fix does not apply to is not the control), refuses a tree whose fingerprint is still the
+candidate's, then runs only those refs there and needs the same reverted-tree `pin-release` as a
+promotion (the error names the `pin-release` command). `--receipt` records a failed `result.json` of
+such a run instead: it must have run at the promotion `tree_head` with a different tree fingerprint,
+carry a clean client pin, and be red at the row's proving assertion (a scenario needs
+`proving_assertions`; a profile needs its verdict).
+
+On success it replaces the `unrunnable` record with the red one (receipt path, assertion) and appends
+a `graphical_control_backfill` entry to the promotion receipt; the row's status and `promotion` field
+are untouched. It never accepts green, timeout, launch-error or unrelated-assertion evidence, and it
+never mass-runs: one row per invocation.
 
 ### How a red is classified (control A and B, every row)
 

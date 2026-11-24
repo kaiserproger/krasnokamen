@@ -79,8 +79,8 @@ def _stale_rows(bugs):
 def _promotion_errors(ident, bug):
     """Why this row's `fixed` status or `promotion` field is not acceptable, if it is not."""
     promotion, fix_commit = bug.get('promotion'), bug.get('fix_commit')
-    if 'fix_commit' in bug and (not isinstance(fix_commit, str) or not re.fullmatch(r'(?:client:)?[0-9a-f]{7,40}|patch:[0-9a-f]{64}', fix_commit)):
-        return [f'{ident}: fix_commit must be a lowercase hex commit id, client:<commit> or patch:<sha256>']
+    if 'fix_commit' in bug and (not isinstance(fix_commit, str) or not re.fullmatch(r'(?:client(?:-test)?:)?[0-9a-f]{7,40}|patch:[0-9a-f]{64}', fix_commit)):
+        return [f'{ident}: fix_commit must be a lowercase hex commit id, client:<commit>, client-test:<commit> or patch:<sha256>']
     # A patch-mode row whose committed patch is missing or no longer reverses is a REPORT, never an
     # L2 error: ordinary edits of historical fixes must not turn the gate red (Main B1). Strictness
     # lives at promote/--dry-run, which require and reverse the patch. run() prints the backlog.
@@ -118,6 +118,14 @@ def _promotion_errors(ident, bug):
     # A receipt without `control` is the ordinary reversed-fix-hunk promotion; only a test-only row
     # may carry `test_hunks`, and its control must be the defect patch the row recorded.
     control = receipt.get('control', 'reversed_fix_hunks')
+    client_test = isinstance(fix_commit, str) and fix_commit.startswith('client-test:')
+    if client_test:
+        if control != 'client_test_reversal':
+            return [f'{ident}: a client-test:<sha> receipt must record control = client_test_reversal, not {control!r}']
+        if not receipt.get('reversed_files'):
+            return [f'{ident}: a client_test_reversal receipt records no reversed production file']
+    elif control == 'client_test_reversal':
+        return [f'{ident}: control = client_test_reversal on a row whose fix_commit is not client-test:<sha>']
     if bug.get('test_only_fix') is True:
         if control != 'test_hunks':
             return [f'{ident}: a test_only_fix receipt must record control = test_hunks, not {control!r}']
@@ -699,9 +707,9 @@ def run(ctx, *, cargo_junit: Path | None = None):
             if not bug.get('repro_check'):
                 errors.append(f'{ident}: test_only_fix needs repro_check stating what the old oracle asserted '
                               'and the independent evidence (data/spec/arithmetic) that the new one is right')
-            if isinstance(bug.get('fix_commit'), str) and bug['fix_commit'].startswith('client:'):
-                errors.append(f'{ident}: test_only_fix is for a committed core fix; a client:<sha> fix has '
-                              'real-client receipts, never a reversed test oracle')
+            if isinstance(bug.get('fix_commit'), str) and bug['fix_commit'].startswith(('client:', 'client-test:')):
+                errors.append(f'{ident}: test_only_fix is for a committed core fix; a client fix is proved by a '
+                              'real-client receipt pair or a client-test reversal, never by a core test oracle')
             defect = bug.get('control_b_patch')
             if not isinstance(defect, str) or not defect:
                 errors.append(f'{ident}: test_only_fix needs control_b_patch (a committed defect-injection patch)')
@@ -758,6 +766,9 @@ def run(ctx, *, cargo_junit: Path | None = None):
                 clients[ref].add(ident)
         if bug.get('status') == 'fixed' and needs_real_client(bug) and not any(is_graphical_ref(ref) for ref in refs):
             errors.append(f'{ident}: original or client-surface repro needs a real-client check')
+        if isinstance(bug.get('fix_commit'), str) and bug['fix_commit'].startswith('client-test:') and not any(
+                ref.startswith('client:') for ref in refs):
+            errors.append(f'{ident}: a client-test:<sha> fix needs a client:<crate>:<test> ref to carry its pair')
         if bug.get('status') == 'fixed' and bug.get('repro') == 'command' and not any(ref.startswith('cargo:') for ref in refs):
             errors.append(f'{ident}: a command repro needs a cargo check through the same command path')
     statuses = {b['id']: b.get('status') for b in bugs if isinstance(b, dict) and isinstance(b.get('id'), str)}
