@@ -1,0 +1,30 @@
+{
+  "id": "FANOUT-ROSTER-SCAN-PER-VISIBLE-PLAYER-PER-VIEWER",
+  "verdict": "promoted",
+  "fix_commit": "patch:671b7732ff1177bc16071c0bddb2d302c508bf5fd349cbf349376d38bd938d9b",
+  "fix_commit_full": "patch:671b7732ff1177bc16071c0bddb2d302c508bf5fd349cbf349376d38bd938d9b",
+  "promoted_at": "2026-11-24T00:36:44+00:00",
+  "tree_head": "7becc657ae49ede5b5b8086d3833eb6b76ee33ae",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "671b7732ff1177bc16071c0bddb2d302c508bf5fd349cbf349376d38bd938d9b",
+  "reversed_files": [
+    "crates/mc-edge/src/plan/entity_interest.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:plan::plan_tests::player_visibility_tests::spectator_index_matches_the_roster_scan_and_is_built_once_per_publish": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:plan::plan_tests::player_visibility_tests::spectator_index_matches_the_roster_scan_and_is_built_once_per_publish": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T003341-ledger-promote-4v784ye8"
+}
