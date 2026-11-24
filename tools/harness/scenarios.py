@@ -768,6 +768,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the structure block's overlay wireframe appears only when the received block entity asks for it (`structure_box_changed`), so a static block-entity scene draws the spectator-only overlay geometry",
         limits="one block entity, one camera and the wireframe only; the test-instance box and error markers, the `showair` block silhouettes and the box's exact vanilla colour stay unit-covered",
     ),
+    "native-worn-head": _entry(
+        id="native-worn-head", summary="A worn piglin head's ears angle down, not sideways",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-worn-head", requires=("xvfb",),
+        sources=("tools/harness/worn_head_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, two stationary zombies in separate shots at a fixed pad and camera: one wearing a dragon head (dragon frame, evidence) and one wearing a piglin head (the row's frame), HUD hidden",
+        proves="the piglin head's ear flaps reach below the head's mid-line into the air beside it (`worn_piglin_ears_angle_down`), so the worn rig carries the 26.3 downward-angled ear geometry instead of two horizontal ear boxes",
+        limits="one species of wearer (zombie), one camera per head and the ear direction only; the dragon head's band counts are reported as evidence (WORN-DRAGON-HEAD-GEOMETRY needs its own angle), and the vanilla texel parity stays unit-covered",
+    ),
     "native-pig-saddle": _entry(
         id="native-pig-saddle", summary="A saddled pig draws its saddle layer",
         owner="core:harness", evidence="graphical", profile="scene-shot",

@@ -795,3 +795,43 @@ def check_dynamic_context(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["visual_review_required"] = [
         "Inspect ctx-day/ctx-night/compass-day frames; mask predicates do not prove vanilla needle parity."
     ]
+
+
+def check_worn_head(probe: ProbeSteps, artifact: Path) -> None:
+    """WORN-PIGLIN-HEAD-EARS: a worn piglin head's ears angle down, not sideways.
+
+    26.3's piglin head carries its ear flaps inside the head model, angled down; the pre-fix rig
+    (client 8a7817c8, control) gave the head two separate horizontal ear boxes at eye level, so its
+    ear pixels stop at the head's mid-line while the fixed model's flaps reach the jaw. Two
+    stationary zombies, one per shot, a front camera each and the HUD hidden: the piglin frame is the
+    row's, the dragon frame (a much larger skull) is retained as WORN-DRAGON-HEAD-GEOMETRY evidence -
+    its neutral-black band counts are reported, not asserted (two framings measured 12750 vs 5982,
+    too close for a load-proof control; that row needs the HeadBreaker third-person angle).
+    """
+    shots = _qa._load_shots(probe, artifact, ("dragon-head", "piglin-head"))
+    dragon, piglin = shots["dragon-head"][0], shots["piglin-head"][0]
+    probe.check("worn_head_camera_at_fixture", all(
+        abs(a - b) < 0.01 for a, b in zip(dragon["camera_position"], (1000.5, 161.62, 1001.0))
+    ) and abs(piglin["camera_position"][2] - 1001.5) < 0.01
+      and abs(piglin["camera_position"][1] - 161.62) < 0.01
+      and abs(piglin["yaw"]) < 0.01 and abs(piglin["pitch"]) < 0.01)
+    probe.check("worn_head_noon", dragon["environment"]["time_of_day"] == "6000"
+                and piglin["environment"]["time_of_day"] == "6000")
+    image = shots["piglin-head"][1]
+    brown = lambda r, g, b: r > 90 and r > g + 15
+    # The head cube spans x 555..730 at this framing; the strips are the air beside it, where a
+    # horizontal ear reaches out at eye level (control) and a downward flap reaches the jaw (fix).
+    left, right = (450, 300, 560, 380), (720, 300, 830, 380)
+    ears = [sum(1 for pixel in image.crop(box).getdata() if brown(*pixel)) for box in (left, right)]
+    probe.report["worn_piglin_ear_strips"] = [list(left), list(right)]
+    probe.report["worn_piglin_ear_pixels"] = ears
+    probe.check("worn_piglin_head_visible", sum(ears) >= 200)
+    # Measured: control 542, fix 3859 (the flaps hang to the jaw). Floor 1500 keeps a 2.6x band.
+    probe.check("worn_piglin_ears_angle_down", sum(ears) >= 1500)
+    dark = lambda r, g, b: max(r, g, b) < 60 and g <= r + 8 and g <= b + 8
+    band = (560, 365, 730, 440)
+    probe.report["worn_dragon_skull_band_pixels"] = sum(
+        1 for pixel in shots["dragon-head"][1].crop(band).getdata() if dark(*pixel))
+    probe.report["visual_review_required"] = [
+        "Inspect dragon-head.png and piglin-head.png; the ear strips prove the flap direction only."
+    ]
