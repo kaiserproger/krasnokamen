@@ -37,13 +37,15 @@ def _menu(state: dict[str, Any]) -> bool:
 def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     opened = _point(origin, dx=1, dz=2)
     control = _point(origin, dx=4, dz=2)
-    steps.fixture(f"gamerule randomTickSpeed {SPEED}")
     for point in (opened, control):
         steps.fixture(f"setblock {point['x']} {point['y']} {point['z']} {CHEST}")
         _block(steps, point, CHEST)
 
     state = _open(steps, opened, "ChestMenu", MENU_SLOTS)
     steps.check("open_copper_chest_menu_received", _menu(state))
+    # The sampler starts only after the menu is open, so the control cannot advance
+    # past a stage during setup.
+    steps.fixture(f"gamerule randomTickSpeed {SPEED}")
 
     # The unopened control advancing twice proves the sampler is rolling on this pad.
     steps.call("minecraft_wait_for_block_state", {
