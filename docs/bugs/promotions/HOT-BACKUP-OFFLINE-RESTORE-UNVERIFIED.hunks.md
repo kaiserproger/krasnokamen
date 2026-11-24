@@ -51,7 +51,7 @@ read-only open and refuses it. The registered ref
 fails the assertion at `crates/mc-edge/src/backup_tests.rs:668` with
 
 ```
-the restore command verifies and restores a hot backup: native source: /tmp/.../native/state.redb: world was not shut down cleanly; start and stop the server once to repair it, then retry
+assertion failed: the restore command verifies and restores a hot backup: native source: /tmp/.../native/state.redb: world was not shut down cleanly; start and stop the server once to repair it, then retry
 ```
 
 (the assertion was made explicit instead of an `expect` so the control red is an
