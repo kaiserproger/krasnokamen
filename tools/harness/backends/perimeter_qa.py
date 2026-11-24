@@ -50,12 +50,16 @@ VERDICTS = frozenset({
 # no stock) is a run that never reached the question and stays unrunnable.
 CHECK = f"buildings_{NAME}"
 FIXTURE = f"{NAME}_fixture"
-RING = 25
 GATE_HALF = 3
 RESIDENTS = 10
 RADIUS = 64
 # Flat pad half width around the bell: the wall line plus a margin for the Builders to stand on.
-PAD = RING + 6
+# The wall line itself is the core's `settlements/layout.rs` RING, derived from the deepest
+# blueprint (`MAX_SIZE[2] = 11` -> 30) and therefore not a constant to copy here: the product's
+# own founded line names it (`Founded <name> (revision <n>), wall ring <n>.`) and the gate reads
+# it there, so a blueprint depth change moves the pad with it instead of silently scanning the
+# wrong line (20261124T160759: the wall stood at 30 while this file scanned 25).
+PAD = 40
 COBBLE_STACKS = 12
 DOORS = 4
 COBBLE, DOOR, AIR, WATER = ("minecraft:cobblestone", "minecraft:oak_door", "minecraft:air",
@@ -68,15 +72,25 @@ BUILD_SECONDS = 1500.0
 SCAN_TICKS = 250  # minecraft_wait_ticks accepts at most 255
 
 
-def ring_columns(ax: int, az: int) -> list[tuple[int, int, int]]:
+def ring_columns(ax: int, az: int, ring: int) -> list[tuple[int, int, int]]:
     """Every column of the wall line as (x, z, across): the offset along its side from the road
     through the bell. The corner columns belong to the north and south sides."""
     columns = []
-    for dx in range(-RING, RING + 1):
-        for dz in range(-RING, RING + 1):
-            if max(abs(dx), abs(dz)) == RING:
-                columns.append((ax + dx, az + dz, dx if abs(dz) == RING else dz))
+    for dx in range(-ring, ring + 1):
+        for dz in range(-ring, ring + 1):
+            if max(abs(dx), abs(dz)) == ring:
+                columns.append((ax + dx, az + dz, dx if abs(dz) == ring else dz))
     return columns
+
+
+def founded_ring(lines: list[str], name: str) -> int:
+    """The wall ring the product's founded line names, or 0 when the line carries none."""
+    for line in lines:
+        if f"Founded {name}" in str(line):
+            match = re.search(r"wall ring (\d+)", str(line))
+            if match:
+                return int(match.group(1))
+    return 0
 
 
 def wanted(across: int) -> list[str]:
@@ -93,13 +107,14 @@ def wells(ax: int, az: int) -> list[tuple[int, int]]:
     return [(ax - 3, az - 3), (ax + 3, az - 3), (ax - 3, az + 3)]
 
 
-def scan_ring(probe: ProbeSteps, ax: int, ay: int, az: int) -> dict[tuple[int, int, int], str]:
+def scan_ring(probe: ProbeSteps, ax: int, ay: int, az: int,
+              ring: int) -> dict[tuple[int, int, int], str]:
     """The four sides of the wall line, foot level up to one above a gatehouse."""
     blocks: dict[tuple[int, int, int], str] = {}
-    for fixed in (-RING, RING):
-        blocks.update(_scan_box(probe, (ax - RING, ay, az + fixed), (ax + RING, ay + 4, az + fixed)))
-        blocks.update(_scan_box(probe, (ax + fixed, ay, az - RING + 1),
-                                (ax + fixed, ay + 4, az + RING - 1)))
+    for fixed in (-ring, ring):
+        blocks.update(_scan_box(probe, (ax - ring, ay, az + fixed), (ax + ring, ay + 4, az + fixed)))
+        blocks.update(_scan_box(probe, (ax + fixed, ay, az - ring + 1),
+                                (ax + fixed, ay + 4, az + ring - 1)))
     return blocks
 
 
@@ -130,13 +145,13 @@ def well_standing(blocks: dict[tuple[int, int, int], str], ay: int,
 
 
 def tally(ring: dict[tuple[int, int, int], str], wells_blocks: dict[tuple[int, int, int], str],
-          ax: int, ay: int, az: int) -> dict[str, Any]:
+          ax: int, ay: int, az: int, wall_ring: int) -> dict[str, Any]:
     """What the scans show: column states per kind, the standing wells, and the open columns."""
     gates = {"built": 0, "partial": 0, "empty": 0}
     walls = {"built": 0, "partial": 0, "empty": 0}
     doors = 0
     open_columns: list[tuple[int, int]] = []
-    for x, z, across in ring_columns(ax, az):
+    for x, z, across in ring_columns(ax, az, wall_ring):
         state = column_state(ring, x, ay, z, across)
         (gates if abs(across) <= GATE_HALF else walls)[state] += 1
         if across == 0 and ring.get((x, ay, z)) == DOOR:
@@ -231,6 +246,20 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
     founded = any(f"Founded {sname}" in line for line in echo.get("recent_chat", []))
     _verdict(sub, "settlement_founded", "PASS" if founded else "FAIL", f"{sname} r={RADIUS}")
     probe.check(f"{FIXTURE}_founded", founded)
+    # The wall line is the product's own RING (blueprint depth dependent), named in the founded
+    # line. A run that cannot read it never reached the question: fail the fixture, never scan a
+    # guessed line and report an empty wall.
+    founded_line = next((str(line) for line in echo.get("recent_chat", [])
+                         if f"Founded {sname}" in str(line)), "")
+    wall_ring = founded_ring([founded_line], sname)
+    fits = wall_ring > 0 and wall_ring + 6 <= PAD
+    sub["wall_ring"] = {"line": founded_line, "ring": wall_ring, "pad": PAD}
+    probe.check(f"{FIXTURE}_ring", fits)
+    _verdict(sub, "wall_ring", "PASS" if fits else "FAIL",
+             f"ring {wall_ring} under pad {PAD} ({founded_line!r})")
+    if not fits:
+        raise RuntimeError(f"buildings-qa fixture: no readable wall ring under pad {PAD}: "
+                           f"{founded_line!r}")
     ax, ay, az = px, py, pz
     sub["bell"] = [ax, ay, az]
     # The buyer's own way into the hub: a bell on the anchor, as the civil fixture has. Without it
@@ -242,7 +271,8 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
     probe.check(f"{FIXTURE}_shell", shell is not None)
     sub["storage_chest"] = list(shell)
     # Baseline before any stock exists: nothing stands on the line or the plaza corners.
-    before = tally(scan_ring(probe, ax, ay, az), scan_wells(probe, ax, ay, az), ax, ay, az)
+    before = tally(scan_ring(probe, ax, ay, az, wall_ring), scan_wells(probe, ax, ay, az),
+                   ax, ay, az, wall_ring)
     sub["before"] = before
     empty = before["ring_blocks"] == 0 and before["well_blocks"] == 0
     _verdict(sub, "walls_absent_before", "PASS" if empty else "FAIL", str(before))
@@ -280,10 +310,12 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
     counts = before
     while True:
         probe.call("minecraft_wait_ticks", {"ticks": SCAN_TICKS})
-        counts = tally(scan_ring(probe, ax, ay, az), scan_wells(probe, ax, ay, az), ax, ay, az)
+        counts = tally(scan_ring(probe, ax, ay, az, wall_ring), scan_wells(probe, ax, ay, az),
+                       ax, ay, az, wall_ring)
         elapsed = time.monotonic() - started
-        roads = _scan_box(probe, (ax - RING, ay - 1, az), (ax + RING, ay - 1, az))
-        roads.update(_scan_box(probe, (ax, ay - 1, az - RING), (ax, ay - 1, az + RING)))
+        roads = _scan_box(probe, (ax - wall_ring, ay - 1, az), (ax + wall_ring, ay - 1, az))
+        roads.update(_scan_box(probe, (ax, ay - 1, az - wall_ring),
+                               (ax, ay - 1, az + wall_ring)))
         samples.append({"seconds": round(elapsed), "ring_blocks": counts["ring_blocks"],
                         "well_blocks": counts["well_blocks"], "doors": counts["doors"],
                         "road_paths": sum(1 for block in roads.values() if block == PATH)})
@@ -344,10 +376,10 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
         probe.call("minecraft_wait_ticks", {"ticks": 60})
         native_client.capture(probe.client, artifact, f"{NAME}-well")
     # A client interaction opens a gate door: the gate is a door, not a wall.
-    door = (ax, ay, az - RING)
+    door = (ax, ay, az - wall_ring)
     opens = False
     if counts["doors"]:
-        probe.fixture(f"tp @s {ax + 0.5} {ay + 1.0} {az - RING + 3.5}")
+        probe.fixture(f"tp @s {ax + 0.5} {ay + 1.0} {az - wall_ring + 3.5}")
         probe.call("minecraft_wait_ticks", {"ticks": 40})
         probe.call("minecraft_set_hotbar_slot", {"slot": 8})
         probe.call("minecraft_use_item_on",
