@@ -1,0 +1,21 @@
+diff --git a/crates/mc-core/src/vanilla_interact.rs b/crates/mc-core/src/vanilla_interact.rs
+index 0000000..0000000 100644
+--- a/crates/mc-core/src/vanilla_interact.rs
++++ b/crates/mc-core/src/vanilla_interact.rs
+@@ -123,7 +123,15 @@
+         {
+             continue;
+         }
+-        if !crate::plugin_player::allows_block(state, actor, target) {
++        if !state
++            .world
++            .has_chunk(target.x.div_euclid(16), target.z.div_euclid(16))
++            || !state
++                .world
++                .block_at(target.x, target.y, target.z)
++                .is_some_and(|id| id == state.registry.states.air)
++            || !crate::plugin_player::allows_block(state, actor, target)
++        {
+             continue;
+         }
+         state.world.set_block(target.x, target.y, target.z, current);
