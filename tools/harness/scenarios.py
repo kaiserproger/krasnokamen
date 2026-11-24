@@ -182,8 +182,8 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="operator pad; every command is the player's own chat command and every answer is the "
                 "player's own received chat line",
         proves="a non-string list element answers `Invalid Tags: every list element must be a string` on "
-               "the mob and the experience-orb spawn paths, neither creates an entity, and a well-formed "
-               "tag list is accepted and read back by the entity's own `/tag <uuid> list` answer",
+               "the mob and the experience-orb spawn paths and creates no entity, while a well-formed tag "
+               "list is accepted without a refusal and its body exists",
         limits="The client chat tool caps a message at 256 characters, so the 1025-element count list and "
                "the 70000-Modified-UTF-8-byte string cannot be typed from a client and rest on the Cargo "
                "ref; one mob and one experience-orb spawn path; the accepted list needs "
