@@ -164,13 +164,13 @@ def _banner_shot(steps: ProbeSteps, origin: tuple[int, int, int], name: str) -> 
                name + "_viewer_returned_to_interaction_position")
 
 
-def _frame_place(steps: ProbeSteps, origin: tuple[int, int, int]) -> dict:
+def _frame_place(steps: ProbeSteps, origin: tuple[int, int, int], slot: int = 0) -> dict:
     """Place the support block and one empty item frame, without a map: returns the frame identity."""
     x, y, z = origin
     support = {"x": x, "y": y + 1, "z": z + 3}
     _set(steps, support, "minecraft:stone")
-    _give(steps, "minecraft:item_frame", 0)
-    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    _give(steps, "minecraft:item_frame", slot)
+    steps.call("minecraft_set_hotbar_slot", {"slot": slot})
     _use(steps, support, "north")
     frame = steps.call("minecraft_wait_for_visible_entity", {
         "entity_type": "minecraft:item_frame", "radius": 8, "timeout_seconds": steps.remaining()})
@@ -197,10 +197,15 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # locked map held; only the map inside the frame differs (absent, then present), so the only
     # rendered difference is the frame's marker icon: a client that receives the decoration and
     # never draws it produces the same frame twice.
+    # The frame is placed from an unused hotbar slot so the created map survives for the cartography
+    # lock; the locked copy then stays in slot 0 and is held in both captures.
+    frame = _frame_place(steps, origin, slot=8)
     locked = _locked(steps, origin, map_id)
-    frame = _frame_place(steps, origin)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
     steps.check("map_unframed_map_has_no_frame_waypoint", _marker_count(steps, locked, "frame") == 0)
+    steps.check("map_capture_without_frame_holds_the_map",
+                steps.call("minecraft_read_item_components", {"source": "selected"}).get("item_id")
+                == "minecraft:filled_map")
     colours_before = _map(steps, locked)["colors"][:]
     _held_shot(steps, "map-held-without-frame-waypoint")
     steps.fixture("clear @s minecraft:filled_map")
@@ -209,6 +214,9 @@ def _frame_waypoint(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                 _marker_count(steps, locked, "frame") == 1)
     _clone(steps, locked, 0)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    steps.check("map_capture_with_frame_holds_the_map",
+                steps.call("minecraft_read_item_components", {"source": "selected"}).get("item_id")
+                == "minecraft:filled_map")
     _held_shot(steps, "map-held-with-frame-waypoint")
     colours_after = _map(steps, locked)["colors"][:]
     steps.report["map_terrain_changed_pixels"] = sum(
