@@ -495,9 +495,13 @@ class SceneShotTests(unittest.TestCase):
             def call(self, name, args):
                 return {}
 
-        def view(yaw, indices):
-            return {"player": {"yaw": yaw},
-                    "render": {"draw_calls": 3, "index_count": indices, "entity_submitted_indices": 1}}
+        counter = {"frame": 0}
+
+        def view(yaw, indices, pitch=0):
+            counter["frame"] += 1
+            return {"player": {"yaw": yaw, "pitch": pitch},
+                    "render": {"draw_calls": 3, "index_count": indices, "entity_submitted_indices": 1,
+                               "submitted_frame_id": str(counter["frame"])}}
 
         steps = [{"render_draw_sample": {"name": "a", "yaw_deg": 0}},
                  {"render_draw_sample": {"name": "b", "yaw_deg": 0}},
@@ -522,6 +526,125 @@ class SceneShotTests(unittest.TestCase):
             stale = Probe([view(0, 1000), view(0, 1000), view(0, 1200)])
             with self.assertRaisesRegex(AssertionError, "render_sample_c_yaw_observed"):
                 scene_shot.execute(stale, root, steps)
+
+    def test_render_samples_key_views_by_pitch_and_require_a_fresh_frame(self):
+        class Probe:
+            def __init__(self, states):
+                self.states, self.checks, self.report = states, {}, {}
+
+            def observe(self, **kwargs):
+                return self.states.pop(0)
+
+            def check(self, name, condition):
+                self.checks[name] = bool(condition)
+                if not condition:
+                    raise AssertionError(name)
+
+            def call(self, name, args):
+                return {}
+
+        frames = {"n": 0}
+
+        def view(yaw, pitch, indices, frame=None):
+            if frame is None:
+                frames["n"] += 1
+                frame = frames["n"]
+            return {"player": {"yaw": yaw, "pitch": pitch},
+                    "render": {"draw_calls": 2, "index_count": indices, "entity_submitted_indices": 1,
+                               "submitted_frame_id": str(frame)}}
+
+        horizon_down = [{"render_draw_sample": {"name": "h1", "yaw_deg": 0, "pitch_deg": 0}},
+                        {"render_draw_sample": {"name": "d", "yaw_deg": 0, "pitch_deg": -45}},
+                        {"render_draw_sample": {"name": "h2", "yaw_deg": 0, "pitch_deg": 0}},
+                        {"assert_render_bounded": {"max_index_count": 260000, "max_growth": 1.5,
+                                                   "min_index_count": 1}}]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # The down look is its own view: returning to the horizon is judged against the first
+            # horizon sample (1010 vs 1000), not against the much smaller down count (200).
+            probe = Probe([view(0, 0, 1000), view(0, -45, 200), view(0, 0, 1010)])
+            scene_shot.execute(probe, root, horizon_down)
+            self.assertTrue(probe.checks["render_drawn_index_bounded"])
+            self.assertTrue(probe.checks["render_repeat_view_stable"])
+            self.assertEqual(
+                [json.loads((root / "render-samples.json").read_text())[index]["pitch"] for index in range(3)],
+                [0.0, -45.0, 0.0])
+            # A renderer that never submits a new frame reads one stale count: not a view sample.
+            frozen = Probe([view(0, 0, 1000, frame=7), view(0, -45, 200, frame=7),
+                            view(0, 0, 1000, frame=7)])
+            with self.assertRaisesRegex(AssertionError, "render_sample_d_fresh_frame"):
+                scene_shot.execute(frozen, root, horizon_down)
+            # A pitch that did not land is not the requested view either.
+            wrong_pitch = Probe([view(0, 0, 1000), view(0, 0, 200), view(0, 0, 1000)])
+            with self.assertRaisesRegex(AssertionError, "render_sample_d_pitch_observed"):
+                scene_shot.execute(wrong_pitch, root, horizon_down)
+
+    def test_hover_chat_component_reads_the_pointer_tooltip_not_the_payload(self):
+        spec = {"name": "datapack-hover", "line": "hoverprobe",
+                "contains": "HoverProbeDescription", "shot": "datapack-hover-tooltip"}
+        scene_shot.validate_steps([{"hover_chat_component": spec}], "native")
+        for bad in ({"shot": "bad shot"}, {"contains": ""}, {"extra": True}):
+            with self.subTest(spec=bad), self.assertRaises(ValueError):
+                scene_shot.validate_steps([{"hover_chat_component": {**spec, **bad}}], "native")
+
+        def node(node_id, label, bounds):
+            return {"id": node_id, "role": "text", "label": label, "bounds": bounds, "visible": True,
+                    "enabled": True, "focused": False}
+
+        screen = {"open": True, "class": "net.minecraft.client.gui.screens.ChatScreen", "title": "Chat"}
+        lines = [node("chat/line/4", "Created new empty pack hoverprobe", [4, 600, 300, 9]),
+                 node("chat/line/7", "[hoverprobe (world)]", [4, 582, 300, 9])]
+        tip = "hoverprobe\nHoverProbeDescription"
+
+        class Probe:
+            def __init__(self, tooltips):
+                self.tooltips, self.checks, self.pointers = list(tooltips), {}, []
+                self.tooltip = None
+
+            def observe(self, **kwargs):
+                nodes = list(lines)
+                if self.tooltip:
+                    nodes.append(node("component/hover/text", self.tooltip, [20, 560, 160, 20]))
+                return {"screen": screen, "ui_nodes": nodes}
+
+            def call(self, name, args):
+                self.pointers.append((name, args))
+                self.tooltip = self.tooltips.pop(0)
+                return {"status": "ok", "tooltip": self.tooltip}
+
+            def check(self, name, condition):
+                self.checks[name] = bool(condition)
+                if not condition:
+                    raise AssertionError(name)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            image = str(root / "tooltip.png")
+            with patch.object(scene_shot, "capture_native", return_value=image):
+                # The newest matching line is tried first; a line without a real tooltip does not
+                # satisfy the check, the next candidate is hovered, and the rendered tooltip and
+                # its UI node must both carry the text.
+                probe = Probe([None, tip])
+                self.assertEqual(scene_shot.execute(probe, root, [{"hover_chat_component": spec}]), [image])
+                self.assertTrue(probe.checks["datapack-hover_tooltip"])
+                self.assertTrue(probe.checks["datapack-hover_ui_tooltip"])
+                self.assertEqual([name for name, _ in probe.pointers], ["client_pointer", "client_pointer"])
+                args = probe.pointers[1][1]
+                self.assertEqual(args["expected_screen_class"], screen["class"])
+                self.assertEqual(args["expected_title"], "Chat")
+                self.assertEqual(args["action"], "move")
+                first, second = probe.pointers[0][1], probe.pointers[1][1]
+                self.assertTrue(4 <= first["x"] < 304 and 582 <= first["y"] < 591)
+                self.assertTrue(4 <= second["x"] < 304 and 600 <= second["y"] < 609)
+                evidence = json.loads((root / "datapack-hover-hover.json").read_text())
+                self.assertEqual(len(evidence["attempts"]), 2)
+                self.assertIsNone(evidence["attempts"][0]["pointer"]["tooltip"])
+                # A plain listing with the same marker text carries no tooltip: the real hover
+                # cannot be satisfied by the payload or by the line text.
+                plain = Probe([None, None])
+                with self.assertRaisesRegex(AssertionError, "datapack-hover_tooltip"):
+                    scene_shot.execute(plain, root, [{"hover_chat_component": spec}])
+                self.assertFalse(plain.checks["datapack-hover_tooltip"])
 
     def test_chat_component_assertion_needs_the_event_not_the_text(self):
         spec = {"name": "datapack-hover", "line": "hoverprobe",

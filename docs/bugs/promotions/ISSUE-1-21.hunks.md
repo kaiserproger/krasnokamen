@@ -4,49 +4,48 @@ Row: `ISSUE-1-21` (client, major) — the first-person tool clips through a bloc
 Ref: `harness:scene-shot:issue1-21-tool-clip` (proving assertion `tool_wall_visible`; the scene also
 requires `tool_hand_visible` at range on both pins).
 
-## Real fix and its pre-image
+## Real fix, its pre-image, and where the same code sits at HEAD
 
 The real fix is the Stage3 `Issue1Client` hand-pass patch
-(`receipts/Stage3/S3Issue1/clip-fix-product.patch`), integrated into the client history by
-`43362918` ("Integrate Solaris client rc4 candidate"): it adds `Scene.first_person`, appends the
-first-person arm, held map and held item there instead of `Scene.dynamic`, and draws that geometry in
-its own pass after a depth clear. Its pre-image is the client before that patch, where the same
-`append_first_person` submitted to `scene.dynamic` — the a/-side lines of the patch at 15-34
-(`&mut scene.dynamic` for the arm) and 73-124 (the bare arm and the held-item quads); the historical
-tree is `adf5153c` (`wip(stage0): Issue1Client uncommitted work at the 21:00 stop`), whose
-`append_first_person` writes through the entity store into the world geometry.
+(`receipts/Stage3/S3Issue1/clip-fix-product.patch`). The patch's own index lines identify its product
+tree exactly: `src/api.rs` `c093a860..4d07ddb7`, `src/player/visual.rs` `10d8f186..2a3a7979`,
+`src/render.rs` `8e30b9c8..41b0d11d`, `src/render/frame.rs` `524f9c26..b1f503a3`,
+`src/render/residency.rs` `a91c10b6..8cf95e3a` — that is `adf5153c` ("wip(stage0): Issue1Client
+uncommitted work at the 21:00 stop"), so `adf5153c` is the fix's *product* commit, not its pre-image.
 
 The 26.3 renderer keeps the same separation at HEAD (`Scene.first_person`, `Renderer.first_person`,
 `targets.first_person_depth_view`, the `first person, independent world depth` pass), so the control
 is a committed reversal at HEAD whose a/-side is the patch's own pre-image lines, not a hand-written
 re-break:
 
-- reversal `e4a470fb7c6b168208c1b53e0dc936fc37dc4b11` — every `append_first_person` submission
-  (`append_local_arm` ×3, `append_held_map`, `presentation_emit` and the foil marking) targets
-  `scene.dynamic` again, so the hand is world geometry and is depth-tested against the wall. The
-  separate pass finds `first_person.ranges` empty and is skipped.
-- re-land `3c3d9fba9a80b0de906f428815d59bb524075763` — the same lines target `scene.first_person`
-  again; row `fix_commit`.
-- `git diff e4a470fb7c 3c3d9fba9a` is exactly the re-land's own non-test patch (7 lines).
+At HEAD the same separation lives under the integrated names: `Scene.first_person`
+(`src/api.rs:460`), `Renderer.first_person` (`src/render.rs:422`), `targets.first_person_depth_view`
+(`src/render.rs:205`), and the hand pass labelled `first person, independent world depth`
+(`src/render/frame.rs:1202-1256`).
 
-The earlier pair `6cd212a514`/`de9fde8dd9` is withdrawn: its pre-image loaded world depth into the
-*separate* `first_person_depth_view` (`Load`), which has no world content, so the pick disappeared
-even 2.5 blocks from the wall and the red was hand visibility, not wall clipping
-(`REVIEW-wave2-9` finding 1).
+The integration history is wider than the Stage3 branch: `43362918` ("Integrate Solaris client rc4
+candidate", 2026-11-03) carries the same product change as `first_person`, extended in two ways — the
+held map and the item-foil marking also submit to that stream, and the hand pass gets its own depth
+attachment (`first_person_depth_view`, `StoreOp::Discard`) instead of clearing the scene depth view.
+`adf5153c` is a duplicate WIP on the `Issue1Client` branch (it spells the field `hand`); the merge
+`62adc12f` ("merge(stage0): Issue1Client") reconciled the duplicate to `first_person`, and HEAD has
+no `hand`. Both `43362918` and `adf5153c` are ancestors of the pair, which is why the control is a
+committed reversal at HEAD rather than a checkout.
 
 ## Every other hunk of the real fix and why it stays on both sides
 
-| scale | file | hunk | reason |
+| patch hunk | file | HEAD equivalent | reason |
 |---|---|---|---|
-| patch 1-12 | `src/api.rs` | `Scene.first_person` field | (b) the kept pass (`render/frame.rs`) and the residency upload read it; present on both sides, carrying no geometry in the reversed tree |
-| patch 35-72 | `src/player/visual.rs` | the two append targets | **in the pair** (reversal/re-land above); at HEAD the same function has three append targets (arm, held map, item) and the foil marking, all carried |
-| patch 78-131 | `src/render.rs` | `Renderer.first_person` stream, its init, the `hand` naming | (b) plumbing the kept residency/pass code calls; an empty stream draws nothing |
-| patch 133-176 | `src/render/frame.rs` | the separate hand pass (at HEAD: `first person, independent world depth`, `first_person_camera_bind`, `Clear(1.)`, `StoreOp::Discard`) | (b) with no hand geometry the pass is skipped (`first_person.ranges` all empty), so it emits no pixels in either direction; removing it would delete ~60 lines without changing a frame |
-| patch 178-201 | `src/render/residency.rs` | directional-light and portal scans, size validation, upload and the lightmap chain include `scene.first_person` | (b) the same kept API; an empty stream validates and uploads nothing |
-| later | `src/render.rs` | `first_person_depth_view`, `first_person_camera` + bind group, `pipelines.first_person`, `render/first_person_tests.rs` | (c) added after the Stage3 patch to keep world depth for post-processing; the reversal keeps them, inert |
+| `@@ -437,6 +437,9` | `src/api.rs` | `Scene.first_person` (`src/api.rs:460`) | (b) the kept pass, residency and upload read it; present on both sides and carries no geometry in the reversed tree |
+| `@@ -398,7 +398,7`, `@@ -427,7 +427,7` | `src/player/visual.rs` | the seven pair lines above | in the pair (see the line table) |
+| `@@ -363,6 +363,7`, `@@ -672,6 +673,7`, `@@ -743,6 +745,7` | `src/render.rs` | `Renderer.first_person` stream `:422`, its construction `:802`, its field init `:891` | (b) plumbing the kept pass and residency call; an empty stream draws nothing |
+| `@@ -1315,6 +1318,7` | `src/render.rs` | `metadata["gait_frame"]` (`src/render.rs:1582`) | (a) the gait capture is another row's observation; it changes no frame and is kept on both sides |
+| `@@ -847,6 +847,49` | `src/render/frame.rs` | the hand pass `first person, independent world depth` (`src/render/frame.rs:1202-1256`) | (b) with no hand geometry `first_person.ranges` is all empty and the pass is skipped, so it emits no pixel in either direction; at HEAD it uses its own depth attachment, the `43362918` form of the same fence |
+| `@@ -192,14 +192,15`, `@@ -239,12 +240,14`, `@@ -387,6 +390,13` | `src/render/residency.rs` | directional/portal scans, size validation, upload and lightmap chain fold `scene.first_person` (`src/render/residency.rs:195,215,253-254,270,424-428`) | (b) the same kept API; an empty stream validates and uploads nothing |
 
-No line of the pair is invented: the reversal restores the patch's own a/-side text at HEAD
-(`&mut scene.dynamic` in `append_first_person`), and the re-land restores its b/-side text.
+`43362918`'s own additional plumbing — `first_person_depth_view`, `first_person_camera` and its
+bind group, `pipelines.first_person`, `render/first_person_tests.rs` — is part of the same integrated
+change, exists on both pins, and is inert while the stream is empty: class (b), not a later commit.
 
 ## Gate
 
@@ -73,4 +72,3 @@ So the pick is visible away from the wall on both pins and only the close frame 
 draws the tool behind the wall, the fix in front of it. Receipts: candidate
 `.analysis/validation/20261124T162258-issue1-21-tool-clip-ujxwerro`, control
 `.analysis/validation/20261124T162352-issue1-21-tool-clip-gcr1cj_q`.
-

@@ -63,7 +63,8 @@
     {
       "render_draw_sample": {
         "name": "yaw-0-first",
-        "yaw_deg": 0
+        "yaw_deg": 0,
+        "pitch_deg": 0
       }
     },
     {
@@ -72,7 +73,8 @@
     {
       "render_draw_sample": {
         "name": "yaw-0-repeat",
-        "yaw_deg": 0
+        "yaw_deg": 0,
+        "pitch_deg": 0
       }
     },
     {
@@ -87,7 +89,8 @@
     {
       "render_draw_sample": {
         "name": "yaw-45",
-        "yaw_deg": 45
+        "yaw_deg": 45,
+        "pitch_deg": 0
       }
     },
     {
@@ -102,7 +105,8 @@
     {
       "render_draw_sample": {
         "name": "yaw-90",
-        "yaw_deg": 90
+        "yaw_deg": 90,
+        "pitch_deg": 0
       }
     },
     {
@@ -117,7 +121,8 @@
     {
       "render_draw_sample": {
         "name": "yaw-135",
-        "yaw_deg": 135
+        "yaw_deg": 135,
+        "pitch_deg": 0
       }
     },
     {
@@ -132,7 +137,8 @@
     {
       "render_draw_sample": {
         "name": "yaw-180",
-        "yaw_deg": 180
+        "yaw_deg": 180,
+        "pitch_deg": 0
       }
     },
     {
@@ -150,7 +156,8 @@
     {
       "render_draw_sample": {
         "name": "yaw-minus-135",
-        "yaw_deg": -135
+        "yaw_deg": -135,
+        "pitch_deg": 0
       }
     },
     {
@@ -165,7 +172,8 @@
     {
       "render_draw_sample": {
         "name": "yaw-minus-90",
-        "yaw_deg": -90
+        "yaw_deg": -90,
+        "pitch_deg": 0
       }
     },
     {
@@ -180,7 +188,8 @@
     {
       "render_draw_sample": {
         "name": "yaw-minus-45",
-        "yaw_deg": -45
+        "yaw_deg": -45,
+        "pitch_deg": 0
       }
     },
     {
@@ -195,11 +204,69 @@
     {
       "render_draw_sample": {
         "name": "yaw-0-return",
-        "yaw_deg": 0
+        "yaw_deg": 0,
+        "pitch_deg": 0
       }
     },
     {
       "shot": "f3-yaw-0-return"
+    },
+    {
+      "look": {
+        "yaw_deg": 0,
+        "pitch_deg": 0
+      }
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "shot": "f3-horizon-down-first"
+    },
+    {
+      "render_draw_sample": {
+        "name": "horizon-down-first",
+        "yaw_deg": 0,
+        "pitch_deg": 0
+      }
+    },
+    {
+      "look": {
+        "yaw_deg": 0,
+        "pitch_deg": -60
+      }
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "shot": "f3-look-down"
+    },
+    {
+      "render_draw_sample": {
+        "name": "look-down",
+        "yaw_deg": 0,
+        "pitch_deg": -60
+      }
+    },
+    {
+      "look": {
+        "yaw_deg": 0,
+        "pitch_deg": 0
+      }
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "shot": "f3-horizon-down-return"
+    },
+    {
+      "render_draw_sample": {
+        "name": "horizon-down-return",
+        "yaw_deg": 0,
+        "pitch_deg": 0
+      }
     },
     {
       "assert_render_bounded": {

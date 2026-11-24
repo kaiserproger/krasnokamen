@@ -17,8 +17,24 @@
       "wait_chat": "data pack(s) available"
     },
     {
-      "assert_chat_components": {
+      "open_chat": {
+        "command": false
+      }
+    },
+    {
+      "wait_screen": "ChatScreen"
+    },
+    {
+      "hover_chat_component": {
         "name": "datapack-hover",
+        "line": "hoverprobe",
+        "contains": "HoverProbeDescription",
+        "shot": "datapack-hover-tooltip"
+      }
+    },
+    {
+      "assert_chat_components": {
+        "name": "datapack-hover-components",
         "line": "hoverprobe",
         "hover": {
           "action": "show_text",

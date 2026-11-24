@@ -505,7 +505,8 @@ env block above and `SCENE_SHOT_SCENARIO` to a JSON file. The JSON has `steps`,
 each one of `cmd`, `tp` (five coordinates), `look`, `hotbar`, `wait_ticks`, `wait_play`,
 `wait_respawn` (waits for live health and a closed death screen), `pause` (native only), `wait_terrain`, `shot`, `observe`, `use_item_on`, `click_screen_button`,
 `scan_blocks`, `read_block`, `navigate_to_block`, `list_entities`, `require_entities`, `timed_entities`,
-`mob_motion`, or `key` (`keys` and `ticks` MCP arguments; released when the step finishes). Optional
+`mob_motion`, `open_chat` (`command` boolean; opens the vanilla chat screen), or
+`key` (`keys` and `ticks` MCP arguments; released when the step finishes). Optional
 `seed` defaults to 100, `world` copies an existing world, `server_view_distance`
 defaults to 4, `lod_enabled` optionally sets `[lod].enabled` in the private
 server config, and `lod_share_terrain_keys` optionally sets
@@ -528,34 +529,51 @@ wall-clipping control.
 then requires turquoise tool pixels over a dark wall in the fixed close-view
 frame. Inspect the attack frames separately; the pixel check covers rest only.
 
-`render_draw_sample` (`name`, `yaw_deg`) records the client's own draw counters
-(`data.render`) at the requested view and checks that the client's reported yaw
-is that view, so a sample taken without the turn cannot pass. `assert_render_bounded`
-(`max_index_count`, `max_growth`, `min_index_count`) is an aggregate over every
-earlier sample of the same run: each count must be non-zero, under the absolute
-bound and within `max_growth` of the first sample (`render_drawn_index_bounded`),
-and a view sampled again or returned to must stay within `max_growth` of that
-view's earlier count (`render_repeat_view_stable`). It refuses fewer than three
-samples over two views with one repeated view. Pair it with `toggle_debug_overlay`
-and a `shot` per view: the screenshot is what the player sees, while the counters
-are the same field F3 renders.
+`render_draw_sample` (`name`, `yaw_deg`, optional `pitch_deg` default 0) records
+the client's own draw counters (`data.render`) at the requested view, checks that
+the client's reported yaw and pitch are that view, so a sample taken without the
+turn cannot pass, and requires its `submitted_frame_id` to be newer than the
+previous sample's, so a frozen renderer that keeps reporting one non-zero count
+cannot pass. `assert_render_bounded` (`max_index_count`, `max_growth`,
+`min_index_count`) is an aggregate over every earlier sample of the same run:
+each count must be non-zero, under the absolute bound and within `max_growth` of
+the first sample (`render_drawn_index_bounded`), and a view sampled again or
+returned to must stay within `max_growth` of that view's earlier count
+(`render_repeat_view_stable`; a view is yaw **and** pitch, so a down look is not a
+horizon repeat). It refuses fewer than three samples over two views with one
+repeated view. Pair it with `toggle_debug_overlay` and a `shot` per view: the
+screenshot is what the player sees, while the counters are the same field F3
+renders.
 
 `assert_chat_components` (`name`, `line`, `hover`, optional `click`) takes the
 newest `recent_chat_components` line whose plain `text` contains `line`, then
 requires a `hover` (and `click`) event with the given `action` whose rendered
 `value` contains the given text. It proves what the chat component carries —
 `/datapack list` links, for example — where `assert_chat` only sees the
-flattened line; a plain listing has the same text and no event. The registered
-scenario `native-datapack-hover` creates a pack with `/datapack create` and
-lists it, so it needs no fixture world.
+flattened line; a plain listing has the same text and no event. That is a
+payload check, not a hover check.
+
+`hover_chat_component` (`name`, `line`, `contains`, `shot`) is the hover check:
+with the chat screen open (`open_chat`, the ordinary T path), it moves
+`client_pointer` over each painted `chat/line/*` node whose label contains
+`line`, through the ordinary pointer path, and requires the tooltip the client
+then shows — and the `component/hover/text` UI node — to carry `contains`; the
+matching frame is kept as `shot`. The pointer result of every candidate is in
+`<name>-hover.json`. The registered scenario `native-datapack-hover` creates a
+pack with `/datapack create`, lists it, opens chat and hovers the link, so it
+needs no fixture world.
 
 `issue1-23-held-items` (`tools/harness/issue1_23_held_item_scene.json`) summons
 a `NoAI` villager and witch facing the camera on a grass platform and equips
 them through the ordinary command path (`/item replace entity … weapon.mainhand
 with minecraft:emerald` / `minecraft:redstone`), then requires both received
 entities and counts the item colours inside the fixed crossed-arms windows of
-one frame (`pixel_window`). The pre-image, whose rig has no crossed-arms role,
-finds no attachment bone and draws neither item.
+one frame (`pixel_window`). It then replaces the witch's hand with
+`minecraft:potion` and counts the potion in the fixed nose window; because the
+control aborts at the earlier emerald window, the potion-at-the-nose claim also
+runs as its own scenario `issue1-23-witch-potion` (one witch, one potion, one
+frame, `potion_nose_pixels`). The pre-image, whose rig has no crossed-arms/nose
+role, finds no attachment bone and draws nothing.
 
 `native-player-head` installs an authored offline skin pack in its private run:
 cyan base head, magenta opaque hat and a transparent face window. The fixed

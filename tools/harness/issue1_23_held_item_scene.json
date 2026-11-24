@@ -148,6 +148,40 @@
         },
         "min_pixels": 200
       }
+    },
+    {
+      "cmd": "item replace entity @e[type=minecraft:witch,limit=1] weapon.mainhand with minecraft:potion"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "shot": "witch-potion"
+    },
+    {
+      "pixel_window": {
+        "name": "potion_nose",
+        "shot": "witch-potion",
+        "window": [
+          410,
+          320,
+          550,
+          470
+        ],
+        "color": {
+          "min": [
+            20,
+            60,
+            140
+          ],
+          "max": [
+            110,
+            150,
+            255
+          ]
+        },
+        "min_pixels": 100
+      }
     }
   ]
 }
