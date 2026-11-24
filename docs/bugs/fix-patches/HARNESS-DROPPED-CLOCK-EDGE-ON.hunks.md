@@ -20,6 +20,7 @@ call plan live in `scene_shot_steps.py`, the executor branch in `scene_shot_exec
 | `@@ -424,6 +426,8 @@ validate_steps`: `native` and `("ctx-day", "ctx-night")` | `scene_shot_steps.py` `@@ -193,6 +193,8 @@` | carried |
 | `@@ -633,6 +637,8 @@ execute`: the `dropped_clock_capture` branch | `scene_shot_execute.py` `@@ -53,6 +53,8 @@` | carried |
 | `@@ -1302,31 +1308,65 @@`: new `_capture_dropped_clock` | `scene_shot_checks.py`: the function at HEAD, `_qa.capture_native`/`_qa._load_shots` | carried; the a/-side is its removal (the pre-image had no such function) |
+| (the same function's import) | `scene_shot_execute.py` `@@ -16,6 +16,7 @@`: `from .scene_shot_checks import _capture_dropped_clock` | carried; the pre-image imported nothing from the checks module, and leaving it behind makes the reversed tree fail at import instead of at an assertion (the first port `patch:a8aa87b9` did exactly that and the promotion refused) |
 | the same hunk: the `check_clock_face` refactor into `_clock_face_samples` | — | (a) the oracle body is HARNESS-DROPPED-CLOCK-HUD-ORACLE's and the held-clock face math is HARNESS-CONTEXT-CLOCK-FIXTURE's |
 | `test_scene_shot.py` additions | — | the row's kept tests, never reversed |
 

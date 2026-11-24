@@ -24,8 +24,9 @@
   "kept_test_files": [],
   "negative_control": {
     "harness:scene-shot:native-player-head": {
-      "state": "unrunnable",
-      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/302dd7221721-server-x86_64-unknown-linux-gnu-incr/krasnokamen: /run/media/kaiserroman/games/solaris-work/pins/302dd7221721-server-x86_64-unknown-linux-gnu-incr/manifest.json pins a different tree (not 302dd7221721/8ba13456191e). Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-player-head --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T125905-ledger-graphical-control-bq8iqdad/regressions-client-0.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T125905-ledger-graphical-control-bq8iqdad/client-artifacts/20261124T125905-native-player-head-wx4tg3iz/result.json"
     },
     "python:tools.harness.test_scene_shot:PlayerHeadTests.test_authored_skin_has_opaque_contrasting_hat_and_base_window": {
       "state": "red",
@@ -67,5 +68,19 @@
     ],
     "profile": "scene-shot"
   },
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T123718-ledger-promote-pn99pq2w"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T123718-ledger-promote-pn99pq2w",
+  "graphical_control_backfill": [
+    {
+      "at": "2026-11-24T12:59:05+00:00",
+      "refs": [
+        "harness:scene-shot:native-player-head"
+      ],
+      "tree_head": "302dd7221721e7364f1fc91a559197200b02e027",
+      "control_tree": {
+        "head": "302dd7221721e7364f1fc91a559197200b02e027",
+        "sha256": "8ba13456191e6ad747dc15b56a8804ded41dc37ec79be66d3be68dcf6c4aa7ad"
+      },
+      "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T125905-ledger-graphical-control-bq8iqdad"
+    }
+  ]
 }
