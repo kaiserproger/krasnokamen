@@ -1,0 +1,45 @@
+{
+  "id": "LOADER-PACK-DECLINED-CONNECTION",
+  "verdict": "promoted",
+  "fix_commit": "loader:7343bd38",
+  "fix_commit_full": "7343bd38ff57462be9ff0e517c8d2cf3532156d2",
+  "promoted_at": "2026-11-24T10:15:34+00:00",
+  "tree_head": "80d1807fb74c80984c209ecafae780f9b6290311",
+  "tree_dirty": true,
+  "tree_sha256": "da9f082f33b5c59407d93ce4af6abab3d3ef22b3c3d706b08320c1641a081091",
+  "loader_fix": true,
+  "control": "loader_reversal",
+  "control_tree": "loader_head",
+  "fix_patch_sha256": "5222b64bdd748ae7f154c5c6cbbd13d2ac1faef71e2c278bc6910116c3e018f1",
+  "reversed_files": [
+    "tools/battle_scenario.py"
+  ],
+  "kept_test_files": [
+    "java-agent/src/test/java/dev/krasnokamen/agent/javaagent/MinecraftClientObservationTest.java",
+    "tools/test_battle_scenario.py"
+  ],
+  "loader_checkout": {
+    "path": "/run/media/kaiserroman/games/solaris-work/solaris-loader",
+    "head": "d508697926173402fb8b52ca4a2d90492127c675",
+    "untracked": []
+  },
+  "negative_control": {
+    "loader:python:tools:test_battle_scenario.PackLoadedOncePerConnectionTest.test_successful_pair_does_not_hide_declined_third_connection": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-loader-control/tools/test_battle_scenario.py",
+        "line": 104,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "loader:python:tools:test_battle_scenario.PackLoadedOncePerConnectionTest.test_successful_pair_does_not_hide_declined_third_connection": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T101200-ledger-promote-agwi9epo"
+}

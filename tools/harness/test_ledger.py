@@ -570,3 +570,150 @@ class GraphicalControlBackfillTests(unittest.TestCase):
         self.assertEqual(entry['assertion'], 'animated_face')
         self.assertEqual(entry['receipt'], str(receipt.resolve()))
 
+
+
+LOADER_BATTLE_OLD = '''def pack_loaded_once_per_connection(events):
+    successful = sum(1 for event in events if event.get("action") == 0)
+    return successful >= 2
+'''
+
+LOADER_BATTLE_NEW = '''def pack_loaded_once_per_connection(events):
+    actors = {event["actor"] for event in events if event.get("action") == 0}
+    return len(actors) >= 2
+'''
+
+LOADER_TEST = '''import unittest
+
+from battle import pack_loaded_once_per_connection
+
+
+class PackTest(unittest.TestCase):
+    def test_pair(self):
+        assert pack_loaded_once_per_connection([{"actor": "a", "action": 0}])
+'''
+
+
+class LoaderFixTests(unittest.TestCase):
+    """`loader:<sha>`: the loader python ref flips on the Loader fix's reversed production hunks."""
+
+    REF = 'loader:python:tools:test_battle.PackTest.test_pair'
+
+    def setUp(self):
+        import subprocess
+        import tempfile
+
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.base = Path(directory.name)
+        self.root = self.base / 'core'
+        self.root.mkdir()
+        subprocess.run(['git', 'init', '-q', str(self.root)], check=True)
+        (self.root / 'README.md').write_text('core\n')
+        _git(self.root, 'add', '-A')
+        _commit(self.root, 'base')
+        self.loader = self.base / 'loader'
+        (self.loader / 'tools').mkdir(parents=True)
+        subprocess.run(['git', 'init', '-q', str(self.loader)], check=True)
+        (self.loader / 'README.md').write_text('loader\n')
+        (self.loader / 'tools/battle.py').write_text(LOADER_BATTLE_OLD)
+        (self.loader / 'tools/test_battle.py').write_text(LOADER_TEST)
+        _git(self.loader, 'add', '-A')
+        _commit(self.loader, 'before')
+        (self.loader / 'tools/battle.py').write_text(LOADER_BATTLE_NEW)
+        _git(self.loader, 'add', '-A')
+        self.fix = _commit(self.loader, 'fix: every actor')
+        self.env = patch.dict('os.environ', {'KRASNOKAMEN_LOADER_ROOT': str(self.loader)})
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        self.write_row()
+
+    def write_row(self, control_files='["tools/battle.py"]'):
+        (self.root / 'docs/bugs/rows').mkdir(parents=True, exist_ok=True)
+        (self.root / 'docs/bugs/rows/LOADER-ROW.toml').write_text(
+            '[[bug]]\nid = "LOADER-ROW"\ntitle = "t"\narea = "harness"\nrepro = "source"\n'
+            'severity = "major"\nstatus = "open"\nsource = "s"\n'
+            f'fix_commit = "loader:{self.fix[:12]}"\nregression = ["{self.REF}"]\n'
+            f'control_files = {control_files}\n')
+
+    def ctx(self):
+        artifact = self.base / 'artifacts'
+        artifact.mkdir(exist_ok=True)
+        return profiles.ProfileContext(artifact)
+
+    def runner(self, calls=None):
+        def run(refs, tree):
+            text = (Path(tree) / 'tools/battle.py').read_text()
+            reversed_now = 'actors = {' not in text
+            if calls is not None:
+                calls.append(reversed_now)
+            if not reversed_now:
+                return {ref: {'state': ledger.GREEN, 'detail': ''} for ref in refs}
+            test = Path(tree) / 'tools/test_battle.py'
+            line = [index for index, text in enumerate(test.read_text().splitlines(), 1)
+                    if 'assert pack_loaded' in text][0]
+            return {ref: {'state': ledger.RED, 'detail': 'test assertion failed',
+                          'assertion': {'file': str(test), 'line': line, 'error': 'AssertionError'}}
+                    for ref in refs}
+        return run
+
+    def test_promotes_on_the_narrowed_real_pre_image(self):
+        calls = []
+        receipt = ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=self.runner(calls))
+        self.assertEqual(receipt['control'], 'loader_reversal')
+        self.assertEqual(receipt['reversed_files'], ['tools/battle.py'])
+        self.assertEqual(calls, [True, False])
+        self.assertEqual(receipt['loader_checkout']['head'], self.fix)
+        self.assertEqual(ledger.load_rows(self.root)[0]['status'], 'fixed')
+
+    def test_refuses_a_test_file_in_control_files(self):
+        self.write_row('["tools/test_battle.py"]')
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=self.runner())
+        self.assertIn('a test or docs path', str(refused.exception))
+
+    def test_refuses_without_control_files(self):
+        (self.root / 'docs/bugs/rows/LOADER-ROW.toml').write_text(
+            '[[bug]]\nid = "LOADER-ROW"\ntitle = "t"\narea = "harness"\nrepro = "source"\n'
+            'severity = "major"\nstatus = "open"\nsource = "s"\n'
+            f'fix_commit = "loader:{self.fix[:12]}"\nregression = ["{self.REF}"]\n')
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=self.runner())
+        self.assertIn('control_files', str(refused.exception))
+
+    def test_refuses_a_red_outside_the_kept_test_file(self):
+        def run(refs, tree):
+            text = (Path(tree) / 'tools/battle.py').read_text()
+            if 'actors = {' in text:
+                return {ref: {'state': ledger.GREEN, 'detail': ''} for ref in refs}
+            return {ref: {'state': ledger.RED, 'detail': 'test assertion failed',
+                          'assertion': {'file': str(Path(tree) / 'tools/battle.py'), 'line': 1,
+                                        'error': 'AssertionError'}} for ref in refs}
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=run)
+        self.assertIn('stayed green', str(refused.exception))
+
+    def test_loader_ref_parses_and_rejects_a_traversal(self):
+        self.assertEqual(regressions._parse_ref(self.REF),
+                         ('loader', 'tools', 'test_battle.PackTest.test_pair'))
+        for bad in ('loader:python:../evil:test_x.Test.test_y', 'loader:python:tools:no_dot',
+                    'loader:gradle:java-agent:Test', 'loader:python:tools'):
+            with self.assertRaises(ValueError):
+                regressions._parse_ref(bad)
+
+    def test_run_accepts_a_fixed_loader_row(self):
+        import json
+        fix = f'loader:{self.fix[:12]}'
+        (self.root / 'docs/bugs/rows/LOADER-ROW.toml').write_text(
+            '[[bug]]\nid = "LOADER-ROW"\ntitle = "t"\narea = "harness"\nrepro = "source"\n'
+            'severity = "major"\nstatus = "fixed"\nsource = "s"\n'
+            f'fix_commit = "{fix}"\nregression = ["{self.REF}"]\n'
+            'control_files = ["tools/battle.py"]\n'
+            'promotion = "docs/bugs/promotions/LOADER-ROW.json"\n')
+        (self.root / 'docs/bugs/promotions').mkdir(parents=True, exist_ok=True)
+        (self.root / 'docs/bugs/promotions/LOADER-ROW.json').write_text(json.dumps({
+            'id': 'LOADER-ROW', 'verdict': 'promoted', 'fix_commit': fix,
+            'control': 'loader_reversal', 'reversed_files': ['tools/battle.py']}))
+        with patch.object(regressions, 'REPO_ROOT', self.root), \
+             patch.object(regressions, 'BASE_FIXED', frozenset()):
+            details = regressions.run(profiles.ProfileContext(self.base / 'artifacts3'))
+        self.assertEqual(details['fixed'], 1)

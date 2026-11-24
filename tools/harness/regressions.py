@@ -22,7 +22,9 @@ OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_
             # A fix whose every hunk is in test files: the corrected oracle IS the guard. The promotion
             # runs two controls (docs/bugs/README.md): the pre-fix test hunks restored must go red on
             # current code, and a committed defect-injection patch must turn the corrected test red.
-            'test_only_fix', 'control_b_patch', 'control_b_sha256', 'control_a_files'}
+            'test_only_fix', 'control_b_patch', 'control_b_sha256', 'control_a_files',
+            # A loader:<sha> row names the production files whose hunks its control reverses.
+            'control_files'}
 PROMOTION_DIR = 'docs/bugs/promotions'
 
 
@@ -79,8 +81,9 @@ def _stale_rows(bugs):
 def _promotion_errors(ident, bug):
     """Why this row's `fixed` status or `promotion` field is not acceptable, if it is not."""
     promotion, fix_commit = bug.get('promotion'), bug.get('fix_commit')
-    if 'fix_commit' in bug and (not isinstance(fix_commit, str) or not re.fullmatch(r'(?:client(?:-test)?:)?[0-9a-f]{7,40}|patch:[0-9a-f]{64}', fix_commit)):
-        return [f'{ident}: fix_commit must be a lowercase hex commit id, client:<commit>, client-test:<commit> or patch:<sha256>']
+    if 'fix_commit' in bug and (not isinstance(fix_commit, str) or not re.fullmatch(r'(?:client(?:-test)?:|loader:)?[0-9a-f]{7,40}|patch:[0-9a-f]{64}', fix_commit)):
+        return [f'{ident}: fix_commit must be a lowercase hex commit id, client:<commit>, client-test:<commit>, '
+                'loader:<commit> or patch:<sha256>']
     # A patch-mode row whose committed patch is missing or no longer reverses is a REPORT, never an
     # L2 error: ordinary edits of historical fixes must not turn the gate red (Main B1). Strictness
     # lives at promote/--dry-run, which require and reverse the patch. run() prints the backlog.
@@ -126,6 +129,14 @@ def _promotion_errors(ident, bug):
             return [f'{ident}: a client_test_reversal receipt records no reversed production file']
     elif control == 'client_test_reversal':
         return [f'{ident}: control = client_test_reversal on a row whose fix_commit is not client-test:<sha>']
+    loader = isinstance(fix_commit, str) and fix_commit.startswith('loader:')
+    if loader:
+        if control != 'loader_reversal':
+            return [f'{ident}: a loader:<sha> receipt must record control = loader_reversal, not {control!r}']
+        if not receipt.get('reversed_files'):
+            return [f'{ident}: a loader_reversal receipt records no reversed production file']
+    elif control == 'loader_reversal':
+        return [f'{ident}: control = loader_reversal on a row whose fix_commit is not loader:<sha>']
     if bug.get('test_only_fix') is True:
         if control != 'test_hunks':
             return [f'{ident}: a test_only_fix receipt must record control = test_hunks, not {control!r}']
@@ -646,6 +657,14 @@ def _parse_ref(ref):
     if (len(parts) == 3 and parts[0] == 'client'
             and re.fullmatch(r'[A-Za-z0-9_-]+', parts[1]) and re.fullmatch(r'[A-Za-z0-9_:]+', parts[2])):
         return tuple(parts)
+    # A Loader fix's python test lives in the Loader checkout and imports its siblings from the
+    # directory it lives in: `loader:python:<dir>:<module>.<TestClass.test_method>`.
+    if (len(parts) == 3 and parts[0] == 'loader' and parts[1] == 'python'
+            and re.fullmatch(r'[A-Za-z0-9_./-]+', parts[2].partition(':')[0])
+            and '..' not in parts[2].partition(':')[0].split('/')
+            and re.fullmatch(r'[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+', parts[2].partition(':')[2])):
+        directory, _, test = parts[2].partition(':')
+        return ('loader', directory, test)
     # A python fix in tools/** has no cargo check and no windowed profile: its own unittest is the
     # regression guard. `python:<dotted module>:<dotted TestClass.test_method>`.
     if (len(parts) == 3 and parts[0] == 'python'
@@ -675,6 +694,7 @@ def run(ctx, *, cargo_junit: Path | None = None):
     clients = defaultdict(set)
     python_refs = defaultdict(set)
     client_tests = defaultdict(set)
+    loader_tests = defaultdict(set)
     errors = []
     for bug in bugs:
         ident = bug['id']
@@ -707,7 +727,7 @@ def run(ctx, *, cargo_junit: Path | None = None):
             if not bug.get('repro_check'):
                 errors.append(f'{ident}: test_only_fix needs repro_check stating what the old oracle asserted '
                               'and the independent evidence (data/spec/arithmetic) that the new one is right')
-            if isinstance(bug.get('fix_commit'), str) and bug['fix_commit'].startswith(('client:', 'client-test:')):
+            if isinstance(bug.get('fix_commit'), str) and bug['fix_commit'].startswith(('client:', 'client-test:', 'loader:')):
                 errors.append(f'{ident}: test_only_fix is for a committed core fix; a client fix is proved by a '
                               'real-client receipt pair or a client-test reversal, never by a core test oracle')
             defect = bug.get('control_b_patch')
@@ -732,6 +752,9 @@ def run(ctx, *, cargo_junit: Path | None = None):
                             errors.append(f'{ident}: control_b_sha256 does not match the committed {defect}')
         if 'control_b_patch' in bug and test_only is not True:
             errors.append(f'{ident}: control_b_patch is only for a row with test_only_fix = true')
+        if 'control_files' in bug and not (isinstance(bug.get('fix_commit'), str)
+                                           and bug['fix_commit'].startswith('loader:')):
+            errors.append(f'{ident}: control_files is only for a row whose fix_commit is loader:<sha>')
         if 'control_a_files' in bug:
             narrowed = bug['control_a_files']
             if test_only is not True:
@@ -762,6 +785,8 @@ def run(ctx, *, cargo_junit: Path | None = None):
                 python_refs[(first, second)].add(ident)
             elif kind == 'client':
                 client_tests[(first, second)].add(ident)
+            elif kind == 'loader':
+                loader_tests[(first, second)].add(ident)
             else:
                 clients[ref].add(ident)
         if (bug.get('status') == 'fixed' and needs_real_client(bug)
@@ -771,6 +796,16 @@ def run(ctx, *, cargo_junit: Path | None = None):
         if isinstance(bug.get('fix_commit'), str) and bug['fix_commit'].startswith('client-test:') and not any(
                 ref.startswith('client:') for ref in refs):
             errors.append(f'{ident}: a client-test:<sha> fix needs a client:<crate>:<test> ref to carry its pair')
+        if isinstance(bug.get('fix_commit'), str) and bug['fix_commit'].startswith('loader:'):
+            if not any(ref.startswith('loader:') for ref in refs):
+                errors.append(f'{ident}: a loader:<sha> fix needs a loader:python:<dir>:<module>.<test> ref '
+                              'to carry its pair')
+            files = bug.get('control_files')
+            if (not isinstance(files, list) or not files
+                    or any(not isinstance(path, str) or not path or path.startswith('/')
+                           or '..' in path.split('/') for path in files)):
+                errors.append(f'{ident}: a loader:<sha> fix needs a non-empty control_files list of '
+                              'repo-relative production paths')
         if bug.get('status') == 'fixed' and bug.get('repro') == 'command' and not any(ref.startswith('cargo:') for ref in refs):
             errors.append(f'{ident}: a command repro needs a cargo check through the same command path')
     statuses = {b['id']: b.get('status') for b in bugs if isinstance(b, dict) and isinstance(b.get('id'), str)}
@@ -793,7 +828,8 @@ def run(ctx, *, cargo_junit: Path | None = None):
     binary = _release_server(ctx, profiles) if ctx.include_regression_client and clients else None
     failures = []
     for refs, execute in ((python_refs, ledger_tool._run_python),
-                          (client_tests if ctx.include_regression_client else {}, ledger_tool._run_client)):
+                          (client_tests if ctx.include_regression_client else {}, ledger_tool._run_client),
+                          (loader_tests if ctx.include_regression_client else {}, ledger_tool._run_loader)):
         if refs:
             results = execute(ctx, set(refs), REPO_ROOT)
             for test, ids in refs.items():

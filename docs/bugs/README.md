@@ -73,6 +73,9 @@ failing_first = "not recorded"
 A ref is `cargo:<crate>:<test>` and `harness:<profile>:<scenario|verdict>` for this repository,
 `python:<dotted module>:<TestClass.test_method>` for a fix in the harness/tooling code itself
 (`ledger promote` runs it with `unittest` in the candidate tree), and
+`loader:python:<dir>:<module>.<TestClass.test_method>` for a test in the Loader repository (run with
+`unittest` from `<loader>/<dir>`, so the module imports its siblings; see [loader
+fixes](#loader-fixes-loadersha)), and
 `client:<crate>:<test>` for a fix in the client repository (`ledger promote` uses
 `cargo metadata --no-deps --format-version 1` in `KRASNOKAMEN_CLIENT_ROOT` or the sibling
 `krasnokamen-client` checkout, then runs `cargo test -p <crate> --lib -- <test>` for a
@@ -456,6 +459,26 @@ reversed hunks and the client checkout head; `regressions` refuses the receipt o
 `--client-control-receipt` are refused here (they prove a behaviour a real client observes), and
 `test_only_fix` is refused as well: that flag is a core oracle plus a defect patch.
 `CLIENT-SETTINGS-TEST-POLLUTION` is the first row promoted this way.
+
+### Loader fixes (`loader:<sha>`)
+
+The Loader (`../solaris-loader`, `KRASNOKAMEN_LOADER_ROOT`) is its own repository with its own python
+tests, so a fix there has no core ref kind. Such a row records `fix_commit = "loader:<sha>"`, a
+`loader:python:<dir>:<module>.<test>` ref, and `control_files`: the non-test files of that commit whose
+hunks the control reverses. One Loader commit often bundles a Gradle dependency, an agent facade or a
+message-shape change another row owns; reversing the build file can stop the test run and reversing
+another row's behaviour proves the wrong thing, so the row names the production files its own guard
+depends on. Every listed path must be a non-test file the commit changes; a test path, a `docs/` path,
+or a file the commit creates or deletes refuses.
+
+Control: the narrowed real pre-image (those files' own hunks, `git apply -R`) is reversed in a
+disposable copy of the Loader checkout — a dirty `*.py`, `*.java`, `*.kts`, `*.gradle`, `*.properties`
+or `*.toml`, a checkout that does not contain the fix, or a hunk that no longer reverses refuses — and
+the loader ref must go **red at an `AssertionError` inside a test file of that copy** (a production
+import error or a unittest setup error is unrunnable). The restore runs every ref green in the Loader
+checkout. Receipt `control = loader_reversal` with `reversed_files`, the patch digest and the Loader
+head. `loader:` refs run in the client tier (`run regressions-client`), never in the ordinary L2 cargo
+lane, so the Loader source stays in its own repository.
 
 ### Recording a graphical control later (backfill)
 

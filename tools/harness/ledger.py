@@ -41,6 +41,7 @@ class Refused(Exception):
 # so its pair is the test red with the fix's production hunks reversed and green on the fix
 # (OWNER-DECISIONS-NEEDED CL-7 option (a)).
 CLIENT_TEST_PREFIX = 'client-test:'
+LOADER_FIX_PREFIX = 'loader:'
 
 
 # ----------------------------------------------------------------- ledger rows
@@ -714,7 +715,7 @@ def run_refs(ctx, refs, tree, client):
     A failed client run is red only when its receipt carries an explicitly failing verdict for the
     referenced profile check. A timeout, a client that never reached play or any other failure
     without a negative verdict is unrunnable: it is not evidence about the check."""
-    out, cargo, harness, python, client_tests = {}, set(), [], set(), set()
+    out, cargo, harness, python, client_tests, loader_tests = {}, set(), [], set(), set(), set()
     for ref in refs:
         try:
             kind, first, second = regressions._parse_ref(ref)
@@ -727,6 +728,8 @@ def run_refs(ctx, refs, tree, client):
             python.add((first, second))
         elif kind == 'client':
             client_tests.add((first, second))
+        elif kind == 'loader':
+            loader_tests.add((first, second))
         elif client:
             harness.append(ref)
         else:
@@ -743,6 +746,11 @@ def run_refs(ctx, refs, tree, client):
             for (module, test), (state, detail, assertion) in _run_python(ctx, python, tree).items():
                 out[f'python:{module}:{test}'] = {'state': state, 'detail': detail,
                                                   **({'assertion': assertion} if assertion else {})}
+        if loader_tests:
+            for (directory, test), entry in _run_loader(ctx, loader_tests, tree).items():
+                assertion = entry[2] if len(entry) > 2 else None
+                out[f'loader:python:{directory}:{test}'] = {'state': entry[0], 'detail': entry[1],
+                                                            **({'assertion': assertion} if assertion else {})}
         if client_tests:
             for (crate, name), entry in _run_client(ctx, client_tests, tree).items():
                 assertion = entry[2] if len(entry) > 2 else None
@@ -1776,19 +1784,24 @@ def _client_source_state(root):
     return repo, head.strip(), sorted(untracked)
 
 
-def _client_control_copy(repo, root, slot='ledger-client-control'):
-    """A disposable copy of the client checkout the fix's production hunks are reversed in.
+_LOADER_COPY_IGNORE = shutil.ignore_patterns('.git', 'build', '.gradle', 'node_modules', '*.log', 'run',
+                                             'logs', '.idea', '.kotlin')
 
-    The client checkout itself is never edited: a promotion reverses the real pre-image in a copy that
+
+def _client_control_copy(repo, root, slot='ledger-client-control', ignore=None):
+    """A disposable copy of a sibling checkout the fix's production hunks are reversed in.
+
+    The checkout itself is never edited: a promotion reverses the real pre-image in a copy that
     carries the same source (every file except build output, `.git` and logs)."""
+    ignore = ignore or _CLIENT_COPY_IGNORE
     parent = _worktree_parent(root) or Path(tempfile.mkdtemp(prefix='ledger-client-control-'))
     tree = parent / slot
     if tree.exists():
         shutil.rmtree(tree, ignore_errors=True)
     try:
-        shutil.copytree(repo, tree, ignore=_CLIENT_COPY_IGNORE, symlinks=True)
+        shutil.copytree(repo, tree, ignore=ignore, symlinks=True)
     except OSError as error:
-        raise Refused(f'cannot copy the client checkout {repo} for the control: {error}')
+        raise Refused(f'cannot copy the checkout {repo} for the control: {error}')
     return tree
 
 
@@ -1926,8 +1939,231 @@ def _client_ref_states_of(results):
     return out
 
 
+# ---------------------------------------------------------------- Loader fixes
+# The Loader keeps its source in `../solaris-loader`; a fix there has no core ref kind. A loader fix is
+# proved by reversing its own production hunks in a copy of that checkout for a loader python test ref
+# (docs/bugs/README.md). The row names the files the control reverses (`control_files`) because one
+# Loader commit often carries a Gradle/Java change this row's guard does not depend on.
+
+
+def loader_repo(root=REPO_ROOT):
+    """The Loader checkout a `loader:<sha>` fix_commit is resolved in (sibling repo or env override)."""
+    from . import runtime
+
+    return runtime.sibling_root('loader', root)
+
+
+def loader_fix_commit(fix, root=REPO_ROOT):
+    """Full sha of a `loader:<sha>` fix_commit in the Loader repository; Refused when it is unknown."""
+    sha = fix[len(LOADER_FIX_PREFIX):]
+    if not re.fullmatch(r'[0-9a-f]{7,40}', sha):
+        raise Refused(f'fix_commit {fix}: expected {LOADER_FIX_PREFIX}<sha>')
+    repo = loader_repo(root)
+    if not repo.is_dir():
+        raise Refused(f'fix_commit {fix}: no Loader checkout at {repo} (set KRASNOKAMEN_LOADER_ROOT)')
+    code, full = _git(repo, 'rev-parse', '--verify', '--quiet', f'{sha}^{{commit}}', check=False)
+    if code:
+        raise Refused(f'fix_commit {fix}: {sha} is not a commit of the Loader repository {repo}')
+    return full.strip()
+
+
+def _run_loader(ctx, tests, root, repo=None):
+    """Run loader python refs {(directory, 'module.test')} with cwd `<loader>/<directory>` -> results.
+
+    The Loader's python tests import their siblings from the directory they live in
+    (`from battle_scenario import ...`), so the ref names that directory; the module path is
+    resolved there, never from this checkout."""
+    repo = Path(repo) if repo is not None else loader_repo(root)
+    if not repo.is_dir():
+        return {test: (UNRUNNABLE, f'no Loader checkout at {repo} (set KRASNOKAMEN_LOADER_ROOT)', None)
+                for test in tests}
+    results = {}
+    for directory, test in sorted(tests):
+        cwd = repo / directory
+        if not cwd.is_dir():
+            results[(directory, test)] = (UNRUNNABLE, f'{directory} is not in the Loader checkout', None)
+            continue
+        argv = [sys.executable, '-m', 'unittest', test]
+        ok, text = _exec(ctx, argv, f'loader-{test.rsplit(".", 1)[-1][:24]}', cwd, None)
+        summary = re.search(r'(?m)^Ran (\d+) tests? in ', text)
+        skipped = re.search(r'\bskipped=(\d+)', text)
+        count = int(summary.group(1)) if summary else 0
+        skipped_count = int(skipped.group(1)) if skipped else 0
+        if not summary or count <= skipped_count or re.search(r'(?m)^ERROR:', text):
+            results[(directory, test)] = (UNRUNNABLE, 'no executed test or unittest error; see log', None)
+        elif ok and re.search(r'(?m)^OK(?: \(|$)', text):
+            results[(directory, test)] = (GREEN, '', None)
+        elif not ok and re.search(r'(?m)^FAIL:', text):
+            results[(directory, test)] = (RED, 'test assertion failed', _python_assertion(text))
+        else:
+            results[(directory, test)] = (UNRUNNABLE, 'no conclusive unittest result; see log', None)
+    return results
+
+
+def _loader_source_state(root):
+    """(repo, head, untracked source files) of the Loader checkout; Refused when its source is dirty."""
+    repo = loader_repo(root)
+    if not repo.is_dir():
+        raise Refused(f'no Loader checkout at {repo} (set KRASNOKAMEN_LOADER_ROOT)')
+    _, head = _git(repo, 'rev-parse', 'HEAD')
+    _, status = _git(repo, 'status', '--porcelain')
+    dirty, untracked = [], []
+    for line in status.splitlines():
+        state, path = line[:2], line[3:].strip('"')
+        if not path.endswith(('.py', '.java', '.kts', '.gradle', '.properties', '.toml')):
+            continue
+        (untracked if state == '??' else dirty).append(path)
+    if dirty:
+        raise Refused(f'the Loader checkout {repo} has modified source files ({", ".join(dirty[:5])}): '
+                      'commit or revert them first; a loader control must run on one Loader revision')
+    return repo, head.strip(), sorted(untracked)
+
+
+def _loader_control_patch(repo, fix_full, control_files):
+    """The fix commit's hunks for `control_files` only; Refused on anything else.
+
+    `control_files` exists because one Loader commit often bundles a Gradle dependency or a Java
+    production change this row's python guard does not depend on (reversing those breaks the run or
+    proves another row). Each listed path must be a non-test file the commit changes; the patch is
+    exactly those chunks, so the a/- side is still the commit's own pre-image."""
+    _, diff = _git(repo, 'diff', '--no-renames', '--no-color', f'{fix_full}^1', fix_full)
+    chunks, changed = {}, set()
+    for chunk in re.split(r'(?m)^(?=diff --git )', diff):
+        if not chunk:
+            continue
+        match = re.match(r'diff --git a/(.+) b/(.+)$', chunk.splitlines()[0])
+        if match is None:
+            raise Refused(f'fix commit {fix_full[:12]} has an unparseable diff header')
+        changed.add(match.group(2))
+        chunks[match.group(2)] = chunk
+    for path in control_files:
+        if _skipped_doc(path) or _TEST_PATH.search(path):
+            raise Refused(f'control_files names {path}, a test or docs path: a control reverses production hunks')
+    missing = sorted(set(control_files) - changed)
+    if missing:
+        raise Refused(f'control_files names {", ".join(missing)}, which the fix commit does not change')
+        if any(line.startswith(('+++ /dev/null', '--- /dev/null', 'new file mode', 'deleted file mode'))
+               for line in chunks[path].splitlines()[:4]):
+            raise Refused(f'control_files names {path}, which the fix commit creates or deletes: a reversal '
+                          'of it is not a pre-image')
+    return ''.join(chunks[path] for path in control_files), list(control_files)
+
+
+def _loader_assertion(entry, tree):
+    """A loader control red only when the failing unittest frame is inside a test file of the reversed tree.
+
+    The test may predate the fix (a guard older than the finding), so it is not required to be one of the
+    fix commit's own files: what proves the control is an AssertionError raised in test code, never a
+    production import error or a unittest setup error."""
+    assertion = entry.get('assertion')
+    if not isinstance(assertion, dict) or assertion.get('error') != 'AssertionError':
+        return False
+    path = assertion.get('file')
+    if not isinstance(path, str) or not os.path.isabs(path):
+        return False
+    try:
+        relative = Path(path).resolve().relative_to(Path(tree).resolve()).as_posix()
+    except ValueError:
+        return False
+    return bool(_TEST_PATH.search(relative))
+
+
+def _promote_loader_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, loader_runner=None):
+    """A `loader:<sha>` fix: the loader python ref is red with the row's production hunks reversed."""
+    fix_full = loader_fix_commit(fix, root)
+    refs = row['regression']
+    if not refs:
+        raise Refused(f'{ident}: no registered check (regression is empty)')
+    for ref in refs:
+        try:
+            regressions._parse_ref(ref)
+        except ValueError as error:
+            raise Refused(f'{ident}: {error}')
+    loader_refs = [ref for ref in refs if ref.startswith('loader:')]
+    if not loader_refs:
+        raise Refused(f'{ident}: a {LOADER_FIX_PREFIX}<sha> fix needs a loader:python:<dir>:<module>.<test> ref '
+                      'to carry the pair')
+    repo, head, untracked = _loader_source_state(root)
+    if _git(repo, 'merge-base', '--is-ancestor', fix_full, head, check=False)[0]:
+        raise Refused(f'{ident}: the Loader checkout {repo} at {head[:12]} does not contain the fix '
+                      f'{fix_full[:12]}')
+    control_files = row.get('control_files')
+    if not isinstance(control_files, list) or not control_files:
+        raise Refused(f'{ident}: a {LOADER_FIX_PREFIX} row records control_files (the non-test files whose '
+                      'hunks the control reverses); one Loader commit usually bundles changes this guard '
+                      'does not depend on')
+    patch, reversed_files = _loader_control_patch(repo, fix_full, control_files)
+    _, _, kept_tests = non_test_patch(repo, fix_full)
+    control = restored = None
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(_control_lock(root))
+        tree = _client_control_copy(repo, root, 'ledger-loader-control', _LOADER_COPY_IGNORE)
+        stack.callback(shutil.rmtree, tree, True)
+        if _git(tree, 'apply', '-R', '--check', '--whitespace=nowarn', '-',
+                stdin=patch.encode(errors='surrogateescape'), check=False)[0]:
+            raise Refused(f'loader control of {ident}: the fix hunks do not reverse on {repo} at {head[:12]}; '
+                          'commit the Loader revision that carries their pre-image (a hand-ported re-break is '
+                          'not a control)')
+        _git(tree, 'apply', '-R', '--whitespace=nowarn', '-', stdin=patch.encode(errors='surrogateescape'))
+        runner = loader_runner or (lambda refs, tree: _loader_ref_states(_run_loader(
+            ctx, {_loader_test(ref) for ref in refs}, root, tree)))
+        control = runner(loader_refs, tree)
+        for ref, entry in control.items():
+            if entry.get('state') == RED and not _loader_assertion(entry, tree):
+                entry['state'] = UNPROVEN_PANIC
+                entry['detail'] = (entry.get('detail', '') + ' | the red is not an AssertionError inside a '
+                                   'test file the fix changed').strip(' |')
+        red = {ref for ref, entry in control.items() if entry['state'] == RED}
+        if not red:
+            raise Refused(f'{ident}: the loader refs stayed green with the fix reversed: '
+                          + '; '.join(f"{ref}={entry['state']} ({entry['detail']})" for ref, entry in control.items()))
+        restored = runner(refs, repo) if loader_runner else _loader_ref_states(
+            _run_loader(ctx, {_loader_test(ref) for ref in refs}, root, repo))
+        if not loader_runner:
+            others = [ref for ref in refs if not ref.startswith('loader:')]
+            if others:
+                restored.update(run_refs(ctx, others, root, True))
+        bad = {ref: entry for ref, entry in restored.items() if entry.get('state') != GREEN}
+        if bad:
+            raise Refused(f'{ident}: refs not green on the Loader that contains the fix: '
+                          + '; '.join(f"{ref}={entry['state']} ({entry['detail']})" for ref, entry in bad.items()))
+    receipt = {
+        'id': ident, 'verdict': 'promoted', 'fix_commit': fix, 'fix_commit_full': fix_full,
+        'promoted_at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
+        'tree_head': tree_now['head'], 'tree_dirty': tree_now['dirty'], 'tree_sha256': tree_now['sha256'],
+        'loader_fix': True, 'control': 'loader_reversal', 'control_tree': 'loader_head',
+        'fix_patch_sha256': hashlib.sha256(patch.encode(errors='surrogateescape')).hexdigest(),
+        'reversed_files': reversed_files, 'kept_test_files': kept_tests,
+        'loader_checkout': {'path': str(repo), 'head': head, 'untracked': untracked},
+        'negative_control': control, 'restored': restored, 'client_receipt': None,
+        'artifact_dir': str(ctx.artifact_dir),
+    }
+    (ctx.artifact_dir / 'promote.json').write_text(json.dumps(receipt, indent=2) + '\n')
+    if dry_run:
+        return receipt
+    _record_promotion(root, ident, receipt)
+    return receipt
+
+
+def _loader_test(ref):
+    """(directory, 'module.test') of a `loader:python:<dir>:<module>.<test>` ref."""
+    _, _, rest = ref.split(':', 2)
+    directory, _, test = rest.partition(':')
+    return directory, test
+
+
+def _loader_ref_states(results):
+    """{ref: {state, detail, assertion?}} from `_run_loader` results keyed by (directory, test)."""
+    out = {}
+    for (directory, test), entry in results.items():
+        assertion = entry[2] if len(entry) > 2 else None
+        out[f'loader:python:{directory}:{test}'] = {'state': entry[0], 'detail': entry[1],
+                                                    **({'assertion': assertion} if assertion else {})}
+    return out
+
+
 def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receipt=None, fix_patch=None,
-            dry_run=False, ctx, runner=run_refs, client_runner=None):
+            dry_run=False, ctx, runner=run_refs, client_runner=None, loader_runner=None):
     """Run every promotion check for `ident`; on success (and not dry_run) flip it to fixed. Refused on any failure.
 
     The candidate is the exact tree: HEAD plus uncommitted diff and untracked files (docs/bugs aside).
@@ -1946,6 +2182,14 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
     if fix.startswith('client:') and row.get('test_only_fix') is True:
         raise Refused(f'{ident}: test_only_fix is for a committed core test fix; a client:<sha> fix is proved '
                       'by real-client receipts, never by a reversed test oracle')
+    if fix.startswith(LOADER_FIX_PREFIX):
+        if row.get('test_only_fix') is True:
+            raise Refused(f'{ident}: test_only_fix is for a committed core test oracle, not a loader fix')
+        if client_receipt or client_control_receipt:
+            raise Refused(f'{ident}: a {LOADER_FIX_PREFIX}<sha> fix is proved by reversing its own hunks for a '
+                          'loader ref, not by real-client receipts')
+        return _promote_loader_fix(ident, row=row, fix=fix, root=root, tree_now=tree_now, dry_run=dry_run,
+                                   ctx=ctx, loader_runner=loader_runner)
     if fix.startswith(CLIENT_TEST_PREFIX):
         if row.get('test_only_fix') is True:
             raise Refused(f'{ident}: test_only_fix (a core test oracle plus its defect patch) is not the '
