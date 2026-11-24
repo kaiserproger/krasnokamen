@@ -66,6 +66,10 @@ class Scenario:
     sources: tuple[str, ...] = ()
     proves: str = ""
     limits: str = ""
+    # The client a runnable scene needs. The ledger's `run scenario` command derives it from the id
+    # when this is None (`native-*` ids are the native client, the rest Java); a scene whose fixture
+    # is the native client's own tool surface declares it here instead of renaming its registered id.
+    client: str | None = None
 
     def __post_init__(self) -> None:
         if self.evidence not in EVIDENCE_KINDS:
@@ -77,6 +81,8 @@ class Scenario:
             raise ValueError(f"{self.id}: a native entry needs an exact selector")
         if self.manifest is not None and self.scenario_id is None:
             raise ValueError(f"{self.id}: a manifest needs the scenario_id it belongs to")
+        if self.client not in (None, "native", "java"):
+            raise ValueError(f"{self.id}: unknown client {self.client!r}")
 
 
 def _entry(**kwargs: object) -> Scenario:
@@ -836,8 +842,9 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="issue1-01-villager-leg", requires=("xvfb",),
         sources=("tools/harness/issue1_01_villager_leg_scene.json",),
         fixture="private native client on a frozen-day fixture with one spawned villager, front camera",
-        proves="a pixel window over the villager's boots/hem band counts the vanilla leg region's grey, so the arm-region (skin) legs of the pre-fix model fail; the window and its threshold come from measured frames on both pins (candidate 754 px, pre-image 234 px)",
+        proves="a pixel window over the villager's boots/hem band counts the vanilla leg region's grey, so the arm-region (skin) legs of the pre-fix model fail; the window and its threshold come from measured frames on both pins (candidate 756 px, pre-image 242 px)",
         limits="one villager, one camera angle; the box is the grey boot band of the vanilla leg texture, so a lighting change that darkens the band below the threshold needs re-measurement",
+        client="native",
     ),
     "issue1-02-held-tool": _entry(
         id="issue1-02-held-tool", summary="The first-person held tool is perfectly still at rest (ISSUE-1-02)",
@@ -847,6 +854,7 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="private native client standing still with a diamond pickaxe on a frozen-tick stone pad, three frames 40 ticks apart",
         proves="the camera is unchanged and the hand region (right half above the hotbar) keeps the same pixels across three frames; the pre-fix idle sway moves it",
         limits="one tool, one still pose, one rasterizer; a zero/2-pixel threshold is calibrated on the fixed and pre-fix clients",
+        client="native",
     ),
     "issue1-03-drawn-index": _entry(
         id="issue1-03-drawn-index", summary="The drawn-index count stays bounded while the camera turns (ISSUE-1-03)",
@@ -857,6 +865,7 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="private native client on a stone pad with the day clock held (`gamerule advance_time false`; the tick rate is not frozen), F3 shown, eight yaws sampled, yaw 0 sampled twice and returned to, then the horizon sampled, the camera put 60 degrees down and returned to the horizon",
         proves="render_drawn_index_bounded over every render_draw_sample: each count is non-zero, under the absolute bound and within max_growth of the first sample, and render_repeat_view_stable keeps the same (yaw, pitch) view's counts from growing; every sample must report the requested pitch and a submitted_frame_id newer than the previous sample, so a frozen renderer cannot pass; the dropped per-frame FrameStats reset accumulates indices and fails",
         limits="one small scene at low preset; the bounds are calibrated on the fixed and reversal clients; the down look is geometry (fewer sections), not an accumulation",
+        client="native",
     ),
     "issue1-21-tool-clip": _entry(
         id="issue1-21-tool-clip", summary="The first-person tool clips through a wall when it should not (ISSUE-1-21)",
@@ -866,6 +875,7 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="private native client facing an obsidian wall with a diamond pickaxe, far (2.5 blocks) and close held frames",
         proves="tool_hand_visible: the tool is visible 2.5 blocks away, as the pre-image that draws the hand in world geometry renders it; tool_wall_visible: at 0.6 blocks the received target, selected tool and eye distance are the fixture's, the close frame shows a dark wall behind the turquoise tool, and the tool pixels stay in front of the wall, which the world-geometry control draws behind it",
         limits="one wall, one tool, far and close frames (attack frames are captured, not asserted); the colour window comes from the fixed frames",
+        client="native",
     ),
     "native-datapack-hover": _entry(
         id="native-datapack-hover", summary="A listed datapack's chat link carries its pack.mcmeta description on hover (DATAPACK-LIST-HOVER)",
@@ -884,6 +894,7 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="private native client on a grass platform with the day clock held, one NoAI villager with an emerald and one NoAI witch with redstone in the main hand through /item replace entity, then the witch's hand replaced with a potion for the nose frame",
         proves="emerald_held_pixels, redstone_held_pixels and potion_nose_pixels require the item colours inside the fixed crossed-arms and witch-nose windows of received frames; a rig with no crossed-arms/nose role finds no attachment bone and draws nothing, so the pre-image control fails at emerald_held_pixels",
         limits="one villager and one witch facing the camera; the potion-at-the-nose assertion also runs on both pins as its own scenario (issue1-23-witch-potion) because the control aborts at the earlier emerald window",
+        client="native",
     ),
     "issue1-23-witch-potion": _entry(
         id="issue1-23-witch-potion", summary="A witch holding a potion draws it at the nose (ISSUE-1-23, the original complaint)",
@@ -893,6 +904,7 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="private native client on a grass platform with the day clock held, one NoAI witch facing the camera with `minecraft:potion` in the main hand through /item replace entity",
         proves="potion_nose_pixels requires the potion's liquid colour inside the fixed nose window of a received frame: the witch's potion goes through WitchItemLayer at the nose, so a rig without the `nose` role (the row's original complaint, a witch holding a potion with nothing drawn) has no attachment bone and fails it",
         limits="one witch, one water potion, one frame; the window is calibrated on the fixed and pre-image clients",
+        client="native",
     ),
     "issue1-18-sheep-goat": _entry(
         id="issue1-18-sheep-goat", summary="Goat horns and sheep wyther rigs render upright and aligned (ISSUE-1-18)",
@@ -902,6 +914,7 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="private native client on a frozen-day fixture with a spawned goat and sheep, side and front camera",
         proves="the goat-horn oracle (upright, body aligned, ear coverage, side horn) passes on the received frames",
         limits="one goat and one sheep per shot; other horned mobs are not covered",
+        client="native",
     ),
     "issue1-19-hostile-motion": _entry(
         id="issue1-19-hostile-motion", summary="A spider and a zombie move at the Java 26.3 gaits (ISSUE-1-19)",
@@ -911,6 +924,7 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="private native client on a grass pad, frozen day, one NoAI zombie and one NoAI spider stepped by fixture teleports, then a chasing zombie with AI after the player drops to survival, side camera on the first zombie",
         proves="each declared kind moves more than 0.1 blocks and every segment's client-visible rate sits inside its declared blocks-per-client-tick range, a pixel window over the zombie's raised-arm anchor counts the rendered sleeve, and the AI chase's own window (`zombie_chase_speed`) keeps the zombie's client-observed pace inside the Java 26.3 interval (0.09..0.14 blocks per client tick), so a frozen animation, a fixture teleport or the historical 3.8 chase speed fails",
         limits="tp-driven NoAI mobs for the fixture windows and one straight AI chase over a flat pad; one speed range per kind; the spider's moving leg swing has no pose anchor and is covered by its motion rate only; the client-observed rate is a net displacement, a lower bound on a curved path",
+        client="native",
     ),
     "native-village-idle-stroll": _entry(
         id="native-village-idle-stroll", summary="Idle residents stay bound to the village and swim up out of deep water",

@@ -206,12 +206,14 @@ def _client_command(profile, scenario):
     if profile == 'battle-crash-recovery':
         # Its own Horizon clients and inputs (KRASNOKAMEN_BATTLE_*); no Java/native client selection.
         return argv
-    if scenario.startswith('native-'):
-        argv.extend(['--client', 'native', '--windowed'])
-    else:
-        argv.extend(['--client', 'java'])
-        if profile == 'scene-shot':
-            argv.append('--windowed')
+    # A scene whose fixture is the native client's own tool surface declares it; the rest keep the
+    # id convention (`native-*` is the native client, everything else Java).
+    client = entry.client or ('native' if scenario.startswith('native-') else 'java')
+    argv.extend(['--client', client])
+    if client == 'java' and profile == 'scene-shot':
+        argv.append('--windowed')
+    elif client == 'native':
+        argv.append('--windowed')
     if profile == 'java-battle-functional':
         argv.extend(['--platform', 'neoforge', '--timeout-seconds', '1800'])
     return argv

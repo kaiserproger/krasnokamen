@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tools.harness import ledger, profiles, regressions
+from tools.harness import ledger, profiles, regressions, scenarios
 
 
 class RegressionLedgerTests(unittest.TestCase):
@@ -360,6 +360,18 @@ regression = []
     def test_unknown_client_scenario_is_rejected(self):
         with self.assertRaises(ValueError):
             regressions._client_command('entities', 'no-such-scenario')
+
+    def test_a_scene_declaring_the_native_client_runs_native(self):
+        """ISSUE-1-19: the ledger derived the client from the id, so a native-fixture `issue1-*` scene
+        ran as Java and refused its own fixture in 0.1 s."""
+        self.assertEqual(regressions._client_command('scene-shot', 'issue1-19-hostile-motion')[-3:],
+                         ['--client', 'native', '--windowed'])
+        # An undeclared Java scene keeps the id convention.
+        self.assertEqual(regressions._client_command('scene-shot', 'java-gait-sidecar')[-3:],
+                         ['--client', 'java', '--windowed'])
+        with self.assertRaisesRegex(ValueError, 'unknown client'):
+            scenarios._entry(id='x', summary='x', owner='x', evidence='graphical', profile='scene-shot',
+                             client='horizon')
 
 
     def test_loader_live_ref_parse_and_command(self):
