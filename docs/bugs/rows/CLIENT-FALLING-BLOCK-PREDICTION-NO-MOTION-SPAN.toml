@@ -1,0 +1,11 @@
+[[bug]]
+id = "CLIENT-FALLING-BLOCK-PREDICTION-NO-MOTION-SPAN"
+title = "A falling block's predicted horizontal motion registers no motion span, so the client's own fence on the query-padding span fails (motion_spans.len() == 1 sees none) and the horizontal prediction is unproven"
+area = "client"
+severity = "minor"
+status = "open"
+source = "client repo src/entities/falling_tests.rs:176-187 (falling_block_prediction_tracks_horizontal_query_padding_without_accumulating_spans), a fence that only compiled once the wave-2 test-module restore added `#[cfg(test)] mod falling_tests;` to src/entities.rs; recorded red in receipts/D123/D123Harness/HANDOFF-15.md ('motion_spans.len()==0') and reported by review REVIEW-wave2-9 minor 6 (a known red with no ledger row). The client registers a motion span only on the packet-motion path (src/entities.rs:822 from `physical.lerp_span`), never for the block's own predicted fall, so `Store::query_padding` (src/entities/physical.rs:272) never widens for a horizontally moving falling block."
+repro = "cargo"
+regression = []
+repro_check = "Known-red on the client branch: entities::falling_tests::falling_block_prediction_tracks_horizontal_query_padding_without_accumulating_spans fails at its `assert_eq!(store.motion_spans.len(), 1)` (no span registered), as recorded in receipts/D123/D123Harness/HANDOFF-15.md and PROGRESS.md. Reproduce with `cargo test -p krasnokamen-client --lib entities::falling_tests` in the client worktree. Kept out of the green gate: no fix exists yet, and the symptom is the missing span registration for a predicted fall, not a presentation regression."
+failing_first = "reported"
