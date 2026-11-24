@@ -1,7 +1,8 @@
 diff --git a/crates/mc-core/src/command_data/entity.rs b/crates/mc-core/src/command_data/entity.rs
 --- a/crates/mc-core/src/command_data/entity.rs
 +++ b/crates/mc-core/src/command_data/entity.rs
-@@ -77,4 +77,9 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag,
+@@ -76,13 +76,19 @@
+     // replace the rest of the runtime image with only the authored fields.
      let base = Tag::Compound(image.clone());
      let mut edited = base.clone();
 -    crate::command_storage::mutate(state, context, action, &mut edited, &mut input, |_| Ok(()))?;
@@ -12,12 +13,34 @@ diff --git a/crates/mc-core/src/command_data/entity.rs b/crates/mc-core/src/comm
 +        Ok(())
 +    })?;
      if edited == base {
-@@ -88,4 +88,5 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag,
+         return Err("Nothing changed. The specified properties already have these values".into());
+     }
      let (Tag::Compound(old), Tag::Compound(new)) = (&base, edited) else {
          return Err("Entity data must be a compound".into());
      };
 +    crate::command_tag::validate_fields(&new)?;
      // What the edit changed or removed. The entity keeps its identity and place:
+     // those are not data to load back.
+     let mut changed = Vec::new();
+@@ -95,17 +101,7 @@
+             return Err(format!("Editing {key} is not supported; use /tp"));
+         }
+         if key == "Tags" {
+-            let Tag::List(list) = value else {
+-                return Err("Tags must be a string list".into());
+-            };
+-            if list.elements.len() > 1024
+-                || list
+-                    .elements
+-                    .iter()
+-                    .any(|tag| !matches!(tag, Tag::String(_)))
+-            {
+-                return Err("Tags must contain at most 1024 strings".into());
+-            }
++            crate::command_summon::validate_tags(value).map_err(|error| error.message())?;
+             image.retain(|(existing, _)| existing != key);
+             image.push((key.clone(), value.clone()));
+             touched.push(key.clone());
 diff --git a/crates/mc-core/src/command_storage.rs b/crates/mc-core/src/command_storage.rs
 index add325cc9..f711444d5 100644
 --- a/crates/mc-core/src/command_storage.rs
@@ -112,78 +135,6 @@ diff --git a/crates/mc-core/src/command_tag.rs b/crates/mc-core/src/command_tag.
 index ed6eaa04a..5bbe387b1 100644
 --- a/crates/mc-core/src/command_tag.rs
 +++ b/crates/mc-core/src/command_tag.rs
-@@ -4,6 +4,71 @@ use crate::command_execution::CommandResult;
- use crate::tick::TickState;
- use mc_nbt::{ListTag, Tag, tag_type};
- 
-+/// Vanilla entity tags are a set; retain first-occurrence order in the NBT list.
-+pub(crate) fn normalized(value: &Tag) -> Result<Tag, String> {
-+    let Tag::List(list) = value else {
-+        return Err("Invalid entity tags: expected a list of strings".into());
-+    };
-+    let mut seen = std::collections::BTreeSet::new();
-+    let mut elements = Vec::with_capacity(list.elements.len());
-+    for value in &list.elements {
-+        let Tag::String(name) = value else {
-+            return Err("Invalid entity tags: expected string elements".into());
-+        };
-+        if seen.insert(name.as_str()) {
-+            elements.push(value.clone());
-+        }
-+    }
-+    Ok(Tag::List(ListTag {
-+        element_type: tag_type::STRING,
-+        elements,
-+    }))
-+}
-+
-+pub(crate) fn validate_fields(fields: &[(String, Tag)]) -> Result<(), String> {
-+    if fields
-+        .iter()
-+        .filter(|(key, _)| key == "Tags")
-+        .take(2)
-+        .count()
-+        > 1
-+    {
-+        return Err("Invalid Tags: duplicate Tags field".into());
-+    }
-+    Ok(())
-+}
-+
-+pub(crate) fn normalize_fields(fields: &mut [(String, Tag)]) -> Result<(), String> {
-+    validate_fields(fields)?;
-+    for (key, value) in fields {
-+        if key == "Tags" {
-+            *value = normalized(value)?;
-+        }
-+    }
-+    Ok(())
-+}
-+
-+/// Also canonicalize existing native/WAL records, without changing the format.
-+pub(crate) fn normalize_opaque(mut bytes: Vec<u8>) -> Result<Vec<u8>, String> {
-+    if bytes.is_empty() {
-+        return Ok(bytes);
-+    }
-+    let mut remaining = bytes.as_slice();
-+    let (_, Tag::Compound(mut fields)) =
-+        mc_nbt::read_named(&mut remaining).map_err(|error| error.to_string())?
-+    else {
-+        return Err("Invalid retained entity data".into());
-+    };
-+    if !remaining.is_empty() {
-+        return Err("Invalid retained entity data: trailing NBT bytes".into());
-+    }
-+    normalize_fields(&mut fields)?;
-+    bytes.clear();
-+    mc_nbt::write_named(&mut bytes, "", &Tag::Compound(fields))
-+        .map_err(|error| error.to_string())?;
-+    Ok(bytes)
-+}
-+
- pub(crate) fn execute(state: &mut TickState, context: Context, input: &str) -> CommandResult {
-     let result = run(state, context, input);
-     match result {
 @@ -81,7 +146,10 @@ fn run(state: &mut TickState, context: Context, input: &str) -> Result<(i32, Str
              Some(Tag::List(list))
                  if list.element_type == tag_type::STRING || list.elements.is_empty() =>

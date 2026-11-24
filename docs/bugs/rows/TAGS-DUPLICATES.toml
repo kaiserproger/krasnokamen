@@ -3,7 +3,7 @@ id = "TAGS-DUPLICATES"
 title = "Duplicate scoreboard tags survive summon and load and require repeated removal"
 area = "gameplay"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "Stage-3 S3FixBreaker finding F3: Tags:['d1','d1'] retains both entries and one /tag remove leaves the tag present"
 repro = "client"
 regression = [
@@ -16,8 +16,9 @@ regression = [
   "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::opaque_wal_trailing_bytes_refuse_offline_and_live_recovery",
   "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_player_tags_in_wal_normalize_before_offline_export_and_live_recovery",
   "cargo:mc-core:command_summon::tests::scoreboard_tags_disk_tests::duplicate_player_tags_keys_in_wal_refuse_offline_export_and_live_recovery",
-  "cargo:mc-world-conversion:export_tests::export_refuses_ambiguous_player_tags_from_real_wal_without_publication",
+  "cargo:mc-world-conversion:export_tests::export_refuses_ambiguous_player_tags_from_real_wal_without_publication", "harness:entities:native-v2-ledger-tag-duplicates",
 ]
-fix_commit = "patch:a8332407519ccdc26e29f3bebd4d45f46cfd4d4f3b6b19f1f1305028c7549210"
+fix_commit = "patch:df4639c038eb3a69d8b66e8bf9a6db3e7fbf0cb48023fc9eeb37eb2e1c0cee47"
 failing_first = "reported"
 repro_check = "FixBatchB/F3-red.log proves duplicate-member loss; amendments/F3-duplicates-red.log proves repeated-key preflight bypass. Round3 F3-trailing-red.log fails when only full-input consumption is reverted. F3-player-red.log and F3-export-red.log fail when only shared player normalization is removed: duplicate elements survive offline recovery and export publishes a corrupt image. Adjacent .control.diff and .control.json identify exact reverted hunks; historical controls are explicitly reconstructed from recorded edits. Shared recovery validates player and entity compounds before rewriting and export. Entity.javap:12057-12060 applies STRING.sizeLimitedListOf(1024) before insertion into the Set. Cumulative TAGS-DUPLICATES.patch retains the mutate validator API for tests but reverts its behavior, excludes F4 validation, and includes the shared recovery fixes. Live player hydration no longer redundantly normalizes the shared result."
+promotion = "docs/bugs/promotions/TAGS-DUPLICATES.json"

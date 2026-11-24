@@ -258,6 +258,23 @@ SCENARIOS: dict[str, Scenario] = {
                "opened chest's own draws lag all six control advances, so this variable gate needs repeats.",
     ),
 
+    "native-v2-ledger-tag-duplicates": _entry(
+        id="native-v2-ledger-tag-duplicates",
+        summary="Entity tags are a set: one removal clears a duplicated summon tag",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-tag-duplicates",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_tag_duplicates.py"),
+        fixture="operator pad; one NoAI cow summoned with Tags:['dupx','dupx']",
+        proves="the duplicated element list still selects the cow, one /tag remove answers "
+               "`Updated tags on 1 entities`, and an `execute unless entity @e[tag=dupx]` branch then prints "
+               "its marker, so no duplicate entry survived",
+        limits="One cow, one duplicated element and one removal; the remaining entry is observed through a "
+               "selector because `tag <uuid> list` and `data get` answers do not reach the client chat. No "
+               "/reload, WAL or export path here; those rest on the cargo refs.",
+    ),
+
     "native-world-first-start-interrupted": _entry(
         id="native-world-first-start-interrupted",
         summary="Recover a singleplayer world interrupted during its first start",
