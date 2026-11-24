@@ -94,10 +94,7 @@ pub(super) fn settlement(
                     error(
                         state,
                         connection,
-                        format!(
-                            "Founded {name} (revision {revision}), wall ring {ring}.",
-                            ring = crate::settlements::layout::RING
-                        ),
+                        format!("Founded {name} (revision {revision})."),
                     );
                 }
                 Err(message) => error(state, connection, message),

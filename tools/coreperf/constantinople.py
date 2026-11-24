@@ -13,10 +13,16 @@ import json
 import math
 from pathlib import Path
 import random
+import re
 import struct
 import uuid
 import zlib
 
+# The product's founded line (`command_execution/settlement.rs`), the console's own signal that
+# a settlement exists; `settlement_commands::the_founded_line_names_only_the_settlement_and_its_revision`
+# pins the message, this pins the parser. A comma suffix here silently stalled the settle phase
+# (review D123 wave 2, M1).
+FOUNDED_LINE = re.compile(r"Founded (\S+) \(revision \d+\)\.")
 AIR = {"air", "cave_air", "void_air"}
 CROPS = ("wheat", "carrots", "potatoes", "beetroots")
 FARMLAND_PLANTS = set(CROPS) | {"melon_stem", "attached_melon_stem", "pumpkin_stem",
@@ -783,7 +789,6 @@ def native_rss_event(session, event, **context):
 
 async def native_console_setup(session, population, timeout, url):
     import asyncio
-    import re
     import time
     from tools.harness import runtime
     expected = {row["uuid"]: row["settlement"] for row in population["cohort"]}
@@ -809,7 +814,7 @@ async def native_console_setup(session, population, timeout, url):
             if line.startswith("checkpoint capture ms:"):
                 native_rss_event(session, "checkpoint_capture", bound_count=len(bound),
                                  detail=line)
-            created = re.search(r"Founded (\S+) \(revision \d+\)\.", line)
+            created = FOUNDED_LINE.search(line)
             if created and created[1] in names:
                 founded.add(created[1])
                 native_rss_event(session, "founded", name=created[1],

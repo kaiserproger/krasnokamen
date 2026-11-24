@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from tools.coreperf.constantinople import (
-    census, population_plan, nbt, stored_item_total, preservation, region_chunks,
+    FOUNDED_LINE, census, population_plan, nbt, stored_item_total, preservation, region_chunks,
 )
 
 
@@ -188,6 +188,15 @@ class ConstantinopleTests(unittest.TestCase):
             nbt(b"\x0a\x00\x00")
         with self.assertRaisesRegex(ValueError, "duplicate"):
             nbt(b"\x0a\x00\x00\x01\x00\x01a\x00\x01\x00\x01a\x00\x00")
+
+    def test_the_founded_line_parser_matches_the_products_message(self):
+        # The settle phase waits for `founded == names`: a message the regex does not match never
+        # advances it (review D123 wave 2, M1). The product side is pinned by
+        # `settlement_commands::the_founded_line_names_only_the_settlement_and_its_revision`.
+        match = FOUNDED_LINE.search("Founded bqa_perimeter (revision 2).")
+        self.assertIsNotNone(match)
+        self.assertEqual(match[1], "bqa_perimeter")
+        self.assertIsNone(FOUNDED_LINE.search("Founded bqa_perimeter (revision 2), wall ring 30."))
 
 
 if __name__ == "__main__":
