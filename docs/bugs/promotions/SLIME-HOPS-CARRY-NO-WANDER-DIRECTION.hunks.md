@@ -52,3 +52,15 @@ in `wander`). No change to `hop_due`, jump power, the between-hop no-traction ru
 (`idle_wander_motion_unchanged` still models `hops: false`, which stays consistent: on a dwell tick
 the real step also does not move because the hop clock, not the drive, is what admits it), or to
 battle steering (frozen).
+
+## Observed control and restore
+
+`ledger promote SLIME-HOPS-CARRY-NO-WANDER-DIRECTION`, receipt
+`.analysis/validation/20261124T025007-ledger-promote-bwg8us0z` on `ea4d7be9bf` (`tree_dirty: false`,
+`control_tree: head`, `reversed_files` = `crates/mc-core/src/tick/passive_follow.rs` only):
+
+- control (`ledger-1-run.log:353-354`) **FAIL** on the proving ref —
+  `assertion `left != right` failed: slime movement family must execute`,
+  `left: [0.5, 65.0, 0.5]` — the pre-fix in-place hop, at the row's own assertion; the shape test
+  stays green (as expected: the a/-side keeps the ungated helper it calls);
+- restore green (`ledger-3-run.log`, exit 0; both refs).

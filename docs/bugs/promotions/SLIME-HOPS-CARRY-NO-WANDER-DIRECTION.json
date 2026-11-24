@@ -1,0 +1,38 @@
+{
+  "id": "SLIME-HOPS-CARRY-NO-WANDER-DIRECTION",
+  "verdict": "promoted",
+  "fix_commit": "patch:fa794bf4e20ecb656e08e7764ba19277c73b87b346d26fdbc6bf71f3034881a4",
+  "fix_commit_full": "patch:fa794bf4e20ecb656e08e7764ba19277c73b87b346d26fdbc6bf71f3034881a4",
+  "promoted_at": "2026-11-24T02:59:51+00:00",
+  "tree_head": "ea4d7be9bf2f85f2f93313014e22d9029bf1730e",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "fa794bf4e20ecb656e08e7764ba19277c73b87b346d26fdbc6bf71f3034881a4",
+  "reversed_files": [
+    "crates/mc-core/src/tick/passive_follow.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:species_tests::every_assigned_species_spawns_locomotes_and_dies_through_native_merge": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:entity_motion_tests::a_hoppers_wander_heading_survives_the_walker_dwell_phase": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-core:species_tests::every_assigned_species_spawns_locomotes_and_dies_through_native_merge": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:entity_motion_tests::a_hoppers_wander_heading_survives_the_walker_dwell_phase": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T025007-ledger-promote-bwg8us0z"
+}
