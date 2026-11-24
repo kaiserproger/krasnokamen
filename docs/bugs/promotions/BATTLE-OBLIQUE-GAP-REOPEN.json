@@ -1,0 +1,32 @@
+{
+  "id": "BATTLE-OBLIQUE-GAP-REOPEN",
+  "verdict": "promoted",
+  "fix_commit": "4a2c83e44",
+  "fix_commit_full": "4a2c83e44c04007d277f140f69244d8b16ac9447",
+  "promoted_at": "2026-11-24T03:46:10+00:00",
+  "tree_head": "74ad96b7b82201d54d0b213ff349ffa7c74ff3a9",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "fix_commit",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/battle/steering.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/battle/steering_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:battle::steering::tests::oblique_neighbour_cannot_reopen_an_already_closed_gap": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:battle::steering::tests::oblique_neighbour_cannot_reopen_an_already_closed_gap": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T034128-ledger-promote-xmze1210"
+}
