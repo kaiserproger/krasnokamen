@@ -1155,6 +1155,32 @@ class FixturePanicTests(unittest.TestCase):
         self.assertEqual(ledger._panic_class(root, ('crates/mc-core/src/test_support.rs', 2),
                                              'assertion failed'), 'unknown')
 
+    def test_an_inline_test_module_in_a_production_file_is_an_assertion(self):
+        # Review wave 2 minor 6: SETTLEMENT-LAYOUT-PROJECT-SHOWS-UNKNOWN-BLUEPRINT's control red is
+        # an `assert_ne!` inside `#[cfg(test)] mod tests` of settlements/ui_text.rs, a production
+        # path. The reversed patch removes three arms above it, so the control tree's line (1021)
+        # is not HEAD's (1024): the class is read from the tree the panic came from.
+        root = self.tree()
+        file = root / 'crates/mc-core/src/ui_text.rs'
+        file.write_text(
+            'pub(crate) fn blueprint(id: &str) -> &\'static str {\n'
+            '    id\n'
+            '}\n'
+            '\n'
+            '#[cfg(test)]\n'
+            'mod tests {\n'
+            '    #[test]\n'
+            '    fn every_layout_project_has_a_name() {\n'
+            '        assert_ne!(super::blueprint("perimeter"), "Unknown blueprint");\n'
+            '    }\n'
+            '}\n')
+        self.assertEqual(
+            ledger._panic_class(root, ('crates/mc-core/src/ui_text.rs', 9),
+                                'assertion `left != right` failed'), 'assertion')
+        self.assertEqual(
+            ledger._panic_class(root, ('crates/mc-core/src/ui_text.rs', 2),
+                                'assertion `left != right` failed'), 'unknown')
+
     def test_a_cargo_red_without_a_panic_line_needs_the_row_to_name_it(self):
         # N3a: a `-> Result<()>` test fails through `?` with no panic line; that is not an assertion.
         entry = {'state': ledger.RED, 'detail': 'FAIL'}

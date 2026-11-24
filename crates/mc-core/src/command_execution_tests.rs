@@ -2797,6 +2797,28 @@ fn settlement_founding_and_claiming_autobind_native_residents() {
     }
 }
 
+/// The founded line is a player-visible, tool-parsed contract: `tools/coreperf/constantinople.py`
+/// matches `Founded <name> (revision <n>).` to know a settlement exists, and the ring is the
+/// harness mirror's business (`settlement_map_qa.LAYOUT_RING`, pinned to `layout.rs` by
+/// `LayoutMirrorTests`). A suffix here silently broke the coreperf settle phase and printed the
+/// wall ring in every founder's chat (review wave 2, M1).
+#[test]
+fn the_founded_line_names_only_the_settlement_and_its_revision() {
+    let (mut state, alice, _) = fixture();
+    let alice_slot = state.entities.slot_of(alice).unwrap();
+    state.entities.set_pos(alice_slot, [-0.5, 80.0, -0.5]);
+    command(&mut state, alice, "settlement create town");
+    let revision = state.settlements.find("town").unwrap().revision;
+    assert!(
+        chat_contains(&state, &format!("Founded town (revision {revision}).")),
+        "the founded line keeps its parsed shape: Founded <name> (revision <n>)."
+    );
+    assert!(
+        !chat_contains(&state, "wall ring"),
+        "the wall ring is not a player-visible field of the founded line"
+    );
+}
+
 #[test]
 fn settlement_commands_keep_native_identity_and_enforce_owner_or_operator() {
     let (mut state, alice, bob) = fixture();

@@ -343,7 +343,8 @@ def _panic_class(tree, location, message):
     (a) a confirmed fixture/setup panic (registry or world builder, a `#[track_caller]`
     unwrap/expect) is `fixture`: the registered test body never ran its assertion.
     (b) a panic whose source line is an assert macro (or an explicit `panic!`) is `assertion`; a
-    shared helper inside a `*_tests.rs` file counts, so a helper assert is not rejected. The macro is
+    shared helper inside a `*_tests.rs` file counts, so a helper assert is not rejected, and so does
+    an inline `#[cfg(test)] mod` inside a production file, read at the control tree's line. The macro is
     recognised from the source line alone: a Rust `assert!(cond, "msg")` panics with exactly `msg`, so
     a custom message never needs a special prefix.
     (c) anything else is `unknown` and the promotion must name its file:line as the proving
@@ -351,16 +352,26 @@ def _panic_class(tree, location, message):
     file, line = location
     if any(pattern.search(message or '') for pattern in _FIXTURE_PANICS) or _SETUP_PANIC.match(message or ''):
         return 'fixture'
-    if not _TEST_PATH.search(file):
-        # An assert macro in production code (even in a test-support module outside _TEST_PATH) is not
-        # evidence about the oracle: class (c) (ReviewD123Harness3 N3b).
-        return 'unknown'
     try:
-        lines = (Path(tree) / file).read_text(errors='surrogateescape').splitlines()
+        source_text = (Path(tree) / file).read_text(errors='surrogateescape')
     except OSError:
         return 'unknown'
+    lines = source_text.splitlines()
     if not 1 <= line <= len(lines):
         return 'unknown'
+    if not _TEST_PATH.search(file):
+        # An inline `#[cfg(test)] mod` is the oracle even in a production file (settlements/ui_text.rs:
+        # the reversed tree's `assert_ne!` there); an assert in the production code beside it, or in a
+        # shared test-support module, is not (ReviewD123Harness3 N3b). The reverse hunks shift these
+        # line numbers, so the range is read from the same tree the panic came from.
+        try:
+            in_test_module = any(first <= line <= last for first, last in _rust_test_ranges(source_text))
+        except Refused:
+            in_test_module = False
+        if not in_test_module:
+            # An assert macro in production code (even in a test-support module outside _TEST_PATH) is not
+            # evidence about the oracle: class (c) (ReviewD123Harness3 N3b).
+            return 'unknown'
     source = lines[line - 1]
     # A line that is an unwrap/expect (with #[track_caller] the test's own line) is only an assertion
     # when the panic message says so (an `assert_eq!` inside `expect(...)`); otherwise it is class (c).

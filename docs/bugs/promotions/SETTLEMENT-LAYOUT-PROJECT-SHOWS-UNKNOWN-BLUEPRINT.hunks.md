@@ -34,9 +34,17 @@ newly inserted `"furnace"` arm; the a/-side is HEAD's real text (it exists: the 
 
 - `cargo:mc-core:settlements::ui_text::tests::every_layout_infrastructure_project_has_a_display_name`
   — red on the reversed tree at `assert_ne!(blueprint(Lang::En, id), "Unknown blueprint")` for
-  `perimeter` (the reversed map falls through to the `_ => ("Unknown blueprint", …)` arm).
+  `perimeter` (the reversed map falls through to the `_ => ("Unknown blueprint", …)` arm). The row
+  names that panic in `proving_assertions` as `crates/mc-core/src/settlements/ui_text.rs:1021`: the
+  reversed patch removes the three naming arms **above** the test, so the control tree's line 1021
+  (column 13) is HEAD's `assert_ne!` at line 1024 — the promote's class check reads the candidate
+  file, which is why the row carries the control-tree location explicitly (promote artifact
+  `20261124T171527-ledger-promote-x_zmjg1r`, panic text `assertion left != right failed: perimeter`,
+  `left: "Unknown blueprint"`).
 - `harness:buildings-qa:perimeter.project_named` — the settlement's own fortification projects
   (wall section, gates, well) are the ones this fix names; the gate reads the live Construction
-  page's project icon label through the native client and fails when any active project is
-  `Unknown blueprint` or when no layout-infrastructure label is ever observed during the wall
-  build. A real-client receipt of `buildings-qa` `perimeter` covers it.
+  page's project labels through the native client and fails when any active project is
+  `Unknown blueprint` or when no layout-infrastructure label is observed during the wall build. A
+  real-client receipt of `buildings-qa` `perimeter` covers it; the *graphical* control needs its
+  own reverted-tree pin with its own `.analysis/ledger-builds` registration, so the promote records
+  it `unrunnable` (wave-2 rule 2) rather than pretending a red.
