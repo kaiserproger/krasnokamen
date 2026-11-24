@@ -877,18 +877,33 @@ fn prove_natural(
     }
 }
 
-/// The grove a natural lumber camp is certified from: the proved tree's column
-/// widened sideways to the grove it stands in, so the camp's zone is the grove
-/// the design describes instead of one trunk (CIV-6; the phase log of
-/// 20261124T020538 found certified bounds of `1x8x1`).
+/// The zone a natural lumber camp is certified from: the proved tree's column
+/// widened sideways, so the camp's zone is the grove the design describes
+/// instead of one trunk (CIV-6; the phase log of 20261124T020538 found certified
+/// bounds of `1x8x1`, and a lumberjack's `plant_zone` walk could then only ever
+/// cover one tree).
 ///
-/// Each side grows only while the rectangle's corners stay inside the
-/// settlement sphere (`buildings::certify_zone`'s own `within` rule) and the
-/// added columns are loaded, so the round trip stays bounded and never routes a
-/// worker into a chunk that never ticks. Certification still owns the remaining
-/// rules — overlap with another certificate, at least four zone logs, an open
-/// entrance — and `prove_natural` keeps the plain column when the wider
-/// rectangle is refused; a grove is an improvement, never a new failure.
+/// The grove is a bounded square around the trunk (at most `GROVE_RADIUS`
+/// columns per side), not a log census: the tree search already proved this
+/// stand is reachable, and a census would walk the world volume on every
+/// certification. Each side grows only while the rectangle's corners stay
+/// inside the settlement sphere (`buildings::certify_zone`'s own `within`
+/// rule), every column of the rectangle is simulated (`bounds_active`, not
+/// mere residency), and no certificate or generated village piece already
+/// stands there.
+///
+/// Cost per call: at most `4 * GROVE_RADIUS` = 24 probes, each an O(1) corner
+/// test, an O(1) chunk-activity lookup and one clearance scan over `B`
+/// certificates and `P` village pieces (`O(B + P)`); no world volume walk and
+/// no new per-tick work.
+///
+/// Certification still owns the remaining rules — overlap with another
+/// certificate, at least four zone logs, an open entrance — and `prove_natural`
+/// keeps the plain column when the wider rectangle is refused; a grove is an
+/// improvement, never a new failure. A natural zone keeps only its own columns
+/// against other worksites (`villager::lumber::base_protected` shields the
+/// grove from every camp but its own), and the lot planner reserves a natural
+/// zone's own footprint only (`construction_site_refusals`).
 fn grove_bounds(
     state: &TickState,
     settlement: SettlementId,
@@ -913,7 +928,7 @@ fn grove_bounds(
         })
     };
     let loaded = |min: [i32; 3], max: [i32; 3]| {
-        ScriptWorldBounds::new(min, max).is_ok_and(|rect| bounds_loaded(state, &rect))
+        ScriptWorldBounds::new(min, max).is_ok_and(|rect| bounds_active(state, &rect))
     };
     // A certificate or a generated village piece already standing there ends
     // the grove on that side (`queue_natural` refuses a tree inside a piece for
@@ -994,6 +1009,16 @@ fn bounds_loaded(state: &TickState, bounds: &ScriptWorldBounds) -> bool {
     (bounds.min[0].div_euclid(16)..=bounds.max[0].div_euclid(16)).all(|x| {
         (bounds.min[2].div_euclid(16)..=bounds.max[2].div_euclid(16))
             .all(|z| state.world.has_chunk(x, z))
+    })
+}
+
+/// Whether every chunk column of `bounds` is *simulated*, not merely resident:
+/// a zone column in a resident-but-inactive chunk cannot tick its worker or the
+/// blocks it edits, so a grove never grows into one.
+fn bounds_active(state: &TickState, bounds: &ScriptWorldBounds) -> bool {
+    (bounds.min[0].div_euclid(16)..=bounds.max[0].div_euclid(16)).all(|x| {
+        (bounds.min[2].div_euclid(16)..=bounds.max[2].div_euclid(16))
+            .all(|z| state.world.is_active(x, z))
     })
 }
 
