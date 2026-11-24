@@ -43,9 +43,6 @@
       "cmd": "fill 990 160 990 1010 165 1010 minecraft:air"
     },
     {
-      "wait_terrain": true
-    },
-    {
       "wait_ticks": 40
     },
     {
