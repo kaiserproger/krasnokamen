@@ -1,0 +1,238 @@
+{
+  "id": "BATTLE-TARGET-LOOK-TURNS-WHOLE-BODY",
+  "verdict": "promoted",
+  "fix_commit": "patch:9ba59d256ba805a9c924686930abea620dd04d827feb041a5ca7b8e833dc5b7e",
+  "fix_commit_full": "patch:9ba59d256ba805a9c924686930abea620dd04d827feb041a5ca7b8e833dc5b7e",
+  "promoted_at": "2026-11-24T04:36:08+00:00",
+  "tree_head": "06aef47075a71093a40d046fbccea92864d6fcab",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "9ba59d256ba805a9c924686930abea620dd04d827feb041a5ca7b8e833dc5b7e",
+  "reversed_files": [
+    "crates/mc-core/src/battle/facing.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:battle::facing::tests::a_dead_tail_row_does_not_move_a_neighbours_head": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::riders_head_on_body_mobs_and_charged_fighters_keep_the_old_look": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::pitch_has_its_own_dead_zone_and_lands_on_the_current_elevation": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:entity_motion_tests::projected_facing_is_written_and_a_moving_tick_writes_the_body_yaw": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::head_turns_while_the_body_holds_then_the_body_aligns_after_ten_stable_ticks_in_ten": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:entity_motion_tests::a_battle_head_off_its_body_returns_without_a_target": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::virtual_body_trails_the_head_at_the_cone": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:entity_motion_tests::a_row_leaving_the_projection_turns_from_the_drawn_body": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::old_look_keeps_the_previous_step_and_rest_guard": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::a_turn_lands_on_the_current_bearing_not_the_smoothed_one": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::back_from_a_driven_step_the_head_is_not_snapped": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::a_handed_row_projected_again_before_its_step_keeps_its_drawn_body": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::from_the_same_start_state_the_same_facing_and_a_restored_row_reaches_rest": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::battle_resume::a_charged_blow_pushes_its_victim_along_the_strike_bearing_across_wal_recovery": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::a_target_switch_reseeds_the_filter_only_for_a_jump_of_45_or_more": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::a_turn_releases_within_5_degrees_of_the_current_bearing": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::leaving_the_projection_starts_from_the_drawn_body": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::a_running_battle_writes_the_published_facing_of_every_standing_row": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::dead_zone_holds_at_19_degrees_and_turns_at_21": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::trigger_reads_the_smoothed_bearing": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::battle_resume::battle_resume_rebuilds_facing_from_the_journaled_pose": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::an_inactive_row_keeps_handing_its_body_until_a_step_takes_it": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::resting_battle_row_with_a_look_target_faces_it_and_then_rests": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::the_hold_is_bit_identical_through_jitter_inside_the_dead_zone": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::the_battle_patch_is_empty_when_only_facing_changes": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::a_standing_row_keeps_its_stored_yaw_and_publishes_the_drawn_body": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::a_paused_battle_rests_every_row_within_8_ticks": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-core:battle::facing::tests::a_dead_tail_row_does_not_move_a_neighbours_head": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::riders_head_on_body_mobs_and_charged_fighters_keep_the_old_look": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::pitch_has_its_own_dead_zone_and_lands_on_the_current_elevation": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:entity_motion_tests::projected_facing_is_written_and_a_moving_tick_writes_the_body_yaw": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::head_turns_while_the_body_holds_then_the_body_aligns_after_ten_stable_ticks_in_ten": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:entity_motion_tests::a_battle_head_off_its_body_returns_without_a_target": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::virtual_body_trails_the_head_at_the_cone": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:entity_motion_tests::a_row_leaving_the_projection_turns_from_the_drawn_body": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::old_look_keeps_the_previous_step_and_rest_guard": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::a_turn_lands_on_the_current_bearing_not_the_smoothed_one": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::back_from_a_driven_step_the_head_is_not_snapped": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::a_handed_row_projected_again_before_its_step_keeps_its_drawn_body": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::from_the_same_start_state_the_same_facing_and_a_restored_row_reaches_rest": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::battle_resume::a_charged_blow_pushes_its_victim_along_the_strike_bearing_across_wal_recovery": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::a_target_switch_reseeds_the_filter_only_for_a_jump_of_45_or_more": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::a_turn_releases_within_5_degrees_of_the_current_bearing": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::leaving_the_projection_starts_from_the_drawn_body": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::a_running_battle_writes_the_published_facing_of_every_standing_row": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::dead_zone_holds_at_19_degrees_and_turns_at_21": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::trigger_reads_the_smoothed_bearing": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::battle_resume::battle_resume_rebuilds_facing_from_the_journaled_pose": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::an_inactive_row_keeps_handing_its_body_until_a_step_takes_it": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::resting_battle_row_with_a_look_target_faces_it_and_then_rests": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::the_hold_is_bit_identical_through_jitter_inside_the_dead_zone": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::the_battle_patch_is_empty_when_only_facing_changes": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::a_standing_row_keeps_its_stored_yaw_and_publishes_the_drawn_body": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::facing::tests::a_paused_battle_rests_every_row_within_8_ticks": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T043035-ledger-promote-wpdt3vov"
+}

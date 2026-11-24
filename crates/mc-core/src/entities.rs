@@ -12,7 +12,11 @@ use uuid::Uuid;
 
 use crate::blueprint::MovementClass;
 use crate::boundary::{ChunkPos, EntityAppearance, EntityId, EntityView};
+pub(crate) use hot::HotRow;
+#[cfg(test)]
+pub(crate) use hot::take_cold_row_reads;
 
+mod hot;
 mod motion_gate;
 
 /// Dense entity index: position in every column.
@@ -212,6 +216,9 @@ pub struct EntityStore {
     /// every column compacts with the dense slot on remove/transfer.
     flags: Vec<u16>,
     hints: Vec<MotionHint>,
+    /// Derived cold scalars, refreshed with `flags`/`hints` from the same dirty
+    /// queue; a clean row that does not need the cold row is answered from here.
+    hot: Vec<HotRow>,
     dirty_flag: Vec<bool>,
     dirty_ids: Vec<EntityId>,
     /// Resident brain bodies, indexed by chunk and stable id, independent of
@@ -544,6 +551,7 @@ impl EntityStore {
         };
         debug_assert_eq!(admitted.len(), self.cold.len());
         debug_assert_eq!(self.bodies.len(), self.cold.len());
+        debug_assert_eq!(self.hot.len(), self.cold.len());
         let hits: Vec<(EntitySlot, u8)> = if self.cold.len() < min_parallel {
             self.cold
                 .iter_mut()
@@ -636,6 +644,7 @@ impl EntityStore {
         };
         debug_assert_eq!(self.flags.len(), self.cold.len());
         debug_assert_eq!(self.bodies.len(), self.cold.len());
+        debug_assert_eq!(self.hot.len(), self.cold.len());
         if self.cold.len() < min_parallel {
             self.cold
                 .iter_mut()
@@ -771,6 +780,7 @@ impl EntityStore {
         let slot = EntitySlot(self.bodies.len() as u32);
         debug_assert_eq!(self.bodies.len(), self.cold.len());
         debug_assert_eq!(self.impulse.len(), self.cold.len());
+        debug_assert_eq!(self.hot.len(), self.cold.len());
         self.max_half_width = self.max_half_width.max(cold.half_width);
         self.pos.push(cold.pos);
         self.vel.push(cold.vel);
@@ -838,6 +848,11 @@ impl EntityStore {
             special: None,
             swell_metadata_neutral: true,
         });
+        self.hot.push(HotRow::of(
+            &self.cold[slot.0 as usize],
+            &self.bodies[slot.0 as usize],
+            0,
+        ));
         self.dirty_flag.push(true);
         self.dirty_ids.push(id);
         self.set_next_wire_id(id.0);
@@ -864,6 +879,7 @@ impl EntityStore {
         }
         debug_assert_eq!(self.bodies.len(), self.cold.len());
         debug_assert_eq!(self.impulse.len(), self.cold.len());
+        debug_assert_eq!(self.hot.len(), self.cold.len());
         let last = self.bodies.len() - 1;
         let removed_id = self.bodies[idx].id;
         let kind = self.bodies[idx].kind;
@@ -901,6 +917,7 @@ impl EntityStore {
         self.wire_marked.swap_remove(idx);
         self.flags.swap_remove(idx);
         self.hints.swap_remove(idx);
+        self.hot.swap_remove(idx);
         self.dirty_flag.swap_remove(idx);
         self.changed_tick.swap_remove(idx);
         self.log_removal(kind, removed_uuid);
@@ -933,6 +950,7 @@ impl EntityStore {
         let index = slot.0 as usize;
         debug_assert_eq!(self.bodies.len(), self.cold.len());
         debug_assert_eq!(self.impulse.len(), self.cold.len());
+        debug_assert_eq!(self.hot.len(), self.cold.len());
         let last = self.bodies.len() - 1;
         self.unindex_tick_members(slot, self.bodies[index].kind);
         if index != last {
@@ -960,6 +978,7 @@ impl EntityStore {
         self.wire_marked.swap_remove(index);
         self.flags.swap_remove(index);
         self.hints.swap_remove(index);
+        self.hot.swap_remove(index);
         self.dirty_flag.swap_remove(index);
         self.changed_tick.swap_remove(index);
         self.log_removal(kind, uuid);
@@ -983,6 +1002,7 @@ impl EntityStore {
         let target = EntitySlot(destination.bodies.len() as u32);
         debug_assert_eq!(destination.bodies.len(), destination.cold.len());
         debug_assert_eq!(destination.impulse.len(), destination.cold.len());
+        debug_assert_eq!(destination.hot.len(), destination.cold.len());
         destination.max_half_width = destination.max_half_width.max(body.half_width);
         destination.pos.push(position);
         destination.vel.push(velocity);
@@ -1004,6 +1024,11 @@ impl EntityStore {
             special: None,
             swell_metadata_neutral: true,
         });
+        destination.hot.push(HotRow::of(
+            &destination.cold[target.0 as usize],
+            &destination.bodies[target.0 as usize],
+            0,
+        ));
         destination.dirty_flag.push(true);
         destination.dirty_ids.push(id);
         destination.id_index.insert(id, target);
@@ -1253,6 +1278,8 @@ impl EntityStore {
     }
 
     pub fn row(&self, slot: EntitySlot) -> &ColdRow {
+        #[cfg(test)]
+        hot::COLD_ROW_READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         &self.cold[slot.0 as usize]
     }
 
@@ -1573,6 +1600,7 @@ impl EntityStore {
         self.changed_tick.reserve(additional);
         self.flags.reserve(additional);
         self.hints.reserve(additional);
+        self.hot.reserve(additional);
         self.dirty_flag.reserve(additional);
         self.dirty_ids.reserve(additional);
         self.wire_marked.reserve(additional);
@@ -2001,48 +2029,6 @@ impl EntityStore {
                 .next()
                 .copied(),
         }
-    }
-
-    /// Refresh motion flags for dirty slots only. Resolves each queued
-    /// stable id to its current slot through `id_index` (removed ids are
-    /// ignored) and retains the queue capacity across ticks.
-    pub(crate) fn prepare_motion_hints(&mut self, registry: &crate::registry::CoreRegistry) {
-        if self.dirty_ids.is_empty() {
-            return;
-        }
-        static CHICKEN: std::sync::LazyLock<mc_data::Identifier> = std::sync::LazyLock::new(|| {
-            mc_data::Identifier::parse("minecraft:chicken").expect("static identifier parses")
-        });
-        static TADPOLE: std::sync::LazyLock<mc_data::Identifier> = std::sync::LazyLock::new(|| {
-            mc_data::Identifier::parse("minecraft:tadpole").expect("static identifier parses")
-        });
-        let chicken = registry.entity_types.id_of(&CHICKEN);
-        let tadpole = registry.entity_types.id_of(&TADPOLE);
-        let dirty = std::mem::take(&mut self.dirty_ids);
-        for id in &dirty {
-            let Some(slot) = self.id_index.get(id).copied() else {
-                continue;
-            };
-            let index = slot.0 as usize;
-            let Some(body) = self.bodies.get(index) else {
-                continue;
-            };
-            if body.id != *id {
-                continue;
-            }
-            self.dirty_flag[index] = false;
-            let special = motion_gate::effective_special(registry, body, &self.cold[index]);
-            let flags =
-                motion_gate::motion_flags_for(registry, self, slot, special, chicken, tadpole);
-            self.flags[index] = flags;
-            self.hints[index] = MotionHint {
-                special,
-                swell_metadata_neutral: crate::hostile::swell_metadata_neutral(&self.cold[index]),
-            };
-        }
-        let mut dirty = dirty;
-        dirty.clear();
-        self.dirty_ids = dirty;
     }
 
     #[cfg(test)]

@@ -146,17 +146,10 @@ pub(crate) struct ArrowLaunch {
 pub struct UnitCounters {
     pub tick: u64,
     pub units: u64,
+    /// Ascending by faction at every point between `clear` and publication, so
+    /// a sample inserts at its binary-search slot instead of scanning.
     pub alive_per_faction: Vec<FactionAlive>,
-    /// Slot of each present faction in `alive_per_faction`, rebuilt by
-    /// `finish`; a lookup is one hash probe instead of a linear faction scan.
-    index: rustc_hash::FxHashMap<u16, usize>,
 }
-
-/// Test-only: faction lookups performed by `record` (one per unit in the fixed
-/// code, one per visited faction with the pre-fix linear find).
-#[cfg(test)]
-pub(crate) static RECORD_LOOKUPS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FactionAlive {
@@ -164,11 +157,28 @@ pub struct FactionAlive {
     pub alive: u64,
 }
 
+/// Test-only: faction comparisons of the sorted tables. Both `record` and
+/// `TargetGrid::rebuild` probe through `faction_cmp`, so the count is what each
+/// implementation actually visits: at most ⌈log2(F+1)⌉ per sample after the fix,
+/// one per visited faction before it.
+#[cfg(test)]
+pub(crate) static FACTION_COMPARES: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// The one faction comparison both table paths make.
+#[inline]
+fn faction_cmp(row: u16, faction: u16) -> std::cmp::Ordering {
+    #[cfg(test)]
+    {
+        FACTION_COMPARES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+    row.cmp(&faction)
+}
+
 impl UnitCounters {
     fn clear(&mut self) {
         self.units = 0;
         self.alive_per_faction.clear();
-        self.index.clear();
     }
 
     fn record(&mut self, faction: u16, alive: bool) {
@@ -176,29 +186,20 @@ impl UnitCounters {
             return;
         }
         self.units += 1;
-        #[cfg(test)]
-        {
-            RECORD_LOOKUPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        }
         let alive = u64::from(alive);
-        if let Some(&slot) = self.index.get(&faction) {
-            self.alive_per_faction[slot].alive += alive;
-        } else {
-            self.index.insert(faction, self.alive_per_faction.len());
-            self.alive_per_faction.push(FactionAlive { faction, alive });
+        match self
+            .alive_per_faction
+            .binary_search_by(|count| faction_cmp(count.faction, faction))
+        {
+            Ok(slot) => self.alive_per_faction[slot].alive += alive,
+            Err(slot) => self
+                .alive_per_faction
+                .insert(slot, FactionAlive { faction, alive }),
         }
     }
 
-    fn finish(&mut self) {
-        // Present factions in index order, then published ascending; the slot
-        // map follows the sort so a later sample's lookups stay exact.
-        self.alive_per_faction
-            .sort_unstable_by_key(|count| count.faction);
-        self.index.clear();
-        for (slot, count) in self.alive_per_faction.iter().enumerate() {
-            self.index.insert(count.faction, slot);
-        }
-    }
+    /// `record` keeps `alive_per_faction` ascending, so publication needs no sort.
+    fn finish(&mut self) {}
 
     #[cfg(test)]
     fn sample(&mut self, entities: &EntityStore, tick: u64) {

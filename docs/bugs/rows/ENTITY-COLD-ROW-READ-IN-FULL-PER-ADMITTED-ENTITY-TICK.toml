@@ -4,7 +4,10 @@ title = "ColdRow is 760 B and read_row takes it unconditionally for every admitt
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "receipts/Books/REPORT-R2.md finding R2-1 and section 5 (Bakhvalov 8.1, Drepper 6.2.1, Slotin AoS vs SoA; perf, Perf1M H5, ranked first by effect). crates/mc-core/src/entities.rs ColdRow = 760 B (receipts/M3FixState/r3/scoped-green-final.log:370); EntityStore::row returns &self.cold[slot] and tick/entity_phase.rs read_row reads loot.slime_size, controls, active_effects, speed, sight_range, attack_reach, attack_damage, love, breed_cooldown, entity_life.* and special_mob for every admitted slot; only resting rows are spared (the hot flag). Verified open on main 5bdc02911 (read_row signature unchanged, entity_body_tests.rs ratchets Body only). Fix shape (design, needs Main's review): a HotRow column of at most 64 B holding exactly the fields read_row reads, wide state left in ColdRow for the rare paths (RarePrep already draws that boundary); fence: a test that the HotRow projection equals the ColdRow fields. Measure ls_any_fills_from_sys.dram_io_all per entity per tick (expect 8-12 before, 1-2 after) and backend_bound_memory."
-regression = []
-failing_first = "not recorded"
+regression = ["cargo:mc-core:tick::entity_phase::entity_phase_tests::read_row_reads_no_cold_row_for_plain_admitted_rows", "cargo:mc-core:tick::entity_phase::entity_phase_tests::hot_row_stays_within_one_cache_line", "cargo:mc-core:tick::entity_phase::entity_phase_tests::hot_row_follows_every_writer", "cargo:mc-core:tick::entity_phase::entity_phase_tests::mutation_after_hint_refresh_reads_cold", "cargo:mc-core:tick::entity_phase::entity_phase_tests::vehicle_occupancy_not_cached"]
+failing_first = "With the gate reversed (read_row reads the live ColdRow for every admitted row) the plain-fixture prepare counts one cold read per admitted row in both parallel and serial prep; the fixed path counts zero (the counter sits in EntityStore::row on both trees)."
+fixes = "A third derived column `hot: Vec<HotRow>` (32 B) beside flags/hints, refreshed only from the existing dirty queue in prepare_motion_hints (same push/swap_remove/reserve points as hints); read_row answers a clean row from it unless `needs_cold` (MOTION_EFFECTS, riders, special_mob_some, piglin body, tamed), and a row mutated after the refresh still reads live. The control reverses only the gate in read_row; the column, its counters and its debug cross-check stay on both sides."
+fix_commit = "patch:9022f2f1b701af5eb64a955224e4a39559b243dbed27c6db5ec43e6aa3d13978"
+promotion = "docs/bugs/promotions/ENTITY-COLD-ROW-READ-IN-FULL-PER-ADMITTED-ENTITY-TICK.json"

@@ -115,7 +115,6 @@ fn spectator_index_matches_the_roster_scan_and_is_built_once_per_publish() {
     // Both counters are process-global; the exact deltas below hold because
     // nextest gives this test its own process (like the admission counter).
     let before = tick_index::SPECTATOR_INDEX_BUILDS.load(std::sync::atomic::Ordering::Relaxed);
-    let scans_before = entity_interest::ROSTER_SCANS.load(std::sync::atomic::Ordering::Relaxed);
     for (recipient_mode, subject_mode) in [(0, 0), (3, 0), (0, 3), (3, 3)] {
         let mut out = scene();
         {
@@ -143,10 +142,33 @@ fn spectator_index_matches_the_roster_scan_and_is_built_once_per_publish() {
         builds, 4,
         "one spectator index per publish, not one scan per viewer and entity"
     );
-    assert_eq!(
-        entity_interest::ROSTER_SCANS.load(std::sync::atomic::Ordering::Relaxed),
-        scans_before,
-        "broadcast_to answers from the publish set, not from a roster scan"
+}
+
+#[test]
+fn broadcast_to_answers_from_the_publish_set_not_the_roster() {
+    // The roster says player 1 and the subject are spectators; the publish set
+    // says nobody is. The answer follows the set (player 1 sees the player);
+    // a roster scan answers the opposite.
+    let mut out = scene();
+    let snapshot = Arc::get_mut(&mut out.snapshot).unwrap();
+    snapshot.player_roster = roster(3, 3);
+    Arc::make_mut(&mut snapshot.cameras).insert(EntityId(2), EntityId(3));
+    let snapshot = &*out.snapshot;
+    let subject = snapshot
+        .entities
+        .iter()
+        .find(|entity| entity.id == EntityId(2))
+        .expect("subject row");
+    let none: std::collections::HashSet<EntityId> = std::collections::HashSet::new();
+    assert!(
+        entity_interest::broadcast_to(snapshot, subject, EntityId(1), &none),
+        "the publish set, not the roster, decides that player 1 sees the player"
+    );
+    let spectators: std::collections::HashSet<EntityId> =
+        [EntityId(1), EntityId(2)].into_iter().collect();
+    assert!(
+        !entity_interest::broadcast_to(snapshot, subject, EntityId(1), &spectators),
+        "as spectators only the camera-bound viewer sees the subject"
     );
 }
 

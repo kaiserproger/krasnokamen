@@ -1897,35 +1897,56 @@ fn faction_population_matches_a_btreemap_oracle_at_sixty_four_factions() {
 }
 
 #[test]
-fn faction_tables_build_with_one_lookup_per_unit_at_sixty_four_factions() {
+fn faction_probes_stay_logarithmic_per_sample_and_per_rebuild() {
     use std::sync::atomic::Ordering;
+    // `FACTION_COMPARES` is process-global; the deltas below are exact under
+    // nextest's per-test process isolation, not under a shared thread pool.
+    // Both tables answer through `faction_cmp`; the bound is what a sorted probe
+    // needs (ceil(log2(len+1)) = 8 for at most 192 rows), not what the pre-fix
+    // per-unit faction scan visits.
+    let units = sixty_four_faction_units();
+    let bound = units.len() * 9;
+    let before = FACTION_COMPARES.load(Ordering::Relaxed);
+    let mut counts = UnitCounters::default();
+    for (faction, alive) in &units {
+        counts.record(*faction, *alive);
+    }
+    let compares = FACTION_COMPARES.load(Ordering::Relaxed) - before;
+    // The first sample inserts into an empty table and compares nothing.
+    assert!(
+        compares <= bound && compares >= units.len().saturating_sub(1),
+        "{compares} faction comparisons for {} samples; a sorted probe stays within {bound}",
+        units.len()
+    );
+
+    let rows: Vec<Unit> = units
+        .iter()
+        .enumerate()
+        .map(|(index, (faction, _))| unit(index as i32 + 1, *faction, index as f64, 64.0, 0.0))
+        .collect();
+    let bound = rows.len() * 9;
+    let before = FACTION_COMPARES.load(Ordering::Relaxed);
+    let mut grid = TargetGrid::default();
+    grid.rebuild(rows.iter().copied());
+    let compares = FACTION_COMPARES.load(Ordering::Relaxed) - before;
+    assert!(
+        compares <= bound && compares >= rows.len().saturating_sub(1),
+        "{compares} faction comparisons for {} rebuild rows; a sorted probe stays within {bound}",
+        rows.len()
+    );
+}
+
+#[test]
+fn target_grid_publishes_the_ascending_distinct_faction_set() {
     let units: Vec<Unit> = sixty_four_faction_units()
         .into_iter()
         .enumerate()
         .map(|(index, (faction, _))| unit(index as i32 + 1, faction, index as f64, 64.0, 0.0))
         .collect();
-    let grid_before = targeting::REBUILD_LOOKUPS.load(Ordering::Relaxed);
     let mut grid = TargetGrid::default();
     grid.rebuild(units.iter().copied());
-    let grid_work = targeting::REBUILD_LOOKUPS.load(Ordering::Relaxed) - grid_before;
-    assert_eq!(
-        grid_work,
-        units.len(),
-        "one faction lookup per unit, not one per visited faction"
-    );
     let mut distinct: Vec<u16> = units.iter().map(|unit| unit.faction).collect();
     distinct.sort_unstable();
     distinct.dedup();
     assert_eq!(grid.factions(), distinct.as_slice());
-
-    let counts_before = RECORD_LOOKUPS.load(Ordering::Relaxed);
-    let mut counts = UnitCounters::default();
-    for (faction, alive) in sixty_four_faction_units() {
-        counts.record(faction, alive);
-    }
-    let record_work = RECORD_LOOKUPS.load(Ordering::Relaxed) - counts_before;
-    assert_eq!(
-        record_work, counts.units as usize,
-        "one faction lookup per unit, not one per visited faction"
-    );
 }

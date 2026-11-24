@@ -1,18 +1,11 @@
 diff --git a/crates/mc-edge/src/plan/entity_interest.rs b/crates/mc-edge/src/plan/entity_interest.rs
+index 08d1e77..8adec82 100644
 --- a/crates/mc-edge/src/plan/entity_interest.rs
 +++ b/crates/mc-edge/src/plan/entity_interest.rs
-@@ -488,27 +488,18 @@
-     snapshot: &WorldSnapshot,
-     entity: &EntityView,
-     recipient: EntityId,
--    _spectators: &std::collections::HashSet<EntityId>,
-+    spectators: &std::collections::HashSet<EntityId>,
- ) -> bool {
+@@ -493,20 +493,13 @@ pub(super) fn broadcast_to(
      if entity.id == recipient || entity.type_id != player_entity_type_id() {
          return true;
      }
--    #[cfg(test)]
--    ROSTER_SCANS.fetch_add(snapshot.player_roster.len(), std::sync::atomic::Ordering::Relaxed);
 -    let spectator_viewer = snapshot
 -        .player_roster
 -        .iter()

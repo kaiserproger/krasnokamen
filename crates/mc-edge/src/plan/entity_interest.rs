@@ -4,14 +4,6 @@ use std::{cmp::Reverse, collections::BinaryHeap};
 
 type Order = (i32, i32, i32);
 
-/// Test-only: roster rows visited by a `broadcast_to` roster scan. The fixed
-/// path answers the spectator question from the publish-wide set, so a publish
-/// leaves this unchanged; the pre-fix scan visited the whole roster twice per
-/// (entity, recipient) pair.
-#[cfg(test)]
-pub(super) static ROSTER_SCANS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
-
 #[derive(Debug, Default)]
 pub(super) struct EntityInterest {
     previous: Option<mc_core::boundary::EntityViews>,

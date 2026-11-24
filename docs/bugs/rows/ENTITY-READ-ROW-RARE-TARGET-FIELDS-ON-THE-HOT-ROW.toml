@@ -10,6 +10,6 @@ regression = ["cargo:mc-core:tick::entity_phase::entity_phase_tests::worker_snap
 failing_first = "not recorded"
 # Fix landed in 5f3415769, which is contained in this tree; the patch is its non-test hunks at HEAD
 # (the two 64 B fields and the two `None` constructor lines), map docs/bugs/promotions/ENTITY-READ-ROW-RARE-TARGET-FIELDS-ON-THE-HOT-ROW.hunks.md
-fix_commit = "patch:f1ca3154281b4dffd52d5cd3f47a9344ed7f0d51df7c7d8b5ee06baf1929594c"
+fix_commit = "patch:5aaaeaa28afe08bf33513cff40287b6721319fc7e345cca24264103cf8011f8b"
 repro_check = "The size ratchet is exact: `size_of::<ReadRow>() == 224` on the fixed tree; restoring the two `Option<[f64; 3]>` fields beside the kept `RareMotion` makes the row 288 B and fails the assertion (control_tree: head)."
 promotion = "docs/bugs/promotions/ENTITY-READ-ROW-RARE-TARGET-FIELDS-ON-THE-HOT-ROW.json"

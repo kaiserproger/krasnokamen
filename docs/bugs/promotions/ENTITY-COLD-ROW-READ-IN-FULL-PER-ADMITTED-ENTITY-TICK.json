@@ -1,0 +1,62 @@
+{
+  "id": "ENTITY-COLD-ROW-READ-IN-FULL-PER-ADMITTED-ENTITY-TICK",
+  "verdict": "promoted",
+  "fix_commit": "patch:9022f2f1b701af5eb64a955224e4a39559b243dbed27c6db5ec43e6aa3d13978",
+  "fix_commit_full": "patch:9022f2f1b701af5eb64a955224e4a39559b243dbed27c6db5ec43e6aa3d13978",
+  "promoted_at": "2026-11-24T03:39:31+00:00",
+  "tree_head": "9794194300fa814048a6ed1dbbfa04802f018ad1",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "9022f2f1b701af5eb64a955224e4a39559b243dbed27c6db5ec43e6aa3d13978",
+  "reversed_files": [
+    "crates/mc-core/src/tick/entity_phase/prepare.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::mutation_after_hint_refresh_reads_cold": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::hot_row_follows_every_writer": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::read_row_reads_no_cold_row_for_plain_admitted_rows": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::hot_row_stays_within_one_cache_line": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::vehicle_occupancy_not_cached": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::mutation_after_hint_refresh_reads_cold": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::hot_row_follows_every_writer": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::read_row_reads_no_cold_row_for_plain_admitted_rows": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::hot_row_stays_within_one_cache_line": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::vehicle_occupancy_not_cached": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T033428-ledger-promote-0o7fhbgg"
+}

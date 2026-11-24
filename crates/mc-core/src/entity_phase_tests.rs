@@ -2535,3 +2535,240 @@ fn parallel_resting_writeback_keeps_exactly_the_rows_the_writeback_changes() {
     );
     assert_eq!(rows, expected);
 }
+
+// --- ENTITY-COLD-ROW-READ: the derived hot column (T1, T2, T4, T5, T6) ---
+
+#[test]
+fn read_row_reads_no_cold_row_for_plain_admitted_rows() {
+    // The counter is process-global; the exact deltas below hold because nextest
+    // gives each test its own process (a plain `cargo test` thread pool would not).
+    // A plain fixture: cows in love (love != 0 keeps `MOTION_REST` off, so
+    // `early_entity_rest` answers before its own cold reads) with no special
+    // mob, rider, tamed state, effect or piglin body. The derived hot column
+    // answers every admitted row, so a prepare reads no cold row at all; before
+    // the fix every admitted row was read in full.
+    for parallel in [false, true] {
+        let (mut state, _) = resting_cow();
+        let cow = state.registry.cow_type_id;
+        for index in 0..64_u32 {
+            state.spawn_mob(cow, [8.5 + f64::from(index % 8), 101.0, 8.5], 10.0);
+        }
+        let slots: Vec<EntitySlot> = state.entities.slots().collect();
+        for slot in slots {
+            if !matches!(state.entities.body(slot).kind, EntityKind::Player { .. }) {
+                state.entities.row_mut(slot).love = 600;
+            }
+        }
+        state.entities.prepare_motion_hints(&state.registry);
+        let periods: Vec<u8> = (0..state.entities.len())
+            .map(|index| [1, 2, MOB_FAR_PERIOD as u8, 0][index % 4])
+            .collect();
+        let env = PrepEnv {
+            targets_empty: true,
+            villagers_empty: true,
+            unchanged_since: state.entity_phase_revision,
+            rest_proofs: None,
+        };
+        let mut out = PrepChunk::default();
+        let _ = crate::entities::take_cold_row_reads();
+        prepare_rows(&state, &periods, &env, parallel, &mut out);
+        assert!(!out.rows.is_empty(), "the fixture must admit rows");
+        assert_eq!(
+            crate::entities::take_cold_row_reads(),
+            0,
+            "a clean plain row is answered by the derived column, not by a cold read (parallel={parallel})"
+        );
+    }
+}
+
+#[test]
+fn hot_row_stays_within_one_cache_line() {
+    let bytes = std::mem::size_of::<crate::entities::HotRow>();
+    assert!(
+        bytes <= 64,
+        "the derived column is one cache line per slot: {bytes} bytes"
+    );
+}
+
+/// After any writer, a clean slot's derived column must equal the cold row's
+/// projection (`hot_row`'s debug assertion) and the fast read must equal the
+/// cold read bit for bit.
+fn assert_hot_read_matches_cold(state: &mut TickState, slot: EntitySlot) {
+    state.entities.prepare_motion_hints(&state.registry);
+    {
+        let view = PrepView::of(state);
+        let flags = state.entities.motion_flags(slot);
+        let rare = RarePrep::default();
+        let (fast, _) = read_row(&view, slot, flags, 1, &rare);
+        let (cold, _) = read_row_from_cold(&view, slot, flags, 1, &rare);
+        assert_eq!(
+            format!("{fast:?}"),
+            format!("{cold:?}"),
+            "the derived-column read must equal the cold read"
+        );
+    }
+    state.entities.hot_row(slot);
+}
+
+#[test]
+fn hot_row_follows_every_writer() {
+    let (mut state, slot) = resting_cow();
+    state.entities.row_mut(slot).love = 600;
+    assert_hot_read_matches_cold(&mut state, slot);
+    state.entities.row_mut(slot).speed += 0.25;
+    assert_hot_read_matches_cold(&mut state, slot);
+    let (_, row) = state.entities.parts_mut(slot);
+    row.sight_range += 0.5;
+    assert_hot_read_matches_cold(&mut state, slot);
+    state.entities.row_mut_unmarked(slot).attack_reach += 0.25;
+    assert_hot_read_matches_cold(&mut state, slot);
+    state.entities.row_mut_projected(slot).breed_cooldown = 40;
+    assert_hot_read_matches_cold(&mut state, slot);
+    let mut life = state.entities.row(slot).entity_life.clone();
+    life.tamed = true;
+    state.entities.set_entity_life(slot, life);
+    assert_hot_read_matches_cold(&mut state, slot);
+    state
+        .entities
+        .set_leash(slot, Some(crate::leash::Holder::Fence([8, 101, 8])));
+    assert_hot_read_matches_cold(&mut state, slot);
+    state
+        .entities
+        .set_riders(slot, vec![uuid::Uuid::from_u128(7)]);
+    assert_hot_read_matches_cold(&mut state, slot);
+    // A body write through `body_mut` marks the slot dirty like every other
+    // writer, so the column is refreshed, not read stale.
+    state.entities.body_mut(slot).alive = true;
+    assert_hot_read_matches_cold(&mut state, slot);
+    // The piglin-body bit lives in the column's `needs_cold`. The row above has
+    // been tamed and seated by its writer cases (both force the cold path on
+    // their own), so the kind round-trip runs on a fresh cow row.
+    let cow = state.registry.cow_type_id;
+    let fresh = state.spawn_mob(cow, [11.5, 101.0, 8.5], 10.0);
+    let fresh_slot = state.entities.slot_of(fresh).unwrap();
+    state.entities.prepare_motion_hints(&state.registry);
+    assert!(
+        !state.entities.hot_row(fresh_slot).needs_cold(),
+        "a plain cow body stays on the column"
+    );
+    let piglin = mc_data::entity_types::entity_type_contract_26_1_2_by_name("minecraft:piglin")
+        .expect("piglin type")
+        .protocol_id;
+    state.entities.set_kind(
+        fresh_slot,
+        crate::entities::EntityKind::Mob { type_id: piglin },
+    );
+    state.entities.prepare_motion_hints(&state.registry);
+    assert!(
+        state.entities.hot_row(fresh_slot).needs_cold(),
+        "a piglin body routes the row to the cold path"
+    );
+    state.entities.set_kind(
+        fresh_slot,
+        crate::entities::EntityKind::Mob { type_id: cow },
+    );
+    state.entities.prepare_motion_hints(&state.registry);
+    assert!(
+        !state.entities.hot_row(fresh_slot).needs_cold(),
+        "a cow body clears the piglin bit"
+    );
+    assert_hot_read_matches_cold(&mut state, fresh_slot);
+    // Spawn: the new slot's column is derived before its first clean read.
+    let cow = state.registry.cow_type_id;
+    let born = state.spawn_mob(cow, [9.5, 101.0, 8.5], 10.0);
+    let born_slot = state.entities.slot_of(born).unwrap();
+    assert_hot_read_matches_cold(&mut state, born_slot);
+    // Transfer both sides: the source swap-removes and the destination pushes.
+    let mut destination = crate::entities::EntityStore::default();
+    let target =
+        state
+            .entities
+            .transfer_to(born_slot, &mut destination, [16.5, 101.0, 8.5], [0.0; 2]);
+    state.entities.prepare_motion_hints(&state.registry);
+    destination.prepare_motion_hints(&state.registry);
+    destination.hot_row(target);
+    if !state.entities.is_empty() {
+        state.entities.hot_row(EntitySlot(0));
+    }
+    // Tail swap-remove: the last row swaps into slot 0.
+    state.spawn_mob(cow, [10.5, 101.0, 8.5], 10.0);
+    state.entities.prepare_motion_hints(&state.registry);
+    state.entities.remove(EntitySlot(0));
+    if !state.entities.is_empty() {
+        assert_hot_read_matches_cold(&mut state, EntitySlot(0));
+    }
+}
+
+#[test]
+fn mutation_after_hint_refresh_reads_cold() {
+    let (mut state, slot) = resting_cow();
+    state.entities.row_mut(slot).love = 600;
+    state.entities.prepare_motion_hints(&state.registry);
+    // A row mutated after the hint refresh carries a stale derived column: its
+    // read must fall through to the live cold row.
+    state.entities.row_mut(slot).controls.no_ai = true;
+    let periods: Vec<u8> = (0..state.entities.len()).map(|_| 1).collect();
+    let env = PrepEnv {
+        targets_empty: true,
+        villagers_empty: true,
+        unchanged_since: state.entity_phase_revision,
+        rest_proofs: None,
+    };
+    let mut out = PrepChunk::default();
+    let _ = crate::entities::take_cold_row_reads();
+    prepare_rows(&state, &periods, &env, false, &mut out);
+    assert!(
+        out.rows.iter().any(|row| row.slot == slot && row.standing),
+        "the read must see the no-AI mutation made after the hint refresh"
+    );
+    assert_eq!(
+        crate::entities::take_cold_row_reads(),
+        1,
+        "exactly the mutated row reads the cold row"
+    );
+}
+
+#[test]
+fn vehicle_occupancy_not_cached() {
+    let (mut state, slot) = resting_cow();
+    let cow = state.registry.cow_type_id;
+    let rider = state.spawn_mob(cow, [9.5, 101.0, 8.5], 10.0);
+    let rider_slot = state.entities.slot_of(rider).unwrap();
+    let rider_uuid = state.entities.row(rider_slot).uuid;
+    let read = |state: &TickState| {
+        let view = PrepView::of(state);
+        let flags = state.entities.motion_flags(slot);
+        read_row(&view, slot, flags, 1, &RarePrep::default()).0
+    };
+    state.entities.set_riders(slot, vec![rider_uuid]);
+    state.entities.prepare_motion_hints(&state.registry);
+    let ridden = read(&state);
+    assert!(ridden.standing, "an occupied mount runs no AI");
+    assert!(!ridden.leash_follow, "an occupied mount has no leash yet");
+    state.entities.set_riders(slot, Vec::new());
+    state.entities.prepare_motion_hints(&state.registry);
+    let empty = read(&state);
+    assert!(
+        !empty.standing,
+        "the rider left: an unoccupied mount runs AI"
+    );
+    // A leash holds the mount still on its own, so occupancy is read through
+    // `leash_follow` here: it must follow the live seat, never a cached bit.
+    state
+        .entities
+        .set_leash(slot, Some(crate::leash::Holder::Fence([8, 101, 8])));
+    state.entities.set_riders(slot, vec![rider_uuid]);
+    state.entities.prepare_motion_hints(&state.registry);
+    let leashed_ridden = read(&state);
+    assert!(
+        !leashed_ridden.leash_follow,
+        "an occupied mount does not follow its leash"
+    );
+    state.entities.set_riders(slot, Vec::new());
+    state.entities.prepare_motion_hints(&state.registry);
+    let leashed = read(&state);
+    assert!(
+        leashed.leash_follow,
+        "an unoccupied leashed mount follows its leash"
+    );
+}
