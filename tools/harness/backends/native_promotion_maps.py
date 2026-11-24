@@ -196,10 +196,15 @@ def _clone_quiet(steps: ProbeSteps, map_id: int, slot: int = 0) -> None:
     steps.fixture(f"debug give minecraft:filled_map[map_id={map_id}] 1 {slot}")
     steps.wait(lambda state: any(stack["slot"] == slot and stack.get("item_id") == "minecraft:filled_map"
                                  for stack in state["inventory"]), "map_clone_quiet_received")
-    stack = steps.call("minecraft_read_item_components", {"source": "player", "slot": slot})
-    steps.check("map_clone_quiet_same_id",
-                stack.get("item_id") == "minecraft:filled_map"
-                and stack.get("components", {}).get("minecraft:map_id") == map_id)
+    # The inventory row can lead the item's components by a tick; read until the same id shows up.
+    for _attempt in range(20):
+        stack = steps.call("minecraft_read_item_components", {"source": "player", "slot": slot})
+        if (stack.get("item_id") == "minecraft:filled_map"
+                and stack.get("components", {}).get("minecraft:map_id") == map_id):
+            steps.check("map_clone_quiet_same_id", True)
+            return
+        steps.call("minecraft_wait_ticks", {"ticks": 2})
+    steps.check("map_clone_quiet_same_id", False)
 
 
 def _frame_insert(steps: ProbeSteps, identity: dict, map_id: int) -> None:
