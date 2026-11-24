@@ -1,0 +1,14 @@
+diff --git a/crates/mc-core/src/abstract_sim.rs b/crates/mc-core/src/abstract_sim.rs
+index bb24f2b6b..6f0ce8ebd 100644
+--- a/crates/mc-core/src/abstract_sim.rs
++++ b/crates/mc-core/src/abstract_sim.rs
+@@ -43,6 +43,9 @@ pub(crate) fn cancel_external_writes(state: &mut TickState) {
+ }
+ 
+ pub(crate) fn run(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>) {
++    if !state.tick_control.runs_normally() {
++        return;
++    }
+     let mut chunks = state.world.catch_up_chunks();
+     if chunks.is_empty() {
+         return;
