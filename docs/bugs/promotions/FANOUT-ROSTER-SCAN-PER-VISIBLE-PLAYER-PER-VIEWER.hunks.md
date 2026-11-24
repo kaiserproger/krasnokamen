@@ -1,7 +1,7 @@
 # FANOUT-ROSTER-SCAN-PER-VISIBLE-PLAYER-PER-VIEWER — fix-hunk map
 
 The production-only patch `FANOUT-ROSTER-SCAN-PER-VISIBLE-PLAYER-PER-VIEWER.patch` is the fix's non-test
-hunks, SHA-256 `patch:a35b728f2d281b21e524365956149097c565b3341366f70e979d13e2924242c2`. Reverse-applies
+hunks, SHA-256 `patch:aecd75e12dd745501c8c297dfe5d6f4784589f0c6fc96ad778c4cfb4a1e4a6e0`. Reverse-applies
 on the candidate (`git apply -R --check` on `071a68f8e4`, clean tree).
 
 ## The fix and the hunk the patch carries

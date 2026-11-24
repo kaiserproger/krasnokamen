@@ -1,6 +1,8 @@
+diff --git a/crates/mc-core/src/tick/entity_phase.rs b/crates/mc-core/src/tick/entity_phase.rs
+index 5cc6b01..0b89456 100644
 --- a/crates/mc-core/src/tick/entity_phase.rs
 +++ b/crates/mc-core/src/tick/entity_phase.rs
-@@ -96,10 +96,8 @@
+@@ -96,10 +96,8 @@ pub(super) struct ReadRow {
      pub(super) dark_aggro: bool,
      /// A lit fuse holds the mob still.
      pub(super) standing: bool,
@@ -12,7 +14,7 @@
      pub(super) has_retained_target: bool,
      pub(super) retain_target: bool,
  }
-@@ -513,7 +511,7 @@
+@@ -513,7 +511,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent>
              && row.think
              && !row.breed_ready
              && !row.standing
@@ -21,9 +23,11 @@
              && row.panic_multiplier == 0.0
              && !row.has_retained_target
      });
+diff --git a/crates/mc-core/src/tick/entity_phase/prepare.rs b/crates/mc-core/src/tick/entity_phase/prepare.rs
+index 543b90e..65f8445 100644
 --- a/crates/mc-core/src/tick/entity_phase/prepare.rs
 +++ b/crates/mc-core/src/tick/entity_phase/prepare.rs
-@@ -649,8 +649,6 @@
+@@ -649,8 +649,6 @@ fn read_row_with(
          has_retained_target,
          retain_target: !battle && blueprint.is_some_and(crate::hostile::retains_target),
          enderman_target: rare.enderman_target,
@@ -32,9 +36,11 @@
          rare_motion: match (rare.plugin_target, rare.gold_target) {
              (Some(target), _) => RareMotion::Plugin(target),
              (None, Some(target)) => RareMotion::Gold(target),
+diff --git a/crates/mc-core/src/tick/entity_phase/step.rs b/crates/mc-core/src/tick/entity_phase/step.rs
+index 62b8be5..c831bc2 100644
 --- a/crates/mc-core/src/tick/entity_phase/step.rs
 +++ b/crates/mc-core/src/tick/entity_phase/step.rs
-@@ -148,7 +148,7 @@
+@@ -148,7 +148,7 @@ pub(in crate::tick) fn step_entity(
                  .copied()
                  .flatten();
          }
@@ -43,7 +49,7 @@
          vel = crate::entity_motion::steer(row.movement, row.pos, target, f64::from(row.speed));
          look_target = Some(target);
      } else if row.standing {
-@@ -251,7 +251,7 @@
+@@ -251,7 +251,7 @@ pub(in crate::tick) fn step_entity(
              row.vel[1],
              row.vel[2] - row.horizontal_impulse[1],
          ];

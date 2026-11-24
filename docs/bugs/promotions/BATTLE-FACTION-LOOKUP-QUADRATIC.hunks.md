@@ -1,7 +1,7 @@
 # BATTLE-FACTION-LOOKUP-QUADRATIC — fix-hunk map
 
 The production-only patch `BATTLE-FACTION-LOOKUP-QUADRATIC.patch` is the fix's non-test hunks, SHA-256
-`patch:85042237055dcf093fbf01ae0bf0701a55acbb9d927a2bee1242df8785b0bca2`. It reverse-applies on the
+`patch:b9c433bd7895940c376ebad7977b3295450639e04cb9dfafe2d42910ebec51be`. It reverse-applies on the
 candidate (`git apply -R --check` on `071a68f8e4`, clean tree).
 
 ## The fix and the hunks the patch carries

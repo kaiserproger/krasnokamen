@@ -1,6 +1,8 @@
+diff --git a/crates/mc-core/src/battle/mod.rs b/crates/mc-core/src/battle/mod.rs
+index 6024e5b..538ca59 100644
 --- a/crates/mc-core/src/battle/mod.rs
 +++ b/crates/mc-core/src/battle/mod.rs
-@@ -146,6 +146,8 @@
+@@ -146,6 +146,8 @@ pub(crate) struct ArrowLaunch {
  pub struct UnitCounters {
      pub tick: u64,
      pub units: u64,
@@ -9,7 +11,7 @@
      pub alive_per_faction: Vec<FactionAlive>,
  }
  
-@@ -185,22 +187,19 @@
+@@ -185,22 +187,19 @@ impl UnitCounters {
          }
          self.units += 1;
          let alive = u64::from(alive);
@@ -40,9 +42,11 @@
  
      #[cfg(test)]
      fn sample(&mut self, entities: &EntityStore, tick: u64) {
+diff --git a/crates/mc-core/src/battle/targeting.rs b/crates/mc-core/src/battle/targeting.rs
+index 7fc6f00..99c8614 100644
 --- a/crates/mc-core/src/battle/targeting.rs
 +++ b/crates/mc-core/src/battle/targeting.rs
-@@ -88,16 +88,16 @@
+@@ -88,16 +88,16 @@ impl TargetGrid {
          for unit in units.filter(|unit| super::battle_row(unit.faction)) {
              let key = (unit.faction, cell(unit.pos[0]), cell(unit.pos[2]));
              self.cells.entry(key).or_default().len += 1;

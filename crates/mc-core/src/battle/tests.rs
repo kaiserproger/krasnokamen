@@ -1910,8 +1910,9 @@ fn faction_probes_stay_logarithmic_per_sample_and_per_rebuild() {
         counts.record(*faction, *alive);
     }
     let compares = FACTION_COMPARES.load(Ordering::Relaxed) - before;
+    // The first sample inserts into an empty table and compares nothing.
     assert!(
-        compares <= bound && compares >= units.len(),
+        compares <= bound && compares >= units.len().saturating_sub(1),
         "{compares} faction comparisons for {} samples; a sorted probe stays within {bound}",
         units.len()
     );
@@ -1927,7 +1928,7 @@ fn faction_probes_stay_logarithmic_per_sample_and_per_rebuild() {
     grid.rebuild(rows.iter().copied());
     let compares = FACTION_COMPARES.load(Ordering::Relaxed) - before;
     assert!(
-        compares <= bound && compares >= rows.len(),
+        compares <= bound && compares >= rows.len().saturating_sub(1),
         "{compares} faction comparisons for {} rebuild rows; a sorted probe stays within {bound}",
         rows.len()
     );

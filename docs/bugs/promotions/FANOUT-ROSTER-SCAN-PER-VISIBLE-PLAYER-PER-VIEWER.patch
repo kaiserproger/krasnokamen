@@ -1,6 +1,8 @@
+diff --git a/crates/mc-edge/src/plan/entity_interest.rs b/crates/mc-edge/src/plan/entity_interest.rs
+index 08d1e77..8adec82 100644
 --- a/crates/mc-edge/src/plan/entity_interest.rs
 +++ b/crates/mc-edge/src/plan/entity_interest.rs
-@@ -493,20 +493,13 @@
+@@ -493,20 +493,13 @@ pub(super) fn broadcast_to(
      if entity.id == recipient || entity.type_id != player_entity_type_id() {
          return true;
      }

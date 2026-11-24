@@ -2,7 +2,7 @@
 
 The production-only patch `ENTITY-READ-ROW-RARE-TARGET-FIELDS-ON-THE-HOT-ROW.patch` is the fix's
 non-test hunks, SHA-256 of its non-test hunks
-`patch:5f3db822beb92a8af0098cc9fab54922d2c5da8f1e8cd24dcbb0cd309c7fe3ac`. It reverse-applies on the
+`patch:5aaaeaa28afe08bf33513cff40287b6721319fc7e345cca24264103cf8011f8b`. It reverse-applies on the
 candidate (`git apply -R --check` on `071a68f8e4`, clean tree).
 
 ## The fix commit and the hunks the patch carries
