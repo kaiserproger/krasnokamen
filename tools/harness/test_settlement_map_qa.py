@@ -601,6 +601,9 @@ class SettlementMapVerdictTests(unittest.TestCase):
         for verdict in ("dashboard", "storage_transfer", "production_order", "all"):
             command = regressions._profile_command("settlement-map-qa", verdict)
             self.assertEqual(command[-5:], ["--client", "native", "--windowed", "--timeout-seconds", "3600"])
+        bell = regressions._profile_command("settlement-map-qa", "bell_opens_hub")
+        self.assertEqual(bell[-8:], ["--client", "native", "--windowed", "--timeout-seconds", "3600",
+                                    "--", "--scenario", "bell-hub"])
         with self.assertRaises(ValueError):
             regressions._profile_command("settlement-map-qa", "no_such_verdict")
 

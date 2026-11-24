@@ -1,0 +1,14 @@
+diff --git a/crates/mc-core/src/natural_spawn.rs b/crates/mc-core/src/natural_spawn.rs
+--- a/crates/mc-core/src/natural_spawn.rs
++++ b/crates/mc-core/src/natural_spawn.rs
+@@ -763,6 +763,10 @@ fn despawn(
+         if !peaceful && (no_players || retained && row.no_action_time == 0) {
+             continue;
+         }
++        if peaceful {
++            gone.push(slot);
++            continue;
++        }
+         if players.table().is_empty() {
+             continue;
+         }
