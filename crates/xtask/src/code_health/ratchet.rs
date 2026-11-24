@@ -95,7 +95,12 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // dimension-filtered dolphin target map per phase (`let dolphin_targets`
         // next to its `StepCtx` field) instead of allocating an `Arc<HashMap>`
         // per tick. Removing the allocation costs the one local binding.
-        ("tick/entity_phase.rs", 261),
+        // D123Battle 2026-11-24: 262. ENTITY-READ-ROW-RARE-TARGET-FIELDS-ON-THE-HOT-ROW
+        // replaces the two `Option<[f64; 3]>` fields (64 B per admitted row) with
+        // the one `RareMotion` enum and its doc comment: the hot row loses 32 B
+        // and the file gains one item. A `rare_motion` submodule would cost the
+        // `mod` item it saves, so the enum stays beside the row it belongs to.
+        ("tick/entity_phase.rs", 262),
         // D8 moved the record's construction fields behind
         // `settlements/construction_access.rs`; 1028 after the split, measured
         // on the D8 branch, 2026-11-17. The store flip and the queue rules
