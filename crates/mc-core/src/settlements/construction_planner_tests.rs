@@ -550,7 +550,8 @@ fn a_furnace_site_stays_at_the_store_level_not_on_a_platform_above_it() {
         .projects
         .iter()
         .find(|project| project.blueprint == furnace::NAME)
-        .expect("the house's furnace prerequisite");
+        .expect("the house's furnace prerequisite")
+        .clone();
     assert_ne!(
         project.origin,
         [3, 206, 1],
@@ -560,6 +561,19 @@ fn a_furnace_site_stays_at_the_store_level_not_on_a_platform_above_it() {
         project.origin[1], 201,
         "the furnace stands at the store's level: {:?}",
         project.origin
+    );
+    // The same class one step later (review wave2-9 minor): the tender's stand
+    // took the highest surface in the anchor's band, so a roof on the first side
+    // the search tries became the furnace's stand five blocks up.
+    let (sx, sy, sz) = (project.origin[0] + 1, project.origin[1] + 5, project.origin[2]);
+    for dz in -1..=1 {
+        state.world.set_block(sx, sy, sz + dz, stone);
+    }
+    state.world.fold_overlay();
+    let stand = furnace::stand(&state, &project, project.origin, None).expect("a furnace stand");
+    assert!(
+        (stand[1] - project.origin[1]).abs() <= 2,
+        "the stand stays at the furnace's level, not on a roof: {stand:?}"
     );
 }
 
