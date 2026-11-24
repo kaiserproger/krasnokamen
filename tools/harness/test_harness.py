@@ -86,6 +86,33 @@ class ClientSettingsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 cli.resolve_client_settings("quilt")
 
+class FailedScenarioReceiptTests(unittest.TestCase):
+    def test_a_failed_scenario_keeps_its_own_assertions(self) -> None:
+        # The ledger reads a client row's red control from details.scenario…assertions, so a failed
+        # entities scenario has to attach the report ProbeSteps wrote before it raised.
+        from .backends.client_probes import failure_scenario
+
+        with tempfile.TemporaryDirectory(prefix="probe-") as directory:
+            artifact = Path(directory)
+            (artifact / "native-v2-input-menus").mkdir()
+            (artifact / "native-v2-input-menus" / "scenario.json").write_text(json.dumps({
+                "id": "native-v2-input-menus", "passed": False,
+                "assertions": {"survival_number_1_moves_hovered": False},
+            }))
+            receipt = failure_scenario(artifact, "native-v2-input-menus",
+                                       RuntimeError("native-v2-input-menus assertion failed: survival_number_1_moves_hovered"))
+            self.assertIsNotNone(receipt)
+            self.assertEqual(receipt["scenario"]["assertions"]["survival_number_1_moves_hovered"], False)
+            self.assertIn("assertion failed", receipt["error"])
+
+    def test_a_scenario_without_a_report_attaches_nothing(self) -> None:
+        from .backends.client_probes import failure_scenario
+
+        with tempfile.TemporaryDirectory(prefix="probe-") as directory:
+            self.assertIsNone(failure_scenario(Path(directory), "native-v2-input-menus", RuntimeError("x")))
+            self.assertIsNone(failure_scenario(Path(directory), None, RuntimeError("x")))
+
+
 class NativeLaunchEnvironmentTests(unittest.TestCase):
     def test_a_launch_never_inherits_the_data_roots_managed_settings(self) -> None:
         # The client reads client-settings.json back on every start, so an inherited
