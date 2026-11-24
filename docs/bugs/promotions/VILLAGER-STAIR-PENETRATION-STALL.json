@@ -1,14 +1,14 @@
 {
   "id": "VILLAGER-STAIR-PENETRATION-STALL",
   "verdict": "promoted",
-  "fix_commit": "patch:584575b9d287cdaed00702f31bd2a671126d8b497ae70355d4014cacd7a59c90",
-  "fix_commit_full": "patch:584575b9d287cdaed00702f31bd2a671126d8b497ae70355d4014cacd7a59c90",
-  "promoted_at": "2026-11-24T00:40:07+00:00",
-  "tree_head": "de73cffa44db8a2e5907f43c1b7f060e048dffe9",
+  "fix_commit": "patch:255a2ab9a37798c2f77f2f42b022f57dfa89d7ff413e1088ad6cc512dd9fe38f",
+  "fix_commit_full": "patch:255a2ab9a37798c2f77f2f42b022f57dfa89d7ff413e1088ad6cc512dd9fe38f",
+  "promoted_at": "2026-11-24T07:35:46+00:00",
+  "tree_head": "1aeb8821fb6f098507bbdc7758365bbe903ca5d5",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
-  "fix_patch_sha256": "584575b9d287cdaed00702f31bd2a671126d8b497ae70355d4014cacd7a59c90",
+  "fix_patch_sha256": "255a2ab9a37798c2f77f2f42b022f57dfa89d7ff413e1088ad6cc512dd9fe38f",
   "reversed_files": [
     "crates/mc-core/src/villager/brain.rs"
   ],
@@ -23,8 +23,9 @@
       "detail": "FAIL"
     },
     "harness:scene-shot:native-village-stair-penetration": {
-      "state": "unrunnable",
-      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-village-stair-penetration --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T073155-ledger-promote-j56_3i31/regressions-client-2.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T073155-ledger-promote-j56_3i31/client-artifacts/20261124T073414-native-village-stair-penetration-7cn097c9/result.json"
     }
   },
   "restored": {
@@ -35,18 +36,23 @@
     "cargo:mc-core:villager::brain::tests::resting_villager_moves_onto_nearby_indoor_stair": {
       "state": "green",
       "detail": ""
+    },
+    "harness:scene-shot:native-village-stair-penetration": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T073155-ledger-promote-j56_3i31/client-artifacts/20261124T073512-native-village-stair-penetration-gu9_3b2m/result.json"
     }
   },
   "client_receipt": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T002748-native-village-stair-penetration-ej0719h6/result.json",
-    "tree_head": "de73cffa44db8a2e5907f43c1b7f060e048dffe9",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T073057-native-village-stair-penetration-__9wj0ge/result.json",
+    "tree_head": "1aeb8821fb6f098507bbdc7758365bbe903ca5d5",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "server_binary_sha256": "306e3aef50a056800c9eea8205c274ba406919d67f8dff7f27161ec2cda189b0",
+    "server_binary_sha256": "69fa6f9ea104d08af8bed39e755ab49c0d2755ca24c476805a9059366c03e2df",
     "covers": [
       "harness:scene-shot:native-village-stair-penetration"
     ],
     "profile": "scene-shot"
   },
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T003645-ledger-promote-vjns7k7p"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123CivGates/.analysis/validation/20261124T073155-ledger-promote-j56_3i31"
 }
