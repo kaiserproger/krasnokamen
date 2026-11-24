@@ -17,4 +17,5 @@ regression = [
   "harness:join-lag-gate:join_behind_slow_pump",
 ]
 failing_first = "reported"
-fix_commit = "patch:223a8c4f1a290df07e9613f2e3b969ff3683701df7091905583e1bdab2b36aff"
+fix_commit = "patch:a9098920f0a64040d39be8913ab65bcdcf042080bf53ce17b777702144b113dd"
+repro_check = ["The pump fix (patch:a9098920, the queue-budget skip arm) is in tree and its cargo refs are green, but the row's own text requires a client-level red at its own assertion (`join_behind_slow_pump`) and the join-lag-gate cannot produce one under the shared patch: the pre-fix halt happens during setup (waiting for tick_rate_applied) before a join is attempted, and `tools/harness/backends/join_lag.py:446-472` sets `join = None` on that branch, so the replay is recorded with no outcome (scenario.json 20261124T124056: 'no join was attempted before the halt: row 1 has no outcome here'). The promotion was withdrawn (review REVIEW-wave2-2 B1); EDGE-OUTBOX carries the same patch and its own behavioural red (`pump_join_lag_tests.rs:427`)."]

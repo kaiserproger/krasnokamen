@@ -3,7 +3,7 @@ id = "EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP"
 title = "The 10 s reliable outbox stall watch halts the core fail-closed under a live edge pump that only lags: at 3 TPS a lone queued batch waits a whole 32-output broadcast window (about 10.3 s) behind the pump and the core stops with `edge pump not draining`"
 area = "gameplay"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Latent; CheckpointJoinStall 2026-11-20, side finding of the EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS repro (not seen in Perf1M R3k-4, which shut down by SIGTERM). crates/mc-core/src/core/tick_loop.rs halts when the outbox is non-empty and its drain epoch has not moved for `outbox_stall_ms` (StallWatch, core/outbox.rs); the edge pump drains a batch only when it publishes an output at or past the batch's tick and, behind the tick, sat at the oldest retained output. Base dc670b3bd, `/tick rate 3`, default window 32, pump paced at half the tick rate behind a lone `Joined` batch: the core closed its broadcast; raising only `outbox_stall_ms` to 60 s removed the halt (A/B, receipts/CheckpointJoinStall/repro/m2-repro-base-20tps-and-stallhalt.log). A pump that stops for good must still halt the core."
 repro = "cargo"
 regression = [
@@ -12,4 +12,5 @@ regression = [
   "harness:join-lag-gate:live_pump_does_not_halt",
 ]
 failing_first = "reported"
-fix_commit = "patch:223a8c4f1a290df07e9613f2e3b969ff3683701df7091905583e1bdab2b36aff"
+fix_commit = "patch:a9098920f0a64040d39be8913ab65bcdcf042080bf53ce17b777702144b113dd"
+promotion = "docs/bugs/promotions/EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP.json"

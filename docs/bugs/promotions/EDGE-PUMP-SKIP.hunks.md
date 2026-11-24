@@ -1,8 +1,8 @@
-# EDGE pump rows — fix-hunk map (shared by two rows)
+# EDGE pump rows — fix-hunk map
 
-Rows: `EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS` and
-`EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP`. Both name the same patch,
-`patch:223a8c4f1a290df07e9613f2e3b969ff3683701df7091905583e1bdab2b36aff`
+Rows: `EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP` (promoted) and
+`EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS` (open, fixed-unproven). Both name the same patch,
+`patch:a9098920f0a64040d39be8913ab65bcdcf042080bf53ce17b777702144b113dd`
 (`EDGE-SLOW-PUMP-HOLDS-JOIN-BEHIND-STALE-OUTPUTS.patch` /
 `EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP.patch`, identical content). It reverse-applies on
 the candidate.
@@ -11,39 +11,53 @@ the candidate.
 
 `bfdc23f1c` added the pump's queue budget: `TickTimes::published_at` stamped at broadcast, a `stale()`
 predicate (waited past `PUBLISH_QUEUE_BUDGET` = 1.6 s **and** a newer output queued) and a skip arm in
-`next_publication` that drops such an output like a broadcast `Lagged`. Without it a pump slower than
-the tick sits at the oldest retained output, the reliable outbox drains only through that tick, and a
-`Joined` waits a whole broadcast window (~10.3 s at 3 TPS), tripping the 10 s join deadline and the
-10 s outbox stall watch. `523b97aa5` made `stale()` read the age first (it asks `rx.is_empty()` only
-for an old output).
+`next_publication` that drops such an output like a broadcast `Lagged`. `523b97aa5` made `stale()` read
+the age first and split the receive loop into `next_publication`.
 
-## Hunks the patch carries (`crates/mc-edge/src/server/pump.rs`)
+## The one hunk the patch carries (`crates/mc-edge/src/server/pump.rs`)
 
 | hunk | a/-side |
 |---|---|
-| `stale()` | returns `false` — the pre-image had no queue-budget skip, so an output is never stale. Keeping the *function* is the README (b) kept-API constructor: `pump_join_lag_tests.rs:584,593,597,604,605` call it |
-| `next_publication`'s stale arm | removed, so the receive loop returns every output (the HEAD equivalent of the pre-image inline loop that `523b97aa5` later split into `next_publication`; reason (c) applies to the split itself) |
+| `next_publication`'s stale arm (`Ok(out) if stale(...)` → skip; `Ok(out) => return`) | removed: `match rx.recv().await { Ok(out) => return Some(out), … }` — the HEAD equivalent of the pre-image inline loop (`523b97aa5` split that loop; reason (c) applies to the split itself) |
 
-Left out, behaviour-neutral in place: `TickTimes::published_at` (boundary.rs) and its stamp
-(tick_loop.rs) — with no reader they change nothing, and the kept tests set the field; the dashboard's
-`record_pump_stale_skipped`/`pump_stale_skipped_ticks` counter, whose only caller is the removed arm;
-the join-linkage debug lines and the test-gate plumbing of the same commits (other `EDGE-*` rows and
-harness work, reason (a)).
+`stale()` is **not** in the patch (review N1, 2026-11-24): `bfdc23f1c` created it, so the pre-image
+has neither it nor `published_at`. It stays at HEAD as a kept helper whose only remaining callers are
+the registered unit tests (`pump_join_lag_tests.rs:593,597,604,605`) — the class "a kept helper whose
+callers are all among the carried hunks". On the control it still answers correctly, so those tests
+stay green there; they are **not evidence**.
+
+## Classes of the rest (review N2)
+
+| item | class |
+|---|---|
+| `TickTimes::published_at` field (`boundary.rs`) | **(b)** — the kept tests read/construct it: `explosion_queue_tests.rs:382`, `pump_join_lag_tests.rs:572`, `dashboard/tests.rs:116` |
+| the stamp `output.times.published_at = Some(now)` (`core/tick_loop.rs:476`) | kept as **(b)** API-for-tests too: with the arm removed nothing in production reads the field, and the kept tests drive `next_publication` themselves; the write changes no behaviour on either side. Labelled here rather than left unnamed |
+| `record_pump_stale_skipped` / `pump_stale_skipped_ticks` (dashboard) | **(b)** — the counter is read by `dashboard/tests.rs:116`; its only production caller is the removed arm |
+| the join-linkage debug lines and the test-gate plumbing of `523b97aa5` | **(a)** — other `EDGE-*` rows and harness work |
+| `pump_join_lag_tests.rs` | test file, kept whole by the splitter |
 
 ## Proving refs
 
-| row | registered refs |
-|---|---|
-| EDGE-SLOW-PUMP | `cargo:…:a_slow_pump_does_not_hold_a_join_behind_stale_outputs`, `…:a_join_lands_at_three_tps_behind_a_slow_pump_without_a_halt`, `…:a_stale_skip_keeps_reliable_changes_in_order_and_never_drains_ahead`, `…:the_queue_budget_is_exclusive`, and `harness:join-lag-gate:join_behind_slow_pump` |
-| EDGE-OUTBOX-STALL-WATCH | `cargo:…:a_live_pump_behind_a_lone_batch_does_not_trip_the_stall_watch`, `…:a_hung_pump_still_halts_the_core`, and `harness:join-lag-gate:live_pump_does_not_halt` |
+| row | ref | assertion |
+|---|---|---|
+| EDGE-OUTBOX | `cargo:mc-edge:server::pump_join_lag_tests::a_live_pump_behind_a_lone_batch_does_not_trip_the_stall_watch` | `pump_join_lag_tests.rs:427` — `skipped > 0`, "the release never skipped a stale output": without the arm the live pump never skips and the stall watch halts the core; the test drives the real pump and observes the halt |
+| EDGE-SLOW | `harness:join-lag-gate:join_behind_slow_pump` (client) | **no outcoming red exists**: under the shared patch the pre-fix halt happens during setup (waiting for `tick_rate_applied`) before a join is attempted, and `join_lag.py:446-472` sets `join = None`, so the control records no outcome (`20261124T124056`: "no join was attempted before the halt"). The row stays open with that wording |
 
-`the_newest_output_is_never_stale` and `a_fresh_output_after_a_long_tick_is_not_stale` are green on
-both trees (they assert "never stale" cases) and are not evidence.
+**Not evidence** (`review B1`): `explosion_queue_tests.rs:417` (a knockback-close precondition, the
+mechanism not the symptom), `pump_join_lag_tests.rs:567` (`skipped > 0`, a counter), and the two
+"never stale" unit refs, which are green on both sides now that `stale()` is untouched.
 
-## What is still missing
+## Gate caveat (review N3)
 
-The client-level receipt. `harness:join-lag-gate:*` runs two native windowed clients against a
-`KRASNOKAMEN_SERVER_BINARY` pin of the candidate and needs a **second pin of the reversed tree** for
-the control (`docs/development/real-client-gates.md`, `realtime-gates` section: "negative control: run
-the same command on a control tree that differs only in the fix hunks"). Neither pin exists for this
-head yet; the cargo refs above are green on the candidate (probe `20261124T092509-ledger-probe-cadi2cru`).
+In the control `scenario.json` the witness reports `in_play: false` although it joined
+(`player_present: true`, landed 1.95 s): the halt branch clears `in_play` after the join, and the
+ledger reads that as "never reached play" and marks the harness ref `unrunnable`. Fixing that needs
+`tools/harness/backends/join_lag.py` to keep `in_play` once `player_present` is set; it is recorded,
+not fixed here.
+
+## Battle-core trade-off (review N6, already in `main`; unchanged by this delta)
+
+Every skipped output carrying an explosion knockback disconnects its recipients
+(`pump.rs:605-642`, `skipped-explosion-knockback`), and the stale skip fires at output age 1.6 s, not
+only on a broadcast `Lagged`. At low TPS in a TNT battle that means players see kicks. Recorded as a
+trade-off of the fix, not a new defect.

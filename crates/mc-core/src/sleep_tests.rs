@@ -1365,6 +1365,15 @@ fn a_bed_broken_in_the_tick_its_player_lies_down_is_not_restored() {
             },
         ],
     );
+    // The lie-down really happened in this tick: `use_bed` counts the stat only
+    // after the sleeper is inserted.
+    assert_eq!(
+        rig.state.players[&rig.player]
+            .statistics
+            .get_custom(mc_data::statistics::CustomStat::SleepInBed),
+        1,
+        "the player lay down in the same tick as the break"
+    );
     assert_eq!(
         rig.state.world.block_at(head.x, head.y, head.z),
         Some(air),

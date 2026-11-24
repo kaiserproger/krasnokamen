@@ -1,0 +1,56 @@
+{
+  "id": "EDGE-OUTBOX-STALL-WATCH-HALTS-LIVE-LAGGING-PUMP",
+  "verdict": "promoted",
+  "fix_commit": "patch:a9098920f0a64040d39be8913ab65bcdcf042080bf53ce17b777702144b113dd",
+  "fix_commit_full": "patch:a9098920f0a64040d39be8913ab65bcdcf042080bf53ce17b777702144b113dd",
+  "promoted_at": "2026-11-24T14:04:26+00:00",
+  "tree_head": "21cb49d1e44b48d81e1715c79a675e2ec5ebdb70",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "a9098920f0a64040d39be8913ab65bcdcf042080bf53ce17b777702144b113dd",
+  "reversed_files": [
+    "crates/mc-edge/src/server/pump.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:server::pump_join_lag_tests::a_live_pump_behind_a_lone_batch_does_not_trip_the_stall_watch": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/server/pump_join_lag_tests.rs",
+        "line": 427,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-edge:server::pump_join_lag_tests::a_hung_pump_still_halts_the_core": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:join-lag-gate:live_pump_does_not_halt": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run join-lag-gate --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T135917-ledger-promote-mff4vz_2/regressions-client-2.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T135917-ledger-promote-mff4vz_2/client-artifacts/20261124T140135-join-lag-gate-gnnbhjaq/result.json"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:server::pump_join_lag_tests::a_live_pump_behind_a_lone_batch_does_not_trip_the_stall_watch": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::pump_join_lag_tests::a_hung_pump_still_halts_the_core": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:join-lag-gate:live_pump_does_not_halt": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T135917-ledger-promote-mff4vz_2/client-artifacts/20261124T140357-join-lag-gate-62sf2f78/result.json"
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T135917-ledger-promote-mff4vz_2"
+}

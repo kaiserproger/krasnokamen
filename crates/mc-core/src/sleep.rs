@@ -302,8 +302,9 @@ pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
 /// their bed's cell, and a bed that lost its sleeper is cleared again. Doing it
 /// here covers every wake path (leave-bed, morning, hit, death, resident
 /// reassignment, dimension travel), not just [`wake`]. The tick calls it after
-/// the phases that can start or end a sleep and before the merge, so its writes
-/// land in the same block phase and a block break staged by the same tick wins.
+/// `state.merge` and before the block phase, so an accepted write to a bed this
+/// tick (a break or a replace) wins over the mirror, and the mirror's own write
+/// still lands in this tick's block phase.
 pub(crate) fn mirror_occupied_beds(state: &mut TickState) {
     let dimension = state.dimension.name();
     let previous = std::mem::take(&mut state.occupied_beds);
@@ -326,11 +327,17 @@ pub(crate) fn mirror_occupied_beds(state: &mut TickState) {
             }
         }
     }
+    // One set for the pass: an accepted write to any cell this tick wins.
+    let written: rustc_hash::FxHashSet<BlockPos> = state
+        .merge_block_writes
+        .iter()
+        .map(|(pos, _)| *pos)
+        .collect();
     for bed in previous.difference(&wanted) {
-        set_bed_occupied(state, *bed, false);
+        set_bed_occupied(state, *bed, false, &written);
     }
     for bed in &wanted {
-        set_bed_occupied(state, *bed, true);
+        set_bed_occupied(state, *bed, true, &written);
     }
     state.occupied_beds = wanted;
 }
@@ -339,7 +346,12 @@ pub(crate) fn mirror_occupied_beds(state: &mut TickState) {
 /// that no longer holds a bed (or is unloaded) is left alone, and so is a bed
 /// an accepted write already targets this tick: the merge's write wins, so a
 /// break or a replace is never undone by the mirror.
-fn set_bed_occupied(state: &mut TickState, head: BlockPos, occupied: bool) {
+fn set_bed_occupied(
+    state: &mut TickState,
+    head: BlockPos,
+    occupied: bool,
+    written: &rustc_hash::FxHashSet<BlockPos>,
+) {
     let value = if occupied { "true" } else { "false" };
     let Some(current) = state.world.block_at(head.x, head.y, head.z) else {
         return;
@@ -347,13 +359,7 @@ fn set_bed_occupied(state: &mut TickState, head: BlockPos, occupied: bool) {
     // Vanilla `BedBlock.updateShape` copies `OCCUPIED` to the connected half.
     let other = crate::placement::other_half(&state.registry.blocks, head, current)
         .map_or(head, |(other, _)| other);
-    let accepted = |pos: &BlockPos| {
-        state
-            .merge_block_writes
-            .iter()
-            .any(|(written, _)| written == pos)
-    };
-    if accepted(&head) || accepted(&other) {
+    if written.contains(&head) || written.contains(&other) {
         return;
     }
     for cell in [head, other] {
