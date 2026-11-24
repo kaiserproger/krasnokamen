@@ -60,10 +60,11 @@ entities::equipment` is green on the control (17 passed) and on the candidate.
 (`tools/harness/backends/scene_shot_checks.py::check_pig_saddle`). One NoAI pig is summoned at
 `1000.5 160 1004.5`, captured from `(1000.5, 161.62, 1002.0)` yaw 0 pitch 20, then killed and
 re-summoned at the same place with `equipment:{saddle:{id:"minecraft:saddle"}}`. Both frames must
-show the pig (pink pixels > 1500; measured 32850/32124), and the saddle's leather — the only brown
-in the region, since the stone is grey and the sky blue — must go from under 100 to over 300
-pixels. Measured: control **0 → 0** leather pixels (the shading difference between the two summons
-moved 1053 pixels but none of them brown), re-land **0 → 3918** leather pixels (6382 changed).
+show the pig (pink pixels > 1500; measured 32901/32967 on the control and 32818/31963 on the re-land),
+and the saddle's leather — the only brown in the region, since the stone is grey and the sky blue —
+must go from under 100 to over 300 pixels. Measured on the promotion receipts: control **0 → 0**
+leather pixels (the shading difference between the two summons moved 138 pixels but none of them
+brown), re-land **0 → 3810** leather pixels (4066 changed).
 
 The unit ref `client:krasnokamen-client:entities::equipment::tests::wearables::received_animal_equipment_draws_and_strips_every_supported_species`
 covers the table's fifteen species on the candidate.
