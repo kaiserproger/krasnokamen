@@ -530,34 +530,85 @@ def _free_summon_cells(probe: ProbeSteps, near: tuple[int, int, int], count: int
     return out
 
 
+def _open_summon_cells(probe: ProbeSteps, count: int) -> list[tuple[int, int, int]]:
+    """Distinct open cells on the fixture pad around the player: air at foot+head, solid below.
+
+    The shell search above can come up empty (per-cell reads that fail, a shell whose interior
+    the client cannot see). Summoning at `near` itself is the chest cell: the body then takes
+    Suffocation damage and the fixture reports no bound residents (20261124T103654). The player
+    stands on the pad the fixture cleared, so its open ring is the reliable second choice."""
+    me = probe.observe().get("player") or {}
+    px, py, pz = (int(math.floor(float(me.get(axis, 0)))) for axis in ("x", "y", "z"))
+    cells: list[tuple[int, int, int]] = []
+    for step in range(1, 33):
+        for dx, dz in ((step, 0), (0, step), (-step, 0), (0, -step)):
+            pos = (px + dx, py, pz + dz)
+            try:
+                foot = _block_id(_qa._read(probe, pos))
+                head = _block_id(_qa._read(probe, (pos[0], pos[1] + 1, pos[2])))
+                below = _block_id(_qa._read(probe, (pos[0], pos[1] - 1, pos[2])))
+            except Exception:
+                continue
+            if foot == "minecraft:air" and head == "minecraft:air" and below != "minecraft:air":
+                cells.append(pos)
+                if len(cells) >= count:
+                    return cells
+    return cells
+
+
 def _summon_bind(probe: ProbeSteps, sub: dict[str, Any], tag: str,
                  settlement: str, near: tuple[int, int, int], count: int) -> bool:
-    """Summon plain villagers at the shell and bind each to the settlement."""
-    cells = _free_summon_cells(probe, near, count) or [(near[0], near[1] + 1, near[2])] * count
+    """Summon plain villagers near the shell and bind each to the settlement."""
+    cells = _free_summon_cells(probe, near, count)
+    if len(cells) < count:
+        cells += _open_summon_cells(probe, count - len(cells))
+    if not cells:  # last resort: one air cell above the site, never the site's own (possibly solid) cell
+        cells = [(near[0], near[1] + 1, near[2])]
+    sub[f"{tag}_summon_cells"] = [list(cell) for cell in cells[:count]]
+    import re as _re
     taken: set[str] = set()
-    for i in range(count):
-        cx, cy, cz = cells[min(i, len(cells) - 1)]
+
+    def members_now() -> tuple[int, list[str]]:
+        state = _qa._send(probe, f"settlement info {settlement}")
+        lines = _qa._chat_lines(state)
+        joined = 0
+        for line in lines:
+            match = _re.search(r"members=(\d+)", line)
+            if match:
+                joined = max(joined, int(match.group(1)))
+        return joined, lines
+
+    def summon_and_bind(index: int) -> bool:
+        cx, cy, cz = cells[min(index, len(cells) - 1)]
         probe.fixture(f"summon minecraft:villager {cx + 0.5} {cy} {cz + 0.5}")
         probe.call("minecraft_wait_ticks", {"ticks": 20})
         cands = [r for r in _villagers(probe) if str(r.get("entity_uuid")) not in taken]
         if not cands:
-            continue
+            return False
         pick = min(cands, key=lambda r: abs(float(r["x"]) - near[0]) + abs(float(r["z"]) - near[2]))
         uuid = str(pick["entity_uuid"])
         probe.fixture(f"settlement bind {settlement} {uuid}")
         taken.add(uuid)
+        return True
+
+    for i in range(count):
+        summon_and_bind(i)
     probe.call("minecraft_wait_ticks", {"ticks": 40})
-    state = _qa._send(probe, f"settlement info {settlement}")
-    members = 0
-    import re as _re
-    lines = _qa._chat_lines(state)
-    for line in lines:
-        m = _re.search(r"members=(\d+)", line)
-        if m:
-            members = max(members, int(m.group(1)))
+    members, lines = members_now()
+    # One lost summon is normal (the client's entity list lags a fresh body): top up one resident
+    # at a time until the settlement reports `count`, bounded so a real refusal cannot spin.
+    attempts = count
+    while members < count and attempts < 2 * count:
+        attempts += 1
+        if summon_and_bind(attempts - 1):
+            probe.call("minecraft_wait_ticks", {"ticks": 40})
+            members, lines = members_now()
+        else:
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
     sub["bound_members"] = members
     sub["bound_info_lines"] = lines[:6]
-    ok = len(taken) >= 2 and members >= 2
+    sub["bound_attempts"] = attempts
+    ok = len(taken) >= 2 and members >= count
     probe.check(f"{tag}_bound", ok)
     _verdict(sub, "bound_residents", "PASS" if ok else "FAIL",
              f"summoned={len(taken)} members={members}")
