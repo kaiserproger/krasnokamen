@@ -232,13 +232,15 @@ def _ledger_summon_nbt(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         steps.report["summon_nbt"] = {"tnt": None, "falling_block": None}
         return
     _capture(steps, "summon-nbt-entities")
-    # `data get` renders "<name> has the following entity data: <snbt>": wait for
-    # the answer, then assert the authored value (a wrong value still answers).
+    # The answer arrives, so assert the authored value (a wrong value still
+    # answers). The fuse has been ticking since the summon: vanilla's default is
+    # 80 and the authored 1000 can only decay slowly, so anything above 500 is
+    # the authored fuse, not the default.
     steps.fixture(f"data get entity {tnt['entity_uuid']} fuse")
     state = steps.wait(lambda s: any("entity data:" in line for line in s["recent_chat"]),
                        "tnt_fuse_query_answered", timeout_seconds=20)
-    steps.check("tnt_authored_fuse_read_back",
-                any((m := re.search(r"entity data: (-?\d+)s", line)) and int(m.group(1)) == 1000
+    steps.check("tnt_authored_fuse_is_counting_down_from_thousand",
+                any((m := re.search(r"entity data: (-?\d+)s", line)) and 500 < int(m.group(1)) <= 1000
                     for line in state["recent_chat"]))
     steps.fixture(f"data get entity {falling['entity_uuid']} BlockState")
     state = steps.wait(lambda s: any("entity data:" in line and "Name" in line

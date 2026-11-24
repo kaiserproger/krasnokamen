@@ -116,8 +116,8 @@ SCENARIOS: dict[str, Scenario] = {
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-summon-nbt",
         requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
         fixture="operator pad; one primed TNT with an authored 1000-tick fuse and one NoGravity falling sand with an authored BlockState",
-        proves="both summons are accepted, both entities appear, and data get returns the authored fuse and BlockState",
-        limits="tnt fuse and falling_block BlockState only; no explosion or landing claim",
+        proves="both summons are accepted, both entities appear, the returned fuse is the authored 1000-tick fuse still counting down (the vanilla default 80 is excluded) and the returned BlockState is the authored sand",
+        limits="tnt fuse and falling_block BlockState only; no explosion or landing claim; the fuse is read after it has ticked, so its exact authored value is bounded (500 < fuse <= 1000), not equal to 1000",
     ),
     "native-v2-ledger-crafting-pickup": _entry(
         id="native-v2-ledger-crafting-pickup", summary="Crafting table remains open on the first inventory pickup",
