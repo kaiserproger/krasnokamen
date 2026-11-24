@@ -171,6 +171,24 @@ SCENARIOS: dict[str, Scenario] = {
         limits="One insertion per block, proven by data get block; extraction and restart persistence are not probed.",
     ),
 
+    "native-v2-ledger-tag-refusals": _entry(
+        id="native-v2-ledger-tag-refusals",
+        summary="Invalid Tags: element types and an oversized tag list are refused in the player's own chat",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-tag-refusals",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_tags.py"),
+        fixture="operator pad; every command is the player's own chat command and every answer is the "
+                "player's own received chat line",
+        proves="a non-string list element answers `Invalid Tags: every list element must be a string`, a "
+               "1025-element list answers `expected at most 1024 tags`, neither creates an entity, a "
+               "well-formed list is accepted and read back by `data get`",
+        limits="The 70000-Modified-UTF-8-byte string cannot be typed: the serverbound command packet is "
+               "bounded at 32767 bytes, so only the Cargo ref covers that class; one mob and one "
+               "experience-orb spawn path.",
+    ),
+
     "native-world-first-start-interrupted": _entry(
         id="native-world-first-start-interrupted",
         summary="Recover a singleplayer world interrupted during its first start",
