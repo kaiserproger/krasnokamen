@@ -309,6 +309,35 @@ class WorkerSettlementTest(unittest.TestCase):
         census.assert_called_once_with(probe, 2, "Mine", "Miner")
 
 
+class SummonPlacementTest(unittest.TestCase):
+    """`_summon_bind` must never place a villager in the site's own (possibly solid) cell."""
+
+    def test_an_empty_shell_search_summons_on_open_pad_cells(self):
+        probe = FakeProbe()
+        summons = []
+        probe.fixture = lambda command: summons.append(command) if command.startswith("summon ") else None
+
+        def read(_probe, pos):
+            x, y, z = pos
+            return {"block": {"block_id": "minecraft:air" if y >= 70 else "minecraft:grass_block"}}
+
+        sub = {}
+        with mock.patch.object(buildings_qa, "_free_summon_cells", return_value=[]), \
+                mock.patch.object(buildings_qa, "_read", side_effect=read), \
+                mock.patch.object(buildings_qa, "_villagers", return_value=[]), \
+                mock.patch.object(buildings_qa, "_send", return_value={"recent_chat": []}), \
+                mock.patch.object(buildings_qa, "_chat_lines", return_value=["members=0"]):
+            with self.assertRaisesRegex(RuntimeError, "buildings_house_bound"):
+                buildings_qa._summon_bind(probe, sub, "buildings_house", "town", (12, 71, 12), 10)
+        self.assertEqual(len(summons), 10)
+        cells = {tuple(int(float(part)) for part in line.split()[2:5]) for line in summons}
+        self.assertNotIn((12, 72, 12), cells)  # the chest cell the old fallback used ten times
+        self.assertEqual(len(cells), 10)
+        self.assertTrue(all(cell[1] == 70 for cell in cells))  # the player's pad level
+        self.assertEqual(sorted(sub["buildings_house_summon_cells"]),
+                         sorted([list(cell) for cell in cells]))
+
+
 class OrderEchoRetryTest(unittest.TestCase):
     def run_retry(self, lines, project_active=False, ctx=HEADLESS):
         probe, sub = FakeProbe(), {}

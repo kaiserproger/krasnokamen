@@ -530,10 +530,41 @@ def _free_summon_cells(probe: ProbeSteps, near: tuple[int, int, int], count: int
     return out
 
 
+def _open_summon_cells(probe: ProbeSteps, count: int) -> list[tuple[int, int, int]]:
+    """Distinct open cells on the fixture pad around the player: air at foot+head, solid below.
+
+    The shell search above can come up empty (per-cell reads that fail, a shell whose interior
+    the client cannot see). Summoning at `near` itself is the chest cell: the body then takes
+    Suffocation damage and the fixture reports no bound residents (20261124T103654). The player
+    stands on the pad the fixture cleared, so its open ring is the reliable second choice."""
+    me = probe.observe().get("player") or {}
+    px, py, pz = (int(math.floor(float(me.get(axis, 0)))) for axis in ("x", "y", "z"))
+    cells: list[tuple[int, int, int]] = []
+    for step in range(1, 33):
+        for dx, dz in ((step, 0), (0, step), (-step, 0), (0, -step)):
+            pos = (px + dx, py, pz + dz)
+            try:
+                foot = _block_id(_qa._read(probe, pos))
+                head = _block_id(_qa._read(probe, (pos[0], pos[1] + 1, pos[2])))
+                below = _block_id(_qa._read(probe, (pos[0], pos[1] - 1, pos[2])))
+            except Exception:
+                continue
+            if foot == "minecraft:air" and head == "minecraft:air" and below != "minecraft:air":
+                cells.append(pos)
+                if len(cells) >= count:
+                    return cells
+    return cells
+
+
 def _summon_bind(probe: ProbeSteps, sub: dict[str, Any], tag: str,
                  settlement: str, near: tuple[int, int, int], count: int) -> bool:
-    """Summon plain villagers at the shell and bind each to the settlement."""
-    cells = _free_summon_cells(probe, near, count) or [(near[0], near[1] + 1, near[2])] * count
+    """Summon plain villagers near the shell and bind each to the settlement."""
+    cells = _free_summon_cells(probe, near, count)
+    if len(cells) < count:
+        cells += _open_summon_cells(probe, count - len(cells))
+    if not cells:  # last resort: one air cell above the site, never the site's own (possibly solid) cell
+        cells = [(near[0], near[1] + 1, near[2])]
+    sub[f"{tag}_summon_cells"] = [list(cell) for cell in cells[:count]]
     taken: set[str] = set()
     for i in range(count):
         cx, cy, cz = cells[min(i, len(cells) - 1)]

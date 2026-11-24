@@ -274,7 +274,11 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
     probe.check(f"{FIXTURE}_funded", funded)
     # Residents come last: the planner runs from the first resident, and with the stock already
     # in storage the first project it starts is funded fortification work, not a meadow clearing.
-    probe.check(f"{FIXTURE}_bound", _summon_bind(probe, sub, FIXTURE, sname, shell, RESIDENTS)
+    # Summon on the open pad beside the anchor, never at the shell chest: a summon inside the
+    # chest block took Suffocation damage and the fixture reported no bound residents
+    # (20261124T103654). The pad is cleared to ay + 24, so these cells are air over grass.
+    probe.check(f"{FIXTURE}_bound",
+                _summon_bind(probe, sub, FIXTURE, sname, (ax + 3, ay, az + 3), RESIDENTS)
                 and sub.get("bound_members", 0) >= RESIDENTS)
     probe.fixture(f"tp @s {ax + 0.5} {ay + 1.0} {az + 0.5}")
     # The Builders' time: first block, then completion, each bounded.
