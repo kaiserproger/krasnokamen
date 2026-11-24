@@ -220,13 +220,13 @@ fn mature_tree(state: &TickState, x: i32, y: i32, z: i32) -> Option<(u32, u16)> 
     Some((sapling, height))
 }
 
-fn columns_total(radius: u32) -> u32 {
+pub(super) fn columns_total(radius: u32) -> u32 {
     let side = radius.saturating_mul(2).saturating_add(1);
     side.saturating_mul(side).max(1)
 }
 
 /// Square rings visit nearby columns before crossing the settlement.
-fn column_at([x, z]: [i32; 2], index: u32) -> [i32; 2] {
+pub(super) fn column_at([x, z]: [i32; 2], index: u32) -> [i32; 2] {
     if index == 0 {
         return [x, z];
     }
@@ -320,15 +320,19 @@ fn search(
         let slot = progress.cursor % total;
         let [x, z] = column_at(origin, slot);
         progress.cursor = (slot + 1) % total;
+        // The overflow is decided from the slot, before the activity check: the
+        // last ring corner (slot total-1) may lie in an unloaded chunk, and a
+        // `continue` there used to swallow the wrap so `swept` was never set
+        // (review D123Civ7 blocker; seed-24 village radius 136 vs
+        // simulation_distance 6 puts that corner out of the loaded set).
+        if slot + 1 == total {
+            progress.swept = true;
+        }
         if !state.world.is_active(x.div_euclid(16), z.div_euclid(16)) {
             skipped += 1;
             continue;
         }
         scanned += 1;
-        if progress.cursor == 0 {
-            // The cursor just passed its start: a whole cycle saw no tree.
-            progress.swept = true;
-        }
         if let Some(tree) = scan_column(
             state,
             anchor,

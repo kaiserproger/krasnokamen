@@ -474,14 +474,20 @@ def _golem_gossip(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             uuid_ = row["entity_uuid"]
             marker = f"golem premise {uuid.uuid4().hex[:8]}"
             steps.call("minecraft_send_chat", {"message": marker, "command": False})
-            steps.wait(lambda s: marker in "\n".join(s.get("recent_chat", [])),
-                       "golem_premise_echo")
+            echoed = steps.wait(lambda s: marker in "\n".join(s.get("recent_chat", [])),
+                                "golem_premise_echo")
+            # The answer must be the line AFTER this marker: a previous villager's
+            # `last_slept` line in the chat history does not prove this merge
+            # (review D123Civ7 note 2).
+            lines = list(echoed.get("recent_chat", []))
+            after = max(index for index, line in enumerate(lines) if marker in line) + 1
             steps.call("minecraft_send_chat",
                        {"message": f"data get entity {uuid_} Brain", "command": True})
             seen = steps.wait(
-                lambda s: any("last_slept" in line for line in s.get("recent_chat", [])),
+                lambda s: any("last_slept" in line
+                              for line in list(s.get("recent_chat", []))[after:]),
                 "golem_premise_memories")
-            premise[uuid_] = [line for line in seen.get("recent_chat", [])
+            premise[uuid_] = [line for line in list(seen.get("recent_chat", []))[after:]
                               if "last_slept" in line][-1:]
 
     def summoned(_state: dict) -> bool:

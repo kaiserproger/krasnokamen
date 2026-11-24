@@ -7,5 +7,5 @@ severity = "major"
 status = "open"
 source = "D123Civ lane, found while fixing the civilization gate's street phase: `layout::stand` searched a stand only at the street line's own anchor-band height, so a cell below the band returned no stand and the road/meadow project stalled (fix 3ae4c84ca8 searches around the cell and at the cell's level). Product fix landed without a row; filed on 2026-11-24 (review D123Civ6 note d) so a real-client receipt can close it."
 regression = ["harness:civilization-seed-qa:all", "cargo:mc-core:villager::building::body_safety_tests::a_street_cell_below_the_anchor_band_still_has_a_stand"]
-fix_commit = "3ae4c84ca8"
 failing_first = "reported"
+repro_check = "identity note: this fix spans several commits; before any promotion it needs a patch:<sha256> identity over their non-test hunks plus a hunks.md (README: a regression test may not be only later than the fix)."

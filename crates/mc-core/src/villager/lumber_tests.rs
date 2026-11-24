@@ -263,10 +263,12 @@ fn a_tree_in_the_sweep_is_cut_instead_of_sowing_the_zone() {
         .id_of(&mc_data::Identifier::parse("minecraft:oak_sapling").unwrap())
         .unwrap();
     v.inventory[0] = Some(ItemStack::new(sapling, 3));
-    tree(&mut state, 11, 11, 5);
+    // Ring 7 of the sweep from [8, 8]: index >= 169 of 225, well past the first
+    // 128-column slice, so a partial-slice sowing would have fired here.
+    tree(&mut state, 1, 8, 5);
     let mut changes = ChangeSet::default();
     let mut found = None;
-    for tick in 0..8 {
+    for tick in 0..10 {
         state.tick = tick * 20;
         crate::settlements::construction::tests::fresh_site_budget(&mut state);
         if let Some(target) = lumber::work(&mut state, slot, &mut v, &mut changes) {
@@ -279,15 +281,61 @@ fn a_tree_in_the_sweep_is_cut_instead_of_sowing_the_zone() {
             "a tree in the sweep must be cut, not preceded by sowing"
         );
     }
-    assert_eq!(
-        found,
-        Some(BlockPos {
-            x: 11,
-            y: 201,
-            z: 11
-        })
-    );
+    assert_eq!(found, Some(BlockPos { x: 1, y: 201, z: 8 }));
     assert_eq!(count(&v, sapling), 3, "no sapling was spent on the zone");
+}
+
+/// The last ring corner (slot total-1) can lie in an unloaded chunk; the wrap must
+/// be recorded there too, or `swept` is never set and the zone is never sown
+/// (review D123Civ7 blocker; the seed-24 village has radius 136 against
+/// simulation_distance 6).
+#[test]
+fn a_wrap_on_an_unloaded_last_corner_still_counts_as_a_full_sweep() {
+    let (mut state, slot, mut v) = fixture(BuildingKind::LumberCamp);
+    crate::settlements::construction::tests::open_plan(&mut state);
+    let settlement = v.settlement.unwrap();
+    let record = state.settlements.get_mut(settlement).unwrap();
+    // Origin [0, 0], reach 16: the last slot is the ring corner [-16, -15], in
+    // chunk (-1, -1), which the fixture leaves unloaded.
+    record.anchor = [0, 201, 0];
+    record.radius = 16;
+    state.entities.set_pos(slot, [0.5, 201.0, 0.5]);
+    let total = lumber::columns_total(16);
+    let last = lumber::column_at([0, 0], total - 1);
+    assert_eq!(last, [-16, -15]);
+    assert!(
+        !state
+            .world
+            .is_active(last[0].div_euclid(16), last[1].div_euclid(16)),
+        "the fixture must leave the last corner unloaded"
+    );
+    // `work` resets the whole progress when the camp id changes, so the cursor has
+    // to sit in a progress already bound to this camp.
+    let camp_id = state
+        .settlements
+        .get(settlement)
+        .unwrap()
+        .buildings
+        .values()
+        .find(|b| b.kind == BuildingKind::LumberCamp)
+        .unwrap()
+        .id
+        .0;
+    v.lumber_progress = lumber::Progress {
+        building: camp_id,
+        revision: 1,
+        cursor: total - 1,
+        search_origin: Some([0, 0]),
+        ..lumber::Progress::default()
+    };
+    let mut changes = ChangeSet::default();
+    crate::settlements::construction::tests::fresh_site_budget(&mut state);
+    state.tick = 0;
+    lumber::work(&mut state, slot, &mut v, &mut changes);
+    assert!(
+        v.lumber_progress.swept,
+        "the wrap on the unloaded corner must still mark the sweep complete"
+    );
 }
 
 #[test]
