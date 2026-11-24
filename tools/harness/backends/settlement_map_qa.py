@@ -326,6 +326,11 @@ SELECTED_CARD_ASSERTIONS = ("map_features_house_and_site", "selected_card_site_o
 STAGES = ("bell_opens_hub", "dashboard", "map", "building_order", "shortage_icons",
           "storage_transfer", "project_progress", "residents", "resources", "production_order")
 VERDICTS = (*STAGES, "localized_text", "all")
+# The scenario-only verdicts: each `--scenario` script above publishes its own name (and `all`),
+# so a receipt carries it; the civil walk never produces them. `regressions` registers this set
+# together with `VERDICTS` (the ledger ref must accept and read every one of them) and
+# `test_settlement_quickwins_qa` holds both sides to it.
+SCENARIO_VERDICTS = ("selected_card", "verge_connected")
 
 
 def _stage_checks(language: str) -> dict[str, tuple[list[str], list[str]]]:
