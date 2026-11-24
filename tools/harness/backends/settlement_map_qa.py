@@ -279,6 +279,9 @@ PAGES = {
 # The verdicts a receipt publishes in `details.verdicts` (registered as
 # `regressions._BOOLEAN_PROFILE_VERDICTS["settlement-map-qa"]`): one per GUI stage the run
 # walks, `localized_text` (every Russian title and text check, ru_ru runs only) and `all`.
+# Assertions the `--scenario selected-card` run must record true for its verdict.
+SELECTED_CARD_ASSERTIONS = ("map_features_house_and_site", "selected_card_site_only",
+                            "selected_card_back_returns_map", "selected_card_building_only")
 STAGES = ("bell_opens_hub", "dashboard", "map", "building_order", "shortage_icons",
           "storage_transfer", "project_progress", "residents", "resources", "production_order")
 VERDICTS = (*STAGES, "localized_text", "all")
@@ -401,9 +404,8 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
                 return _selected_card_script(probe, artifact, steps, client, args)
             finally:
                 checks = probe.report["assertions"]
-                required = [name for name in checks
-                            if name.startswith(("selected_card_", "map_features_"))]
-                ok = bool(required) and all(checks[name] for name in required)
+                # Every required check must have been recorded true: a missing one is not a pass.
+                ok = all(checks.get(name) is True for name in SELECTED_CARD_ASSERTIONS)
                 published = {"selected_card": ok, "all": ok}
                 probe.report["verdicts"] = published
                 ctx.client_evidence["verdicts"] = published
@@ -1026,8 +1028,13 @@ def _selected_card_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[s
         shot("selected-site-card")
         site_text = _visible_text(landed)
         probe.report["selected_card"]["site_card"] = site_text[:1200]
+        # One project's facts: the aggregate screen lists every active project (the control run shows
+        # "Active projects: 3/8" with Road, Street lamp and House) while a selected card has one level.
+        levels = len(re.findall(r"\bL1\b", site_text))
+        probe.report["selected_card"]["site_card_levels"] = levels
         probe.check("selected_card_site_only",
-                    label("House", "Дом") in site_text and label("Storage", "Склад") not in site_text)
+                    label("House", "Дом") in site_text and levels == 1
+                    and "Active projects" not in site_text and "Активные проекты" not in site_text)
         gui.button(label("Back", "Назад"))
         restored = probe.wait(lambda s: str((s.get("screen") or {}).get("title", ""))
                               .startswith(label("Map ·", "Карта ·")),
