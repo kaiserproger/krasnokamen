@@ -33,12 +33,29 @@ def _arrived(steps, name, arguments):
     steps.check(name, result.get("arrived") is True)
     return result
 
+def _approach_hold(client) -> float:
+    """How long this client accepts one approach action.
+
+    The row's control needs an action clearly longer than the lease idle TTL (120 s). The tool
+    declares its own bound (120 s before 2026-11-25, 300 s after), so the scene asks the client and
+    records the answer instead of assuming one: a client that still caps at 120 s runs the scene but
+    cannot carry the margin, and the report says so."""
+    for tool in client.list_tools():
+        if tool.get("name") != "minecraft_approach_entity":
+            continue
+        schema = tool.get("inputSchema") or tool.get("input_schema") or {}
+        maximum = (schema.get("properties") or {}).get("timeout_seconds", {}).get("maximum", 120.0)
+        return min(150.0, float(maximum))
+    raise RuntimeError("approach_entity declares no timeout range")
+
+
 def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     a = steps.client
     b = McpClient(a.endpoint, a.token, 140)
     b.initialize()
     worker = None
     result = {}
+    hold = 120.0
     try:
         x, y, z = origin
         _set(steps, {"x": x, "y": y + 11, "z": z}, "minecraft:stone")
@@ -55,15 +72,16 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             return True
         steps.wait(received_target, "stationary_out_of_reach_target", timeout_seconds=30)
         started = time.monotonic()
+        hold = _approach_hold(a)
         def approach():
             try:
                 result["approach"] = a.call_tool("minecraft_approach_entity", {
-                    "entity_id": target["entity_id"], "timeout_seconds": 150.0})
+                    "entity_id": target["entity_id"], "timeout_seconds": hold})
             except Exception as error:
                 result["approach_error"] = str(error)
         worker = threading.Thread(target=approach)
         worker.start()
-        worker.join(timeout=165)
+        worker.join(timeout=hold + 15)
         # The row's own claim comes first: a client that loses the controller at the idle deadline
         # never returns the bounded action, so `active_writer_survived_idle_deadline` is the
         # assertion that has to flip, and the generic completion check follows it.
@@ -72,6 +90,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         controller_now = _controller(b)
         steps.report["idle_deadline"] = {
             "elapsed_seconds": round(time.monotonic() - started, 3),
+            "approach_timeout_seconds": hold,
             "completed": completed,
             "approach_entity_uuid": approach.get("entity_uuid"),
             "target_entity_uuid": target.get("entity_uuid"),
@@ -80,7 +99,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
             "controller_remaining_ms": controller_now.get("remaining_ms"),
         }
         steps.check("active_writer_survived_idle_deadline",
-                    time.monotonic() - started >= 125 and completed
+                    time.monotonic() - started >= hold - 25.0 and completed
                     and approach.get("entity_uuid") == target.get("entity_uuid")
                     and controller_now.get("active") is True)
         steps.check("long_action_completed", completed)
@@ -130,7 +149,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     finally:
         b.close()
         if worker is not None:
-            worker.join(timeout=175)
+            worker.join(timeout=hold + 25)
 
     # The client must receive the hole and adjacent supporting block before the
     # exact straddling pose is imposed by the private operator fixture.
