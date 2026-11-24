@@ -348,7 +348,26 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
                       and str((s["screen"]).get("title") or "").startswith(title), label)
 
     def order_form(recipe: str) -> dict[str, Any]:
-        """Production menu -> New order icon -> recipe icon -> the order dialog, box set ON."""
+        """Production menu -> New order icon -> recipe icon -> the order dialog, box set ON.
+
+        The form refuses with "No free resident" while no settler is free in the
+        server's live view (ui.rs:1453); a bound villager that has wandered out of
+        the loaded chunks is not in `people()` at that instant (20261123T232447 and
+        20261124T043521 wedged there with two bound villagers, 20261124T043115
+        passed with the same binding). Retry the recipe click instead of failing on
+        one instant of a wandering settler; a settlement that never reports a free
+        resident still fails here with its own view recorded.
+        """
+        for attempt in range(6):
+            form = _order_form_once(recipe)
+            if form is not None:
+                return form
+            probe.call("minecraft_close_screen", {})
+            probe.call("minecraft_wait_ticks", {"ticks": 40})
+        raise RuntimeError(f"production form for {recipe} never opened: no free resident in the "
+                           f"settlement after 6 attempts; last view {detail.get('residents_before_order')}")
+
+    def _order_form_once(recipe: str) -> dict[str, Any] | None:
         probe.call("minecraft_send_chat", {"message": "settlement menu production", "command": True})
         orders = menu("Production orders", f"orders_open_{recipe}")
         action = next((row for row in orders["container"]["slots"] if row.get("slot") == ACTION_SLOT), {})
@@ -361,9 +380,24 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
         probe.check(f"recipe_icon_{recipe}", icon is not None)
         probe.call("minecraft_click_container_slot",
                    {"slot": icon, "button": "primary", "timeout_seconds": probe.remaining()})
-        form = _bwait(probe, lambda s: (s.get("screen") or {}).get("class") == DIALOG
-                      and (s["screen"].get("title") or "") == "New production order",
-                      f"order_dialog_{recipe}")
+        # Either the form opens or the settlement refuses it for want of a free
+        # resident; the refusal text sits in the dialog body (not the action
+        # labels), so poll the observation briefly for either instead of waiting
+        # out the 90 s wedge.
+        form: dict[str, Any] | None = None
+        for _ in range(60):
+            state = probe.observe()
+            screen = state.get("screen") or {}
+            if screen.get("class") == DIALOG and (screen.get("title") or "") == "New production order":
+                form = state
+                break
+            body = _body(state)
+            if "No free resident" in body:
+                detail.setdefault("form_refusals", []).append(body[:200])
+                return None
+            probe.call("minecraft_wait_ticks", {"ticks": 2})
+        if form is None:
+            raise RuntimeError(f"the {recipe} order dialog neither opened nor refused within 120 ticks")
         detail.setdefault("resident_options", {})[recipe] = [
             label for label in _labels(form) if label.startswith("Resident: ")]
         auto = next((label for label in _labels(form) if label.startswith(AUTO_LABEL)), None)
@@ -385,9 +419,20 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     # names who the settlement counts instead of only saying "No free resident"
     # (20261123T232447: two bound villagers, "строитель" + "безработный", and the
     # saddle form refused).
-    detail["residents_before_order"] = [
-        line for line in _readback(probe, f"settlement info {SETTLEMENT}", "«").splitlines()
-    ] + _readback(probe, f"settlement residents {SETTLEMENT}", "Residents").splitlines()
+    # The order form needs the server's own settler view (ui.rs:1453 refuses with
+    # "No free resident" while `production_workers` is empty). Right after
+    # `settlement bind` that view can still lack the bound villagers, which made
+    # 20261123T232447's saddle form refuse although two villagers were bound. Wait
+    # for the reported membership instead of opening the form into a stale view.
+    info: list[str] = []
+    for _ in range(8):
+        info = _readback(probe, f"settlement info {SETTLEMENT}", "«").splitlines()
+        if any(f"members={RESIDENTS}" in line for line in info):
+            break
+        probe.call("minecraft_wait_ticks", {"ticks": 20})
+    detail["residents_before_order"] = info
+    probe.check("settlers_visible_to_server",
+                any(f"members={RESIDENTS}" in line for line in info))
 
     form = order_form("saddle")
     labels = _labels(form)
