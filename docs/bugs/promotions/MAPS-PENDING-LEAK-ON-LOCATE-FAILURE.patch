@@ -1,0 +1,58 @@
+diff --git a/crates/mc-core/src/command_locate.rs b/crates/mc-core/src/command_locate.rs
+index ed5bf0b..ba7dcd6 100644
+--- a/crates/mc-core/src/command_locate.rs
++++ b/crates/mc-core/src/command_locate.rs
+@@ -1457,14 +1457,17 @@ fn deliver(state: &mut TickState, done: LocateDone) {
+                 crate::projectiles::eye::complete(state, request, hit.pos);
+             }
+         }
+-        LocateCompletion::Callback { reply, .. } => {
+-            // A metadata/read failure is not "no destination": the caller's
+-            // pending loot/trade plan is released so its container opens again
++        LocateCompletion::Callback { reply, on_failure } => {
++            // A metadata/read failure is not "no destination": release the
++            // caller's pending loot/trade plan so its container opens again
+             // (a fresh search next time) instead of waiting forever.
+             if done.error.is_some() {
+                 tracing::warn!(
+                     "locate callback refused: metadata unreadable; pending plan released"
+                 );
++                if let Some(release) = on_failure {
++                    release(state);
++                }
+                 return;
+             }
+             let hit = done.hit.map(|hit| mc_world::BlockPos {
+@@ -1609,9 +1612,12 @@ fn terminal_wrong_dimension(state: &mut TickState, pending: PendingLocate) {
+                 );
+             }
+         }
+-        LocateCompletion::Callback { .. } => {
+-            // Cross-world: the search cannot answer this dimension; the
+-            // container re-plans when reopened.
++        LocateCompletion::Callback { on_failure, .. } => {
++            // Cross-world: the search cannot answer this dimension, so release
++            // the pending plan; the container re-plans when reopened.
++            if let Some(release) = on_failure {
++                release(state);
++            }
+         }
+         LocateCompletion::Dolphin(dolphin) => {
+             state.locate.dolphin.remove(&dolphin);
+@@ -1662,10 +1668,13 @@ fn fail_worker(state: &mut TickState) {
+                     );
+                 }
+             }
+-            LocateCompletion::Callback { .. } => {
+-                // Infrastructure loss must not wedge the container: the next
+-                // open plans a new search.
++            LocateCompletion::Callback { on_failure, .. } => {
++                // Infrastructure loss must not wedge the container: release the
++                // pending loot/trade plan so the next open plans a new search.
+                 tracing::warn!("locate worker lost: pending map/loot plan released");
++                if let Some(release) = on_failure {
++                    release(state);
++                }
+             }
+             LocateCompletion::Dolphin(dolphin) => {
+                 let matches = state.locate.dolphin.get(&dolphin).is_some_and(|treasure| {
