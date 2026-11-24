@@ -166,6 +166,9 @@ _PROFILE_VERDICT_RUN = {
     # The starter chest founded under block churn in its chunk (row JAVA-CLIENT-MISSES-FOUNDING-STARTER-CHEST-BLOCK
     # was seen on vanilla Java 26.3); the scenario's default race: 4 observer clocks, founded 100 ticks after the pad.
     ('settlement-map-qa', 'starter_chest_race'): ('java', ['--', '--scenario', 'quickwins-c1-race']),
+    # The site/storage markers each open their own card (row SETTLEMENT-MAP-SITE-CLICK-LOSES-PROJECT);
+    # one live construction site beside the certified storage, native windowed.
+    ('settlement-map-qa', 'selected_card'): ('native', ['--', '--scenario', 'selected-card']),
     # The chisel resource-pack admission is a vanilla-Java client behaviour; the native client
     # never asks for the optional pack.
     ('chisel', 'vanilla_optional_admission'): ('java', []),
