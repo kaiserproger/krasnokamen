@@ -1370,7 +1370,7 @@ fn a_bed_broken_in_the_tick_its_player_lies_down_is_not_restored() {
     assert_eq!(
         rig.state.players[&rig.player]
             .statistics
-            .get_custom(CustomStat::SleepInBed),
+            .get_custom(mc_data::statistics::CustomStat::SleepInBed),
         1,
         "the player lay down in the same tick as the break"
     );
