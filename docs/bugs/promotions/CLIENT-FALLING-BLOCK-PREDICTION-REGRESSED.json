@@ -1,0 +1,65 @@
+{
+  "id": "CLIENT-FALLING-BLOCK-PREDICTION-REGRESSED",
+  "verdict": "promoted",
+  "fix_commit": "client:e541641c53a0c2cf452e6f5f694e3758e8550519",
+  "fix_commit_full": "e541641c53a0c2cf452e6f5f694e3758e8550519",
+  "promoted_at": "2026-11-24T17:11:06+00:00",
+  "tree_head": "790a30cde116370587892894b41f8cb7b25454d7",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T170359-native-v2-input-sand-6wuffbln/result.json",
+    "client_head": "593f7957134733579e67515ff9a1cf3e47a83534",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "red": [
+      "harness:entities:native-v2-input-sand"
+    ],
+    "states": {
+      "harness:entities:native-v2-input-sand": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T165830-native-v2-input-sand-v3phoagi/result.json",
+    "client_head": "e541641c53a0c2cf452e6f5f694e3758e8550519",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "green": [
+      "harness:entities:native-v2-input-sand"
+    ],
+    "states": {
+      "harness:entities:native-v2-input-sand": "green"
+    },
+    "tree_head": "790a30cde116370587892894b41f8cb7b25454d7",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T165830-native-v2-input-sand-v3phoagi/result.json",
+    "client_head": "e541641c53a0c2cf452e6f5f694e3758e8550519",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "green": [
+      "harness:entities:native-v2-input-sand"
+    ],
+    "states": {
+      "harness:entities:native-v2-input-sand": "green"
+    },
+    "tree_head": "790a30cde116370587892894b41f8cb7b25454d7",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "17a5a6842ca5ba524ff416551ce3b7487361d3c0",
+    "paths": [
+      "src/minecraft/entities.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::falling_tests::falling_block_predicts_between_packets_then_lands_without_moving_received_base": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261124T171105-ledger-promote-pfukfrff"
+}
