@@ -177,6 +177,34 @@ pub(crate) fn encode_tile(
     out
 }
 
+/// Queue a tile sampled under the generation captured before the sample. A
+/// reliable dimension reset while sampling makes the writer discard the frame
+/// instead of applying an old-dimension tile in the new one.
+fn enqueue_sampled(
+    sender: &crate::server::WorldSender,
+    sampled_at: u64,
+    frame: bytes::Bytes,
+) -> bool {
+    sender.try_send_at(sampled_at, frame).is_ok()
+}
+
+/// Capture the queue generation, run `sample` and enqueue the frame under that
+/// generation. The capture must precede `sample`: a dimension reset while the
+/// tile is sampled has to fence the frame out of the new dimension.
+fn sample_tile(
+    sender: &crate::server::WorldSender,
+    captured: Option<u64>,
+    sample: impl FnOnce() -> Option<bytes::Bytes>,
+) -> bool {
+    let Some(sampled_at) = captured else {
+        return false;
+    };
+    let Some(frame) = sample() else {
+        return false;
+    };
+    enqueue_sampled(sender, sampled_at, frame)
+}
+
 fn varint(out: &mut Vec<u8>, mut value: u32) {
     loop {
         if value < 0x80 {
@@ -283,6 +311,10 @@ impl LodConnection {
                 self.inflight.fetch_sub(1, Ordering::AcqRel);
                 continue;
             }
+            let captured = server
+                .connections
+                .get(connection)
+                .map(|handles| handles.world_tx.generation());
             let inflight = Arc::clone(&self.inflight);
             let workers = Arc::clone(&service.workers);
             let server = Arc::clone(server);
@@ -291,42 +323,48 @@ impl LodConnection {
                 let Ok(_permit) = workers.acquire_owned().await else {
                     return;
                 };
+                let Some(handles) = server.connections.get(connection) else {
+                    return;
+                };
+                let sender = handles.world_tx.clone();
                 let hub = Arc::clone(&server.hub);
-                let samples = tokio::task::spawn_blocking(move || {
-                    hub.lod_tile(
-                        request.tile_x,
-                        request.tile_z,
-                        request.level,
-                        request.stored_only,
-                    )
+                // The sample is blocking; the generation captured before it is
+                // stamped on the frame, so a dimension reset while it runs makes
+                // the writer discard the tile.
+                let sampled = tokio::task::spawn_blocking(move || {
+                    sample_tile(&sender, captured, || {
+                        let samples = match hub.lod_tile(
+                            request.tile_x,
+                            request.tile_z,
+                            request.level,
+                            request.stored_only,
+                        ) {
+                            Ok(samples) => samples,
+                            Err(error) => {
+                                tracing::warn!(%error, "lod tile failed");
+                                return None;
+                            }
+                        };
+                        if server.hub.session_locked(connection) {
+                            return None;
+                        }
+                        let service = server.lod.as_ref()?;
+                        let payload = encode_tile(request, &samples, &service.biomes);
+                        frame(tile_channel(), payload).ok()
+                    })
                 })
                 .await;
-                let samples = match samples {
-                    Ok(Ok(samples)) => samples,
-                    Ok(Err(error)) => return tracing::warn!(%error, "lod tile failed"),
-                    Err(error) => return tracing::warn!(%error, "lod tile task failed"),
-                };
-                if server.hub.session_locked(connection) {
-                    return;
-                }
-                let Some(service) = server.lod.as_ref() else {
-                    return;
-                };
-                let payload = encode_tile(request, &samples, &service.biomes);
-                let Ok(frame) = frame(tile_channel(), payload) else {
-                    return;
-                };
-                if let Some(handles) = server.connections.get(connection)
-                    && handles.world_tx.try_send(frame).is_ok()
-                {
-                    tracing::debug!(
+                match sampled {
+                    Ok(true) => tracing::debug!(
                         connection = connection.0,
                         tile_x = request.tile_x,
                         tile_z = request.tile_z,
                         level = request.level,
                         stored_only = request.stored_only,
                         "lod tile queued"
-                    );
+                    ),
+                    Ok(false) => {}
+                    Err(error) => tracing::warn!(%error, "lod tile task failed"),
                 }
             });
         }
@@ -359,6 +397,36 @@ impl Drop for Done {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A tile sampled before a reliable dimension reset must not reach the new
+    /// dimension: the frame carries the generation captured before the sample
+    /// and the writer discards it, releasing its queued credit. Moving the
+    /// capture after the sample delivers the stale tile.
+    #[test]
+    fn a_reset_during_the_sample_discards_the_tile() {
+        let (sender, mut receiver) = crate::server::world_queue(4, 256);
+        let captured = sender.generation();
+        let queued = sample_tile(&sender, Some(captured), || {
+            sender.reset();
+            Some(bytes::Bytes::from(vec![1u8; 32]))
+        });
+        assert!(queued, "the stale tile is queued under its old generation");
+        assert!(matches!(
+            receiver.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+        ));
+        assert_eq!(
+            sender.queued_bytes(),
+            0,
+            "the discarded tile released its queued bytes"
+        );
+        // A tile sampled after the reset is delivered.
+        let queued = sample_tile(&sender, Some(sender.generation()), || {
+            Some(bytes::Bytes::from(vec![2u8; 16]))
+        });
+        assert!(queued);
+        assert_eq!(receiver.try_recv().unwrap().len(), 16);
+    }
 
     #[test]
     fn request_round_trips_and_rejects_malformed() {

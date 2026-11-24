@@ -1,0 +1,157 @@
+diff --git a/crates/mc-core/src/core/journal.rs b/crates/mc-core/src/core/journal.rs
+index 39cf18d7f..6b61e513a 100644
+--- a/crates/mc-core/src/core/journal.rs
++++ b/crates/mc-core/src/core/journal.rs
+@@ -1310,7 +1310,7 @@ pub(super) fn run_native_work(
+             let result = crate::hot_backup::copy_world(
+                 world_dir,
+                 &job.out,
+-                &mut std::io::empty(),
++                &mut store.snapshot_reader(),
+                 prev_manifest.tick,
+                 through,
+                 wal_identity,
+diff --git a/crates/mc-core/src/hot_backup.rs b/crates/mc-core/src/hot_backup.rs
+index 12e661382..b0f1296ea 100644
+--- a/crates/mc-core/src/hot_backup.rs
++++ b/crates/mc-core/src/hot_backup.rs
+@@ -114,10 +114,9 @@ pub(crate) fn copy_world(
+     let mut files = BTreeMap::new();
+     std::fs::create_dir(out.join("native")).map_err(io)?;
+     std::fs::create_dir(out.join("journal")).map_err(io)?;
+-    let _ = database;
+     files.insert(
+         NATIVE_DATABASE.to_owned(),
+-        copy_hashed(&world_dir.join(NATIVE_DATABASE), &out.join(NATIVE_DATABASE))?,
++        copy_reader_hashed(database, &out.join(NATIVE_DATABASE))?,
+     );
+     // Books R4-P1: the marker travels with the store it witnesses, so a
+     // restored copy is checked against the same (store id, checkpoint tick)
+@@ -227,9 +226,7 @@ pub(crate) fn copy_world(
+         _ => {}
+     }
+     for directory in [out.join("native"), out.join("journal"), out.to_path_buf()] {
+-        File::open(directory)
+-            .and_then(|d| d.sync_all())
+-            .map_err(io)?;
++        crate::journal::fsync_dir(&directory).map_err(io)?;
+     }
+     Ok(HotBackup {
+         checkpoint_tick,
+diff --git a/crates/mc-edge/src/backup.rs b/crates/mc-edge/src/backup.rs
+index b77b01e19..d3f02c038 100644
+--- a/crates/mc-edge/src/backup.rs
++++ b/crates/mc-edge/src/backup.rs
+@@ -250,15 +250,21 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<usize> {
+             .map_err(|error| anyhow::anyhow!("backup source store: {error}"))?;
+     mc_world::store_marker::verify(&world, store_uuid, store_tick)
+         .map_err(|error| anyhow::anyhow!("backup refused: {error}"))?;
+-    let _database_lease = ExclusiveLease::acquire(&world.join(NATIVE_DATABASE))?;
++    let mut database_lease = ExclusiveLease::acquire(&world.join(NATIVE_DATABASE))?;
+     require_empty(&out)?;
+     std::fs::create_dir_all(&out)?;
+     let _output_lease = ExclusiveLease::acquire(&out)?;
+     require_empty(&out)?;
+     let mut manifest = BackupManifest::current();
+     for (name, source) in files {
+-        let digest = copy_file_durable(&source, &out.join(&name))
+-            .with_context(|| format!("backing up {name}"))?;
++        // Windows byte-range locks also deny reads through a second handle in
++        // this process. Read the database through the handle holding its lease.
++        let digest = if name == NATIVE_DATABASE {
++            copy_reader_durable(&mut database_lease.0, &out.join(&name))
++        } else {
++            copy_file_durable(&source, &out.join(&name))
++        }
++        .with_context(|| format!("backing up {name}"))?;
+         manifest.files.insert(name, digest);
+     }
+     write_manifest(&out, &manifest)?;
+@@ -414,7 +420,7 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+     if !files.keys().eq(manifest.files.keys()) {
+         bail!("backup files do not match manifest; restore refused");
+     }
+-    let _database_lease = ExclusiveLease::acquire(&from.join(NATIVE_DATABASE))?;
++    let mut database_lease = ExclusiveLease::acquire(&from.join(NATIVE_DATABASE))?;
+     // Lease an existing target before inspecting it; a live core must fail on
+     // its actual lock even when it has not yet published any files.
+     let target_lease = if target.try_exists()? {
+@@ -424,7 +430,11 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+     };
+     require_empty(&target)?;
+     for (name, source) in &files {
+-        let actual = digest_file(source)?;
++        let actual = if name == NATIVE_DATABASE {
++            digest_reader(&mut database_lease.0)?
++        } else {
++            digest_file(source)?
++        };
+         let expected = &manifest.files[name];
+         if &actual != expected {
+             bail!(
+@@ -439,9 +449,14 @@ pub fn run_restore(from: &Path, world_dir: &Path) -> Result<()> {
+         None => ExclusiveLease::acquire(&target)?,
+     };
+     require_empty(&target)?;
++    database_lease.0.rewind()?;
+     for (name, source) in &files {
+-        let actual = copy_file_durable(source, &target.join(name))
+-            .with_context(|| format!("restoring {name}"))?;
++        let actual = if name == NATIVE_DATABASE {
++            copy_reader_durable(&mut database_lease.0, &target.join(name))
++        } else {
++            copy_file_durable(source, &target.join(name))
++        }
++        .with_context(|| format!("restoring {name}"))?;
+         if actual != manifest.files[name] {
+             bail!("backup file {name} changed while restoring; restore is incomplete");
+         }
+diff --git a/crates/mc-world-conversion/src/import.rs b/crates/mc-world-conversion/src/import.rs
+index b84c8e792..3f6a31416 100644
+--- a/crates/mc-world-conversion/src/import.rs
++++ b/crates/mc-world-conversion/src/import.rs
+@@ -1106,10 +1106,9 @@ pub(super) fn convert(
+                 .directory(Path::new(""))
+                 .join("data/minecraft")
+                 .join(name);
+-            let key = canonical
+-                .to_str()
++            let key = mc_data::resource_path::slash_relative(Path::new(""), &canonical)
+                 .ok_or_else(|| fail("non-UTF8 saved-data path"))?;
+-            if let Some(tag) = metadata.get(key) {
++            if let Some(tag) = metadata.get(&key) {
+                 if fight {
+                     if dimension != Dimension::End {
+                         return Err(fail(format!("{key}: dragon fight outside End")));
+diff --git a/crates/mc-world-conversion/src/lib.rs b/crates/mc-world-conversion/src/lib.rs
+index 60297576b..b771410e5 100644
+--- a/crates/mc-world-conversion/src/lib.rs
++++ b/crates/mc-world-conversion/src/lib.rs
+@@ -716,7 +716,12 @@ fn files(root: &Path) -> Result<Vec<PathBuf>, CoreError> {
+             .map_err(fail)?;
+         entries.sort_by_key(|entry| entry.file_name());
+         for entry in entries {
+-            let path = relative.join(entry.file_name());
++            // Keep the interchange path slash-separated even when directory
++            // traversal returns Windows separators. Consumers use these names
++            // as metadata keys as well as filesystem-relative paths.
++            let name = mc_data::resource_path::slash_relative(root, &entry.path())
++                .ok_or_else(|| fail("non-UTF8 source path"))?;
++            let path = PathBuf::from(&name);
+             let kind = entry.file_type().map_err(fail)?;
+             if kind.is_symlink() {
+                 return Err(fail(format!("symlink rejected: {}", path.display())));
+@@ -724,9 +729,10 @@ fn files(root: &Path) -> Result<Vec<PathBuf>, CoreError> {
+             if kind.is_dir() {
+                 walk(root, &path, out)?;
+             } else if kind.is_file() {
+-                mc_core::level_metadata::validate_relative_path(
+-                    path.to_str().ok_or_else(|| fail("non-UTF8 source path"))?,
+-                )?;
++                if name == mc_world::storage::WORLD_LEASE_FILE_NAME {
++                    continue;
++                }
++                mc_core::level_metadata::validate_relative_path(&name)?;
+                 out.push(path);
+             } else {
+                 return Err(fail(format!(

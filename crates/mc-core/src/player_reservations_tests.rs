@@ -945,7 +945,7 @@ fn refused_sparse_route_images_actual_open_container_cargo_and_cursor() {
         .unwrap()
         .carried = cursor.clone();
     state.open_containers.insert(entity, (pos.x, pos.y, pos.z));
-    let effects = crate::tick::inventory_transition_refused(&state, entity);
+    let effects = crate::tick::inventory_transition_refused(&mut state, entity);
     let PlayerChange::MenuContents {
         window,
         slots,

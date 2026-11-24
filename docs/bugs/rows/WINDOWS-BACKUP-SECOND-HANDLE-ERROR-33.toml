@@ -1,0 +1,11 @@
+[[bug]]
+id = "WINDOWS-BACKUP-SECOND-HANDLE-ERROR-33"
+title = "Windows-only backup/import symptoms: offline backup/restore fail reading native/state.redb through a second handle while the same process holds an exclusive LockFileEx on it (error 33), and import-anvil/export-anvil/census build `\\`-separated keys that fail validate_relative_path. The code fix c1f387bbcb is already in HEAD; this row stays open until a Windows control runs."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "Split out of WINDOWS-BACKUP-CONVERSION on the final delta review (2026-11-24, B1, then review 9): the Linux-provable parts (owned-snapshot copy, world-lease skip) stay there; the Windows-only symptoms — the second-handle LockFileEx error 33 and the platform-separator keys (no Linux red: the a/- form yields the same '/' keys) — need a Windows control. The fix c1f387bbcb introduced the lease-holding reads (mc-edge/backup.rs copy_reader_durable/digest_reader, mc-world/native.rs NativeStore::snapshot_reader over the owned Arc<File>, hot_backup for a running core); the offline mc-edge path is recorded as coverage only there because it is green on Linux. See docs/development/windows-and-macos-client-qa.md:5-41 for the Windows VM lane and receipts/D123/OWNER-DECISIONS-NEEDED.md (item: run the control on the owner's laptop or accept Linux proof)."
+regression = []
+failing_first = "not recorded"
+repro_check = "The fix c1f387bbcb is already in HEAD: mc-edge/backup.rs reads the database through the lease-holding handle (copy_reader_durable/digest_reader/rewind), mc-world/native.rs NativeStore::snapshot_reader reads the owned Arc<File>, and import/export keys go through resource_path::slash_relative. This row stays open until a Windows control runs (a second handle under LockFileEx must fail with error 33 pre-fix and succeed with the fix; separated keys must fail validate_relative_path). Any future identity reuses the same mc-edge/backup.rs hunks as WINDOWS-BACKUP-CONVERSION. Regression stays empty; the mc-edge offline test is coverage only."

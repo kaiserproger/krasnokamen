@@ -1,0 +1,56 @@
+diff --git a/crates/mc-core/src/datapacks.rs b/crates/mc-core/src/datapacks.rs
+index 29933861b..036ceef29 100644
+--- a/crates/mc-core/src/datapacks.rs
++++ b/crates/mc-core/src/datapacks.rs
+@@ -808,13 +808,19 @@ impl PackSet {
+                 .source
+                 .data_files(&mut remaining, &mut visited)
+                 .map_err(|e| format!("{id}: {e}"))?;
++            // Worldgen this server cannot generate refuses the whole pack, naming
++            // every such entry (a bounded list) instead of loading a partial pack.
++            let mut unsupported = Vec::new();
+             for (relative, bytes) in data {
+                 let add = || -> Result<(), String> {
+                     worldgen::validate_path(&relative)?;
+                     if worldgen::is_resource(&relative) {
+                         let expanded = match worldgen::validate_resource(&relative, &bytes) {
+                             Ok(expanded) => expanded,
+-                            Err(worldgen::ResourceError::Unsupported(_)) => return Ok(()),
++                            Err(worldgen::ResourceError::Unsupported(entry)) => {
++                                unsupported.push(entry);
++                                return Ok(());
++                            }
+                             Err(worldgen::ResourceError::Invalid(error)) => return Err(error),
+                         };
+                         remaining = remaining
+@@ -832,6 +838,16 @@ impl PackSet {
+                 };
+                 add().map_err(|e| format!("{id}: {relative}: {e}"))?;
+             }
++            if !unsupported.is_empty() {
++                const NAMED: usize = 8;
++                let mut named = unsupported[..unsupported.len().min(NAMED)].join(", ");
++                if unsupported.len() > NAMED {
++                    named.push_str(&format!(" and {} more", unsupported.len() - NAMED));
++                }
++                return Err(format!(
++                    "{id}: unsupported worldgen this server cannot generate: {named}"
++                ));
++            }
+             result.worldgen_layers.push(layer);
+         }
+         fn expand(
+diff --git a/crates/mc-core/src/datapacks_worldgen.rs b/crates/mc-core/src/datapacks_worldgen.rs
+index 8e71e3012..8f48b3875 100644
+--- a/crates/mc-core/src/datapacks_worldgen.rs
++++ b/crates/mc-core/src/datapacks_worldgen.rs
+@@ -983,6 +983,9 @@ pub(crate) fn open(
+         let adoption = inputs.stage_identity(&mut staged)?;
+         adoption.validate_replay_baselines(replays, reader, registry)?;
+         packs.bind_structure_catalog(adoption.catalog);
++        inputs
++            .validate(registry)
++            .map_err(crate::CoreError::Worldgen)?;
+         let mut content = registry.prepare_content();
+         packs
+             .install_content(&mut content)

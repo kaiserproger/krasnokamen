@@ -1,0 +1,10 @@
+[[bug]]
+id = "REFRESH-CONTAINER-VIEWERS-COLD-FORK"
+title = "refresh_container_viewers rebuilds a block menu's cells and slots for every viewer without the residency guard the click, recipe and refusal paths make, so an external custody change while a chest half is non-resident publishes a menu image with 27 real slots plus 27 empty ones (or overlay records of the cold half) to that viewer."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Filed from the final Opus review of D123/D113BugB (2026-11-24), NB9: crates/mc-core/src/tick/containers.rs refresh_container_viewers has the same fork as the pre-fix inventory_transition_refused (fixed in 96fca8717 by applying menu.kind.container_size() != container.len() || any cell block_at is None). Not fixed in that commit: it is a separate path (external custody mutation while a viewer has the menu open), needs its own scene and regression."
+regression = []
+failing_first = "not recorded"

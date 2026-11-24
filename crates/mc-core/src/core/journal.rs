@@ -394,6 +394,20 @@ pub(crate) fn journal_entries_for_tick(
     output: &TickOutput,
 ) -> Result<Vec<JournalEntry>, CoreError> {
     let start = std::time::Instant::now();
+    // A block write whose chunk's storage admission already failed is never
+    // persisted; journaling the tick's write-list entry would let replay apply
+    // a block without its owner once the storage is repaired. Fail before any
+    // state is mutated; the tick owner turns this into a halt before the send.
+    if let Some(change) = output.changes.blocks.iter().find(|change| {
+        state
+            .world
+            .write_refused(change.position.x, change.position.z)
+    }) {
+        return Err(CoreError::Storage(format!(
+            "block write into refused chunk ({}, {}): state {}",
+            change.position.x, change.position.z, change.state
+        )));
+    }
     // Classify item births/crossings before entity_images advances the
     // existing WAL baselines (restored items already have a baseline).
     crate::abstract_sim::cancel_external_writes(state);

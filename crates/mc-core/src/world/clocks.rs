@@ -3,6 +3,15 @@
 
 use super::*;
 
+/// One native interval whose game clock was held, with the held ticks that
+/// precede it. Half-open: `start..end` are held ticks.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ClockSpan {
+    start: u64,
+    end: u64,
+    held_before: u64,
+}
+
 impl ChunkWorld {
     /// Read the live counter, including ticks not yet captured for persistence.
     pub(crate) fn inhabited_time(&self, pos: ChunkPos) -> i64 {
@@ -308,6 +317,122 @@ impl ChunkWorld {
         (start < end).then_some((start, end))
     }
 
+    /// Record this tick's held span once. `set_simulation_clock` published
+    /// `(held at tick, held at tick-1)`; a held tick advances the count by one.
+    /// The pair carries the count at `tick - 1` too, which is where the exact
+    /// history starts, so `clock_since` is `tick - 1`: a baseline seeded by
+    /// recovery at that tick projects exactly.
+    fn record_clock_tick(&mut self, tick: u64) {
+        if self.clock_recorded.is_some_and(|last| tick <= last) {
+            return;
+        }
+        if self.clock_since.is_none() {
+            self.clock_since = Some(tick.saturating_sub(1));
+            self.clock_held_base = self.sim_held_before_tick;
+        }
+        if self.sim_held_ticks > self.sim_held_before_tick {
+            // Cumulative held ticks before a new span keep the lookup a binary
+            // search plus one partial span, not a walk over the session.
+            let held_before = self
+                .clock_spans
+                .last()
+                .map_or(0, |span| span.held_before + (span.end - span.start));
+            match self.clock_spans.last_mut() {
+                Some(span) if span.end == tick => span.end = tick.saturating_add(1),
+                _ => self.clock_spans.push(ClockSpan {
+                    start: tick,
+                    end: tick.saturating_add(1),
+                    held_before,
+                }),
+            }
+        }
+        self.clock_recorded = Some(tick);
+    }
+
+    /// Game ticks simulated in `(from, to]` from the recorded held spans, or
+    /// `None` when `from` predates the recorded history (a re-anchored
+    /// baseline; the caller then leaves the image unadvanced, which can only
+    /// cost one extra image, never a wrong one).
+    #[must_use]
+    pub(crate) fn simulated_game_ticks(&self, from: u64, to: u64) -> Option<u64> {
+        if self.clock_since.is_some_and(|since| from < since) {
+            return None;
+        }
+        Some(
+            self.game_ticks_at(to)
+                .saturating_sub(self.game_ticks_at(from)),
+        )
+    }
+
+    /// Game ticks the clock has run through `tick` (offset by the held ticks
+    /// counted at [`Self::clock_since`], inclusive); differences across held
+    /// spans are exact.
+    fn game_ticks_at(&self, tick: u64) -> u64 {
+        let index = self.clock_spans.partition_point(|span| span.start <= tick);
+        let Some(span) = index.checked_sub(1).map(|index| &self.clock_spans[index]) else {
+            return tick.saturating_sub(self.clock_held_base);
+        };
+        // `held_ticks(tick)` counts a held tick at `tick` itself, so the
+        // partial span is `[span.start, min(span.end, tick + 1))`.
+        let within = span
+            .end
+            .min(tick.saturating_add(1))
+            .saturating_sub(span.start);
+        tick.saturating_sub(self.clock_held_base + span.held_before + within)
+    }
+
+    /// Visit `(first, last]` spans of running ticks inside `(from, to]`;
+    /// `first` is the boundary before the span and may be a held tick. Mirrors
+    /// `ReplayGameClock::running_intervals` for the live journal mirror.
+    pub(crate) fn for_each_running_interval(
+        &self,
+        from: u64,
+        to: u64,
+        mut visit: impl FnMut(u64, u64),
+    ) {
+        if to <= from {
+            return;
+        }
+        let mut start = from;
+        let first = self.clock_spans.partition_point(|span| span.end <= from);
+        for span in &self.clock_spans[first..] {
+            if span.start > to {
+                break;
+            }
+            if span.start > start {
+                let last = span.start - 1;
+                if start < last {
+                    visit(start, last);
+                }
+            }
+            start = start.max(span.end.saturating_sub(1));
+        }
+        if start < to {
+            visit(start, to);
+        }
+    }
+
+    /// Last running tick at or before `tick` (`tick` itself when it is not
+    /// held). Mirrors `ReplayGameClock::last_running_at`.
+    ///
+    /// A world recovered in the middle of a hold starts its spans at the first
+    /// tick it records (`R + 1`), so the hold that began before recovery is not
+    /// visible: for a `tick` in that pre-recovery part this returns `R`, while
+    /// replay (which reads `held_since`) returns `since - 1`. The difference
+    /// shifts only `advance_running_clocks`'s `from` anchor for one release
+    /// comparison, so a working/sleeping/panicking villager can emit one extra
+    /// image at the release; it is a conservative lag, never a wrong value.
+    #[must_use]
+    pub(crate) fn last_running_at(&self, tick: u64) -> u64 {
+        let index = self.clock_spans.partition_point(|span| span.start <= tick);
+        if let Some(span) = index.checked_sub(1).map(|index| &self.clock_spans[index])
+            && tick < span.end
+        {
+            return span.start.saturating_sub(1);
+        }
+        tick
+    }
+
     pub(crate) fn set_simulation_clock(&mut self, held_ticks: u64, held_before_tick: u64) {
         self.sim_held_ticks = held_ticks;
         self.sim_held_before_tick = held_before_tick;
@@ -372,6 +497,7 @@ impl ChunkWorld {
     /// [`Self::set_active_chunks`] stores then calls this same method.
     pub fn refresh_active_clock(&mut self, tick: u64) {
         self.sim_tick = tick;
+        self.record_clock_tick(tick);
         let held_ticks = self.sim_held_ticks;
         let held_before_tick = self.sim_held_before_tick;
         // Hot path: no per-tick allocation or sorting. Disjoint field borrows

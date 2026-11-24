@@ -587,6 +587,8 @@ seed = 81
                         and os.environ.get("BREAK_DL_ATTACK", "").startswith("hold"))):
                 def restart_server(remaining: float) -> str:
                     nonlocal server, server_log
+                    from .wal_forge import capture_identity
+                    mcp.wal_identity = capture_identity(Path(evidence["world_dir"]))
                     old_pid = server.pid
                     if console_shutdown:
                         start = server_log_path.stat().st_size
@@ -612,8 +614,13 @@ seed = 81
                         convert_world(ctx, binary, config, evidence,
                                       corrupt=getattr(mcp, "corrupt_fixture", None))
                     if getattr(mcp, "wal_forge", None):
+                        # The palette digest is a property of this build, so take it (and the
+                        # store id) from a format-2 batch the server itself wrote before it
+                        # stopped; the shutdown checkpoint may still prune the journal, so the
+                        # capture happens here, ahead of the stop path above.
+                        identity = getattr(mcp, "wal_identity", None)
                         evidence.setdefault("forged_wal_batches", []).append(
-                            str(mcp.wal_forge(Path(evidence["world_dir"]))))
+                            str(mcp.wal_forge(Path(evidence["world_dir"]), identity)))
                     server_log = server_log_path.open("ab")
                     server = subprocess.Popen([str(binary), "--config", str(config), "--no-console"],
                                               cwd=runtime.REPO_ROOT, stdout=server_log,

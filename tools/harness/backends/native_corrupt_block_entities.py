@@ -209,14 +209,16 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _echo(steps, "wal_fixtures_ordered")
     steps.report["wal_fixtures"] = [{**point, "block": block} for point, (block, _, _) in zip(wal, WAL_FIXTURES)]
 
-    def forge(world: Path) -> Path:
+    def forge(world: Path, identity) -> Path:
         tick = committed_tick(_server_log(steps))
         records = {
             (point["x"], point["y"], point["z"]): network_compound(record(point))
             for point, (_, _, record) in zip(wal, WAL_FIXTURES)
         }
         steps.report["forged_wal"] = {"after_checkpoint_tick": tick, "positions": [list(key) for key in records]}
-        return publish_opaque_batch(world, tick, records)
+        # The builder reads format-2 batches: the frame must carry this world's
+        # store id and this build's palette, captured from the server's own batch.
+        return publish_opaque_batch(world, tick, records, identity)
 
     steps.client.wal_forge = forge
     # Clean shutdown: its checkpoint commits too (the log between the stop and the next start).

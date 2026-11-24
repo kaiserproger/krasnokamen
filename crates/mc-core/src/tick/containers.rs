@@ -286,27 +286,54 @@ pub(crate) fn debug_menu_snapshot(
 
 /// Resync the real current menu after refusing a native inventory transition.
 /// A vehicle or block menu must never be imaged with placeholder empty cargo.
+/// Every caller is a live player's own input path (pick item, swap hands,
+/// creative slot, drop, book edit, interact), so `players[&entity]` is an
+/// invariant here rather than a checked precondition.
 pub(crate) fn inventory_transition_refused(
-    state: &TickState,
+    state: &mut TickState,
     entity: EntityId,
 ) -> crate::player::PlayerEffects {
-    let Some(player) = state.players.get(&entity) else {
-        return crate::player::PlayerEffects::default();
-    };
     if let Some(slots) = crate::vehicles::container_slots_for_player(state, entity) {
-        return player.inventory_transition_refused(slots);
+        return state.players[&entity].inventory_transition_refused(slots);
     }
     if crate::ender_chest::is_open(state, entity) {
-        return crate::ender_chest::contents(&player.opaque_player_fields, &state.registry.items)
-            .map(|slots| player.inventory_transition_refused(&slots))
+        let slots = crate::ender_chest::contents(
+            &state.players[&entity].opaque_player_fields,
+            &state.registry.items,
+        );
+        return slots
+            .map(|slots| state.players[&entity].inventory_transition_refused(&slots))
             .unwrap_or_default();
     }
-    let cells = state
+    // A block menu is only resynced when every slot it names is readable: its
+    // retained shape must match the reconstructed storage and every block must
+    // be resident (the same check the click and recipe paths make). A cold
+    // half, whichever one it is, would otherwise be imaged as empty slots.
+    // Menus with no `open_containers` record (Mount, plugin, settlement) have no
+    // cells, so a non-zero retained size fails the shape check and they close
+    // fail-closed here instead of being imaged with an empty placeholder.
+    let open_cells = state
         .open_containers
         .menu_at(&entity)
         .map(|open| container_cells(state, *open))
         .unwrap_or_default();
-    player.inventory_transition_refused(&container_slots(state, &cells))
+    let container = container_slots(state, &open_cells);
+    let cold = state
+        .players
+        .get(&entity)
+        .and_then(|player| player.open.as_ref())
+        .is_some_and(|menu| menu.kind.container_size() != container.len())
+        || open_cells
+            .iter()
+            .any(|&(x, y, z)| state.world.block_at(x, y, z).is_none());
+    if cold {
+        let connection = state.players[&entity].connection;
+        super::players::close_player_menu(state, connection);
+        // Window-0 resync after the close: the client's predicted stack, cursor
+        // or book edit rolls back against the authoritative inventory.
+        return state.players[&entity].inventory_transition_refused(&[]);
+    }
+    state.players[&entity].inventory_transition_refused(&container)
 }
 
 /// Publish the current authoritative menu image to every viewer after external

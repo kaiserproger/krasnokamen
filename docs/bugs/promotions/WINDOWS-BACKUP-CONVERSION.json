@@ -1,0 +1,98 @@
+{
+  "id": "WINDOWS-BACKUP-CONVERSION",
+  "verdict": "promoted",
+  "fix_commit": "patch:cc59e7252b58d25585849f9e4fbc7860fe3ae48c27e40b483a6f6ad0bf0238eb",
+  "fix_commit_full": "patch:cc59e7252b58d25585849f9e4fbc7860fe3ae48c27e40b483a6f6ad0bf0238eb",
+  "promoted_at": "2026-11-24T00:42:27+00:00",
+  "tree_head": "e310c51587a64dbd915a0cd5015b11108462754a",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "cc59e7252b58d25585849f9e4fbc7860fe3ae48c27e40b483a6f6ad0bf0238eb",
+  "reversed_files": [
+    "crates/mc-core/src/core/journal.rs",
+    "crates/mc-core/src/hot_backup.rs",
+    "crates/mc-edge/src/backup.rs",
+    "crates/mc-world-conversion/src/import.rs",
+    "crates/mc-world-conversion/src/lib.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-world-conversion:roundtrip_tests::nested_paths_import_export_and_census_under_world_leases": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:hot_backup_tests::backup_of_a_running_core_restores_the_state_at_its_tick": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:path_tests::syncing_staged_nested_files_preserves_every_byte": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:hot_backup_tests::copy_reads_the_owned_database_snapshot_not_a_second_path_handle": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:backup::tests::hot_backup_of_a_running_core_is_a_verified_restorable_backup": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::stop_tests::shutdown_releases_database_while_backup_admission_is_paused": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:backup::tests::offline_backup_restore_copies_database_under_real_file_leases": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world:native::backup_tests::snapshot_reads_lease_holding_handle_without_releasing_database_custody": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:path_tests::walked_paths_are_portable_metadata_keys_and_exclude_world_lease": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-world-conversion:roundtrip_tests::nested_paths_import_export_and_census_under_world_leases": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:hot_backup_tests::backup_of_a_running_core_restores_the_state_at_its_tick": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:path_tests::syncing_staged_nested_files_preserves_every_byte": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:hot_backup_tests::copy_reads_the_owned_database_snapshot_not_a_second_path_handle": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:backup::tests::hot_backup_of_a_running_core_is_a_verified_restorable_backup": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::stop_tests::shutdown_releases_database_while_backup_admission_is_paused": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:backup::tests::offline_backup_restore_copies_database_under_real_file_leases": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world:native::backup_tests::snapshot_reads_lease_holding_handle_without_releasing_database_custody": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-world-conversion:path_tests::walked_paths_are_portable_metadata_keys_and_exclude_world_lease": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T003857-ledger-promote-tecmcjv1"
+}

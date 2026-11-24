@@ -100,9 +100,29 @@ pub fn world_queue_for(
 }
 
 impl WorldSender {
+    /// Current dimension generation. Capture it before a payload is sampled
+    /// outside the queue (a LOD tile) and pass it to [`Self::try_send_at`], so
+    /// a reset while sampling discards the stale frame.
+    #[must_use]
+    pub fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Acquire)
+    }
+
     /// Queue one item (one or more whole frames) when a slot is free. The
     /// byte bound never refuses: it is credit for the planner, not a drop.
     pub fn try_send(&self, frame: bytes::Bytes) -> Result<(), TrySendError<bytes::Bytes>> {
+        self.try_send_at(self.generation(), frame)
+    }
+
+    /// Queue a frame stamped with `generation`. The writer delivers it only
+    /// while that generation is current, so a frame whose payload was sampled
+    /// before a reliable dimension reset is dropped instead of applying to
+    /// the new dimension.
+    pub fn try_send_at(
+        &self,
+        generation: u64,
+        frame: bytes::Bytes,
+    ) -> Result<(), TrySendError<bytes::Bytes>> {
         let len = frame.len();
         // Counted before the receiver can see the frame, so its decrement
         // never runs ahead of this increment.
@@ -112,7 +132,7 @@ impl WorldSender {
                 bytes: frame,
                 additional: Vec::new(),
                 byte_len: len,
-                generation: self.generation.load(Ordering::Acquire),
+                generation,
                 reservations: Vec::new(),
                 chunk_batch: None,
             })

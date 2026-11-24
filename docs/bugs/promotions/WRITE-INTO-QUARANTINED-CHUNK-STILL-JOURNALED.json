@@ -1,0 +1,33 @@
+{
+  "id": "WRITE-INTO-QUARANTINED-CHUNK-STILL-JOURNALED",
+  "verdict": "promoted",
+  "fix_commit": "b5a18d05c6fe6429509101d1ffc633216d374793",
+  "fix_commit_full": "b5a18d05c6fe6429509101d1ffc633216d374793",
+  "promoted_at": "2026-11-23T20:32:24+00:00",
+  "tree_head": "b5a18d05c6fe6429509101d1ffc633216d374793",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/core/journal.rs",
+    "crates/mc-core/src/world.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/journal_touched_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:journal_touched::tests::a_block_write_into_a_refused_chunk_refuses_the_journal_batch": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:journal_touched::tests::a_block_write_into_a_refused_chunk_refuses_the_journal_batch": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261123T202747-ledger-promote-rxcuhsyx"
+}

@@ -1,0 +1,57 @@
+{
+  "id": "CHUNK-REFUSAL-BLOCKS-CHECKPOINTS",
+  "verdict": "promoted",
+  "fix_commit": "patch:7b7f5f553372e75f6678f98bed38ecdceabe2a738f92d54d617fb7cede83b721",
+  "fix_commit_full": "patch:7b7f5f553372e75f6678f98bed38ecdceabe2a738f92d54d617fb7cede83b721",
+  "promoted_at": "2026-11-24T02:37:56+00:00",
+  "tree_head": "b675f99e78377209c274895d353ad1f17c8abd49",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "7b7f5f553372e75f6678f98bed38ecdceabe2a738f92d54d617fb7cede83b721",
+  "reversed_files": [
+    "crates/mc-core/src/core/journal.rs",
+    "crates/mc-core/src/world.rs",
+    "crates/mc-core/src/world/capture.rs",
+    "crates/mc-core/src/world/residency.rs",
+    "crates/mc-world/src/anvil/chunk_nbt.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:chunk_loader::tests::refused_chunk_never_blocks_other_chunks_and_stays_refused": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:chunk_loader::tests::refusing_a_resident_chunk_keeps_custody_of_its_unsaved_edits": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-corrupt-block-entities": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-corrupt-block-entities --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T021808-ledger-promote-9i9gvqfi/regressions-client-2.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T021808-ledger-promote-9i9gvqfi/client-artifacts/20261124T022123-native-v2-corrupt-block-entities-8mcpqj16/result.json"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:chunk_loader::tests::refused_chunk_never_blocks_other_chunks_and_stays_refused": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:chunk_loader::tests::refusing_a_resident_chunk_keeps_custody_of_its_unsaved_edits": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T013244-native-v2-corrupt-block-entities-2psg1q5b/result.json",
+    "tree_head": "b675f99e78377209c274895d353ad1f17c8abd49",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "51199a8eaa4daa80468148dda760d559c6382ba0ce47ffa515a201fbdcb5c6df",
+    "covers": [
+      "harness:entities:native-v2-corrupt-block-entities"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Persist/.analysis/validation/20261124T021808-ledger-promote-9i9gvqfi"
+}

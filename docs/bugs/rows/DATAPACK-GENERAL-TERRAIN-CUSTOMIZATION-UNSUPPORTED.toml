@@ -1,0 +1,10 @@
+[[bug]]
+id = "DATAPACK-GENERAL-TERRAIN-CUSTOMIZATION-UNSUPPORTED"
+title = "General datapack terrain customization stays unsupported: only the experimental jigsaw inputs change generation, and every other worldgen or dimension resource is refused (selected pack) or skipped and named (new pack) rather than honoured, so a pack that expects custom biomes, dimension types, noise settings or features cannot produce that terrain."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "Split out of DATAPACK-WORLDGEN-OVERRIDES on the final Opus review (2026-11-24, NB3): the fail-closed refusal/skip is fixed by 1d8e57dd8, but the underlying gap (no general terrain customization) remains open. docs/OPERATING.md Datapacks and command blocks and docs/COMPATIBILITY.md describe the limitation; the fix would need the generator to consume custom biomes/dimension types/noise settings/features."
+regression = []
+failing_first = "not recorded"

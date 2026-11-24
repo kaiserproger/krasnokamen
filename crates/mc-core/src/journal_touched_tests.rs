@@ -62,6 +62,13 @@ fn step(state: &mut TickState) -> Vec<JournalEntry> {
     entries
 }
 
+/// Like [`step`] but without the test-only differential fence, so a regression
+/// fails at its own assertion rather than inside the fence.
+fn step_unfenced(state: &mut TickState) -> Vec<JournalEntry> {
+    let (output, _, _) = crate::tick::run_tick(state, &[]);
+    journal_entries_for_tick(state, &output).unwrap()
+}
+
 fn image_ids(entries: &[JournalEntry]) -> Vec<i32> {
     let mut ids: Vec<i32> = entries
         .iter()
@@ -1158,6 +1165,273 @@ fn activity_churn_journal_microbench() {
             samples[SAMPLES * 95 / 100]
         );
     }
+}
+
+#[test]
+fn held_game_clock_does_not_churn_a_touched_mob() {
+    let mut state = fixture();
+    let chunk = crate::boundary::ChunkPos { x: 0, z: 0 };
+    state.tickets.insert("held-clock".into(), (chunk, 0));
+    state
+        .world
+        .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+    state.refresh_active_chunks(0);
+    let cow = spawn_idle_cow(&mut state, 8.5);
+    let slot = state.entities.slot_of(cow).unwrap();
+    // A breeding cooldown makes the row clock-sensitive, so its journal image
+    // is projected lazily from the world clock.
+    state.entities.row_mut(slot).breed_cooldown = 100;
+    let first = step_unfenced(&mut state);
+    assert!(
+        image_ids(&first).contains(&cow.0),
+        "the first touch journals the live row"
+    );
+    // The first (running) tick already spent one countdown tick.
+    let held_value = state.entities.row(slot).breed_cooldown;
+    assert_eq!(held_value, 99);
+    state.tick_control.set_frozen(true);
+    for held_tick in 0..8 {
+        // A touched row is compared every batch; an over-advanced mirror then
+        // emits an image of its own, not just a fence failure.
+        state.entities.row_mut(slot);
+        let entries = step_unfenced(&mut state);
+        assert!(
+            image_ids(&entries).is_empty(),
+            "held tick {held_tick}: a held game clock must not churn a comparison image: {:?}",
+            image_ids(&entries)
+        );
+        assert_eq!(
+            state.entities.row(slot).breed_cooldown,
+            held_value,
+            "held ticks do not simulate gameplay clocks"
+        );
+    }
+    state.tick_control.set_frozen(false);
+    state.entities.row_mut(slot);
+    let resumed = step_unfenced(&mut state);
+    assert_eq!(
+        state.entities.row(slot).breed_cooldown,
+        held_value - 1,
+        "releasing the clock resumes the countdown"
+    );
+    assert!(
+        image_ids(&resumed).is_empty(),
+        "a resume that the mirror followed emits nothing: {:?}",
+        image_ids(&resumed)
+    );
+}
+
+#[test]
+fn held_game_clock_holds_a_working_villager_baseline() {
+    let mut state = fixture();
+    let chunk = crate::boundary::ChunkPos { x: 0, z: 0 };
+    state.tickets.insert("held-villager".into(), (chunk, 0));
+    state
+        .world
+        .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+    state.refresh_active_chunks(0);
+    let villager = spawn_idle_villager(&mut state, 8.5);
+    let slot = state.entities.slot_of(villager).unwrap();
+    {
+        let row = state.entities.row_mut(slot);
+        // A working villager: the live path (`advance_villager_clocks`) runs
+        // only when the brain clock changes, i.e. never while the clock is held.
+        row.controls.no_ai = false;
+        let state = row.villager.as_mut().unwrap();
+        state.wandering = false;
+        state.age = 100;
+    }
+    state.entities.row_mut(slot);
+    let first = step_unfenced(&mut state);
+    assert!(
+        image_ids(&first).contains(&villager.0),
+        "the first touch journals the live villager"
+    );
+    // The first running tick already aged the villager through the brain clock.
+    let held_value = state.entities.row(slot).villager.as_deref().unwrap().age;
+    state.tick_control.set_frozen(true);
+    for held_tick in 0..4 {
+        // Touched every held tick, so the projection itself is compared and an
+        // over-advanced mirror emits an image of its own.
+        state.entities.row_mut(slot);
+        let entries = step_unfenced(&mut state);
+        let live = state.entities.row(slot).villager.as_deref().unwrap().age;
+        assert_eq!(live, held_value, "held ticks do not age the villager");
+        assert!(
+            image_ids(&entries).is_empty(),
+            "held tick {held_tick}: a held game clock must not churn a villager image: {:?}",
+            image_ids(&entries)
+        );
+    }
+    state.tick_control.set_frozen(false);
+    for running_tick in 0..3 {
+        // The brain's own clock projection advances the live row one tick when
+        // the clock runs; the journal mirror must follow it.
+        state.entities.row_mut(slot);
+        let entries = step_unfenced(&mut state);
+        let live = state.entities.row(slot).villager.as_deref().unwrap().age;
+        assert_eq!(
+            live,
+            held_value - 1 - running_tick,
+            "running ticks age the villager"
+        );
+        assert!(
+            image_ids(&entries).is_empty(),
+            "running tick {running_tick}: the mirror followed the live villager: {:?}",
+            image_ids(&entries)
+        );
+    }
+}
+
+#[test]
+fn recovered_mob_clock_does_not_burst_on_the_first_batch() {
+    let mut state = fixture();
+    let chunk = crate::boundary::ChunkPos { x: 0, z: 0 };
+    state.tickets.insert("recovery".into(), (chunk, 0));
+    state
+        .world
+        .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+    let cow = spawn_idle_cow(&mut state, 8.5);
+    let slot = state.entities.slot_of(cow).unwrap();
+    state.entities.row_mut(slot).breed_cooldown = 100;
+    // Recovery state: baselines are seeded at the recovered tick R and the
+    // first batch runs at R + 1, where the clock already published its pair.
+    let recovered = 7;
+    state.tick = recovered;
+    let body = *state.entities.body(slot);
+    let row = state.entities.row(slot);
+    state.journaled_entity_state.insert(
+        cow,
+        (
+            recovered,
+            chunk,
+            Arc::new(crate::journal::EntityStateImage::from_row(&body, row)),
+        ),
+    );
+    state.entities.row_mut(slot);
+    let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+    let entries = journal_entries_for_tick(&mut state, &output).unwrap();
+    assert!(
+        image_ids(&entries).is_empty(),
+        "the first batch after recovery must not re-image a clock-sensitive mob: {:?}",
+        image_ids(&entries)
+    );
+}
+
+#[test]
+fn the_mirror_agrees_with_the_replay_game_clock_over_holds() {
+    use crate::journal::{JournalEntry, ReplayGameClock};
+    use crate::weather::{ClimateImage, GameClockImage};
+    let mut state = fixture();
+    let chunk = crate::boundary::ChunkPos { x: 0, z: 0 };
+    state.tickets.insert("mirror-diff".into(), (chunk, 0));
+    state
+        .world
+        .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+    state.refresh_active_chunks(0);
+    let _cow = spawn_idle_cow(&mut state, 8.5);
+    let clock_at = |state: &TickState| ClimateImage::capture(state).game_clock;
+    let start = state.tick;
+    let initial: GameClockImage = clock_at(&state);
+    let mut frames: Vec<(u64, u64, Vec<JournalEntry>)> = Vec::new();
+    let mut last: Option<GameClockImage> = Some(initial);
+    let run = |state: &mut TickState,
+               frames: &mut Vec<(u64, u64, Vec<JournalEntry>)>,
+               last: &mut Option<GameClockImage>| {
+        let (output, _, _) = crate::tick::run_tick(state, &[]);
+        let image = clock_at(state);
+        if *last != Some(image) {
+            frames.push((
+                output.tick,
+                output.tick,
+                vec![JournalEntry::Climate {
+                    value: ClimateImage::capture(state),
+                }],
+            ));
+            *last = Some(image);
+        }
+    };
+    // work 2, hold 3, step, hold 2, release 2
+    for _ in 0..2 {
+        run(&mut state, &mut frames, &mut last);
+    }
+    state.tick_control.set_frozen(true);
+    for _ in 0..3 {
+        run(&mut state, &mut frames, &mut last);
+    }
+    state.tick_control.step(1);
+    run(&mut state, &mut frames, &mut last);
+    for _ in 0..2 {
+        run(&mut state, &mut frames, &mut last);
+    }
+    state.tick_control.set_frozen(false);
+    for _ in 0..2 {
+        run(&mut state, &mut frames, &mut last);
+    }
+    let mut game = ReplayGameClock::new(start, Some(initial)).unwrap();
+    game.observe_batches(&frames, false).unwrap();
+    let mut mismatches = Vec::new();
+    for from in start..=state.tick {
+        for to in from..=state.tick {
+            let replay = game.between(from, to);
+            match state.world.simulated_game_ticks(from, to) {
+                Some(mirror) if mirror == replay => {}
+                other => mismatches.push((from, to, replay, other)),
+            }
+            let mut mirrored_spans = Vec::new();
+            state
+                .world
+                .for_each_running_interval(from, to, |first, last| {
+                    mirrored_spans.push((first, last))
+                });
+            let mut replay_spans = Vec::new();
+            game.running_intervals(from, to, |first, last| replay_spans.push((first, last)));
+            assert_eq!(
+                mirrored_spans, replay_spans,
+                "running spans differ for ({from}, {to})"
+            );
+        }
+        assert_eq!(
+            state.world.last_running_at(from),
+            game.last_running_at(from),
+            "last running boundary differs at {from}"
+        );
+    }
+    assert!(
+        mismatches.is_empty(),
+        "mirror disagrees with ReplayGameClock: {mismatches:?}"
+    );
+}
+
+#[test]
+fn a_block_write_into_a_refused_chunk_refuses_the_journal_batch() {
+    let mut state = fixture();
+    let chunk = crate::boundary::ChunkPos { x: 0, z: 0 };
+    state.tickets.insert("refused-write".into(), (chunk, 0));
+    state
+        .world
+        .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+    state.refresh_active_chunks(0);
+    let (mut output, _, _) = crate::tick::run_tick(&mut state, &[]);
+    journal_entries_for_tick(&mut state, &output).unwrap();
+    state
+        .world
+        .reject_resident(chunk, "invalid retained metadata".into());
+    // The setter refused the write silently; the tick's accepted write list
+    // still names the quarantined chunk, and journaling it would let replay
+    // apply a block without its owner after the storage is repaired.
+    let mut changes = crate::boundary::ChangeSet::default();
+    changes.blocks.push(crate::boundary::BlockChange {
+        position: mc_world::BlockPos { x: 3, y: 64, z: 3 },
+        state: 1,
+    });
+    output.changes = Arc::new(changes);
+    let error = journal_entries_for_tick(&mut state, &output)
+        .expect_err("a refused chunk write must not be journaled");
+    assert!(
+        error.to_string().contains("refused chunk"),
+        "the halt reason names the refused write: {error}"
+    );
 }
 
 #[test]

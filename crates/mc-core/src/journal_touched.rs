@@ -562,11 +562,16 @@ pub(crate) fn entity_images(
         if let std::collections::hash_map::Entry::Occupied(previous) = &mut baseline {
             let (tick, old_chunk, old) = previous.get_mut();
             *old_chunk = chunk;
-            if let EntityKind::Mob { type_id } = body.kind
-                && old.clock_sensitive(type_id, row.appearance.baby)
-                && let Some((from, to)) = state.world.simulation_interval(chunk, *tick, output.tick)
-            {
-                Arc::make_mut(old).advance_clocks(type_id, row.appearance.baby, to - from);
+            if let EntityKind::Mob { type_id } = body.kind {
+                advance_mob_mirror(
+                    &state.world,
+                    old,
+                    type_id,
+                    row.appearance.baby,
+                    chunk,
+                    *tick,
+                    output.tick,
+                );
             }
             *tick = output.tick;
             if old.matches(body, row) {
@@ -594,6 +599,49 @@ pub(crate) fn entity_images(
     state.journal_scan.times.touched = images_start - start;
     state.journal_scan.times.images = compare_start - images_start;
     state.journal_scan.times.compare = compare_start.elapsed();
+}
+
+/// Project a mob image's clocks through the world's activity and game clock.
+/// The advance is the number of game ticks actually simulated in the span, so
+/// a held interval contributes nothing (the replay projection's rule).
+fn advance_mob_mirror(
+    world: &crate::world::ChunkWorld,
+    image: &mut std::sync::Arc<crate::journal::EntityStateImage>,
+    type_id: u32,
+    baby: bool,
+    chunk: crate::boundary::ChunkPos,
+    from: u64,
+    to: u64,
+) {
+    if image.clock_sensitive(type_id, baby)
+        && let Some((start, end)) = world.simulation_interval(chunk, from, to)
+        && let Some(elapsed) = world.simulated_game_ticks(start, end)
+        && elapsed > 0
+    {
+        std::sync::Arc::make_mut(image).advance_clocks(type_id, baby, elapsed);
+    }
+}
+
+/// Project a villager image's clocks the way replay does: one uninterrupted
+/// running span at a time, each anchored at the previous running boundary.
+fn advance_villager_mirror(
+    world: &crate::world::ChunkWorld,
+    villager: &mut crate::villager::VillagerState,
+    chunk: crate::boundary::ChunkPos,
+    from: u64,
+    to: u64,
+) {
+    let Some((start, end)) = world.simulation_interval(chunk, from, to) else {
+        return;
+    };
+    world.for_each_running_interval(start, end, |first, last| {
+        crate::villager::persistence::advance_running_clocks(
+            villager,
+            world.last_running_at(first),
+            first + 1,
+            last,
+        );
+    });
 }
 
 /// Clear the compact-record bases. A checkpoint stores neither the WAL's
@@ -771,10 +819,9 @@ fn villager_image(state: &mut TickState, slot: EntitySlot, tick: u64, full: &mut
         row.villager.as_mut().unwrap().brain_clock = clock;
     }
     let villager = state.entities.row(slot).villager.as_deref().unwrap();
+    let world = &state.world;
     if let Some((from, old)) = state.journaled_villagers.get_mut(&body.id) {
-        if let Some((start, end)) = state.world.simulation_interval(chunk, *from, tick) {
-            crate::villager::persistence::advance_clocks(old, start, end);
-        }
+        advance_villager_mirror(world, old, chunk, *from, tick);
         *from = tick;
         if crate::villager::persistence::journal_eq(villager, old) {
             return;
@@ -804,9 +851,7 @@ pub(crate) fn assert_baselines_complete(state: &TickState, tick: u64) {
                 .get(&body.id)
                 .unwrap_or_else(|| panic!("villager {:?} has no journal baseline", body.id));
             let mut old: Box<crate::villager::VillagerState> = old.clone();
-            if let Some((start, end)) = state.world.simulation_interval(chunk, *from, tick) {
-                crate::villager::persistence::advance_clocks(&mut old, start, end);
-            }
+            advance_villager_mirror(&state.world, &mut old, chunk, *from, tick);
             let mut live = villager.clone();
             live.brain_clock = brain_clock(body, row, state.world.is_active(chunk.x, chunk.z));
             assert!(
@@ -822,11 +867,17 @@ pub(crate) fn assert_baselines_complete(state: &TickState, tick: u64) {
             .journaled_entity_state
             .get(&body.id)
             .unwrap_or_else(|| panic!("entity {:?} has no state baseline", body.id));
-        let mut old = old.as_ref().clone();
-        if let EntityKind::Mob { type_id } = body.kind
-            && let Some((start, end)) = state.world.simulation_interval(chunk, *from, tick)
-        {
-            old.advance_clocks(type_id, row.appearance.baby, end - start);
+        let mut old = Arc::new(old.as_ref().clone());
+        if let EntityKind::Mob { type_id } = body.kind {
+            advance_mob_mirror(
+                &state.world,
+                &mut old,
+                type_id,
+                row.appearance.baby,
+                chunk,
+                *from,
+                tick,
+            );
         }
         assert!(
             old.matches(body, row),
