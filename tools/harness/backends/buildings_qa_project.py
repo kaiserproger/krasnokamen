@@ -118,6 +118,18 @@ def _admitted_or_caught(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: st
 PROJECT_TITLES = ("Construction", "Строительство")
 _CATALOGUE_ROW = re.compile(r"^.+ L1$")
 _PROJECT_CARD = re.compile(r"^(.+?) L(\d+) · ")
+# A queued order is a book at slots 18.., not an admitted project card: `Pending #<n>: <label>
+# L<level> · <reason>` also matches the card shape, and reading it as an active project made the
+# certificate wait believe the settlement was busy for 40 minutes while two unfunded fence orders
+# stood (20261124T195112-buildings-qa-i3lpcv6x).
+_PENDING_ORDER = re.compile(r"^Pending #\d+:")
+
+
+def _active_card(name: str) -> bool:
+    """An admitted project card `<label> L<level> · <phase>`, never a pending-order book."""
+    return bool(_PROJECT_CARD.match(name)) and not _PENDING_ORDER.match(name)
+
+
 _SUMMARY_LINE = re.compile(r"^(?:Active projects|Активные стройки|Pending orders|Заказы|Заказов)\b")
 
 
@@ -140,7 +152,7 @@ def _status_page(state: dict[str, Any]) -> bool:
     """The project-status page: the summary clock and/or an admitted project's card."""
     names = _page_names(state)
     return _project_titled(state) and (any(_SUMMARY_LINE.match(name) for name in names)
-                                       or any(_PROJECT_CARD.match(name) for name in names))
+                                       or any(_active_card(name) for name in names))
 
 
 def _project_page(probe: ProbeSteps) -> dict[str, Any]:
@@ -174,14 +186,16 @@ def _project_view(probe: ProbeSteps) -> tuple[str, int, bool] | None:
     """Return the first admitted project's label and level, or None.
 
     `ui_menus::project_screen` puts each admitted project's card at slots 0.. as
-    `<label> L<level> · <phase>`; a queued order is a pending-order book at slots 18.. with no
-    card, so a page without a card has no active project."""
+    `<label> L<level> · <phase>`; a queued order is a `Pending #<n>: <label> L<level> · <reason>`
+    book at slots 18.., which matches the card shape but is not an active project, so it is
+    excluded (`_active_card`)."""
     page = _qa._project_page(probe)
     slots = page["container"]["slots"]
     probe.call("minecraft_close_screen", {})
     for row in slots:
-        match = _PROJECT_CARD.match(str(row.get("name") or ""))
-        if match:
+        name = str(row.get("name") or "")
+        if _active_card(name):
+            match = _PROJECT_CARD.match(name)
             return match.group(1), int(match.group(2)), True
     return None
 
@@ -189,6 +203,19 @@ def _project_view(probe: ProbeSteps) -> tuple[str, int, bool] | None:
 def _project_status(probe: ProbeSteps) -> tuple[str, int] | None:
     view = _project_view(probe)
     return (view[0], view[1]) if view is not None and view[2] else None
+
+
+def _pending_names(probe: ProbeSteps) -> list[str]:
+    """The status page's queued-order books (`Pending #<n>: <label> L<level> · <reason>`)."""
+    page = _qa._project_page(probe)
+    names = [str(row.get("name")) for row in page["container"]["slots"] if row.get("name")]
+    probe.call("minecraft_close_screen", {})
+    return [name for name in names if _PENDING_ORDER.match(name)]
+
+
+def _pending_fence(probe: ProbeSteps, expected: str) -> bool:
+    """A queued order for the fence kind is still on the page."""
+    return any(expected in name.lower() for name in _pending_names(probe))
 
 
 def _project_active_quiet(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
@@ -232,10 +259,13 @@ def _wait_certified_origin_here(probe: ProbeSteps, sub: dict[str, Any], tag: str
         if certificate is None:
             continue
         view = _project_view(probe)
-        if view is not None and view[2]:
+        if view is not None:
             continue
         expected = PROJECT_LABEL.get(fence, fence.capitalize()).lower()
-        fenced = view is not None and not view[2] and view[1] == 1 and view[0].lower() == expected
+        # The fence is a queued order, so it lives in the page's `Pending #<n>:` book, not in a
+        # project card. Reading the book (never the card list) is what proves the settlement
+        # certified this level while its autonomous work stayed fenced.
+        fenced = _pending_fence(probe, expected)
         probe.check(f"{tag}_L{level}_fence_waiting", fenced)
         # The listing flips on upgrade admission, not completion; check it
         # again after observing the queued fence.

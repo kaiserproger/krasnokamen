@@ -739,6 +739,39 @@ class ProjectOriginTest(unittest.TestCase):
                           if name == "minecraft_read_item_components"], [])
 
 
+class PendingOrderTest(unittest.TestCase):
+    """A queued order (`Pending #<n>: … · <reason>`) matches the card shape but is not an active
+    project: reading it as one kept the certificate wait busy for 40 minutes while the fence stood
+    (20261124T195112-buildings-qa-i3lpcv6x)."""
+
+    def test_a_pending_book_is_not_an_active_card(self):
+        from tools.harness.backends import buildings_qa_project as project
+        self.assertFalse(project._active_card(
+            "Pending #1: Farm L1 · not enough: minecraft:cobblestone x40"))
+        self.assertTrue(project._active_card("House L1 · Building"))
+        self.assertFalse(project._active_card("Active projects: 1/8"))
+
+    def test_the_view_skips_pending_books(self):
+        only_pending = {"container": {"slots": [
+            {"slot": 18, "name": "Pending #1: Farm L1 · not enough: minecraft:cobblestone x40"}]}}
+        with_both = {"container": {"slots": [
+            {"slot": 18, "name": "Pending #2: Farm L1 · not enough: minecraft:cobblestone x40"},
+            {"slot": 0, "name": "House L1 · Building"}]}}
+        probe = mock.Mock()
+        with mock.patch.object(buildings_qa, "_project_page", return_value=only_pending):
+            self.assertIsNone(buildings_qa._project_view(probe))
+        with mock.patch.object(buildings_qa, "_project_page", return_value=only_pending):
+            self.assertTrue(buildings_qa._pending_fence(probe, "farm"))
+        no_fence = {"container": {"slots": [
+            {"slot": 18, "name": "Pending #1: Mason's workshop L1 · not enough: x"}]}}
+        with mock.patch.object(buildings_qa, "_project_page", return_value=no_fence):
+            self.assertFalse(buildings_qa._pending_fence(probe, "farm"))
+        with mock.patch.object(buildings_qa, "_project_page", return_value=with_both):
+            self.assertEqual(buildings_qa._project_view(probe), ("House", 1, True))
+        with mock.patch.object(buildings_qa, "_project_page", return_value=with_both):
+            self.assertTrue(buildings_qa._pending_fence(probe, "farm"))
+
+
 def buildings_qa_project_catalogue(state):
     from tools.harness.backends import buildings_qa_project as project
     return project._catalogue_page(state)

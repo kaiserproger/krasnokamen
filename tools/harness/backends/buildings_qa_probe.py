@@ -223,7 +223,7 @@ def _project_origin(probe: ProbeSteps) -> tuple[int, int, int] | None:
     page = _qa._project_page(probe)
     try:
         card = next((row for row in page["container"]["slots"]
-                     if _qa._PROJECT_CARD.match(str(row.get("name") or ""))), None)
+                     if _qa._active_card(str(row.get("name") or ""))), None)
         if card is None:
             return None
         components = probe.call("minecraft_read_item_components",
