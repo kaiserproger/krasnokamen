@@ -224,30 +224,30 @@ def camera(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.check("frozen_captured_camera_tracks_teleport",
                 abs(second["camera_position"][0] - x - 3.5) < .05)
     # NATIVE-FREEZE-CAMERA: vanilla draws a frozen entity at partial tick 1 (its current
-    # tick), so a mob that took one stepped tick must be drawn one step on, not on the
-    # previous tick. Probe first: record the drawn and the received x.
+    # tick). A launched item is the witness: one stepped tick moves it blocks, and the
+    # server sends that as a relative move. Probe: record the pose before the step, the
+    # received position after it and the drawn (presented) position of the same frame.
     witness_uuid = str(uuid.uuid4())
-    steps.fixture(f"summon minecraft:zombie {x + 4.5} {y} {z + 4.5} "
-                  f"{{UUID:'{witness_uuid}',PersistenceRequired:1b}}")
+    steps.fixture(f"summon minecraft:item {x + 2.5} {y + 1.0} {z + 2.5} "
+                  f"{{UUID:'{witness_uuid}',Item:{{id:\"minecraft:snowball\",count:1b}},"
+                  f"Motion:[2.0,0.0,0.0]}}")
 
     def witness(_: dict) -> dict | None:
         rows = steps.call("minecraft_list_entities", {"radius": 24.0, "limit": 128})["entities"]
         return next((row for row in rows if row["entity_uuid"] == witness_uuid), None)
 
-    steps.wait(witness, "frozen_witness_summoned")
-    steps.fixture("tick step 3")
-    steps.call("minecraft_wait_ticks", {"ticks": 5})
+    before_step = steps.wait(witness, "frozen_witness_summoned")
+    steps.fixture("tick step 1")
+    steps.call("minecraft_wait_ticks", {"ticks": 4})
     _shot(steps, "frozen-witness-stepped")
-    state = steps.observe()
-    drawn = next((row for row in (state.get("gait_capture") or [])
-                  if row.get("entity_uuid") == witness_uuid), None)
-    received = witness(state) or {}
+    after_step = witness(steps.observe()) or {}
     steps.report["frozen_witness"] = {
-        "drawn": (drawn or {}).get("position"),
-        "received": received.get("position"),
-        "server_frozen": state.get("minecraft", {}).get("server_frozen"),
+        "before": before_step.get("position"),
+        "received": after_step.get("position"),
+        "presented": after_step.get("presented_position"),
+        "server_frozen": (steps.observe().get("minecraft") or {}).get("server_frozen"),
     }
-    steps.fixture("kill @e[type=minecraft:zombie]")
+    steps.fixture("kill @e[type=minecraft:item]")
     shown = _shot(steps, "hud-shown")
     steps.call("minecraft_press_inputs", {"keys": ["key.keyboard.f1"], "ticks": 1})
     hidden = _shot(steps, "hud-hidden")
