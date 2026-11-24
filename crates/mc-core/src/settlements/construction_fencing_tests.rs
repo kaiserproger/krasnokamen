@@ -237,6 +237,45 @@ fn farmland_drying_and_wheat_growth_during_native_work_do_not_pause_construction
     crate::plugin_structures::validate(&state).unwrap();
 }
 
+/// Seed-24 gate 20261124T195404: the farm's own harvest emptied a crop cell, the
+/// completion pass reopened a repair stage of 12 wheat_seeds that no stock could
+/// fund (structure `settlement-1-229`, watermark 215), and the project held the
+/// settlement's only construction slot for 39 000 ticks, so no House was ever
+/// admitted. A harvested crop is the farm's work, not construction damage.
+#[test]
+fn a_harvested_farm_crop_does_not_reopen_a_repair_stage() {
+    let (mut state, id, slot) = fixture();
+    start(&mut state, id, "farm", 1, None);
+    fund(&mut state, "farm", 1);
+    let (crop, crop_state) = first_cell(&state, "farm", "wheat");
+    for _ in 0..4096 {
+        if state.world.block_at(crop[0], crop[1], crop[2]) == Some(crop_state) {
+            break;
+        }
+        attempt(&mut state, id, slot);
+    }
+    assert_eq!(
+        state.world.block_at(crop[0], crop[1], crop[2]),
+        Some(crop_state),
+        "the farm's crops are built"
+    );
+    // The farmer harvests the crop before the completion pass.
+    state
+        .world
+        .set_block(crop[0], crop[1], crop[2], state.registry.states.air);
+    complete(&mut state, id, slot);
+    assert!(
+        state.settlements.get(id).unwrap().projects.is_empty(),
+        "a harvested crop must not keep construction open"
+    );
+    assert_eq!(
+        state.world.block_at(crop[0], crop[1], crop[2]),
+        Some(state.registry.states.air),
+        "construction never re-plants a crop"
+    );
+    crate::plugin_structures::validate(&state).unwrap();
+}
+
 #[test]
 fn foreign_replacement_of_a_completed_cell_does_not_pause_pending_portions() {
     let (mut state, id, slot) = fixture();
