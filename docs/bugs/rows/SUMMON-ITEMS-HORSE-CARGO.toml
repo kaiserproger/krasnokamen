@@ -4,9 +4,10 @@ title = "`summon` refuses `Items` cargo on a chested horse, donkey, mule or llam
 area = "gameplay"
 repro = "manual"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "docs/bugs/rows/HS-2.toml (REVIEW-wave2-3, non-blocking note on the Items ingress: vanilla keeps a chested horse's cargo in `Items` alongside `ChestedHorse`, and Krasnokamen's summon field set answers `Entity does not support summon NBT field Items` for those species)"
 regression = ["harness:entities:native-v2-ledger-summon-horse-cargo", "cargo:mc-core:command_summon::tests::chested_horse_summon_carries_vanilla_items_cargo"]
 repro_check = "Fixed by ee71ee684 and promoted from the client gate. The field set admits `Items` (vehicles or mounts), `ChestedHorse` and (llamas) `Strength` through mounts::persistence::owns_cargo_field (:384-389); the parse itself needs no extra code because decode() builds the image through EntityStateImage::from_record, which already runs mounts::persistence::from_fields and cargo_from_record (journal/replay.rs:427-441) and refuses a bad slot/strength before the entity exists. Client gate native-v2-ledger-summon-horse-cargo summons a chested donkey carrying three diamonds (storage slot 0) and one apple (slot 14), opens the 53-slot cargo menu with the client (sneak+use) and asserts both stacks in their slots plus an empty saddle slot. Core ref also round-trips the saved record through checkpoint_data_for + from_record, so import/replay and summon share one parser. Control: ee71ee684 reversed -> the summon refuses ChestedHorse and the gate cannot even place the fixture."
 fix_commit = "ee71ee684"
 proving_assertions = { "harness:entities:native-v2-ledger-summon-horse-cargo" = "summoned_items_land_in_the_first_cargo_slot", "cargo:mc-core:command_summon::tests::chested_horse_summon_carries_vanilla_items_cargo" = "crates/mc-core/src/command_summon_tests.rs:26" }
+promotion = "docs/bugs/promotions/SUMMON-ITEMS-HORSE-CARGO.json"
