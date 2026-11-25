@@ -39,12 +39,14 @@ condition and text and nothing else.
 
 ## Proving refs
 
-- `harness:datapack-reload:native-datapack-reload` — with the patch reversed a hot-enabled pack's recipe never
-  replaces the vanilla one, so `pack_recipe_after_hot_enable` (and the loot/disable halves) fail; on the candidate
-  they pass (see the promotion JSON's receipt).
+- `harness:datapack-reload:native-datapack-reload` — the candidate's green (receipt in the promotion JSON). With
+  the patch reversed the same gate should lose `pack_recipe_after_hot_enable` and the loot/disable halves;
+  **[INFERENCE]** — the control records the harness ref as `unrunnable` (no reverted-pin client build), so its red
+  was not observed.
 - `cargo:mc-core:datapacks::command_tests::enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clients`
   — the controlled red: with the refusal restored the registry keeps the old recipe, so the test's own
-  `assert_eq!` on the installed recipe fails (`crates/mc-core/src/datapack_commands_tests.rs`, the assertion named
-  in the row's `proving_assertions`).
+  `assert_eq!` on the installed recipe fails at `crates/mc-core/src/datapack_commands_tests.rs:927` (the `Arc::ptr_eq`
+  check at `:923` stays green on the control, because the registry is simply never replaced; `:1478` also reds).
+  Two of the row's refs red, the rest stay green.
 - The control cannot run the graphical half (no reverted-pin client build), so the red is the cargo ref — the same
   POL-1 shape HS-2 uses.

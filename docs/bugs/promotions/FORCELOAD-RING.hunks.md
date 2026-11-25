@@ -33,8 +33,14 @@ the comment plus `pub(crate) const ENTITY_RADIUS: i32 = 1;` as they stood before
   age)` (`crates/mc-core/src/forceload_tests.rs:303-304`), while `assert!(state.world.is_block_active(11, 10),
   "level 32 still ticks blocks")` at `:305` stays green: the block half is untouched, the entity half is the
   row's symptom. The recorded reversal control is in the row's `repro_check` (`control-A.log`).
-- **No real-client ref is possible.** The symptom lives in the ring of a *remote* forced chunk: with a player
-  present the ring is normally simulated anyway (masking the bug), and with no player there the client neither
-  loads the chunk nor sees its entities, so no graphical scenario can distinguish the two trees. The row is
-  `repro = manual`; promotion needs Main's decision on whether the cargo ref through the real tick path is
-  enough for a symptom no client can observe.
+- `harness:entities:native-v2-ledger-forceload-ring` — the real-client ref, and the row's promotion ref:
+  `tools/harness/backends/native_ledger_forceload_ring.py` forces **one** chunk 96 chunks from the operator pad
+  (`/forceload add`), summons a cow at y=200 in the ring chunk one chunk east and reads
+  `data get entity @e[type=minecraft:cow,x=…,y=200,z=…,distance=..8,limit=1,sort=nearest] Pos` twice through the
+  client's own chat commands (`gamerule send_command_feedback true`). On the candidate both answers are
+  `[1744.5d, 200.0d, -447.5d]` (`ring_entity_position_frozen`); with the patch reversed the ring chunk simulates
+  the entity, the cow falls out of the selector and the check reds. The centre cow's fall is the gate's positive
+  control: a build that stops ticking forced chunks altogether cannot pass. Receipts: gate
+  `20261125T043641-native-v2-ledger-forceload-ring-pdlmkm_0` on `eda66c3ff`, promotion
+  `20261125T043728-ledger-promote-ngsisr5c` (the control's red came from the cargo ref, the graphical half is
+  `unrunnable` there — POL-1 practice).
