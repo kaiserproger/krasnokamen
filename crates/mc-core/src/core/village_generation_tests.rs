@@ -129,7 +129,11 @@ fn fresh_v2_sites_describe_generated_villagers_from_the_same_plans() {
 #[ignore = "requires the local vanilla content cache"]
 fn seed24_generated_pieces_show_which_house_assessment_fails() {
     let directory = tempfile::tempdir().unwrap();
-    let mut config = CoreConfig::new(directory.path().to_owned(), 24);
+    let seed = std::env::var("KRASNOKAMEN_SEED")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(24);
+    let mut config = CoreConfig::new(directory.path().to_owned(), seed);
     config.vanilla_data_dir = Some(
         std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
             .map(PathBuf::from)

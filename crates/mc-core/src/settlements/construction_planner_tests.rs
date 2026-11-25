@@ -634,6 +634,30 @@ fn pending_noniron_order_blocks_unrelated_furnaces_and_funded_houses() {
 }
 
 #[test]
+fn a_missing_farm_outranks_further_storehouse_work() {
+    let (mut state, id, _) = fixture();
+    let farmer = BuildingKind::Workshop(Profession::Farmer);
+    certificate(
+        state.settlements.get_mut(id).unwrap(),
+        BuildingKind::Storage,
+        1,
+        false,
+    );
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(
+        super::candidate_kinds(&state, record, &[]).next(),
+        Some(farmer),
+        "a town with a store but no farm plans the farm before more storehouse work"
+    );
+    certificate(state.settlements.get_mut(id).unwrap(), farmer, 1, false);
+    let record = state.settlements.get(id).unwrap();
+    assert_ne!(
+        super::candidate_kinds(&state, record, &[]).next(),
+        Some(farmer)
+    );
+}
+
+#[test]
 fn autonomous_needs_cover_every_authored_kind_and_ignore_natural_zones() {
     let (mut state, id, _) = fixture();
     let record = state.settlements.get_mut(id).unwrap();
