@@ -49,7 +49,13 @@ reach; that half is pinned by the client unit test.
 | half | client | content |
 |---|---|---|
 | control | `bafbf78b40` | CM-4 list-form frame report + the fourteen invented rigs (`allay.json` with the wings baked spread), no pose |
-| fix | `715a7110af` | the vanilla rig and the `AllayModel.setupAnim` wing pose |
+| fix | `0eb3e0ea1e` | the vanilla rigs (the pose commit `715a7110af` is the candidate tip and rides as a unit ref, see below) |
+
+Why the fix side is `0eb3e0ea1e` and not the tip: `ledger promote`'s client rule demands the two
+pinned client heads differ by exactly the fix commit's non-test patch, and no single commit spans
+the rig re-land and the pose. Pairing `bafbf78b40` with `0eb3e0ea1e` is therefore exactly
+`client:3bfbd7b6`'s patch (patch id `6cf9f2be…`), and the pose commit is covered by the row's
+`client:` unit ref, which the promote runs on the candidate client tree.
 
 Non-test hunks carried: the fourteen rig JSONs (the same patch that `client:3bfbd7b6` carries) plus
 the `procedural_part` hunk of `715a7110af` (the allay arm and its `walk_pos` parameter, threaded from
