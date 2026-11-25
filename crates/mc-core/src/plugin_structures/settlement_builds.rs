@@ -331,7 +331,8 @@ pub(crate) fn recover(
     let record = structure(&ledger, &owner(settlement), handle)?;
     let paused = record.snapshot.state == ScriptStructureState::Paused
         && record.snapshot.pause_reason.as_deref() == Some("footprint_changed");
-    let committed = record.snapshot.state == ScriptStructureState::Committed;
+    let committed = record.snapshot.state == ScriptStructureState::Committed
+        && record.snapshot.current_stage_index as usize >= record.cells.len();
     // A structure can be persisted at the terminal stage index without the commit — the House L2
     // upgrade of SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE did (`stage=2 work=0`,
     // `Running`). It has no next cell, so no builder pass can advance it and the project would hold
@@ -710,9 +711,6 @@ pub(crate) fn step_empty_stage(
     settlement: SettlementId,
     handle: &str,
 ) -> Result<bool, Failure> {
-    if status(state, settlement, handle)?.state == ScriptStructureState::Committed {
-        return Ok(false);
-    }
     let mut ledger = ledger_mut(state)?;
     let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
     // PROBE (temporary, remove with the diagnosis): the client reports `stage=2 work=0 next=None`
@@ -732,7 +730,14 @@ pub(crate) fn step_empty_stage(
         state = ?record.snapshot.state,
         "step_empty_stage: probe"
     );
-    let mut stepped = false;
+    // A `Committed` record whose index is still inside `cells` was finished before a later stage
+    // was planned onto it (the House L2 upgrade appends stage 2 to the committed L1 record), so it
+    // is not finished: reopen it and step, or `next_cell` stays None forever.
+    let mut stepped = record.snapshot.state == ScriptStructureState::Committed
+        && (record.snapshot.current_stage_index as usize) < record.cells.len();
+    if stepped {
+        record.snapshot.state = ScriptStructureState::Running;
+    }
     while record
         .cells
         .get(record.snapshot.current_stage_index as usize)
