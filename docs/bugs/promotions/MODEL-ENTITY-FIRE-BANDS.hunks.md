@@ -1,65 +1,80 @@
-# MODEL-ENTITY-FIRE-BANDS — hunk map for the pinned pair
+# MODEL-ENTITY-FIRE-BANDS — hunk map for the pinned pair (rebuilt on the current head)
 
 Promotion receipt: `promotions/MODEL-ENTITY-FIRE-BANDS.json` (written by `ledger promote`).
-Client pair: control `client:e017c320` (the tip with `a3f2a486`'s patch reversed) → restore
-`client:de93dc7e` (the tip). Both pins clean; the CM-4 counter commit is in *both* trees, so the
-pair's delta is exactly the fix's production hunk. `fix_commit` on the row is `client:a3f2a486` —
-the original, not the re-land — because naming the re-land made the tool's patch-id comparison
-compare the commit with itself.
+Client pair on the current client head `07d879cd`: control **`client:8f54183f`** (the geometry block
+replaced by the real pre-image body) → restore **`client:9308bb29`** (exactly that diff re-applied;
+this is the row's `fix_commit`). Both pins are clean (`pins/8f54183f2f75-client-*`,
+`pins/9308bb29bf07-client-*`). The pair's production delta is `patch:e37f4b12…`
+(`git diff 8f54183f 9308bb29 -- src/entities/presentation.rs | git patch-id --verbatim`).
 
-## Why a committed pair
+## Why the pair was rebuilt
 
-`a3f2a486` is post-rename but is not the tip's parent; its patch still reverses cleanly at the tip,
-so the control is that reversal and the re-land restores the tip's blob. `git diff e017c320
-de93dc7e` is therefore the fix's own patch; its non-test part must carry the same patch id as
-`a3f2a486`'s non-test part (the ledger's own split excludes the `#[cfg(test)]` hunks on both sides).
+The first pair (`client:e017c320` → `client:de93dc7e`, the tip with `a3f2a486`'s patch reversed)
+measured span 2.331 on BOTH halves (receipts `20261125T165330/165340/165434` vs
+`20261125T165457/165519/165541`): `54ca14f778` had already rewritten the lines `a3f2a486` touched
+(rotation source, sprite parity, the `camera_yaw` parameter), so reversing `54ca14f778` reversed
+none of the band geometry. That pair also could not run against the HEAD check (its pins emit the
+pre-CM-4 string-keyed `entity_layer_geometry`, while `scene_shot_checks.py:309-310` reads the CM-4
+list). The rebuilt pair therefore reverses **only** `a3f2a486`'s geometry onto HEAD, and the
+control is committed on the branch so each half has its own clean pin — no hand re-break, no
+dirty tree.
 
-## Hunks carried by the pair (control -> restore)
+## Original commit `a3f2a486` (`fix(client): draw entity fire with the vanilla flame feature bands`)
 
-| file | hunk | role |
-|---|---|---|
-| `src/entities/presentation.rs` | `append_entity_fire`: the control's camera-height billboard (`facing`, `unit = bbWidth * scale` height, sprite `row % 2`) becomes the 26.3 bands — `unit = bbWidth * scale * 1.4`, quads 1.4 units tall from `y_top = bbHeight * scale / unit`, `y_bottom` stepping 0.45 so each later band sits higher, half width 0.5 shrinking by 0.9, z from `0.3 - (int)y_top * 0.02` stepping -0.03, and the sprite/UV choice of the day (`(band / 2) % 2`); the call sites pass the camera rotation | the row's subject: the flame feature's band geometry |
-| same file, `mod tests` | `fire_bands_follow_the_vanilla_flame_feature_numbers` | excluded from the non-test patch; present in both trees |
+Its non-test hunks, each with its HEAD equivalent or omission class:
 
-No other production path differs, so nothing is class (a) or (b).
+| # | file `@@` header | what the hunk did | HEAD equivalent | class |
+|---|---|---|---|---|
+| 1 | `src/entities/presentation.rs` `@@ -636,12 +636,16 @@ fn append_experience_orb` | added the `append_entity_fire` doc paragraph; removed the `camera_yaw` parameter | HEAD has the paragraph (rewritten 2026-11-25 to name `prepare`, the camera yaw and the u mirroring) and the parameter is back as `transform, camera_yaw` (`54ca14f778`) | kept, not reversed: docs and the signature are not the band geometry; the parameter removal is **(c)** — `54ca14f778` re-added it |
+| 2 | `@@ -652,30 +656,31 @@ fn append_entity_fire` | body: `facing`→`rotation` by `transform.yaw`; `width`→`unit`; `y`/`half`/`row`→`y_top`/`y_bottom`/`half`/`z`/`band`; quads 1.4 units tall; UV swap; `p * unit` | HEAD carries the same geometry, except `rotation` uses `camera_yaw` (`54ca14f778`) and the sprite is `textures[band % 2]` with `(band / 2) % 2` u mirroring (`54ca14f778`, fixture `234673dd`/`7c366236`) | the control reverses exactly the geometry lines (`unit`/`y_top`/`y_bottom`/`half`/`z`/quad height/step); the rotation source, sprite alternation and mirroring stay HEAD's |
+| 3 | `@@ -683,9 +688,11 @@ fn append_entity_fire` | tail: `y_top -= 0.45; y_bottom -= 0.45; z -= 0.03; band += 1` | same lines in HEAD | reversed by the control (`y += width * 0.45; half *= 0.9; band += 1`) |
+| 4 | `@@ -790,15 +797,7 @@ pub fn append` | first call site: drop `camera_rotation[0]`, pass `transform` | HEAD passes `transform, camera_rotation[0]` again | **(c)** `54ca14f778` rewrote it; kept |
+| 5 | `@@ -872,7 +871,6 @@ pub fn append` | second call site: drop `camera_rotation[0]` | same | **(c)**; kept |
+| 6 | `@@ -969,7 +967,6 @@ pub fn append` | third call site: drop `camera_rotation[0]` | same | **(c)**; kept |
+| 7 | `@@ -1017,15 +1014,7 @@ pub fn append` | fourth call site: drop `camera_rotation[0]`, pass `transform` | same | **(c)**; kept |
+| 8 | `@@ -3743,13 +3732,144 @@ mod tests` | the light-15 assertion change and the new `fire_bands_follow_the_vanilla_flame_feature_numbers` | HEAD's test evolved: 11-band 4.0 x 0.6 fixture (`234673dd`, repaired by `7c366236`) | test hunk, excluded from the non-test patch; present on both sides |
+
+No non-test hunk is class (a) or (b); hunks 1 and 4-7 are **(c)** and stay at HEAD.
+
+## The a/-side text of the pair (control → restore)
+
+Everything the control's a/-side carries is either the real pre-image (`a3f2a486`'s own removed
+lines, reproduced verbatim in `e017c320`) or a named kept line:
+
+- `let width = dimensions.width * scale * 1.4;` … `y += width * 0.45;` and the quad/`z` lines are
+  `a3f2a486`'s removed body text, byte for byte (including `width * 0.45`, not the `width` step an
+  earlier recipe mis-stated: 0.45 * unit is what makes `1.45 * unit = 1.827`).
+- `let rotation = Mat4::from_rotation_y((180. - camera_yaw).to_radians());` — HEAD's line
+  (`54ca14f778`), kept; a rename of `facing` only.
+- `textures[band % 2]` and the `(left, right)` mirroring — HEAD's lines, kept; for bands 0 and 1
+  they emit the same UVs as the pre-image, so they add nothing to the delta.
+- `band` instead of `row` — counter rename only (HEAD's name).
+- The signature `transform: super::Transform, camera_yaw: f32` and the four call sites — HEAD's,
+  kept (hunks 1 and 4-7 above are class (c)).
+
+None of these lines is inside the control↔restore diff, so the pair's delta is the band geometry
+alone; the control still builds (client pin above) and only its `fire_bands_follow_the_vanilla_flame_feature_numbers`
+unit test is red.
 
 ## What the scene proves — and what it does not
 
 `native-entity-fire` (`tools/harness/entity_fire_scene.json`) shoots one stationary pig burning and
 then plain at a fixed pad and camera. `check_entity_fire` reads the frame's own
-`entity_extraction.entity_layer_geometry` (CM-4) and asserts, in this order:
+`entity_extraction.entity_layer_geometry` (CM-4) and asserts, in order:
 
 - `plain_frame_has_no_fire_layer` — the unlit frame has no `EntityFire` slice;
-- `fire_layer_present` — the burning frame has one (this is the assertion MODEL-ENTITY-FIRE's title
-  needs; the control here draws an overlay, so it is green on both halves and proves nothing for
-  that row);
-- `fire_overlay_is_one_layer` — one slice, not two (renamed from `fire_sprite_pairs_two_bands`,
-  which passed on the control because both sprites share one texture layer);
-- `fire_band_count` — 12 indices;
-- `fire_band_span` — 2.2..2.5 blocks: 1.85 scaled units at the pig's 1.26 scale = 2.331, where the
-  pre-fix loop reaches 1.827. **This is the row's discriminator.**
+- `fire_layer_present` — the burning frame has one (green on both halves here; it is
+  MODEL-ENTITY-FIRE's assertion, not this row's);
+- `fire_overlay_is_one_layer` — one slice, not two;
+- `fire_band_count` — 12 indices (2 bands). Both loops give the pig `n = ceil(y_top / 0.45)` =
+  2 bands, so this cannot separate the halves either;
+- `fire_band_span` — **2.2..2.5 blocks, the row's discriminator.** Derived from the model, not
+  fitted: the control stacks `(1 + 0.45) * unit`, the fix `(1.4 + 0.45) * unit`, with
+  `unit = bbWidth * scale * 1.4 = 1.26` for the scene pig, so the analytic spans are **1.827** and
+  **2.331**; the registered two-sided band sits around the vanilla 2.331. The earlier receipts
+  `20261125T122429` / `20261125T123333` measured exactly those numbers on the old pins.
 
-Not witnessed here: the sprite parity, the u mirroring and the camera-facing rotation. Both halves
-submit a single fire layer, and the plane looks the same in both trees, so those three are covered
-by the unit test alone. The 2026-11-25 client fix corrected all three against `javap` on the local
-26.3 jar (sprite `band % 2` with u mirrored when `(band / 2) % 2 == 0`; rotation
-`Mth.rotationAroundAxis(Y_AXIS, camera.orientation)`), which is why the hunk above describes the
-older `(band / 2) % 2` sprite choice: the pair was cut before that correction and must be re-run on
-the pinned tree that carries both it and this row.
-
-## The pair, corrected (Opus round 2)
-
-The `e017c320 -> de93dc7e` pair cannot be run against the HEAD check: those pins emit the pre-CM-4
-string-keyed `entity_layer_geometry` and the check reads the CM-4 list (`scene_shot_checks.py:309-310`).
-`54ca14f778` also rewrote the lines `a3f2a486` touched, so a pair on HEAD cannot be verbatim-equal to
-`a3f2a486`; computed, not assumed: `a3f2a486`'s non-test digest is `patch:ac0a6624…`, `54ca14f778`'s
-is `patch:30db35e5…`. Rebuild route: side branch from `d0b6708c` plus the `17e806e8aa` frame-report
-equivalent; on it reverse the band hunks (`append_entity_fire`'s rotation source, sprite parity,
-signature and four call sites) as the control, re-apply them as the restore, run
-`native-entity-fire` **three takes per side**, and record `client:54ca14f778` (the digest above) as
-the `fix_commit` the pair must equal. The measured span 1.827 (control) / 2.331 (fix) still comes
-from receipts 20261125T122429 / 20261125T123333.
-
-Note on the title: vanilla billboards the bands with the camera's yaw too (`EntityRenderDispatcher.submit`
-passes `Mth.rotationAroundAxis(Y_AXIS, camera.orientation)`), so the camera-facing plane is not the
-defect - the band size and the 0.45 step are.
+Not witnessed: the sprite parity, the u mirroring and the camera-facing rotation. Both halves
+submit a single fire layer and the plane looks the same in both trees, so those stay covered by
+`fire_bands_follow_the_vanilla_flame_feature_numbers` (and its 11-band fixture, which exercises
+both mirroring branches).
