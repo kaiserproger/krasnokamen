@@ -146,7 +146,7 @@ index 52acc954c..b6b545aa1 100644
  /// the plan, not the block that is about to be replaced.
  pub(crate) fn next_plan_state(
 diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
-index 0d6244542..93b879aa2 100644
+index 0d6244542..04f744e08 100644
 --- a/crates/mc-core/src/settlements/construction.rs
 +++ b/crates/mc-core/src/settlements/construction.rs
 @@ -1865,21 +1865,33 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
@@ -243,3 +243,26 @@ index 0d6244542..93b879aa2 100644
          return false;
      }
      if !executor::status(state, id, &project.structure)
+@@ -2869,9 +2915,22 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+         return false;
+     }
+     let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {
++        tracing::warn!(
++            settlement = id.0,
++            blueprint = %project.blueprint,
++            level = project.level,
++            "finish_project: unknown blueprint"
++        );
+         return false;
+     };
+     let Some(level) = blueprint.level(project.level) else {
++        tracing::warn!(
++            settlement = id.0,
++            blueprint = %project.blueprint,
++            level = project.level,
++            levels = blueprint.levels.len(),
++            "finish_project: the blueprint has no such level"
++        );
+         return false;
+     };
+     let bounds = level
