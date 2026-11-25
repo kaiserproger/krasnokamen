@@ -309,7 +309,33 @@ fn advance(
                     },
                 };
                 for kind in kinds {
-                    let _ = super::buildings::certify_generated(state, id, kind, bounds);
+                    // A refused adopted piece used to vanish here: the gate could
+                    // only report "no certified House", never why (ReviewD123Civ13).
+                    if let Err(error) = super::buildings::certify_generated(state, id, kind, bounds)
+                    {
+                        let missing: Vec<String> = error
+                            .missing
+                            .iter()
+                            .map(|requirement| {
+                                format!(
+                                    "{}({}/{})",
+                                    requirement.description,
+                                    requirement.found,
+                                    requirement.required
+                                )
+                            })
+                            .collect();
+                        tracing::debug!(
+                            target: "settlements::construction",
+                            settlement = id.0,
+                            ?kind,
+                            template = ?piece.template,
+                            min = ?lo,
+                            max = ?hi,
+                            missing = ?missing,
+                            "adopted piece refused certification"
+                        );
+                    }
                 }
             }
         }
