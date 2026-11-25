@@ -2915,9 +2915,22 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
         return false;
     }
     let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {
+        tracing::warn!(
+            settlement = id.0,
+            blueprint = %project.blueprint,
+            level = project.level,
+            "finish_project: unknown blueprint"
+        );
         return false;
     };
     let Some(level) = blueprint.level(project.level) else {
+        tracing::warn!(
+            settlement = id.0,
+            blueprint = %project.blueprint,
+            level = project.level,
+            levels = blueprint.levels.len(),
+            "finish_project: the blueprint has no such level"
+        );
         return false;
     };
     let bounds = level
