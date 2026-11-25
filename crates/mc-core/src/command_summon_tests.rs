@@ -1597,3 +1597,70 @@ fn summon_rejects_tnt_and_falling_block_fields_on_wrong_entities_and_bad_values(
     // Negative Time is invalid.
     rejected_tag_in_state(&mut state, "falling_block", "Time", "-1");
 }
+
+#[test]
+fn chested_horse_summon_carries_vanilla_items_cargo() {
+    // Vanilla `AbstractHorse`/`ChestedHorse` keeps a chested mount's cargo in `Items`;
+    // the slot columns are the mount's own (five for the donkey/mule, strength-driven
+    // for the llama) and a summon must place it, not refuse the field.
+    let (state, id) = summon(
+        "donkey",
+        "{Tame:1b,ChestedHorse:1b,Items:[{Slot:0b,id:\"minecraft:diamond\",count:3},\
+         {Slot:14b,id:\"minecraft:apple\",count:1}]}",
+    );
+    let slot = state.entities.slot_of(id).unwrap();
+    let mount = &state.entities.row(slot).entity_life.mount;
+    assert!(mount.chested, "a summoned chested donkey is chested");
+    assert_eq!(mount.cargo.len(), 15);
+    assert_eq!(mount.cargo[0].item_id, item(&state, "diamond"));
+    assert_eq!(mount.cargo[0].count, 3);
+    assert_eq!(mount.cargo[14].item_id, item(&state, "apple"));
+    assert!(mount.cargo[1].is_empty());
+
+    // A llama's cargo columns follow its authored Strength (vanilla: `Strength` 1..5).
+    let (state, id) = summon(
+        "llama",
+        "{Tame:1b,ChestedHorse:1b,Strength:3,Items:[{Slot:8b,id:\"minecraft:wheat\",count:2}]}",
+    );
+    let slot = state.entities.slot_of(id).unwrap();
+    let mount = &state.entities.row(slot).entity_life.mount;
+    assert_eq!(mount.strength, 3);
+    assert_eq!(mount.cargo.len(), 9);
+    assert_eq!(mount.cargo[8].item_id, item(&state, "wheat"));
+
+    // Cargo without the chest is inert in vanilla: the field is accepted, the mount
+    // stays unchested and keeps no stacks.
+    let (state, id) = summon(
+        "mule",
+        "{Tame:1b,Items:[{Slot:0b,id:\"minecraft:diamond\",count:1}]}",
+    );
+    let slot = state.entities.slot_of(id).unwrap();
+    let mount = &state.entities.row(slot).entity_life.mount;
+    assert!(!mount.chested);
+    assert!(mount.cargo.is_empty());
+
+    // A horse has no mount cargo; the slot bound and the field set are the mount's own,
+    // and every refusal happens before the entity exists.
+    let (mut state, actor, _) = crate::hostile_tests::setup(8.0);
+    for (kind, nbt) in [
+        ("horse", "{ChestedHorse:1b,Items:[{Slot:0b,id:\"minecraft:diamond\",count:1}]}"),
+        ("donkey", "{ChestedHorse:1b,Items:[{Slot:15b,id:\"minecraft:diamond\",count:1}]}"),
+        ("donkey", "{ChestedHorse:1b,Items:{Slot:0b}}"),
+        ("mule", "{Strength:3}"),
+        ("cow", "{ChestedHorse:1b}"),
+    ] {
+        let parsed = crate::commands::parse(&format!("summon {kind} ~ ~ ~ {nbt}"), true).unwrap();
+        let mut changes = ChangeSet::default();
+        crate::command_execution::execute(
+            &mut state,
+            ConnectionId(1),
+            actor,
+            &parsed,
+            &mut changes,
+        );
+        assert!(
+            changes.entities_spawned.is_empty(),
+            "{kind} {nbt} must be refused"
+        );
+    }
+}

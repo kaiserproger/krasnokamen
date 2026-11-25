@@ -378,8 +378,15 @@ pub(crate) fn supports(state: &TickState, type_id: u32, name: &str, key: &str) -
         "fuse" | "explosion_power" | "block_state" => name == "minecraft:tnt",
         "BlockState" | "Time" => name == "minecraft:falling_block",
         // Vanilla container vehicles save their cargo as `Items`; whether the
-        // field applies is the kind's own container size.
-        "Items" => crate::vehicles::container_size(name) != 0,
+        // field applies is the kind's own container size. A chested horse, donkey,
+        // mule or llama keeps the same list in `Items` beside `ChestedHorse` (and the
+        // llama's `Strength`), which the mount persistence parser owns.
+        "Items" => {
+            crate::vehicles::container_size(name) != 0
+                || crate::mounts::persistence::owns_cargo_field(name, "Items")
+        }
+        "ChestedHorse" => crate::mounts::persistence::owns_cargo_field(name, "ChestedHorse"),
+        "Strength" => crate::mounts::persistence::owns_cargo_field(name, "Strength"),
         _ => return None,
     })
 }
@@ -771,6 +778,21 @@ pub(crate) fn prepare(
     if image.uuid_authored && image.state.faction != 0 {
         crate::scoreboard::require_no_team(&state.scoreboard, &image.native.uuid.to_string())
             .map_err(error)?;
+    }
+    if crate::mounts::persistence::owns_cargo_field(name, "Items") {
+        // The mount's own parser is the one that validates the chest, the strength and
+        // every cargo slot, so a bad list is refused here, before the entity exists.
+        crate::mounts::persistence::from_fields(
+            &mut image.state.entity_life,
+            &image.native.extra_fields,
+        )
+        .map_err(|failure| error(failure.to_string()))?;
+        crate::mounts::persistence::cargo_from_record(
+            &mut image.state.entity_life.mount,
+            &state.registry.items,
+            &image.native,
+        )
+        .map_err(|failure| error(failure.to_string()))?;
     }
     image.variant = variant;
     Ok(image)
