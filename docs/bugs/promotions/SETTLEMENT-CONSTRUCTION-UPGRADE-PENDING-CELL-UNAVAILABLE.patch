@@ -1,5 +1,5 @@
 diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-index 52acc954c..8540bebf0 100644
+index 52acc954c..c94d307ea 100644
 --- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
 +++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
 @@ -332,7 +332,28 @@ pub(crate) fn recover(
@@ -73,8 +73,54 @@ index 52acc954c..8540bebf0 100644
      // The repair stage is derived afresh, so repeated interference cannot
      // accumulate stages or charge again for cells already repaired.
      if let Some(index) = record
+@@ -659,6 +696,45 @@ pub(crate) fn next_cell(
+         .map(|cell| cell.at))
+ }
+ 
++/// Step over a stage that was planned with no cells, so the next cell can be named.
++///
++/// The House L2 upgrade reports `stage=2 work=0 next=None` on the real client
++/// (20261124T231255, `20261125T001250`) while its index is still inside `cells`: an empty stage has
++/// no cell, and `advance` can never reach a `work_units` of zero, so the builder is released on
++/// every shift and the project never finishes. Recovery does the same step-over, but recovery only
++/// runs when a project is finished; this runs where the cell is asked for.
++pub(crate) fn step_empty_stage(
++    state: &mut TickState,
++    settlement: SettlementId,
++    handle: &str,
++) -> Result<bool, Failure> {
++    if status(state, settlement, handle)?.state == ScriptStructureState::Committed {
++        return Ok(false);
++    }
++    let mut ledger = ledger_mut(state)?;
++    let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
++    let mut stepped = false;
++    while record
++        .cells
++        .get(record.snapshot.current_stage_index as usize)
++        .is_some_and(|cells| cells.is_empty())
++    {
++        record.snapshot.current_stage_index += 1;
++        record.snapshot.completed_work_units = 0;
++        stepped = true;
++    }
++    if stepped {
++        ledger.revision = next(ledger.revision)?;
++        record.snapshot.revision = ledger.revision;
++        record.snapshot.resource_plan_hash =
++            inventories::resource_plan_hash(&resource_plan(&record.snapshot.stages));
++        record.snapshot.remaining = remaining(&record);
++        ledger.insert_structure(handle.to_owned(), record);
++        save(state, ledger);
++    }
++    Ok(stepped)
++}
++
+ /// The planned world state of the next cell, for naming a wait: the gate reads
+ /// the plan, not the block that is about to be replaced.
+ pub(crate) fn next_plan_state(
 diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
-index 0d6244542..b3eba08a0 100644
+index 0d6244542..068ce9f93 100644
 --- a/crates/mc-core/src/settlements/construction.rs
 +++ b/crates/mc-core/src/settlements/construction.rs
 @@ -1865,21 +1865,33 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
@@ -117,7 +163,26 @@ index 0d6244542..b3eba08a0 100644
          return false;
      };
      begin_cells(state, site.project, site.bounds, site.cells)
-@@ -2839,7 +2851,13 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+@@ -2341,9 +2353,17 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) ->
+     // The incumbent is the resident bound to this project, never another
+     // project's builder standing first in the resident list (D8).
+     let incumbent = incumbent_slot(state, id, project);
+-    let next = executor::next_cell(state, id, &project.structure)
++    let mut next = executor::next_cell(state, id, &project.structure)
+         .ok()
+         .flatten();
++    if next.is_none() && executor::step_empty_stage(state, id, &project.structure).unwrap_or(false)
++    {
++        // A stage planned with no cells is already complete; naming the next stage's cell here
++        // keeps the builder working instead of releasing it on every shift (House L2).
++        next = executor::next_cell(state, id, &project.structure)
++            .ok()
++            .flatten();
++    }
+     let lot = super::forestry::lot_bounds(state, project);
+     let protected = snapshot
+         .stages
+@@ -2839,7 +2859,13 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
      };
      // Certification is not a substitute for matching the placed blueprint:
      // the executor may have reached its last cell after a player broke one.
