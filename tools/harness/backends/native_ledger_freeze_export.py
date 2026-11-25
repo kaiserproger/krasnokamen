@@ -67,10 +67,12 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.wait(lambda state: any("The game is frozen" in line for line in state["recent_chat"]),
                "frozen_export_world_frozen")
     _echo(steps, "frozen_export_freeze_ordered")
-    # The server keeps ticking while frozen, so the exported held prefix grows; a
-    # bounded client tick wait makes the pre-fix gametime jump unmistakable and
-    # keeps the exported prefix well above the restart's own ticks.
-    steps.call("minecraft_wait_ticks", {"ticks": 200})
+    # The server keeps ticking while frozen, so the exported held prefix grows.
+    # `minecraft_wait_ticks` caps at 255 per call; 750 frozen ticks make the
+    # pre-fix gametime jump unmistakably larger than the restart's own ticks
+    # (measured at 183 in 20261125T084902 when only 200 were held).
+    for _ in range(3):
+        steps.call("minecraft_wait_ticks", {"ticks": 250})
     # A gravity block placed with open air below becomes a falling entity in the
     # same tick and is held there while frozen (`falling::run` returns), so the
     # placed cell is already air. A frozen world pushes no entity or block change
@@ -101,13 +103,15 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # jumps forward by the whole held prefix.
     imported_gametime = _gametime(steps, "after_reimport")
     steps.report["imported_gametime"] = imported_gametime
-    # Bounded by the restart's own ticks (join + probe), far below the held prefix
-    # the frozen world accumulated before the export.
+    # Bounded by the restart's own ticks (join + probe, ~183 measured), far below
+    # the >= 750-tick held prefix the frozen world accumulates before the export.
     steps.check("reimport_gametime_continues_from_the_frozen_age",
-                0 <= imported_gametime - frozen_gametime <= 150)
+                0 <= imported_gametime - frozen_gametime <= 400)
     # The freeze is session state (like vanilla): the imported world runs, so the
     # block the freeze held falls one block onto its fixture support.
-    landed = _block(steps, held, "minecraft:sand")
+    landed = steps.call("minecraft_wait_for_block_state", {
+        **held, "block_id": "minecraft:sand", "properties": {},
+        "timeout_seconds": min(60.0, steps.remaining())})
     steps.report["landed"] = {**landed}
     source = steps.call("minecraft_read_block", {**placed})
     steps.report["placed_now"] = {**source}
