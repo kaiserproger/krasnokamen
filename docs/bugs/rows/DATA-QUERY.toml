@@ -6,5 +6,17 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-QUERY"
-regression = ["cargo:mc-core:command_data::tests::data_player_queries_read_live_inventory_vitals_and_absent_paths", "cargo:mc-core:command_data::tests::data_block_accepts_every_registered_block_entity_kind", "harness:entities:native-v2-data-query"]
-repro_check = "Open, no honest control. The earlier stored patch carried a synthetic a/-side (withdrawn). The next attempt, dropping `data` from command_context::native's root list so /data is unknown, was observed NOT to red the row's refs: with the reverse applied the two cargo refs still pass (`.analysis/validation/20261123T212911-test-7u1iawnh`: 21 passed, 1 unrelated `data_storage_modify` failure; `data_player_queries_…` and `data_block_accepts_…` PASS). `git show 0c6f68d8^:crates/mc-core/src/command_data.rs` does not exist and the pre-fix partial handler `command_blocks::data` is gone at HEAD, so there is no pre-image that reds these refs. Owner decision requested (repros/owner file §1): split the row into a behaviour ref that depends on the routing, or accept a client-only proof."
+regression = [
+  "cargo:mc-core:command_data::tests::data_player_queries_read_live_inventory_vitals_and_absent_paths",
+  "cargo:mc-core:command_data::tests::data_block_accepts_every_registered_block_entity_kind",
+  "harness:entities:native-v2-data-query",
+  "cargo:mc-core:command_data::tests::data_queries_answer_through_the_native_command_pipeline",
+]
+repro_check = "CONTROL (patch mode, kept API). The real commit is `0c6f68d84`; its `command_data.rs` and `command_nbt_path.rs` are the fix's own modules, so reversing their creation would stop the kept refs compiling and they stay compiled but unreferenced by the reversed dispatch (README:250-256). `docs/bugs/promotions/DATA-QUERY.patch` therefore carries the one line the row lacked: the `if root == \"data\" { return crate::command_data::command(...) }` dispatch in `datapacks::command`, whose pre-fix body called the removed `command_blocks::data` partial handler (class (c): only the enclosing signature was rewritten later). Map: `docs/bugs/promotions/DATA-QUERY.hunks.md`.\n\nThe two older refs cannot prove it: they call `query`/`entity`/`block` directly, and the measured dispatch removal left them green (`20261123T212911-test-7u1iawnh`). This pack adds `command_data::tests::data_queries_answer_through_the_native_command_pipeline`, which enters through `command_context::run` (the console's own path) and asserts the answer the console was given (`commands.data.entity.query` carrying `13.5f`) plus one refusal line for an absent target; with the dispatch removed it reds at `command_data_tests.rs:2107` (`shown.len() == 1`, left 0). The graphical gate's `data_get_entity_health_20` is now a bounded observed check instead of a `steps.wait`, because a wait timeout is unrunnable as a control."
+fix_commit = "patch:d41098ff0e097bc406dca78af6c85e91938e9ec71a1eeb72abc4935b45ba13d4"
+failing_first = "reported"
+proving_refs = [
+  "cargo:mc-core:command_data::tests::data_queries_answer_through_the_native_command_pipeline",
+  "harness:entities:native-v2-data-query",
+]
+proving_assertions = { "cargo:mc-core:command_data::tests::data_queries_answer_through_the_native_command_pipeline" = "crates/mc-core/src/command_data_tests.rs:2107", "harness:entities:native-v2-data-query" = "data_get_entity_health_20" }
