@@ -1,0 +1,65 @@
+{
+  "id": "MODEL-SHIELD-GUI",
+  "verdict": "promoted",
+  "fix_commit": "client:f2c3a0f8",
+  "fix_commit_full": "f2c3a0f82868da5e575c26b3fee5e6c6f974c1ea",
+  "promoted_at": "2026-11-25T11:27:24+00:00",
+  "tree_head": "34109d67663ad48a17fa93e81548b322b8e2fd5a",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T112440-native-shield-gui-29rw0w8c/result.json",
+    "client_head": "d1eb60649910b17c2f9135185bc39ca0f8eab525",
+    "server_binary_sha256": "06ba83364da39a7e6e1b1d99ab9ccc6d34c0edb626bff43babd8cb4abff8bb4c",
+    "red": [
+      "harness:scene-shot:native-shield-gui"
+    ],
+    "states": {
+      "harness:scene-shot:native-shield-gui": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T112457-native-shield-gui-aml7o3x4/result.json",
+    "client_head": "323f801ca62a7184655f84e649ce7c431fc686da",
+    "server_binary_sha256": "06ba83364da39a7e6e1b1d99ab9ccc6d34c0edb626bff43babd8cb4abff8bb4c",
+    "green": [
+      "harness:scene-shot:native-shield-gui"
+    ],
+    "states": {
+      "harness:scene-shot:native-shield-gui": "green"
+    },
+    "tree_head": "34109d67663ad48a17fa93e81548b322b8e2fd5a",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T112457-native-shield-gui-aml7o3x4/result.json",
+    "client_head": "323f801ca62a7184655f84e649ce7c431fc686da",
+    "server_binary_sha256": "06ba83364da39a7e6e1b1d99ab9ccc6d34c0edb626bff43babd8cb4abff8bb4c",
+    "green": [
+      "harness:scene-shot:native-shield-gui"
+    ],
+    "states": {
+      "harness:scene-shot:native-shield-gui": "green"
+    },
+    "tree_head": "34109d67663ad48a17fa93e81548b322b8e2fd5a",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "d1b542727524a40f49c9ba86793b3c9d3b1796d6",
+    "paths": [
+      "assets/krasnokamen/models/entity/shield.json"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::asset_model_regression_tests::shield_plate_and_handle_match_the_vanilla_263_model": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T112605-ledger-promote-yh4x_qag"
+}
