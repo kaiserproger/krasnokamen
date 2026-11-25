@@ -6,8 +6,6 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:135"
-regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::hoglin_strider_and_bee_keep_their_signature_parts", "client:krasnokamen-client:entities::animation_tests::animation_roleless_named_parts_move_without_erasing_authored_orientation", "harness:scene-shot:native-rig-parity"]
-proving_refs = ["harness:scene-shot:native-rig-parity"]
-proving_assertions = { "harness:scene-shot:native-rig-parity" = "guardian_spikes_and_bee_legs_submitted" }
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::hoglin_strider_and_bee_keep_their_signature_parts", "client:krasnokamen-client:entities::animation_tests::animation_roleless_named_parts_move_without_erasing_authored_orientation"]
 fix_commit = "client:92dcb25d"
-repro_check = "candidate: same real revert run (red); guardian/elder_guardian blocked on named-part animation; area=client, real-client check required; round 3 adds guardian/elder_guardian (client:92dcb25d) with its real revert control; area=client, candidate: real-client check required"
+repro_check = "candidate: same real revert run (red); guardian/elder_guardian blocked on named-part animation; area=client, real-client check required; round 3 adds guardian/elder_guardian (client:92dcb25d) with its real revert control; area=client, candidate: real-client check required MEASURED 2026-11-25 (scene native-rig-parity, both pinned clients): the frame's entity_extraction.entity_indices is the whole dynamic pass - the cloud layer is appended into scene.dynamic before the entities - so one mob's frame reads about 51,500 indices and the value moves with the camera/cloud offset (guardian-minus-bee -264 on the control vs +60 on the fix against the 240/498 the rig JSONs predict). The rig counts cannot be isolated without a per-material or per-entity counter in the client observation (lane CM-4), so the row stays open; the scene keeps the per-subject submission (`submitted`, `unrendered`) and reports the counts as evidence."
