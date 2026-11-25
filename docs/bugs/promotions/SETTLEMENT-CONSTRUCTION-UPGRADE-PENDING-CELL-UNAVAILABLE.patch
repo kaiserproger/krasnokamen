@@ -146,7 +146,7 @@ index 52acc954c..b6b545aa1 100644
  /// the plan, not the block that is about to be replaced.
  pub(crate) fn next_plan_state(
 diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
-index 0d6244542..04f744e08 100644
+index 0d6244542..fd7c39273 100644
 --- a/crates/mc-core/src/settlements/construction.rs
 +++ b/crates/mc-core/src/settlements/construction.rs
 @@ -1865,21 +1865,33 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
@@ -189,7 +189,7 @@ index 0d6244542..04f744e08 100644
          return false;
      };
      begin_cells(state, site.project, site.bounds, site.cells)
-@@ -2341,9 +2353,37 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) ->
+@@ -2341,9 +2353,27 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) ->
      // The incumbent is the resident bound to this project, never another
      // project's builder standing first in the resident list (D8).
      let incumbent = incumbent_slot(state, id, project);
@@ -197,16 +197,6 @@ index 0d6244542..04f744e08 100644
 +    let mut next = executor::next_cell(state, id, &project.structure)
          .ok()
          .flatten();
-+    if next.is_none()
-+        && executor::status(state, id, &project.structure)
-+            .is_ok_and(|status| status.state == ScriptStructureState::Committed)
-+        && finish_project(state, id, &project.structure)
-+    {
-+        // The structure is already finished (the L2 planner appends a stage to the committed L1
-+        // record, then the executor commits it again): nothing will ever place a cell, so without
-+        // this the watcher releases the builder on every shift forever (20261125T035022).
-+        return true;
-+    }
 +    if next.is_none() {
 +        match executor::step_empty_stage(state, id, &project.structure) {
 +            Ok(true) => {
@@ -228,7 +218,7 @@ index 0d6244542..04f744e08 100644
      let lot = super::forestry::lot_bounds(state, project);
      let protected = snapshot
          .stages
-@@ -2839,7 +2879,13 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+@@ -2839,7 +2869,13 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
      };
      // Certification is not a substitute for matching the placed blueprint:
      // the executor may have reached its last cell after a player broke one.
@@ -243,7 +233,7 @@ index 0d6244542..04f744e08 100644
          return false;
      }
      if !executor::status(state, id, &project.structure)
-@@ -2869,9 +2915,22 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+@@ -2869,9 +2905,22 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
          return false;
      }
      let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {

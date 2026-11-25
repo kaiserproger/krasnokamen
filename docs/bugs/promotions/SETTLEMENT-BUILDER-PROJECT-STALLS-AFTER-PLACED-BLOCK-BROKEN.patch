@@ -86,10 +86,10 @@ index 7cf1385..b6b545a 100644
          inventories::resource_plan_hash(&resource_plan(&record.snapshot.stages));
      record.snapshot.remaining = remaining(&record);
 diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
-index 692d20d..04f744e 100644
+index 7a75741..fd7c392 100644
 --- a/crates/mc-core/src/settlements/construction.rs
 +++ b/crates/mc-core/src/settlements/construction.rs
-@@ -2909,6 +2909,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+@@ -2899,6 +2899,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
          record.revision = record.revision.saturating_add(1);
          return true;
      }
