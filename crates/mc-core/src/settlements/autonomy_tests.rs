@@ -13,6 +13,8 @@ use super::*;
 /// `autonomy.rs`/`buildings.rs` cannot take the test module with it.
 #[path = "generated_certification_tests.rs"]
 mod generated_certification_tests;
+#[path = "natural_mine_queue_tests.rs"]
+mod natural_mine_queue_tests;
 use crate::boundary::{ChangeSet, ChunkPos};
 use crate::registry::CoreRegistry;
 use crate::settlements::buildings::BuildingKind;
