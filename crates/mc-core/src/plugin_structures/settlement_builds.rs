@@ -343,17 +343,17 @@ pub(crate) fn recover(
     let terminal = !record.cells.is_empty()
         && record.snapshot.current_stage_index as usize == record.cells.len()
         && record.snapshot.completed_work_units == 0;
-    // A stage can also be planned with no cells at all — the House L2 upgrade reported
+    // A stage can also be finished without the index moving — every one of its cells worked, or
+    // planned with no cells at all — and the House L2 upgrade reported
     // `stage=2 work=0 next=None` on the real client (20261124T231255) while its stage index was
     // still inside `cells`, so `next_cell` is None and `advance` can never reach `work_units`.
     // Recovery steps over such a stage; the tail below commits when the index is terminal.
-    let empty_stage = !committed
-        && record.snapshot.completed_work_units == 0
+    let finished_stage = !committed
         && record
             .cells
             .get(record.snapshot.current_stage_index as usize)
-            .is_some_and(|cells| cells.is_empty());
-    if !paused && !committed && !terminal && !empty_stage {
+            .is_some_and(|cells| record.snapshot.completed_work_units as usize >= cells.len());
+    if !paused && !committed && !terminal && !finished_stage {
         return Ok(false);
     }
     let retry = (paused
@@ -468,12 +468,13 @@ pub(crate) fn recover(
     drop(ledger);
     let mut ledger = ledger_mut(state)?;
     let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
-    // A stage planned with no cells is already complete: step over it so `next_cell` can name the
-    // next stage's first cell, and the tail below commits once the index is terminal.
+    // A stage whose cells are all worked (or that was planned with none) is already complete: step
+    // over it so `next_cell` can name the next stage's first cell, and the tail below commits once
+    // the index is terminal.
     while record
         .cells
         .get(record.snapshot.current_stage_index as usize)
-        .is_some_and(|cells| cells.is_empty())
+        .is_some_and(|cells| record.snapshot.completed_work_units as usize >= cells.len())
     {
         record.snapshot.current_stage_index += 1;
         record.snapshot.completed_work_units = 0;
@@ -696,7 +697,8 @@ pub(crate) fn next_cell(
         .map(|cell| cell.at))
 }
 
-/// Step over a stage that was planned with no cells, so the next cell can be named.
+/// Step over a stage whose cells are all worked (or that was planned with none), so the next cell can
+/// be named.
 ///
 /// The House L2 upgrade reports `stage=2 work=0 next=None` on the real client
 /// (20261124T231255, `20261125T001250`) while its index is still inside `cells`: an empty stage has
@@ -717,7 +719,7 @@ pub(crate) fn step_empty_stage(
     while record
         .cells
         .get(record.snapshot.current_stage_index as usize)
-        .is_some_and(|cells| cells.is_empty())
+        .is_some_and(|cells| record.snapshot.completed_work_units as usize >= cells.len())
     {
         record.snapshot.current_stage_index += 1;
         record.snapshot.completed_work_units = 0;

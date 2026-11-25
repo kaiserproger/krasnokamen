@@ -905,6 +905,38 @@ fn a_terminal_index_running_structure_is_committed_by_recovery() {
 }
 
 #[test]
+fn a_stage_whose_cells_are_all_worked_is_stepped_over() {
+    let (mut state, id, _slot) = crate::settlements::construction::tests::fixture();
+    crate::settlements::construction::tests::start(&mut state, id, "house", 1, None);
+    crate::settlements::construction::tests::fund(&mut state, "house", 1);
+    let handle = state.settlements.get(id).unwrap().projects[0]
+        .structure
+        .clone();
+    {
+        let mut ledger = ledger_mut(&mut state).unwrap();
+        let mut record = take_structure(&mut ledger, &owner(id), &handle).unwrap();
+        // The House L2 shape `stage=2 work=N next=None`: every cell of the current stage worked,
+        // index not advanced. `next_cell` is None and only a step can move it.
+        let cells = record.cells[record.snapshot.current_stage_index as usize].len();
+        record.snapshot.completed_work_units = cells as u64;
+        record.snapshot.state = ScriptStructureState::Running;
+        ledger.insert_structure(handle.clone(), record);
+        save(&mut state, ledger);
+    }
+    assert_eq!(
+        next_cell(&state, id, &handle).unwrap(),
+        None,
+        "a worked-through stage names no cell"
+    );
+    assert_eq!(step_empty_stage(&mut state, id, &handle), Ok(true));
+    let after = status(&state, id, &handle).unwrap();
+    assert!(
+        after.current_stage_index > 0 && after.completed_work_units == 0,
+        "the step moves to the next stage and resets its work counter"
+    );
+}
+
+#[test]
 fn the_watcher_step_over_an_empty_stage_names_the_following_cell() {
     let (mut state, id, _slot) = crate::settlements::construction::tests::fixture();
     crate::settlements::construction::tests::start(&mut state, id, "house", 1, None);
