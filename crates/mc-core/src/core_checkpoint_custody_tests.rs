@@ -4014,7 +4014,10 @@ fn checkpoint_mid_sleep_leaves_no_stale_occupied_bed_after_reopen() {
             y: 201,
             z: at[2].floor() as i32,
         };
-        let head = BlockPos { x: foot.x + 1, ..foot };
+        let head = BlockPos {
+            x: foot.x + 1,
+            ..foot
+        };
         for dx in -2..=2 {
             for dz in -2..=2 {
                 state
