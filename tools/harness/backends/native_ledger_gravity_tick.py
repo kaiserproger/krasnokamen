@@ -97,8 +97,10 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.client.export_edit = plant
     address = steps.client.p4_restart_server(steps.remaining())
     steps.report["export_edit"] = edits
-    steps.check("export_carried_the_saved_tick", edits.get("block_ticks_before") == 0
-                and edits.get("tick", {}).get("t") == DELAY_TICKS)
+    steps.check("export_carried_the_saved_tick",
+                edits.get("tick", {}).get("t") == DELAY_TICKS
+                and edits.get("cleared", {}).get("now") == AIR
+                and edits.get("tick", {}).get("i") == SAND)
     steps.call("minecraft_connect", {"server_addr": address})
     play = steps.call("minecraft_wait_for_play", {"timeout_seconds": steps.remaining()})
     steps.check("reimport_entered_play", play["in_play"] is True)
