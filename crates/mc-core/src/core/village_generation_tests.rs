@@ -207,8 +207,17 @@ fn seed24_generated_pieces_show_which_house_assessment_fails() {
             ) {
                 Ok(_) => {}
                 Err(err) => misses.push(format!(
-                    "{:?} at {:?}: {:?}",
-                    piece.template, lo, err.missing
+                    "{:?} at {:?}: {}",
+                    piece.template,
+                    lo,
+                    err.missing
+                        .iter()
+                        .map(|requirement| format!(
+                            "{}({}/{})",
+                            requirement.description, requirement.found, requirement.required
+                        ))
+                        .collect::<Vec<_>>()
+                        .join(" ")
                 )),
             }
         }

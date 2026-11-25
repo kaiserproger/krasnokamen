@@ -490,6 +490,37 @@ fn piece_kinds_separates_the_house_the_workstation_and_neither() {
     );
 }
 
+#[test]
+fn a_street_whose_bounds_graze_a_bed_is_not_a_house_site() {
+    let claim = generated_claim("minecraft:village/plains/streets", [0, 201, 0]);
+    let (state, _chunks) = fixture_furnished(
+        vec![BELL],
+        vec![(claim, [2.5, 202.0, 2.5], "butcher".into())],
+        vec![],
+        hut_blocks(),
+    );
+    let piece = mc_world::GeneratedVillagePiece {
+        template: Some("minecraft:village/plains/streets/straight_02".into()),
+        position: mc_world::BlockPos { x: 0, y: 201, z: 0 },
+        rotation: 0,
+        entity_owner: Some("minecraft:village/plains/streets".into()),
+        bounds: Some((
+            mc_world::BlockPos { x: 0, y: 201, z: 0 },
+            mc_world::BlockPos {
+                x: 15,
+                y: 205,
+                z: 15,
+            },
+        )),
+    };
+    let bounds = ScriptWorldBounds::new([0, 201, 0], [15, 205, 15]).unwrap();
+    let kinds = super::piece_kinds(&piece, &state, &bounds).expect("readable piece");
+    assert!(
+        kinds.is_empty(),
+        "a street piece must certify no building, even with a bed in its bounds: {kinds:?}"
+    );
+}
+
 /// An unreadable column is not a verdict: classification returns `None`, so the
 /// caller keeps the piece queued instead of memoising "no building" forever.
 #[test]

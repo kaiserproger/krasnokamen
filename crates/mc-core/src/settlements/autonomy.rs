@@ -1068,6 +1068,13 @@ pub(crate) fn piece_kinds(
     bounds: &ScriptWorldBounds,
 ) -> Option<Vec<BuildingKind>> {
     let template = piece.template.as_deref()?;
+    // A street is never a building. Its bounds frequently graze the beds of the
+    // houses it runs past, and the bed probe below then certified the street as a
+    // house site (seed-24 listing: streets/straight_02/03/06 and turn_01 all came
+    // back as House pieces).
+    if template.contains("/streets/") || template.contains("/roads/") {
+        return Some(Vec::new());
+    }
     if template.contains("farm") || template.contains("field") || template.contains("crop") {
         return Some(vec![BuildingKind::Workshop(
             crate::villager::VillagerProfession::Farmer,
