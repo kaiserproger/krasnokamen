@@ -2,10 +2,10 @@
 
 Row: `ENTITY-RELATIVE-MOVEMENT-DRIFT` (client, major) — relative entity movement accumulates
 viewer drift on closed trajectories. Refs:
-`cargo:mc-edge:plan_tests::shared_moves_tests::relative_movement_cycles_return_the_decoded_consumer_to_origin`,
-`cargo:mc-edge:plan_tests::shared_moves_tests::relative_movement_rounds_endpoints_at_signed_half_step_boundaries`,
-`cargo:mc-edge:plan_tests::shared_moves_tests::relative_movement_preserves_unsent_components_and_accumulates_small_steps`,
-`cargo:mc-edge:plan_tests::shared_moves_tests::relative_movement_range_uses_quantized_endpoints_and_sync_resets_the_consumer`.
+`cargo:mc-edge:plan::plan_tests::shared_moves_tests::relative_movement_cycles_return_the_decoded_consumer_to_origin`,
+`cargo:mc-edge:plan::plan_tests::shared_moves_tests::relative_movement_rounds_endpoints_at_signed_half_step_boundaries`,
+`cargo:mc-edge:plan::plan_tests::shared_moves_tests::relative_movement_preserves_unsent_components_and_accumulates_small_steps`,
+`cargo:mc-edge:plan::plan_tests::shared_moves_tests::relative_movement_range_uses_quantized_endpoints_and_sync_resets_the_consumer`.
 
 ## Real fix and why the patch is forward-ported
 

@@ -263,7 +263,9 @@ worker, runs the negative control.
      constructor line that changes no behaviour. When no real pre-image
      exists (the fix created the function or file), the row has no faithful
      control and stays `open` with the reason recorded, as
-     IMPORT-ANVIL-PRE-RENAME-KEYS-IGNORED does.
+     TIME-LEGACY-FROZEN-CLOCK-CONVERSION does (its conversion module has no
+     value-level pre-image; every reversal of the remaining wiring refuses
+     before an assertion, which is a fixture panic, not a control).
    - **Proving ref.** `promote.json` records every red ref as plain `FAIL`.
      So `hunks.md` names the ref and `file:line` whose assertion is the row's
      symptom. A ref that goes red only on an assertion of the kept API
