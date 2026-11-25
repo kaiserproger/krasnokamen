@@ -6,4 +6,5 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:129"
+repro_check = "BLOCKER 2026-11-25: a texel-density oracle needs a rasterized 26.3 armour shell; the harness has the vanilla layer dump (models/vanilla_layers_26_3.json) but no rasterizer, so the missing artifact is a jar-derived raster of the shells (owner policy CL-4) - no in-tree oracle can separate 1:1 from resampled texels."
 regression = []

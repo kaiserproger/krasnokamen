@@ -6,4 +6,5 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:87"
+repro_check = "BLOCKER 2026-11-25: the TNT/falling-block/lightning producers were CREATED by e8fe40c2 in src/entities/render_special/world_fx.rs (absent at e8fe40c2^), so no pre-image blob exists; the control is a committed deletion of the three dispatch call sites keeping the module (kept-helper class), and no registered scene has a TNT, falling-block or lightning subject, so it needs one individual scene as well."
 regression = []

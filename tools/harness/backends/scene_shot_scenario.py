@@ -27,7 +27,10 @@ from .scene_shot_checks import (
     check_263_entity_rigs, check_decorated_pot, check_dynamic_context, check_elytra, check_entity_visuals,
     check_element_emission, check_gait_spider, check_held_tool_rest, check_item_bars, check_pig_saddle,
     check_placed_head, check_player_head, check_player_head_registry, check_shade_override,
-    check_shelf_clock, check_structure_box, check_toasts, check_use_pose, check_worn_head,
+    check_entity_fire, check_rig_allay, check_rig_guardian, check_rig_parity, check_shelf_clock, check_shield_gui, check_structure_box,
+    check_toasts,
+    check_use_pose,
+    check_worn_head,
     player_head_skin_pack,
 )
 from .scene_shot_client import (
@@ -49,6 +52,11 @@ NAMED_FIXTURES = {
     "native-elytra": "elytra_scene.json",
     "native-toast": "toast_scene.json",
     "native-item-bars": "item_bars_scene.json",
+    "native-shield-gui": "shield_gui_scene.json",
+    "native-rig-parity": "rig_parity_scene.json",
+    "native-rig-guardian": "rig_guardian_scene.json",
+    "native-rig-allay": "rig_allay_scene.json",
+    "native-entity-fire": "entity_fire_scene.json",
     "native-shade-override": "shade_override_scene.json",
     "native-decorated-pot": "decorated_pot_scene.json",
     "native-pig-saddle": "pig_saddle_scene.json",
@@ -357,6 +365,16 @@ def run(
                 check_entity_visuals(probe, artifact)
             elif ctx.scenario_id == "native-item-bars":
                 check_item_bars(probe, artifact)
+            elif ctx.scenario_id == "native-shield-gui":
+                check_shield_gui(probe, artifact)
+            elif ctx.scenario_id == "native-rig-parity":
+                check_rig_parity(probe, artifact)
+            elif ctx.scenario_id == "native-rig-guardian":
+                check_rig_guardian(probe, artifact)
+            elif ctx.scenario_id == "native-rig-allay":
+                check_rig_allay(probe, artifact)
+            elif ctx.scenario_id == "native-entity-fire":
+                check_entity_fire(probe, artifact)
             elif ctx.scenario_id == "native-shade-override":
                 check_shade_override(probe, artifact)
             elif ctx.scenario_id == "native-decorated-pot":

@@ -1,0 +1,10 @@
+[[bug]]
+id = "MODEL-OPUS-10-HOGLIN"
+title = "The hoglin's ears and tusks keep the pre-26.3 shape (its rig submits 66 quads on both trees, so a count cannot witness it)"
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "split 2026-11-25 from MODEL-OPUS-10 (receipts/D123/D123ClientModel/REVIEW-CODE-1-Opus.md: 'hoglin (396 -> 396, only as evidence)')"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::hoglin_strider_and_bee_keep_their_signature_parts"]
+repro_check = "No scene assertion witnesses this yet. `native-rig-parity` still frames a hoglin, but its rig indices are 396 on both the pre-image and the fix, so the count is evidence only, and the ears/tusks change shape, not cube count. The client unit test named in `regression` checks the authored parts; a client visual row needs a scene assertion (for example a per-bone or per-layer bbox next to a vanilla-derived one, or recorded visual review), so this stays OPEN. Source of the geometry claim: `minecraft:hoglin#main` in model-audit/opus-review/vanilla-26.1.2-layers.json."

@@ -4,8 +4,11 @@ title = "Shield GUI cell narrow: the in-tree shield plate was 10x16 at uv(0,6), 
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:92"
-regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::shield_plate_and_handle_match_the_vanilla_263_model"]
-repro_check = "round 2 (XClientUi f2c3a0f8): the shield rig is now the vanilla 26.3 ShieldModel - the plate addBox(-6,-11,-2,12,22,1) at texOffs(0,0) plus the handle addBox(-1,-3,-1,2,6,6) at texOffs(26,0) - and the ref asserts the authored 12 layer quads against it. The earlier 'blocked on rig content' line is closed: the rig exists. Control receipts/XClientUi/shield-control.log: with f2c3a0f8 reverted the ref is red (17 passed, 1 failed). candidate: area=client, real-client check required - the narrow 16x16 GUI cell is the stage-3 visual gate"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::shield_plate_and_handle_match_the_vanilla_263_model", "harness:scene-shot:native-shield-gui"]
+proving_refs = ["harness:scene-shot:native-shield-gui"]
+proving_assertions = { "harness:scene-shot:native-shield-gui" = "shield_icon_height_is_vanilla_plate" }
+repro_check = "Real-client pair on core 34109d676 (server pin 34109d67663a) and the committed client pair: control 20261125T112440-native-shield-gui-29rw0w8c (client d1eb6064, the lane tip with c53b0d40's 10x16 plate blob restored byte-for-byte) failed at shield_icon_height_is_vanilla_plate (icon 34x21 px, floor 40) and the re-land 20261125T112457-native-shield-gui-aml7o3x4 (client 323f801c, the tip whose shield.json is f2c3a0f8's) passed with 46x25 px. diff(control, re-land) has f2c3a0f8's production patch id. The scene fixes window and GUI scale and reads the shield icon's own bounding box in the first hotbar cell; the unit ref shield_plate_and_handle_match_the_vanilla_263_model stays red on the control client and green on the re-land. Earlier stage-2 note: the rig is the vanilla 26.3 ShieldModel (plate 12x22x1 at texOffs(0,0), handle 2x6x6 at texOffs(26,0)). Threshold history (Opus code review, 2026-11-25): the first registered assertion was a ratio of icon heights, 0.78 (commit 73b6d83d0, derived from the 0.894 vs 0.65 gui spans), and it was replaced by the 40 px height floor because the ratio divided the measured icon heights while the GUI rect is a fixed 48 px; the 40 px floor sits 13% below the candidate (46) and 18% above the control (34), and is a projection of a deterministic GUI, so it was accepted. The docstring promises only the height assertion; the width (25 vs 21 px) is reported, not asserted."
 fix_commit = "client:f2c3a0f8"
+promotion = "docs/bugs/promotions/MODEL-SHIELD-GUI.json"

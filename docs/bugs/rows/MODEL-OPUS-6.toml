@@ -7,4 +7,4 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:100"
 regression = []
-repro_check = "parked by Main after stage 2: the shared renderer scale affects about ten model families and needs a design decision from the owner, so no row work here"
+repro_check = "parked by Main after stage 2: the shared renderer scale affects about ten model families and needs a design decision from the owner, so no row work here BLOCKER 2026-11-25: the shared renderer/layer scale moves about ten model families, so the missing artifact is the owner's scale policy (CL-4 in OWNER-DECISIONS-NEEDED.md), not a build or a fixture."

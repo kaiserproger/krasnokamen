@@ -8,4 +8,4 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:150"
 regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::shulker_base_uses_lower_shell_and_spiral_floor_not_lid_texels", "client:krasnokamen-client:entities::render_blocks::village_tests::static_shulker_box_renders_and_opening_moves_lid"]
 fix_commit = "client:83994480"
-repro_check = "candidate: real revert (base cube uv restored to its pre-83994480 value [0,0], so base sides sample lid rows) reds both refs, receipts/XClientBlocks/10-negative-control.log; area=client, real-client check required"
+repro_check = "candidate: real revert (base cube uv restored to its pre-83994480 value [0,0], so base sides sample lid rows) reds both refs, receipts/XClientBlocks/10-negative-control.log; area=client, real-client check required BLOCKER 2026-11-25: shulker_box.json's pre-image blob is 927a7afce607, but HEAD's b1c545f88be8 differs from the fix's 73a5f298eed0 through 29b6c059's rebrand of the file's ids, so a verbatim restore is not HEAD-valid; the control must be an adapted pre-image (CM-1(a))."
