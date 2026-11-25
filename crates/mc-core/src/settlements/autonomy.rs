@@ -824,13 +824,13 @@ fn queue_natural(
             .template
             .as_deref()
             .is_some_and(|template| template.contains("/streets/") || template.contains("/roads/"));
-        let intersects = |axes: [usize; 3]| {
-            axes.into_iter()
-                .all(|axis| min[axis] <= bounds.max[axis] && max[axis] >= bounds.min[axis])
+        let intersects = |axes: &[usize]| {
+            axes.iter()
+                .all(|&axis| min[axis] <= bounds.max[axis] && max[axis] >= bounds.min[axis])
         };
         match kind {
-            BuildingKind::Mine => !street && intersects([0, 1, 2]),
-            _ => intersects([0, 2]),
+            BuildingKind::Mine => !street && intersects(&[0, 1, 2]),
+            _ => intersects(&[0, 2]),
         }
     });
     if blocked {

@@ -1,5 +1,5 @@
 diff --git a/crates/mc-core/src/settlements/autonomy.rs b/crates/mc-core/src/settlements/autonomy.rs
-index 98a62a94a..e71edb799 100644
+index 0e2c120f2..dd7ce756f 100644
 --- a/crates/mc-core/src/settlements/autonomy.rs
 +++ b/crates/mc-core/src/settlements/autonomy.rs
 @@ -273,7 +273,9 @@ fn advance(
@@ -13,37 +13,22 @@ index 98a62a94a..e71edb799 100644
      for _ in 0..pending.uncertified.len().min(PIECES_PER_PASS) {
          let index = pending.uncertified.pop_front().expect("counted piece");
          let piece = &pending.site.pieces[index];
-@@ -794,33 +796,43 @@ fn queue_natural(
+@@ -794,18 +796,44 @@ fn queue_natural(
      queued_at: u64,
      candidates: &mut VecDeque<NaturalCandidate>,
  ) {
--    // A grove is taken where nothing stands: its zone is the visible stand. A
--    // mine is dug below the surface, so a village piece standing over the same
--    // columns is not in its way - only the entrance it opens must stand clear.
--    // Comparing X/Z alone refused every mine box on a plains village (the
--    // village spans 117 pieces; HANDOFF-42 section 2).
--    let blocked = site
+-    if site
 -        .pieces
 -        .iter()
 -        .filter_map(|piece| piece.bounds)
 -        .any(|(min, max)| {
 -            let min = [min.x, min.y, min.z];
 -            let max = [max.x, max.y, max.z];
--            match kind {
--                BuildingKind::Mine => {
--                    (0..3).all(|axis| min[axis] <= entrance[axis] && max[axis] >= entrance[axis])
--                        || (1..=2).all(|dy| {
--                            (0..3).all(|axis| {
--                                let at = entrance[axis] + if axis == 1 { dy } else { 0 };
--                                min[axis] <= at && max[axis] >= at
--                            })
--                        })
--                }
--                _ => [0, 2]
--                    .into_iter()
--                    .all(|axis| min[axis] <= bounds.max[axis] && max[axis] >= bounds.min[axis]),
--            }
--        });
+-            [0, 2]
+-                .into_iter()
+-                .all(|axis| min[axis] <= bounds.max[axis] && max[axis] >= bounds.min[axis])
+-        })
+-    {
 +    // A grove is taken where nothing stands: its zone is the visible stand.
 +    //
 +    // A mine's box spans the village too - its floor is 14 below the entrance but
@@ -72,19 +57,20 @@ index 98a62a94a..e71edb799 100644
 +            .template
 +            .as_deref()
 +            .is_some_and(|template| template.contains("/streets/") || template.contains("/roads/"));
-+        let intersects = |axes: [usize; 3]| {
-+            axes.into_iter()
-+                .all(|axis| min[axis] <= bounds.max[axis] && max[axis] >= bounds.min[axis])
++        let intersects = |axes: &[usize]| {
++            axes.iter()
++                .all(|&axis| min[axis] <= bounds.max[axis] && max[axis] >= bounds.min[axis])
 +        };
 +        match kind {
-+            BuildingKind::Mine => !street && intersects([0, 1, 2]),
-+            _ => intersects([0, 2]),
++            BuildingKind::Mine => !street && intersects(&[0, 1, 2]),
++            _ => intersects(&[0, 2]),
 +        }
 +    });
-     if blocked {
++    if blocked {
          return;
      }
-@@ -957,21 +969,36 @@ fn prove_natural(
+     candidates.push_back(NaturalCandidate {
+@@ -941,21 +969,36 @@ fn prove_natural(
              BuildingKind::LumberCamp => grove_bounds(state, settlement, site, candidate.bounds),
              _ => candidate.bounds,
          };

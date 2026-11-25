@@ -150,7 +150,9 @@ fn a_plains_village_queues_proves_and_certifies_its_mine() {
             continue;
         };
         for kind in kinds {
-            if super::buildings::certify_generated(&mut state, id, kind, bounds).is_ok() {
+            if crate::settlements::buildings::certify_generated(&mut state, id, kind, bounds)
+                .is_ok()
+            {
                 adopted += 1;
             }
         }
