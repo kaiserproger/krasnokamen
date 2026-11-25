@@ -529,6 +529,18 @@ class ClientGateTests(unittest.TestCase):
         self.assertEqual(state, ledger.UNRUNNABLE)
         self.assertIn('did not reach the compiler', detail)
 
+    def test_a_vendored_warning_is_not_a_diagnostic(self):
+        # `--workspace` lints the checkout's own crates; a vendored dependency keeps its lint settings
+        # and warns on a clean run, so only a diagnostic inside the checkout counts.
+        log = ('warning: direct cast of function item into an integer\n'
+               '   --> vendor/winit/src/platform_impl/linux/x11/ime/context.rs:161:40\n')
+        with patch.object(ledger, '_exec', return_value=(False, log)):
+            state, detail, _ = ledger._run_client_gates(self.ctx(), {self.GATE}, self.root)[self.GATE]
+        self.assertEqual(state, ledger.UNRUNNABLE)
+        with patch.object(ledger, '_exec', return_value=(True, log)):
+            results = ledger._run_client_gates(self.ctx(), {self.GATE}, self.root)
+        self.assertEqual(results[self.GATE][0], ledger.GREEN)
+
     def test_a_dirty_client_checkout_is_refused(self):
         (self.client / 'src/lib.rs').write_text(CLIENT_LIB_FIXED + '\n// local edit\n')
         with patch.object(ledger, '_exec', return_value=(True, '')):

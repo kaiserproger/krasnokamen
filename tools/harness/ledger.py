@@ -583,19 +583,28 @@ _GATE_DIAGNOSTIC = re.compile(
     r'\s*-->\s+(?P<file>[^\s:]+):(?P<line>\d+):(?P<column>\d+)')
 
 
-def _gate_diagnostic(text):
-    """The first compiler diagnostic (message and source location) a gate log carries, else None.
+def _gate_diagnostic(text, repo):
+    """The first workspace-source diagnostic (message and location) a gate log carries, else None.
 
-    Only a lint diagnostic counts: clippy/rustc print `error: <lint> ...` (or `error[E...]`) with a
-    `--> path:line:column` location, and a plain `warning: ...` when the command did not deny warnings.
-    A cargo-level failure (`error: could not compile`, a download error) has no such location block, so
-    it stays unrunnable, never evidence."""
-    match = _GATE_DIAGNOSTIC.search(text)
-    if match is None:
-        return None
-    return {'message': match.group('message').strip()[:200], 'file': match.group('file'),
-            'line': int(match.group('line')), 'column': int(match.group('column')),
-            'level': match.group(1).split('[', 1)[0]}
+    Only a lint in the checkout's own source counts: clippy/rustc print `error: <lint> ...` (or
+    `error[E...]`) with a `--> path:line:column` location. A vendored dependency keeps its own lint
+    settings and prints warnings even when the workspace denies them (`vendor/winit` under `--workspace`),
+    and a cargo-level failure (`error: could not compile`, a download error) has no location block, so
+    neither is evidence about this row."""
+    for match in _GATE_DIAGNOSTIC.finditer(text):
+        path = Path(match.group('file'))
+        if not path.is_absolute():
+            path = Path(repo) / path
+        try:
+            relative = path.resolve().relative_to(Path(repo).resolve()).as_posix()
+        except ValueError:
+            continue
+        if relative.split('/', 1)[0] in ('vendor', 'target'):
+            continue
+        return {'message': match.group('message').strip()[:200], 'file': relative,
+                'line': int(match.group('line')), 'column': int(match.group('column')),
+                'level': match.group(1).split('[', 1)[0]}
+    return None
 
 
 def _run_client_gates(ctx, gates, root, repo=None, pinned=True):
@@ -638,10 +647,10 @@ def _run_client_gates(ctx, gates, root, repo=None, pinned=True):
         if Path(repo).resolve() != client_repo(root).resolve():
             env = _client_control_env(env, root / '.analysis/client-sandbox' / time.strftime('%Y%m%dT%H%M%S'))
         ok, text = _exec(ctx, build_argv, f'gate-{gate[:24]}', repo, env)
-        diagnostic = _gate_diagnostic(text)
-        if ok and diagnostic is None:
+        diagnostic = _gate_diagnostic(text, repo)
+        if ok:
             results[gate] = (GREEN, '', None)
-        elif not ok and diagnostic is not None:
+        elif diagnostic is not None:
             results[gate] = (RED, f"{description}: {diagnostic['level']}: {diagnostic['message']} "
                                   f"({diagnostic['file']}:{diagnostic['line']}:{diagnostic['column']})",
                              {'error': 'gate-diagnostic', 'class': 'assertion',
