@@ -1,5 +1,5 @@
 diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-index 6bbcce0..5c68af8 100644
+index 8d5532e..2b8dd47 100644
 --- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
 +++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
 @@ -331,7 +331,8 @@ pub(crate) fn recover(
@@ -92,7 +92,7 @@ index 6bbcce0..5c68af8 100644
      record.snapshot.resource_plan_hash =
          inventories::resource_plan_hash(&resource_plan(&record.snapshot.stages));
      record.snapshot.remaining = remaining(&record);
-@@ -514,6 +581,7 @@ pub(crate) fn reopen_emptied(
+@@ -552,6 +619,7 @@ pub(crate) fn reopen_emptied(
          if !seen.insert(cell.at)
              || cell.state == target.registry.states.air
              || free_soil_work(target, cell)
@@ -101,10 +101,10 @@ index 6bbcce0..5c68af8 100644
              continue;
          }
 diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
-index 52a6525..6bad4d9 100644
+index 2be55ea..10b35be 100644
 --- a/crates/mc-core/src/settlements/construction.rs
 +++ b/crates/mc-core/src/settlements/construction.rs
-@@ -2905,6 +2905,9 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+@@ -2922,6 +2922,9 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
      // Recovery that opens a repair keeps the project; recovery that finishes a
      // terminal-index structure in place (SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE)
      // leaves it completable, so only an uncommitted outcome refuses.
@@ -114,7 +114,7 @@ index 52a6525..6bad4d9 100644
      if !executor::status(state, id, &project.structure)
          .is_ok_and(|snapshot| snapshot.state == ScriptStructureState::Committed)
      {
-@@ -2932,6 +2935,17 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+@@ -2949,6 +2952,17 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
          record.revision = record.revision.saturating_add(1);
          return true;
      }
@@ -129,6 +129,6 @@ index 52a6525..6bad4d9 100644
 +        );
 +        return false;
 +    }
-     let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {
-         tracing::warn!(
-             settlement = id.0,
+     let Ok((blueprint, bounds)) = certificate_bounds(state, &project) else {
+         return false;
+     };

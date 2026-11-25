@@ -143,8 +143,10 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             command = f"settlement build {bp}" if level == 1 else f"settlement build upgrade {bid}"
             dialog = (lambda: _order_via_dialog(probe, sub, tag, bp, level, sname)) if level == 1 else \
                 (lambda: _upgrade_via_dialog(probe, sub, tag, bp, bid, level, sname))
-            admitted = _qa._order_echo_retry(probe, sub, tag, bp, level, command, use_dialog, ctx,
-                                         dialog_fn=dialog, upgrade_bid=bid)
+            admitted = _qa._order_echo_retry(
+                probe, sub, tag, bp, level, command, use_dialog, ctx, dialog_fn=dialog,
+                upgrade_bid=bid,
+                refund=lambda: _qa._fund_level(probe, sub, bp, level, tuple(shell)))
             if level == 1:
                 refusal = _order_refusal(sub, 1)
                 if refusal is not None:

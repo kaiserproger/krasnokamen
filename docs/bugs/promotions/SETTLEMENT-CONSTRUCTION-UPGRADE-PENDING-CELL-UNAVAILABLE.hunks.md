@@ -1,23 +1,30 @@
 # SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE — control hunks
 
-The fix under test is `983178bde2` (fix(settlements): repair an upgrade's inherited level-image
-cell), on top of `597352d5a7`. The candidate is `f532864432`; its only later commits are the ledger
-row, the docs and clippy/code-health hygiene, so the fix's hunks are unchanged from the commit.
+Patch mode is used because the fix is two sessions of one lane: `settlement_builds.rs` and
+`blueprints.rs` were changed by D123CivGatesH's pack (committed `2f9d545215`) and then changed again by
+D123CivGatesJ's pack (`2d5735657`), which replaced the blueprint-image inheritance with the executed
+build chain and deleted `Blueprint::image`/`Blueprint::inherited`; the net `blueprints.rs` diff against
+the lane base is empty. The recorded pre-image is therefore the lane base itself, `597352d5a7`, whose
+`reopen_emptied` scans only the record's own cells.
 
-Patch mode is used for one reason: **class (b) — API the kept tests call.** The fix's
-`blueprints.rs` hunk adds `Blueprint::inherited`/`Blueprint::image`, and the kept test
-`settlements::construction::stall_tests::a_committed_house_upgrade_reports_its_missing_certificate_requirement`
-(which this fix had to adapt) calls `Blueprint::inherited` to lay the inherited shell. Reversing that
-hunk stops the control from compiling, so the patch carries only the behaviour hunk; the helper stays
-present (unused in the control, a `dead_code` warning) exactly as the kept tests need.
+`docs/bugs/promotions/SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE.patch`
+(`patch:27b05b91`) is `git diff 597352d5a7 <head> -- settlement_builds.rs blueprints.rs`: one file,
+`settlement_builds.rs`, in which the whole `inherited()` function (the chain fold) and the
+`reopen_emptied` loop over it are added. Reversing it restores `597352d5a7`'s text, so the control has
+no inherited-cell scan at all.
 
 | hunk | site | pre-fix state |
 |---|---|---|
-| 2 (kept) | `settlement_builds.rs`: `fn inherited(..)` and the `reopen_emptied` loop over it | absent — `reopen_emptied` scans only the record's own cells (`597352d5a7` text, verbatim) |
-| 1 (omitted, class b) | `blueprints.rs`: `Blueprint::image`/`Blueprint::inherited` | kept in the control; reversing it breaks the kept stall test's build |
+| 1 (kept) | `settlement_builds.rs`: `fn inherited(..)` + the `reopen_emptied` loop | absent (`597352d5a7` text: the scan reads `record.cells` only) |
 
-`git apply -R --check` passes on `f532864432`; the reversed tree compiles and the row's own cargo
-ref goes red at its assertion (`construction did not finish`, house L2 at 100% Committed,
-`20261125T115102` is the same red on the unpatched base). The harness ref is not rerun for the
-control (no reverted-tree pin; it is `unrunnable` there and green on the candidate receipt
-`20261125T141741-buildings-qa-bdfzq_2x`).
+The two membership cargo refs are red on that pre-image: `20261125T115102` (the lane's own red run on
+the base) failed `an_upgrade_repairs_an_inherited_perimeter_cell_emptied_mid_build` at
+`construction_fencing_tests.rs:385` (`construction did not finish`). On the pack-2 pre-image
+(`2f9d545215`, blueprint-image inheritance) that test stays green, because the image already repairs an
+oak inherited cell; the species test
+`an_upgrade_repairs_an_inherited_cell_in_the_species_the_house_was_built_with` is the one that reds
+there (`20261125T170443`, same assertion), and the cost/`validate` assertions are the pack-2 additions.
+
+The graphical ref `house.L2_upgrade` is red on the pre-image: gate `20261124T231255` FAILed it after the
+L2 adversarial break (the L1 stage, including `broken_cell_replaced`, PASSed on that run). The promotion
+run re-runs it on the reversed control tree itself.

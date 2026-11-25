@@ -55,11 +55,15 @@ def _missing_level_order(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: s
 
 def _order_echo_retry(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str, level: int,
                       order_cmd: str, use_dialog: bool, ctx: ProfileContext,
-                      dialog_fn=None, upgrade_bid: int | None = None) -> bool:
+                      dialog_fn=None, upgrade_bid: int | None = None, refund=None) -> bool:
     """Issue one order; never infer admission from stale chat or an unrelated project.
 
     A refusal is usually transient planner contention, so retry up to three times about a
-    minute apart and re-check admission after each attempt."""
+    minute apart and re-check admission after each attempt. `refund` re-stocks the bill when
+    the order is queued *unfunded*: the village planner can admit its own construction in the
+    minute between the funded deposit and this dialog and take the stock for it (seed-100
+    house gate 20261125T172634: the planner's second House L1 left `Missing: Oak Planks x60`
+    on the level-2 order and the harness's timed-out order was the only red)."""
     for attempt in range(1, 4):
         state: dict[str, Any] = {}
         if use_dialog and ctx.windowed and dialog_fn is not None:
@@ -78,6 +82,12 @@ def _order_echo_retry(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
         if f"started {PROJECT_LABEL.get(bp, bp)} construction.".lower() in message.lower() or \
                 f"started {bp} construction.".lower() in message.lower():
             return True
+        # A queued order the server could not fund ("Missing: ...") becomes ready when the
+        # storage can pay it, so restock instead of issuing a second identical order.
+        queued_reply = str(sub.get(f"L{level}_dialog_upgrade") or sub.get(f"L{level}_dialog_order") or "")
+        if refund is not None and "Missing:" in queued_reply:
+            refund()
+            sub[f"L{level}_order_refund{attempt}"] = "queue was unfunded; stock re-deposited"
         probe.call("minecraft_wait_ticks", {"ticks": 20})
         if _qa._project_active_quiet(probe, sub, tag, bp, level, upgrade_bid=upgrade_bid):
             # The planner admitted this level while our order was refused: follow its build.

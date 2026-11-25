@@ -411,6 +411,34 @@ class OrderEchoRetryTest(unittest.TestCase):
         self.assertFalse(result)
         active.assert_called_once()
 
+    def test_an_unfunded_queued_order_restocks_before_the_next_attempt(self):
+        """The village planner can take the deposit for its own build; the queued order becomes
+        ready once storage can pay it, so the harness must restock instead of re-ordering."""
+        probe, sub = FakeProbe(), {}
+        dialog_calls = []
+
+        def dialog():
+            dialog_calls.append(1)
+            if len(dialog_calls) == 1:
+                sub["L3_dialog_upgrade"] = (
+                    "Order accepted: Gate L3. | Missing:\nOak Planks \u00d760 | "
+                    "Put missing materials in Storage; follow progress in Construction.")
+            else:
+                sub["L3_dialog_upgrade"] = "Order accepted: Gate L3. | Pending #2: Gate L3 \u00b7 ready"
+
+        refunded = []
+        with mock.patch.object(buildings_qa, "_project_active_quiet",
+                               side_effect=[False, True]), \
+                mock.patch.object(buildings_qa, "_current_certificate", return_value=None):
+            result = buildings_qa._order_echo_retry(
+                probe, sub, "buildings_gate", "gate", 3, "settlement build upgrade 7", True,
+                SimpleNamespace(windowed=True), dialog_fn=dialog, upgrade_bid=7,
+                refund=lambda: refunded.append(len(refunded)))
+        self.assertTrue(result)
+        self.assertEqual(len(refunded), 1)
+        self.assertEqual(sub["L3_order_refund1"], "queue was unfunded; stock re-deposited")
+        self.assertNotIn("L3_order_refund2", sub)
+
 
 class AdmissionTest(unittest.TestCase):
     def test_a_refused_order_is_fine_when_the_planner_already_certified_the_level(self):
@@ -482,7 +510,7 @@ class SequentialFlowTest(unittest.TestCase):
             return 7, certs[level]
 
         def order(_probe, sub, tag, _bp, level, cmd, use_dialog, ctx, dialog_fn=None,
-                  upgrade_bid=None):
+                  upgrade_bid=None, refund=None):
             events.append(("order", level, use_dialog))
             stages.append(("order", level))
             if order_echo is not None:
