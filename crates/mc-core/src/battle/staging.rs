@@ -36,14 +36,12 @@ pub enum BattleCommand {
         name: String,
         target: String,
     },
-    /// Read-only per-regiment contact census (contact.rs consumer: the respawn fixture's witness).
-    Contacts,
 }
 
 pub fn parse(args: &[&str]) -> Result<BattleCommand, CommandError> {
     let usage = || {
         CommandError::Usage(
-            "battle setup <seed> <field-100|field-1k|field-10k> [count] | battle start|pause|reset|status|roster|contacts | battle watch <player>... | battle live <player> <red|blue> | battle spectate <player> <target>",
+            "battle setup <seed> <field-100|field-1k|field-10k> [count] | battle start|pause|reset|status|roster | battle watch <player>... | battle live <player> <red|blue> | battle spectate <player> <target>",
         )
     };
     match args {
@@ -68,7 +66,6 @@ pub fn parse(args: &[&str]) -> Result<BattleCommand, CommandError> {
         ["pause"] => Ok(BattleCommand::Pause),
         ["reset"] => Ok(BattleCommand::Reset),
         ["status"] => Ok(BattleCommand::Status),
-        ["contacts"] => Ok(BattleCommand::Contacts),
         ["roster"] => Ok(BattleCommand::Roster),
         ["watch", names @ ..] => {
             let names: Vec<String> = names.iter().map(|n| (*n).to_owned()).collect();
@@ -959,57 +956,12 @@ pub(crate) fn execute(
                 engaged
             ))
         }
-        BattleCommand::Contacts => Ok(contacts_census(state)),
         BattleCommand::Watch { names } => Ok(live_players::watch(state, names)),
         BattleCommand::Live { name, side } => live_players::live(state, name, *side),
         BattleCommand::Spectate { name, target } => {
             live_players::spectate(state, changes, name, target)
         }
     }
-}
-
-/// Read-only per-regiment contact census (`battle contacts`): one line per regiment with the same
-/// contact predicate the status line's `engaged` count uses, so a scene can tell whether a holder's
-/// own regiment has an enemy within reach. It reads the formation and writes nothing.
-fn contacts_census(state: &TickState) -> String {
-    use std::fmt::Write;
-    let regiments = &state.hostile.battle.formation.regiments;
-    let mut out = format!(
-        "Battle contacts tick={} regiments={}",
-        crate::command_context::execution_tick(state).saturating_add(1),
-        regiments.len()
-    );
-    for (index, regiment) in regiments.iter().enumerate() {
-        let contact = regiment.spec.order != Order::Hold
-            && regiment.enemy.is_some()
-            && regiment.gap <= 6.0
-            && regiment.live_count > 0;
-        let _ = write!(
-            out,
-            " | regiment={} faction={} files={} live={} gap={:.1} enemy_regiment={} enemy_routing={} order={} contact={} broke_now={}",
-            index,
-            regiment.spec.faction,
-            regiment.spec.files,
-            regiment.live_count,
-            regiment.gap,
-            regiment
-                .enemy_regiment
-                .map(|e| e.to_string())
-                .unwrap_or_else(|| "-".into()),
-            regiment.enemy_routing,
-            match regiment.spec.order {
-                Order::Hold => "hold",
-                Order::Advance => "advance",
-                Order::Charge => "charge",
-                #[cfg(test)]
-                Order::Withdraw => "withdraw",
-                Order::Pursue => "pursue",
-            },
-            contact,
-            regiment.broke_now,
-        );
-    }
-    out
 }
 
 #[cfg(test)]
