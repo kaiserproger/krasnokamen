@@ -632,7 +632,8 @@ seed = 81
                         from .native_promotion_custody import convert_world
 
                         convert_world(ctx, binary, config, evidence,
-                                      corrupt=getattr(mcp, "corrupt_fixture", None))
+                                      corrupt=getattr(mcp, "corrupt_fixture", None),
+                                      edit=getattr(mcp, "export_edit", None))
                     if getattr(mcp, "wal_forge", None):
                         # The palette digest is a property of this build, so take it (and the
                         # store id and branch) from a format-3 batch the server itself wrote before it

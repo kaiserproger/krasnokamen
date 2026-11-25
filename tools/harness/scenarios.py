@@ -273,13 +273,16 @@ SCENARIOS: dict[str, Scenario] = {
         requires=("xvfb",),
         sources=("tools/harness/backends/native_v2.py",
                  "tools/harness/backends/native_ledger_gravity_tick.py",
+                 "tools/harness/backends/anvil_scheduled_tick.py",
+                 "tools/harness/backends/anvil_corrupt.py",
                  "tools/harness/backends/native_promotion_custody.py"),
-        fixture="operator pad; `/tick freeze`; one floating sand block six blocks above the pad "
-                "floor with air below; a clean stop, export-anvil and import-anvil round trip",
+        fixture="operator pad; a sand block on a stone support with a second stone cell under it; a "
+                "clean stop, export-anvil, a fixture edit that clears the lower cell and appends the "
+                "sand's due `block_ticks` entry to the exported chunk, then import-anvil",
         proves="the imported world's saved `block_ticks` entry makes the sand leave its position and "
                "land one block down after the restart, with no command writing near it",
-        limits="One frozen-world sand block and one conversion round trip; no gravel, no other "
-               "falling kind and no second saved tick.",
+        limits="One saved sand tick and one conversion round trip; no gravel, no other falling kind "
+               "and no second saved tick.",
     ),
 
     "native-v2-ledger-mob-attack": _entry(
