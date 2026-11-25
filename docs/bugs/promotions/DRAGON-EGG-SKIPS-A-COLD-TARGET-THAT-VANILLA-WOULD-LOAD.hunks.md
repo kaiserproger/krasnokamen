@@ -1,5 +1,10 @@
 # DRAGON-EGG-SKIPS-A-COLD-TARGET-THAT-VANILLA-WOULD-LOAD — fix-hunk map
 
+**Promoted** as `patch:92ca0cba…` (promotion `20261125T004214-ledger-promote-v_83wwku`, tree `f3382ce42`,
+red on the ledger's own reversal at `interact_parity_tests.rs:678` — the missing second priority-0
+demand). The fix itself is the scaffold from `70d39713e` plus the wave2-13 M1/m2 changes it now carries;
+this file is the record, not a second patch.
+
 Fix commit: the one that adds this file's row refs (see the ledger row's `fix_commit`). Design:
 `receipts/D123/D123Battle/DRAGON-EGG-TICK-NOTE.md` (Main's OD-1 option 1).
 

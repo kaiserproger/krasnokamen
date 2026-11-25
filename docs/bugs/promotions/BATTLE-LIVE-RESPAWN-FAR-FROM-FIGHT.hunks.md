@@ -1,8 +1,8 @@
 # BATTLE-LIVE-RESPAWN-FAR-FROM-FIGHT — fix-hunk map
 
-Fix `f90997cc1` in tree. This map's patch is its **behaviour-only** form (the BED pattern, review
-wave2-13 M3/Main): `patch:09c7ef28c66dcaa8cb2fd933751f49b253573a162257dd40289427a1b8205f4c`,
-`git apply -R --check` passes at HEAD.
+Fix `f90997cc1` in tree. There is NO behaviour-only patch: the earlier `09c7ef28` was a hand
+re-break (its a-side never existed in history) and is withdrawn per REVIEW-wave2-14 Major-2. The
+control is the fix's real parent tree `f90997cc1^`.
 
 | file | what it does |
 |---|---|
@@ -14,9 +14,10 @@ drops `nearest_file` and the test tree does not build (`E0425`), which is why th
 
 ## Controls
 
-- **cargo**: the row's four `battle::live_players::tests::a_respawn_*` refs must red on the reversal
-  (`ledger promote --fix-patch` runs exactly that).
-- **graphical**: the scene's `holder_sees_an_enemy_after_respawn` (an enemy within 8 blocks sampled
-  from the holder's own client after his death and respawn) is the row's symptom and must be red on a
-  pin of the reversed tree; `contact=`/`rule=centre` are strings the fix itself writes and are not
-  the control.
+- **cargo**: the four `battle::live_players::tests::a_respawn_*` refs cannot be built from the
+  ledger's reversal (E0425 `nearest_file`); if they are green on the parent pin they are excluded as
+  non-proving per docs/bugs/README.md (proving_refs), and the graphical control carries the row.
+- **graphical**: `holder_sees_an_enemy_after_respawn` — the enrolled holder's own client position
+  against the enemy side in the server's battle image (8 blocks) — must be green on the candidate pin
+  and red on the parent-tree pin `f90997cc1^`; `contact=`/`rule=centre` are strings the fix writes and
+  are not the control.

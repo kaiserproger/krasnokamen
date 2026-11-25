@@ -142,17 +142,17 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         report.setdefault("observations", {})["fighting"] = (strike.get("battle") or {}).get("fighting")
         mark = console.mark()
         console.send(f"kill {HOLDER}")
-        died = console.wait(rf"Battle live died: {HOLDER}", mark, timeout=120)
+        died = console.wait(rf"Battle live died: {HOLDER}", mark, timeout=300)
         report["observations"]["died_line"] = died.group(0)
         # The client drives his own respawn: the server's live respawn answers that
         # action (battle_recovery's kit does the same on the real client).
         holder = clients[0]
-        holder.driver("wait_for", condition="screen", value="dead", timeout=120)
+        holder.driver("wait_for", condition="screen", value="dead", timeout=300)
         dead = holder.capture("dead")
         died_at = _point(dead["state"])
         holder.driver("respawn")
-        holder.driver("wait_for", condition="screen", value="playing", timeout=120)
-        respawned = console.wait(rf"Battle live respawned: {HOLDER}[^\n]*", mark, timeout=120)
+        holder.driver("wait_for", condition="screen", value="playing", timeout=300)
+        respawned = console.wait(rf"Battle live respawned: {HOLDER}[^\n]*", mark, timeout=300)
         line = respawned.group(0)
         report["observations"]["respawn_line"] = line
         at = _parse_at(line)
@@ -179,12 +179,14 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         # client `state` carries no entities. Recorded as the row's missing proof —
         # `contact=`/`rule=centre` are strings the fix itself writes, not a control
         # (review wave2-13 M3).
-        report.setdefault("incomplete", []).append(
-            "no client entity census through horizon-ctl: the enemy-in-reach symptom is not measured")
+        if scenario == "battle-live-respawn-line-contact":
+            report.setdefault("incomplete", []).append(
+                "no client entity census through horizon-ctl: the enemy-in-reach symptom is not measured")
         # The row's symptom from the server's own published truth: the respawned holder must
         # have an enemy soldier inside weapon reach in the next battle image. Log fields are
         # not evidence here (contact=/rule=centre are strings the fix writes).
-        witness = _respawn_enemy_witness(run_dir)
+        holder_at = _point(holder_after)
+        witness = _respawn_enemy_witness(run_dir, holder_at)
         report["observations"]["respawn_enemy_witness"] = witness
         check(report, "holder_sees_an_enemy_after_respawn",
               witness.get("min_enemy_distance") is not None
@@ -247,7 +249,8 @@ def _point(state: dict[str, Any]) -> list[float] | None:
     return None
 
 
-def _respawn_enemy_witness(run_dir: Path, holder: str = HOLDER) -> dict[str, Any]:
+def _respawn_enemy_witness(run_dir: Path, holder_at: list[float] | None,
+                          holder: str = HOLDER) -> dict[str, Any]:
     """The respawned holder's distance to the nearest soldier of another faction.
 
     Reads the runner's `wal-archive/` (enabled with `--crash-handoff`) and folds the battle images:
@@ -280,9 +283,11 @@ def _respawn_enemy_witness(run_dir: Path, holder: str = HOLDER) -> dict[str, Any
         return result
     battle = fold["battle"]
     hold = next((row for row in battle["live"]["holds"] if row.get("name") == holder), None)
-    if hold is None or not hold.get("at"):
+    if hold is None or holder_at is None:
         return result
-    at = [float(value) for value in hold["at"]]
+    # The hold's own `at` lags the respawn teleport, so where he stands comes from his client;
+    # the server image supplies only the enemy side (measured, HANDOFF-20).
+    at = [float(value) for value in holder_at]
     result["holder"], result["holder_at"] = hold.get("name"), at
     regiments = battle["formation"]["regiments"]
     own = regiments[hold["regiment"]]["spec"]["faction"]

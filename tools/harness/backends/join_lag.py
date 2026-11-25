@@ -724,7 +724,9 @@ def _gate(a: ProbeSteps, ctx: ProfileContext, artifact: Path, tick_rate: float, 
     # the whole window; a halt inside it is row 2's own symptom and ends the wait.
     bound_rate = applied_rate if applied_rate is not None and applied_rate > 0 else tick_rate
     window = publish_window(server_log_path, JOINER, bound_rate)
-    if halt is None and window.get("start_at") is not None:
+    # The start stays None until an applied-rate interval appears after the admission (m3), so
+    # the wait is gated on the admission itself (review wave2-14 Major-1).
+    if halt is None and window.get("admitted_at") is not None:
 
         def extended() -> tuple[bool, dict[str, Any]]:
             return gate_window(server_log_path, bound_rate)

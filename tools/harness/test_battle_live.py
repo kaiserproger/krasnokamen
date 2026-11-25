@@ -62,7 +62,7 @@ class MarkerTest(unittest.TestCase):
         self.assertIn('"--crash-handoff"', source)
         self.assertIn("_respawn_enemy_witness", source)
         self.assertIn("holder_sees_an_enemy_after_respawn", source)
-        missing = battle_live._respawn_enemy_witness(Path("/nonexistent-run"))
+        missing = battle_live._respawn_enemy_witness(Path("/nonexistent-run"), [0.0, 64.0, 0.0])
         self.assertFalse(missing["archive_exists"])
         self.assertIsNone(missing["min_enemy_distance"])
 

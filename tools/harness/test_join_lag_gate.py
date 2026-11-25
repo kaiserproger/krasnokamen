@@ -752,6 +752,33 @@ class PublishWindowTest(unittest.TestCase):
             ready, window = join_lag.gate_window(log, 3.0)
             self.assertTrue(ready)
             self.assertGreaterEqual(window["seconds"], join_lag.HALT_WINDOW_SECONDS)
+            # A later publication that is itself at the requested rate must move the start again
+            # (the recompute takes the newest applied interval, not the first one it saw).
+            shifted = MIXED_RATE_LOG + "2026-11-24T18:19:42.000000Z DEBUG mc_edge::server::pump: pump published tick tick=310 viewers=2 elapsed_us=3900\n"
+            log.write_text(shifted)
+            ready, window = join_lag.gate_window(log, 3.0)
+            self.assertEqual(window["start_at"], "2026-11-24T18:19:38.656790+00:00")
+
+    def test_an_admission_with_no_applied_rate_is_inconclusive(self) -> None:
+        # m3 itself: an admission followed only by 20 TPS publications must give seconds None,
+        # never fall back to the admission (review wave2-14 Major-1 asks for this red).
+        with tempfile.TemporaryDirectory() as root:
+            log = Path(root) / "server.log"
+            log.write_text(MIXED_RATE_LOG.replace(
+                """
+2026-11-24T18:19:35.992221Z DEBUG mc_edge::server::pump: pump published tick tick=292 viewers=1 elapsed_us=2019
+2026-11-24T18:19:38.656790Z DEBUG mc_edge::server::pump: pump published tick tick=300 viewers=2 elapsed_us=2797
+""",
+                """
+2026-11-24T18:19:35.960000Z DEBUG mc_edge::server::pump: pump published tick tick=292 viewers=1 elapsed_us=2019
+2026-11-24T18:19:35.990000Z DEBUG mc_edge::server::pump: pump published tick tick=300 viewers=2 elapsed_us=2797
+"""))
+            window = join_lag.publish_window(log, join_lag.JOINER, 3.0)
+            self.assertIsNotNone(window["admitted_at"])
+            self.assertIsNone(window["start_at"])
+            self.assertIsNone(window["seconds"])
+            ready, _ = join_lag.gate_window(log, 3.0)
+            self.assertFalse(ready)
 
     def test_a_rate_where_the_guard_is_blind_is_refused(self) -> None:
         for rate in ("16", "20"):
