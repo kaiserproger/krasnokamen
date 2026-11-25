@@ -64,6 +64,7 @@ class DismountObserver:
                 entry = json.loads(line)["Entity"]
                 life = (entry.get("state") or {}).get("entity_life") or {}
                 self.entities[entry["id"]] = {
+                    "id": entry["id"],
                     "type_id": entry["type_id"],
                     "uuid": entry["uuid"],
                     "pos": list(entry["pos"]),
