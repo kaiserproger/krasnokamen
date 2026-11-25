@@ -5,10 +5,12 @@
 //! `natural_zones` probe box overlapped 1-12 of them by X/Z, so `queue_natural`'s
 //! X/Z-only rule refused the mine before any route proof existed. A mine's box
 //! spans the village in Y too (floor `entrance-14`, top `entrance+1`), so the
-//! rule is a 3D one: a mine may only take ground where no built piece stands
-//! (streets and roads may cross it; `piece_kinds` never certifies them). Depth is
-//! no protection - `safe()`/`natural()` are, and `certify_zone` refuses a zone
-//! that 3D-intersects any certificate (HANDOFF-43 review).
+//! rule is X/Z plus "not wholly above the quarry top": the quarry digs 48 blocks
+//! under the certificate (`mining::operational_bounds`), so a mine may only take
+//! ground where no built piece stands or lies below it (streets and roads may
+//! cross it; `piece_kinds` never certifies them). Depth is no protection -
+//! `safe()`/`natural()` are, and `certify_zone` refuses a zone that 3D-intersects
+//! any certificate (HANDOFF-43/45 reviews).
 //!
 //! The test adopts the village first, exactly as `advance` does, so the
 //! certificate-overlap refusal and the piece queue are both live; it then queues,
@@ -185,11 +187,68 @@ fn a_plains_village_queues_proves_and_certifies_its_mine() {
         }
     }
     let Some((cursor, bounds, entrance)) = queued else {
+        // Name what blocks the swallowed box: the rule's verdict is only useful if
+        // the receipt says which piece (and where) stands in the quarry.
+        for cursor in 0..8 {
+            let mut blockers = Vec::new();
+            {
+                let anchor = ANCHOR;
+                let record = state.settlements.get(id).expect("settlement");
+                let base = super::zone_probe(anchor, record.radius, cursor);
+                let min = [base[0] + 9, anchor[1] - 17, base[2] - 2];
+                let max = [base[0] + 23, anchor[1] + 18, base[2] + 12];
+                let Some(entrance) = open_entrance(
+                    &state,
+                    &ScriptWorldBounds::new(min, max).unwrap(),
+                    [min[0], anchor[1], min[2] + 1],
+                ) else {
+                    blockers.push(format!("cursor {cursor}: no open entrance"));
+                    continue;
+                };
+                let Ok(bounds) = ScriptWorldBounds::new(
+                    [min[0], entrance[1] - 14, min[2]],
+                    [max[0], entrance[1] + 1, max[2]],
+                ) else {
+                    continue;
+                };
+                for piece in &site.pieces {
+                    let Some((lo, hi)) = piece.bounds else {
+                        continue;
+                    };
+                    let street = piece.template.as_deref().is_some_and(|template| {
+                        template.contains("/streets/") || template.contains("/roads/")
+                    });
+                    if street {
+                        continue;
+                    }
+                    let overlaps = [0usize, 2].into_iter().all(|axis| {
+                        let (a, b) = match axis {
+                            0 => (lo.x, hi.x),
+                            _ => (lo.z, hi.z),
+                        };
+                        a <= bounds.max[axis] && b >= bounds.min[axis]
+                    });
+                    if overlaps && lo.y <= bounds.max[1] {
+                        blockers.push(format!(
+                            "cursor {cursor} box {:?}..{:?}: piece {:?} {:?}..{:?}",
+                            bounds.min,
+                            bounds.max,
+                            piece.template.as_deref().unwrap_or("?"),
+                            [lo.x, lo.y, lo.z],
+                            [hi.x, hi.y, hi.z]
+                        ));
+                    }
+                }
+            }
+            for line in blockers {
+                eprintln!("MEASURE blocker {line}");
+            }
+        }
         eprintln!(
             "MEASURE no_mine_cursor adopted={adopted} pieces={}",
             site.pieces.len()
         );
-        panic!("no mine candidate queued: every probe box holds a built piece in 3D");
+        panic!("no mine candidate queued: every probe box holds a built piece in the quarry");
     };
     eprintln!(
         "MEASURE mine_queued cursor={cursor} min={:?} max={:?} entrance={entrance:?} adopted={adopted}",

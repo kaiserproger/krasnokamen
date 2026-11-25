@@ -63,7 +63,20 @@ struct NaturalCandidate {
     queued_at: u64,
     stock_proved: bool,
     after_resident: Option<uuid::Uuid>,
+    /// Passes spent waiting for the entrance chunk to become simulated. The
+    /// cursor does not come back for a long time (`NATURAL_ZONE_CYCLES`), and the
+    /// chunk activates as soon as the player walks over the village, so an
+    /// unloaded-entrance candidate is held instead of dropped - bounded, because
+    /// a chunk that never activates must not pin the queue for the world's life.
+    entrance_waits: u32,
 }
+
+/// Passes (20 ticks each, ~2.7 min of game time) a candidate may wait for its
+/// resident-but-inactive entrance chunk to become simulated before it is
+/// dropped. A chunk that is not even loaded is dropped at once, as before
+/// (`treeless_village_leaves_queue_after_bounded_natural_zone_sweeps` bounds the
+/// whole sweep, and 160 stays inside the smallest probe cycle).
+const NATURAL_ZONE_ENTRANCE_WAITS: u32 = 160;
 
 fn adopted_marker(source: &str) -> String {
     format!("settlement-village:{source}")
@@ -673,29 +686,76 @@ fn natural_zones(
     if !has_kind(state, id, BuildingKind::Mine) {
         let min = [probe[0] + 9, anchor[1] - 17, probe[2] - 2];
         let max = [probe[0] + 23, anchor[1] + 18, probe[2] + 12];
-        if let Ok(search) = ScriptWorldBounds::new(min, max)
-            && let Some(entrance) = open_entrance(state, &search, [min[0], anchor[1], min[2] + 1])
-            && let Ok(bounds) = ScriptWorldBounds::new(
-                [min[0], entrance[1] - 14, min[2]],
-                [max[0], entrance[1] + 1, max[2]],
-            )
-            && crate::villager::mining::initial_cut_safe(
-                state,
-                bounds,
-                crate::boundary::BlockPos {
-                    x: entrance[0],
-                    y: entrance[1],
-                    z: entrance[2],
-                },
-            )
-        {
-            queue_natural(
+        // The first probe pass is not gated on `tick % 20` (the cursor starts at 0
+        // and sweeps four probes per pass), so a column that is still unloaded, or
+        // whose entrance is not open yet, fails silently - and the queue is the
+        // only place the mine could appear. Name the reason once per probe; the
+        // same cursor returns only in the second probe cycle (NATURAL_ZONE_CYCLES)
+        // or after a restart.
+        let searched = ScriptWorldBounds::new(min, max);
+        let mine = match searched {
+            Err(_) => Err(("probe bounds refused", false)),
+            Ok(search) => {
+                let loaded = bounds_loaded(state, &search);
+                match open_entrance(state, &search, [min[0], anchor[1], min[2] + 1]) {
+                    None => Err(("no open entrance", loaded)),
+                    Some(entrance) => match ScriptWorldBounds::new(
+                        [min[0], entrance[1] - 14, min[2]],
+                        [max[0], entrance[1] + 1, max[2]],
+                    ) {
+                        Err(_) => Err(("entrance bounds refused", loaded)),
+                        Ok(bounds) => {
+                            let safe = crate::villager::mining::initial_cut_safe(
+                                state,
+                                bounds,
+                                crate::boundary::BlockPos {
+                                    x: entrance[0],
+                                    y: entrance[1],
+                                    z: entrance[2],
+                                },
+                            );
+                            if safe {
+                                Ok((bounds, entrance))
+                            } else {
+                                Err(("first cut unsafe", loaded))
+                            }
+                        }
+                    },
+                }
+            }
+        };
+        let before = candidates.len();
+        let built = mine.is_ok();
+        match mine {
+            Ok((bounds, entrance)) => queue_natural(
                 site,
                 BuildingKind::Mine,
                 bounds,
                 entrance,
                 state.tick,
                 candidates,
+            ),
+            Err((reason, loaded)) => tracing::debug!(
+                target: "settlements::construction",
+                cursor,
+                probe = ?probe,
+                min = ?min,
+                max = ?max,
+                loaded,
+                reason,
+                "mine probe queued no candidate"
+            ),
+        }
+        if built && candidates.len() == before {
+            // queue_natural refuses silently; the probe above already logged its own
+            // reason, so this line names the generated-piece rule as the blocker.
+            tracing::debug!(
+                target: "settlements::construction",
+                cursor,
+                probe = ?probe,
+                min = ?min,
+                max = ?max,
+                "mine probe refused: a generated piece stands in the quarry"
             );
         }
     }
@@ -798,22 +858,30 @@ fn queue_natural(
 ) {
     // A grove is taken where nothing stands: its zone is the visible stand.
     //
-    // A mine's box spans the village too - its floor is 14 below the entrance but
-    // its top is the village's ground level (`natural_zones`), and the quarry
-    // reaches the surface. Depth is not what protects a house: `safe()` and
-    // `natural()` keep house and artificial blocks intact, while the ground
-    // between houses is dug (mining.rs level 4 cuts `entrance-1..entrance` rows
-    // right across that area). What a mine must not do is take a piece's ground:
-    // `certify_zone` refuses a zone that intersects any existing certificate, and
-    // the acceptance rule (`overlaps_existing` in `advance`) silently drops a
-    // piece a certified mine covers - a house lost for the world's life, since
-    // the piece queue is not persisted and a certificate is. So a mine is taken
-    // only where no built piece stands; streets and roads may cross it, they
-    // never certify (`piece_kinds`). An earlier rule compared X/Z alone and
+    // A mine's certificate box is not its dug volume: `mining::operational_bounds`
+    // lowers the floor by `QUARRY_DEPTH` (48) under the certificate, while the box
+    // top stays the village's ground level and the quarry itself reaches the
+    // surface. So a mine must keep clear of every generated piece it does not lie
+    // wholly above: its X/Z columns and the ground below them are cut, and a piece
+    // standing there - even wholly below the certificate box - would lose its
+    // `natural()` blocks (foundations, dirt, gravel), which is exactly what the
+    // old X/Z rule protected. `safe()`/`natural()` are what keep house blocks
+    // intact, not the box's depth.
+    //
+    // The rule is also what keeps the piece queue honest: `certify_zone` refuses a
+    // zone that 3D-intersects any existing certificate, and `overlaps_existing`
+    // (`advance`) silently drops a piece a certified mine covers - a house lost
+    // for the world's life, since the piece queue is not persisted and a
+    // certificate is. Streets and roads may cross a mine: they never certify
+    // (`piece_kinds`). A piece wholly above `bounds.max.y` cannot be reached by
+    // the quarry (`mining.rs` refuses a block outside `operational_bounds`), so it
+    // is the one exception - a piece at `entrance+2` barely clears that and still
+    // gets the soil under it combed, which is why the cut is "wholly above the
+    // top", not "at another height". An earlier rule compared X/Z alone and
     // refused every mine box on a plains village (117 pieces, HANDOFF-42); an
-    // entrance-only fence misses a roof-ridge or cave entrance (HANDOFF-43
-    // review). The visible ground a certified mine may still cut is an owner
-    // decision, not this rule's (docs/settlements/construction.md section 3).
+    // entrance-only fence misses a roof-ridge or cave entrance (HANDOFF-43). The
+    // visible ground a certified mine may cut is an owner decision, not this
+    // rule's (docs/settlements/construction.md#natural-zones-and-radius).
     let blocked = site.pieces.iter().any(|piece| {
         let Some((min, max)) = piece.bounds else {
             return false;
@@ -829,7 +897,10 @@ fn queue_natural(
                 .all(|&axis| min[axis] <= bounds.max[axis] && max[axis] >= bounds.min[axis])
         };
         match kind {
-            BuildingKind::Mine => !street && intersects(&[0, 1, 2]),
+            // X/Z plus "not wholly above the quarry top": the dug floor lies 48
+            // blocks under the certificate, so the Y axis alone would let a piece
+            // below the box be undermined (`mining::operational_bounds`).
+            BuildingKind::Mine => !street && intersects(&[0, 2]) && min[1] <= bounds.max[1],
             _ => intersects(&[0, 2]),
         }
     });
@@ -854,6 +925,7 @@ fn queue_natural(
         queued_at,
         stock_proved: false,
         after_resident: None,
+        entrance_waits: 0,
     });
 }
 
@@ -868,32 +940,67 @@ fn prove_natural(
     use crate::tick_budget::Consumer;
     use std::ops::Bound::{Excluded, Unbounded};
 
+    // Copy what this pass needs before touching the queue: the wait below takes a
+    // mutable borrow of the front candidate, and the rest of the pass must not
+    // hold one across it.
     let Some(candidate) = candidates.front() else {
         return;
     };
-    if candidate.queued_at >= state.tick {
+    let kind = candidate.kind;
+    let queued_at = candidate.queued_at;
+    let entrance = candidate.entrance;
+    let after_resident = candidate.after_resident;
+    let stock_proved = candidate.stock_proved;
+    if queued_at >= state.tick {
         return;
     }
-    if has_kind(state, settlement, candidate.kind) {
+    if has_kind(state, settlement, kind) {
         candidates.pop_front();
         return;
     }
-    let [x, y, z] = candidate.entrance;
+    let [x, y, z] = entrance;
     // A loaded route can lead beyond entity simulation. Such a job strands
     // its worker before they can take the profession or bring stock home.
-    if !state.world.is_active(x.div_euclid(16), z.div_euclid(16)) {
-        // The queue is not persisted and the cursor never returns: a candidate
-        // dropped here is lost for the world's life, so the gate must name it.
+    let (cx, cz) = (x.div_euclid(16), z.div_euclid(16));
+    if !state.world.has_chunk(cx, cz) {
+        // Not even resident: nothing can activate it until a ticket reaches the
+        // zone, and the cursor does not come back for a long time. Drop it, as
+        // before (`treeless_village_leaves_queue_after_bounded_natural_zone_sweeps`).
         tracing::debug!(
             target: "settlements::construction",
-            kind = ?candidate.kind,
-            entrance = ?candidate.entrance,
+            kind = ?kind,
+            entrance = ?entrance,
+            "natural zone dropped: entrance chunk not loaded"
+        );
+        candidates.pop_front();
+        return;
+    }
+    if !state.world.is_active(cx, cz) {
+        // The chunk activates as soon as the player (or a ticket) reaches the
+        // village, and the cursor does not come back for a long time
+        // (`NATURAL_ZONE_CYCLES`), so hold the candidate and retry next pass.
+        // Gate run 20261125T192842 lost the village mine exactly here 2.6 s after
+        // queueing it; keeping it is what lets the zone be proved when the player
+        // walks in. A chunk that never activates must not pin the queue forever.
+        let waits = {
+            let held = candidates.front_mut().expect("counted candidate");
+            held.entrance_waits = held.entrance_waits.saturating_add(1);
+            held.entrance_waits
+        };
+        if waits < NATURAL_ZONE_ENTRANCE_WAITS {
+            return;
+        }
+        tracing::debug!(
+            target: "settlements::construction",
+            kind = ?kind,
+            entrance = ?entrance,
+            waits,
             "natural zone dropped: entrance chunk inactive"
         );
         candidates.pop_front();
         return;
     }
-    let after = candidate.after_resident.map_or(Unbounded, Excluded);
+    let after = after_resident.map_or(Unbounded, Excluded);
     let resident = residents.range((after, Unbounded)).find_map(|uuid| {
         let slot = state.entities.slot_of_uuid(*uuid)?;
         let villager = state.entities.row(slot).villager.as_ref()?;
@@ -920,15 +1027,14 @@ fn prove_natural(
     let Some((uuid, start, width, height)) = resident else {
         tracing::debug!(
             target: "settlements::construction",
-            kind = ?candidate.kind,
-            entrance = ?candidate.entrance,
-            tried = ?candidate.after_resident,
+            kind = ?kind,
+            entrance = ?entrance,
+            tried = ?after_resident,
             "natural zone dropped: no eligible resident left to prove it"
         );
         candidates.pop_front();
         return;
     };
-    let stock_proved = candidate.stock_proved;
     let (start, target) = if stock_proved {
         (start, BlockPos { x, y, z })
     } else {
@@ -1023,7 +1129,7 @@ fn prove_natural(
         };
         // A refused zone is otherwise invisible: the planner just probes the
         // next cursor and the gate can only report "no certified Mine". Name the
-        // zone and what it lacked (docs/settlements/construction.md section 3).
+        // zone and what it lacked (docs/settlements/construction.md#natural-zones-and-radius).
         if let Some(error) = refused {
             tracing::info!(
                 target: "settlements::construction",

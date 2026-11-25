@@ -1180,6 +1180,7 @@ fn natural_mine_requires_a_route_from_entrance_to_stock() {
         queued_at: 0,
         stock_proved: false,
         after_resident: None,
+        entrance_waits: 0,
     }]);
     for _ in 0..8 {
         state.tick += 20;
@@ -1231,13 +1232,24 @@ fn loaded_but_unsimulated_natural_worksite_is_not_certified() {
         queued_at: 0,
         stock_proved: false,
         after_resident: None,
+        entrance_waits: 0,
     }]);
     assert!(state.world.has_chunk(5, 0));
     assert!(!state.world.is_active(5, 0));
     state.tick = 20;
     state.tick_budget.reset(state.tick);
     prove_natural(&mut state, id, None, &residents, &mut candidates);
-    assert!(candidates.is_empty());
+    // A resident-but-unsimulated entrance is retried, never certified: the zone
+    // stays queued while the chunk may still become simulated (the player walks
+    // over the village) and is dropped once the bounded wait is spent.
+    assert!(!has_kind(&state, id, BuildingKind::Mine));
+    assert_eq!(candidates.len(), 1, "the worksite waits for its chunk");
+    for _ in 0..=NATURAL_ZONE_ENTRANCE_WAITS {
+        state.tick += 20;
+        state.tick_budget.reset(state.tick);
+        prove_natural(&mut state, id, None, &residents, &mut candidates);
+    }
+    assert!(candidates.is_empty(), "the wait is bounded");
     assert!(!has_kind(&state, id, BuildingKind::Mine));
 }
 
@@ -1454,11 +1466,12 @@ fn natural_quarry_uses_local_entrance_height_instead_of_bell_height() {
     assert!(mine.bounds.min[1] < 211 && mine.bounds.max[1] >= 212);
 }
 
-/// A quarry's volume is what a piece protects: a box at another height is out of
-/// its way (the mine's bounds top out at ground level, so it cannot undermine a
-/// piece 47 blocks above), while a piece whose volume the quarry would cut
-/// refuses it outright. The old rule refused on X/Z alone, which also refused
-/// every village box on a plains village (HANDOFF-42/44).
+/// A quarry protects the ground it can cut: `mining::operational_bounds` lowers
+/// the floor 48 blocks under the certificate, so only a piece **wholly above the
+/// quarry top** is out of its way (a piece at `entrance+2` still gets the soil
+/// under it combed). A piece wholly below the box is still inside the dug volume
+/// and refuses the mine, exactly as the old X/Z rule did; the old rule's bug was
+/// that it refused *every* village piece by X/Z alone (HANDOFF-42/44/45).
 #[test]
 fn natural_quarry_never_undermines_a_generated_piece_at_another_height() {
     let (mut state, id) = autonomously_adopted_state();
@@ -1511,7 +1524,36 @@ fn natural_quarry_never_undermines_a_generated_piece_at_another_height() {
         !has_kind(&state, id, BuildingKind::Mine),
         "queueing is not certification"
     );
-    // 2. A piece whose volume the quarry would cut: refused before any route.
+    // 2. A piece wholly below the certificate box: the quarry digs 48 blocks under
+    //    it, so this piece's natural() blocks are inside the dug volume. The old
+    //    X/Z rule protected it; so does this one.
+    site.pieces.pop();
+    site.pieces.push(piece(
+        mc_world::BlockPos {
+            x: 17,
+            y: 150,
+            z: 6,
+        },
+        mc_world::BlockPos {
+            x: 31,
+            y: 160,
+            z: 20,
+        },
+    ));
+    let mut candidates = VecDeque::new();
+    queue_natural(
+        &site,
+        BuildingKind::Mine,
+        bounds,
+        [17, 202, 7],
+        state.tick,
+        &mut candidates,
+    );
+    assert!(
+        candidates.is_empty(),
+        "a piece in the dug volume below the box is not even queued"
+    );
+    // 3. A piece whose volume the quarry would cut at its own level.
     site.pieces.pop();
     site.pieces.push(piece(
         mc_world::BlockPos {
@@ -1536,7 +1578,7 @@ fn natural_quarry_never_undermines_a_generated_piece_at_another_height() {
     );
     assert!(
         candidates.is_empty(),
-        "a piece standing in the quarry's volume is not even queued"
+        "a piece standing inside the certificate box is not even queued"
     );
 }
 
@@ -2223,6 +2265,7 @@ fn busy_gatherer_can_prove_the_other_natural_source() {
         queued_at: 0,
         stock_proved: false,
         after_resident: None,
+        entrance_waits: 0,
     }]);
     for _ in 0..8 {
         state.tick += 20;
