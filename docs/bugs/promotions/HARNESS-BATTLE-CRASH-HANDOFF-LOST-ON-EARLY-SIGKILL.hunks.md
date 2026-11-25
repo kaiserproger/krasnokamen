@@ -17,3 +17,12 @@ and the helper disappears.
   cut, and green on the candidate — the runner's own unit test
   `test_crash_handoff_sees_sigkill_while_crash_watcher_holds_waitpid` is the fast half of the pair.
 - The patch touches no server code: the server binary (and its pin) is identical on both sides.
+
+## Why the harness ref cannot flip on the control (proving_refs)
+
+The scene's staged SIGKILL race is probabilistic: my control run went red
+(`041726-battle-crash-handoff-0jkq0anw`, `crash_handoff_preserved_staged`, `handoff: null`), but the
+ledger's own control run of the same reversed tree stayed green, so the harness ref is a witness, not
+a control. The python ref flips deterministically — it requires the runner to recognise a SIGKILLed
+server whose `poll()` is still `None`, which a reversed tree cannot provide — so it is the proving ref
+and the harness ref stays green-on-candidate only.
