@@ -1,3 +1,4 @@
+diff --git a/crates/mc-core/src/tick/input/session.rs b/crates/mc-core/src/tick/input/session.rs
 --- a/crates/mc-core/src/tick/input/session.rs
 +++ b/crates/mc-core/src/tick/input/session.rs
 @@ -16,6 +16,7 @@
@@ -8,17 +9,18 @@
      }
  }
  
-@@ -342,6 +343,7 @@
-             game_mode,
+@@ -347,6 +348,7 @@
          },
      );
+     tracing::debug!(connection = connection.0, tick = state.tick, "join applied");
 +    sync_permission(state, *connection);
      crate::scoreboard::sync_join(state, *connection);
      crate::tick_control::sync_join(state, *connection);
      crate::bossbar::sync_join(state, *connection);
+diff --git a/crates/mc-core/src/tick/auth.rs b/crates/mc-core/src/tick/auth.rs
 --- a/crates/mc-core/src/tick/auth.rs
 +++ b/crates/mc-core/src/tick/auth.rs
-@@ -214,6 +214,7 @@
+@@ -218,6 +218,7 @@
              );
          }
      }

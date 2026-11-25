@@ -1561,13 +1561,17 @@ class LedgerToolTests(unittest.TestCase):
         return root
 
     def client_row(self, client_sha=None, ref='harness:entities:native-v2-craft-drag', extra=None,
-                   refs=None):
+                   refs=None, replace_assertions=None):
         root = self.scratch(area='client', ref=ref)
         fix = f'client:{client_sha}' if client_sha else ''
         text = ledger.document(root).replace(
             f'fix_commit = "{self.fix}"', f'fix_commit = "{fix}"')
         if ref == 'harness:entities:native-v2-craft-drag':
             text += '\nproving_assertions = { "harness:entities:native-v2-craft-drag" = "initial_drag_keeps_server_cursor" }\n'
+        if replace_assertions is not None:
+            import re as _re
+            inline = '{ ' + ', '.join(f'"{k}" = "{v}"' for k, v in replace_assertions.items()) + ' }'
+            text = _re.sub(r'^proving_assertions = .*$', 'proving_assertions = ' + inline, text, count=1, flags=_re.M)
         if refs is not None:
             import re as _re
             text = _re.sub(r'^regression = .*$', 'regression = ' + json.dumps(refs), text, count=1, flags=_re.M)
@@ -1701,15 +1705,25 @@ class LedgerToolTests(unittest.TestCase):
                          client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
 
     def test_a_client_row_may_exclude_a_green_graphical_ref(self):
-        """R3 client half: excluding an extra graphical ref is allowed only while another stays proving."""
+        """R3 client half: with two real-client refs, an excluded one is legal only while it is GREEN on
+        the control and another real-client ref stays proving (REVIEW-wave2-14 N1)."""
         self.client_repo()
-        root = self.client_row(client_sha=self.client_fix[:12],
-                               extra='proving_refs = ["harness:entities:native-v2-craft-drag"]')
-        control = self.client_receipt(root, self.client_base, verdict=False,
-                                      assertions={'initial_drag_keeps_server_cursor': False})
-        receipt = self.promote(root, self.runner(), client_control_receipt=control,
-                               client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
-        self.assertEqual(receipt['verdict'], 'promoted')
+        drag = 'harness:entities:native-v2-craft-drag'
+        scene = 'harness:scene-shot:command-selector-permission'
+        root = self.client_row(client_sha=self.client_fix[:12])
+        row = {'id': 'BUG', 'area': 'client', 'repro': 'client', 'regression': [drag, scene],
+               'proving_refs': [scene],
+               'proving_assertions': {drag: 'initial_drag_keeps_server_cursor',
+                                      scene: 'op-permission'}}
+        chosen = ledger._check_proving_choice('BUG', row, {drag: {'state': ledger.GREEN},
+                                                           scene: {'state': ledger.RED}},
+                                              control_refs=[drag, scene])
+        self.assertEqual(chosen, {scene})
+        with self.assertRaisesRegex(ledger.Refused, 'excluded ref must be green'):
+            ledger._check_proving_choice('BUG', row, {drag: {'state': ledger.RED},
+                                                      scene: {'state': ledger.RED}},
+                                         control_refs=[drag, scene])
+        del root
 
     def test_client_control_that_already_has_the_fix_is_refused(self):
         self.client_repo()

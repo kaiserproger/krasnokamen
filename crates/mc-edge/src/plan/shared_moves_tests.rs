@@ -468,12 +468,20 @@ fn relative_movement_drift_bound_compares_the_policies() {
         };
         (q(position) - q(baseline)) as i32
     });
-    let floor = measure(|position, baseline| ((position * 4096.0).floor() - (baseline * 4096.0).floor()) as i32);
+    let floor = measure(|position, baseline| {
+        ((position * 4096.0).floor() - (baseline * 4096.0).floor()) as i32
+    });
     let reanchor = 0.0_f64; // an absolute position every packet cannot drift
     assert_eq!(in_tree, 0.0, "the in-tree policy returns to the origin");
-    assert_ne!(floor, 0.0, "the pre-image accumulates: {floor} blocks over 1024 cycles");
+    assert_ne!(
+        floor, 0.0,
+        "the pre-image accumulates: {floor} blocks over 1024 cycles"
+    );
     assert_eq!(reanchor, 0.0);
     // Bytes per packet: relative move = 3 x i16 delta; absolute = 3 x f64 (+ the same header).
     // Re-anchoring costs 24 bytes against 6, for a drift the in-tree policy already removes.
-    assert!(6 * 4 < 24, "relative packets are a quarter of an absolute sync: {in_tree} {floor}");
+    assert!(
+        6 * 4 < 24,
+        "relative packets are a quarter of an absolute sync: {in_tree} {floor}"
+    );
 }

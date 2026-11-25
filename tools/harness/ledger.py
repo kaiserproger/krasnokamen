@@ -1789,8 +1789,13 @@ def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client
                                            row.get('proving_assertions', {}))
     restored_info = check_client_restore_receipt(root, client_receipt, graphical, fix_full, tree_now)
     delta = _check_client_control_delta(root, control['client_head'], restored_info['client_head'], fix_full)
-    graphical_proving = [ref for ref in _check_proving_choice(ident, row, control, control_refs=graphical)
-                         if ref in graphical]
+    pair_control = {ref: {'state': state} for ref, state in (control.get('states') or {}).items() if state}
+    chosen = _check_proving_choice(ident, row, pair_control, control_refs=graphical)
+    stray = [ref for ref in chosen if ref not in graphical]
+    if stray:
+        raise Refused(f"{ident}: proving_refs names {', '.join(stray)}, which the client receipt cannot "
+                      'observe: on a client fix only the real-client refs are the proving set')
+    graphical_proving = [ref for ref in chosen if ref in graphical]
     if not graphical_proving:
         raise Refused(f'{ident}: proving_refs names no real-client ref, but a client:<sha> fix is proved by a '
                       'real-client receipt')
