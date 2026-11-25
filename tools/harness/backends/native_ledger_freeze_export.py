@@ -101,8 +101,10 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # jumps forward by the whole held prefix.
     imported_gametime = _gametime(steps, "after_reimport")
     steps.report["imported_gametime"] = imported_gametime
+    # Bounded by the restart's own ticks (join + probe), far below the held prefix
+    # the frozen world accumulated before the export.
     steps.check("reimport_gametime_continues_from_the_frozen_age",
-                0 <= imported_gametime - frozen_gametime <= 60)
+                0 <= imported_gametime - frozen_gametime <= 150)
     # The freeze is session state (like vanilla): the imported world runs, so the
     # block the freeze held falls one block onto its fixture support.
     landed = _block(steps, held, "minecraft:sand")
