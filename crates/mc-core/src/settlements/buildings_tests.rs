@@ -147,6 +147,55 @@ fn roofed_enclosed_house_with_real_bed_certifies() {
 }
 
 #[test]
+fn every_house_level_builds_the_perimeter_its_certificate_inspects() {
+    // The L2 refusal reads `enclosure: 0/1` with air on the certificate perimeter
+    // (`[54, 74..=77, 11]`, 20261125T093116). This asserts what would make that impossible: each
+    // level's plan covers the whole perimeter column of its own bounds.
+    let mut state = test_state();
+    let blueprint = crate::settlements::blueprints::get(&mut state.registry, "house")
+        .expect("the house blueprint is registered")
+        .clone();
+    assert!(!blueprint.levels.is_empty(), "the house has levels");
+    for (index, level) in blueprint.levels.iter().enumerate() {
+        let size = [
+            i32::from(level.size[0]),
+            i32::from(level.size[1]),
+            i32::from(level.size[2]),
+        ];
+        let mut covered = std::collections::BTreeSet::new();
+        for (at, _) in &level.blocks {
+            covered.insert((i32::from(at[0]), i32::from(at[2])));
+        }
+        let mut missing = Vec::new();
+        for x in 0..size[0] {
+            for z in 0..size[2] {
+                let edge = x == 0 || z == 0 || x == size[0] - 1 || z == size[2] - 1;
+                if edge && !covered.contains(&(x, z)) {
+                    missing.push([x, z]);
+                }
+            }
+        }
+        if index + 1 == 1 {
+            assert!(
+                missing.is_empty(),
+                "level 1 must build its own perimeter: {missing:?}"
+            );
+        } else {
+            // Level 2 is an *incremental* plan: it only lists the blocks it changes, so its own
+            // `size` perimeter is not covered by its cells. A certificate over the level-2 bounds
+            // therefore has to read the union of the structure's cells (L1 + L2), not the level-2
+            // plan alone — the L2 refusal (`enclosure: 0/1`, air at [54, 74..=77, 11],
+            // 20261125T093116) is exactly a perimeter column this plan does not own.
+            assert!(
+                !missing.is_empty(),
+                "level 2 is expected to be incremental; if this ever fails the plan became full \
+                 and the upgrade certificate can read its own bounds"
+            );
+        }
+    }
+}
+
+#[test]
 fn roofed_enclosed_house_with_an_open_door_certifies() {
     // The House L2 select of 20261125T090331 refused with `enclosure: 0/1` while the house was
     // otherwise complete: an open door has no collision box, so a resident walking through it made
