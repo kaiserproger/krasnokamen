@@ -4,7 +4,7 @@ title = "Generic entity/block data get paths/scales were unavailable; query erro
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-QUERY"
 regression = [
   "cargo:mc-core:command_data::tests::data_player_queries_read_live_inventory_vitals_and_absent_paths",
@@ -20,3 +20,4 @@ proving_refs = [
   "harness:entities:native-v2-data-query",
 ]
 proving_assertions = { "cargo:mc-core:command_data::tests::data_queries_answer_through_the_native_command_pipeline" = "crates/mc-core/src/command_data_tests.rs:2107", "harness:entities:native-v2-data-query" = "data_get_entity_health_20" }
+promotion = "docs/bugs/promotions/DATA-QUERY.json"
