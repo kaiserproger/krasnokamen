@@ -346,29 +346,36 @@ def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
     42 (252) while the hoglin (66) and vex (42) kept theirs. The assertions are the two differences
     the fix moves: guardian minus baby bee 240 -> 498 (floor 350) and allay minus vex -48 -> 0
     (floor -20). The hoglin frame stays evidence (its ears and tusks changed shape, not count).
+
+    Measured 2026-11-25 on the pinned pair: the sum over all entity materials is NOT the rig - a vex
+    holds a sword (`ItemCutout` up to 1080 indices), every entity adds one `EntityShadow` quad, and a
+    just-killed mob's death pass lingers for tens of ticks (the first version read guardian-minus-bee
+    -24/+516 instead of 240/498). The rig itself is the `EntityCutout` slice, and each shot asserts
+    `submitted == 1` so a leaked entity fails loudly instead of skewing the arithmetic.
     """
     names = ("hoglin", "guardian", "allay", "vex", "bee-baby")
     shots = _qa._load_shots(probe, artifact, names)
-    totals = {}
+    rigs = {}
     for name in names:
         extraction = shots[name][0].get("entity_extraction") or {}
         by_material = extraction.get("entity_indices_by_material") or {}
-        total = sum(int(value or 0) for value in by_material.values())
-        totals[name] = total
+        # The rig lives in `EntityCutout`; a vex's held sword also adds `ItemCutout` and every
+        # entity adds one `EntityShadow` quad, so the rig's own count is that one material.
+        rig = int(by_material.get("EntityCutout") or 0)
+        rigs[name] = rig
         probe.report[f"{name}_entity_extraction"] = {
             "submitted": extraction.get("submitted"),
             "entity_indices": extraction.get("entity_indices"),
             "entity_indices_by_material": by_material,
-            "entity_pass_indices": total,
+            "rig_indices": rig,
             "unrendered": extraction.get("unrendered"),
         }
-        probe.check(f"{name}_entity_submitted", extraction.get("submitted", 0) >= 1)
+        # One mob per frame: a killed mob's death pass would otherwise ride along in the count.
+        probe.check(f"{name}_single_entity", extraction.get("submitted") == 1)
         probe.check(f"{name}_rig_rendered", not extraction.get("unrendered"))
-        # The per-material map must exclude the cloud layer the total still carries.
-        probe.check(f"{name}_entity_pass_excludes_clouds",
-                    total < int(extraction.get("entity_indices") or 0))
-    guardian_bee = totals["guardian"] - totals["bee-baby"]
-    allay_vex = totals["allay"] - totals["vex"]
+        probe.check(f"{name}_rig_submitted", rig > 0)
+    guardian_bee = rigs["guardian"] - rigs["bee-baby"]
+    allay_vex = rigs["allay"] - rigs["vex"]
     probe.report["guardian_minus_bee_indices"] = guardian_bee
     probe.report["allay_minus_vex_indices"] = allay_vex
     probe.check("guardian_spikes_and_bee_legs_submitted", guardian_bee >= 350)

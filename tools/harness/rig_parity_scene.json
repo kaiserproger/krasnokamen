@@ -82,6 +82,9 @@
       "cmd": "kill @e[type=minecraft:hoglin,distance=..16]"
     },
     {
+      "wait_ticks": 60
+    },
+    {
       "cmd": "summon minecraft:guardian 1000.5 160 1003.5 {NoAI:1b,Invulnerable:1b,Rotation:[180f,0f]}"
     },
     {
@@ -101,6 +104,9 @@
     },
     {
       "cmd": "kill @e[type=minecraft:guardian,distance=..16]"
+    },
+    {
+      "wait_ticks": 60
     },
     {
       "cmd": "summon minecraft:allay 1000.5 160 1003.5 {NoAI:1b,Invulnerable:1b,Rotation:[180f,0f]}"
@@ -124,6 +130,9 @@
       "cmd": "kill @e[type=minecraft:allay,distance=..16]"
     },
     {
+      "wait_ticks": 60
+    },
+    {
       "cmd": "summon minecraft:vex 1000.5 160 1003.5 {NoAI:1b,Invulnerable:1b,Rotation:[180f,0f]}"
     },
     {
@@ -145,6 +154,9 @@
       "cmd": "kill @e[type=minecraft:vex,distance=..16]"
     },
     {
+      "wait_ticks": 60
+    },
+    {
       "cmd": "summon minecraft:bee 1000.5 160 1003.5 {NoAI:1b,Invulnerable:1b,Age:-24000,Rotation:[180f,0f]}"
     },
     {
@@ -164,6 +176,9 @@
     },
     {
       "cmd": "kill @e[type=minecraft:bee,distance=..16]"
+    },
+    {
+      "wait_ticks": 60
     }
   ]
 }
