@@ -2356,27 +2356,6 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     let mut next = executor::next_cell(state, id, &project.structure)
         .ok()
         .flatten();
-    if next.is_none()
-        && executor::status(state, id, &project.structure).is_ok_and(|status| {
-            status.state == ScriptStructureState::Committed
-                && status.current_stage_index as usize >= status.stages.len()
-        })
-    {
-        // A structure that is committed and terminal has no cell left to place, so no builder pass
-        // will ever close its project; the watcher is the only caller that still holds both. The
-        // L2 upgrade stalls exactly here (20261125T053949, 20261125T063133).
-        let closed = finish_project(state, id, &project.structure);
-        tracing::warn!(
-            settlement = id.0,
-            structure = %project.structure,
-            cause = "watcher_finish",
-            closed,
-            "watch_project: finish a committed structure"
-        );
-        if closed {
-            return true;
-        }
-    }
     if next.is_none() {
         match executor::step_empty_stage(state, id, &project.structure) {
             Ok(true) => {
