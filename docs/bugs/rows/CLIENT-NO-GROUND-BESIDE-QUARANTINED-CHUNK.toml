@@ -1,0 +1,10 @@
+[[bug]]
+id = "CLIENT-NO-GROUND-BESIDE-QUARANTINED-CHUNK"
+title = "After a restart beside a chunk the server quarantined, the native client enters play at the teleported position with the floor block and entities received, but never reports on_ground, so the player is pinned in place next to the corrupt chunk."
+area = "client"
+repro = "client"
+severity = "major"
+status = "open"
+source = "D123ClientNativeH 2026-11-25, the NAT-3 measurement of NATIVE-INPLAY-BLOCKED-BY-MISSING-CHUNK: native-v2-corrupt-chunk-near-camera with the refused chunk in the chunk column west of the player (a column the pre-fix loading gate demanded, not the player's own). Receipts 20261125T035800 (plan diagnostics), 20261125T040219 (client block/entity probes), 20261125T034455."
+regression = ["harness:entities:native-v2-corrupt-chunk-near-camera"]
+repro_check = "Filed 2026-11-25 from the NAT-3 measurement of NATIVE-INPLAY-BLOCKED-BY-MISSING-CHUNK. Measured: the join is healthy (the edge plan serves 80 of 81 chunks around position [192.5, 77.0, -447.5], center (12, -28); the eighty-first is the quarantined column and can never arrive - 20261125T035800), and the client holds its own chunk (its feet block (192, 77, -447) reads loaded air, the floor at 76 reads solid obsidian, 3 nearby entities - 20261125T041303/040219). It never reports on_ground, velocity is 0, y stays exactly 77.0, and a held forward changes nothing (20261125T041303). movement_blocked is null (20261125T043004) so the local prediction does not error; the remaining reading of Player::predict is its early 'waits for terrain' return, which fires only when the block at/just below the LOCAL prediction position is unloaded - so the open question is whether the local prediction position is the reported (teleport) one. The corrections/local_position mirror added this session returned null (those names are not in the shared observation), so that needs its own observable. Design note: receipts/D123/D123ClientNative/DESIGN-NO-GROUND-BESIDE-QUARANTINE.md. Withdrawn: the earlier claim that the join payload never arrives (it came from observation keys the MCP payload does not carry)."
