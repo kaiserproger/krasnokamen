@@ -1,0 +1,11 @@
+[[bug]]
+id = "HARNESS-CIV-GATE-LOCAL-SCAN-UNLOADED"
+title = "civilization-seed-qa scans a local building's blocks before the client holds its chunks, aborting the gate with 'client chunk is not loaded'"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "civilization-seed-qa artifact wt/D123Gate47/.analysis/validation/20261125T220300-civilization-seed-qa-12zuxr8_ (pin de356989816d): 122 s in, `minecraft_scan_blocks failed: {code: client chunk is not loaded at 144, 79, -224}` while scanning a building 13 blocks from the bell [131,78,-217]. building_blocks only teleported and called minecraft_wait_for_loaded_block for buildings beyond 48 blocks; a local one scanned blind, so a chunk the client had not yet streamed aborted the whole scenario. Fixed on wt/D123CivStock by waiting for every scanned chunk on both paths (event-driven MCP wait, no sleeps); the unit test reds without the wait."
+failing_first = "reported"
+regression = []
+repro_check = ["python3 -m unittest tools.harness.test_civilization_seed_qa -k local_building_waits (green with the wait; red with the pre-fix local branch, where the scan is the first call)"]

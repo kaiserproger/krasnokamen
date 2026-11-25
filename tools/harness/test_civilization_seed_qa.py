@@ -428,6 +428,24 @@ class CivilizationEvidenceTests(unittest.TestCase):
         furnace = detail["snapshots"][0]["workstation_blocks"][0]
         self.assertEqual(furnace["iron_menu_skipped"], "output collected before the simulation hold")
 
+    def test_local_building_waits_for_its_chunks_before_the_scan(self):
+        # HANDOFF-47 run 3 (20261125T220300-12zuxr8_): a scan of a house 13
+        # blocks from the bell failed with "client chunk is not loaded" 122 s
+        # into the run. Locality is the observer's distance, not whether the
+        # client has streamed the chunk: a local scan asks for its chunks too.
+        building = {"natural": False, "min": [144, 79, -224], "max": [150, 84, -218]}
+        probe = Mock()
+        probe.remaining.side_effect = lambda limit=None: min(120.0, limit or 120.0)
+        probe.call.return_value = {"blocks": [], "truncated": False}
+        probe.observe.return_value = {"player": {"x": 131.5, "y": 78.0, "z": -217.5}}
+        with patch.object(qa.village, "_listed_buildings", return_value=[building]):
+            evidence = qa.building_blocks(probe, [], Mock())
+        calls = [call.args[0] for call in probe.call.call_args_list]
+        self.assertEqual(calls[0], "minecraft_wait_for_loaded_block",
+                         "the local scan must wait for its chunks, not scan blind")
+        self.assertIn("minecraft_scan_blocks", calls)
+        self.assertFalse(evidence[0]["observer_teleported"])
+
     def test_remote_building_loads_each_chunk_and_returns_observer(self):
         building = {"natural": False, "min": [234, 72, -213], "max": [240, 76, -207]}
         probe = Mock()
