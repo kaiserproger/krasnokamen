@@ -4,9 +4,10 @@ title = "gap_daylight_detector failed bare (thunder step power 15 vs 10)."
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#REDSTONE-DAYLIGHT"
 regression = ["cargo:mc-core:redstone::tests::gap_tests::gap_daylight_detector_requires_local_sky_and_overworld", "harness:entities:native-v2-ledger-daylight-detector"]
 fix_commit = "da5421f7b"
 repro_check = "Real-client gate (2026-11-25; this closes MECH-12 for the row): native-v2-ledger-daylight-detector freezes the world, ramps `/weather thunder` 200 ticks to its settled value, places a `daylight_detector` with `/setblock` and advances exactly one tick, then reads the block-state `power` from the client's own chunk model. Candidate: power 8 after one tick and 8 after a second (daylight_detector_carries_power, daylight_detector_reports_the_settled_sky_under_thunder, daylight_detector_power_is_stable), so no graphical waiver is needed. Control: da5421f7b still reverses on HEAD; with it reversed the explicit wake is swallowed by the queued 20-tick recheck and the detector keeps 15, so the gate reds ([INFERENCE] from the same swallow the cargo ref proves at gap_tests.rs:203, where the control reds on power == 10). Thunder expectation from vanilla 26.3 (server-26.3.jar javap): DaylightDetectorBlock.updateSignalStrength uses Level.getEffectiveSkyBrightness = max(skyLight - skyDarken, 0); Level.updateSkyBrightness sets skyDarken = (int)(15 - SKY_LIGHT_LEVEL); WeatherAttributes alpha-blends SKY_LIGHT_LEVEL toward 4.0 with alpha 0.3125 (rain) and 0.52734375 (thunder)."
 proving_assertions = { "cargo:mc-core:redstone::tests::gap_tests::gap_daylight_detector_requires_local_sky_and_overworld" = "crates/mc-core/src/redstone/gap_tests.rs:203", "harness:entities:native-v2-ledger-daylight-detector" = "daylight_detector_reports_the_settled_sky_under_thunder" }
+promotion = "docs/bugs/promotions/REDSTONE-DAYLIGHT.json"
