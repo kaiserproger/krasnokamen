@@ -1103,6 +1103,24 @@ def _promotion_wave1(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
 
 
 
+def _frozen_witness(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_frozen_witness import run
+
+    run(steps, origin)
+
+
+def _map_marker_region(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_map_marker_region import run
+
+    run(steps, origin)
+
+
+def _control_q(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_control_q import run
+
+    run(steps, origin)
+
+
 def _promotion_maps(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from .native_promotion_maps import run
 
@@ -1172,6 +1190,9 @@ RUNNERS = {
     "native-v2-ledger-brush": _ledger_brush,
     "native-v2-ledger-infiniburn": _ledger_infiniburn,
     "native-v2-ledger-pot-shelf": _ledger_pot_shelf,
+    "native-v2-frozen-witness": _frozen_witness,
+    "native-v2-map-markers": _map_marker_region,
+    "native-v2-control-q-stack": _control_q,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
     "native-v2-map-locked-banners": _promotion_maps,
