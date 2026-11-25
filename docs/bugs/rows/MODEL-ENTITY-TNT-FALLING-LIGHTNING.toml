@@ -1,10 +1,14 @@
 [[bug]]
 id = "MODEL-ENTITY-TNT-FALLING-LIGHTNING"
-title = "TNT, falling blocks and lightning bolts have simulation state but no draw call"
+title = "Primed TNT, falling blocks and lightning bolts have no draw call: the special-render guard admits only paintings and item frames, so their simulation state never reaches a layer"
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:87"
-repro_check = "BLOCKER 2026-11-25: the TNT/falling-block/lightning producers were CREATED by e8fe40c2 in src/entities/render_special/world_fx.rs (absent at e8fe40c2^), so no pre-image blob exists; the control is a committed deletion of the three dispatch call sites keeping the module (kept-helper class), and no registered scene has a TNT, falling-block or lightning subject, so it needs one individual scene as well."
-regression = []
+regression = ["harness:scene-shot:native-entity-tnt"]
+proving_refs = ["harness:scene-shot:native-entity-tnt"]
+proving_assertions = { "harness:scene-shot:native-entity-tnt" = "tnt_block_layer_present" }
+fix_commit = "client:9f8b91c8"
+repro_check = "Committed reversal on the current head 03c4675b, because the real fix e8fe40c2 created render_special/world_fx.rs (no pre-image blob) and is a bulk commit: control client:d2c556ed deletes the lightning_bolt dispatch and the tnt | falling_block block draw and narrows the top guard back to painting/item frames (the leash clauses stay, MODEL-ENTITY-LEASH is promoted), so a primed TNT falls out of append with no layer; restore client:9f8b91c8 re-applies exactly that diff and is the fix_commit. Scene tools/harness/entity_tnt_scene.json: one primed TNT `{fuse:1000s}` on a pad at 160, fixed camera, an `empty` frame first and a `tnt` frame after. Assertions derived from `javap -p -c` on qa-armada/template-data/mojang/versions/26.3/client.jar (classes unzipped to /tmp, never committed): TntRenderer.extractRenderState sets fuseRemainingInTicks = getFuse() - partial + 1, submit scales by 1 + getSwellAmount(r) ONLY when r < 10 with getSwellAmount(f) = 0.3 * clamp(1 - f/10, 0, 1)^4, and 1000 ticks is far above the threshold, so the block model renders at scale 1: exactly one 36-index (six-quad) block layer spanning 1.000 blocks on every axis, against an empty frame with no such layer - the layer is ItemCutout unlit and EntityCutout while the five-tick white-flash phase is on, which alternates between takes, so the check identifies the block by its 36-index model and accepts either material (fuseRemaining >= 10 also makes isLit false, so the frame is the plain TNT texture). The swell (r = 9 -> 1.0, r = 8 > 1.0) and the white flash (isLit(f) = f >= 0 && (int)(f/5) % 2 == 0) are already pinned by world_fx_tests::tnt_flashes_white_and_swells_only_at_fuse_end and tnt_uses_received_block_state_and_fuse_boundaries, so this scene deliberately asserts only the dispatch that e8fe40c2 added. Falling blocks share append_block and the same guard clause, and the lightning bolt shares the guard clause with its own append_bolt dispatch; the scene's single TNT witnesses the guard and the block path, while the falling-block/Bolt paths stay unit-covered. Hunk map: docs/bugs/promotions/MODEL-ENTITY-TNT-FALLING-LIGHTNING.hunks.md."
+promotion = "docs/bugs/promotions/MODEL-ENTITY-TNT-FALLING-LIGHTNING.json"
