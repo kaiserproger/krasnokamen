@@ -2966,15 +2966,19 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
             "settlement_outpost_completed");
         return true;
     }
-    let Ok(building) = buildings::certify(state, id, blueprint.kind, bounds) else {
-        tracing::warn!(
-            settlement = id.0,
-            blueprint = %project.blueprint,
-            level = project.level,
-            cause = "certify_failed",
-            "finish_project: the building did not certify"
-        );
-        return false;
+    let building = match buildings::certify(state, id, blueprint.kind, bounds) {
+        Ok(building) => building,
+        Err(error) => {
+            tracing::warn!(
+                settlement = id.0,
+                blueprint = %project.blueprint,
+                level = project.level,
+                cause = "certify_failed",
+                missing = %error,
+                "finish_project: the building did not certify"
+            );
+            return false;
+        }
     };
     if project
         .building
@@ -2988,13 +2992,16 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
         );
         return false;
     }
-    if project.level > 1 && buildings::upgrade(state, building).is_err() {
+    if project.level > 1
+        && let Err(error) = buildings::upgrade(state, building)
+    {
         tracing::warn!(
             settlement = id.0,
             blueprint = %project.blueprint,
             level = project.level,
             building = building.0,
             cause = "upgrade_failed",
+            missing = %error,
             "finish_project: the level upgrade did not certify"
         );
         return false;
