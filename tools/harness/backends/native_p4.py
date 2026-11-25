@@ -64,6 +64,16 @@ def _restart(steps: ProbeSteps) -> None:
                            timeout_seconds=min(60.0, steps.remaining()))
     except TimeoutError:
         state = steps.observe()
+        # Keep the observation that failed: a player that stays in play without ever grounding is a
+        # fixture question (which columns arrived, where the server put the player), and the numbers
+        # are otherwise lost with the run.
+        steps.report["restart_grounded_observation"] = {
+            "player": {key: state["player"].get(key) for key in
+                       ("position", "server_position", "on_ground", "pose_known", "yaw", "pitch")},
+            "loading_readiness": state.get("loading_readiness"),
+            "dimension": state.get("dimension"),
+            "entity_rows": len((state.get("entities") or {}).get("entities") or []),
+        }
         steps.check("restart_player_grounded", state["player"]["on_ground"] is True)
     steps.check("restart_same_player_uuid", state["player"]["entity_uuid"] == identity)
     _echo(steps, "restart_ordered_server_receipt")
