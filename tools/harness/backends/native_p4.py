@@ -56,7 +56,15 @@ def _restart(steps: ProbeSteps) -> None:
     steps.call("minecraft_connect", {"server_addr": address})
     play = steps.call("minecraft_wait_for_play", {"timeout_seconds": steps.remaining()})
     steps.check("restart_client_entered_play", play["in_play"] is True)
-    state = steps.wait(lambda state: state["player"]["on_ground"], "restart_player_grounded")
+    # Bounded: a fixture whose floor never arrives would otherwise hold the whole scenario to its
+    # deadline (measured on 20261125T030306/031825, where both clients stayed in play with
+    # `player.grounded` false for the rest of the run). The assertion, not the deadline, carries it.
+    try:
+        state = steps.wait(lambda state: state["player"]["on_ground"], "restart_player_grounded",
+                           timeout_seconds=min(60.0, steps.remaining()))
+    except TimeoutError:
+        state = steps.observe()
+        steps.check("restart_player_grounded", state["player"]["on_ground"] is True)
     steps.check("restart_same_player_uuid", state["player"]["entity_uuid"] == identity)
     _echo(steps, "restart_ordered_server_receipt")
 
