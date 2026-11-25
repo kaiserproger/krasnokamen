@@ -1,0 +1,52 @@
+{
+  "id": "HAPPY-GHAST-HARNESS",
+  "verdict": "promoted",
+  "fix_commit": "patch:0c07255492152b53fcd7453104062e1be91f08ca82afd1f5d4063ee67a955178",
+  "fix_commit_full": "patch:0c07255492152b53fcd7453104062e1be91f08ca82afd1f5d4063ee67a955178",
+  "promoted_at": "2026-11-25T04:36:11+00:00",
+  "tree_head": "cb4dc32534e506d92e74607843f152ff849ce2ea",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "0c07255492152b53fcd7453104062e1be91f08ca82afd1f5d4063ee67a955178",
+  "reversed_files": [
+    "crates/mc-core/src/mounts.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:vanilla_mob_behavior_tests::happy_ghast_harness_admits_four_riders_and_survives_rider_codec": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/vanilla_mob_behavior_tests.rs",
+        "line": 647,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "harness:entities:native-v2-happy-ghast-harness": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:vanilla_mob_behavior_tests::happy_ghast_harness_admits_four_riders_and_survives_rider_codec": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261125T041959-native-v2-happy-ghast-harness-4ahooiv2/result.json",
+    "tree_head": "cb4dc32534e506d92e74607843f152ff849ce2ea",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "b4fd1988c6fc237b5819d3bcf9650059dc89f82cf2abd943ba9030044b53dcd4",
+    "covers": [
+      "harness:entities:native-v2-happy-ghast-harness"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261125T042055-ledger-promote-29gflybr"
+}

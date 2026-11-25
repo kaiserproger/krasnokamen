@@ -4,10 +4,11 @@ title = "No harness equipment or four-rider admission; current mount owner has s
 area = "gameplay"
 repro = "manual"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HAPPY-GHAST-HARNESS"
 regression = [
   "cargo:mc-core:vanilla_mob_behavior_tests::happy_ghast_harness_admits_four_riders_and_survives_rider_codec",
   "harness:entities:native-v2-happy-ghast-harness",
 ]
 fix_commit = "patch:0c07255492152b53fcd7453104062e1be91f08ca82afd1f5d4063ee67a955178"
+promotion = "docs/bugs/promotions/HAPPY-GHAST-HARNESS.json"
