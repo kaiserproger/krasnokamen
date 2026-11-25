@@ -308,6 +308,8 @@ fn advance(
                         }
                     },
                 };
+                let retry_tick = state.tick.is_multiple_of(RETRY_SPACING_TICKS);
+                let mut refused_any = false;
                 for kind in kinds {
                     // A refused adopted piece used to vanish here: the gate could
                     // only report "no certified House", never why (ReviewD123Civ13).
@@ -335,7 +337,24 @@ fn advance(
                             missing = ?missing,
                             "adopted piece refused certification"
                         );
+                        refused_any = true;
                     }
+                }
+                // A village's blocks can arrive after the claim, so a refusal is
+                // requeued and re-examined a few game minutes later instead of
+                // dropping the piece for the world's life. Spacing keeps the bound
+                // cheap: at most one scan per RETRY_SPACING_TICKS per piece.
+                if refused_any && should_retry_refusal(retry_tick, pending.piece_attempts[index]) {
+                    pending.piece_attempts[index] = pending.piece_attempts[index].saturating_add(1);
+                    pending.uncertified.push_back(index);
+                } else if refused_any && retry_tick {
+                    tracing::debug!(
+                        target: "settlements::construction",
+                        settlement = id.0,
+                        template = ?piece.template,
+                        attempts = pending.piece_attempts[index],
+                        "adopted piece refused certification at the retry bound"
+                    );
                 }
             }
         }
@@ -1052,6 +1071,14 @@ fn open_entrance(
         }
     }
     None
+}
+
+/// Retry pacing for a refused adopted piece: re-examined once per spacing window,
+/// at most PIECE_ATTEMPTS times. A non-retry tick defers at no cost.
+const RETRY_SPACING_TICKS: u64 = 1200;
+
+fn should_retry_refusal(retry_tick: bool, attempts: u8) -> bool {
+    retry_tick && attempts < PIECE_ATTEMPTS
 }
 
 fn bounds_loaded(state: &TickState, bounds: &ScriptWorldBounds) -> bool {
