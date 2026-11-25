@@ -276,6 +276,22 @@ SCENARIOS: dict[str, Scenario] = {
                "falling kind and no second saved tick.",
     ),
 
+    "native-v2-ledger-mob-attack": _entry(
+        id="native-v2-ledger-mob-attack",
+        summary="A daylight zombie reaches a survival player's authoritative health",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-mob-attack",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_mob_attack.py"),
+        fixture="operator pad at day, clear weather, normal difficulty; one survival player and a "
+                "zombie summoned two blocks away",
+        proves="the client's own health observation falls within twelve twenty-tick steps, so the "
+               "zombie acquired and meleed instead of fleeing its daylight fire",
+        limits="One zombie, daylight, two blocks away; no eight-block acquisition distance and no "
+               "knockback, damage-number or animation coverage (the core ref keeps that claim).",
+    ),
+
     "native-v2-ledger-map-pocket": _entry(
         id="native-v2-ledger-map-pocket",
         summary="A map carried in a pocket never explores terrain",

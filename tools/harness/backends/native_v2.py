@@ -1207,6 +1207,12 @@ def _ledger_sculk_downward(steps: ProbeSteps, origin: tuple[int, int, int]) -> N
     run(steps, origin)
 
 
+def _ledger_mob_attack(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_ledger_mob_attack import run
+
+    run(steps, origin)
+
+
 def _ledger_map_pocket(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from .native_ledger_map_pocket import run
 
@@ -1277,6 +1283,7 @@ RUNNERS = {
     "native-v2-ledger-summon-horse-cargo": _ledger_summon_horse_cargo,
     "native-v2-ledger-daylight-detector": _ledger_daylight_detector,
     "native-v2-ledger-map-pocket": _ledger_map_pocket,
+    "native-v2-ledger-mob-attack": _ledger_mob_attack,
     "native-v2-ledger-gravity-tick": _ledger_gravity_tick,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
