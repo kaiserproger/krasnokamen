@@ -34,22 +34,28 @@ and GPU checks) is green on both halves — so the red is the band geometry and 
 `ledger promote MODEL-ENTITY-FIRE-BANDS` receipt `20261125T175952-ledger-promote-oqob4f51`;
 `promote.json` records `fix_patch_id e37f4b12…` and the client unit ref green on the restore.
 
+**Round-3 re-take** on the clean server pin `pins/38fe67d13d1a-server-*` (core `38fe67d13`, the tree
+with `|span - 2.331| <= 0.01` and `fire_bands_start_at_the_feet`): control `20261125T191213` FAIL at
+`fire_band_span` (span 1.827, feet 160.000 on the body's 160.001 — the feet assertion is green and the
+exact span is what fails), restore `20261125T191241` PASS (span 2.331, feet 160.000). A `fixed` row
+cannot be re-promoted, so this is recorded evidence; the promotion above stands.
+
 ## Original commit `a3f2a486` (`fix(client): draw entity fire with the vanilla flame feature bands`)
 
 Its non-test hunks, each with its HEAD equivalent or omission class:
 
 | # | file `@@` header | what the hunk did | HEAD equivalent | class |
 |---|---|---|---|---|
-| 1 | `src/entities/presentation.rs` `@@ -636,12 +636,16 @@ fn append_experience_orb` | added the `append_entity_fire` doc paragraph; removed the `camera_yaw` parameter | HEAD has the paragraph (rewritten 2026-11-25 to name `prepare`, the camera yaw and the u mirroring) and the parameter is back as `transform, camera_yaw` (`54ca14f778`) | kept, not reversed: docs and the signature are not the band geometry; the parameter removal is **(c)** — `54ca14f778` re-added it |
+| 1 | `src/entities/presentation.rs` `@@ -636,12 +636,16 @@ fn append_experience_orb` | added the `append_entity_fire` doc paragraph; removed the `camera_yaw` parameter | HEAD has the paragraph and the parameter back as `transform, camera_yaw`. The paragraph named `renderFlame` at the time of the pair; `54ca14f778` had renamed `prepare` -> `renderFlame`, and the 26.3 method is `prepare` (`54ca14f778` also described the bands as stacking *down*; both are corrected on the client head by `f8f3224c`). The parameter list itself came from three commits: `83994480` created `(camera_yaw, tick, partial)`, `895c63f3` replaced `tick, partial` with the `transform` frame, `a3f2a486` dropped `camera_yaw` (entity-yaw rotation) and `54ca14f778` re-added it (camera rotation) | kept, NOT class (c): docs and the signature are not the band geometry, and the control keeps HEAD's `transform, camera_yaw` verbatim (`tick, partial -> transform` is HEAD text from `895c63f3`, absent from the control↔restore diff), so no signature line is reversed |
 | 2 | `@@ -652,30 +656,31 @@ fn append_entity_fire` | body: `facing`→`rotation` by `transform.yaw`; `width`→`unit`; `y`/`half`/`row`→`y_top`/`y_bottom`/`half`/`z`/`band`; quads 1.4 units tall; UV swap; `p * unit` | HEAD carries the same geometry, except `rotation` uses `camera_yaw` (`54ca14f778`) and the sprite is `textures[band % 2]` with `(band / 2) % 2` u mirroring (`54ca14f778`, fixture `234673dd`/`7c366236`) | the control reverses exactly the geometry lines (`unit`/`y_top`/`y_bottom`/`half`/`z`/quad height/step); the rotation source, sprite alternation and mirroring stay HEAD's |
 | 3 | `@@ -683,9 +688,11 @@ fn append_entity_fire` | tail: `y_top -= 0.45; y_bottom -= 0.45; z -= 0.03; band += 1` | same lines in HEAD | reversed by the control (`y += width * 0.45; half *= 0.9; band += 1`) |
-| 4 | `@@ -790,15 +797,7 @@ pub fn append` | first call site: drop `camera_rotation[0]`, pass `transform` | HEAD passes `transform, camera_rotation[0]` again | **(c)** `54ca14f778` rewrote it; kept |
-| 5 | `@@ -872,7 +871,6 @@ pub fn append` | second call site: drop `camera_rotation[0]` | same | **(c)**; kept |
-| 6 | `@@ -969,7 +967,6 @@ pub fn append` | third call site: drop `camera_rotation[0]` | same | **(c)**; kept |
-| 7 | `@@ -1017,15 +1014,7 @@ pub fn append` | fourth call site: drop `camera_rotation[0]`, pass `transform` | same | **(c)**; kept |
+| 4 | `@@ -790,15 +797,7 @@ pub fn append` | first call site: `camera_rotation[0]` gone, `tick, partial` gone | HEAD passes `transform, camera_rotation[0]`; the `tick, partial -> transform` part is `895c63f3`'s and the `camera_rotation[0]` re-add is `54ca14f778`'s | kept: the control leaves the call signature alone and only swaps the function body, so neither part is in the delta (not class (c)) |
+| 5 | `@@ -872,7 +871,6 @@ pub fn append` | second call site: `camera_rotation[0]` gone | HEAD passes it again (`54ca14f778`) | kept, not in the delta (not class (c)) |
+| 6 | `@@ -969,7 +967,6 @@ pub fn append` | third call site: `camera_rotation[0]` gone | same | kept, not in the delta (not class (c)) |
+| 7 | `@@ -1017,15 +1014,7 @@ pub fn append` | fourth call site: `camera_rotation[0]` and `tick, partial` gone | HEAD passes `transform, camera_rotation[0]` again | kept, not in the delta (the `tick, partial -> transform` part is `895c63f3`'s, not class (c)) |
 | 8 | `@@ -3743,13 +3732,144 @@ mod tests` | the light-15 assertion change and the new `fire_bands_follow_the_vanilla_flame_feature_numbers` | HEAD's test evolved: 11-band 4.0 x 0.6 fixture (`234673dd`, repaired by `7c366236`) | test hunk, excluded from the non-test patch; present on both sides |
 
-No non-test hunk is class (a) or (b); hunks 1 and 4-7 are **(c)** and stay at HEAD.
+No non-test hunk is class (a) or (b). Hunks 1 and 4-7 are KEPT at HEAD (the parameter list, the `tick, partial -> transform` frame and the re-added `camera_rotation[0]`), not class (c): the control swaps only the function body, so none of their lines is in the control↔restore diff.
 
 ## The a/-side text of the pair (control → restore)
 
@@ -83,11 +89,19 @@ then plain at a fixed pad and camera. `check_entity_fire` reads the frame's own
 - `fire_overlay_is_one_layer` — one slice, not two;
 - `fire_band_count` — 12 indices (2 bands). Both loops give the pig `n = ceil(y_top / 0.45)` =
   2 bands, so this cannot separate the halves either;
-- `fire_band_span` — **2.2..2.5 blocks, the row's discriminator.** Derived from the model, not
-  fitted: the control stacks `(1 + 0.45) * unit`, the fix `(1.4 + 0.45) * unit`, with
-  `unit = bbWidth * scale * 1.4 = 1.26` for the scene pig, so the analytic spans are **1.827** and
-  **2.331**; the registered two-sided band sits around the vanilla 2.331. The earlier receipts
-  `20261125T122429` / `20261125T123333` measured exactly those numbers on the old pins.
+- `fire_band_span` — **the row's discriminator, asserted exactly** (round 3): the control stacks
+  `(1 + 0.45) * unit`, the fix `(1.4 + 0.45) * unit`, with `unit = bbWidth * scale * 1.4 = 1.26`
+  for the scene pig, so the analytic spans are **1.827** and **2.331**. The geometry is
+  deterministic — six of six pinned takes measured exactly those three-decimal values — so the
+  check now requires `|span - 2.331| <= 0.01`, not the old 2.2..2.5 window (which also passed bands
+  stacked DOWNWARD and band heights of 1.30..1.53);
+- `fire_bands_start_at_the_feet` — the lowest fire vertex sits on the entity's own bbox bottom (the
+  body layers' min y) within 0.002, because vanilla stacks the bands from the feet upward. The
+  pre-image also starts at the feet (its span is what fails), so this assertion is green on both
+  halves and exists to reject a downward stack that keeps the 2.331 span.
+
+The earlier receipts `20261125T122429` / `20261125T123333` measured exactly those numbers on the old
+pins.
 
 Not witnessed: the sprite parity, the u mirroring and the camera-facing rotation. Both halves
 submit a single fire layer and the plane looks the same in both trees, so those stay covered by

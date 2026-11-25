@@ -18,7 +18,7 @@ commit that the reversal carries or leaves.
 | # | file `@@` header | what it did | HEAD equivalent | class |
 |---|---|---|---|---|
 | 1 | `src/entities/render_special.rs` `@@ -6,6 +6,7 @@ mod kernels;` | added `mod world_fx;` | the module is `render_special/world_fx.rs` after a later split; HEAD declares it at `render_special.rs:9` | **(c)** rewritten by a later commit; the module stays (kept-helper) |
-| 2 | `@@ -54,6 +55,7 @@ pub(crate) struct Cache` | added `tnt_state: Option<u32>` | HEAD's `Cache` has it | **kept**: `append_block` resolves the default primed state through it; it is class (b)-like only in name — nothing is reversed that needs it, so it simply stays |
+| 2 | `@@ -54,6 +55,7 @@ pub(crate) struct Cache` | added `tnt_state: Option<u32>` | HEAD's `Cache` has it | **kept-helper**: `append_block` resolves the default primed state through it, the control keeps the field and the helper, and nothing in the pair's delta touches it |
 | 3 | `@@ -146,13 +148,26 @@ pub(crate) fn append(` — the top guard | widened the guard to `tnt`, `falling_block`, `lightning_bolt` and leashed entities | HEAD's guard has the same list plus the leash clauses | **split**: the `tnt`/`falling_block`/`lightning_bolt` arms are reversed by the control (the guard goes back to painting/item frames); the leash arms are **(a)** (MODEL-ENTITY-LEASH is promoted — reversing them would flip its assertion) |
 | 4 | same hunk — the `lightning_bolt` dispatch | `return world_fx::append_bolt(entity, origin, tick, partial, out);` | HEAD's call is `append_bolt(entity, origin, transform, out)` (a later commit added the transform) | reversed by the control (`append_bolt` stays as a kept helper) |
 | 5 | same hunk — the leash dispatch | `return world_fx::append_leash(...)` | HEAD's call | **(a)** MODEL-ENTITY-LEASH's promoted behaviour; untouched |
@@ -86,6 +86,8 @@ Three takes per side on `native-entity-tnt`, all six on the same clean server pi
 | control `client:d2c556ed` | `20261125T183446` / `183515` / `183553` | FAIL at `tnt_block_layer_present` on all three | none (the entity pass carries no 36-index layer) |
 | restore `client:9f8b91c8` | `20261125T183331` / `183401` / `183422` | PASS on all three | 6 quads, spans `[1.0, 1.0, 1.0]`, material `ItemCutout` / `EntityCutout` / `ItemCutout` |
 
+The first TNT attempt on server `pins/ae98d53c2531-server-*` (core `ae98d53c2`, the check before it matched the 36-index block model) recorded three control takes `20261125T182716` / `182743` / `182805`, all FAIL at `tnt_block_layer_present`; they are kept as calibration for the material change and are not part of the promotion (the promoted control is `183446` / `183515` / `183553`).
+
 The material alternation is the white-flash phase and is the reason the check matches the
 36-index block model instead of a material name: a first pair on the pre-`51f5158b8` check
 (`20261125T182556` PASS, `182619` / `182650` FAIL, server `pins/ae98d53c2531-server-*`) failed
@@ -94,6 +96,12 @@ as the calibration record for the material change, and its receipts prove the fr
 the entity (`submitted: 1`, `entity_indices: 51108`). `ledger promote
 MODEL-ENTITY-TNT-FALLING-LIGHTNING` receipt `20261125T183634-ledger-promote-5df3vsc9`;
 `promote.json` records `fix_patch_id b924ddca…`.
+
+**Round-3 re-take** on the clean server pin `pins/38fe67d13d1a-server-*` (core `38fe67d13`, the tree
+with the `tnt_reached_client` fixture): control `20261125T191306` reports `eligible: 1`, the
+`tnt-entities` dump lists `minecraft:tnt`, `tnt_reached_client` TRUE, and `tnt_block_layer_present`
+FALSE; fix `20261125T191327` PASS with spans `[1.0, 1.0, 1.0]` and `tnt_reached_client` TRUE. The
+fixture therefore separates a deleted dispatch from a failed summon, which the first pair could not.
 
 ## What the scene does not prove
 

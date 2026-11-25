@@ -1,19 +1,19 @@
 {
   "id": "MODEL-ENTITY-LEASH",
   "verdict": "promoted",
-  "fix_commit": "client:03c4675b",
-  "fix_commit_full": "03c4675b57e67715287db95d52e982458f4fbc64",
-  "promoted_at": "2026-11-25T18:14:33+00:00",
-  "tree_head": "8607c5d7634fb0228d2d1ce50f25b8e982a9a061",
+  "fix_commit": "client:a8c18847",
+  "fix_commit_full": "a8c18847ff06bd6fc58861476a107b3abf75b564",
+  "promoted_at": "2026-11-25T19:14:02+00:00",
+  "tree_head": "38fe67d13d1a82c4affc15535c389e9240096e27",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "client_fix": true,
   "control_tree": "client",
   "control": "client_receipt_pair",
   "negative_control": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T181048-native-entity-visuals-63um1h70/result.json",
-    "client_head": "df888507b40ffb25377a1b4379801fc9adfa16c8",
-    "server_binary_sha256": "46180f13170af52eb40832611a1855c1ebab4f5699028190585a86b29e16e203",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T190755-native-entity-visuals-b9s9cq1t/result.json",
+    "client_head": "fd4d1f5b6c940e9890dcb74b7d3bee6c7ce55809",
+    "server_binary_sha256": "23ca9854781cf77e8d5d4d1644d12085818432c50ea43ba07cbe2b5f3b147c71",
     "red": [
       "harness:scene-shot:native-entity-visuals"
     ],
@@ -22,39 +22,39 @@
     }
   },
   "restored": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T181228-native-entity-visuals-n33jpf5y/result.json",
-    "client_head": "03c4675b57e67715287db95d52e982458f4fbc64",
-    "server_binary_sha256": "46180f13170af52eb40832611a1855c1ebab4f5699028190585a86b29e16e203",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T190946-native-entity-visuals-bcdnyrhi/result.json",
+    "client_head": "a8c18847ff06bd6fc58861476a107b3abf75b564",
+    "server_binary_sha256": "23ca9854781cf77e8d5d4d1644d12085818432c50ea43ba07cbe2b5f3b147c71",
     "green": [
       "harness:scene-shot:native-entity-visuals"
     ],
     "states": {
       "harness:scene-shot:native-entity-visuals": "green"
     },
-    "tree_head": "8607c5d7634fb0228d2d1ce50f25b8e982a9a061",
+    "tree_head": "38fe67d13d1a82c4affc15535c389e9240096e27",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "client_receipt": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T181228-native-entity-visuals-n33jpf5y/result.json",
-    "client_head": "03c4675b57e67715287db95d52e982458f4fbc64",
-    "server_binary_sha256": "46180f13170af52eb40832611a1855c1ebab4f5699028190585a86b29e16e203",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T190946-native-entity-visuals-bcdnyrhi/result.json",
+    "client_head": "a8c18847ff06bd6fc58861476a107b3abf75b564",
+    "server_binary_sha256": "23ca9854781cf77e8d5d4d1644d12085818432c50ea43ba07cbe2b5f3b147c71",
     "green": [
       "harness:scene-shot:native-entity-visuals"
     ],
     "states": {
       "harness:scene-shot:native-entity-visuals": "green"
     },
-    "tree_head": "8607c5d7634fb0228d2d1ce50f25b8e982a9a061",
+    "tree_head": "38fe67d13d1a82c4affc15535c389e9240096e27",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "client_control_delta": {
-    "fix_patch_id": "98f3534d838eaf35bd6e4d32420bd4ff984edadb",
+    "fix_patch_id": "e1cc83d33269a43e1a758a9270a21af1aaab03a9",
     "paths": [
       "src/entities/render_special.rs"
     ]
   },
   "candidate_refs": {},
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T181432-ledger-promote-wdy6djxt"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T191401-ledger-promote-r1e_2hif"
 }
