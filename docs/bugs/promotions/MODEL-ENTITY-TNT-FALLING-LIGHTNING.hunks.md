@@ -57,10 +57,13 @@ dumps the entities. `check_entity_tnt` runs the fixture assertions first (`*_gpu
 `*_image_size`, `tnt_camera_unchanged`, and `empty_frame_has_no_tnt_block` — the unlit frame's entity
 pass must carry no opaque layer), then:
 
-- `tnt_block_layer_present` — the burning frame has an `ItemCutout` layer (the row's proving ref);
+- `tnt_block_layer_present` — the TNT frame has a 36-index (six-quad) block layer (the row's proving
+  ref). The layer is `ItemCutout` unlit and `EntityCutout` while the white-flash phase is on
+  (`append_block` re-targets this draw's indices onto the overlay-capable material while `isLit`,
+  which alternates every five ticks and is NOT stable across takes — the first runs showed exactly
+  that), so the particle identity is the 36-index block model, not the material name;
 - `tnt_block_layer_is_one` — exactly one such layer;
-- `tnt_block_quads` — 6 quads (the vanilla TNT model is one cube; `p::append_block_quads` puts opaque
-  block quads on `ItemCutout` when the model quad has no explicit entity material);
+- `tnt_block_quads` — 6 quads;
 - `tnt_block_span_is_one` — 1.000 blocks on every axis.
 
 The span is **derived by javap on the real 26.3 jar**, not measured: `TntRenderer.extractRenderState`

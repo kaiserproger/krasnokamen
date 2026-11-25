@@ -1194,8 +1194,13 @@ def check_entity_tnt(probe: ProbeSteps, artifact: Path) -> None:
     `world_fx_tests::tnt_flashes_white_and_swells_only_at_fuse_end` and
     `tnt_uses_received_block_state_and_fuse_boundaries`.
 
-    The unlit `empty` frame is the fixture: the entity pass there must carry no opaque block layer,
-    so the TNT frame's layer is the summoned entity and not the pad or a leftover.
+    The unlit `empty` frame is the fixture: the entity pass there must carry no block layer, so the
+    TNT frame's layer is the summoned entity and not the pad or a leftover. The layer moves between
+    `ItemCutout` and `EntityCutout` depending on the white-flash phase (`append_block` re-targets
+    this draw's indices onto the overlay-capable material while `isLit`, which alternates every five
+    ticks and is therefore NOT stable across takes); both are the same six-quad block draw with the
+    same bounds, so the check accepts either material and reads the particle identity from the
+    36-index block model, not from the material name.
     """
     shots = _qa._load_shots(probe, artifact, ("empty", "tnt"))
     ref, frame = shots["empty"][0], shots["tnt"][0]
@@ -1204,12 +1209,20 @@ def check_entity_tnt(probe: ProbeSteps, artifact: Path) -> None:
     ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
     empty_layers = (ref.get("entity_extraction") or {}).get("entity_layer_geometry") or []
     layers = (frame.get("entity_extraction") or {}).get("entity_layer_geometry") or []
-    blocks = [layer for layer in layers if layer.get("material") == "ItemCutout"]
+
+    def block_layers(candidate):
+        # The vanilla TNT model is one cube: six quads, six indices each. Both the unlit
+        # (`ItemCutout`) and the flashing (`EntityCutout`) draw carry that count and the same bounds.
+        return [layer for layer in candidate
+                if layer.get("material") in ("ItemCutout", "EntityCutout")
+                and int(layer.get("indices") or 0) == 36]
+
+    blocks = block_layers(layers)
     probe.report["tnt_empty_layers"] = empty_layers
     probe.report["tnt_layers"] = layers
+    probe.report["tnt_block_materials"] = [layer.get("material") for layer in blocks]
     probe.report["tnt_block_quads"] = sum(int(layer.get("quads") or 0) for layer in blocks)
-    probe.check("empty_frame_has_no_tnt_block", not any(
-        layer.get("material") == "ItemCutout" for layer in empty_layers))
+    probe.check("empty_frame_has_no_tnt_block", not block_layers(empty_layers))
     probe.check("tnt_block_layer_present", bool(blocks))
     probe.check("tnt_block_layer_is_one", len(blocks) == 1)
     probe.check("tnt_block_quads", probe.report["tnt_block_quads"] == 6)

@@ -979,7 +979,7 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="native-entity-tnt", requires=("xvfb",),
         sources=("tools/harness/entity_tnt_scene.json", "tools/harness/backends/scene_shot_checks.py"),
         fixture="private native client, one stationary primed TNT with a 1000-tick fuse at a fixed pad and camera, HUD default",
-        proves="the frame's own submitted block layer (`entity_extraction.entity_layer_geometry`, CM-4): exactly one 6-quad `ItemCutout` layer spanning 1.000 blocks on every axis, which is the vanilla `TntRenderer` at scale 1 while `fuseRemaining >= 10` (the swell `1 + 0.3 * clamp(1 - r/10, 0, 1)^4` applies only below 10, so a 1000-tick fuse is exactly 1.0), against an empty frame with no such layer",
+        proves="the frame's own submitted block layer (`entity_extraction.entity_layer_geometry`, CM-4): exactly one 36-index (six-quad) block layer - `ItemCutout`, or `EntityCutout` while the five-tick white-flash phase is on - spanning 1.000 blocks on every axis, which is the vanilla `TntRenderer` at scale 1 while `fuseRemaining >= 10` (the swell `1 + 0.3 * clamp(1 - r/10, 0, 1)^4` applies only below 10, so a 1000-tick fuse is exactly 1.0), against an empty frame with no such layer",
         limits="the draw call and the unswelled block only; the swell and white-flash formulas, the falling-block path and the lightning bolt stay unit-covered (`world_fx_tests`), and the swell/flash scene is still to be written",
     ),
     "native-rig-guardian": _entry(
