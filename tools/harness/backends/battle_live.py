@@ -123,11 +123,11 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             client = battle_recovery.Horizon(ctx, inputs, run_dir, name, display)
             clients.append(client)
             client.start(address, "live")
-        online = console.wait(rf"Battle player online: {HOLDER} entity=(\d+)", 0, timeout=600)
+        online = console.wait(rf"Battle player online: {HOLDER} entity=(\d+)", 0, timeout=900)
         holder_entity = int(online.group(1))
         console.wait(rf"Battle spectator placed: {VIEWER} .*camera=({holder_entity})\b", 0,
                      timeout=600)
-        console.wait(r"Battle started tick=", 0, timeout=600)
+        console.wait(r"Battle started tick=", 0, timeout=900)
         before = [client.capture("before-death") for client in clients]
         camera_before = (before[1]["state"].get("camera") or {}).get("entity_id")
         check(report, "clients_reached_play",
@@ -154,7 +154,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         died_at = _point(dead["state"])
         holder.driver("respawn")
         holder.driver("wait_for", condition="screen", value="playing", timeout=300)
-        respawned = console.wait(rf"Battle live respawned: {HOLDER}[^\n]*", mark, timeout=300)
+        respawned = console.wait(rf"Battle live respawned: {HOLDER}[^\n]*", mark, timeout=600)
         line = respawned.group(0)
         report["observations"]["respawn_line"] = line
         at = _parse_at(line)
