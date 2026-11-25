@@ -3,12 +3,13 @@ id = "COMMAND-SELECTOR-PERMISSION-SYNC"
 title = "Operator selector completion is rejected because the client never receives its permission level"
 area = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "HzClientQA suggestions-1/2 and passive suggestions-4: give @s diamond_sw + Tab fails with Selector not allowed; named-player control completes. Core join and permission updates omitted own-entity permission status."
 repro = "client"
 regression = ["cargo:mc-core:tick::auth_gate_tests::permission_projection_follows_join_updates_and_authenticated_unlock", "cargo:mc-edge:plan::plan_tests::permission_updates_target_joined_self_reliably_in_order", "cargo:mc-edge:server::admin_tests::operator_changes_reach_own_entity_permission_consumer", "harness:scene-shot:command-selector-permission"]
 fix_commit = "patch:a94bbc63e602a74055c29005435bb2b4c324de4ae09a9f8c6450415dca845ba9"
-proving_refs = ["harness:scene-shot:command-selector-permission"]
-proving_assertions = { "harness:scene-shot:command-selector-permission" = "op-permission" }
+proving_refs = ["cargo:mc-core:tick::auth_gate_tests::permission_projection_follows_join_updates_and_authenticated_unlock", "cargo:mc-edge:server::admin_tests::operator_changes_reach_own_entity_permission_consumer", "harness:scene-shot:command-selector-permission"]
+proving_assertions = { "harness:scene-shot:command-selector-permission" = "op-permission", "cargo:mc-edge:server::admin_tests::operator_changes_reach_own_entity_permission_consumer" = "crates/mc-edge/src/admin_tests.rs:714" }
 failing_first = "reported"
 repro_check = "Work-root receipts/HzClientQA/REPORT.md and suggestions-4-diagnostic.log; original selector assertion must pass unchanged on Main's integrated pin."
+promotion = "docs/bugs/promotions/COMMAND-SELECTOR-PERMISSION-SYNC.json"

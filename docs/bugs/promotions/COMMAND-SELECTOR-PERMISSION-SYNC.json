@@ -1,0 +1,84 @@
+{
+  "id": "COMMAND-SELECTOR-PERMISSION-SYNC",
+  "verdict": "promoted",
+  "fix_commit": "patch:a94bbc63e602a74055c29005435bb2b4c324de4ae09a9f8c6450415dca845ba9",
+  "fix_commit_full": "patch:a94bbc63e602a74055c29005435bb2b4c324de4ae09a9f8c6450415dca845ba9",
+  "promoted_at": "2026-11-25T01:55:07+00:00",
+  "tree_head": "05c8f435f6b9da042d4fd99ea27b92356f146043",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "a94bbc63e602a74055c29005435bb2b4c324de4ae09a9f8c6450415dca845ba9",
+  "reversed_files": [
+    "crates/mc-core/src/tick/input/session.rs",
+    "crates/mc-core/src/tick/auth.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:tick::auth_gate_tests::permission_projection_follows_join_updates_and_authenticated_unlock": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/auth_gate_tests.rs",
+        "line": 77,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-edge:server::admin_tests::operator_changes_reach_own_entity_permission_consumer": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/admin_tests.rs",
+        "line": 714,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "cargo:mc-edge:plan::plan_tests::permission_updates_target_joined_self_reliably_in_order": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:scene-shot:command-selector-permission": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario command-selector-permission --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261125T014648-ledger-promote-yuyyldfd/regressions-client-2.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261125T014648-ledger-promote-yuyyldfd/client-artifacts/20261125T015307-command-selector-permission-3uqc0n35/result.json",
+      "assertion": {
+        "name": "op-permission"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick::auth_gate_tests::permission_projection_follows_join_updates_and_authenticated_unlock": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::admin_tests::operator_changes_reach_own_entity_permission_consumer": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:plan::plan_tests::permission_updates_target_joined_self_reliably_in_order": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:scene-shot:command-selector-permission": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261125T014648-ledger-promote-yuyyldfd/client-artifacts/20261125T015445-command-selector-permission-2_qgzi51/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261125T004923-command-selector-permission-d1ijgy6t/result.json",
+    "tree_head": "05c8f435f6b9da042d4fd99ea27b92356f146043",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "6b189be119e1012671a845c8f566011dbe26b1cc519aa6b3b299e8bc81b6c3f5",
+    "covers": [
+      "harness:scene-shot:command-selector-permission"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientRestFCore/.analysis/validation/20261125T014648-ledger-promote-yuyyldfd"
+}
