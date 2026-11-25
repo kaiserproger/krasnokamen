@@ -301,25 +301,28 @@ def check_entity_fire(probe: ProbeSteps, artifact: Path) -> None:
     shots = _qa._load_shots(probe, artifact, ("burning", "plain"))
     burning = shots["burning"][0].get("entity_extraction") or {}
     plain = shots["plain"][0].get("entity_extraction") or {}
-    burning_layers = burning.get("entity_layer_geometry") or {}
-    plain_layers = plain.get("entity_layer_geometry") or {}
-    fire = {key: value for key, value in burning_layers.items() if key.startswith("EntityFire#")}
-    body = {key: value for key, value in burning_layers.items()
-            if key.startswith(("EntitySolid#", "EntityCutout#", "EntityTranslucent#"))}
+    burning_layers = burning.get("entity_layer_geometry") or []
+    plain_layers = plain.get("entity_layer_geometry") or []
+    fire = [layer for layer in burning_layers if layer.get("material") == "EntityFire"]
+    body = [layer for layer in burning_layers
+            if layer.get("material") in ("EntitySolid", "EntityCutout", "EntityTranslucent")]
     probe.report["burning_layers"] = burning_layers
     probe.report["plain_layers"] = plain_layers
-    probe.report["fire_layer_keys"] = sorted(fire)
-    probe.report["fire_indices"] = sum(int(layer.get("indices") or 0) for layer in fire.values())
+    probe.report["fire_layers"] = fire
+    probe.report["fire_body_share"] = sum(int(layer.get("indices") or 0) for layer in body)
+    probe.report["fire_indices"] = sum(int(layer.get("indices") or 0) for layer in fire)
     probe.check("plain_frame_has_no_fire_layer",
-                not any(key.startswith("EntityFire#") for key in plain_layers))
+                not any(layer.get("material") == "EntityFire" for layer in plain_layers))
     probe.check("fire_layer_present", bool(fire))
-    probe.check("fire_sprite_pairs_two_bands", len(fire) == 1)
+    # Renamed from fire_sprite_pairs_two_bands: it passed on the control too (both sprites live on
+    # one texture layer there), so what it really says is that the overlay is a single layer.
+    probe.check("fire_overlay_is_one_layer", len(fire) == 1)
     probe.check("fire_band_count", probe.report["fire_indices"] == 12)
     if not fire:
         probe.check("fire_band_span", False)
         return
-    fire_min_y = min(float(layer["min"][1]) for layer in fire.values())
-    fire_max_y = max(float(layer["max"][1]) for layer in fire.values())
+    fire_min_y = min(float(layer["min"][1]) for layer in fire)
+    fire_max_y = max(float(layer["max"][1]) for layer in fire)
     span = fire_max_y - fire_min_y
     probe.report["fire_min_y"] = round(fire_min_y, 3)
     probe.report["fire_max_y"] = round(fire_max_y, 3)
@@ -385,8 +388,8 @@ def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
     # The allay's pre-image rig submits the same quads as the fix (42), only at animated wing angles:
     # measured horizontal span 1.10 blocks on the control vs 0.70 on the fix (wings folded onto the
     # body, body depth 0.70), so the span - not the count - is what this row can assert.
-    layers = (shots["allay"][0].get("entity_extraction") or {}).get("entity_layer_geometry") or {}
-    cutout = next((v for k, v in layers.items() if k.startswith("EntityCutout")), {})
+    layers = (shots["allay"][0].get("entity_extraction") or {}).get("entity_layer_geometry") or []
+    cutout = next((entry for entry in layers if entry.get("material") == "EntityCutout"), {})
     lo, hi = cutout.get("min"), cutout.get("max")
     allay_span = None
     if isinstance(lo, list) and isinstance(hi, list) and len(lo) >= 3 and len(hi) >= 3:
