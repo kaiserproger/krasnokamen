@@ -36,12 +36,17 @@ TICKS_BOUND = 12_000        # give the charge 600 s of battle before calling the
 
 
 class DismountObserver:
-    """Fold the published entity records into per-entity position, velocity and vehicle state."""
+    """Fold the published entity records into per-entity position, velocity and mount riders.
+
+    A horse carries its riders as uuids in `state.entity_life.mount.riders`; a rider's own `vehicle`
+    field is the *cargo* mount enum (minecart, boat), never his horse, so the link is read from the
+    horse's side."""
 
     def __init__(self, archive: Path, horse_type: int):
         self.archive, self.horse_type = archive, horse_type
         self.last_tick = -1
         self.entities: dict[int, dict[str, Any]] = {}
+        self.by_uuid: dict[str, int] = {}
 
     def update(self) -> None:
         for path in sorted(self.archive.glob("batch-*.bin")):
@@ -56,30 +61,36 @@ class DismountObserver:
                 if b'"Entity"' not in line:
                     continue
                 entry = json.loads(line)["Entity"]
+                life = (entry.get("state") or {}).get("entity_life") or {}
                 self.entities[entry["id"]] = {
                     "type_id": entry["type_id"],
                     "uuid": entry["uuid"],
                     "pos": list(entry["pos"]),
                     "vel": list(entry.get("vel") or [0.0, 0.0, 0.0]),
                     "alive": entry["alive"],
-                    "vehicle": ((entry.get("state") or {}).get("entity_life") or {}).get("vehicle"),
+                    "riders": list((life.get("mount") or {}).get("riders") or []),
                 }
+                self.by_uuid[entry["uuid"]] = entry["id"]
             self.last_tick = frame.hi
 
     def charging_rider(self) -> dict[str, Any] | None:
-        """A mounted member moving at charge speed on a horse: the sweep_drives row's subject."""
-        for entity in self.entities.values():
-            if not entity["alive"] or entity["vehicle"] is None:
+        """A rider mounted on a horse and moving at charge speed: the sweep_drives row's subject."""
+        for horse in self.entities.values():
+            if horse["type_id"] != self.horse_type or not horse["alive"] or not horse["riders"]:
                 continue
-            mount = self.entities.get(entity["vehicle"])
-            if mount is None or mount["type_id"] != self.horse_type:
-                continue
-            speed = sum(component * component for component in entity["vel"]) ** 0.5
-            if speed >= CHARGE_SPEED:
-                return {**entity, "speed": speed, "mount_uuid": mount["uuid"]}
+            for uuid in horse["riders"]:
+                rider = self.entities.get(self.by_uuid.get(uuid, -1))
+                if rider is None or not rider["alive"]:
+                    continue
+                speed = sum(component * component for component in rider["vel"]) ** 0.5
+                if speed >= CHARGE_SPEED:
+                    return {**rider, "speed": speed, "mount_uuid": horse["uuid"], "mount_id": horse["id"]}
         return None
 
-    def wait_for(self, condition, timeout_ticks: int = TICKS_BOUND):
+    def rider_by_uuid(self, uuid: str) -> dict[str, Any] | None:
+        return self.entities.get(self.by_uuid.get(uuid, -1))
+
+    def wait_for(self, condition):
         def ready():
             self.update()
             return condition(), None
@@ -121,14 +132,15 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         report["observations"]["kill_reply"] = kill_reply
         battle_recovery.check(report, "horse_killed_under_the_rider", "Killed " in kill_reply, kill_reply)
         # 100 published ticks of the rider's own position: the fix keeps him at foot speed.
-        rider = target["id"]
+        rider_uuid = target["uuid"]
         samples: list[dict[str, Any]] = []
         deadline = observer.last_tick + TICKS_AFTER_KILL
 
         def hundred_ticks():
             observer.update()
-            entity = observer.entities.get(rider)
-            if entity is not None and entity["alive"] and entity["vehicle"] is None:
+            entity = observer.rider_by_uuid(rider_uuid)
+            horse = observer.entities.get(target["mount_id"])
+            if entity is not None and entity["alive"] and horse is not None and not horse["alive"]:
                 samples.append({"tick": observer.last_tick, "pos": entity["pos"], "vel": entity["vel"]})
             return observer.last_tick >= deadline
         observer.wait_for(hundred_ticks)
