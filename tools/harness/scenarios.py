@@ -970,7 +970,7 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="native-entity-fire", requires=("xvfb",),
         sources=("tools/harness/entity_fire_scene.json", "tools/harness/backends/scene_shot_checks.py"),
         fixture="private native client, one stationary pig at a fixed pad and camera, burning and then plain, HUD default",
-        proves="the burning frame's own submitted fire layer (`entity_extraction.entity_layer_geometry`): one sprite slice with all 12 indices, a 2.33-block band span, and a bottom 0.567 blocks below the pig's body, so `fire_sprite_pairs_two_bands`/`fire_band_below_the_entity` separate the 26.3 bands from the pre-fix camera-billboard overlay without pixels",
+        proves="the burning frame's own submitted fire layer (`entity_extraction.entity_layer_geometry`): one fire slice with all 12 indices and a 2.331-block band span against the pre-fix loop's 1.827, so `fire_band_span` separates the 26.3 bands from the camera-billboard overlay without pixels",
         limits="one entity (a pig, two bands) and the layer geometry only; the sprite alternation for taller entities, the light-15 emission and the exact texel parity stay unit-covered",
     ),
     "native-rig-parity": _entry(

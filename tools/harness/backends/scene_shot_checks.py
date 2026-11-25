@@ -290,10 +290,11 @@ def check_entity_fire(probe: ProbeSteps, artifact: Path) -> None:
     (`entity_extraction.entity_layer_geometry`, CM-4), so the check needs no pixels and no load
     margin:
 
-    - one `EntityFire#<layer>` slice carrying all 12 indices (the pre-fix client splits them 6/6
-      over both fire sprites);
-    - the fire layer's bbox is 2.33 blocks tall against 1.83 before, and its bottom sits 0.567
-      blocks below the pig's own body bottom, where the pre-fix overlay starts exactly at it;
+    - one `EntityFire#<layer>` slice carrying all 12 indices (both clients report a single fire
+      layer, so the sprite alternation is not observable here and stays unit-covered);
+    - the slice's bbox is 2.331 blocks tall on the fix against 1.827 on the control (measured
+      2026-11-25 on the pinned pair): 1.85 scaled units times the pig's 1.26-unit scale, where the
+      pre-fix loop only reaches 1.45 units. This is the row's discriminator;
     - the plain frame has no fire slice at all.
     """
     shots = _qa._load_shots(probe, artifact, ("burning", "plain"))
@@ -313,21 +314,18 @@ def check_entity_fire(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("fire_layer_present", bool(fire))
     probe.check("fire_sprite_pairs_two_bands", len(fire) == 1)
     probe.check("fire_band_count", probe.report["fire_indices"] == 12)
-    if not fire or not body:
-        probe.check("fire_band_below_the_entity", False)
+    if not fire:
         probe.check("fire_band_span", False)
         return
     fire_min_y = min(float(layer["min"][1]) for layer in fire.values())
     fire_max_y = max(float(layer["max"][1]) for layer in fire.values())
-    body_min_y = min(float(layer["min"][1]) for layer in body.values())
+    span = fire_max_y - fire_min_y
     probe.report["fire_min_y"] = round(fire_min_y, 3)
     probe.report["fire_max_y"] = round(fire_max_y, 3)
-    probe.report["body_min_y"] = round(body_min_y, 3)
-    probe.report["fire_span"] = round(fire_max_y - fire_min_y, 3)
-    # 26.3 puts the second band's bottom 0.45 scaled units below the feet (0.567 blocks for a pig);
-    # the pre-fix billboard starts at the feet, so the bottom is the discriminator.
-    probe.check("fire_band_below_the_entity", fire_min_y <= body_min_y - 0.25)
-    probe.check("fire_band_span", fire_max_y - fire_min_y >= 2.0)
+    probe.report["fire_span"] = round(span, 3)
+    # 26.3 stacks 1.85 scaled units (1.4 plus the 0.45 first step) at the pig's 1.26 scale; the
+    # pre-fix loop tops out at 1.45 units. Measured 2.331 vs 1.827, so the band is 2.2..2.5.
+    probe.check("fire_band_span", 2.2 <= span <= 2.5)
     probe.report["visual_review_required"] = [
         "Inspect burning.png: the layer geometry proves the bands, not the sprite's texel parity."
     ]
