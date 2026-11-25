@@ -356,6 +356,8 @@ def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
     names = ("hoglin", "guardian", "allay", "vex", "bee-baby")
     shots = _qa._load_shots(probe, artifact, names)
     rigs = {}
+    submitted = {}
+    unrendered = {}
     for name in names:
         extraction = shots[name][0].get("entity_extraction") or {}
         by_material = extraction.get("entity_indices_by_material") or {}
@@ -370,16 +372,20 @@ def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
             "rig_indices": rig,
             "unrendered": extraction.get("unrendered"),
         }
-        # One mob per frame: a killed mob's death pass would otherwise ride along in the count.
-        probe.check(f"{name}_single_entity", extraction.get("submitted") == 1)
-        probe.check(f"{name}_rig_rendered", not extraction.get("unrendered"))
-        probe.check(f"{name}_rig_submitted", rig > 0)
+        submitted[name] = extraction.get("submitted")
+        unrendered[name] = bool(extraction.get("unrendered"))
     guardian_bee = rigs["guardian"] - rigs["bee-baby"]
     allay_vex = rigs["allay"] - rigs["vex"]
     probe.report["guardian_minus_bee_indices"] = guardian_bee
     probe.report["allay_minus_vex_indices"] = allay_vex
+    # The row's own assertions first: a fixture leak must not mask which symptom is red.
     probe.check("guardian_spikes_and_bee_legs_submitted", guardian_bee >= 350)
     probe.check("allay_wing_faces_submitted", allay_vex >= -20)
+    for name in names:
+        # One mob per frame: a killed mob's death pass or its dropped loot would ride along.
+        probe.check(f"{name}_single_entity", submitted[name] == 1)
+        probe.check(f"{name}_rig_rendered", not unrendered[name])
+        probe.check(f"{name}_rig_submitted", rigs[name] > 0)
     probe.report["visual_review_required"] = [
         "Inspect guardian/allay/bee-baby frames: the counts prove parts were submitted, not their shape."
     ]
