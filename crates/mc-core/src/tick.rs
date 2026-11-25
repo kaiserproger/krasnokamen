@@ -584,7 +584,8 @@ impl mc_physics::BlockSampler for TickSampler<'_> {
     fn material_at(&self, x: i32, y: i32, z: i32) -> mc_physics::BlockMaterial {
         match self.world.physics_block_at(x, y, z) {
             Some(state) => self.registry.materials.classify(state),
-            // Missing chunk blocks movement: never a floor, never passable.
+            // Missing chunk blocks movement. It classifies as a full solid block, so it stops a
+            // body and also holds one up: the move resolver's `grounded` is true on it.
             None => mc_physics::BlockMaterial::Solid,
         }
     }

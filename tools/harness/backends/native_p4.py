@@ -156,12 +156,12 @@ def _restart(steps: ProbeSteps) -> None:
 def walk_to_refused_column(steps: ProbeSteps, origin: tuple[int, int, int], chunk_x: int) -> None:
     """One forward step toward the quarantined column the scene refused.
 
-    The row's symptom is a body pinned beside the hole: the pre-fix client refused the whole
-    prediction, so it never moved and every step it did send was answered with a position
-    correction. Both readings are asserted here on a grounded player: the reconciliation counter
-    stays zero, and the body stops at the column's face (one half width, 0.3, from its edge)
-    instead of standing still or walking in. A frozen body reds both, which is why the scene only
-    runs this after `restart_player_grounded` held.
+    The row's symptom was a body pinned beside the hole: the pre-fix client refused the whole
+    prediction, so it never moved. The carrier below is the stop: on a grounded player the body
+    must reach the column's face (one half width, 0.3, from its edge) and not walk in or stand
+    still. `corrections == 0` is not that carrier - it is the client/server agreement guard
+    (measured 0 on the control too, where the body never moved) - so a frozen body reds the stop
+    check, which is why the scene only runs this after `restart_player_grounded` held.
     """
     own = origin[0] // 16
     if chunk_x == own:
@@ -177,6 +177,8 @@ def walk_to_refused_column(steps: ProbeSteps, origin: tuple[int, int, int], chun
     before = steps.observe()
     steps.call("minecraft_look", {"yaw_deg": yaw, "pitch_deg": 0})
     steps.call("minecraft_press_inputs", {"keys": ["right"], "ticks": 20})
+    # Ordered receipt: the read below must be causally after the press, not a race with it.
+    _echo(steps, "refused_column_walk_ordered")
     after = steps.observe()
     steps.report["refused_column_stop"] = {
         "refused_chunk": chunk_x, "player_chunk": own, "face": face, "expected_x": expected_x,
