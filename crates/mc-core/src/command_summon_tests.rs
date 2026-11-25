@@ -1629,8 +1629,14 @@ fn chested_horse_summon_carries_vanilla_items_cargo() {
     let restored = EntityStateImage::from_record(&state.registry, record).unwrap();
     assert!(restored.entity_life.mount.chested);
     assert_eq!(restored.entity_life.mount.cargo.len(), 15);
-    assert_eq!(restored.entity_life.mount.cargo[0].item_id, item(&state, "diamond"));
-    assert_eq!(restored.entity_life.mount.cargo[14].item_id, item(&state, "apple"));
+    assert_eq!(
+        restored.entity_life.mount.cargo[0].item_id,
+        item(&state, "diamond")
+    );
+    assert_eq!(
+        restored.entity_life.mount.cargo[14].item_id,
+        item(&state, "apple")
+    );
 
     // A llama's cargo columns follow its authored Strength (vanilla: `Strength` 1..5).
     let (state, id) = summon(
@@ -1658,8 +1664,14 @@ fn chested_horse_summon_carries_vanilla_items_cargo() {
     // and every refusal happens before the entity exists.
     let (mut state, actor, _) = crate::hostile_tests::setup(8.0);
     for (kind, nbt) in [
-        ("horse", "{ChestedHorse:1b,Items:[{Slot:0b,id:\"minecraft:diamond\",count:1}]}"),
-        ("donkey", "{ChestedHorse:1b,Items:[{Slot:15b,id:\"minecraft:diamond\",count:1}]}"),
+        (
+            "horse",
+            "{ChestedHorse:1b,Items:[{Slot:0b,id:\"minecraft:diamond\",count:1}]}",
+        ),
+        (
+            "donkey",
+            "{ChestedHorse:1b,Items:[{Slot:15b,id:\"minecraft:diamond\",count:1}]}",
+        ),
         ("donkey", "{ChestedHorse:1b,Items:{Slot:0b}}"),
         ("mule", "{Strength:3}"),
         ("cow", "{ChestedHorse:1b}"),
