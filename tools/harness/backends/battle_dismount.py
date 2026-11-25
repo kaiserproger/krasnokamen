@@ -101,7 +101,9 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         session = battle_recovery.RunnerSession(ctx, inputs, root / "run", display,
                                                paused_ticks=0, console_fifo=True)
         session.start()
-        console = session.console
+        # The runner is driven through its console fifo (the same surface battle_live uses); the
+        # stdin Console only exists for the recovery path.
+        console = battle_recovery.FifoConsole(session.root)
         console.wait(r"Battle live placed: " + HOLDER, 0, timeout=900)
         console.wait(r"Battle started tick=", 0, timeout=900)
         observer = DismountObserver(session.root / "wal-archive", horse_type)
