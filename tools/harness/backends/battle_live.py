@@ -36,9 +36,11 @@ VIEW_DISTANCE = 8
 PRE_STAGE_TICKS = 120
 BATTLE_TICKS_BOUND = 1200
 FALL_TOLERANCE_BLOCKS = 40.0
-# The row's symptom is an enemy in sight after the respawn; a 8-block weapon reach keeps a
-# future census check about the fight. Reserved for the server-side battle image.
+# The row's symptom is an enemy in reach after the respawn; 8 blocks is generous against a
+# few-block weapon reach, so the check is about the fight, not the exact weapon.
 ENEMY_REACH_BLOCKS = 8.0
+# PovRed is staged on the red side (`--live-player PovRed:red`).
+HOLDER_SIDE = 1
 # The spectator camera sits about a block behind the followed entity's eye.
 CAMERA_FOLLOW_BLOCKS = 8.0
 RESPAWN_MARKERS = (
@@ -103,6 +105,9 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             "--dashboard-port", str(dashboard), "--live-player", f"{HOLDER}:red",
             "--live-spectator", VIEWER, "--live-timeout", "600", "--console-fifo",
             "--allow-marker-gaps", "--no-phase-log",
+            # The WAL publication is the witness for the respawn symptom: the server's own
+            # fighter positions per tick (review wave2-13 M3, Main-approved route).
+            "--crash-handoff",
         ]
         runner_log = (ctx.artifact_dir / "battle-live-runner.log").open("x")
         runner, runner_index = battle_recovery._launch(
@@ -176,6 +181,14 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         # (review wave2-13 M3).
         report.setdefault("incomplete", []).append(
             "no client entity census through horizon-ctl: the enemy-in-reach symptom is not measured")
+        # The row's symptom from the server's own published truth: the respawned holder must
+        # have an enemy soldier inside weapon reach in the next battle image. Log fields are
+        # not evidence here (contact=/rule=centre are strings the fix writes).
+        witness = _respawn_enemy_witness(run_dir, holder_entity, HOLDER_SIDE)
+        report["observations"]["respawn_enemy_witness"] = witness
+        check(report, "holder_sees_an_enemy_after_respawn",
+              witness.get("min_enemy_distance") is not None
+              and witness["min_enemy_distance"] <= ENEMY_REACH_BLOCKS, witness)
         # Where he landed against where he fell: the row names a 230-block jump.
         if at is not None and died_at is not None:
             fall = sum((a - b) ** 2 for a, b in zip(at, died_at)) ** 0.5
@@ -232,6 +245,65 @@ def _point(state: dict[str, Any]) -> list[float] | None:
     if all(isinstance(player.get(key), (int, float)) for key in ("x", "y", "z")):
         return [float(player["x"]), float(player["y"]), float(player["z"])]
     return None
+
+
+def _respawn_enemy_witness(run_dir: Path, holder_entity: int, holder_side: int) -> dict[str, Any]:
+    """Distances from the respawned holder to every enemy soldier in the latest battle image.
+
+    Reads the runner's `wal-archive/` (enabled with `--crash-handoff`): the `Entity` rows carry the
+    positions and the battle image carries the sides, so this is the server's own view of who stood
+    within weapon reach of the respawn — not a log line (review wave2-13 M3).
+    """
+    archive = run_dir / "wal-archive"
+    result: dict[str, Any] = {"archive": str(archive), "archive_exists": archive.is_dir(),
+                              "images": 0, "entities": 0, "min_enemy_distance": None}
+    if not archive.is_dir():
+        return result
+    battle = battle_recovery._runner_module()
+    fold = None
+    positions: dict[int, list[float]] = {}
+    for path in sorted(archive.glob("batch-*.bin")):
+        decoded = battle.wal_frame(path.name, path.read_bytes())
+        if decoded is None:
+            continue
+        for line in decoded[2].splitlines():
+            if b'"Entity"' not in line and b'"Battle' not in line:
+                continue
+            for dimension, entry in battle._visit(json.loads(line)):
+                if dimension != "minecraft:overworld":
+                    continue
+                entity = entry.get("Entity")
+                if isinstance(entity, dict):
+                    pos = entity.get("pos") or entity.get("position")
+                    if isinstance(pos, list) and len(pos) == 3:
+                        positions[int(entity["id"])] = [float(v) for v in pos]
+                if "Battle" in entry or "BattlePatch" in entry:
+                    fold = battle.fold_battle(fold, entry)
+                    if fold is not None:
+                        result["images"] += 1
+    result["entities"] = len(positions)
+    if fold is None:
+        return result
+    members = {member["id"]: member for member in fold["battle"]["formation"]["members"]}
+    holder_pos = positions.get(holder_entity)
+    if holder_pos is None:
+        result["holder_position"] = None
+        return result
+    result["holder_position"] = holder_pos
+    distances = []
+    for entity_id, member in members.items():
+        if member.get("side") == holder_side:
+            continue
+        pos = positions.get(entity_id)
+        if pos is None:
+            continue
+        distances.append((sum((a - b) ** 2 for a, b in zip(pos, holder_pos)) ** 0.5, entity_id))
+    result["enemy_fighters"] = len(distances)
+    if distances:
+        distances.sort()
+        result["min_enemy_distance"] = round(distances[0][0], 2)
+        result["nearest_enemy"] = distances[0][1]
+    return result
 
 
 def _camera_gap(camera: dict[str, Any], holder: dict[str, Any]) -> float | None:

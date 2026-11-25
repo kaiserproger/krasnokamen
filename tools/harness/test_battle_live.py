@@ -57,6 +57,15 @@ class MarkerTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "assertions failed"):
                 battle_live.judge(dict(bad))
 
+    def test_the_respawn_witness_reads_the_wal_archive(self) -> None:
+        source = Path(battle_live.__file__).read_text()
+        self.assertIn('"--crash-handoff"', source)
+        self.assertIn("_respawn_enemy_witness", source)
+        self.assertIn("holder_sees_an_enemy_after_respawn", source)
+        missing = battle_live._respawn_enemy_witness(Path("/nonexistent-run"), 1, 1)
+        self.assertFalse(missing["archive_exists"])
+        self.assertIsNone(missing["min_enemy_distance"])
+
     def test_the_profile_and_scenarios_are_registered(self) -> None:
         self.assertIn("battle-live", PROFILES)
         self.assertEqual(battle_live.scenario_ids(),
