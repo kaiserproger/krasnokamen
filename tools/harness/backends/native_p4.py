@@ -130,6 +130,8 @@ def _restart(steps: ProbeSteps) -> None:
                 "game_mode": (after.get("player") or {}).get("game_mode"),
                 "abilities_flying": after["player"].get("abilities_flying"),
                 "predict_ticks": after["player"].get("predict_ticks"),
+                "corrections": after["player"].get("corrections"),
+                "last_correction_distance": after["player"].get("last_correction_distance"),
                 "on_ground": (after.get("player") or {}).get("on_ground"),
                 "velocity": (after.get("player") or {}).get("velocity"),
                 "outer_pose_known": (after.get("player") or {}).get("pose_known"),
