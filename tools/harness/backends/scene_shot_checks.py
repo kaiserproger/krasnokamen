@@ -280,6 +280,49 @@ def check_shield_gui(probe: ProbeSteps, artifact: Path) -> None:
     ]
 
 
+def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-10/11: a rig re-authored to the vanilla layer geometry submits its own parts.
+
+    The row's symptom is missing or malformed *parts*, so the observable is the frame's own
+    submission: every cube is six quads (a cube with explicit `faces` counts that many) and a quad is
+    six indices, all of it independent of the camera, the light and the host's load. `client:92dcb25d`
+    re-authored the guardian family from 17 cubes (102 quads, 612 indices) to 22 (132, 792), the baby
+    bee from 13 (62, 372) to 9 (49, 294), and the allay from 34 quads (204) to 42 (252), while the
+    hoglin (66), rabbit, fox, panda and vex (42) kept their count and changed only their boxes.
+
+    Two differences are asserted, each between two subjects of the same run so the per-entity shadow
+    quad (one per shot) cancels:
+
+    - guardian minus baby bee: 612 - 372 = 240 before, 792 - 294 = 498 after (floor 350) — the
+      guardian's five extra head/spike cubes against the bee's three leg fans;
+    - allay minus vex: 204 - 252 = -48 before, 252 - 252 = 0 after (floor -20) — the allay's wing
+      faces, which the pre-fix rig dropped through its restricted cube.
+
+    The hoglin frame is kept as evidence (its ears and tusks changed shape, not count).
+    """
+    shots = _qa._load_shots(probe, artifact, ("hoglin", "guardian", "allay", "vex", "bee-baby"))
+    for name in ("hoglin", "guardian", "allay", "vex", "bee-baby"):
+        extraction = shots[name][0].get("entity_extraction") or {}
+        probe.report[f"{name}_entity_extraction"] = {
+            key: extraction.get(key) for key in ("submitted", "entity_indices", "unrendered")
+        }
+        probe.check(f"{name}_entity_submitted", extraction.get("submitted", 0) >= 1)
+        probe.check(f"{name}_rig_rendered", not extraction.get("unrendered"))
+    indices = {name: int((shots[name][0].get("entity_extraction") or {}).get("entity_indices") or 0)
+               for name in ("guardian", "allay", "vex", "bee-baby")}
+    guardian_bee = indices["guardian"] - indices["bee-baby"]
+    allay_vex = indices["allay"] - indices["vex"]
+    probe.report["guardian_minus_bee_indices"] = guardian_bee
+    probe.report["allay_minus_vex_indices"] = allay_vex
+    # 26.3 rigs: 17 -> 22 guardian cubes and 13 -> 9 bee cubes make the difference 240 -> 498,
+    # and the allay's 34 -> 42 quads make its difference against the unchanged vex -48 -> 0.
+    probe.check("guardian_spikes_and_bee_legs_submitted", guardian_bee >= 350)
+    probe.check("allay_wing_faces_submitted", allay_vex >= -20)
+    probe.report["visual_review_required"] = [
+        "Inspect guardian/allay/bee-baby frames: the counts prove parts were submitted, not their vanilla shape."
+    ]
+
+
 def check_shade_override(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-SHADE-OVERRIDE: a face named by the model's shade override takes the up weight.
 

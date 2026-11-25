@@ -964,6 +964,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="checks the received hotbar/durability observation and the framed shot",
         limits="one fixture and one camera per shot; the visual review of each frame stays with the operator",
     ),
+    "native-rig-parity": _entry(
+        id="native-rig-parity", summary="A re-authored rig submits the vanilla layer's own parts",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-rig-parity", requires=("xvfb",),
+        sources=("tools/harness/rig_parity_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, one stationary mob per shot at a fixed pad and camera (hoglin, guardian, allay, vex, baby bee), HUD default",
+        proves="each rig's submitted index count in its own frame, and the two differences that the 26.3 re-authoring moves (guardian minus baby bee, allay minus vex), so `guardian_spikes_and_bee_legs_submitted`/`allay_wing_faces_submitted` prove the missing parts are drawn",
+        limits="one species per shot and part counts only; the parts' exact vanilla shapes and every rig whose count did not change (hoglin, rabbit, fox, panda, vex, horse family) stay unit-covered",
+    ),
     "native-shield-gui": _entry(
         id="native-shield-gui", summary="The shield's GUI icon is the vanilla 26.3 plate size",
         owner="core:harness", evidence="graphical", profile="scene-shot",
