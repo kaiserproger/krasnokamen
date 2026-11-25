@@ -173,7 +173,10 @@ fn the_house_certificate_boxes_match_the_footprints_they_inspect() {
                 }
             }
         }
-        let boxed = ([bounds.min[0], bounds.min[2]], [bounds.max[0], bounds.max[2]]);
+        let boxed = (
+            [bounds.min[0], bounds.min[2]],
+            [bounds.max[0], bounds.max[2]],
+        );
         if index < 2 {
             assert_eq!(
                 boxed,
