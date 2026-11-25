@@ -1,0 +1,53 @@
+{
+  "id": "AUDIT-SCULK",
+  "verdict": "promoted",
+  "fix_commit": "patch:b3845d0732f3086bf094d6a04db368476e1478a763b85e3bbb22211af93ecdb8",
+  "fix_commit_full": "patch:b3845d0732f3086bf094d6a04db368476e1478a763b85e3bbb22211af93ecdb8",
+  "promoted_at": "2026-11-25T02:44:25+00:00",
+  "tree_head": "57f008945e39776623ddfd97ccd99c5404811b15",
+  "tree_dirty": true,
+  "tree_sha256": "d395a4f2f743dec3b3169cb658da50caf391140f012cc4ba80ab4c8b0d4dd42e",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "b3845d0732f3086bf094d6a04db368476e1478a763b85e3bbb22211af93ecdb8",
+  "reversed_files": [
+    "crates/mc-core/src/redstone/mod.rs",
+    "crates/mc-core/src/redstone/signal.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:sculk::tests::note_frequency_reaches_downward_latches_after_sensor_replacement": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/sculk_tests.rs",
+        "line": 361,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "harness:entities:native-v2-ledger-sculk-downward": {
+      "state": "unrunnable",
+      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/57f008945e39-536cfd14-server-x86_64-unknown-linux-gnu-incr/krasnokamen: /run/media/kaiserroman/games/solaris-work/pins/57f008945e39-536cfd14-server-x86_64-unknown-linux-gnu-incr/manifest.json pins a different tree (not 57f008945e39/68ac6f836531). Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:sculk::tests::note_frequency_reaches_downward_latches_after_sensor_replacement": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261125T020201-native-v2-ledger-sculk-downward-rbilk_89/result.json",
+    "tree_head": "57f008945e39776623ddfd97ccd99c5404811b15",
+    "tree_dirty": true,
+    "tree_sha256": "d395a4f2f743dec3b3169cb658da50caf391140f012cc4ba80ab4c8b0d4dd42e",
+    "server_binary_sha256": "88b5bd647352d4edb919b2887b2c8f4b228b117b83e346136773c304131cb855",
+    "covers": [
+      "harness:entities:native-v2-ledger-sculk-downward"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261125T023805-ledger-promote-ol0h1n1m"
+}

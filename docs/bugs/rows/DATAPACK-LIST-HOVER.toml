@@ -4,8 +4,10 @@ title = "Datapack listing emits joined plain names and discards pack description
 area = "gameplay"
 repro = "manual"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-HOVER Fix patch: reversing it makes the list print plain pack names instead of hover chat links."
-regression = ["cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover"]
+regression = ["cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover", "harness:entities:native-v2-ledger-datapack-hover"]
 fix_commit = "patch:61916b68f2759fa892f3eedc6158c06aa19d47274e877ab607e220a850d0593a"
-repro_check = "round 2: patch docs/bugs/fix-patches/DATAPACK-LIST-HOVER.patch (digest verified here). Control negative-control.log: reversed -> red `left: [] right: [vanilla, file/alpha]` (plain names, no link or hover). Needs a graphical harness ref before it can be promoted"
+repro_check = "control: docs/bugs/fix-patches/DATAPACK-LIST-HOVER.patch reverse-applies on HEAD (verified); reversed, the list prints joined plain names, so the cargo ref fails at its own hover assertion (datapack_commands_tests.rs:211 — the a:hover_event extra is absent) and :202/:209 keep the plain-name comparison green as the fixture. Graphical ref added: harness:entities:native-v2-ledger-datapack-hover reads the client's own recent_chat_components for the /datapack list line and asserts a show_text hover whose payload is the pack description; recent_chat alone flattens the line. The client observer exists at client 5429858c (chat_component_projection with its unit test chat_components_keep_the_datapack_hover_description), so the gate needs a client pin of that head or later."
+proving_assertions = { "cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover" = "crates/mc-core/src/datapack_commands_tests.rs:206", "harness:entities:native-v2-ledger-datapack-hover" = "datapack_list_entry_carries_a_description_hover" }
+promotion = "docs/bugs/promotions/DATAPACK-LIST-HOVER.json"

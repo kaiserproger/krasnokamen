@@ -4,7 +4,10 @@ title = "DomWorld corrected downward latch043238-4_gyxzcu:74 expected-lit failur
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AUDIT-SCULK"
-regression = ["cargo:mc-core:sculk::tests::note_frequency_reaches_downward_latches_after_sensor_replacement", "harness:entities:native-v2-automation-storage"]
-repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/rows.md:27: test is green-first with no identified fix commit; real-client downward-latch proof remains required."
+regression = ["cargo:mc-core:sculk::tests::note_frequency_reaches_downward_latches_after_sensor_replacement", "harness:entities:native-v2-ledger-sculk-downward"]
+repro_check = "guard older than the finding: cc3084d7e added the copper bulb as a reactive block (redstone::reactive, the lit latch on a rising powered edge, and its analog output), which is the downward half of the chain this audit found broken. Its three hunks still reverse on HEAD unchanged, so docs/bugs/promotions/AUDIT-SCULK.patch is that commit's real pre-image (not a hand re-break); hunks.md lists the omissions. Control expected: sculk_tests.rs:362 reds (the dust-fed bulbs stay lit=false) while the sensor phase and comparator assertions above it stay green. Graphical gate added: native-v2-ledger-sculk-downward reads the dust power (proving the note-block ingress) and then both bulbs one block below their dust, and their kept latch after the trigger is removed."
+fix_commit = "patch:b3845d0732f3086bf094d6a04db368476e1478a763b85e3bbb22211af93ecdb8"
+proving_assertions = { "cargo:mc-core:sculk::tests::note_frequency_reaches_downward_latches_after_sensor_replacement" = "crates/mc-core/src/sculk_tests.rs:361", "harness:entities:native-v2-ledger-sculk-downward" = "downward_bulbs_latch_lit" }
+promotion = "docs/bugs/promotions/AUDIT-SCULK.json"

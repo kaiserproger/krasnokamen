@@ -1,0 +1,55 @@
+diff --git a/crates/mc-core/src/projectiles/payloads.rs b/crates/mc-core/src/projectiles/payloads.rs
+--- a/crates/mc-core/src/projectiles/payloads.rs
++++ b/crates/mc-core/src/projectiles/payloads.rs
+@@ -337,9 +337,38 @@ fn potion_effects(stack: &ItemStack) -> Vec<ActiveEffect> {
+             crate::effects::potion_effects(potion.path())
+         })
+ }
++/// Accepted custom potion payload (wire-retained component): mirrors the
++/// tipped-arrow custom loop so splash/cloud apply custom-only and
++/// base-plus-custom mixtures.
++fn custom_effects(stack: &ItemStack) -> Vec<ActiveEffect> {
++    stack
++        .extended()
++        .potion_custom_effects
++        .iter()
++        .filter_map(|effect| {
++            let mut active = ActiveEffect::new(
++                EffectId::from_name(effect.id.as_str())?,
++                effect.duration,
++                effect.amplifier,
++            );
++            active.ambient = effect.ambient;
++            active.show_particles = effect.show_particles;
++            active.show_icon = effect.show_icon;
++            Some(active)
++        })
++        .collect()
++}
++
+ fn potion_color(stack: &ItemStack) -> i32 {
++    // Accepted custom color component wins over the mixed base color.
++    if let Some(color) = stack.extended().potion_custom_color {
++        return color;
++    }
+     let (mut red, mut green, mut blue, mut weight) = (0_i32, 0_i32, 0_i32, 0_i32);
+-    for effect in potion_effects(stack) {
++    for effect in potion_effects(stack)
++        .into_iter()
++        .chain(custom_effects(stack))
++    {
+         let color = effect.id.color();
+         let count = i32::from(effect.amplifier) + 1;
+         red += ((color >> 16) & 255) * count;
+@@ -436,7 +465,10 @@ pub(crate) fn apply_potion(
+     if !potion_affected(state, target) {
+         return;
+     }
+-    for mut effect in potion_effects(&record.stack) {
++    for mut effect in potion_effects(&record.stack)
++        .into_iter()
++        .chain(custom_effects(&record.stack))
++    {
+         if cloud
+             && !pvp_permitted(state, owner_id(state, record), target)
+             && cloud_harmful(state, target, effect.id)

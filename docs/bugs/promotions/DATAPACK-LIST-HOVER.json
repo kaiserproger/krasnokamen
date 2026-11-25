@@ -1,0 +1,52 @@
+{
+  "id": "DATAPACK-LIST-HOVER",
+  "verdict": "promoted",
+  "fix_commit": "patch:61916b68f2759fa892f3eedc6158c06aa19d47274e877ab607e220a850d0593a",
+  "fix_commit_full": "patch:61916b68f2759fa892f3eedc6158c06aa19d47274e877ab607e220a850d0593a",
+  "promoted_at": "2026-11-25T03:15:21+00:00",
+  "tree_head": "57f008945e39776623ddfd97ccd99c5404811b15",
+  "tree_dirty": true,
+  "tree_sha256": "d395a4f2f743dec3b3169cb658da50caf391140f012cc4ba80ab4c8b0d4dd42e",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "61916b68f2759fa892f3eedc6158c06aa19d47274e877ab607e220a850d0593a",
+  "reversed_files": [
+    "crates/mc-core/src/datapack_management.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/datapack_commands_tests.rs",
+        "line": 201,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "harness:entities:native-v2-ledger-datapack-hover": {
+      "state": "unrunnable",
+      "detail": "release server: cannot use KRASNOKAMEN_SERVER_BINARY=/run/media/kaiserroman/games/solaris-work/pins/57f008945e39-536cfd14-server-x86_64-unknown-linux-gnu-incr/krasnokamen: /run/media/kaiserroman/games/solaris-work/pins/57f008945e39-536cfd14-server-x86_64-unknown-linux-gnu-incr/manifest.json pins a different tree (not 57f008945e39/93ff545f8ca4). Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261125T030919-native-v2-ledger-datapack-hover-g7bamz4n/result.json",
+    "tree_head": "57f008945e39776623ddfd97ccd99c5404811b15",
+    "tree_dirty": true,
+    "tree_sha256": "d395a4f2f743dec3b3169cb658da50caf391140f012cc4ba80ab4c8b0d4dd42e",
+    "server_binary_sha256": "88b5bd647352d4edb919b2887b2c8f4b228b117b83e346136773c304131cb855",
+    "covers": [
+      "harness:entities:native-v2-ledger-datapack-hover"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261125T031000-ledger-promote-fe74e5p0"
+}

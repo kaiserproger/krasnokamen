@@ -1,0 +1,20 @@
+diff --git a/crates/mc-core/src/datapacks.rs b/crates/mc-core/src/datapacks.rs
+--- a/crates/mc-core/src/datapacks.rs
++++ b/crates/mc-core/src/datapacks.rs
+@@ -2000,16 +2000,6 @@ fn finish(
+     };
+     match (&reload.job, completed) {
+         (Job::Reload | Job::Activation { .. }, Completed::Packs(packs, registry)) => {
+-            if packs.changes_registry(&state.datapacks.packs) {
+-                if deliver {
+-                    feedback(
+-                        state,
+-                        connection,
+-                        "Recipe/loot changes require restart; reload refused, old packs and selection retained",
+-                    );
+-                }
+-                return (false, 0);
+-            }
+             if let Some(registry) = registry {
+                 install_registry(state, registry);
+             }
