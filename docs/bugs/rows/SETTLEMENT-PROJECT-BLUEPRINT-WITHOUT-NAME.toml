@@ -6,6 +6,7 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "D123Civ civilization gate, run 20261124T002707: the planner's one-cell furnace project (blueprint id `furnace`, construction_furnace.rs NAME, handled by `site_target`'s furnace branch, absent from the asset catalog and the layout table) had no display name, so the dialog listed 'Unknown blueprint' and the gate could not read the project. Fix a895cc853b names it in ui_text::blueprint (Furnace/Печь) and the gate's label map; filed on 2026-11-24 (review D123Civ6 note d), same class as SETTLEMENT-LAYOUT-PROJECT-SHOWS-UNKNOWN-BLUEPRINT."
-regression = ["harness:civilization-seed-qa:all", "cargo:mc-core:settlements::ui_text::tests::every_project_kind_has_a_display_name"]
+regression = ["harness:civilization-seed-qa:all", "cargo:mc-core:settlements::ui_text::tests::every_project_kind_has_a_display_name", "harness:settlement-map-qa:program_unknown"]
 fix_commit = "a895cc853b"
+proving_assertions = { "harness:settlement-map-qa:program_unknown" = "program_unknown_label", "cargo:mc-core:settlements::ui_text::tests::every_project_kind_has_a_display_name" = "crates/mc-core/src/settlements/ui_text.rs:1003" }
 failing_first = "reported"

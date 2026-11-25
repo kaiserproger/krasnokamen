@@ -254,7 +254,7 @@ _BOOLEAN_PROFILE_VERDICTS = {
         'bell_opens_hub', 'dashboard', 'map', 'building_order', 'shortage_icons',
         'storage_transfer', 'project_progress', 'residents', 'resources', 'production_order',
         'localized_text', 'all', 'starter_chest_race', 'selected_card', 'verge_connected',
-        'blueprints',
+        'blueprints', 'program_unknown',
     }),
 }
 # Run arguments of a profile ref: (client, args after `--`) per verdict that needs another client
@@ -273,6 +273,9 @@ _PROFILE_VERDICT_RUN = {
     # The Construction page's blueprint list must show localized names only (row
     # SETTLEMENT-BLUEPRINT-LIST-SHOWS-RAW-SPANISH-IDS); the quickwins setup founds the settlement.
     ('settlement-map-qa', 'blueprints'): ('native', ['--', '--scenario', 'blueprints']),
+    # The autonomous furnace project's Construction-dialog label comes from the display-name table, not
+    # "Unknown blueprint" (row SETTLEMENT-PROJECT-BLUEPRINT-WITHOUT-NAME).
+    ('settlement-map-qa', 'program_unknown'): ('native', ['--', '--scenario', 'program-unknown']),
     # The chisel resource-pack admission is a vanilla-Java client behaviour; the native client
     # never asks for the optional pack.
     ('chisel', 'vanilla_optional_admission'): ('java', []),

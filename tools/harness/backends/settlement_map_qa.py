@@ -323,6 +323,10 @@ def layout_cell(anchor: list[int], x: int, z: int) -> str:
 VERGE_ASSERTIONS = ("verge_project_admitted_on_the_status_page", "verge_obstacle_stands")
 SELECTED_CARD_ASSERTIONS = ("map_features_house_and_site", "selected_card_site_only",
                             "selected_card_back_returns_map", "selected_card_building_only")
+# `--scenario program-unknown` (SETTLEMENT-PROJECT-BLUEPRINT-WITHOUT-NAME): the autonomous furnace
+# project carries no asset/layout blueprint entry, so its Construction-dialog label must come from the
+# display-name table, never "Unknown blueprint" or the raw `furnace` id.
+PROGRAM_UNKNOWN_ASSERTIONS = ("program_unknown_label",)
 STAGES = ("bell_opens_hub", "dashboard", "map", "building_order", "shortage_icons",
           "storage_transfer", "project_progress", "residents", "resources", "production_order")
 VERDICTS = (*STAGES, "localized_text", "all")
@@ -330,7 +334,7 @@ VERDICTS = (*STAGES, "localized_text", "all")
 # so a receipt carries it; the civil walk never produces them. `regressions` registers this set
 # together with `VERDICTS` (the ledger ref must accept and read every one of them) and
 # `test_settlement_quickwins_qa` holds both sides to it.
-SCENARIO_VERDICTS = ("selected_card", "verge_connected")
+SCENARIO_VERDICTS = ("selected_card", "verge_connected", "program_unknown")
 
 
 def _stage_checks(language: str) -> dict[str, tuple[list[str], list[str]]]:
@@ -422,7 +426,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     parser.add_argument("--size", choices=("1280x720", "1920x1080"), default="1280x720")
     parser.add_argument("--wrong-click", action="store_true",
                         help="negative control: click Help instead of Settlement")
-    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race", "stage2", "stage2op", "blueprints", "selected-card", "verge"), default="civil",
+    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race", "stage2", "stage2op", "blueprints", "selected-card", "program-unknown", "verge"), default="civil",
                         help="quickwins: the owner-path acceptance of the D63 quick wins (native, ru_ru); "
                              "quickwins-c1-race: the starter chest (C1) founded under block churn in its chunk")
     parser.add_argument("--survey", action="store_true",
@@ -455,6 +459,22 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
                 ctx.client_evidence["verdicts"] = published
         return scene_shot.run(ctx, scenario={"steps": [], "java_plain": ctx.client == "java",
                                              "client_settings": settings}, script=verge_script)
+    if args.scenario == "program-unknown":
+        # One order for the autonomous furnace blueprint, then the Construction dialog's own text.
+        settings = {"gui_scale": args.gui_scale, "language": args.language,
+                    "screen_size": list(map(int, args.size.split("x")))} if ctx.client == "java" else {}
+
+        def program_script(probe, artifact, steps, client):
+            try:
+                return _program_unknown_script(probe, artifact, steps, client, args)
+            finally:
+                checks = probe.report["assertions"]
+                ok = all(checks.get(name) is True for name in PROGRAM_UNKNOWN_ASSERTIONS)
+                published = {"program_unknown": ok, "all": ok}
+                probe.report["verdicts"] = published
+                ctx.client_evidence["verdicts"] = published
+        return scene_shot.run(ctx, scenario={"steps": [], "java_plain": ctx.client == "java",
+                                             "client_settings": settings}, script=program_script)
     if args.scenario == "selected-card":
         # One live construction site and the storage; the site marker must open that project alone.
         settings = {"gui_scale": args.gui_scale, "language": args.language,
@@ -1028,6 +1048,44 @@ def _visible_text(state: dict[str, Any]) -> str:
     parts += [str(node.get("label")) for node in state.get("ui_nodes") or [] if node.get("label")]
     parts += [str(row.get("name")) for row in (state.get("container") or {}).get("slots", []) if row.get("name")]
     return "\n".join(parts)
+
+
+def _program_unknown_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
+                            args: argparse.Namespace) -> list[str]:
+    """`--scenario program-unknown` (SETTLEMENT-PROJECT-BLUEPRINT-WITHOUT-NAME): found the civil fixture,
+    order the one-cell autonomous furnace and read the Construction dialog's label for it. The blueprint
+    has no asset/layout entry, so the pre-image prints `Unknown blueprint` (or the raw `furnace` id)."""
+    size = tuple(map(int, args.size.split("x")))
+    scene_shot.resize_window(probe.client.p4_window, size)
+    ru = args.language == "ru_ru"
+    label = lambda en, russian: russian if ru else en
+    unknown = "Неизвестный чертёж" if ru else "Unknown blueprint"
+    name = label("Furnace", "Печь")
+    try:
+        _setup(probe)
+        probe.fixture("settlement build furnace")
+        deadline_ticks = 0
+        chat = ""
+        while True:
+            probe.fixture("settlement building list")
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
+            chat = "\n".join(str(line) for line in probe.observe().get("recent_chat", []))
+            if re.search(r"#\d+\s+" + re.escape(name), chat, re.IGNORECASE):
+                break
+            if unknown.lower() in chat.lower() or re.search(r"#\d+\s+furnace\b", chat, re.IGNORECASE):
+                break
+            deadline_ticks += 20
+            if deadline_ticks > 1200:
+                raise RuntimeError("the furnace order never reached the building list")
+        (artifact / "program-unknown-chat.txt").write_text(chat)
+        probe.report["program_unknown"] = {"chat": chat[-1600:]}
+        probe.check("program_unknown_label",
+                    re.search(r"#\d+\s+" + re.escape(name), chat, re.IGNORECASE) is not None
+                    and unknown.lower() not in chat.lower()
+                    and re.search(r"#\d+\s+furnace\b", chat, re.IGNORECASE) is None)
+    finally:
+        pass
+    return []
 
 
 def _selected_card_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
