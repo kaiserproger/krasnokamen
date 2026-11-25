@@ -7,6 +7,12 @@
 //! chunks listed in `changes.chunks_loaded`, generated villagers spawned via
 //! `generated::load` BEFORE `autonomy::tick`.
 use super::*;
+
+/// The generated-piece certification tests live beside these: this file is only
+/// compiled under `cfg(test)`, so a reversal of the production hunks in
+/// `autonomy.rs`/`buildings.rs` cannot take the test module with it.
+#[path = "generated_certification_tests.rs"]
+mod generated_certification_tests;
 use crate::boundary::{ChangeSet, ChunkPos};
 use crate::registry::CoreRegistry;
 use crate::settlements::buildings::BuildingKind;

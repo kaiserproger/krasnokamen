@@ -1200,7 +1200,3 @@ mod tests;
 #[cfg(test)]
 #[path = "starter_chest_tests.rs"]
 mod starter_tests;
-
-#[cfg(test)]
-#[path = "generated_certification_tests.rs"]
-mod generated_certification_tests;
