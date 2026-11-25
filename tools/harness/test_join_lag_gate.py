@@ -752,8 +752,8 @@ class PublishWindowTest(unittest.TestCase):
             ready, window = join_lag.gate_window(log, 3.0)
             self.assertTrue(ready)
             self.assertGreaterEqual(window["seconds"], join_lag.HALT_WINDOW_SECONDS)
-            # A later publication that is itself at the requested rate must move the start again
-            # (the recompute takes the newest applied interval, not the first one it saw).
+            # A later publication at the requested rate does NOT move the start: the window
+            # begins at the first publication whose own interval already runs at the rate.
             shifted = MIXED_RATE_LOG + "2026-11-24T18:19:42.000000Z DEBUG mc_edge::server::pump: pump published tick tick=310 viewers=2 elapsed_us=3900\n"
             log.write_text(shifted)
             ready, window = join_lag.gate_window(log, 3.0)

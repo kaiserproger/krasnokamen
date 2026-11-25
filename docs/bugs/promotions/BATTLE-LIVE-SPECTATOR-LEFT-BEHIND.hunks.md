@@ -1,22 +1,11 @@
-# BATTLE-LIVE-SPECTATOR-LEFT-BEHIND — fix-hunk map
+# BATTLE-LIVE-SPECTATOR-LEFT-BEHIND — proof state (promotion withdrawn)
 
-Fix `c6fa94da3` in tree; this map's patch is its **behaviour-only** form,
-`patch:58f02bb7959a01a3a4ca24e750f090e138eee5e0e057c9210f0cbd0d2e66f29d` (`docs/bugs/promotions/BATTLE-LIVE-SPECTATOR-LEFT-BEHIND.preimage.patch`), which
-reverses at HEAD.
+Fix `c6fa94da3` is in the tree. **No promotion stands** (REVIEW-wave2-15 M2 withdrew it) and no control
+patch is kept: the one that existed removed only the two `follow(...)` calls, which leaves the per-tick
+`follow_cameras` rebind (called every tick from `tick/spectator.rs` via `tick/dimension.rs`) catching up
+in <=1 tick, so the scene could not flip; it also omitted other hunks of the commit without (a)/(b)/(c)
+reasons and carried invented a-side comments.
 
-| file | what it does |
-|---|---|
-| `crates/mc-core/src/battle/live_players.rs` | the two `follow(...)` calls `c6fa94da3` added — one in the respawn path (`update`, after the kit re-place) and one in the placement path (`place`) — so a bound spectator is re-placed behind his holder on every respawn and re-arm. |
-
-Adaptations: none in behaviour. The commit's own added lines are deleted; `follow()` and
-`place_behind()` stay in the file (the pre-fix tree has them only as reachable-from-`battle spectate`
-code), so the reversal compiles (`warning: function `follow` is never used`). No stub or early return
-is introduced.
-
-## Control
-
-- **cargo**: the row's three refs are expected to be *green* on this reversal (they test the rebind
-  helpers through `battle spectate`), so per docs/bugs/README.md (proving_refs) they are structural and
-  the flipping ref is the scene;
-- **graphical**: `spectator_camera_followed_the_respawn` (the camera eye within 8 blocks of the holder
-  after his respawn) is the row's symptom and must be red on a pin of this reversed tree.
+What a valid control needs: reverse **all** real non-test hunks of `c6fa94da3` (including whatever
+introduced the per-tick rebind) with mechanical adaptations only, then >=3 control runs red on the
+camera/gap assertion and >=3 candidate runs green.
