@@ -1,0 +1,61 @@
+{
+  "id": "CODE-CLIENT-CLIPPY",
+  "verdict": "promoted",
+  "fix_commit": "client-test:902db87c317c1810d8ce33b3e7b3ca231b283a3d",
+  "fix_commit_full": "902db87c317c1810d8ce33b3e7b3ca231b283a3d",
+  "promoted_at": "2026-11-25T11:50:27+00:00",
+  "tree_head": "1a6acd8aeecb3e9beba6f097955e6b3780a8387e",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control": "client_test_reversal",
+  "control_tree": "client_head",
+  "fix_patch_sha256": "0af12c6a84856990df99f8452368260284aeb7b2185a883eb8021b71130c79c3",
+  "reversed_files": [
+    "src/session/profile_textures.rs"
+  ],
+  "kept_test_files": [
+    "src/entities/resources.rs"
+  ],
+  "client_checkout": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123HarnessHCli",
+    "head": "fa231b1b34f8d7631a4b0a5316b8349138f28f25",
+    "untracked": []
+  },
+  "negative_control": {
+    "client-gate:clippy-client-all-targets": {
+      "state": "red",
+      "detail": "cargo clippy -p krasnokamen-client --all-targets -- -D warnings: error: this `if` statement can be collapsed (src/session/profile_textures.rs:117:9)",
+      "assertion": {
+        "error": "gate-diagnostic",
+        "class": "assertion",
+        "file": "src/session/profile_textures.rs",
+        "line": 117,
+        "detail": "this `if` statement can be collapsed"
+      }
+    },
+    "client-gate:clippy-workspace-all-targets": {
+      "state": "red",
+      "detail": "cargo clippy --workspace --all-targets -- -D warnings: error: this `if` statement can be collapsed (src/session/profile_textures.rs:117:9)",
+      "assertion": {
+        "error": "gate-diagnostic",
+        "class": "assertion",
+        "file": "src/session/profile_textures.rs",
+        "line": 117,
+        "detail": "this `if` statement can be collapsed"
+      }
+    }
+  },
+  "restored": {
+    "client-gate:clippy-client-all-targets": {
+      "state": "green",
+      "detail": ""
+    },
+    "client-gate:clippy-workspace-all-targets": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261125T114352-ledger-promote-ji063knj"
+}

@@ -42,6 +42,7 @@ class Refused(Exception):
 # so its pair is the test red with the fix's production hunks reversed and green on the fix
 # (OWNER-DECISIONS-NEEDED CL-7 option (a)).
 CLIENT_TEST_PREFIX = 'client-test:'
+CLIENT_GATE_PREFIX = 'client-gate:'
 LOADER_FIX_PREFIX = 'loader:'
 
 
@@ -577,6 +578,90 @@ def _run_client(ctx, tests, root, repo=None):
     return results
 
 
+_GATE_DIAGNOSTIC = re.compile(
+    r'(?m)^(error(?:\[[A-Z]+\d+\])?|warning): (?P<message>[^\n]+)\n'
+    r'\s*-->\s+(?P<file>[^\s:]+):(?P<line>\d+):(?P<column>\d+)')
+
+
+def _gate_diagnostic(text, repo):
+    """The first workspace-source diagnostic (message and location) a gate log carries, else None.
+
+    Only a lint in the checkout's own source counts: clippy/rustc print `error: <lint> ...` (or
+    `error[E...]`) with a `--> path:line:column` location. A vendored dependency keeps its own lint
+    settings and prints warnings even when the workspace denies them (`vendor/winit` under `--workspace`),
+    and a cargo-level failure (`error: could not compile`, a download error) has no location block, so
+    neither is evidence about this row."""
+    for match in _GATE_DIAGNOSTIC.finditer(text):
+        path = Path(match.group('file'))
+        if not path.is_absolute():
+            path = Path(repo) / path
+        try:
+            relative = path.resolve().relative_to(Path(repo).resolve()).as_posix()
+        except ValueError:
+            continue
+        if relative.split('/', 1)[0] in ('vendor', 'target'):
+            continue
+        return {'message': match.group('message').strip()[:200], 'file': relative,
+                'line': int(match.group('line')), 'column': int(match.group('column')),
+                'level': match.group(1).split('[', 1)[0]}
+    return None
+
+
+def _run_client_gates(ctx, gates, root, repo=None, pinned=True):
+    """Run `client-gate:<id>` refs {id} in the client checkout -> {id: (state, detail, assertion)}.
+
+    A gate is a registered whole-repository command (tools/harness/client_gates.py): green on exit 0
+    with no diagnostic, red when it exits non-zero over the compiler's own diagnostic, unrunnable for
+    an unregistered id, a missing or dirty checkout or a command that never reached the compiler.
+    `pinned=False` is the reversal control copy: it carries the reversed hunks by construction and has
+    no checkout revision of its own, so only the command decides there."""
+    from . import client_gates
+
+    repo = Path(repo) if repo is not None else client_repo(root)
+    results = {}
+    for gate in sorted(gates):
+        spec = client_gates.command(gate)
+        if spec is None:
+            results[gate] = (UNRUNNABLE, f'{gate} is not registered in tools/harness/client_gates.py '
+                                         f'(registered: {", ".join(client_gates.ids()) or "none"})', None)
+            continue
+        description, argv = spec
+        if not repo.is_dir():
+            results[gate] = (UNRUNNABLE, f'no client checkout at {repo} (set KRASNOKAMEN_CLIENT_ROOT)', None)
+            continue
+        if pinned:
+            # Only source-relevant dirt refuses (the same rule as `_client_source_state`): a checkout
+            # with edited docs is still the source tree the gate is run against.
+            dirty = [line.strip() for line in _git(repo, 'status', '--porcelain', check=False)[1].splitlines()
+                     if line.strip() and (line[3:].strip('"').endswith(('.rs', '.toml', '.lock'))
+                                          or line[3:].strip('"') == 'build.rs')]
+            if dirty:
+                results[gate] = (UNRUNNABLE, f'client checkout {repo} is dirty ({dirty[0]}): {description} runs '
+                                             'on the committed tree it names', None)
+                continue
+            code, head = _git(repo, 'rev-parse', 'HEAD', check=False)
+            if code or not re.fullmatch(r'[0-9a-f]{40}', head.strip()):
+                results[gate] = (UNRUNNABLE, f'client checkout {repo} has no HEAD to pin', None)
+                continue
+        build_argv, env = regressions.tree_build_command(repo, list(argv))
+        if Path(repo).resolve() != client_repo(root).resolve():
+            env = _client_control_env(env, root / '.analysis/client-sandbox' / time.strftime('%Y%m%dT%H%M%S'))
+        ok, text = _exec(ctx, build_argv, f'gate-{gate[:24]}', repo, env)
+        diagnostic = _gate_diagnostic(text, repo)
+        if ok:
+            results[gate] = (GREEN, '', None)
+        elif diagnostic is not None:
+            results[gate] = (RED, f"{description}: {diagnostic['level']}: {diagnostic['message']} "
+                                  f"({diagnostic['file']}:{diagnostic['line']}:{diagnostic['column']})",
+                             {'error': 'gate-diagnostic', 'class': 'assertion',
+                              'file': diagnostic['file'], 'line': diagnostic['line'],
+                              'detail': diagnostic['message']})
+        else:
+            results[gate] = (UNRUNNABLE, f'{description} did not reach the compiler with a diagnostic '
+                                         '(see log)', None)
+    return results
+
+
 def _run_python(ctx, tests, tree):
     """Run exact unittest targets {(module, dotted test)} in `tree` -> {(module, test): (state, detail)}.
 
@@ -778,7 +863,7 @@ def run_refs(ctx, refs, tree, client):
     A failed client run is red only when its receipt carries an explicitly failing verdict for the
     referenced profile check. A timeout, a client that never reached play or any other failure
     without a negative verdict is unrunnable: it is not evidence about the check."""
-    out, cargo, harness, python, client_tests = {}, set(), [], set(), set()
+    out, cargo, harness, python, client_tests, client_gate_ids = {}, set(), [], set(), set(), set()
     loader_python, loader_gradle = set(), set()
     for ref in refs:
         try:
@@ -792,6 +877,8 @@ def run_refs(ctx, refs, tree, client):
             python.add((first, second))
         elif kind == 'client':
             client_tests.add((first, second))
+        elif kind == 'client-gate':
+            client_gate_ids.add(first)
         elif kind == 'loader':
             (loader_python if first == 'python' else loader_gradle).add(ref)
         elif client:
@@ -830,6 +917,11 @@ def run_refs(ctx, refs, tree, client):
                 assertion = entry[2] if len(entry) > 2 else None
                 out[f'client:{crate}:{name}'] = {'state': entry[0], 'detail': entry[1],
                                                  **({'assertion': assertion} if assertion else {})}
+        if client_gate_ids:
+            for gate, entry in _run_client_gates(ctx, client_gate_ids, tree).items():
+                assertion = entry[2] if len(entry) > 2 else None
+                out[f'{CLIENT_GATE_PREFIX}{gate}'] = {'state': entry[0], 'detail': entry[1],
+                                                      **({'assertion': assertion} if assertion else {})}
     return out
 
 
@@ -2127,9 +2219,11 @@ def _promote_client_test_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, c
         except ValueError as error:
             raise Refused(f'{ident}: {error}')
     client_refs = [ref for ref in refs if ref.startswith('client:')]
-    if not client_refs:
-        raise Refused(f'{ident}: a {CLIENT_TEST_PREFIX}<sha> fix needs a client:<crate>:<test> ref to carry '
-                      'the pair (a harness ref would need a real-client control)')
+    gate_refs = [ref for ref in refs if ref.startswith(CLIENT_GATE_PREFIX)]
+    if not client_refs and not gate_refs:
+        raise Refused(f'{ident}: a {CLIENT_TEST_PREFIX}<sha> fix needs a client:<crate>:<test> or '
+                      f'{CLIENT_GATE_PREFIX}<id> ref to carry the pair (a harness ref would need a '
+                      'real-client control)')
     repo, head, untracked = _client_source_state(root)
     if not client_contains(root, head, fix_full):
         raise Refused(f'{ident}: the client checkout {repo} at {head[:12]} does not contain the fix '
@@ -2150,12 +2244,34 @@ def _promote_client_test_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, c
         if check[0]:
             raise Refused(repair)
         _git(tree, 'apply', '-R', '--whitespace=nowarn', '-', stdin=patch.encode(errors='surrogateescape'))
-        runner = client_runner or (lambda refs, tree: _client_ref_states_of(_run_client(
-            ctx, {_client_test(ref): ref for ref in refs}, root, tree)))
-        control = runner(client_refs, tree)
+        def run_here(selected, where):
+            """Run client unit refs and client-gate refs of `selected` in the checkout `where`."""
+            states = {}
+            tests = {_client_test(ref) for ref in selected if ref.startswith('client:')}
+            gates = {ref.split(':', 1)[1] for ref in selected if ref.startswith(CLIENT_GATE_PREFIX)}
+            if tests:
+                states.update(_client_ref_states_of(_run_client(ctx, tests, root, where)))
+            if gates:
+                reversed_copy = where.resolve() != client_repo(root).resolve()
+                for gate, entry in _run_client_gates(ctx, gates, root, where, pinned=not reversed_copy).items():
+                    assertion = entry[2] if len(entry) > 2 else None
+                    states[f'{CLIENT_GATE_PREFIX}{gate}'] = {'state': entry[0], 'detail': entry[1],
+                                                            **({'assertion': assertion} if assertion else {})}
+            return states
+
+        runner = client_runner or run_here
+        control = runner(client_refs + gate_refs, tree)
         changed = set(reversed_files) | set(kept_test_files)
         for ref, entry in control.items():
             if entry.get('state') != RED:
+                continue
+            if ref.startswith(CLIENT_GATE_PREFIX):
+                # A gate's red is its own compiler diagnostic (class assertion), never an assert macro
+                # in the reversed test code: the command itself is the oracle the row names.
+                if (entry.get('assertion') or {}).get('class') != 'assertion':
+                    entry['detail'] = (entry.get('detail', '') + ' | the gate failed without a compiler '
+                                       'diagnostic').strip(' |')
+                    entry['state'] = UNPROVEN_PANIC
                 continue
             if _client_test_assertion(tree, entry, changed) != 'assertion':
                 entry['detail'] = (entry.get('detail', '') + ' | the red is not an assertion inside test code '
@@ -2163,13 +2279,12 @@ def _promote_client_test_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, c
                 entry['state'] = UNPROVEN_PANIC
         red = {ref for ref, entry in control.items() if entry['state'] == RED}
         if not red:
-            raise Refused(f'{ident}: the client unit refs stayed green with the fix reversed: '
+            raise Refused(f'{ident}: the client refs stayed green with the fix reversed: '
                           + '; '.join(f"{ref}={entry['state']} ({entry['detail']})" for ref, entry in control.items())
                           + ' (a control that stays green does not test the fix)')
-        restored = runner(refs, repo) if client_runner else _client_ref_states_of(
-            _run_client(ctx, {_client_test(ref): ref for ref in refs}, root, repo))
+        restored = runner(refs, repo) if client_runner else run_here(refs, repo)
         if not client_runner:
-            others = [ref for ref in refs if not ref.startswith('client:')]
+            others = [ref for ref in refs if not ref.startswith(('client:', CLIENT_GATE_PREFIX))]
             if others:
                 restored.update(run_refs(ctx, others, root, True))
         bad = {ref: entry for ref, entry in restored.items() if entry.get('state') != GREEN}
