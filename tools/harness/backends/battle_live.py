@@ -138,8 +138,15 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
               before[0]["state"].get("gamemode"))
         check(report, "spectator_camera_bound_before_death",
               camera_before == holder_entity, {"camera": camera_before, "holder": holder_entity})
-        # Contact: the telemetry's fighting count is the server's own front-line census.
+        # Contact: the telemetry's fighting count is the server's own front-line census; the holder's
+        # own regiment must meanwhile be OUT of contact, or his respawn takes the fix's first branch
+        # (a file of his regiment in contact) and the pre-image fallbacks are never exercised.
         strike, rows = _wait_for_fighting(battle, dashboard, report)
+        placed = console.wait(rf"Battle live placed: {HOLDER}[^\n]*", 0, timeout=120).group(0)
+        report["observations"]["placed_line"] = placed
+        regiment = int(re.search(r"regiment=(\d+)", placed).group(1))
+        report["observations"]["holder_regiment"] = regiment
+        contacts = _wait_for_holder_regiment_out_of_contact(console, regiment, run_dir, report)
         (run_dir / "before-death-telemetry.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
         report.setdefault("observations", {})["fighting"] = (strike.get("battle") or {}).get("fighting")
         mark = console.mark()
@@ -214,6 +221,37 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         runtime.stop_process(display_process)
         display_log.close()
     return {"scenario": report}
+
+
+def _wait_for_holder_regiment_out_of_contact(console, regiment: int, run_dir: Path, report: dict[str, Any],
+                                             bound: int = BATTLE_TICKS_BOUND) -> str:
+    """Wait until the holder's own regiment reports contact=false in `battle contacts`.
+
+    The row's fixture needs the pre-image state (no contact file for his regiment) before the kill:
+    with contact the fix's first branch runs and the control never exercises the fallbacks."""
+    deadline_ticks = bound
+    polls = 0
+    while True:
+        mark = console.mark()
+        console.send("battle contacts")
+        text = console.wait(r"Battle contacts tick=.*", mark, timeout=120).group(0)
+        polls += 1
+        (run_dir / "contacts-polls.txt").open("a").write(text + "\n")
+        fields = {"regiment": None, "contact": None}
+        for part in text.split(" | ")[1:]:
+            values = dict(item.split("=", 1) for item in part.split() if "=" in item)
+            if values.get("regiment") == str(regiment):
+                fields = values
+                break
+        report.setdefault("observations", {}).setdefault("contacts_polls", []).append(
+            {"regiment": regiment, "contact": fields.get("contact"), "gap": fields.get("gap")})
+        if fields.get("contact") == "false":
+            return text
+        if polls * 100 > deadline_ticks:
+            report["passed"] = False
+            raise RuntimeError(
+                f"the holder's regiment {regiment} stayed in contact for {polls} polls: the fixture never "
+                "reaches the pre-image state (no contact file) the fix's fallbacks answer")
 
 
 def _wait_for_fighting(battle: Any, dashboard: int, report: dict[str, Any],
