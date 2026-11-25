@@ -86,12 +86,20 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                     "entity_id": target["entity_id"], "timeout_seconds": hold})
                 payload = reply.get("structuredContent") or reply
                 if reply.get("isError"):
+                    code = (payload or {}).get("code") if isinstance(payload, dict) else None
+                    # Only the client's own lease refusal is this row's observable (the same rule as
+                    # `_arrived`): a timeout or any other tool error never saw the bug and must not
+                    # become the red assertion.
+                    if code != "controller_lease_revoked":
+                        raise RuntimeError("approach refused by something other than the lease: "
+                                           + json.dumps(payload, ensure_ascii=False)[:400])
                     result["approach_error"] = json.dumps(payload, ensure_ascii=False)[:400]
-                    result["approach_error_code"] = (payload or {}).get("code")                         if isinstance(payload, dict) else None
+                    result["approach_error_code"] = code
                 else:
                     result["approach"] = payload
             except Exception as error:
                 result["approach_error"] = str(error)
+                result["approach_failed"] = True
             result["approach_elapsed_seconds"] = round(time.monotonic() - started_call, 3)
         worker = threading.Thread(target=approach)
         worker.start()
@@ -101,6 +109,9 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         # 120 s, so `active_writer_survived_idle_deadline` is the assertion that has to flip, and the
         # generic completion check follows it.
         completed = not worker.is_alive()
+        if result.get("approach_failed") and not result.get("approach_error_code"):
+            # A transport failure observed nothing: fail the run instead of a red row assertion.
+            raise RuntimeError(f"approach request failed: {result.get('approach_error')}")
         approach = result.get("approach") or {}
         controller_now = _controller(b)
         steps.report["idle_deadline"] = {
