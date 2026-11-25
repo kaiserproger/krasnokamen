@@ -229,7 +229,8 @@ def client_group(
     timeout_seconds = float(timeout_seconds)
 
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    xvfb_process, display, xvfb_log = runtime.start_xvfb(artifact_dir)
+    # The Java client (vanilla, Horizon, NeoForge) needs GLX for its window.
+    xvfb_process, display, xvfb_log = runtime.start_xvfb(artifact_dir, gl=True)
     launched: list[dict[str, Any]] = []
     launched_lock = threading.Lock()
     request_timeout = max(30.0, timeout_seconds + 10.0)

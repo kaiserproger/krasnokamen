@@ -185,7 +185,8 @@ def run(
         "client_ready_timeout_seconds": client_ready_timeout_seconds,
     }
     try:
-        xvfb, display, xvfb_log = runtime.start_xvfb(artifact_dir)
+        # The Loader/Java client needs GLX for its window (see runtime.xvfb_gl_args).
+        xvfb, display, xvfb_log = runtime.start_xvfb(artifact_dir, gl=True)
         result["display"] = display
 
         server_log_path = artifact_dir / "server.log"

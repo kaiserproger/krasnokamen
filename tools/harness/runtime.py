@@ -726,15 +726,28 @@ def validate_screen_size(size: tuple[int, int] | list[int]) -> tuple[int, int]:
     return size[0], size[1]
 
 
+def xvfb_gl_args(gl: bool) -> list[str]:
+    """The extension flags an Xvfb needs for a GL client.
+
+    A vanilla/Minecraft Java client and a NeoForge client fail at window creation
+    ("Couldn't find matching GLX visual") on a display without GLX; Xvfb exports it only with
+    `+extension GLX`. The native-client scenes render without it, so they keep the plain flags
+    (2026-11-26)."""
+    return ["+extension", "GLX"] if gl else []
+
+
 @in_phase("client_start")
-def start_xvfb(artifact_dir: Path, screen_size: tuple[int, int] = (1280, 720)) -> tuple[subprocess.Popen[Any], str, Any]:
+def start_xvfb(artifact_dir: Path, screen_size: tuple[int, int] = (1280, 720), *,
+               gl: bool = False) -> tuple[subprocess.Popen[Any], str, Any]:
     """Start Xvfb and return (process, display, log_handle).
 
     Readiness comes from Xvfb's -displayfd announcement (or the X socket
     file event on fallback), never from assuming survival after a delay.
+    `gl=True` adds GLX for the Java/NeoForge clients; see xvfb_gl_args.
     """
     width, height = validate_screen_size(screen_size)
     screen_spec = f"{width}x{height}x24"
+    gl_args = xvfb_gl_args(gl)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     log_handle = (artifact_dir / "xvfb.log").open("wb")
     read_fd, write_fd = os.pipe()
@@ -750,6 +763,7 @@ def start_xvfb(artifact_dir: Path, screen_size: tuple[int, int] = (1280, 720)) -
                     screen_spec,
                     "-nolisten",
                     "tcp",
+                    *gl_args,
                 ],
                 cwd=REPO_ROOT,
                 stdout=log_handle,
@@ -758,7 +772,7 @@ def start_xvfb(artifact_dir: Path, screen_size: tuple[int, int] = (1280, 720)) -
                 pass_fds=(write_fd,),
             )
         except (FileNotFoundError, OSError):
-            return _start_xvfb_scan(artifact_dir, log_handle, screen_spec)
+            return _start_xvfb_scan(artifact_dir, log_handle, screen_spec, gl_args)
         finally:
             try:
                 os.close(write_fd)
@@ -776,7 +790,7 @@ def start_xvfb(artifact_dir: Path, screen_size: tuple[int, int] = (1280, 720)) -
                 if process.poll() is not None:
                     # -displayfd unsupported or Xvfb failed: fall back to scan.
                     stop_process(process)
-                    return _start_xvfb_scan(artifact_dir, log_handle, screen_spec)
+                    return _start_xvfb_scan(artifact_dir, log_handle, screen_spec, gl_args)
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     stop_process(process)
@@ -786,13 +800,13 @@ def start_xvfb(artifact_dir: Path, screen_size: tuple[int, int] = (1280, 720)) -
                         chunk = os.read(read_fd, 64)
                         if not chunk:
                             stop_process(process)
-                            return _start_xvfb_scan(artifact_dir, log_handle, screen_spec)
+                            return _start_xvfb_scan(artifact_dir, log_handle, screen_spec, gl_args)
                         display_number += chunk
                         if display_number.endswith(b"\n"):
                             number = int(display_number.decode().strip())
                             if number in _OWNER_DISPLAYS:
                                 stop_process(process)
-                                return _start_xvfb_scan(artifact_dir, log_handle, screen_spec)
+                                return _start_xvfb_scan(artifact_dir, log_handle, screen_spec, gl_args)
                             return process, f":{number}", log_handle
                     else:
                         _drain(key.fd)
@@ -808,14 +822,14 @@ def start_xvfb(artifact_dir: Path, screen_size: tuple[int, int] = (1280, 720)) -
 
 
 def _start_xvfb_scan(
-    artifact_dir: Path, log_handle: Any, screen_spec: str
+    artifact_dir: Path, log_handle: Any, screen_spec: str, gl_args: list[str]
 ) -> tuple[subprocess.Popen[Any], str, Any]:
     for display_number in range(99, 200):
         socket_path = Path(f"/tmp/.X11-unix/X{display_number}")
         if socket_path.exists():
             continue
         process = subprocess.Popen(
-            ["Xvfb", f":{display_number}", "-screen", "0", screen_spec, "-nolisten", "tcp"],
+            ["Xvfb", f":{display_number}", "-screen", "0", screen_spec, "-nolisten", "tcp", *gl_args],
             cwd=REPO_ROOT,
             stdout=log_handle,
             stderr=subprocess.STDOUT,
