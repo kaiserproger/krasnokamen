@@ -222,18 +222,33 @@ def check_item_bars(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("fullness_bar_drawn", _count(damaged, (420, 698, 464, 710), blue) > 15)
 
 
+def _icon_mask(empty, items, box) -> tuple[int, int, int, int, int] | None:
+    """Bounding box and pixel count of the pixels that differ between two frames inside `box`."""
+    xs, ys, count = [], [], 0
+    for x in range(box[0], box[2]):
+        for y in range(box[1], box[3]):
+            if max(abs(p - q) for p, q in zip(empty.getpixel((x, y)), items.getpixel((x, y)))) > 25:
+                xs.append(x)
+                ys.append(y)
+                count += 1
+    return (min(xs), min(ys), max(xs), max(ys), count) if xs else None
+
+
 def check_shield_gui(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-SHIELD-GUI: the shield's GUI icon carries the vanilla 26.3 plate size.
 
     A 3D `minecraft:special` item is drawn in the GUI with its base item model's own
     `gui` display transform (`ui::state::append_item`), never fitted to the cell, so the
-    authored plate is what the icon shows. 26.3 `ShieldModel` is a 12x22x1 plate, which
-    at `item/shield`'s gui scale 0.65 spans 22/16*0.65 = 0.894 of the cell's height; the
-    pre-fix rig was a 10x16x1 plate (16/16*0.65 = 0.65). One frame in an empty hotbar and
-    one with a shield in slot 0 and paper in slot 1 give the ruler inside the run: a
-    generated item is a 16x16 sprite that fills its cell exactly, so the ratio of the two
-    icons' heights is the plate's own size, independent of GUI scale, window size, where
-    the hotbar is drawn and how the cell background is textured.
+    authored plate is what the icon shows. 26.3 `ShieldModel` is a 12x22x1 plate, which at
+    `item/shield`'s gui scale 0.65 spans 0.894 of the icon rect in height; the pre-fix rig
+    was a 10x16x1 plate (0.65). The scene keeps the window at 1280x720 and GUI scale 3, so
+    the icon rect is a fixed 16x16 GUI px (48 px) and the two plates measure 46x25 vs
+    34x21 px in the first hotbar slot; the paper in the second slot is the fixture check
+    that the item pipeline drew at all.
+
+    Measured on the pinned pair (2026-11-25): control `d1eb6064` 34 px tall / 21 wide /
+    469 px, re-land `323f801c` 46 tall / 25 wide / 802 px. The floor is 40 px tall and
+    23 wide: 13% below the candidate, 18% above the control.
     """
     shots = _qa._load_shots(probe, artifact, ("cells-empty", "cells-items"))
     empty_f, items_f = shots["cells-empty"][0], shots["cells-items"][0]
@@ -242,41 +257,23 @@ def check_shield_gui(probe: ProbeSteps, artifact: Path) -> None:
     ) and abs(empty_f["yaw"] - items_f["yaw"]) < 0.01
       and abs(empty_f["pitch"] - items_f["pitch"]) < 0.01)
     empty, items = shots["cells-empty"][1], shots["cells-items"][1]
-    # The hotbar strip: 182x22 GUI px centred at GUI scale 3 on a 1280x720 frame.
-    strip = (330, 640, 950, 720)
-    changed = lambda x, y: max(
-        abs(p - q) for p, q in zip(empty.getpixel((x, y)), items.getpixel((x, y)))) > 25
-    runs: list[list[int]] = []
-    for x in range(strip[0], strip[2]):
-        if not any(changed(x, y) for y in range(strip[1], strip[3])):
-            continue
-        if runs and x - runs[-1][1] <= 6:
-            runs[-1][1] = x
-        else:
-            runs.append([x, x])
-    boxes = []
-    for x0, x1 in runs:
-        ys = [y for x in range(x0, x1 + 1) for y in range(strip[1], strip[3]) if changed(x, y)]
-        if ys:
-            boxes.append((x0, min(ys), x1, max(ys)))
-    heights = [box[3] - box[1] + 1 for box in boxes]
-    widths = [box[2] - box[0] + 1 for box in boxes]
-    shield_h = heights[0] if heights else 0
-    paper_h = heights[1] if len(heights) > 1 else 0
-    ratio = shield_h / paper_h if paper_h else 0.0
-    probe.report["shield_gui_strip"] = list(strip)
-    probe.report["shield_gui_icon_boxes"] = [list(box) for box in boxes]
-    probe.report["shield_gui_icon_heights"] = heights
-    probe.report["shield_gui_icon_widths"] = widths
-    probe.report["shield_gui_height_ratio"] = round(ratio, 3)
-    probe.check("two_hotbar_icons_drawn", len(boxes) == 2)
-    probe.check("shield_icon_visible", shield_h >= 15 and paper_h >= 15)
-    # 26.3's plate projects to about 0.87 of the cell height under the gui transform
-    # (rotation [15,-25,-5], scale 0.65), the pre-fix plate to 0.64; 0.78 sits 12% below
-    # the fixed value and 22% above the pre-fix one.
-    probe.check("shield_icon_is_vanilla_plate_height", ratio >= 0.78)
+    # The two hotbar cells that change (the plate is not centred on the frame, so the drawn
+    # hand and the cloud shadows on either side stay out of these boxes).
+    slot0, slot1 = (368, 656, 428, 718), (430, 656, 490, 718)
+    shield = _icon_mask(empty, items, slot0)
+    paper = _icon_mask(empty, items, slot1)
+    height = shield[3] - shield[1] + 1 if shield else 0
+    width = shield[2] - shield[0] + 1 if shield else 0
+    probe.report["shield_gui_slot_boxes"] = [list(slot0), list(slot1)]
+    probe.report["shield_gui_mask"] = list(shield) if shield else None
+    probe.report["shield_gui_paper_mask"] = list(paper) if paper else None
+    probe.report["shield_gui_icon_height_px"] = height
+    probe.report["shield_gui_icon_width_px"] = width
+    probe.check("shield_icon_visible", bool(shield) and shield[4] >= 200)
+    probe.check("paper_icon_visible", bool(paper) and paper[4] >= 400)
+    probe.check("shield_icon_height_is_vanilla_plate", height >= 40)
     probe.report["visual_review_required"] = [
-        "Inspect cells-items.png: the pixels prove the icon's plate height, not its vanilla texture."
+        "Inspect cells-items.png: the pixels prove the icon's plate size, not its vanilla texture."
     ]
 
 

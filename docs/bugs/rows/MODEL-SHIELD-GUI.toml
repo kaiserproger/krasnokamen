@@ -6,6 +6,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:92"
-regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::shield_plate_and_handle_match_the_vanilla_263_model"]
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::shield_plate_and_handle_match_the_vanilla_263_model", "harness:scene-shot:native-shield-gui"]
+proving_assertions = { "harness:scene-shot:native-shield-gui" = "shield_icon_height_is_vanilla_plate" }
 repro_check = "round 2 (XClientUi f2c3a0f8): the shield rig is now the vanilla 26.3 ShieldModel - the plate addBox(-6,-11,-2,12,22,1) at texOffs(0,0) plus the handle addBox(-1,-3,-1,2,6,6) at texOffs(26,0) - and the ref asserts the authored 12 layer quads against it. The earlier 'blocked on rig content' line is closed: the rig exists. Control receipts/XClientUi/shield-control.log: with f2c3a0f8 reverted the ref is red (17 passed, 1 failed). candidate: area=client, real-client check required - the narrow 16x16 GUI cell is the stage-3 visual gate"
 fix_commit = "client:f2c3a0f8"

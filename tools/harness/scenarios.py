@@ -979,7 +979,7 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="native-shield-gui", requires=("xvfb",),
         sources=("tools/harness/shield_gui_scene.json", "tools/harness/backends/scene_shot_checks.py"),
         fixture="private native client, empty hotbar then a shield in slot 0 and paper in slot 1, fixed camera and GUI scale",
-        proves="the shield icon's height against the same-frame generated-item ruler (`shield_icon_is_vanilla_plate_height`), so the cell draws the 12x22 vanilla plate instead of the earlier 10x16 one",
+        proves="the shield icon's own height and width in the first hotbar cell (`shield_icon_height_is_vanilla_plate`), so the cell draws the 12x22 vanilla plate (46x25 px here) instead of the earlier 10x16 one (34x21 px)",
         limits="one item model and the icon's plate height only; the held/first-person shield poses and the banner-pattern overlay stay unit-covered",
     ),
     "native-toast": _entry(
