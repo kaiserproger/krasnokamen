@@ -1,0 +1,66 @@
+{
+  "id": "HS-3",
+  "verdict": "promoted",
+  "fix_commit": "d3e8d4686",
+  "fix_commit_full": "d3e8d4686440e2eb24b16e01c3ac0c8989c216ca",
+  "promoted_at": "2026-11-25T14:16:17+00:00",
+  "tree_head": "c2d54b3342f7882ec92a078278435c8301bed418",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "363749ad7034e60d0613c3dea7a3723eae045a9e4b2697336bd516b15df98165",
+  "control_tree_head": "c2d54b3342f7882ec92a078278435c8301bed418",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/falling.rs",
+    "crates/mc-core/src/redstone/mod.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/falling_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:falling::tests::restored_due_gravity_tick_starts_the_fall_without_nearby_writes": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/falling_tests.rs",
+        "line": 517,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "harness:entities:native-v2-ledger-gravity-tick": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-ledger-gravity-tick --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123MechanicsG/.analysis/validation/20261125T135428-ledger-promote-dc8n_m1h/regressions-client-2.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123MechanicsG/.analysis/validation/20261125T135428-ledger-promote-dc8n_m1h/client-artifacts/20261125T140415-native-v2-ledger-gravity-tick-ojez00bj/result.json",
+      "assertion": {
+        "name": "saved_tick_moved_the_sand"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-core:falling::tests::restored_due_gravity_tick_starts_the_fall_without_nearby_writes": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:entities:native-v2-ledger-gravity-tick": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123MechanicsG/.analysis/validation/20261125T135428-ledger-promote-dc8n_m1h/client-artifacts/20261125T141449-native-v2-ledger-gravity-tick-iwmld0vy/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123MechanicsG/.analysis/validation/20261125T132205-native-v2-ledger-gravity-tick-01kiw6wx/result.json",
+    "tree_head": "c2d54b3342f7882ec92a078278435c8301bed418",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "f22dc8a74655372408f61e2909b7b7651de25ea387a43530bba5b2da9c3b4c2d",
+    "covers": [
+      "harness:entities:native-v2-ledger-gravity-tick"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123MechanicsG/.analysis/validation/20261125T135428-ledger-promote-dc8n_m1h"
+}
