@@ -247,6 +247,12 @@ fn fixture_furnished(
         .flat_map(|x| (-1..=1).map(move |z| ChunkPos { x, z }))
         .collect();
     world.ensure_blocking(&chunks.iter().map(|chunk| (*chunk, 0)).collect());
+    // A fixture column models a finished generation: adoption defers a piece whose
+    // box is resident but not full (see bounds_generated).
+    let mut world = world;
+    for chunk in &chunks {
+        world.set_chunk_generation_status(chunk.x, chunk.z, "full");
+    }
     let mut state = TickState::new(registry, world, 2, 512);
     state
         .tickets
@@ -518,6 +524,29 @@ fn a_street_whose_bounds_graze_a_bed_is_not_a_house_site() {
     assert!(
         kinds.is_empty(),
         "a street piece must certify no building, even with a bed in its bounds: {kinds:?}"
+    );
+}
+
+#[test]
+fn a_piece_box_is_not_adopted_until_its_chunks_reach_full_generation() {
+    let (mut state, _chunks) = fixture(vec![BELL], vec![], vec![]);
+    let bounds = ScriptWorldBounds::new([0, 201, 0], [15, 205, 15]).unwrap();
+    state.world.set_chunk_generation_status(0, 0, "full");
+    assert!(
+        super::bounds_generated(&state, &bounds),
+        "a full column adopts its piece at once"
+    );
+    state
+        .world
+        .set_chunk_generation_status(0, 0, "structure_starts");
+    assert!(
+        !super::bounds_generated(&state, &bounds),
+        "a resident column at structure_starts has no village blocks yet, so a piece over it must wait"
+    );
+    state.world.set_chunk_generation_status(0, 0, "full");
+    assert!(
+        super::bounds_generated(&state, &bounds),
+        "once the column is full the piece is adopted"
     );
 }
 

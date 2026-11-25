@@ -20,8 +20,7 @@ pub(super) fn candidate_kinds<'a>(
     std::iter::once(farmer)
         .filter(move |_| farm_first)
         .chain(
-            std::iter::once(BuildingKind::Storage)
-                .filter(move |_| needed(state, record, images)),
+            std::iter::once(BuildingKind::Storage).filter(move |_| needed(state, record, images)),
         )
         .chain(
             needed_kinds(record, state.settlements.member_count(record.id)).filter(move |kind| {
