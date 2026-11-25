@@ -1053,6 +1053,22 @@ SCENARIOS: dict[str, Scenario] = {
         limits="one holder and one respawn; the fall-distance assertion needs the client's player coordinates "
                "(recorded, and named incomplete otherwise); the run is a small battle, not the take-7 geometry",
     ),
+    "battle-live-dismounted-rider-walk": _entry(
+        id="battle-live-dismounted-rider-walk",
+        summary="A rider whose horse is killed mid-charge walks afterwards instead of keeping a charge-sized drive",
+        owner="core:harness", evidence="graphical", profile="battle-dismount",
+        scenario_id="battle-live-dismounted-rider-walk", requires=("xvfb",),
+        sources=("tools/harness/backends/battle_dismount.py", "tools/harness/backends/battle_recovery.py",
+                 "tools/battle/run-battle.py"),
+        fixture="field-1k with 200 a side on KRASNOKAMEN_BATTLE_WORLD, one real Horizon holder and a recorder; "
+                "the scene waits for a mounted member of the published battle whose velocity shows a charge, "
+                "kills that horse through the console fifo (kill <uuid>) and reads 100 published ticks",
+        proves="the horse dies under the rider (the console acknowledges the kill, his vehicle clears and he is "
+               "alive), and his own per-tick ground speed stays at the walking speed (max step <= 1.35x the walk "
+               "step) instead of the sweep_drives charge displacement",
+        limits="one rider and one horse; the witness is the published entity position/velocity, so a battle that "
+               "never charges is incomplete, not a pass",
+    ),
     "battle-live-spectator-follows-respawn": _entry(
         id="battle-live-spectator-follows-respawn",
         summary="A spectator bound to a battle holder keeps his camera on him across death and respawn",
