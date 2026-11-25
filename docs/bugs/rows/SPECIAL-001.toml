@@ -4,7 +4,7 @@ title = "Pot/shelf no storage."
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPECIAL-001"
 regression = ["cargo:mc-core:interact_parity_tests::interact_parity_decorated_pot_stores_one_item", "cargo:mc-core:shelf::tests::shelf_checkpoint_native_chunk_restart_preserves_stacks_and_alignment", "harness:entities:native-v2-ledger-pot-shelf"]
 proving_refs = ["cargo:mc-core:interact_parity_tests::interact_parity_decorated_pot_stores_one_item", "harness:entities:native-v2-ledger-pot-shelf"]
@@ -12,3 +12,4 @@ fix_commit = "patch:53952b4d6e6da92a1986b8e8d13d89d61ea082a90e3739b6f89c13040c67
 failing_first = "reported"
 repro_check = "CONTROL (patch mode, kept API): the real commit is `35308579c`, a 33-file bulk commit carrying six rows (axe, sponge, brushing, painting, spawn protection, dragon egg, special storage); its pot/shelf dispatch statement was later merged with `chiseled_shelf` by `be01ee35f`, so `docs/bugs/promotions/SPECIAL-001.patch` carries that statement's HEAD equivalent (delete only the `special_storage::use_on` call, keep `chiseled_shelf`), and reversing it leaves the fix's `special_storage.rs` compiled and imported but unreferenced by the dispatch - the accepted kept-helper class (README:250-256). Every other hunk of the commit is a class (a) omission for another row's behaviour; the map is `docs/bugs/promotions/SPECIAL-001.hunks.md`.\n\nMeasured red before the map was written: with only that call removed the pot ref reds at `interact_parity_tests.rs:103` (`left: 3, right: 2` - the hand keeps all three diamonds), `20261125T144102-test-5_em1pk1`. The shelf module is untouched, so `shelf::tests::shelf_checkpoint_native_chunk_restart_preserves_stacks_and_alignment` stays green with and without the patch and is not proved by it (excluded from `proving_refs`).\n\nGRAPHICAL: `native-v2-ledger-pot-shelf` now asserts `pot_stored_one_item` from bounded reads of the client's own count instead of waiting for a change, because a wait timeout is unrunnable as a control and this row's question is exactly whether one diamond left the hand."
 proving_assertions = { "cargo:mc-core:interact_parity_tests::interact_parity_decorated_pot_stores_one_item" = "crates/mc-core/src/interact_parity_tests.rs:103", "harness:entities:native-v2-ledger-pot-shelf" = "pot_stored_one_item" }
+promotion = "docs/bugs/promotions/SPECIAL-001.json"
