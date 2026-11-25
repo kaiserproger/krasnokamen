@@ -342,8 +342,17 @@ pub(crate) fn work(
     let project = state
         .settlements
         .get(id)
-        .and_then(|record| crate::settlements::construction::project_of_builder(record, uuid))?;
-    let next = executor::next_cell(state, id, &project.structure).ok()??;
+        .and_then(|record| crate::settlements::construction::project_of_builder(record, uuid))?
+        .clone();
+    let structure = project.structure.clone();
+    let Some(next) = executor::next_cell(state, id, &structure).ok()? else {
+        // Nothing left to place. A structure can already be finished here — the L2 planner
+        // appends a stage to the committed L1 record and the executor commits it again — and then
+        // only `finish_project` closes the project: without this the builder is released on every
+        // shift and the upgrade is never certified (20261125T053949).
+        crate::settlements::construction::finish_project(state, id, &structure);
+        return None;
+    };
     if let Some((item, count)) = executor::next_material(state, id, &project.structure).ok()?
         && !carried(v, item, count)
     {
@@ -354,7 +363,7 @@ pub(crate) fn work(
     }
     // Already outside the footprint and in reach of the next cell: keep
     // standing here rather than walking around the site for every cell.
-    if in_reach(state, slot, project, next) {
+    if in_reach(state, slot, &project, next) {
         let here = crate::settlements::allocator::at(state.entities.pos(slot));
         return Some(WorkTarget {
             pos: here,
@@ -363,7 +372,7 @@ pub(crate) fn work(
     }
     let stand = site_target(
         state,
-        project,
+        &project,
         next,
         slot,
         v.navigation_target.filter(|_| !v.navigation_search_failed),
