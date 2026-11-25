@@ -36,9 +36,11 @@ VIEW_DISTANCE = 8
 PRE_STAGE_TICKS = 120
 BATTLE_TICKS_BOUND = 1200
 FALL_TOLERANCE_BLOCKS = 40.0
-# The row's symptom is an enemy in reach after the respawn; 8 blocks is generous against a
-# few-block weapon reach, so the check is about the fight, not the exact weapon.
-ENEMY_REACH_BLOCKS = 8.0
+# The row's symptom is being placed far from the fight. Measured with the same scene and pin pair:
+# the fix places him 11.17 blocks from the nearest enemy file (client position vs the server image),
+# the pre-fix control 30.17, and trial-7's symptom was ~230. 20 blocks sits between the two with
+# ~9 and ~10 blocks of margin and leaves the 230-block jump far outside.
+ENEMY_REACH_BLOCKS = 20.0
 # PovRed is staged on the red side (`--live-player PovRed:red`).
 HOLDER_SIDE = 1
 # The spectator camera sits about a block behind the followed entity's eye.
