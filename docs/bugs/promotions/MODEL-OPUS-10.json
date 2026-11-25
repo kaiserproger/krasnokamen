@@ -1,0 +1,82 @@
+{
+  "id": "MODEL-OPUS-10",
+  "verdict": "promoted",
+  "fix_commit": "client:3bfbd7b6",
+  "fix_commit_full": "3bfbd7b6902c8265f57be8ca3890359e691bfe87",
+  "promoted_at": "2026-11-25T13:21:39+00:00",
+  "tree_head": "6670d89e3675c8f0f3b1d7a9de88c0d73c56dabd",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T131449-native-rig-parity-kfdk_vpx/result.json",
+    "client_head": "e3678206dc82240442206f6d59b2ed3d1f80a643",
+    "server_binary_sha256": "46180f13170af52eb40832611a1855c1ebab4f5699028190585a86b29e16e203",
+    "red": [
+      "harness:scene-shot:native-rig-parity"
+    ],
+    "states": {
+      "harness:scene-shot:native-rig-parity": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T131617-native-rig-parity-7jdv5pzt/result.json",
+    "client_head": "3bfbd7b6902c8265f57be8ca3890359e691bfe87",
+    "server_binary_sha256": "46180f13170af52eb40832611a1855c1ebab4f5699028190585a86b29e16e203",
+    "green": [
+      "harness:scene-shot:native-rig-parity"
+    ],
+    "states": {
+      "harness:scene-shot:native-rig-parity": "green"
+    },
+    "tree_head": "6670d89e3675c8f0f3b1d7a9de88c0d73c56dabd",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T131617-native-rig-parity-7jdv5pzt/result.json",
+    "client_head": "3bfbd7b6902c8265f57be8ca3890359e691bfe87",
+    "server_binary_sha256": "46180f13170af52eb40832611a1855c1ebab4f5699028190585a86b29e16e203",
+    "green": [
+      "harness:scene-shot:native-rig-parity"
+    ],
+    "states": {
+      "harness:scene-shot:native-rig-parity": "green"
+    },
+    "tree_head": "6670d89e3675c8f0f3b1d7a9de88c0d73c56dabd",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "0622414eba9c283339a746290872e89a6bbebdc3",
+    "paths": [
+      "assets/krasnokamen/models/entity/allay.json",
+      "assets/krasnokamen/models/entity/bee_baby.json",
+      "assets/krasnokamen/models/entity/cod.json",
+      "assets/krasnokamen/models/entity/donkey.json",
+      "assets/krasnokamen/models/entity/donkey_saddle_equipment.json",
+      "assets/krasnokamen/models/entity/elder_guardian.json",
+      "assets/krasnokamen/models/entity/guardian.json",
+      "assets/krasnokamen/models/entity/horse.json",
+      "assets/krasnokamen/models/entity/horse_body_equipment.json",
+      "assets/krasnokamen/models/entity/horse_saddle_equipment.json",
+      "assets/krasnokamen/models/entity/mule.json",
+      "assets/krasnokamen/models/entity/mule_saddle_equipment.json",
+      "assets/krasnokamen/models/entity/skeleton_horse.json",
+      "assets/krasnokamen/models/entity/zombie_horse.json"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::animation_tests::animation_roleless_named_parts_move_without_erasing_authored_orientation": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::asset_model_regression_tests::hoglin_strider_and_bee_keep_their_signature_parts": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T131900-ledger-promote-5oyl6wex"
+}
