@@ -4,9 +4,10 @@ title = "A viewer whose menu is anchored on a half that went cold is never match
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "Filed from the independent review of wave 2 (receipts/D123/D123Persist/review/REVIEW-wave2-1.md N1), after REFRESH-CONTAINER-VIEWERS-COLD-FORK fixed the partial-image case. `tick/containers.rs` `refresh_container_viewers` matches viewers by `container_cells(state, open) == cells`, so a viewer anchored on a now-cold half `H` is not matched when the mutation is on the resident half `R` (`[H] != [R]`): no partial image and no duplicate is sent (the reviewer checked custody), but the menu keeps its previous image until the first click closes it through the residency check in `tick/input/inventory.rs` `container_click`."
 regression = ["cargo:mc-core:chests::tests::external_custody_refresh_closes_a_menu_anchored_on_the_cold_half"]
 failing_first = "not recorded"
 repro_check = ["Control: cargo:mc-core:chests::tests::external_custody_refresh_closes_a_menu_anchored_on_the_cold_half. A double chest straddles a chunk boundary; the viewer opens the menu on the half whose chunk is then evicted (container_cells of a cold half resolves to itself alone), and the only custody refresh this menu gets is the resident partner's. The test requires MenuClosed for its window, no MenuContents for it, the player menu removed and the viewer gone from OpenContainers; with the fix hunks reversed the refresh drops the cold-anchored viewer before the close and every one of those assertions fails. Shape chosen: (a), the one-clause widening of the existing viewer selection in tick/containers.rs refresh_container_viewers (a cold anchor is unusable by definition - every click closes it - so a refresh of another container closing it is consistent with the custody rule), not (b)'s new eviction hook; the accepted implication is that such a menu closes at the next custody refresh rather than at the moment of eviction. No persistence-format change: OpenContainers already names the anchor cell as runtime-only state, and MenuClosed plus the window-0 inventory resync already exist in the protocol."]
 fix_commit = "3f3ae4ad458a6ec64f3b6f06793dd113895d8c80"
+promotion = "docs/bugs/promotions/REFRESH-CONTAINER-VIEWERS-COLD-ANCHOR-STALE.json"
