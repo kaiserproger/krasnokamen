@@ -1,0 +1,68 @@
+{
+  "id": "SCENARIO-MOB-ATTACK-NO-PROGRESS",
+  "verdict": "promoted",
+  "fix_commit": "patch:e50e92a77bb814b738f77a401decfa11ebd1714c0fd993b949803739b1b585c0",
+  "fix_commit_full": "patch:e50e92a77bb814b738f77a401decfa11ebd1714c0fd993b949803739b1b585c0",
+  "promoted_at": "2026-11-25T10:38:17+00:00",
+  "tree_head": "448cf03cec67a719678c0c98fcf339b6e5baf3d2",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "e50e92a77bb814b738f77a401decfa11ebd1714c0fd993b949803739b1b585c0",
+  "reversed_files": [
+    "crates/mc-core/src/blueprint.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:hostile_tests::daylight_zombie_acquires_and_damages_a_player_eight_blocks_away": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/hostile_tests.rs",
+        "line": 107,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "harness:entities:native-v2-ledger-mob-attack": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    },
+    "python:tools.harness.matrix_domains.test_combat:MobTargetsBaselineTests.test_a_probe_without_any_hit_still_times_out": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.matrix_domains.test_combat:MobTargetsBaselineTests.test_baseline_is_taken_before_the_mob_can_hit": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-core:hostile_tests::daylight_zombie_acquires_and_damages_a_player_eight_blocks_away": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.matrix_domains.test_combat:MobTargetsBaselineTests.test_a_probe_without_any_hit_still_times_out": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.matrix_domains.test_combat:MobTargetsBaselineTests.test_baseline_is_taken_before_the_mob_can_hit": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261125T102103-native-v2-ledger-mob-attack-2k59c1jt/result.json",
+    "tree_head": "448cf03cec67a719678c0c98fcf339b6e5baf3d2",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "aa150265625cd28b04d00c3dcb4cf477fa1aae6f6b0960dc8655cdf752b2c908",
+    "covers": [
+      "harness:entities:native-v2-ledger-mob-attack"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261125T102155-ledger-promote-h1sig9l5"
+}
