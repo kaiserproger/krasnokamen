@@ -1,0 +1,12 @@
+[[bug]]
+id = "SETTLEMENT-HOUSE-LEVEL3-CERT-BOX-ONE-SHORT"
+title = "The house level-3 certificate box is one block short in z, so the enclosure check inspects a box narrower than the level's cells"
+area = "gameplay"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "D123UpgradeCell"
+regression = ["cargo:mc-core:settlements::buildings::tests::the_house_certificate_boxes_match_the_footprints_they_inspect"]
+failing_first = "reported"
+repro_check = "`the_house_certificate_boxes_match_the_footprints_they_inspect` asserts level 1 and level 2 cert boxes equal their footprints and level 3 is `[0,0]..[10,6]` against cells `[0,0]..[10,7]`; the level-3 difference is measured in crates/mc-core/assets/blueprints/house.json (`levels[2].cert` [11,5,7] against an 11-deep layer set). No graphical repro: the level survives as a plan-only difference at the moment this row was filed."
+notes = "Found while localising SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE: level 3 is not the L2 cause (level 2's box matches exactly), it is blueprint data."
