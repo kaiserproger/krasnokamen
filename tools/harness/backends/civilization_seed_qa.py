@@ -414,7 +414,10 @@ def _aim_at_baby(probe: ProbeSteps, entity: dict[str, Any],
             # (20261124T035536: "entity identity left client-visible state while
             # approaching"). Re-read the census and approach again; an identity
             # that is genuinely gone trips the visibility check below.
-            if "left client-visible state" not in str(error):
+            # Run 20261125T040502 refused with the same class of error in another
+            # wording ("entity is not client-visible"), so both wordings retry.
+            text = str(error)
+            if "left client-visible state" not in text and "not client-visible" not in text:
                 raise
             probe.call("minecraft_wait_ticks", {"ticks": 10})
             seen = entity_census(probe, "minecraft:villager")

@@ -579,6 +579,35 @@ class ApproachRetryTests(unittest.TestCase):
         self.assertFalse(teleported)
 
 
+    def test_a_not_client_visible_refusal_is_approached_again_not_fatal(self):
+        # Run 20261125T040502: the same class of failure arrived in another wording,
+        # "entity is not client-visible", and aborted the gate before verdicts.
+        baby = {"entity_id": 7, "entity_uuid": "b7", "entity_type": "minecraft:villager",
+                "received_baby": True, "x": 130.5, "y": 78.0, "z": -218.5}
+        calls = {"approach": 0}
+
+        def call(name, arguments):
+            if name == "minecraft_approach_entity":
+                calls["approach"] += 1
+                if calls["approach"] == 1:
+                    raise RuntimeError('minecraft_approach_entity failed: {"code": "entity is not '
+                                       'client-visible", "retryable": false, "stage": "automation"}')
+                return {"in_reach": True}
+            if name == "minecraft_list_entities":
+                return {"entities": [baby], "visible_count": 1, "truncated": False,
+                        "next_cursor": None}
+            return {}
+
+        probe = Mock()
+        probe.call.side_effect = call
+        probe.observe.return_value = {"player": {"x": 130.0, "y": 78.0, "z": -215.0}}
+        hit = {"type": "entity", "entity_uuid": "b7"}
+        with patch.object(qa, "_aim", return_value=hit):
+            observed, teleported = qa._aim_at_baby(probe, baby, None)
+        self.assertEqual(calls["approach"], 2, "the not-visible refusal is retried, not fatal")
+        self.assertEqual(observed, hit)
+        self.assertFalse(teleported)
+
     def test_a_baby_inside_a_house_is_observed_from_beside_it(self):
         # 20261124T205323: the observer was teleported onto the baby's own cell
         # inside its house and the raycast hit cobblestone at 120,71,-274, which
