@@ -581,6 +581,30 @@ fn a_furnace_site_stays_at_the_store_level_not_on_a_platform_above_it() {
     );
 }
 
+/// D123 (CIV-B3): a newborn needs a spare bed, so a town whose beds merely equal
+/// its residents must still ask for a House - with one bed spare it may not.
+#[test]
+fn a_house_is_needed_while_no_bed_is_spare() {
+    let (mut state, id, _) = fixture();
+    let residents = 4;
+    let record = state.settlements.get_mut(id).unwrap();
+    certificate(record, BuildingKind::Storage, 1, false);
+    for _ in 0..residents {
+        certificate(record, BuildingKind::House, 1, false);
+    }
+    assert_eq!(
+        needed_kinds(record, residents).next(),
+        Some(BuildingKind::House),
+        "beds == residents leaves no spare bed for a birth"
+    );
+    certificate(record, BuildingKind::House, 1, false);
+    assert_ne!(
+        needed_kinds(record, residents).next(),
+        Some(BuildingKind::House),
+        "one spare bed is enough housing"
+    );
+}
+
 #[test]
 fn pending_noniron_order_blocks_unrelated_furnaces_and_funded_houses() {
     let (mut state, id, _) = smelting_house_stock();
@@ -1245,6 +1269,8 @@ fn autonomous_upgrade_requires_blueprint_provenance_and_materials() {
     ] {
         certificate(record, kind, 1, false);
     }
+    // A spare bed is housing, so no new kind is needed and only the upgrade remains.
+    certificate(record, BuildingKind::House, 1, false);
     assert_eq!(needed_kinds(record, 1).next(), None);
     let player_certificate = record
         .buildings

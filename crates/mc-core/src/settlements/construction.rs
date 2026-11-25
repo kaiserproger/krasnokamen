@@ -1039,7 +1039,9 @@ pub(super) fn needed_kinds(
         .sum();
     let kinds: [(BuildingKind, bool); AUTONOMOUS_KINDS] = [
         (BuildingKind::Storage, !has(BuildingKind::Storage)),
-        (BuildingKind::House, beds < residents),
+        // A newborn needs a free bed (the breeding path checks spare beds), so
+        // housing is short while no bed is spare, not only when beds run out.
+        (BuildingKind::House, beds <= residents),
         (
             BuildingKind::Workshop(Profession::Farmer),
             !has(BuildingKind::Workshop(Profession::Farmer)),
