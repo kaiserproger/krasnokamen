@@ -83,11 +83,19 @@ then plain at a fixed pad and camera. `check_entity_fire` reads the frame's own
 - `fire_overlay_is_one_layer` — one slice, not two;
 - `fire_band_count` — 12 indices (2 bands). Both loops give the pig `n = ceil(y_top / 0.45)` =
   2 bands, so this cannot separate the halves either;
-- `fire_band_span` — **2.2..2.5 blocks, the row's discriminator.** Derived from the model, not
-  fitted: the control stacks `(1 + 0.45) * unit`, the fix `(1.4 + 0.45) * unit`, with
-  `unit = bbWidth * scale * 1.4 = 1.26` for the scene pig, so the analytic spans are **1.827** and
-  **2.331**; the registered two-sided band sits around the vanilla 2.331. The earlier receipts
-  `20261125T122429` / `20261125T123333` measured exactly those numbers on the old pins.
+- `fire_band_span` — **the row's discriminator, asserted exactly** (round 3): the control stacks
+  `(1 + 0.45) * unit`, the fix `(1.4 + 0.45) * unit`, with `unit = bbWidth * scale * 1.4 = 1.26`
+  for the scene pig, so the analytic spans are **1.827** and **2.331**. The geometry is
+  deterministic — six of six pinned takes measured exactly those three-decimal values — so the
+  check now requires `|span - 2.331| <= 0.01`, not the old 2.2..2.5 window (which also passed bands
+  stacked DOWNWARD and band heights of 1.30..1.53);
+- `fire_bands_start_at_the_feet` — the lowest fire vertex sits on the entity's own bbox bottom (the
+  body layers' min y) within 0.002, because vanilla stacks the bands from the feet upward. The
+  pre-image also starts at the feet (its span is what fails), so this assertion is green on both
+  halves and exists to reject a downward stack that keeps the 2.331 span.
+
+The earlier receipts `20261125T122429` / `20261125T123333` measured exactly those numbers on the old
+pins.
 
 Not witnessed: the sprite parity, the u mirroring and the camera-facing rotation. Both halves
 submit a single fire layer and the plane looks the same in both trees, so those stay covered by

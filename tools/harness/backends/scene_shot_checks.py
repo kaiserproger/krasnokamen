@@ -305,15 +305,21 @@ def check_entity_fire(probe: ProbeSteps, artifact: Path) -> None:
     That detail is not observable here: both the pre-fix billboard and the 26.3 bands submit a
     single `EntityFire` texture layer, so the sprite parity and the mirroring stay unit-covered
     (`presentation::tests::fire_bands_follow_the_vanilla_flame_feature_numbers`). What the frame can
-    witness is the shape. Both loops give two bands for a pig, so the count cannot separate them;
-    the vertical span can: 26.3 stacks 1.85 scaled units (1.4 plus the 0.45 first step) at the
-    pig's 1.26 scale, where the pre-fix loop only reaches 1.45 units - measured 2.331 against
-    1.827 on the pinned pair, so the band is 2.2..2.5. The remaining assertions are fixtures:
-    the plain frame has no fire slice, the burning one has exactly one, and it carries 12 indices.
+    witness is the shape, and it is EXACT: 26.3 stacks 1.85 scaled units (1.4 plus the 0.45 first
+    step) at the pig's 1.26 scale = 2.331, where the pre-image's 1.0-unit quads reach
+    1.45 * 1.26 = 1.827. Both values are deterministic (every one of the six pinned takes measured
+    them to three decimals), so the check asserts |span - 2.331| <= 0.01 instead of a wide window
+    and ALSO pins the bottom: vanilla stacks the bands from the entity's feet upward, so the lowest
+    fire vertex must sit on the entity's own bbox bottom (the body layers' min y) within 0.002. A
+    wide window alone would pass bands stacked downward (same span, feet 0.9 blocks off) and band
+    heights of 1.30..1.53. The remaining assertions are fixtures: the plain frame has no fire
+    slice, the burning one has exactly one, and it carries 12 indices.
 
-    This check does not prove the row's title symptom (a client that never reads the on-fire flag):
-    its control already draws an overlay. `fire_layer_present` is the assertion that would, and it
-    needs a control with the fire dispatch deleted.
+    MODEL-ENTITY-FIRE's own symptom (a client that never dispatches the overlay) is
+    `fire_layer_present`, proven by the committed dispatch-deletion pair (control
+    `client:6608f21c`, restore `client:07d879cd`, three takes per side) and mapped in
+    `docs/bugs/promotions/MODEL-ENTITY-FIRE.hunks.md`; the older band-control pair already drew an
+    overlay, so it could never prove that row.
     """
     shots = _qa._load_shots(probe, artifact, ("burning", "plain"))
     burning = shots["burning"][0].get("entity_extraction") or {}
@@ -341,12 +347,18 @@ def check_entity_fire(probe: ProbeSteps, artifact: Path) -> None:
     fire_min_y = min(float(layer["min"][1]) for layer in fire)
     fire_max_y = max(float(layer["max"][1]) for layer in fire)
     span = fire_max_y - fire_min_y
+    feet = min((float(layer["min"][1]) for layer in body), default=None)
     probe.report["fire_min_y"] = round(fire_min_y, 3)
     probe.report["fire_max_y"] = round(fire_max_y, 3)
     probe.report["fire_span"] = round(span, 3)
-    # 26.3 stacks 1.85 scaled units (1.4 plus the 0.45 first step) at the pig's 1.26 scale; the
-    # pre-fix loop tops out at 1.45 units. Measured 2.331 vs 1.827, so the band is 2.2..2.5.
-    probe.check("fire_band_span", 2.2 <= span <= 2.5)
+    probe.report["fire_feet_y"] = None if feet is None else round(feet, 3)
+    # Derived, not fitted: vanilla stacks 1.85 scaled units (1.4 + the 0.45 first step) at the
+    # pig's bbWidth * scale * 1.4 = 1.26, i.e. 2.331; the pre-image's 1.0-unit quads reach
+    # 1.45 * 1.26 = 1.827. Both are exact to three decimals across six takes, and vanilla runs
+    # from the feet upward, so the lowest fire vertex sits on the body's own bbox bottom.
+    probe.check("fire_band_span", abs(span - 2.331) <= 0.01)
+    probe.check("fire_bands_start_at_the_feet",
+                feet is not None and abs(fire_min_y - feet) <= 0.002)
     probe.report["visual_review_required"] = [
         "Inspect burning.png: the layer geometry proves the bands, not the sprite's texel parity."
     ]
@@ -1223,6 +1235,19 @@ def check_entity_tnt(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["tnt_block_materials"] = [layer.get("material") for layer in blocks]
     probe.report["tnt_block_quads"] = sum(int(layer.get("quads") or 0) for layer in blocks)
     probe.check("empty_frame_has_no_tnt_block", not block_layers(empty_layers))
+    # The control deletes the dispatch, so its entity pass carries no block layer; without this
+    # fixture a failed summon would look identical. The frame reports the entity as eligible even
+    # when nothing was drawn, and the operator dump lists the summoned row.
+    eligible = int(((frame.get("entity_extraction") or {}).get("eligible")) or 0)
+    dump = artifact / "tnt-entities.json"
+    dumped = []
+    if dump.is_file():
+        dumped = (json.loads(dump.read_text()).get("entities") or [])
+    probe.report["tnt_eligible"] = eligible
+    probe.report["tnt_dump_entities"] = [entity.get("entity_type") for entity in dumped]
+    probe.check("tnt_reached_client",
+                eligible >= 1 and any(entity.get("entity_type") == "minecraft:tnt"
+                                      for entity in dumped))
     probe.check("tnt_block_layer_present", bool(blocks))
     probe.check("tnt_block_layer_is_one", len(blocks) == 1)
     probe.check("tnt_block_quads", probe.report["tnt_block_quads"] == 6)
