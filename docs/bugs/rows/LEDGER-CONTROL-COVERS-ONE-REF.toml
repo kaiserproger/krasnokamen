@@ -5,7 +5,7 @@ area = "harness"
 severity = "major"
 status = "fixed"
 source = "Found while re-auditing ISSUE-1-19 for REVIEW-wave2-12 (M1/M4). The stored promotion `docs/bugs/promotions/ISSUE-1-19.json` at `e25d40529` was accepted with `negative_control[harness:scene-shot:issue1-19-hostile-motion] = red` and the cargo ref `unproven-panic`: one red ref carried the row. Residual (not covered yet): the other graphical profiles (`entities` native-v2-*, `chat-visibility`, `datapack-reload`) still accept a red on any assertion of their run."
-repro = "tooling"
+repro = "cargo"
 regression = ["python:tools.harness.test_regressions:ControlCoversEveryProvingRefTests"]
 failing_first = "reported"
 repro_check = "`ledger.row_verdict` reduces a row's control states with `red > all-green > needs-real-client > unrunnable`, so one red ref satisfied the control for the whole row. The real case: `docs/bugs/promotions/ISSUE-1-19.json` at `e25d40529` was accepted with the scene ref red and the cargo ref `unproven-panic`, so the row held although only one of its two refs proved anything — visible once the scene gained an explicit assertion name. Fixed in `a260a34fa`/`71f7b487f`: every proving ref must be RED (`proving_refs` defaults to all refs), an excluded ref must be GREEN on the control, and a crashed/aborted/unrunnable run never counts as red; `ControlCoversEveryProvingRefTests` is the red control (it fails on the pre-fix tree)."
