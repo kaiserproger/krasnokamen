@@ -1,15 +1,12 @@
 diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-index 52acc954c..b6b545aa1 100644
+index 52acc954c..3da75179d 100644
 --- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
 +++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-@@ -331,8 +331,30 @@ pub(crate) fn recover(
-     let record = structure(&ledger, &owner(settlement), handle)?;
+@@ -332,7 +332,28 @@ pub(crate) fn recover(
      let paused = record.snapshot.state == ScriptStructureState::Paused
          && record.snapshot.pause_reason.as_deref() == Some("footprint_changed");
--    let committed = record.snapshot.state == ScriptStructureState::Committed;
+     let committed = record.snapshot.state == ScriptStructureState::Committed;
 -    if !paused && !committed {
-+    let committed = record.snapshot.state == ScriptStructureState::Committed
-+        && record.snapshot.current_stage_index as usize >= record.cells.len();
 +    // A structure can be persisted at the terminal stage index without the commit — the House L2
 +    // upgrade of SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE did (`stage=2 work=0`,
 +    // `Running`). It has no next cell, so no builder pass can advance it and the project would hold
@@ -35,7 +32,7 @@ index 52acc954c..b6b545aa1 100644
          return Ok(false);
      }
      let retry = (paused
-@@ -391,7 +413,10 @@ pub(crate) fn recover(
+@@ -391,7 +412,10 @@ pub(crate) fn recover(
              continue;
          }
          let current = record.snapshot.current_stage_index as usize;
@@ -47,7 +44,7 @@ index 52acc954c..b6b545aa1 100644
              record.cells[index].len()
          } else if current == index {
              record.snapshot.completed_work_units as usize
-@@ -399,7 +424,10 @@ pub(crate) fn recover(
+@@ -399,7 +423,10 @@ pub(crate) fn recover(
              0
          };
          for cell in record.cells[index].iter().take(completed).rev() {
@@ -59,7 +56,7 @@ index 52acc954c..b6b545aa1 100644
                  continue;
              }
              let now = target
-@@ -441,6 +469,17 @@ pub(crate) fn recover(
+@@ -441,6 +468,17 @@ pub(crate) fn recover(
      drop(ledger);
      let mut ledger = ledger_mut(state)?;
      let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
@@ -77,7 +74,7 @@ index 52acc954c..b6b545aa1 100644
      // The repair stage is derived afresh, so repeated interference cannot
      // accumulate stages or charge again for cells already repaired.
      if let Some(index) = record
-@@ -659,6 +698,67 @@ pub(crate) fn next_cell(
+@@ -659,6 +697,63 @@ pub(crate) fn next_cell(
          .map(|cell| cell.at))
  }
  
@@ -94,6 +91,9 @@ index 52acc954c..b6b545aa1 100644
 +    settlement: SettlementId,
 +    handle: &str,
 +) -> Result<bool, Failure> {
++    if status(state, settlement, handle)?.state == ScriptStructureState::Committed {
++        return Ok(false);
++    }
 +    let mut ledger = ledger_mut(state)?;
 +    let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
 +    // PROBE (temporary, remove with the diagnosis): the client reports `stage=2 work=0 next=None`
@@ -113,14 +113,7 @@ index 52acc954c..b6b545aa1 100644
 +        state = ?record.snapshot.state,
 +        "step_empty_stage: probe"
 +    );
-+    // A `Committed` record whose index is still inside `cells` was finished before a later stage
-+    // was planned onto it (the House L2 upgrade appends stage 2 to the committed L1 record), so it
-+    // is not finished: reopen it and step, or `next_cell` stays None forever.
-+    let mut stepped = record.snapshot.state == ScriptStructureState::Committed
-+        && (record.snapshot.current_stage_index as usize) < record.cells.len();
-+    if stepped {
-+        record.snapshot.state = ScriptStructureState::Running;
-+    }
++    let mut stepped = false;
 +    while record
 +        .cells
 +        .get(record.snapshot.current_stage_index as usize)
