@@ -621,8 +621,11 @@ def _run_client_gates(ctx, gates, root, repo=None, pinned=True):
             results[gate] = (UNRUNNABLE, f'no client checkout at {repo} (set KRASNOKAMEN_CLIENT_ROOT)', None)
             continue
         if pinned:
+            # Only source-relevant dirt refuses (the same rule as `_client_source_state`): a checkout
+            # with edited docs is still the source tree the gate is run against.
             dirty = [line.strip() for line in _git(repo, 'status', '--porcelain', check=False)[1].splitlines()
-                     if line.strip()]
+                     if line.strip() and (line[3:].strip('"').endswith(('.rs', '.toml', '.lock'))
+                                          or line[3:].strip('"') == 'build.rs')]
             if dirty:
                 results[gate] = (UNRUNNABLE, f'client checkout {repo} is dirty ({dirty[0]}): {description} runs '
                                              'on the committed tree it names', None)
