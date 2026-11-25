@@ -332,28 +332,7 @@ pub(crate) fn recover(
     let paused = record.snapshot.state == ScriptStructureState::Paused
         && record.snapshot.pause_reason.as_deref() == Some("footprint_changed");
     let committed = record.snapshot.state == ScriptStructureState::Committed;
-    // A structure can be persisted at the terminal stage index without the commit — the House L2
-    // upgrade of SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE did (`stage=2 work=0`,
-    // `Running`). It has no next cell, so no builder pass can advance it and the project would hold
-    // its slot forever; recovery is the only pass that can finish it, and the tail below already
-    // writes `Committed` once the index is terminal. A record with no cells is the opposite case —
-    // an admitted site whose plan was never generated reads `0 == 0` here — and is left to the
-    // builder pass, which is what admits the House project (three BuildQA house L1 selects failed
-    // with no project while this matched an empty plan).
-    let terminal = !record.cells.is_empty()
-        && record.snapshot.current_stage_index as usize == record.cells.len()
-        && record.snapshot.completed_work_units == 0;
-    // A stage can also be finished without the index moving — every one of its cells worked, or
-    // planned with no cells at all — and the House L2 upgrade reported
-    // `stage=2 work=0 next=None` on the real client (20261124T231255) while its stage index was
-    // still inside `cells`, so `next_cell` is None and `advance` can never reach `work_units`.
-    // Recovery steps over such a stage; the tail below commits when the index is terminal.
-    let finished_stage = !committed
-        && record
-            .cells
-            .get(record.snapshot.current_stage_index as usize)
-            .is_some_and(|cells| record.snapshot.completed_work_units as usize >= cells.len());
-    if !paused && !committed && !terminal && !finished_stage {
+    if !paused && !committed {
         return Ok(false);
     }
     let retry = (paused
@@ -412,10 +391,7 @@ pub(crate) fn recover(
             continue;
         }
         let current = record.snapshot.current_stage_index as usize;
-        // A terminal index has no stage of its own, so every stage is behind it and its cells
-        // count as placed: an abandoned site must still show its empty cells, or the tail below
-        // commits a structure whose blocks were never there (BuildQA house L1, 20261124T221059).
-        let completed = if terminal || current > index {
+        let completed = if current > index {
             record.cells[index].len()
         } else if current == index {
             record.snapshot.completed_work_units as usize
@@ -468,17 +444,6 @@ pub(crate) fn recover(
     drop(ledger);
     let mut ledger = ledger_mut(state)?;
     let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
-    // A stage whose cells are all worked (or that was planned with none) is already complete: step
-    // over it so `next_cell` can name the next stage's first cell, and the tail below commits once
-    // the index is terminal.
-    while record
-        .cells
-        .get(record.snapshot.current_stage_index as usize)
-        .is_some_and(|cells| record.snapshot.completed_work_units as usize >= cells.len())
-    {
-        record.snapshot.current_stage_index += 1;
-        record.snapshot.completed_work_units = 0;
-    }
     // The repair stage is derived afresh, so repeated interference cannot
     // accumulate stages or charge again for cells already repaired.
     if let Some(index) = record
@@ -695,63 +660,6 @@ pub(crate) fn next_cell(
         .get(record.snapshot.current_stage_index as usize)
         .and_then(|cells| cells.get(record.snapshot.completed_work_units as usize))
         .map(|cell| cell.at))
-}
-
-/// Step over a stage whose cells are all worked (or that was planned with none), so the next cell can
-/// be named.
-///
-/// The House L2 upgrade reports `stage=2 work=0 next=None` on the real client
-/// (20261124T231255, `20261125T001250`) while its index is still inside `cells`: an empty stage has
-/// no cell, and `advance` can never reach a `work_units` of zero, so the builder is released on
-/// every shift and the project never finishes. Recovery does the same step-over, but recovery only
-/// runs when a project is finished; this runs where the cell is asked for.
-pub(crate) fn step_empty_stage(
-    state: &mut TickState,
-    settlement: SettlementId,
-    handle: &str,
-) -> Result<bool, Failure> {
-    if status(state, settlement, handle)?.state == ScriptStructureState::Committed {
-        return Ok(false);
-    }
-    let mut ledger = ledger_mut(state)?;
-    let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
-    // PROBE (temporary, remove with the diagnosis): the client reports `stage=2 work=0 next=None`
-    // and the step-over never visibly fires. Warn level so the gate log carries it.
-    let probe_cells = record
-        .cells
-        .get(record.snapshot.current_stage_index as usize)
-        .map(Vec::len);
-    tracing::warn!(
-        settlement = settlement.0,
-        handle,
-        stages = record.snapshot.stages.len(),
-        cells = record.cells.len(),
-        index = record.snapshot.current_stage_index,
-        work = record.snapshot.completed_work_units,
-        ?probe_cells,
-        state = ?record.snapshot.state,
-        "step_empty_stage: probe"
-    );
-    let mut stepped = false;
-    while record
-        .cells
-        .get(record.snapshot.current_stage_index as usize)
-        .is_some_and(|cells| record.snapshot.completed_work_units as usize >= cells.len())
-    {
-        record.snapshot.current_stage_index += 1;
-        record.snapshot.completed_work_units = 0;
-        stepped = true;
-    }
-    if stepped {
-        ledger.revision = next(ledger.revision)?;
-        record.snapshot.revision = ledger.revision;
-        record.snapshot.resource_plan_hash =
-            inventories::resource_plan_hash(&resource_plan(&record.snapshot.stages));
-        record.snapshot.remaining = remaining(&record);
-        ledger.insert_structure(handle.to_owned(), record);
-        save(state, ledger);
-    }
-    Ok(stepped)
 }
 
 /// The planned world state of the next cell, for naming a wait: the gate reads

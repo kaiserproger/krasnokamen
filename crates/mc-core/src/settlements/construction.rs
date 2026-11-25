@@ -2353,26 +2353,26 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     // The incumbent is the resident bound to this project, never another
     // project's builder standing first in the resident list (D8).
     let incumbent = incumbent_slot(state, id, project);
-    let mut next = executor::next_cell(state, id, &project.structure)
+    let next = executor::next_cell(state, id, &project.structure)
         .ok()
         .flatten();
-    if next.is_none() {
-        match executor::step_empty_stage(state, id, &project.structure) {
-            Ok(true) => {
-                // A finished stage is stepped over; naming the next stage's cell here keeps the
-                // builder working instead of releasing it on every shift (House L2).
-                next = executor::next_cell(state, id, &project.structure)
-                    .ok()
-                    .flatten();
-            }
-            Ok(false) => {}
-            Err(error) => tracing::warn!(
-                settlement = id.0,
-                structure = %project.structure,
-                ?error,
-                "watch_project: step over a finished stage failed"
-            ),
-        }
+    if next.is_none()
+        && executor::status(state, id, &project.structure).is_ok_and(|status| {
+            status.state == ScriptStructureState::Committed
+                && status.current_stage_index as usize >= status.stages.len()
+        })
+        && let Some(missing) = certificate_missing(state, project)
+    {
+        // Pure query only: naming the missing requirement must not disturb the settlement (calling
+        // `finish_project` here certified the L1 house and broke the L2 admission, 20261125T080841).
+        tracing::warn!(
+            settlement = id.0,
+            blueprint = %project.blueprint,
+            level = project.level,
+            cause = "certificate_incomplete",
+            missing = %missing,
+            "watch_project: committed structure cannot certify"
+        );
     }
     let lot = super::forestry::lot_bounds(state, project);
     let protected = snapshot
@@ -2857,6 +2857,33 @@ fn release_builder(
 }
 
 /// Finishes the project that owns `structure`. A handle that names no active
+/// Why the certificate would refuse this project, without touching any state.
+///
+/// `finish_project` mutates before it refuses (`owe_carry`, `buildings::certify` certifies the
+/// building), so calling it speculatively from a watcher disturbs the settlement. This mirrors the
+/// certificate side only: bounds, blueprint level and the missing building requirements, rendered as
+/// `description: found/required`.
+pub(crate) fn certificate_missing(state: &TickState, project: &Project) -> Option<String> {
+    let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {
+        return Some(format!("unknown blueprint {}", project.blueprint));
+    };
+    let Some(level) = blueprint.level(project.level) else {
+        return Some(format!(
+            "no level {} for {} ({} level(s))",
+            project.level,
+            project.blueprint,
+            blueprint.levels.len()
+        ));
+    };
+    let bounds = level
+        .rotated(Rotation::from_quarter_turns(project.rotation))
+        .bounds(project.origin);
+    match buildings::inspect(state, blueprint.kind, 1, bounds) {
+        Ok(_) => None,
+        Err(error) => Some(error.to_string()),
+    }
+}
+
 /// project of this settlement finishes nothing (S1b: several projects).
 pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure: &str) -> bool {
     let Some(project) = state
@@ -2878,10 +2905,7 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
     // Recovery that opens a repair keeps the project; recovery that finishes a
     // terminal-index structure in place (SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE)
     // leaves it completable, so only an uncommitted outcome refuses.
-    if executor::recover(state, id, &project.structure) != Ok(false)
-        && !executor::status(state, id, &project.structure)
-            .is_ok_and(|snapshot| snapshot.state == ScriptStructureState::Committed)
-    {
+    if executor::recover(state, id, &project.structure) != Ok(false) {
         return false;
     }
     if !executor::status(state, id, &project.structure)
