@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 import tomllib
 
 from .light_wire import Reader
@@ -85,10 +85,13 @@ class PackWireReceipt:
 
 
 def convert_world(ctx: Any, binary: Path, config: Path, evidence: dict[str, Any],
-                  corrupt: dict[tuple[int, int, int], Any] | None = None) -> dict[str, str]:
+                  corrupt: dict[tuple[int, int, int], Any] | None = None,
+                  edit: Callable[[Path], dict[str, Any]] | None = None) -> dict[str, str]:
     """Offline conversion on a stopped private world, via the shipping CLI.
 
-    `corrupt` edits chosen block entities of the exported Anvil copy before it is imported.
+    `corrupt` edits chosen block entities of the exported Anvil copy before it is imported;
+    `edit` rewrites the exported copy itself (a whole-chunk fixture the scene plants, such as a
+    saved gravity tick in `anvil_scheduled_tick`) and its report is kept in evidence.
     """
     from ..profiles import _run_command
     from .anvil_corrupt import corrupt_block_entities
@@ -104,6 +107,8 @@ def convert_world(ctx: Any, binary: Path, config: Path, evidence: dict[str, Any]
         if label == "import" and corrupt:
             evidence["corrupted_block_entities"] = {
                 str(position): block for position, block in corrupt_block_entities(exported, corrupt).items()}
+        if label == "import" and edit:
+            evidence["export_edit"] = edit(exported)
         receipt = ctx.artifact_dir / f"world-{label}-{index}.json"
         _run_command([str(binary), "--config", str(config), "world", operation,
                       "--source", str(src), "--destination", str(dst), "--receipt", str(receipt)],
