@@ -7,8 +7,8 @@ status = "open"
 source = "Stage-3 S3FixBreaker finding F2: returning from the nether while TNT explodes closes the connection with dimension-switch-explosion-knockback"
 repro = "client"
 regression = [
-  "cargo:mc-edge:explosion_queue_tests::same_tick_dimension_switch_discards_only_old_world_knockback",
-  "cargo:mc-edge:explosion_queue_tests::dimension_reset_fences_queued_old_world_explosions_at_real_writer",
+  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::same_tick_dimension_switch_discards_only_old_world_knockback",
+  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::dimension_reset_fences_queued_old_world_explosions_at_real_writer",
 ]
 fix_commit = "5810902c7"
 failing_first = "reported"
