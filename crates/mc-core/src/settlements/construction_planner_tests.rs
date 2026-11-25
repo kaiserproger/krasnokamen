@@ -634,7 +634,7 @@ fn pending_noniron_order_blocks_unrelated_furnaces_and_funded_houses() {
 }
 
 #[test]
-fn a_missing_farm_outranks_further_storehouse_work() {
+fn a_missing_farm_is_planned_before_a_house_a_lumber_camp_and_a_mine() {
     let (mut state, id, _) = fixture();
     let farmer = BuildingKind::Workshop(Profession::Farmer);
     certificate(
@@ -647,7 +647,7 @@ fn a_missing_farm_outranks_further_storehouse_work() {
     assert_eq!(
         super::candidate_kinds(&state, record, &[]).next(),
         Some(farmer),
-        "a town with a store but no farm plans the farm before more storehouse work"
+        "a town with a store but no farm plans the farm before a house, a lumber camp and a mine"
     );
     certificate(state.settlements.get_mut(id).unwrap(), farmer, 1, false);
     let record = state.settlements.get(id).unwrap();

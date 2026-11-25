@@ -21,7 +21,7 @@ pub(super) fn candidate_kinds<'a>(
         .filter(move |_| farm_first)
         .chain(
             std::iter::once(BuildingKind::Storage)
-                .filter(move |_| !farm_first && needed(state, record, images)),
+                .filter(move |_| needed(state, record, images)),
         )
         .chain(
             needed_kinds(record, state.settlements.member_count(record.id)).filter(move |kind| {

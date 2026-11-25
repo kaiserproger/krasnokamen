@@ -401,6 +401,15 @@ def _aim(probe: ProbeSteps, target: tuple[float, float, float]) -> dict[str, Any
     return probe.observe().get("target") or {}
 
 
+def _approach_timeout(probe: ProbeSteps) -> float:
+    """One approach may not eat the rest of the scenario deadline."""
+    try:
+        remaining = float(probe.remaining())
+    except (AttributeError, TypeError, ValueError):
+        return 120.0
+    return min(120.0, remaining)
+
+
 Teleport = Callable[[float, float, float], None]
 
 
@@ -421,7 +430,8 @@ def _aim_at_baby(probe: ProbeSteps, entity: dict[str, Any],
     for _ in range(BABY_AIM_ATTEMPTS):
         try:
             reply = probe.call("minecraft_approach_entity",
-                               {"entity_id": entity["entity_id"], "timeout_seconds": 120.0})
+                               {"entity_id": entity["entity_id"],
+                                "timeout_seconds": _approach_timeout(probe)})
         except RuntimeError as error:
             # A walking baby can leave the client's received set mid-approach
             # (20261124T035536: "entity identity left client-visible state while
