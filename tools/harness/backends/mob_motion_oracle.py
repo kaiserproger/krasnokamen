@@ -1,4 +1,4 @@
-"""Bounded displacement evidence from three client-visible entity samples."""
+"""Bounded displacement and facing evidence from client-visible entity samples."""
 from __future__ import annotations
 
 import math
@@ -34,3 +34,13 @@ def measure(samples: list[dict[str, Any]], entity_types: list[str]) -> dict[str,
         result[kind] = {"entity_uuid": entities[0]["entity_uuid"], "segments": segments,
                         "total_displacement_blocks": sum(segment["displacement_blocks"] for segment in segments)}
     return result
+
+
+def shortest_arc(degrees: float) -> float:
+    """The signed turn in (-180, 180] between two body-yaw bearings."""
+    return (degrees + 180.0) % 360.0 - 180.0
+
+
+def bearing(dx: float, dz: float) -> float:
+    """Body-yaw degrees pointing along (dx, dz), the client's own convention (`yaw_delta`)."""
+    return math.degrees(math.atan2(-dx, dz))

@@ -59,3 +59,15 @@ matching the MINING patch's model (`MINING-...hunks.md` "Commit roles").
   distance 4, where the whole sampled frame is resident, so it cannot observe the cold overlay; it proves
   only that the ordinary parity path still teleports the egg. The ledger still requires a passed receipt
   for the row's registered real-client ref, and this re-promote carries a fresh one on the candidate tree.
+
+
+## Regenerated 2026-11-25 (REVIEW-wave2-13 m1)
+
+`70d39713e` moved the residency test into its own branch ahead of the air check (a cold sample is
+recorded before it can be judged), so this patch's old b-side (`has_chunk(..) ||` inside the air
+condition) no longer matched HEAD. The patch is regenerated from the current `dragon_egg`: the
+reverse removes the cold-target branch, which is exactly the pre-fix behaviour (the air check sees
+`None` for a non-resident cell and the sample is skipped, never written into the overlay).
+`git apply -R --check` passes on HEAD; sha256 `87e8dbd32fafc93b…` (full digest in the promotion JSON).
+The citations above that name `interact_parity_tests.rs` lines are historical; the cold-overlay test
+is `interact_parity_dragon_egg_never_teleports_into_a_cold_overlay` (search by name).

@@ -43,6 +43,7 @@ impl TickState {
             spawn_protection: 16,
             spawn_operators: Default::default(),
             brushing: Default::default(),
+            pending_egg_teleports: Default::default(),
             command_blocks_due: Vec::new(),
             mob_griefing: crate::config::MobGriefingRules::default(),
             test_acceleration: crate::config::test_acceleration::TestAcceleration::default(),

@@ -1388,3 +1388,148 @@ class HeldScreenshotSchemaTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, 'hold_keys screenshots unsupported for --client java'):
             scene_shot_steps.validate_steps([{'shot': 'held-tab', 'hold_keys': ['key.keyboard.tab']}], 'java')
+class _FakeProbe:
+    """The step dispatcher's seams: observation, MCP calls and named checks."""
+
+    def __init__(self, player=(9.5, 71.0, 4.5), entities=None, dimension="minecraft:overworld"):
+        self.player = player
+        self.entities = entities or []
+        self.dimension = dimension
+        self.report = {"assertions": {}, "calls": []}
+        self.calls = []
+        self.attacked = False
+        self.fail_after_snapshot = False
+        self.truncated = False
+        self.jab_damages = True
+        self.target_vanishes = False
+        self.jab_evidence = True
+        self.snapshot_calls = 0
+        self.snapshots = 0
+
+    def observe(self, **kwargs):
+        return {"in_play": True, "dimension": self.dimension, "gamemode": "survival",
+                "screen": {"title": "Playing"}, "recent_chat": [],
+                "selected_item": {"item_id": "minecraft:iron_spear", "count": 1},
+                "player": {"x": self.player[0], "y": self.player[1], "z": self.player[2],
+                           "health": 20.0, "camera_position": [0.0, 0.0, 0.0]}}
+
+    def call(self, name, arguments=None):
+        self.calls.append((name, arguments))
+        self.report["calls"].append({"tool": name, "arguments": arguments})
+        if name == "minecraft_list_entities":
+            self.snapshots += 1
+            if self.fail_after_snapshot and self.snapshots > 1:
+                raise RuntimeError("list failed")
+            # The server's damage is what the client receives: the second snapshot carries it.
+            self.snapshot_calls += 1
+            entities = [] if (self.target_vanishes and self.snapshots > 1) else [
+                dict(row) for row in self.entities]
+            if self.attacked and self.jab_damages:
+                for row in entities:
+                    if row.get("entity_uuid") == "u":
+                        row["health"] = 4.0
+            return {"game_time": 120, "truncated": self.truncated, "entities": entities}
+        if name == "minecraft_attack_entity_once":
+            self.attacked = True
+            if not self.jab_evidence:
+                return {"entity_id": 7, "entity_uuid": "u", "entity_type": "minecraft:cow",
+                        "dispatched": True, "confirmed": False, "removed": False,
+                        "health_before": None, "health_after": None}
+            return {"entity_id": 7, "entity_uuid": "u", "entity_type": "minecraft:cow",
+                    "dispatched": True, "confirmed": True, "removed": False,
+                    "health_before": 10.0, "health_after": 4.0}
+        return {"ok": True}
+
+    def check(self, name, condition):
+        self.report["assertions"][name] = bool(condition)
+        if not condition:
+            raise AssertionError(name)
+
+
+class NewSceneStepTests(unittest.TestCase):
+    def test_attack_and_facing_steps_validate(self):
+        from tools.harness.backends.scene_shot_steps import validate_steps
+
+        validate_steps([
+            {"attack_entity": {"name": "spear_jab", "entity_type": "minecraft:cow", "timeout_seconds": 20}},
+            {"attack_entity": {"name": "spear_jab", "entity_type": "minecraft:cow", "timeout_seconds": 20,
+                               "expect_item": "minecraft:iron_spear", "attempts": 3}},
+        ], "native")
+        for bad in (
+            {"attack_entity": {"name": "jab", "entity_type": "cow", "timeout_seconds": 20}},
+            {"attack_entity": {"name": "jab", "entity_type": "minecraft:cow", "timeout_seconds": 20,
+                               "expect_item": "iron_spear"}},
+            {"attack_entity": {"name": "jab", "entity_type": "minecraft:cow", "timeout_seconds": 20,
+                               "attempts": 9}},
+        ):
+            with self.assertRaisesRegex(ValueError, "invalid scene step"):
+                validate_steps([bad], "native")
+
+    def test_attack_entity_fails_closed_on_an_unreadable_target(self):
+        from tools.harness.backends.scene_shot_execute import execute
+
+        row = {"entity_id": 7, "entity_uuid": "u", "entity_type": "minecraft:cow",
+               "x": 3.5, "y": 99.0, "z": 0.5, "health": 10.0}
+        step = {"attack_entity": {"name": "spear_jab", "entity_type": "minecraft:cow",
+                                  "timeout_seconds": 20}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            probe = _FakeProbe(entities=[row])
+            probe.fail_after_snapshot = True
+            with self.assertRaisesRegex(RuntimeError, "list failed"):
+                execute(probe, root, [step], "native")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            probe = _FakeProbe(entities=[row])
+            probe.truncated = True
+            with self.assertRaisesRegex(RuntimeError, "truncated"):
+                execute(probe, root, [step], "native")
+
+    def test_attack_entity_does_not_call_an_out_of_range_target_removed(self):
+        from tools.harness.backends.scene_shot_execute import execute
+
+        row = {"entity_id": 7, "entity_uuid": "u", "entity_type": "minecraft:cow",
+               "x": 3.5, "y": 99.0, "z": 0.5, "health": 10.0}
+        with tempfile.TemporaryDirectory() as directory:
+            probe = _FakeProbe(entities=[row])
+            probe.jab_damages = False
+            probe.target_vanishes = True
+            probe.jab_evidence = False
+            with self.assertRaisesRegex(RuntimeError, "not a removal"):
+                execute(probe, Path(directory), [{"attack_entity": {
+                    "name": "spear_jab", "entity_type": "minecraft:cow", "timeout_seconds": 20}}], "native")
+
+    def test_attack_entity_reports_an_untouched_target_as_not_damaged(self):
+        from tools.harness.backends.scene_shot_execute import execute
+
+        row = {"entity_id": 7, "entity_uuid": "u", "entity_type": "minecraft:cow",
+               "x": 3.5, "y": 99.0, "z": 0.5, "health": 10.0}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            probe = _FakeProbe(entities=[row])
+            probe.jab_damages = False
+            with self.assertRaisesRegex(AssertionError, "spear_jab_damaged"):
+                execute(probe, root, [{"attack_entity": {"name": "spear_jab",
+                                                        "entity_type": "minecraft:cow",
+                                                        "timeout_seconds": 20}}], "native")
+            self.assertFalse(probe.report["assertions"]["spear_jab_damaged"])
+
+    def test_attack_entity_reports_only_authoritative_damage(self):
+        from tools.harness.backends.scene_shot_execute import execute
+
+        row = {"entity_id": 7, "entity_uuid": "u", "entity_type": "minecraft:cow",
+               "x": 3.5, "y": 99.0, "z": 0.5, "health": 10.0}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            probe = _FakeProbe(entities=[row])
+            execute(probe, root, [{"attack_entity": {"name": "spear_jab", "entity_type": "minecraft:cow",
+                                                     "timeout_seconds": 20,
+                                                     "expect_item": "minecraft:iron_spear"}}], "native")
+            self.assertTrue(probe.report["assertions"]["spear_jab_holds_iron_spear"])
+            self.assertTrue(probe.report["assertions"]["spear_jab_accepted"])
+            self.assertTrue(probe.report["assertions"]["spear_jab_damaged"])
+            self.assertEqual(probe.calls[0][1]["radius"], 32)
+            receipt = json.loads((root / "spear_jab.json").read_text())
+            self.assertEqual(receipt["attack"]["health_after"], 4.0)
+            self.assertEqual(receipt["health_after"], 4.0)
+

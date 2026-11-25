@@ -1,5 +1,5 @@
 //! Native vanilla block uses which do not open a screen.
-use crate::boundary::{BlockPos, EntityId, Hand};
+use crate::boundary::{BlockPos, ChunkPos, EntityId, Hand};
 use crate::tick::TickState;
 use mc_data::Identifier;
 use mc_world::BlockStateId;
@@ -84,6 +84,15 @@ pub(crate) fn axe(state: &mut TickState, actor: EntityId, hand: Hand, pos: Block
     true
 }
 
+/// The world-border test the teleport sample applies (`Border` in vanilla).
+fn in_border(state: &TickState, target: BlockPos) -> bool {
+    let border = &state.border;
+    !(f64::from(target.x + 1) <= border.center_x - border.size / 2.0
+        || f64::from(target.x) >= border.center_x + border.size / 2.0
+        || f64::from(target.z + 1) <= border.center_z - border.size / 2.0
+        || f64::from(target.z) >= border.center_z + border.size / 2.0)
+}
+
 pub(crate) fn dragon_egg(state: &mut TickState, actor: EntityId, pos: BlockPos) -> bool {
     let Some(current) = state.world.block_at(pos.x, pos.y, pos.z) else {
         return false;
@@ -100,7 +109,8 @@ pub(crate) fn dragon_egg(state: &mut TickState, actor: EntityId, pos: BlockPos) 
         return true;
     }
     // DragonEggBlock.teleport: 1000 attempts, differences of uniform [0,16)
-    // horizontal and [0,8) vertical samples. Only resident, in-border air wins.
+    // horizontal and [0,8) vertical samples. In-border air wins; a target whose
+    // chunk is not resident yet is requested and landed when it arrives.
     let mut random = mc_data::loot::chest_26_1_2::ChestRng::new(
         state.tick
             ^ (actor.0 as u64)
@@ -114,22 +124,42 @@ pub(crate) fn dragon_egg(state: &mut TickState, actor: EntityId, pos: BlockPos) 
             y: pos.y + sample(8) - sample(8),
             z: pos.z + sample(16) - sample(16),
         };
-        let border = &state.border;
-        if f64::from(target.x + 1) <= border.center_x - border.size / 2.0
-            || f64::from(target.x) >= border.center_x + border.size / 2.0
-            || f64::from(target.z + 1) <= border.center_z - border.size / 2.0
-            || f64::from(target.z) >= border.center_z + border.size / 2.0
-            || crate::spawn_protection::protected(state, actor, target)
-        {
+        if !in_border(state, target) || crate::spawn_protection::protected(state, actor, target) {
             continue;
         }
+        // Vanilla's `Level.getChunk` loads the sampled target and the egg lands
+        // there. Here residency is the world's own demand path: a target whose
+        // chunk is not resident is recorded (it enters `desired_chunks` while the
+        // record lives) and the move completes once it is resident.
+        //
+        // The sample cannot be judged before then: a non-resident cell reads as
+        // `None`, never as air or as a solid block, so the air, plugin and
+        // protection checks run again at completion for the loaded cell.
+        // Divergence from vanilla, recorded on the row: vanilla samples on past a
+        // loaded non-air cell; here such a sample is dropped at completion and the
+        // egg stays, as the cold-overlay row already required.
         if !state
             .world
             .has_chunk(target.x.div_euclid(16), target.z.div_euclid(16))
-            || !state
-                .world
-                .block_at(target.x, target.y, target.z)
-                .is_some_and(|id| id == state.registry.states.air)
+        {
+            state
+                .pending_egg_teleports
+                .retain(|(origin, _)| *origin != pos);
+            state.pending_egg_teleports.push((
+                pos,
+                EggTeleport {
+                    target,
+                    source: current,
+                    actor,
+                    deadline_tick: state.tick + EGG_TELEPORT_BUDGET_TICKS,
+                },
+            ));
+            return true;
+        }
+        if !state
+            .world
+            .block_at(target.x, target.y, target.z)
+            .is_some_and(|id| id == state.registry.states.air)
             || !crate::plugin_player::allows_block(state, actor, target)
         {
             continue;
@@ -144,4 +174,79 @@ pub(crate) fn dragon_egg(state: &mut TickState, actor: EntityId, pos: BlockPos) 
         return true;
     }
     true
+}
+
+/// How long a dragon egg's request for a cold target chunk lives. Vanilla has no
+/// visible delay (`Level.getChunk` is synchronous); two seconds keeps the egg
+/// "about to jump" and bounds the demand a click can add.
+pub(crate) const EGG_TELEPORT_BUDGET_TICKS: u64 = 40;
+
+/// One dragon-egg click whose vanilla target was not resident yet.
+pub(crate) struct EggTeleport {
+    pub target: BlockPos,
+    pub source: u32,
+    /// The clicking player: the completion re-runs the protection and plugin
+    /// checks for the loaded cell, which need him.
+    pub actor: EntityId,
+    pub deadline_tick: u64,
+}
+
+impl TickState {
+    /// The residency demand a pending egg teleport adds: its target chunk at the
+    /// highest priority (zero), so the sample it landed on is the first loaded.
+    pub(crate) fn pending_egg_chunks(&self) -> impl Iterator<Item = ChunkPos> + '_ {
+        self.pending_egg_teleports
+            .iter()
+            .map(|(_, pending)| ChunkPos {
+                x: pending.target.x.div_euclid(16),
+                z: pending.target.z.div_euclid(16),
+            })
+    }
+
+    /// Complete the vanilla move for every pending record whose target chunk is
+    /// resident now; drop records whose egg moved, changed state or ran out of
+    /// budget. Runs after chunk admission, so the writes land in the same tick's
+    /// block phase (`merge_block_writes`).
+    pub(crate) fn complete_pending_egg_teleports(&mut self) {
+        if self.pending_egg_teleports.is_empty() {
+            return;
+        }
+        let air = self.registry.states.air;
+        let pending = std::mem::take(&mut self.pending_egg_teleports);
+        for (origin, record) in pending {
+            let target = record.target;
+            let egg_in_place = self
+                .world
+                .block_at(origin.x, origin.y, origin.z)
+                .is_some_and(|id| id == record.source);
+            let resident = self
+                .world
+                .has_chunk(target.x.div_euclid(16), target.z.div_euclid(16));
+            let actor_present = self.players.contains_key(&record.actor);
+            if !egg_in_place || !actor_present || self.tick > record.deadline_tick {
+                continue;
+            }
+            let target_air = self
+                .world
+                .block_at(target.x, target.y, target.z)
+                .is_some_and(|id| id == air)
+                && in_border(self, target)
+                && !crate::spawn_protection::protected(self, record.actor, target)
+                && crate::plugin_player::allows_block(self, record.actor, target);
+            if !resident || !target_air {
+                // Still waiting (the demand keeps the chunk requested) unless the
+                // budget above dropped it; a cell that is no longer air is dropped.
+                if resident {
+                    continue;
+                }
+                self.pending_egg_teleports.push((origin, record));
+                continue;
+            }
+            self.world
+                .set_block(target.x, target.y, target.z, record.source);
+            self.world.set_block(origin.x, origin.y, origin.z, air);
+            self.merge_block_writes
+                .extend([(origin, air), (target, record.source)]);
+        }
+    }
 }

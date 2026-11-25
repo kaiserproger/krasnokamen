@@ -8,4 +8,4 @@ source = "FixBatchB F2 triage: CustomName:{text:'NamedCow',color:'red'} is expli
 repro = "source"
 regression = []
 failing_first = "reported"
-repro_check = "Existing command_summon::tests::unsupported_styled_custom_name_is_not_silently_flattened asserts the explicit refusal. Quoted-JSON CustomName strings are literal in vanilla 26.x, not selector defects; preserve command_execution::tests::json_shaped_summon_custom_name_stays_literal_in_vanilla_26."
+repro_check = ["Blocked: a structured name (`Name { text, style }`) in the appearance/checkpoint image and the entity OptionalComponent wire codec is a persistence format change: design, migration for plain names, independent review, and a roundtrip test through WAL + checkpoint + wire. The explicit refusal guard (`unsupported_styled_custom_name_is_not_silently_flattened`) stays as is."]

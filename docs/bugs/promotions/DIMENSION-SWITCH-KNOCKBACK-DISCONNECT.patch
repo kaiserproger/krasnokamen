@@ -1,0 +1,25 @@
+diff --git a/crates/mc-edge/src/server/pump.rs b/crates/mc-edge/src/server/pump.rs
+index f260afacd..4d73d0f54 100644
+--- a/crates/mc-edge/src/server/pump.rs
++++ b/crates/mc-edge/src/server/pump.rs
+@@ -435,20 +435,6 @@ pub(super) fn close_skipped_knockback(
+         let current = u64::from(last_tick == out.tick);
+         let reason = if count.saturating_sub(previous) > current {
+             Some("skipped-explosion-knockback")
+-        } else if current != 0
+-            && count > previous
+-            && !viewers.get(&id).is_some_and(|viewer| {
+-                out.in_dimension(viewer.dimension).is_some_and(|world| {
+-                    world.changes.explosions.iter().any(|blast| {
+-                        blast
+-                            .knockback
+-                            .iter()
+-                            .any(|&(entity, push)| entity == viewer.entity_id && push != [0.0; 3])
+-                    })
+-                })
+-            })
+-        {
+-            Some("dimension-switch-explosion-knockback")
+         } else {
+             None
+         };

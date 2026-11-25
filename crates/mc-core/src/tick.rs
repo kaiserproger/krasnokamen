@@ -268,6 +268,12 @@ pub struct TickState {
     pub(crate) spawn_protection: u32,
     pub(crate) spawn_operators: std::collections::BTreeSet<uuid::Uuid>,
     pub(crate) brushing: crate::brushing::Brushing,
+    /// Dragon eggs whose vanilla target lies in a chunk that is not resident yet
+    /// (`vanilla_interact::dragon_egg`): the click requested the target through the
+    /// normal demand path (`desired_chunks`) and the move completes once the chunk is
+    /// resident, or the record is dropped when its budget expires or the egg moves.
+    /// Derived runtime state; a checkpoint taken mid-flight simply drops it.
+    pub(crate) pending_egg_teleports: Vec<(BlockPos, crate::vanilla_interact::EggTeleport)>,
     pub(crate) command_blocks_due: Vec<BlockPos>,
     /// Per-mob switches layered under the `mob_griefing` gamerule.
     pub(crate) mob_griefing: crate::config::MobGriefingRules,
@@ -443,7 +449,7 @@ pub struct TickState {
     /// Players lying in a bed ([`crate::sleep`]).
     pub sleepers: HashMap<EntityId, crate::sleep::Sleeper>,
     /// Bed head cells whose block `occupied` property this tick mirrored
-    /// ([`crate::sleep::run`]). Derived from the sleepers and sleeping
+    /// ([`crate::sleep::mirror_occupied_beds`]). Derived from the sleepers and sleeping
     /// residents every tick, never persisted.
     pub(crate) occupied_beds: HashSet<BlockPos>,
     /// Last journaled player / block-entity post-images. Images are

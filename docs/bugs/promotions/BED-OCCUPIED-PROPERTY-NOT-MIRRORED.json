@@ -1,0 +1,67 @@
+{
+  "id": "BED-OCCUPIED-PROPERTY-NOT-MIRRORED",
+  "verdict": "promoted",
+  "fix_commit": "patch:fb6d7c78c3ad229b655fddb7960cb96e47224e53c7e3a24c960eec760c079361",
+  "fix_commit_full": "patch:fb6d7c78c3ad229b655fddb7960cb96e47224e53c7e3a24c960eec760c079361",
+  "promoted_at": "2026-11-24T20:56:05+00:00",
+  "tree_head": "0a785659af4c6e1a842cc0a8b77a0e6cc328d823",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "fb6d7c78c3ad229b655fddb7960cb96e47224e53c7e3a24c960eec760c079361",
+  "reversed_files": [
+    "crates/mc-core/src/sleep.rs",
+    "crates/mc-core/src/tick/dimension.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:sleep::tests::a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/sleep_tests.rs",
+        "line": 1321,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "cargo:mc-core:sleep::tests::a_sleeping_player_marks_the_bed_occupied_and_a_wake_clears_it": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/sleep_tests.rs",
+        "line": 1300,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "harness:scene-shot:native-bed-occupied-state": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:sleep::tests::a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:sleep::tests::a_sleeping_player_marks_the_bed_occupied_and_a_wake_clears_it": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T204850-native-bed-occupied-state-vrfd0gew/result.json",
+    "tree_head": "0a785659af4c6e1a842cc0a8b77a0e6cc328d823",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "269eeaf00723e73edcb3324b7ce7a74493d956f859b453815d58f8bf693714c3",
+    "covers": [
+      "harness:scene-shot:native-bed-occupied-state"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T205132-ledger-promote-x9e6a0hj"
+}

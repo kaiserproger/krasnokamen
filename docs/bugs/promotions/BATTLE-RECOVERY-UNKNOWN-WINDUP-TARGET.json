@@ -1,0 +1,58 @@
+{
+  "id": "BATTLE-RECOVERY-UNKNOWN-WINDUP-TARGET",
+  "verdict": "promoted",
+  "fix_commit": "ab04093d7",
+  "fix_commit_full": "ab04093d7a9db273a489511d54983f1db572f487",
+  "promoted_at": "2026-11-24T19:54:05+00:00",
+  "tree_head": "3163da19e2f7f73f4c81cb640428fbb894a6c279",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/battle/combat.rs",
+    "crates/mc-core/src/battle/retaliation.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/battle/combat_tests.rs",
+    "crates/mc-core/src/battle/persistence_tests.rs",
+    "crates/mc-core/src/battle/retaliation_tests.rs",
+    "crates/mc-core/src/native_battle_persistence_drill_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::battle_resume::battle_resume_clean_checkpoint_after_a_windup_target_horse_dies_reopens": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/native_battle_persistence_drill_tests.rs",
+        "line": 1157,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "harness:battle-crash-recovery:battle-rearm-recovery": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::battle_resume::battle_resume_clean_checkpoint_after_a_windup_target_horse_dies_reopens": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T191950-battle-rearm-recovery-im9z7t0s/result.json",
+    "tree_head": "3163da19e2f7f73f4c81cb640428fbb894a6c279",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "0a3d7bcc78ffb3bb08c951b3f86ba5e042c1693ac8972b54ee5e242d3872bbbb",
+    "covers": [
+      "harness:battle-crash-recovery:battle-rearm-recovery"
+    ],
+    "profile": "battle-crash-recovery"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T194439-ledger-promote-rroragjy"
+}

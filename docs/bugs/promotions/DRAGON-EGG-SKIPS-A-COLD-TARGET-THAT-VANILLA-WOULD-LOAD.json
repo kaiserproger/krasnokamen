@@ -1,0 +1,52 @@
+{
+  "id": "DRAGON-EGG-SKIPS-A-COLD-TARGET-THAT-VANILLA-WOULD-LOAD",
+  "verdict": "promoted",
+  "fix_commit": "patch:92ca0cba74a2e60785588c48234dcf793fa40c3fe59f117e57c276ffe18fe8da",
+  "fix_commit_full": "patch:92ca0cba74a2e60785588c48234dcf793fa40c3fe59f117e57c276ffe18fe8da",
+  "promoted_at": "2026-11-25T04:41:52+00:00",
+  "tree_head": "c541ab170f615f84627d552065c78760c9692b17",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "92ca0cba74a2e60785588c48234dcf793fa40c3fe59f117e57c276ffe18fe8da",
+  "reversed_files": [
+    "crates/mc-core/src/vanilla_interact.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_requests_a_cold_target_through_the_demand_path": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/interact_parity_tests.rs",
+        "line": 678,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_guards_its_drop_paths": {
+      "state": "unproven-panic",
+      "detail": "FAIL | panic at crates/mc-core/src/interact_parity_tests.rs:805 is not an assert macro; name it in proving_assertions",
+      "assertion": {
+        "file": "crates/mc-core/src/interact_parity_tests.rs",
+        "line": 805,
+        "error": "panic",
+        "class": "unknown"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_requests_a_cold_target_through_the_demand_path": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_guards_its_drop_paths": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123BattleJ/.analysis/validation/20261125T042929-ledger-promote-2305r__r"
+}

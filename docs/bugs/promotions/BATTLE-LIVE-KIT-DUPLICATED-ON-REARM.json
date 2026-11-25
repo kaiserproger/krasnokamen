@@ -1,0 +1,90 @@
+{
+  "id": "BATTLE-LIVE-KIT-DUPLICATED-ON-REARM",
+  "verdict": "promoted",
+  "fix_commit": "b06399a7e288f92be1e53c9d99118df4119a114b",
+  "fix_commit_full": "b06399a7e288f92be1e53c9d99118df4119a114b",
+  "promoted_at": "2026-11-24T19:01:46+00:00",
+  "tree_head": "660717828dd4cfeb7c2f8379e47a19ec1d516e8e",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/battle/live_players.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/battle/live_players_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:battle::live_players::tests::a_kit_item_dropped_before_a_rejoin_is_not_issued_twice": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/battle/live_players_tests.rs",
+        "line": 1001,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:battle::live_players::tests::a_rearm_keeps_the_worn_battle_piece_not_a_plain_twin": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::live_players::tests::a_rearm_returns_a_worn_kit_piece_to_its_slot_with_its_wear": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/battle/live_players_tests.rs",
+        "line": 1066,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:battle::live_players::tests::a_kit_item_dropped_before_a_respawn_is_not_issued_twice": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/battle/live_players_tests.rs",
+        "line": 1037,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "harness:battle-crash-recovery:battle-kit-census": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:battle::live_players::tests::a_kit_item_dropped_before_a_rejoin_is_not_issued_twice": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::live_players::tests::a_rearm_keeps_the_worn_battle_piece_not_a_plain_twin": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::live_players::tests::a_rearm_returns_a_worn_kit_piece_to_its_slot_with_its_wear": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::live_players::tests::a_kit_item_dropped_before_a_respawn_is_not_issued_twice": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T182150-battle-kit-census-kmgfw4gd/result.json",
+    "tree_head": "660717828dd4cfeb7c2f8379e47a19ec1d516e8e",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "fe75260950babdf198bfb25f5e17eca4efd36287cc7272685f8f8a4b3d7185eb",
+    "covers": [
+      "harness:battle-crash-recovery:battle-kit-census"
+    ],
+    "profile": "battle-crash-recovery"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Battle/.analysis/validation/20261124T185137-ledger-promote-p2ix0xa1"
+}

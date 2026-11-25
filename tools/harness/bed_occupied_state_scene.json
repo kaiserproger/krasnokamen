@@ -1,0 +1,221 @@
+{
+  "seed": 100,
+  "server_view_distance": 6,
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "tp": [
+        1000.5,
+        205,
+        1000.5,
+        0,
+        30
+      ]
+    },
+    {
+      "wait_ticks": 100
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule random_tick_speed 0"
+    },
+    {
+      "cmd": "time set 18000"
+    },
+    {
+      "cmd": "fill 976 198 976 1040 199 1040 minecraft:stone"
+    },
+    {
+      "cmd": "fill 976 200 976 1040 206 1040 minecraft:air"
+    },
+    {
+      "cmd": "setblock 1001 200 1001 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+    },
+    {
+      "cmd": "setblock 1002 200 1001 minecraft:red_bed[facing=east,part=head,occupied=false]"
+    },
+    {
+      "cmd": "gamerule players_sleeping_percentage 101"
+    },
+    {
+      "tp": [
+        1001.5,
+        200,
+        1003.5,
+        180,
+        35
+      ]
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "cmd": "execute if block 1002 200 1001 minecraft:red_bed[part=head,occupied=false] run say bed_head_free_before"
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "assert_chat": {
+        "name": "bed_head_free_before",
+        "contains": [
+          "bed_head_free_before"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "cmd": "execute if block 1001 200 1001 minecraft:red_bed[part=foot,occupied=false] run say bed_foot_free_before"
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "assert_chat": {
+        "name": "bed_foot_free_before",
+        "contains": [
+          "bed_foot_free_before"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "read_block": {
+        "name": "bed_head_before",
+        "args": {
+          "x": 1002,
+          "y": 200,
+          "z": 1001
+        }
+      }
+    },
+    {
+      "shot": "bed-free-before"
+    },
+    {
+      "key": {
+        "keys": [
+          "use"
+        ],
+        "ticks": 1
+      }
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "assert_player_sleeping": {
+        "name": "sleeper_lies_down",
+        "sleeping": true
+      }
+    },
+    {
+      "read_block": {
+        "name": "bed_head_during_sleep",
+        "args": {
+          "x": 1002,
+          "y": 200,
+          "z": 1001
+        }
+      }
+    },
+    {
+      "cmd": "execute if block 1002 200 1001 minecraft:red_bed[part=head,occupied=true] run say bed_head_occupied"
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "assert_chat": {
+        "name": "bed_head_occupied",
+        "contains": [
+          "bed_head_occupied"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "cmd": "execute if block 1001 200 1001 minecraft:red_bed[part=foot,occupied=true] run say bed_foot_occupied"
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "assert_chat": {
+        "name": "bed_foot_occupied",
+        "contains": [
+          "bed_foot_occupied"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "shot": "bed-occupied"
+    },
+    {
+      "cmd": "time set 3000"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "assert_player_sleeping": {
+        "name": "day_wakes_the_sleeper",
+        "sleeping": false
+      }
+    },
+    {
+      "read_block": {
+        "name": "bed_head_after_wake",
+        "args": {
+          "x": 1002,
+          "y": 200,
+          "z": 1001
+        }
+      }
+    },
+    {
+      "cmd": "execute if block 1002 200 1001 minecraft:red_bed[part=head,occupied=false] run say bed_head_free_after"
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "assert_chat": {
+        "name": "bed_head_free_after",
+        "contains": [
+          "bed_head_free_after"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "cmd": "execute if block 1001 200 1001 minecraft:red_bed[part=foot,occupied=false] run say bed_foot_free_after"
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "assert_chat": {
+        "name": "bed_foot_free_after",
+        "contains": [
+          "bed_foot_free_after"
+        ],
+        "excludes": []
+      }
+    },
+    {
+      "shot": "bed-free-after"
+    }
+  ]
+}

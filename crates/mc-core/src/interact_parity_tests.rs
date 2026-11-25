@@ -599,6 +599,257 @@ fn interact_parity_dragon_egg_conserves_block_before_falling() {
 }
 
 #[test]
+fn interact_parity_dragon_egg_requests_a_cold_target_through_the_demand_path() {
+    let (mut state, actor) = setup();
+    // Away from the join chunks, so only the egg's own column is resident.
+    let pos = BlockPos {
+        x: 64,
+        y: Y + 1,
+        z: 64,
+    };
+    state.world.ensure_blocking(
+        &[(
+            crate::boundary::ChunkPos {
+                x: pos.x.div_euclid(16),
+                z: pos.z.div_euclid(16),
+            },
+            0,
+        )]
+        .into_iter()
+        .collect(),
+    );
+    let slot = state.entities.slot_of(actor).unwrap();
+    state.entities.set_pos(
+        slot,
+        [
+            f64::from(pos.x) + 0.5,
+            f64::from(pos.y),
+            f64::from(pos.z) + 2.5,
+        ],
+    );
+    state.entities.set_ground(slot, true);
+    let egg = block(&state, "dragon_egg", &[]);
+    put(&mut state, pos.x, pos.y, pos.z, egg);
+    let stone = block(&state, "stone", &[]);
+    // Resident cells inside the sample box are solid; the cold chunks are left
+    // exactly as the world holds them (not resident), so the target a real server
+    // would load is unknown here — which is the point of the deferred record.
+    for dx in -15..=15 {
+        for dz in -15..=15 {
+            let x = pos.x + dx;
+            let z = pos.z + dz;
+            if !state.world.has_chunk(x.div_euclid(16), z.div_euclid(16)) {
+                continue;
+            }
+            for dy in -7..=7 {
+                let y = pos.y + dy;
+                if (x, y, z) != (pos.x, pos.y, pos.z) {
+                    state.world.set_block(x, y, z, stone);
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let own_chunk = crate::boundary::ChunkPos {
+        x: pos.x.div_euclid(16),
+        z: pos.z.div_euclid(16),
+    };
+    // Through the real tick: the click records the request and the same tick's
+    // chunk phase demands the target chunk at the highest priority.
+    crate::tick::run_tick(
+        &mut state,
+        &[PlayerInput::UseItemOn {
+            connection: ConnectionId(1),
+            hand: Hand::Main,
+            position: pos,
+            face: 1,
+            cursor: [0.5; 3],
+            sequence: 1,
+        }],
+    );
+    // The player's own chunk is the only priority-0 demand a pre-image state ever has: the
+    // egg adds a second one, the chunk of the sample it could not judge.
+    let after = state.desired_chunks();
+    let requested: Vec<_> = after
+        .iter()
+        .filter(|(chunk, priority)| **priority == 0 && **chunk != own_chunk)
+        .map(|(chunk, _)| *chunk)
+        .collect();
+    assert_eq!(
+        requested.len(),
+        1,
+        "exactly one new highest-priority demand is the egg's sampled target chunk: {requested:?}"
+    );
+    assert_eq!(
+        state.world.block_at(pos.x, pos.y, pos.z),
+        Some(egg),
+        "the egg waits for its target chunk instead of being skipped or moved into it cold"
+    );
+    // The admission the request asked for: the next tick lands the egg inside the
+    // sampled box and empties the origin.
+    state
+        .world
+        .ensure_blocking(&[(requested[0], 0)].into_iter().collect());
+    crate::tick::run_tick(&mut state, &[]);
+    let air_state = state.registry.states.air;
+    assert_eq!(
+        state.world.block_at(pos.x, pos.y, pos.z),
+        Some(air_state),
+        "the origin is emptied by the tick that admits the chunk"
+    );
+    let mut custody = 0_usize;
+    for dx in -15..=15 {
+        for dz in -15..=15 {
+            for dy in -7..=7 {
+                if state.world.block_at(pos.x + dx, pos.y + dy, pos.z + dz) == Some(egg) {
+                    custody += 1;
+                }
+            }
+        }
+    }
+    let falling = state
+        .entities
+        .slots()
+        .filter(|slot| {
+            state
+                .entities
+                .row(*slot)
+                .falling
+                .is_some_and(|state| state.block_state == egg)
+        })
+        .count();
+    assert_eq!(
+        custody + falling,
+        1,
+        "the egg moved to its target chunk (blocks {custody}, falling {falling})"
+    );
+}
+
+#[test]
+fn interact_parity_dragon_egg_guards_its_drop_paths() {
+    // Guards, not proof of the fix: each one is green on a pre-image tree too, because there is no
+    // pending record there at all. They keep the completion from writing where it must not
+    // (REVIEW-wave2-14 Major-3).
+    fn fixture() -> (TickState, BlockPos, u32, crate::boundary::ChunkPos) {
+        let (mut state, actor) = setup();
+        let pos = BlockPos {
+            x: 64,
+            y: Y + 1,
+            z: 64,
+        };
+        state.world.ensure_blocking(
+            &[(
+                crate::boundary::ChunkPos {
+                    x: pos.x.div_euclid(16),
+                    z: pos.z.div_euclid(16),
+                },
+                0,
+            )]
+            .into_iter()
+            .collect(),
+        );
+        let slot = state.entities.slot_of(actor).unwrap();
+        state.entities.set_pos(
+            slot,
+            [
+                f64::from(pos.x) + 0.5,
+                f64::from(pos.y),
+                f64::from(pos.z) + 2.5,
+            ],
+        );
+        state.entities.set_ground(slot, true);
+        let egg = block(&state, "dragon_egg", &[]);
+        put(&mut state, pos.x, pos.y, pos.z, egg);
+        let stone = block(&state, "stone", &[]);
+        for dx in -15..=15 {
+            for dz in -15..=15 {
+                let x = pos.x + dx;
+                let z = pos.z + dz;
+                if !state.world.has_chunk(x.div_euclid(16), z.div_euclid(16)) {
+                    continue;
+                }
+                for dy in -7..=7 {
+                    let y = pos.y + dy;
+                    if (x, y, z) != (pos.x, pos.y, pos.z) {
+                        state.world.set_block(x, y, z, stone);
+                    }
+                }
+            }
+        }
+        state.world.fold_overlay();
+        let own = crate::boundary::ChunkPos {
+            x: pos.x.div_euclid(16),
+            z: pos.z.div_euclid(16),
+        };
+        (state, pos, egg, own)
+    }
+    fn click(state: &mut TickState, pos: BlockPos) {
+        crate::tick::run_tick(
+            state,
+            &[PlayerInput::UseItemOn {
+                connection: ConnectionId(1),
+                hand: Hand::Main,
+                position: pos,
+                face: 1,
+                cursor: [0.5; 3],
+                sequence: 1,
+            }],
+        );
+    }
+    fn requested_chunk(state: &TickState, own: crate::boundary::ChunkPos) -> crate::boundary::ChunkPos {
+        state
+            .desired_chunks()
+            .into_iter()
+            .find(|(chunk, priority)| *priority == 0 && *chunk != own)
+            .map(|(chunk, _)| chunk)
+            .expect("the click demanded a chunk that is not the egg's own")
+    }
+
+    fn egg_count(state: &TickState, pos: BlockPos, egg: u32) -> usize {
+        let mut count = 0;
+        for dx in -15..=15 {
+            for dz in -15..=15 {
+                for dy in -7..=7 {
+                    if state.world.block_at(pos.x + dx, pos.y + dy, pos.z + dz) == Some(egg) {
+                        count += 1;
+                    }
+                }
+            }
+        }
+        count
+    }
+
+    // The egg is gone before the chunk arrives: nothing lands.
+    let (mut state, pos, egg, own) = fixture();
+    click(&mut state, pos);
+    let air = state.registry.states.air;
+    put(&mut state, pos.x, pos.y, pos.z, air);
+    state.world.ensure_blocking(&[(requested_chunk(&state, own), 0)].into_iter().collect());
+    crate::tick::run_tick(&mut state, &[]);
+    assert_eq!(egg_count(&state, pos, egg), 0);
+
+    // The origin is still the egg but the cell is filled meanwhile: the egg stays on the origin.
+    let (mut state, pos, egg, own) = fixture();
+    click(&mut state, pos);
+    let stone = block(&state, "stone", &[]);
+    for dx in -15..=15 {
+        for dz in -15..=15 {
+            for dy in -7..=7 {
+                let (x, y, z) = (pos.x + dx, pos.y + dy, pos.z + dz);
+                if (x, y, z) != (pos.x, pos.y, pos.z) {
+                    state.world.set_block(x, y, z, stone);
+                }
+            }
+        }
+    }
+    state.world.fold_overlay();
+    state.world.ensure_blocking(&[(requested_chunk(&state, own), 0)].into_iter().collect());
+    crate::tick::run_tick(&mut state, &[]);
+    assert_eq!(state.world.block_at(pos.x, pos.y, pos.z), Some(egg));
+    assert_eq!(egg_count(&state, pos, egg), 1);
+}
+
+#[test]
 fn interact_parity_dragon_egg_never_teleports_into_a_cold_overlay() {
     let (mut state, actor) = setup();
     // Away from the join chunks, so only the egg's own column is resident.

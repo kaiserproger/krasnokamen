@@ -12,3 +12,4 @@ failing_first = "not recorded"
 # Books audit rows (owner D31, 2026-11-18, BooksLedger): every gap of receipts/Books/REPORT-R1..R6.md still open on main 5bdc02911.
 # Gap-to-row table, skipped gaps and their closing commits: receipts/Books/LEDGER-FILING.md. Ideas live in receipts/Perf1M/BOOKS-IDEAS.md.
 # Severity: the reports rank classes, not blocker/major/minor. Data loss, corruption and security gaps file as major; perf and hygiene gaps as minor.
+repro_check = ["Open, no fix in tree: the row-s own attribution is 61 percent presentation vs 31 percent steering (receipts/MotionYaw) and neither arm has a take. Cheapest honest path: one cavalry gallop-yaw take (`battle-live-cavalry-gallop-yaw`, SWEEP-MANIFEST) to attribute the sway between the horse body-yaw rules and BattleRest-s rest guard; the steering half waits for Main-s S0 unfreeze. Missing proof: that take; no cargo-only red exists."]

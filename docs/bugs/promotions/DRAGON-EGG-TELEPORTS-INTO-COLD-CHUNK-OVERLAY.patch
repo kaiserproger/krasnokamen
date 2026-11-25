@@ -1,17 +1,27 @@
-diff --git a/crates/mc-core/src/vanilla_interact.rs b/crates/mc-core/src/vanilla_interact.rs
 --- a/crates/mc-core/src/vanilla_interact.rs
 +++ b/crates/mc-core/src/vanilla_interact.rs
-@@ -125,8 +125,11 @@ pub(crate) fn dragon_egg(state: &mut TickState, actor: EntityId, pos: BlockPos)
-         }
+@@ -140,6 +140,24 @@
+         // Divergence from vanilla, recorded on the row: vanilla samples on past a
+         // loaded non-air cell; here such a sample is dropped at completion and the
+         // egg stays, as the cold-overlay row already required.
++        if !state
++            .world
++            .has_chunk(target.x.div_euclid(16), target.z.div_euclid(16))
++        {
++            state
++                .pending_egg_teleports
++                .retain(|(origin, _)| *origin != pos);
++            state.pending_egg_teleports.push((
++                pos,
++                EggTeleport {
++                    target,
++                    source: current,
++                    actor,
++                    deadline_tick: state.tick + EGG_TELEPORT_BUDGET_TICKS,
++                },
++            ));
++            return true;
++        }
          if !state
              .world
--            .block_at(target.x, target.y, target.z)
--            .is_some_and(|id| id == state.registry.states.air)
-+            .has_chunk(target.x.div_euclid(16), target.z.div_euclid(16))
-+            || !state
-+                .world
-+                .block_at(target.x, target.y, target.z)
-+                .is_some_and(|id| id == state.registry.states.air)
-             || !crate::plugin_player::allows_block(state, actor, target)
-         {
-             continue;
+             .block_at(target.x, target.y, target.z)

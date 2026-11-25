@@ -7,9 +7,9 @@ status = "open"
 source = "Stage-3 S3FixBreaker finding F2: returning from the nether while TNT explodes closes the connection with dimension-switch-explosion-knockback"
 repro = "client"
 regression = [
-  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::same_tick_dimension_switch_discards_only_old_world_knockback",
-  "cargo:mc-edge:server::admin_tests::explosion_queue_tests::dimension_reset_fences_queued_old_world_explosions_at_real_writer",
+  "cargo:mc-edge:explosion_queue_tests::same_tick_dimension_switch_discards_only_old_world_knockback",
+  "cargo:mc-edge:explosion_queue_tests::dimension_reset_fences_queued_old_world_explosions_at_real_writer",
 ]
-fix_commit = "patch:be44726c320aba551f99973c44c4061122283f3f7233bafea05f70f5d58740d3"
+fix_commit = "5810902c7"
 failing_first = "reported"
-repro_check = "FixBatchB/F1-red.log and amendments/F1-queue-red.log fail respectively on the connection close and the real writer leaking an old visual explosion after respawn. F1-green.log and amendments/F1-queue-green.log pass. Cumulative patch docs/bugs/fix-patches/DIMENSION-SWITCH-KNOCKBACK-DISCONNECT.patch combines 5810902c7 and 0c51b3a44; the control keeps only the reset API state/method for retained tests, with base send/receive behavior. Both same-tick destination impulse cases pass. Explicit drop policy is not vanilla motion-reset parity."
+repro_check = ["Fix 5810902c7 is in tree (the row's old patch id no longer resolves; refs corrected to mc-edge/src/explosion_queue_tests.rs) and its behaviour patch is regenerated against HEAD as patch:27ac5e8f (pump.rs, 14 removed lines, reverses cleanly). Control: reversing that hunk restores the dimension-switch-explosion-knockback branch, so explosion_queue_tests::same_tick_dimension_switch_discards_only_old_world_knockback reds at its closed.try_recv() assertion. Missing proof for promotion: the registered graphical scene native-v2-dimension-switch-knockback does not exist, and a client-surface row needs a real-client harness ref; the scene plan (portal frame, TNT fuse aligned to the travel tick via /tick freeze + /tick step, client dimension change and connection survival read from the client state and the server log) and its command are in docs/bugs/promotions/DIMENSION-SWITCH-KNOCKBACK-DISCONNECT.hunks.md and PERF-QUEUE.md."]

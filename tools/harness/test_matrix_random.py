@@ -272,6 +272,30 @@ class RandomMatrixTests(unittest.TestCase):
             _fixture_item_stock([{'type': 'minecraft:item', 'position': [33, 80, 34]}])
 
 
+    def test_published_reads_a_format_two_batch_and_refuses_a_format_one_frame(self):
+        # `_published` is the random matrix's WAL witness: it must bind to the writer's format 2 and
+        # refuse a v1 frame by name (review wave2-8 m4).
+        import zlib
+
+        from .backends.wal_forge import BATCH_MAGIC, BATCH_VERSION, HEADER
+        from .matrix_domains.random import _published
+
+        with tempfile.TemporaryDirectory() as directory:
+            world = Path(directory) / "world"
+            journal = world / "journal"
+            journal.mkdir(parents=True)
+            (journal / ".fence").write_bytes(b"")
+            payload = b'{"Player": {}}\n'
+            good = HEADER.pack(BATCH_MAGIC, BATCH_VERSION, bytes(range(16)), bytes(range(8)),
+                               7, 7, len(payload), zlib.crc32(payload)) + payload
+            (journal / "batch-00000000000000000007-00000000000000000007.bin").write_bytes(good)
+            ctx = SimpleNamespace(server=SimpleNamespace(world_dir=world))
+            self.assertEqual(_published(ctx, 7)["high"], 7)
+            (journal / "batch-00000000000000000008-00000000000000000008.bin").write_bytes(
+                struct.pack("<IIQQII", BATCH_MAGIC, 1, 8, 8, 0, 0))
+            with self.assertRaisesRegex(AssertionError, "format 2 only"):
+                _published(ctx, 8)
+
     def test_recovery_rejects_lost_published_transfer_and_craft_equivalent_substitution(self):
         committed = {'inventories': [{}, {'minecraft:oak_log': 1}],
                      'container': {}, 'blocks': {'32,80,34': 'minecraft:dirt'}}

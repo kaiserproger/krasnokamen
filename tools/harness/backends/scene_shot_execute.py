@@ -550,6 +550,92 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 raise RuntimeError("entity snapshot omitted same-thread game_time")
             receipt = {"game_time": result["game_time"], "snapshot": result}
             (artifact / f"{value['name']}.json").write_text(json.dumps(receipt, indent=2) + "\n")
+        elif kind == "attack_entity":
+            def snapshot() -> list[dict[str, Any]]:
+                result = probe.call("minecraft_list_entities", {"radius": 32, "limit": 128})
+                entities = result.get("entities")
+                if not isinstance(entities, list):
+                    raise RuntimeError("entity snapshot omitted entities")
+                if result.get("truncated") is not False:
+                    # A truncated list cannot prove an entity absent: fail closed (review wave2-12 Major-3).
+                    raise RuntimeError("entity snapshot is truncated or omitted its truncation status")
+                return entities
+
+            def find_target() -> dict[str, Any]:
+                matches = [row for row in snapshot() if row.get("entity_type") == value["entity_type"]]
+                if len(matches) != 1:
+                    raise RuntimeError(f"attack_entity needs exactly one {value['entity_type']}, "
+                                       f"got {len(matches)}")
+                for key in ("entity_id", "entity_uuid", "entity_type"):
+                    if key not in matches[0]:
+                        raise RuntimeError(f"target row omitted {key}")
+                return matches[0]
+
+            target = find_target()
+            receipt: dict[str, Any] = {"target": target, "health_before": target.get("health")}
+            if "expect_item" in value:
+                held = (probe.observe().get("selected_item") or {}).get("item_id")
+                receipt["selected_item"] = held
+                probe.check(f"{value['name']}_holds_{value['expect_item'].split(':')[1]}",
+                            held == value["expect_item"])
+            attempts = value.get("attempts", 2)
+            receipt["attempts"] = []
+            removed = False
+            confirmed = False
+            health_after = receipt["health_before"]
+            for attempt in range(attempts):
+                attempt_receipt: dict[str, Any] = {"index": attempt}
+                probe.call("minecraft_approach_entity", {
+                    "entity_id": target["entity_id"], "timeout_seconds": value["timeout_seconds"]})
+                try:
+                    attempt_receipt["attack"] = probe.call("minecraft_attack_entity_once", {
+                        "entity_id": target["entity_id"], "entity_uuid": target["entity_uuid"],
+                        "entity_type": target["entity_type"],
+                        "timeout_seconds": value["timeout_seconds"]})
+                except Exception as error:
+                    # The client's own wait is one witness; the authoritative one is the target's
+                    # received state below, so a timed-out tool still lets the damage speak.
+                    attempt_receipt["attack_error"] = str(error)
+                probe.call("minecraft_wait_ticks", {"ticks": 10})
+                # A list error or a truncated snapshot raises here: an unreadable target is never
+                # "removed" (review wave2-12 Major-3).
+                rows = [row for row in snapshot() if row.get("entity_uuid") == target["entity_uuid"]]
+                after = rows[0] if rows else None
+                attack = attempt_receipt.get("attack") or {}
+                attempt_receipt["health_after"] = None if after is None else after.get("health")
+                receipt["attempts"].append(attempt_receipt)
+                removed = after is None
+                if removed and not (attack.get("confirmed") is True
+                                    or (type(attack.get("health_before")) in (int, float)
+                                        and type(attack.get("health_after")) in (int, float)
+                                        and attack["health_after"] < attack["health_before"])):
+                    # Absence from a 32-block snapshot is not proof of a kill: a target pushed
+                    # out of the radius would look "removed" (review wave2-13 m6). Without the
+                    # tool's own kill evidence the step fails closed instead.
+                    raise RuntimeError(
+                        "attack_entity: the target left the 32-block snapshot without damage or "
+                        "kill evidence; that is not a removal")
+                confirmed = (attack.get("confirmed") is True
+                             or (type(attack.get("health_before")) in (int, float)
+                                 and type(attack.get("health_after")) in (int, float)
+                                 and attack["health_after"] < attack["health_before"]))
+                health_after = attempt_receipt["health_after"]
+                receipt["attack"] = attempt_receipt.get("attack")
+                receipt["health_after"] = health_after
+                dropped = (type(receipt["health_before"]) in (int, float)
+                           and type(health_after) in (int, float)
+                           and health_after < receipt["health_before"])
+                if removed or dropped or confirmed:
+                    break
+            receipt["removed"] = removed
+            (artifact / f"{value['name']}.json").write_text(json.dumps(receipt, indent=2) + "\n")
+            dropped = (type(receipt["health_before"]) in (int, float)
+                       and type(health_after) in (int, float)
+                       and health_after < receipt["health_before"])
+            # The jab was accepted only if the server's own damage shows in the target's received
+            # state, or the target left a valid snapshot: a STAB dropped at decode leaves it whole.
+            probe.check(f"{value['name']}_accepted", removed or dropped or confirmed)
+            probe.check(f"{value['name']}_damaged", removed or dropped)
         elif kind == "mob_motion":
             from . import mob_motion_oracle
 

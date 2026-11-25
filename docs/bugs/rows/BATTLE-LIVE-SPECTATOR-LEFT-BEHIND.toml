@@ -6,6 +6,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "G2R calibration trial-7: CamSpec ('battle spectate CamSpec PovRed') stayed underground at PovRed's death spot after PovRed respawned about 230 blocks away; the camera recording was a dark cave for four minutes. Initial placement and later behind-player repositioning did not provide continuous entity-camera following. Native /spectate and battle named intent now share real Set Camera binding, with death/disconnect release and battle respawn/reconnect rebind. Acceptance and ledger promotion remain pending."
-regression = ["cargo:mc-core:battle::live_players::tests::the_bound_spectator_follows_the_holder_after_a_respawn_and_a_rearm", "cargo:mc-core:tick::spectator::tests::spectator_tick_follows_target_and_publishes_tracking_anchor_without_teleport_spam", "cargo:mc-edge:plan::plan_tests::camera_tests::camera_binding_follows_pairing_and_release_precedes_target_removal"]
+regression = ["cargo:mc-core:battle::live_players::tests::the_bound_spectator_follows_the_holder_after_a_respawn_and_a_rearm", "cargo:mc-core:tick::spectator::tests::spectator_tick_follows_target_and_publishes_tracking_anchor_without_teleport_spam", "cargo:mc-edge:plan::plan_tests::camera_tests::camera_binding_follows_pairing_and_release_precedes_target_removal",
+  "harness:battle-live:battle-live-spectator-follows-respawn",
+]
+
 failing_first = "reported"
-fix_commit = "c6fa94da3eb7d41830992e6e2a00818e2813e9f4"
+fix_commit = "patch:58f02bb7959a01a3a4ca24e750f090e138eee5e0e057c9210f0cbd0d2e66f29d"
+repro_check = "Withdrawn 2026-11-25 (REVIEW-wave2-15 M2): the control patch removed only the two follow(...) calls while the per-tick follow_cameras rebind still catches up in <=1 tick, so the scene cannot flip; it also omitted other hunks of c6fa94da3 without (a)/(b)/(c) reasons and carried invented a-side comment lines. No spectator scene ever ran on a control pin. Proof ready, graphical control missing: reverse ALL real non-test hunks of c6fa94da3 with mechanical adaptations only, then >=3 control runs red on the camera/gap assertion and >=3 candidate runs green."

@@ -76,7 +76,13 @@ class ProbeSteps:
 
     def wait(self, predicate: Callable[[dict[str, Any]], bool], label: str,
              *, wait_for_play: bool = False, outside_play: bool = False,
-             timeout_seconds: float | None = None) -> dict[str, Any]:
+             timeout_seconds: float | None = None, record: bool = True) -> dict[str, Any]:
+        """Wait event-driven for `predicate`; `record=False` makes a timeout non-evidence.
+
+        A best-effort wait (a reply that may legitimately never arrive) must not write
+        `assertions[label] = False`: a scenario's assertion map is evidence, and a held optional
+        reply is not a failed behaviour (review wave2-8 m2).
+        """
         deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
         try:
             while True:
@@ -104,7 +110,8 @@ class ProbeSteps:
                     if CLIENT_STATE_EVENT_EXPIRED not in str(error):
                         raise
         except TimeoutError as error:
-            self.report["assertions"][label] = False
+            if record:
+                self.report["assertions"][label] = False
             runtime.tag_failure(error, "assertion")
             raise
 

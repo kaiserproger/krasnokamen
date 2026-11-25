@@ -142,6 +142,10 @@ impl TickState {
                 }
             }
         };
+        // A dragon egg waiting for its sampled target chunk is the same demand
+        // one step earlier: highest priority, bounded by the record's lifetime.
+        // Collected first: `add` below holds `want` mutably.
+        let egg_chunks: Vec<ChunkPos> = self.pending_egg_chunks().collect();
         for id in self.players.keys() {
             let Some(slot) = self.entities.slot_of_any(*id) else {
                 continue;
@@ -177,6 +181,9 @@ impl TickState {
         }
         for chunk in self.world.active_positions().chain(self.world.dirty_pins()) {
             want.entry(chunk).or_insert(i32::MAX);
+        }
+        for chunk in egg_chunks {
+            want.entry(chunk).and_modify(|best| *best = 0).or_insert(0);
         }
         want
     }

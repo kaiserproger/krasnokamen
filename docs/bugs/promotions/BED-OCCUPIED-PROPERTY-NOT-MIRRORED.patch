@@ -1,8 +1,8 @@
 diff --git a/crates/mc-core/src/sleep.rs b/crates/mc-core/src/sleep.rs
-index 6e21fd7..958047b 100644
+index 6e21fd7c7..a4ffda0cf 100644
 --- a/crates/mc-core/src/sleep.rs
 +++ b/crates/mc-core/src/sleep.rs
-@@ -295,6 +295,76 @@ pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
+@@ -295,6 +295,87 @@ pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
      }
  }
  
@@ -13,8 +13,9 @@ index 6e21fd7..958047b 100644
 +/// their bed's cell, and a bed that lost its sleeper is cleared again. Doing it
 +/// here covers every wake path (leave-bed, morning, hit, death, resident
 +/// reassignment, dimension travel), not just [`wake`]. The tick calls it after
-+/// the phases that can start or end a sleep and before the merge, so its writes
-+/// land in the same block phase and a block break staged by the same tick wins.
++/// `state.merge` and before the block phase, so an accepted write to a bed this
++/// tick (a break or a replace) wins over the mirror, and the mirror's own write
++/// still lands in this tick's block phase.
 +pub(crate) fn mirror_occupied_beds(state: &mut TickState) {
 +    let dimension = state.dimension.name();
 +    let previous = std::mem::take(&mut state.occupied_beds);
@@ -37,11 +38,22 @@ index 6e21fd7..958047b 100644
 +            }
 +        }
 +    }
++    // No sleeper and no occupied cell: nothing to compare, and the per-tick pass must not build
++    // the written-cell set for every dimension on every tick (review wave2-8 m8).
++    if previous.is_empty() && wanted.is_empty() {
++        return;
++    }
++    // One set for the pass: an accepted write to any cell this tick wins.
++    let written: rustc_hash::FxHashSet<BlockPos> = state
++        .merge_block_writes
++        .iter()
++        .map(|(pos, _)| *pos)
++        .collect();
 +    for bed in previous.difference(&wanted) {
-+        set_bed_occupied(state, *bed, false);
++        set_bed_occupied(state, *bed, false, &written);
 +    }
 +    for bed in &wanted {
-+        set_bed_occupied(state, *bed, true);
++        set_bed_occupied(state, *bed, true, &written);
 +    }
 +    state.occupied_beds = wanted;
 +}
@@ -50,7 +62,12 @@ index 6e21fd7..958047b 100644
 +/// that no longer holds a bed (or is unloaded) is left alone, and so is a bed
 +/// an accepted write already targets this tick: the merge's write wins, so a
 +/// break or a replace is never undone by the mirror.
-+fn set_bed_occupied(state: &mut TickState, head: BlockPos, occupied: bool) {
++fn set_bed_occupied(
++    state: &mut TickState,
++    head: BlockPos,
++    occupied: bool,
++    written: &rustc_hash::FxHashSet<BlockPos>,
++) {
 +    let value = if occupied { "true" } else { "false" };
 +    let Some(current) = state.world.block_at(head.x, head.y, head.z) else {
 +        return;
@@ -58,13 +75,7 @@ index 6e21fd7..958047b 100644
 +    // Vanilla `BedBlock.updateShape` copies `OCCUPIED` to the connected half.
 +    let other = crate::placement::other_half(&state.registry.blocks, head, current)
 +        .map_or(head, |(other, _)| other);
-+    let accepted = |pos: &BlockPos| {
-+        state
-+            .merge_block_writes
-+            .iter()
-+            .any(|(written, _)| written == pos)
-+    };
-+    if accepted(&head) || accepted(&other) {
++    if written.contains(&head) || written.contains(&other) {
 +        return;
 +    }
 +    for cell in [head, other] {
@@ -79,23 +90,8 @@ index 6e21fd7..958047b 100644
  /// Once per tick: count sleep time, wake those whose bed is gone, whose
  /// night is over or who were hurt, and skip the night when the gamerule's
  /// percentage of active non-spectator players sleeps soundly.
-diff --git a/crates/mc-core/src/tick.rs b/crates/mc-core/src/tick.rs
-index 60ef9b2..9a4d140 100644
---- a/crates/mc-core/src/tick.rs
-+++ b/crates/mc-core/src/tick.rs
-@@ -442,6 +442,10 @@ pub struct TickState {
-     pub(crate) shriekers: crate::shrieker::Shriekers,
-     /// Players lying in a bed ([`crate::sleep`]).
-     pub sleepers: HashMap<EntityId, crate::sleep::Sleeper>,
-+    /// Bed head cells whose block `occupied` property this tick mirrored
-+    /// ([`crate::sleep::run`]). Derived from the sleepers and sleeping
-+    /// residents every tick, never persisted.
-+    pub(crate) occupied_beds: HashSet<BlockPos>,
-     /// Last journaled player / block-entity post-images. Images are
-     /// absolute, so the journal writes one only when it differs from the
-     /// last; an unchanged record is still covered by an earlier batch or
 diff --git a/crates/mc-core/src/tick/dimension.rs b/crates/mc-core/src/tick/dimension.rs
-index 38bf46f..15a4a35 100644
+index 38bf46f8a..15a4a35c6 100644
 --- a/crates/mc-core/src/tick/dimension.rs
 +++ b/crates/mc-core/src/tick/dimension.rs
 @@ -276,6 +276,11 @@ fn run_dimension_tick_inner<'a>(
@@ -110,15 +106,3 @@ index 38bf46f..15a4a35 100644
      let block_prepare_start = std::time::Instant::now();
  
      // 4. Block phase: ordered merge writes, retained falling lifecycle.
-diff --git a/crates/mc-core/src/tick/state.rs b/crates/mc-core/src/tick/state.rs
-index 65a3340..4b9cd37 100644
---- a/crates/mc-core/src/tick/state.rs
-+++ b/crates/mc-core/src/tick/state.rs
-@@ -151,6 +151,7 @@ impl TickState {
-             vaults: Default::default(),
-             shriekers: Default::default(),
-             sleepers: HashMap::default(),
-+            occupied_beds: HashSet::default(),
-             journaled_players: HashMap::default(),
-             journaled_block_entities: HashMap::default(),
-             block_log: Default::default(),

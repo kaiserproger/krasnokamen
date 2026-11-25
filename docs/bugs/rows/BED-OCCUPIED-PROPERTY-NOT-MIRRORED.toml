@@ -4,8 +4,13 @@ title = "A sleeping resident never sets its bed block's occupied=true"
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "receipts/BreakVillageParity/FINDINGS.md (\"Noticed (not filed)\"): every bed reads FREE while its owner sleeps, in all scenes and in the baseline; vanilla LivingEntity.startSleeping sets the bed's OCCUPIED block state. Solaris derived bed occupancy from its sleepers and never mirrored the property. Also stated in docs/bugs/rows/VILLAGER-BED-USE-SLEEPS-PLAYER-OVER-VILLAGER.toml source. Fix: one mirror pass per tick after the merge in tick/dimension.rs (occupied_beds derived from state.sleepers and sleeping residents; both halves written; a bed an accepted write already targets is skipped, so a same-tick break wins), fix patch docs/bugs/promotions/BED-OCCUPIED-PROPERTY-NOT-MIRRORED.patch, hunk map beside it. Client-visible: promotion needs a scene that reads the bed head's occupied state during sleep and after the wake — see receipts/D123/D123Battle/OWNER-DECISIONS-NEEDED.md item 2. Filed as its own row on 2026-11-24 (review N5)."
-regression = ["cargo:mc-core:sleep::tests::a_sleeping_player_marks_the_bed_occupied_and_a_wake_clears_it", "cargo:mc-core:sleep::tests::a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it"]
+regression = ["cargo:mc-core:sleep::tests::a_sleeping_player_marks_the_bed_occupied_and_a_wake_clears_it", "cargo:mc-core:sleep::tests::a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it", "harness:scene-shot:native-bed-occupied-state",
+  "harness:scene-shot:native-village-occupied-bed"]
 failing_first = "not recorded"
-fix_commit = "patch:06c5dace1735a3c911934b460aba6dd11d71183184d6533ba798334bb733fd65"
+fix_commit = "patch:fb6d7c78c3ad229b655fddb7960cb96e47224e53c7e3a24c960eec760c079361"
+# Both regressions red through the multi-line `assert!(bed_occupied(..), "…")` macro, whose panic
+# location is the macro's own first line, so the control's red is named here (README class (c)).
+proving_assertions = { "cargo:mc-core:sleep::tests::a_sleeping_player_marks_the_bed_occupied_and_a_wake_clears_it" = "crates/mc-core/src/sleep_tests.rs:1300", "cargo:mc-core:sleep::tests::a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it" = "crates/mc-core/src/sleep_tests.rs:1321" }
+promotion = "docs/bugs/promotions/BED-OCCUPIED-PROPERTY-NOT-MIRRORED.json"
