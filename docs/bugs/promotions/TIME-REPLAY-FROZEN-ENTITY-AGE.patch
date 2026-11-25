@@ -1,0 +1,60 @@
+diff --git a/crates/mc-core/src/journal/replay.rs b/crates/mc-core/src/journal/replay.rs
+index f28c8da20..9704820db 100644
+--- a/crates/mc-core/src/journal/replay.rs
++++ b/crates/mc-core/src/journal/replay.rs
+@@ -99,12 +99,17 @@ impl ReplayChunkClock {
+         }
+     }
+ 
+-    pub(super) fn through(&self, tick: u64, _game: &ReplayGameClock) -> u64 {
++    pub(super) fn through(&self, tick: u64, game: &ReplayGameClock) -> u64 {
+         let index = self.points.partition_point(|point| point.tick <= tick);
+         let Some(point) = index.checked_sub(1).map(|index| &self.points[index]) else {
+             return 0;
+         };
+-        point.elapsed + if point.active { tick - point.tick } else { 0 }
++        point.elapsed
++            + if point.active {
++                game.between(point.tick, tick)
++            } else {
++                0
++            }
+     }
+ 
+     pub(super) fn between(&self, from: u64, to: u64, game: &ReplayGameClock) -> u64 {
+@@ -128,7 +133,7 @@ impl ReplayChunkClock {
+             image.tick.min(image.last_sim.saturating_add(1))
+         };
+         let elapsed = if image.active {
+-            self.through(tick.saturating_sub(1), game) + 1
++            self.through(tick.saturating_sub(1), game) + game.between(tick.saturating_sub(1), tick)
+         } else {
+             self.through(image.last_sim, game)
+         };
+@@ -146,7 +151,7 @@ impl ReplayChunkClock {
+         villager: &mut crate::villager::VillagerState,
+         from: u64,
+         to: u64,
+-        _game: &ReplayGameClock,
++        game: &ReplayGameClock,
+     ) -> bool {
+         let mut advanced = false;
+         for (index, point) in self.points.iter().enumerate() {
+@@ -159,8 +164,15 @@ impl ReplayChunkClock {
+                 .get(index + 1)
+                 .map_or(to, |next| to.min(next.tick.saturating_sub(1)));
+             if start < end {
+-                crate::villager::persistence::advance_clocks(villager, start, end);
+-                advanced = true;
++                game.running_intervals(start, end, |first, last| {
++                    crate::villager::persistence::advance_running_clocks(
++                        villager,
++                        game.last_running_at(first),
++                        first + 1,
++                        last,
++                    );
++                    advanced = true;
++                });
+             }
+         }
+         advanced
