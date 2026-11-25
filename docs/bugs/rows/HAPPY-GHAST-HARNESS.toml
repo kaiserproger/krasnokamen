@@ -12,3 +12,4 @@ regression = [
 ]
 fix_commit = "patch:0c07255492152b53fcd7453104062e1be91f08ca82afd1f5d4063ee67a955178"
 promotion = "docs/bugs/promotions/HAPPY-GHAST-HARNESS.json"
+proving_assertions = { "harness:entities:native-v2-happy-ghast-harness" = "rider_4_distinct_and_keeps_others", "cargo:mc-core:vanilla_mob_behavior_tests::happy_ghast_harness_admits_four_riders_and_survives_rider_codec" = "crates/mc-core/src/vanilla_mob_behavior_tests.rs:647" }

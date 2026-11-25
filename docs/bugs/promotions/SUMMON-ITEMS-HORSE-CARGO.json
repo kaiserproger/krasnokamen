@@ -1,0 +1,54 @@
+{
+  "id": "SUMMON-ITEMS-HORSE-CARGO",
+  "verdict": "promoted",
+  "fix_commit": "ee71ee684",
+  "fix_commit_full": "ee71ee68435863c87542e8dcae430fd42b1145af",
+  "promoted_at": "2026-11-25T07:26:01+00:00",
+  "tree_head": "b9d3b4a45379b23f90a011173a3211cfeac6e4f4",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "fix_commit",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/command_summon.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/command_summon_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:command_summon::tests::chested_horse_summon_carries_vanilla_items_cargo": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/command_summon_tests.rs",
+        "line": 26,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "harness:entities:native-v2-ledger-summon-horse-cargo": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-fix` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_summon::tests::chested_horse_summon_carries_vanilla_items_cargo": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261125T071112-native-v2-ledger-summon-horse-cargo-l8po83cn/result.json",
+    "tree_head": "b9d3b4a45379b23f90a011173a3211cfeac6e4f4",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "aa150265625cd28b04d00c3dcb4cf477fa1aae6f6b0960dc8655cdf752b2c908",
+    "covers": [
+      "harness:entities:native-v2-ledger-summon-horse-cargo"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261125T071232-ledger-promote-fd92u87v"
+}

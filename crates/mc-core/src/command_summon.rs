@@ -378,8 +378,15 @@ pub(crate) fn supports(state: &TickState, type_id: u32, name: &str, key: &str) -
         "fuse" | "explosion_power" | "block_state" => name == "minecraft:tnt",
         "BlockState" | "Time" => name == "minecraft:falling_block",
         // Vanilla container vehicles save their cargo as `Items`; whether the
-        // field applies is the kind's own container size.
-        "Items" => crate::vehicles::container_size(name) != 0,
+        // field applies is the kind's own container size. A chested horse, donkey,
+        // mule or llama keeps the same list in `Items` beside `ChestedHorse` (and the
+        // llama's `Strength`), which the mount persistence parser owns.
+        "Items" => {
+            crate::vehicles::container_size(name) != 0
+                || crate::mounts::persistence::owns_cargo_field(name, "Items")
+        }
+        "ChestedHorse" => crate::mounts::persistence::owns_cargo_field(name, "ChestedHorse"),
+        "Strength" => crate::mounts::persistence::owns_cargo_field(name, "Strength"),
         _ => return None,
     })
 }
@@ -772,6 +779,11 @@ pub(crate) fn prepare(
         crate::scoreboard::require_no_team(&state.scoreboard, &image.native.uuid.to_string())
             .map_err(error)?;
     }
+    // The mount's chest, strength and cargo need no second pass here: `decode` builds the
+    // image through `EntityStateImage::from_record`, which already runs
+    // `mounts::persistence::from_fields` and `cargo_from_record` on the same `native`
+    // (journal/replay.rs:427-441) and turns a bad slot into the refusal above. The
+    // `supports` predicate is what admits the fields.
     image.variant = variant;
     Ok(image)
 }

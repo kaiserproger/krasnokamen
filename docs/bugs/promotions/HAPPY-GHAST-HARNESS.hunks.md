@@ -33,10 +33,19 @@ applied forward is the fix and reversed is the pre-image.
   — the control's red: with the patch reversed the ghast accepts one rider and no harness, so the four-rider
   assertion fails.
 - `harness:entities:native-v2-happy-ghast-harness` — the candidate's green: gate
-  `20261125T034806-native-v2-happy-ghast-harness-lcyel49r` on the clean pin (`f2b291c99`, 39.2 s, status
-  passed). Its assertions: `no_harness_no_riders`, `rider_1..4_distinct_and_keeps_others`,
+  `20261125T041959-native-v2-happy-ghast-harness-4ahooiv2` on `cb4dc3253` (29.3 s, status passed) — the receipt
+  the promotion JSON records; an earlier green on `f2b291c99` (`034806-…-lcyel49r`) proves the same behaviour. Its assertions: `no_harness_no_riders`, `rider_1..4_distinct_and_keeps_others`,
   `fifth_rider_refused_before_ordered_dismount`, `other_riders_retained`; the passenger trace in the artifact
   shows `1` → `1,83` → `1,83,88` → `1,83,88,90` → `1,83,88` (harness leaves) → `83,88`, and
   `screenshots/four-riders-mounted.png` is the graphical half.
 - The control cannot run the graphical ref (no reverted-pin client build); its red is the cargo ref, as in
   HS-2 (POL-1 practice).
+
+## Not carried (honest scope)
+
+HEAD has a **second** happy-ghast `Action::Armor` path — a `minecraft:harnesses` tag check at
+`mounts.rs:282-291`, added by a later commit — that this patch does not revert (the tag branch exists in 477
+trees, the suffix branch in 532). On the control, equipping a harness therefore *still works*; only the
+four-rider admission and the harness-before-riding gate break, which is exactly what the cargo ref asserts
+(`vanilla_mob_behavior_tests.rs:647`, left 1 / right 4). The three reversed hunks also do not touch the product
+tree: `mounts.rs` here matches `A10Main`/`BattleLiveCrash` file-for-file.

@@ -265,6 +265,39 @@ SCENARIOS: dict[str, Scenario] = {
                "retransmission, cooldown ordering or player-caused vibration.",
     ),
 
+    "native-v2-ledger-gravity-tick": _entry(
+        id="native-v2-ledger-gravity-tick",
+        summary="An imported due gravity tick starts the fall without a nearby write",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-gravity-tick",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_gravity_tick.py",
+                 "tools/harness/backends/native_promotion_custody.py"),
+        fixture="operator pad; `/tick freeze`; one floating sand block six blocks above the pad "
+                "floor with air below; a clean stop, export-anvil and import-anvil round trip",
+        proves="the imported world's saved `block_ticks` entry makes the sand leave its position and "
+               "land one block down after the restart, with no command writing near it",
+        limits="One frozen-world sand block and one conversion round trip; no gravel, no other "
+               "falling kind and no second saved tick.",
+    ),
+
+    "native-v2-ledger-summon-horse-cargo": _entry(
+        id="native-v2-ledger-summon-horse-cargo",
+        summary="A summoned chested mount carries its vanilla Items cargo",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-summon-horse-cargo",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_summon_horse_cargo.py"),
+        fixture="operator pad; one `summon` chested donkey carrying three diamonds in storage "
+                "slot 0 and one apple in slot 14",
+        proves="the client's own sneak+use opens the 53-slot horse cargo menu and it holds the "
+               "authored three diamonds and one apple in their slots",
+        limits="One donkey with two authored cargo slots, read through the menu; no chest attach, "
+               "no deposit/withdraw, no mule or llama column check and no export/reimport.",
+    ),
+
     "native-v2-ledger-forceload-ring": _entry(
         id="native-v2-ledger-forceload-ring",
         summary="A forced far chunk's ring ticks blocks but freezes entities",
