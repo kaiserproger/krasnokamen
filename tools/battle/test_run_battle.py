@@ -739,7 +739,12 @@ class BattleRunnerTests(unittest.TestCase):
             def wait(self, timeout=None):
                 return process.wait(timeout=timeout)
         os.kill(process.pid, 9)
-        self.assertTrue(runner.killed_by_sigkill(Watched()))
+        # The contract, not the symbol: a runner without the recognition path fails here as an
+        # assertion (a reversed tree must red at an assertion, never crash at import).
+        recognise = getattr(runner, "killed_by_sigkill", None)
+        self.assertIsNotNone(
+            recognise, "the runner must recognise a SIGKILLed server whose poll() is still None")
+        self.assertTrue(recognise(Watched()))
 
     def test_console_fifo_forwards_each_written_line_to_the_console(self):
         runner = load_runner()
