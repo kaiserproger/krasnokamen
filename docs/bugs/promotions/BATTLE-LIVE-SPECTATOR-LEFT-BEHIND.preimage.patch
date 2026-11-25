@@ -1,0 +1,22 @@
+diff --git b/crates/mc-core/src/battle/live_players.rs a/crates/mc-core/src/battle/live_players.rs
+index 67407c3a3..c5583c33a 100644
+--- b/crates/mc-core/src/battle/live_players.rs
++++ a/crates/mc-core/src/battle/live_players.rs
+@@ -292,7 +292,7 @@ pub(crate) fn update(state: &mut TickState) {
+                 }
+             }
+             let name = state.hostile.battle.live.holds[index].name.clone();
+-            let _ = &name; // CONTROL: the pre-fix tree had no follow() call here.
++            follow(state, &name);
+         }
+         if !is_dead(state, player)
+             && let Some(slot) = state.entities.slot_of(player)
+@@ -945,7 +945,7 @@ pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<Strin
+     };
+     let index = existing.unwrap_or(state.hostile.battle.live.holds.len() - 1);
+     remember_player(&mut state.hostile.battle, index, player);
+-    // CONTROL: the pre-fix tree had no follow() call here.
++    follow(state, name);
+     Ok(reply)
+ }
+ 
