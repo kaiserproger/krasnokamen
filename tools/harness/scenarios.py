@@ -223,6 +223,74 @@ SCENARIOS: dict[str, Scenario] = {
                "profile-command refs.",
     ),
 
+    "native-v2-ledger-hopper-vehicle": _entry(
+        id="native-v2-ledger-hopper-vehicle",
+        summary="A hopper pulling from a chest minecart refreshes its already-open menu",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-hopper-vehicle",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_hopper_vehicle.py"),
+        fixture="operator pad; one hopper with its own menu open and one chest minecart summoned above "
+                "it carrying a single diamond as vanilla `Items` cargo",
+        proves="the open HopperMenu receives the pulled diamond as a menu-slot update while the screen "
+               "stays open, and closing and reopening the menu then shows the same diamond, so the "
+               "transfer itself is not what the assertion measures",
+        limits="One chest minecart over one hopper, one diamond, one open menu; no chains, "
+               "hopper-to-chest push, restart or offline export. The verdict is an assertion on the open "
+               "menu after a bounded client-tick wait, never the wait's own expiry.",
+    ),
+
+    "native-v2-ledger-sculk-downward": _entry(
+        id="native-v2-ledger-sculk-downward",
+        summary="A sculk sensor chain latches the copper bulbs one block below its dust",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-sculk-downward",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_sculk_downward.py"),
+        fixture="operator pad; one sculk sensor, one east-facing comparator, two dust cells and "
+                "two copper bulbs one block below them; a note block is played by a fixture "
+                "redstone block",
+        proves="the client reads dust power above zero after the note-block vibration, both "
+               "downward bulbs latch `lit` true, and they keep the latch after the trigger is "
+               "removed",
+        limits="One sensor chain with fixture-driven ingress; no calibrated sensor, amethyst "
+               "retransmission, cooldown ordering or player-caused vibration.",
+    ),
+
+    "native-v2-ledger-datapack-hover": _entry(
+        id="native-v2-ledger-datapack-hover",
+        summary="A `/datapack list` entry carries its pack description on hover",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-datapack-hover",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_datapack_hover.py"),
+        fixture="operator pad; one `/datapack list` answer naming the built-in vanilla pack",
+        proves="the entry line still names the pack and its projected component carries a "
+               "`show_text` hover whose rendered payload is the pack description",
+        limits="One list answer for the built-in pack; no enabled file pack, no scrolling and no "
+               "click event.",
+    ),
+
+    "native-v2-ledger-potion-custom": _entry(
+        id="native-v2-ledger-potion-custom",
+        summary="A lingering potion's cloud applies its authored custom effect",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-potion-custom",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_potion_custom.py"),
+        fixture="operator pad; a survival player holding a lingering potion whose only payload is "
+                "one authored custom levitation effect and no base potion",
+        proves="the thrown cloud applies the authored custom effect: the client's own position rises "
+               "after a bounded client-tick wait, which an ignored custom payload cannot produce",
+        limits="One lingering potion with one authored custom effect and no base potion, thrown straight "
+               "down; the custom impact colour is a level-event value no observation exposes and rests "
+               "on the row's cargo ref. No amplifier mixture, splash form or second cloud.",
+    ),
+
     "native-v2-ledger-donkey-cargo": _entry(
         id="native-v2-ledger-donkey-cargo",
         summary="A chested donkey's cargo menu opens, takes seven diamonds and gives them back",

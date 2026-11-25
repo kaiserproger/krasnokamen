@@ -1189,6 +1189,30 @@ def _ledger_tag_duplicates(steps: ProbeSteps, origin: tuple[int, int, int]) -> N
     run(steps, origin)
 
 
+def _ledger_hopper_vehicle(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_ledger_hopper_vehicle import run
+
+    run(steps, origin)
+
+
+def _ledger_potion_custom(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_ledger_potion_custom import run
+
+    run(steps, origin)
+
+
+def _ledger_sculk_downward(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_ledger_sculk_downward import run
+
+    run(steps, origin)
+
+
+def _ledger_datapack_hover(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_ledger_datapack_hover import run
+
+    run(steps, origin)
+
+
 RUNNERS = {
     "native-v2-happy-ghast-harness": _happy_ghast,
     "native-v2-mob-metadata-spot": _mob_metadata,
@@ -1214,6 +1238,10 @@ RUNNERS = {
     "native-v2-ledger-donkey-cargo": _ledger_donkey_cargo,
     "native-v2-ledger-copper-chest-open": _ledger_copper_chest,
     "native-v2-ledger-tag-duplicates": _ledger_tag_duplicates,
+    "native-v2-ledger-hopper-vehicle": _ledger_hopper_vehicle,
+    "native-v2-ledger-potion-custom": _ledger_potion_custom,
+    "native-v2-ledger-sculk-downward": _ledger_sculk_downward,
+    "native-v2-ledger-datapack-hover": _ledger_datapack_hover,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
     "native-v2-map-locked-banners": _promotion_maps,
