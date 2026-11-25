@@ -1,0 +1,77 @@
+{
+  "id": "CLIENT-NO-GROUND-BESIDE-QUARANTINED-CHUNK",
+  "verdict": "promoted",
+  "fix_commit": "client:cdc99ae89ee58c2e98ec9d8480927b9573194cd9",
+  "fix_commit_full": "cdc99ae89ee58c2e98ec9d8480927b9573194cd9",
+  "promoted_at": "2026-11-25T11:18:30+00:00",
+  "tree_head": "5f67fd29c934dd500b3ba2a8dd81e99cf7996efa",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261125T105418-native-v2-corrupt-chunk-near-camera-pz1pkl4w/result.json",
+    "client_head": "3671790ee7f9fbbb30d62a44adb99a5b15ff63bb",
+    "server_binary_sha256": "52c7e9207e3d2bd4efc22f058d54eda7fcb7a7bb3dbeb8bb1f34f8c459ba9576",
+    "red": [
+      "harness:entities:native-v2-corrupt-chunk-near-camera"
+    ],
+    "states": {
+      "harness:entities:native-v2-corrupt-chunk-near-camera": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261125T104941-native-v2-corrupt-chunk-near-camera-_1xtw14_/result.json",
+    "client_head": "c084f8c483272f45e44b0a7cb6760b4c69d4e5ae",
+    "server_binary_sha256": "52c7e9207e3d2bd4efc22f058d54eda7fcb7a7bb3dbeb8bb1f34f8c459ba9576",
+    "green": [
+      "harness:entities:native-v2-corrupt-chunk-near-camera"
+    ],
+    "states": {
+      "harness:entities:native-v2-corrupt-chunk-near-camera": "green"
+    },
+    "tree_head": "5f67fd29c934dd500b3ba2a8dd81e99cf7996efa",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261125T104941-native-v2-corrupt-chunk-near-camera-_1xtw14_/result.json",
+    "client_head": "c084f8c483272f45e44b0a7cb6760b4c69d4e5ae",
+    "server_binary_sha256": "52c7e9207e3d2bd4efc22f058d54eda7fcb7a7bb3dbeb8bb1f34f8c459ba9576",
+    "green": [
+      "harness:entities:native-v2-corrupt-chunk-near-camera"
+    ],
+    "states": {
+      "harness:entities:native-v2-corrupt-chunk-near-camera": "green"
+    },
+    "tree_head": "5f67fd29c934dd500b3ba2a8dd81e99cf7996efa",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "a738aac638c6afae5e1a89b3522b9448d76e50c0",
+    "paths": [
+      "src/entities/physical.rs",
+      "src/lib.rs",
+      "src/minecraft/navigation.rs",
+      "src/player/collision.rs",
+      "src/player/movement.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:session::observation::destruction_tests::a_player_beside_an_unheld_column_grounds_and_can_sneak": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:session::observation::destruction_tests::an_unheld_cell_is_solid_in_the_collision_scan": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:session::observation::destruction_tests::unloaded_eye_keeps_play_frames_and_waits_for_terrain": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261125T111442-ledger-promote-spn11exq"
+}
