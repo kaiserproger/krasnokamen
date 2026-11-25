@@ -54,10 +54,18 @@ it. Disposition: class (a)-adjacent — another commit's code, present in both h
 The 78/54 (and 62/49) counts the older text used are the same rigs counted in quads, not cubes:
 `krasnokamen_models.rs:265-283`'s `faces` map only overrides UVs, all six faces are always emitted.
 
-## Remaining before promotion
+## The pair that promoted it
 
-The pair above was built from the pre-CM-4 client, whose frame reported the layer summary as a
-string-keyed map without bounds. The height term needs the CM-4 list form, so a control commit on
-top of the CM-4 client head that reverses `92dcb25d`'s production hunks is required (its patch must
-stay equal to the rig fix), then both halves must be re-run against a server pinned at the harness
-commit that carries `check_rig_guardian`'s height term.
+The pre-CM-4 pair above could not carry the height term (its frames report the layer summary as a
+string-keyed map without bounds), so the pair was rebuilt on the CM-4 client and re-run against the
+server pinned at core `c20a0d18be`:
+
+- control `bafbf78b40` (the fourteen rigs restored from `e3678206`, frame report in place) →
+  receipt `20261125T152848-native-rig-guardian-_dusv2q0`, FAIL at
+  `guardian_spikes_and_bee_legs_submitted` with guardian 612 / bee 468 / height 1.373;
+- fix `0eb3e0ea1e` (the same fourteen rigs at the fix content) → receipt
+  `20261125T152915-native-rig-guardian-b4j5_vjb`, PASS with 792 / 324 / 1.516.
+
+diff(control, fix) carries patch id `6cf9f2be…`, equal to `client:3bfbd7b6`'s non-test patch. The
+measured numbers match the dump-derived predictions (612/468/1.3761 against 792/324/1.4912) within
+0.3%, which is the evidence that the window was derived rather than fitted.

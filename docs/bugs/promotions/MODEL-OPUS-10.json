@@ -3,49 +3,49 @@
   "verdict": "promoted",
   "fix_commit": "client:3bfbd7b6",
   "fix_commit_full": "3bfbd7b6902c8265f57be8ca3890359e691bfe87",
-  "promoted_at": "2026-11-25T13:21:39+00:00",
-  "tree_head": "6670d89e3675c8f0f3b1d7a9de88c0d73c56dabd",
+  "promoted_at": "2026-11-25T15:32:49+00:00",
+  "tree_head": "c20a0d18bee552b8690031398ea80bfcb3ac7006",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "client_fix": true,
   "control_tree": "client",
   "control": "client_receipt_pair",
   "negative_control": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T131449-native-rig-parity-kfdk_vpx/result.json",
-    "client_head": "e3678206dc82240442206f6d59b2ed3d1f80a643",
-    "server_binary_sha256": "46180f13170af52eb40832611a1855c1ebab4f5699028190585a86b29e16e203",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T152848-native-rig-guardian-_dusv2q0/result.json",
+    "client_head": "bafbf78b400a583f972252c3f376e090c3f5b859",
+    "server_binary_sha256": "06ba83364da39a7e6e1b1d99ab9ccc6d34c0edb626bff43babd8cb4abff8bb4c",
     "red": [
-      "harness:scene-shot:native-rig-parity"
+      "harness:scene-shot:native-rig-guardian"
     ],
     "states": {
-      "harness:scene-shot:native-rig-parity": "red"
+      "harness:scene-shot:native-rig-guardian": "red"
     }
   },
   "restored": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T131617-native-rig-parity-7jdv5pzt/result.json",
-    "client_head": "3bfbd7b6902c8265f57be8ca3890359e691bfe87",
-    "server_binary_sha256": "46180f13170af52eb40832611a1855c1ebab4f5699028190585a86b29e16e203",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T152915-native-rig-guardian-b4j5_vjb/result.json",
+    "client_head": "0eb3e0ea1eec0648144d521bf55bb5ba86d3fe4d",
+    "server_binary_sha256": "06ba83364da39a7e6e1b1d99ab9ccc6d34c0edb626bff43babd8cb4abff8bb4c",
     "green": [
-      "harness:scene-shot:native-rig-parity"
+      "harness:scene-shot:native-rig-guardian"
     ],
     "states": {
-      "harness:scene-shot:native-rig-parity": "green"
+      "harness:scene-shot:native-rig-guardian": "green"
     },
-    "tree_head": "6670d89e3675c8f0f3b1d7a9de88c0d73c56dabd",
+    "tree_head": "c20a0d18bee552b8690031398ea80bfcb3ac7006",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "client_receipt": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T131617-native-rig-parity-7jdv5pzt/result.json",
-    "client_head": "3bfbd7b6902c8265f57be8ca3890359e691bfe87",
-    "server_binary_sha256": "46180f13170af52eb40832611a1855c1ebab4f5699028190585a86b29e16e203",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T152915-native-rig-guardian-b4j5_vjb/result.json",
+    "client_head": "0eb3e0ea1eec0648144d521bf55bb5ba86d3fe4d",
+    "server_binary_sha256": "06ba83364da39a7e6e1b1d99ab9ccc6d34c0edb626bff43babd8cb4abff8bb4c",
     "green": [
-      "harness:scene-shot:native-rig-parity"
+      "harness:scene-shot:native-rig-guardian"
     ],
     "states": {
-      "harness:scene-shot:native-rig-parity": "green"
+      "harness:scene-shot:native-rig-guardian": "green"
     },
-    "tree_head": "6670d89e3675c8f0f3b1d7a9de88c0d73c56dabd",
+    "tree_head": "c20a0d18bee552b8690031398ea80bfcb3ac7006",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
@@ -78,5 +78,5 @@
       "detail": ""
     }
   },
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T131900-ledger-promote-5oyl6wex"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T152958-ledger-promote-51ymyblk"
 }
