@@ -19,6 +19,21 @@ list). The rebuilt pair therefore reverses **only** `a3f2a486`'s geometry onto H
 control is committed on the branch so each half has its own clean pin — no hand re-break, no
 dirty tree.
 
+## The measured pair (2026-11-25, server pin `pins/2bd91efa9122-server-*` = core `2bd91efa9`)
+
+Three takes per side on `native-entity-fire`, all six on the same clean server pin:
+
+| side | receipts | result | span |
+|---|---|---|---|
+| control `client:8f54183f` | `20261125T175643` / `175710` / `175734` | FAIL at `fire_band_span` on all three | **1.827** (y 160.000..161.827, 12 indices) |
+| restore `client:9308bb29` | `20261125T175800` / `175827` / `175854` | PASS on all three | **2.331** (y 160.000..162.331, 12 indices) |
+
+Both numbers are the analytic values derived above, and every other assertion (`fire_layer_present`,
+`fire_overlay_is_one_layer`, `fire_band_count`, `plain_frame_has_no_fire_layer`, the fixture camera
+and GPU checks) is green on both halves — so the red is the band geometry and nothing else.
+`ledger promote MODEL-ENTITY-FIRE-BANDS` receipt `20261125T175952-ledger-promote-oqob4f51`;
+`promote.json` records `fix_patch_id e37f4b12…` and the client unit ref green on the restore.
+
 ## Original commit `a3f2a486` (`fix(client): draw entity fire with the vanilla flame feature bands`)
 
 Its non-test hunks, each with its HEAD equivalent or omission class:
