@@ -1,0 +1,10 @@
+[[bug]]
+id = "FREEZE-EXPORT-IMPORT-QUARANTINE"
+title = "A world exported while `/tick freeze` is active imports as quarantined chunks: the restarted server logs `stored chunk unavailable; repair required` for most chunks and the client never enters play."
+area = "gameplay"
+repro = "manual"
+severity = "major"
+status = "open"
+source = "docs/bugs/rows/HS-3.toml (found 2026-11-25 while building HS-3's saved-due-gravity-tick fixture; the same scenario without `/tick freeze` imports cleanly)"
+regression = []
+repro_check = "NOT YET FIXED — observed 2026-11-25, artifact 20261125T063246-native-v2-ledger-gravity-tick-f4v0b_n_. Sequence: private world, `/tick freeze`, `/setblock sand` in mid-air, `save-all`, `disconnect`, clean SIGINT stop, `krasnokamen world export-anvil` (status PASS), `world import-anvil` (status PASS), restart on the imported store. The restarted process logs `ERROR mc_core::world::residency: stored chunk unavailable; repair required error=native dimension 0 chunk (…)` for 81 chunks and then `checkpoint skipped quarantined chunks; repair required count=81` every checkpoint; the harness client cannot reach play (`reimport_entered_play` false) and the run ends 153 s in. Attribution: the identical scenario with the `/tick freeze` line removed imports cleanly and reaches its block assertions (artifact 20261125T063605-native-v2-ledger-gravity-tick-e71qaxcf), so the quarantine follows the freeze and not the conversion. Likely shape: while the tick loop is frozen the stop path's checkpoint/export skips or mis-stamps the chunks it writes, or the export serialises a frozen store whose sections lack their final state. Worth checking `mc-world-conversion/src/export.rs` against a frozen `TickState` and whether `save-all` under freeze flushes at all. Workaround for fixtures: convert unfrozen worlds only."
