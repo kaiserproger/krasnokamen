@@ -837,6 +837,17 @@ class LoaderFixTests(unittest.TestCase):
             ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=self.runner())
         self.assertIn('control_files', str(refused.exception))
 
+    def test_refuses_a_client_surface_row_that_only_has_a_loader_ref(self):
+        (self.root / 'docs/bugs/rows/LOADER-ROW.toml').write_text(
+            '[[bug]]\nid = "LOADER-ROW"\ntitle = "t"\narea = "harness"\nrepro = "client"\n'
+            'severity = "major"\nstatus = "open"\nsource = "s"\n'
+            f'fix_commit = "loader:{self.fix[:12]}"\nregression = ["{self.REF}"]\n'
+            'control_files = ["tools/battle.py"]\n')
+        with self.assertRaises(ledger.Refused) as refused:
+            ledger.promote('LOADER-ROW', root=self.root, ctx=self.ctx(), loader_runner=self.runner())
+        self.assertIn('graphical real-client ref', str(refused.exception))
+        self.assertEqual(ledger.load_rows(self.root)[0]['status'], 'open')
+
     def test_refuses_a_red_outside_the_kept_test_file(self):
         def run(refs, tree):
             text = (Path(tree) / 'tools/battle.py').read_text()

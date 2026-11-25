@@ -2571,6 +2571,10 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         if client_receipt or client_control_receipt:
             raise Refused(f'{ident}: a {LOADER_FIX_PREFIX}<sha> fix is proved by reversing its own hunks for a '
                           'loader ref, not by real-client receipts')
+        if regressions.needs_real_client(row):
+            raise Refused(f'{ident}: a {LOADER_FIX_PREFIX}<sha> fix proves only its loader ref; a client-surface row '
+                          '(area client, or repro manual/client) needs a graphical real-client ref and receipt, '
+                          'which this promotion cannot supply')
         return _promote_loader_fix(ident, row=row, fix=fix, root=root, tree_now=tree_now, dry_run=dry_run,
                                    ctx=ctx, loader_runner=loader_runner)
     if fix.startswith(CLIENT_TEST_PREFIX):
