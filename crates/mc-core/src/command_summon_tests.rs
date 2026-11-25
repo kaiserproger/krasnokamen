@@ -1617,6 +1617,21 @@ fn chested_horse_summon_carries_vanilla_items_cargo() {
     assert_eq!(mount.cargo[14].item_id, item(&state, "apple"));
     assert!(mount.cargo[1].is_empty());
 
+    // A saved record round-trips the same cargo: summon and import/replay share
+    // `EntityStateImage::from_record`, which is what applies the mount parser.
+    let row = state.entities.row(slot);
+    let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+    let record = chunks
+        .values()
+        .flat_map(|chunk| &chunk.entities)
+        .find(|entity| entity.uuid == row.uuid)
+        .unwrap();
+    let restored = EntityStateImage::from_record(&state.registry, record).unwrap();
+    assert!(restored.entity_life.mount.chested);
+    assert_eq!(restored.entity_life.mount.cargo.len(), 15);
+    assert_eq!(restored.entity_life.mount.cargo[0].item_id, item(&state, "diamond"));
+    assert_eq!(restored.entity_life.mount.cargo[14].item_id, item(&state, "apple"));
+
     // A llama's cargo columns follow its authored Strength (vanilla: `Strength` 1..5).
     let (state, id) = summon(
         "llama",

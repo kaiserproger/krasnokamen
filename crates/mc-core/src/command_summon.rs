@@ -779,21 +779,11 @@ pub(crate) fn prepare(
         crate::scoreboard::require_no_team(&state.scoreboard, &image.native.uuid.to_string())
             .map_err(error)?;
     }
-    if crate::mounts::persistence::owns_cargo_field(name, "Items") {
-        // The mount's own parser is the one that validates the chest, the strength and
-        // every cargo slot, so a bad list is refused here, before the entity exists.
-        crate::mounts::persistence::from_fields(
-            &mut image.state.entity_life,
-            &image.native.extra_fields,
-        )
-        .map_err(|failure| error(failure.to_string()))?;
-        crate::mounts::persistence::cargo_from_record(
-            &mut image.state.entity_life.mount,
-            &state.registry.items,
-            &image.native,
-        )
-        .map_err(|failure| error(failure.to_string()))?;
-    }
+    // The mount's chest, strength and cargo need no second pass here: `decode` builds the
+    // image through `EntityStateImage::from_record`, which already runs
+    // `mounts::persistence::from_fields` and `cargo_from_record` on the same `native`
+    // (journal/replay.rs:427-441) and turns a bad slot into the refusal above. The
+    // `supports` predicate is what admits the fields.
     image.variant = variant;
     Ok(image)
 }
