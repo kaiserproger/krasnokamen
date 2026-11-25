@@ -121,6 +121,10 @@ class NativeV2ProbeTests(unittest.TestCase):
                 steps = mock.Mock()
                 _disable_gamerule(steps, rule)
                 steps.fixture.assert_called_once_with(f"gamerule {rule} false")
+                # The ack wait is the guard: without it an unsupported rule's reply is never read and
+                # the scene proceeds; the assertion must fail as an AssertionError, not a TypeError
+                # on a missing call, so a reversal is a red the ledger accepts.
+                steps.wait.assert_called_once()
                 predicate, label = steps.wait.call_args.args
                 self.assertEqual(label, f"{rule}_disabled")
                 self.assertFalse(predicate({"recent_chat": ["Unknown game rule"]}))
