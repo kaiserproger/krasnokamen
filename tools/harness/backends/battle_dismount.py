@@ -145,7 +145,8 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         # 100 published ticks of the rider's own position: the fix keeps him at foot speed.
         rider_uuid = target["uuid"]
         samples: list[dict[str, Any]] = []
-        deadline = observer.last_tick + TICKS_AFTER_KILL
+        start_tick = observer.last_tick
+        deadline = start_tick + TICKS_AFTER_KILL
 
         def hundred_ticks():
             observer.update()
@@ -155,21 +156,26 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
                 samples.append({"tick": observer.last_tick, "pos": entity["pos"], "vel": entity["vel"]})
             return observer.last_tick >= deadline
         observer.wait_for(hundred_ticks, "100 published ticks after the kill")
-        steps = []
+        # Entity records are published when the entity changes, not every tick, so speed is the
+        # distance over the elapsed ticks (the row is blocks per tick, i.e. per wire packet).
+        speeds = []
         for before, after in zip(samples, samples[1:]):
-            if after["tick"] - before["tick"] != 1:
+            ticks = after["tick"] - before["tick"]
+            if ticks <= 0:
                 continue
-            steps.append(sum((b - a) ** 2 for a, b in zip(before["pos"], after["pos"])) ** 0.5)
-        report["observations"].update({"samples": len(samples), "steps": len(steps),
-                                       "max_step": max(steps) if steps else None,
-                                       "mean_step": (sum(steps) / len(steps)) if steps else None})
-        battle_recovery.check(report, "rider_sample_window_complete",
-                              len(steps) >= TICKS_AFTER_KILL // 2,
-                              {"samples": len(samples), "steps": len(steps)})
+            distance = sum((b - a) ** 2 for a, b in zip(before["pos"], after["pos"])) ** 0.5
+            speeds.append(distance / ticks)
+        report["observations"].update({"samples": len(samples), "steps": len(speeds),
+                                       "max_speed": max(speeds) if speeds else None,
+                                       "max_blocks_per_second": (max(speeds) * 20.0) if speeds else None,
+                                       "walk_blocks_per_second": WALK_SPEED})
+        battle_recovery.check(report, "rider_sample_window_complete", len(speeds) >= 8,
+                              {"samples": len(samples), "speeds": len(speeds),
+                               "ticks": observer.last_tick - start_tick})
         battle_recovery.check(report, "dismounted_rider_keeps_walk_speed",
-                              bool(steps) and max(steps) <= TICK_SPEED * 1.35,
-                              {"max_step": report["observations"]["max_step"],
-                               "walk_step": TICK_SPEED})
+                              bool(speeds) and max(speeds) <= TICK_SPEED * 1.35,
+                              {"max_blocks_per_second": report["observations"]["max_blocks_per_second"],
+                               "walk_blocks_per_second": WALK_SPEED})
         battle_live_judge(report, scenario)
         return {"scenario": report}
     finally:
