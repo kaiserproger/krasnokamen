@@ -1,0 +1,10 @@
+[[bug]]
+id = "MODEL-OPUS-11-RABBIT-FOX-PANDA-VEX"
+title = "The rabbit, fox, panda and vex rigs' silhouettes and proportions are not the vanilla ones (42-quad counts are identical on both trees)"
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "split 2026-11-25 from MODEL-OPUS-11 (receipts/D123/D123ClientModel/REVIEW-CODE-1-Opus.md)"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::rabbit_fox_panda_and_vex_shapes_match_the_vanilla_proportions"]
+repro_check = "Only unit-covered today. `native-rig-parity` frames a vex and its EntityCutout is 252 indices on both trees (42 quads), which is why the old `allay_minus_vex` difference was -48 -> 0 and proved nothing about these four rigs; the rabbit, fox and panda were never framed at all. A client visual row needs a scene assertion derived from the vanilla layer dump per species (`minecraft:rabbit#main`, `minecraft:fox#main`, `minecraft:panda#main`, `minecraft:vex#main` in model-audit/opus-review/vanilla-26.1.2-layers.json) - counts read inside each lock/hold animation are ambiguous, so prefer a two-sided bbox term per species as in the guardian's spike height."

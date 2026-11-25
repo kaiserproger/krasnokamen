@@ -10,7 +10,7 @@ The row's real fix is `client:f2c3a0f8` ("author the shield rig as the vanilla 2
 2026-11-15). It is post-rename, but it is not the parent of the lane tip and the tip's neighbour
 commits are unrelated, so the pair is built at the tip: one commit puts the *real pre-image blob*
 (a byte-identical copy of `c53b0d40:assets/krasnokamen/models/entity/shield.json`) into the tree and
-the next restores the fix's blob. `git diff <control> <re-land>` is therefore exactly the fix's
+the next restores the fix's blob. `git diff d1eb6064 323f801c` is therefore exactly the fix's
 production hunk, which is what `ledger promote` checks by patch id.
 
 ## Hunks carried by the pair (control -> restore)

@@ -1,31 +1,43 @@
-# MODEL-OPUS-11 — hunk map for the pinned pair
+# MODEL-OPUS-11 — hunk map for the pair, and why the row stays open
 
-Promotion receipt: `promotions/MODEL-OPUS-11.json` (written by `ledger promote`).
-Client pair: control `client:4092ac53` (the fix commit's parent) → restore `client:92dcb25d`. Both
-pins clean, both post-rename.
+Promotion receipt: `promotions/MODEL-OPUS-11.json` (written by `ledger promote`; stale until the
+redesign below lands).
+Client pair used: control `client:e3678206` → fix `client:3bfbd7b6`. This map supersedes the older
+`4092ac53 → 92dcb25d` text, which named a pair the lane never ran and printed quad counts as if they
+were indices.
 
-## What the pair carries
-
-`92dcb25d` re-authors ten rigs to the vanilla 26.3 layer geometry. For this row:
+## What the pair carries for this row
 
 | file | change | role |
 |---|---|---|
-| `assets/krasnokamen/models/entity/allay.json` | 34 quads → 42: the wing cubes gain their faces (the pre-fix rig restricted `left_wing` to one face) and the head is reached through the layer root | the row's first subject ("allay ... incorrect silhouettes") |
-| `assets/krasnokamen/models/entity/{donkey,mule,horse,skeleton_horse,zombie_horse}.json` + the three `*_equipment.json` overlays | re-authored to the vanilla equine bones, with the 26.1 `MeshTransformer` scale folded into the top bones | the row's horse family |
-| `src/entities/presentation.rs`, `krasnokamen_models/tests.rs`, `asset_model_regression_tests.rs`, `animation_tests.rs` | bone renames and the migrated assertions | the row's unit refs |
+| `assets/krasnokamen/models/entity/allay.json` | whole file: 34 quads → 42 (252 indices); the wings gain their faces, the head is reached through the layer root, and the rest pose puts the wing tip 11.1 px from the head's front face | the row's allay subject |
+| the nine horse-family rigs (`horse.json`, `horse_body_equipment.json`, `horse_saddle_equipment.json`, `donkey.json`, `donkey_saddle_equipment.json`, `mule.json`, `mule_saddle_equipment.json`, `skeleton_horse.json`, `zombie_horse.json`) | whole files | moved to MODEL-OPUS-11-HORSES (class (a)) |
+| `bee_baby.json`, `cod.json`, `guardian.json`, `elder_guardian.json` | whole files | class (a): MODEL-OPUS-10 / MODEL-OPUS-9 |
+| `src/entities/presentation.rs` `@@ -4290,9 +4290,25 @@ mod tests`, `asset_model_regression_tests.rs` (three hunks), `krasnokamen_models/tests.rs` (three hunks), `animation_tests.rs` (one hunk) | test-only | the row's unit refs |
 
-## Hunks carried for other rows (class (a))
+No production code hunk exists outside the rig JSONs, so the earlier `204-252 = -48 → 0` arithmetic
+was about quads, not indices: the allay's cutout is 252 indices on both sides of the pair.
 
-| file | disposition |
-|---|---|
-| `guardian.json`, `elder_guardian.json` | (a) MODEL-OPUS-10's subject |
-| `bee_baby.json`, `cod.json` | (a) MODEL-OPUS-10 / MODEL-OPUS-9 subjects |
+## What the scene showed, and why it cannot promote
 
-## What the scene proves
+`native-rig-parity` reports the allay's own cutout bbox span: 1.122 blocks on the control against
+0.690 on the fix, where the old check asserted `span <= 0.85`. Two things are wrong with that:
 
-`native-rig-parity`'s `allay_wing_faces_submitted`: the allay's submitted indices minus the vex's in
-the same run, 204-252 = -48 before and 252-252 = 0 after, floor -20. The vex's rig is unchanged by
-the commit, so the difference isolates the allay's added faces, and the per-entity shadow quad
-cancels. Limits recorded in the scenario entry: the rabbit/fox/panda/vex silhouettes (counts
-unchanged) and the crowd-rendered horse family keep their unit refs; the horse family has no CPU
-indices to assert.
+1. the threshold was chosen after those two measurements, and its stated justification ("body depth
+   0.70") is wrong — the body is 2 px = 0.125 blocks; 0.694 is 11.1 px, the distance from the head's
+   front face at -2.5 px to the wing tip at 0.6 + 8 px in the layer's REST pose;
+2. the rest pose is not the pose the game shows. `javap -p -c` on the local 26.3 client jar
+   (`net/minecraft/client/model/animal/allay/AllayModel`, Mojang names, never committed) shows
+   `setupAnim` sets `right_wing.xRot = 0.4363 * (1 - min(walkSpeed / 0.3, 1))` and
+   `right_wing.yRot = -0.7854 + f`, left mirrored — 25 degrees about x, ∓45 about y at idle. The
+   client does not apply it (it only rolls the allay ±0.3 rad), so 0.690 is the client's rest pose,
+   and a `|span - 0.694| <= 0.03` window would freeze exactly that defect.
+
+Evaluated with the client's own bone convention, the dump's allay reaches 0.7696 blocks horizontally
+when those two rotations are applied (x -0.385..0.385; the rest pose is 0.6937 with x ±0.156). The
+redesign is therefore: implement the setupAnim wing rotation, then assert `|span - 0.770| <= 0.03`
+two-sided, on a scene of the allay alone. Until then the row cannot be promoted, and the
+`native-rig-parity` span check is labelled withdrawn evidence in the scenario entry.
+
+Rabbit/fox/panda/vex moved to MODEL-OPUS-11-RABBIT-FOX-PANDA-VEX and the horse family to
+MODEL-OPUS-11-HORSES; both are open and unit-covered only.

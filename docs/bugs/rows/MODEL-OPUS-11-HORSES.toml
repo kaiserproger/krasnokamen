@@ -1,0 +1,10 @@
+[[bug]]
+id = "MODEL-OPUS-11-HORSES"
+title = "The horse family rigs' proportions are not the vanilla ones and no frame submits them through the CPU entity pass"
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "split 2026-11-25 from MODEL-OPUS-11 (receipts/D123/D123ClientModel/REVIEW-CODE-1-Opus.md)"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::adult_horse_rig_has_vanilla_equine_proportions", "client:krasnokamen-client:entities::equipment::tests::horse_overlay_joints_follow_authored_horse_pose"]
+repro_check = "Only unit-covered, and the usual scene route is closed: horses are drawn through the crowd path, so they contribute no CPU entity-pass indices and `entity_indices_by_material` cannot separate them (`native-rig-parity` never frames one). Closing this needs either a per-bone witness outside the crowd path or recorded visual review of a summoned horse with `NoAI:1b`, plus the vanilla numbers from `minecraft:horse#main` and the saddle/armour layer keys in model-audit/opus-review/vanilla-26.1.2-layers.json."

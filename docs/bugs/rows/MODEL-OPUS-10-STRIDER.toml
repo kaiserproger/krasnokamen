@@ -1,0 +1,10 @@
+[[bug]]
+id = "MODEL-OPUS-10-STRIDER"
+title = "The strider's bristles and proportions are not the vanilla ones (no scene frames a strider at all)"
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "split 2026-11-25 from MODEL-OPUS-10 (receipts/D123/D123ClientModel/REVIEW-CODE-1-Opus.md: 'strider (в сцене его нет)')"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::hoglin_strider_and_bee_keep_their_signature_parts"]
+repro_check = "Unwitnessed, not proven: no harness scene summons a strider, so no receipt covers this row, and the only check is the client unit test above (a unit test cannot close a client visual row). To close it, add the strider to a rig scene (its own shot, one entity, fixture checks first) and derive the expected numbers from `minecraft:strider#main` in model-audit/opus-review/vanilla-26.1.2-layers.json; the summoned strider needs `NoAI:1b` and a fixed camera like the guardian scene."
