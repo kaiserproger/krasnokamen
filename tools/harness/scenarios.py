@@ -988,7 +988,7 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="native-rig-parity", requires=("xvfb",),
         sources=("tools/harness/rig_parity_scene.json", "tools/harness/backends/scene_shot_checks.py"),
         fixture="private native client, one stationary mob per shot at a fixed pad and camera (hoglin, guardian, allay, vex, baby bee), HUD default",
-        proves="each framed rig's own entity-pass `EntityCutout` count (CM-4, cloud-free) as evidence only: MODEL-OPUS-10 promotes on `native-rig-guardian` now, and the allay span 1.122 -> 0.69 is the withdrawn one-sided evidence MODEL-OPUS-11's row records (vanilla `AllayModel.setupAnim` holds the wings at 25 degrees about x and -+45 about y, so the rest-pose span is not the game's pose)",
+        proves="each framed rig's own entity-pass `EntityCutout` count (CM-4, cloud-free) as evidence only: MODEL-OPUS-10 promotes on `native-rig-guardian` now, and the allay horizontal span is asserted as a derived envelope 0.68..1.03 (`allay_wing_span_within_wings`): with the vanilla `AllayModel.setupAnim` pose applied the flap sweeps the span over 0.7014..1.0135, the pre-image's baked-spread wings read 1.122, and the envelope does not witness the pose itself (see MODEL-OPUS-11)",
         limits="one species per shot, counts only and no promotion: the rig is the `EntityCutout` slice of CM-4's cloud-free per-material pass, each frame must hold exactly one entity, and the parts' exact vanilla shapes plus the rigs whose count did not change (hoglin, rabbit, fox, panda, vex, crowd-rendered horse family) stay unit-covered",
     ),
     "native-shield-gui": _entry(

@@ -348,12 +348,15 @@ def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
     scene and check with the fixture assertions first and the exact vanilla counts plus the spike
     height; the guardian-minus-bee floor this docstring used to describe (240 -> 498, floor 350) is
     gone with it, because the rig changes it summed came from the head and tail, not from the
-    spikes, and its bee term was inverted. MODEL-OPUS-11's `allay_wing_span_within_body`
-    survives here only as the withdrawn one-sided evidence the row records: the pre-image spread its
-    wings to a 1.122-block cutout span where the fix's rest pose reads 0.69, but the vanilla
-    `AllayModel.setupAnim` holds the wings at 25 degrees about x and -+45 about y (javap on the local
-    26.3 jar), so neither number is the pose the game shows and the check must not be used to
-    promote until the client applies that pose and the span is asserted two-sided around 0.770.
+    spikes, and its bee term was inverted. MODEL-OPUS-11's `allay_wing_span_within_wings` is now an
+    ENVELOPE, not a threshold: the client applies the vanilla `AllayModel.setupAnim` wing pose (25
+    degrees about x, -+45 about y, plus the flap), and the flap
+    `cos(ageInTicks * 20 deg + walkAnimationPos) * PI * 0.15` sweeps the y angle over -72..-18
+    degrees, so the same rig's horizontal span sweeps 0.7014..1.0135 blocks in the dump's own
+    geometry (rest pose without the pose: 0.6937). The pre-image, whose wings were baked spread,
+    reads 1.122 and stays outside. The envelope 0.68..1.03 is therefore derived, covers every flap
+    phase, and still separates the rig fix; it does NOT witness the pose itself (the flap dips to
+    0.7014 against the 0.6937 rest pose), which is why MODEL-OPUS-11 is unit-covered and open.
 
     What remains true of the frame: `entity_extraction.entity_indices` is the whole dynamic pass and
     the cloud layer is appended into the same `scene.dynamic` first, so a total count cannot isolate
@@ -399,7 +402,7 @@ def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
     if isinstance(lo, list) and isinstance(hi, list) and len(lo) >= 3 and len(hi) >= 3:
         allay_span = round(max(abs(hi[0] - lo[0]), abs(hi[2] - lo[2])), 3)
     probe.report["allay_horizontal_span"] = allay_span
-    probe.check("allay_wing_span_within_body", allay_span is not None and allay_span <= 0.85)
+    probe.check("allay_wing_span_within_wings", allay_span is not None and 0.68 <= allay_span <= 1.03)
     probe.check("allay_wing_faces_submitted", allay_vex >= -20)
     for name in names:
         # One mob per frame: a killed mob's death pass or its dropped loot would ride along.
