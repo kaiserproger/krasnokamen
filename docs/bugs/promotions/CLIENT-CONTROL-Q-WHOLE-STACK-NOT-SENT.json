@@ -1,0 +1,68 @@
+{
+  "id": "CLIENT-CONTROL-Q-WHOLE-STACK-NOT-SENT",
+  "verdict": "promoted",
+  "fix_commit": "client:584f70baaca4de852af3d1b4e943d535ab5cec96",
+  "fix_commit_full": "584f70baaca4de852af3d1b4e943d535ab5cec96",
+  "promoted_at": "2026-11-25T02:25:39+00:00",
+  "tree_head": "5717cf6e74919b71e9a2ebe56edb6c560d5ebdb6",
+  "tree_dirty": true,
+  "tree_sha256": "3fcf926077e02e26879a9544f3661f95706e007d86f237a852e956b41e3d6f19",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261125T022321-native-v2-control-q-stack-bq65zf4w/result.json",
+    "client_head": "7cc14fefc2cabffe8a511e969c3b4653705413a0",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "red": [
+      "harness:entities:native-v2-control-q-stack"
+    ],
+    "states": {
+      "harness:entities:native-v2-control-q-stack": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261125T022206-native-v2-control-q-stack-3rmgsevv/result.json",
+    "client_head": "584f70baaca4de852af3d1b4e943d535ab5cec96",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "green": [
+      "harness:entities:native-v2-control-q-stack"
+    ],
+    "states": {
+      "harness:entities:native-v2-control-q-stack": "green"
+    },
+    "tree_head": "5717cf6e74919b71e9a2ebe56edb6c560d5ebdb6",
+    "tree_dirty": true,
+    "tree_sha256": "3fcf926077e02e26879a9544f3661f95706e007d86f237a852e956b41e3d6f19"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261125T022206-native-v2-control-q-stack-3rmgsevv/result.json",
+    "client_head": "584f70baaca4de852af3d1b4e943d535ab5cec96",
+    "server_binary_sha256": "6a691af46de897ddb574e25703fb31b8c3bb8c8e4b0ebbbf33f86a9f1b6b8e68",
+    "green": [
+      "harness:entities:native-v2-control-q-stack"
+    ],
+    "states": {
+      "harness:entities:native-v2-control-q-stack": "green"
+    },
+    "tree_head": "5717cf6e74919b71e9a2ebe56edb6c560d5ebdb6",
+    "tree_dirty": true,
+    "tree_sha256": "3fcf926077e02e26879a9544f3661f95706e007d86f237a852e956b41e3d6f19"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "f76a0a397c284c5160d5cf0ada6b186ea9be1a07",
+    "paths": [
+      "src/api.rs",
+      "src/lib.rs",
+      "src/session.rs",
+      "src/session/actions.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:session::actions::item_key_tests::control_held_drop_sends_the_whole_stack_ordinal": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientNativeFCore/.analysis/validation/20261125T022444-ledger-promote-ftng0mhz"
+}

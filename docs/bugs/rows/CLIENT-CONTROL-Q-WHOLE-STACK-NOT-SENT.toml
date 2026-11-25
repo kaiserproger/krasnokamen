@@ -4,7 +4,10 @@ title = "Ctrl+Q must drop the whole selected stack; the native client always sen
 area = "client"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "Review D123ClientNative REVIEW-wave2-11 m4: src/session/actions.rs sends the drop intent with whole_stack: false unconditionally, while vanilla `Player.drop(boolean all)` receives `Screen.hasControlDown()` (Minecraft.handleKeybinds -> player.drop(...)). A held Ctrl+Q therefore drops one item instead of the stack. The native-v2-input-menus scene already proves Control+Q inside the inventory screen (control_q_stack); the world-level key path has no such leg."
-regression = []
+regression = ["client:krasnokamen-client:session::actions::item_key_tests::control_held_drop_sends_the_whole_stack_ordinal", "harness:entities:native-v2-control-q-stack"]
 repro_check = "No fix commit yet. Source-level: the drop intent in src/session/actions.rs carries whole_stack: false for every press; the control state is not consulted. Needs (a) the fix that passes the Ctrl state into the drop intent, (b) a committed reversal pair, and (c) a real-client leg: press Ctrl+Q with no screen open and assert the selected stack reaches zero and one item entity carries the whole stack (owner: this lane, next pack)."
+fix_commit = "client:584f70baaca4de852af3d1b4e943d535ab5cec96"
+proving_assertions = { "harness:entities:native-v2-control-q-stack" = "control_q_whole_stack_dropped" }
+promotion = "docs/bugs/promotions/CLIENT-CONTROL-Q-WHOLE-STACK-NOT-SENT.json"
