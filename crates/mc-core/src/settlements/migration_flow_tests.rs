@@ -30,7 +30,7 @@ fn a_house_and_its_workshop_on_one_footprint_count_as_one_building() {
         .next()
         .expect("the town's house")
         .bounds;
-    let mut record = state.settlements.get_mut(destination).unwrap();
+    let record = state.settlements.get_mut(destination).unwrap();
     let next = record.building_sequence + 1;
     record.building_sequence = next;
     let id = crate::settlements::buildings::BuildingId((destination.0 << 32) | next);
@@ -49,7 +49,6 @@ fn a_house_and_its_workshop_on_one_footprint_count_as_one_building() {
             natural_zone: false,
         },
     );
-    drop(record);
     assert_eq!(
         state.settlements.get(destination).unwrap().buildings.len(),
         2,
