@@ -6,4 +6,5 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:121"
+repro_check = "BLOCKER 2026-11-25: the keyframe/armour rigs' pre-image blob is a53c8444acdf (armor_baby_zombie_chest.json) while HEAD's ec438e4520d7 comes from da704d9b, a later fix for MODEL-OPUS-N1/N5/N7; restoring the pre-image would revert that row, so the control needs a per-hunk split (CM-1(a)) and the owner's consent."
 regression = []

@@ -8,4 +8,4 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:96"
 regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::slime_face_parts_sit_on_the_inner_cube_under_a_separate_shell"]
 fix_commit = "client:4092ac53"
-repro_check = "candidate: same real revert run (red); the shell stays a separate EntityTranslucent rig; area=client, real-client check required"
+repro_check = "candidate: same real revert run (red); the shell stays a separate EntityTranslucent rig; area=client, real-client check required BLOCKER 2026-11-25: the pre-fix control already shows both eyes and the mouth through the shell, so the row needs a fixture/oracle that separates the two frames (CL-5)."

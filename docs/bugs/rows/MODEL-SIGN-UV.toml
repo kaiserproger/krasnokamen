@@ -7,4 +7,4 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:28"
 regression = []
-repro_check = "obsolete per evidence: the cited sign_standing/sign_wall rigs were deleted by client:7df8dd6e and 26.3 ships sign bodies as block models (template_sign_rot_0/template_wall_sign carry elements; dump key minecraft:block/oak_sign_rot_0), so there is nothing to revert; no promotion is claimed"
+repro_check = "obsolete per evidence: the cited sign_standing/sign_wall rigs were deleted by client:7df8dd6e and 26.3 ships sign bodies as block models (template_sign_rot_0/template_wall_sign carry elements; dump key minecraft:block/oak_sign_rot_0), so there is nothing to revert; no promotion is claimed BLOCKER 2026-11-25: the cited sign_standing/sign_wall rigs were deleted by 7df8dd6e and 26.3 ships sign bodies as block models (template_sign_rot_0 / template_wall_sign), so there is nothing to revert; the missing artifact is an owner-accepted close."

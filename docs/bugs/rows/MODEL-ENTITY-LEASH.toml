@@ -8,4 +8,4 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:88"
 regression = ["harness:scene-shot:native-entity-visuals"]
 proving_assertions = { "harness:scene-shot:native-entity-visuals" = "leash_rope_drawn" }
-repro_check = "26.3 LeashFeatureRenderer needs the holder transform in the emit path; the scene checks rope pixels."
+repro_check = "26.3 LeashFeatureRenderer needs the holder transform in the emit path; the scene checks rope pixels. BLOCKER 2026-11-25: the rope producer was CREATED by e8fe40c2 in src/entities/render_special/world_fx.rs (that path does not exist at e8fe40c2^), so there is no pre-image blob at all; the faithful control is a committed pair that deletes the dispatch call site (world_fx::append_leash in render_special.rs, the accepted kept-helper class) and leaves the module unreferenced, with native-entity-visuals' leash_rope_drawn red. That pair is not built yet."

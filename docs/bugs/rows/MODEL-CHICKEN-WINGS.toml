@@ -7,4 +7,4 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/todo-active/TodoIssueSonnet/REPORT.md"
 regression = ["client:krasnokamen-client:entities::animation_tests::animation_chicken_wings_rest_on_received_ground_and_beat_in_midair"]
-repro_check = "candidate: in-tree code and a passing unit ref, no control (the code lives in the shared animation state, Area C); real-client check required"
+repro_check = "candidate: in-tree code and a passing unit ref, no control (the code lives in the shared animation state, Area C); real-client check required BLOCKER 2026-11-25: the wing geometry lives in assets/solaris/models/entity/{chicken,parrot}.json at the fix; their pre-images are blobs 3f0d7f2d5d32 and 7663c4eaa76b, but the current assets/krasnokamen/models/entity/{chicken,parrot}.json are 569e96fb7466 and feb2dd104af3, rewritten after the fix by b40b8d63 (MODEL-OPUS-N8's mirror flags). Restoring either blob would revert that row, so this row needs a per-hunk split of the two JSON files as its control (CM-1 options (a)/(b)) and the owner's consent; until then no run can discriminate."

@@ -6,4 +6,5 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:66"
+repro_check = "BLOCKER 2026-11-25: no commit closed these rigs - git log on assets/krasnokamen/models/entity/{zombie,husk,giant}.json shows only the rename commit f0a6abf6, so the rigs arrived with the initial import and the row has no fix to hold. The missing artifact is a re-audit of the current rigs (or an owner-accepted close), not a control."
 regression = []

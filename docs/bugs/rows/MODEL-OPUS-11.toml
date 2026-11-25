@@ -6,6 +6,8 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:142"
-regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::rabbit_fox_panda_and_vex_shapes_match_the_vanilla_proportions", "client:krasnokamen-client:entities::asset_model_regression_tests::adult_horse_rig_has_vanilla_equine_proportions", "client:krasnokamen-client:entities::equipment::tests::horse_overlay_joints_follow_authored_horse_pose"]
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::rabbit_fox_panda_and_vex_shapes_match_the_vanilla_proportions", "client:krasnokamen-client:entities::asset_model_regression_tests::adult_horse_rig_has_vanilla_equine_proportions", "client:krasnokamen-client:entities::equipment::tests::horse_overlay_joints_follow_authored_horse_pose", "harness:scene-shot:native-rig-parity"]
+proving_refs = ["harness:scene-shot:native-rig-parity"]
+proving_assertions = { "harness:scene-shot:native-rig-parity" = "allay_wing_faces_submitted" }
 fix_commit = "client:92dcb25d"
 repro_check = "candidate: same real revert run (red); allay/horse family blocked on the bone inventory; area=client, real-client check required; round 3 adds the horse family (client:92dcb25d, vanilla bones) with a real revert control (receipts/XHarnessGates/client-r3-*.log, models/audit-r3-after.json); area=client, candidate: real-client check required"

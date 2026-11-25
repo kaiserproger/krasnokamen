@@ -8,4 +8,4 @@ source = "Stage3 HeadBreaker paired 26.3 oracle: a player head whose profile car
 repro = "client"
 regression = []
 failing_first = "reported"
-repro_check = "Pre-existing: pre-fix control client 0a0ed7e4 renders the same Steve head for placed and inventory surfaces (20261115T024646-scene-shot-o_aczqke). Server side holds the texture: `data get block ... profile.properties[0].value` returns the exact encoded texture (profile_nbt_readback.json). Signed full profiles not covered (MCP tool field limit 256 chars)."
+repro_check = "Pre-existing: pre-fix control client 0a0ed7e4 renders the same Steve head for placed and inventory surfaces (20261115T024646-scene-shot-o_aczqke). Server side holds the texture: `data get block ... profile.properties[0].value` returns the exact encoded texture (profile_nbt_readback.json). Signed full profiles not covered (MCP tool field limit 256 chars). BLOCKER 2026-11-25: rc/entities/profiles.rs resolves only listed (tab-list) profiles and the unlisted texture comes from the same unsigned 'textures' property with host textures.minecraft.net; the harness has no skin service, so the missing artifact is an offline endpoint serving it (CL-3)."
