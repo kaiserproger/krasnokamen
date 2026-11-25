@@ -439,6 +439,163 @@ class ClientTestPromotionTests(unittest.TestCase):
                                   'tests::a_save_never_writes_when_the_guard_is_present')}])
 
 
+class ClientGateTests(unittest.TestCase):
+    """`client-gate:<id>`: a registered client command whose red is its own compiler diagnostic."""
+
+    GATE = 'clippy-workspace-all-targets'
+    DIAGNOSTIC = ('    Checking krasnokamen-client v1.0.0-rc.5\n'
+                  'warning: unused variable: `undo`\n'
+                  '  --> src/lib.rs:4:9\n'
+                  '   |\n'
+                  '    = note: `-D unused-variables` implied by `-D warnings`\n')
+
+    def setUp(self):
+        import subprocess
+
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.base = Path(directory.name)
+        self.root = self.base / 'core'
+        self.root.mkdir()
+        subprocess.run(['git', 'init', '-q', str(self.root)], check=True)
+        (self.root / 'README.md').write_text('core\n')
+        _git(self.root, 'add', '-A')
+        _commit(self.root, 'base')
+        self.client = self.base / 'client'
+        self.client.mkdir()
+        subprocess.run(['git', 'init', '-q', str(self.client)], check=True)
+        (self.client / 'Cargo.toml').write_text('[package]\nname = "krasnokamen-client"\nversion = "0.1.0"\n')
+        (self.client / 'src').mkdir()
+        (self.client / 'src/lib.rs').write_text(CLIENT_LIB)
+        _git(self.client, 'add', '-A')
+        _commit(self.client, 'before')
+        (self.client / 'src/lib.rs').write_text(CLIENT_LIB_FIXED)
+        _git(self.client, 'add', '-A')
+        self.fix = _commit(self.client, 'fix: keep a test save out of the data root')
+        env = patch.dict('os.environ', {'KRASNOKAMEN_CLIENT_ROOT': str(self.client)})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def ctx(self, include_regression_client=False):
+        artifact = self.base / 'artifacts'
+        artifact.mkdir(exist_ok=True)
+        return profiles.ProfileContext(artifact, include_regression_client=include_regression_client)
+
+    def ledger_write(self, body):
+        (self.root / 'docs/bugs/rows').mkdir(parents=True, exist_ok=True)
+        (self.root / 'docs/bugs/rows/CLIENT-GATE-ROW.toml').write_text('[[bug]]\n' + body)
+
+    def row(self, status='open', ref=None):
+        self.ledger_write(
+            f'id = "CLIENT-GATE-ROW"\ntitle = "t"\narea = "client"\nrepro = "source"\n'
+            f'severity = "major"\nstatus = "{status}"\nsource = "s"\n'
+            f'fix_commit = "client-test:{self.fix[:12]}"\n'
+            f'regression = ["{ref or "client-gate:" + self.GATE}"]\n'
+            'client_test_reason = "a whole-repository lint gate has no scene: only the command can flip it"\n')
+
+    def test_a_registered_gate_parses_and_an_unregistered_one_is_refused_by_name(self):
+        self.assertEqual(regressions._parse_ref('client-gate:' + self.GATE), ('client-gate', self.GATE, ''))
+        with self.assertRaises(ValueError) as raised:
+            regressions._parse_ref('client-gate:not-a-gate')
+        self.assertIn('unknown client gate', str(raised.exception))
+        self.assertIn('clippy-workspace-all-targets', str(raised.exception))
+
+    def test_a_clean_gate_run_is_green_and_the_checkout_is_named(self):
+        calls = []
+
+        def execute(ctx, argv, name, cwd, env):
+            calls.append((argv, str(cwd)))
+            return True, '    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 07s\n'
+
+        with patch.object(ledger, '_exec', side_effect=execute):
+            results = ledger._run_client_gates(self.ctx(), {self.GATE}, self.root)
+        state, detail, assertion = results[self.GATE]
+        self.assertEqual((state, detail, assertion), (ledger.GREEN, '', None))
+        self.assertEqual(calls[0][1], str(self.client))
+        self.assertIn('clippy', calls[0][0])
+
+    def test_a_located_diagnostic_reds_the_gate(self):
+        with patch.object(ledger, '_exec', return_value=(False, self.DIAGNOSTIC)):
+            state, detail, assertion = ledger._run_client_gates(self.ctx(), {self.GATE}, self.root)[self.GATE]
+        self.assertEqual(state, ledger.RED)
+        self.assertIn('unused variable', detail)
+        self.assertEqual(assertion['class'], 'assertion')
+        self.assertEqual((assertion['file'], assertion['line']), ('src/lib.rs', 4))
+
+    def test_a_build_failure_without_a_diagnostic_is_unrunnable(self):
+        log = 'error: could not compile `krasnokamen-client` (lib) due to 1 previous error\n'
+        with patch.object(ledger, '_exec', return_value=(False, log)):
+            state, detail, _ = ledger._run_client_gates(self.ctx(), {self.GATE}, self.root)[self.GATE]
+        self.assertEqual(state, ledger.UNRUNNABLE)
+        self.assertIn('did not reach the compiler', detail)
+
+    def test_a_dirty_client_checkout_is_refused(self):
+        (self.client / 'src/lib.rs').write_text(CLIENT_LIB_FIXED + '\n// local edit\n')
+        with patch.object(ledger, '_exec', return_value=(True, '')):
+            state, detail, _ = ledger._run_client_gates(self.ctx(), {self.GATE}, self.root)[self.GATE]
+        self.assertEqual(state, ledger.UNRUNNABLE)
+        self.assertIn('is dirty', detail)
+
+    def test_an_unpinned_client_checkout_is_refused(self):
+        empty = self.base / 'unpacked-client'  # a checkout without a revision: no HEAD to pin
+        empty.mkdir()
+        (empty / 'Cargo.toml').write_text('[package]\nname = "krasnokamen-client"\nversion = "0.1.0"\n')
+        with patch.object(ledger, 'client_repo', return_value=empty):
+            state, detail, _ = ledger._run_client_gates(self.ctx(), {self.GATE}, self.root)[self.GATE]
+        self.assertEqual(state, ledger.UNRUNNABLE)
+        self.assertIn('no HEAD to pin', detail)
+
+    def test_an_unregistered_gate_run_names_the_registry(self):
+        state, detail, _ = ledger._run_client_gates(self.ctx(), {'not-a-gate'}, self.root)['not-a-gate']
+        self.assertEqual(state, ledger.UNRUNNABLE)
+        self.assertIn('is not registered in tools/harness/client_gates.py', detail)
+
+    def test_an_unregistered_gate_ref_cannot_be_promoted(self):
+        self.row(ref='client-gate:not-a-gate')
+        with self.assertRaises(ledger.Refused) as raised:
+            ledger.promote('CLIENT-GATE-ROW', root=self.root, ctx=self.ctx())
+        self.assertIn('unknown client gate', str(raised.exception))
+
+    def test_the_gate_pair_promotes_on_the_reversed_client_fix(self):
+        self.row()
+
+        def execute(ctx, argv, name, cwd, env):
+            if 'ledger-client-control' in str(cwd):
+                return False, self.DIAGNOSTIC
+            return True, '    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1s\n'
+
+        with patch.object(ledger, '_exec', side_effect=execute):
+            receipt = ledger.promote('CLIENT-GATE-ROW', root=self.root, ctx=self.ctx())
+        ref = 'client-gate:' + self.GATE
+        self.assertEqual(receipt['control'], 'client_test_reversal')
+        self.assertEqual(receipt['negative_control'][ref]['state'], ledger.RED)
+        self.assertEqual(receipt['negative_control'][ref]['assertion']['class'], 'assertion')
+        self.assertEqual(receipt['restored'][ref]['state'], ledger.GREEN)
+        self.assertEqual(ledger.load_rows(self.root)[0]['status'], 'fixed')
+
+    def test_the_gate_pair_refuses_a_control_that_stays_green(self):
+        self.row()
+        with patch.object(ledger, '_exec', return_value=(True, '')):
+            with self.assertRaises(ledger.Refused) as raised:
+                ledger.promote('CLIENT-GATE-ROW', root=self.root, ctx=self.ctx())
+        self.assertIn('stayed green', str(raised.exception))
+        self.assertEqual(ledger.load_rows(self.root)[0]['status'], 'open')
+
+    def test_the_default_regression_run_skips_gates_and_the_client_tier_runs_them(self):
+        self.row()
+        with patch.object(regressions, 'REPO_ROOT', self.root), \
+             patch.object(regressions, 'BASE_FIXED', frozenset()), \
+             patch.object(ledger, '_exec', side_effect=AssertionError('the default L2 must not run a gate')):
+            details = regressions.run(self.ctx())
+        self.assertEqual(details['fixed'], 0)
+        with patch.object(regressions, 'REPO_ROOT', self.root), \
+             patch.object(regressions, 'BASE_FIXED', frozenset()), \
+             patch.object(ledger, '_exec', return_value=(False, self.DIAGNOSTIC)):
+            with self.assertRaises(RuntimeError) as raised:
+                regressions.run(self.ctx(include_regression_client=True))
+        self.assertIn('client-gate:' + self.GATE, str(raised.exception))
+
+
 class GraphicalControlBackfillTests(unittest.TestCase):
     """`ledger graphical-control`: record a promoted row's graphical red later, never promote."""
 

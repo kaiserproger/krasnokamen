@@ -671,6 +671,16 @@ def _parse_ref(ref):
     if (len(parts) == 3 and parts[0] == 'client'
             and re.fullmatch(r'[A-Za-z0-9_-]+', parts[1]) and re.fullmatch(r'[A-Za-z0-9_:]+', parts[2])):
         return tuple(parts)
+    # A strict client-repository gate (a whole-repository lint command) is registered beside the
+    # rows in tools/harness/client_gates.py: `client-gate:<id>`. It runs in the client checkout and
+    # is a client-tier ref (regressions --include-regression-client), never part of the default L2.
+    if len(parts) == 2 and parts[0] == 'client-gate' and re.fullmatch(r'[a-z0-9-]+', parts[1]):
+        from . import client_gates as gates
+
+        if gates.command(parts[1]) is None:
+            raise ValueError(f'unknown client gate {parts[1]!r}: register it in '
+                             f'tools/harness/client_gates.py (registered: {", ".join(gates.ids())})')
+        return ('client-gate', parts[1], '')
     # A Loader fix's python test lives in the Loader checkout and imports its siblings from the
     # directory it lives in: `loader:python:<dir>:<module>.<TestClass.test_method>`.
     if len(parts) == 3 and parts[0] == 'loader':
@@ -712,6 +722,7 @@ def run(ctx, *, cargo_junit: Path | None = None):
     clients = defaultdict(set)
     python_refs = defaultdict(set)
     client_tests = defaultdict(set)
+    client_gates = defaultdict(set)
     loader_tests = defaultdict(set)
     loader_gradle = defaultdict(set)
     errors = []
@@ -804,6 +815,8 @@ def run(ctx, *, cargo_junit: Path | None = None):
                 python_refs[(first, second)].add(ident)
             elif kind == 'client':
                 client_tests[(first, second)].add(ident)
+            elif kind == 'client-gate':
+                client_gates[first].add(ident)
             elif kind == 'loader':
                 location, _, selector = second.partition(':')
                 (loader_tests if first == 'python' else loader_gradle)[(location, selector)].add(ident)
@@ -817,8 +830,9 @@ def run(ctx, *, cargo_junit: Path | None = None):
                 errors.append(f'{ident}: a client-test:<sha> fix registers no graphical ref, so it needs '
                               'client_test_reason: the exact observable no scene can flip (or the owner decision)')
         if isinstance(bug.get('fix_commit'), str) and bug['fix_commit'].startswith('client-test:') and not any(
-                ref.startswith('client:') for ref in refs):
-            errors.append(f'{ident}: a client-test:<sha> fix needs a client:<crate>:<test> ref to carry its pair')
+                ref.startswith(('client:', 'client-gate:')) for ref in refs):
+            errors.append(f'{ident}: a client-test:<sha> fix needs a client:<crate>:<test> or '
+                          'client-gate:<id> ref to carry its pair')
         if isinstance(bug.get('fix_commit'), str) and bug['fix_commit'].startswith('loader:'):
             if not any(ref.startswith('loader:') for ref in refs):
                 errors.append(f'{ident}: a loader:<sha> fix needs a loader:python:<dir>:<module>.<test> ref '
@@ -861,6 +875,12 @@ def run(ctx, *, cargo_junit: Path | None = None):
                 state, detail = entry[0], entry[1]
                 if state != ledger_tool.GREEN:
                     failures.append(f"{', '.join(sorted(ids))}: {test}: {state}: {detail}")
+    if ctx.include_regression_client and client_gates:
+        results = ledger_tool._run_client_gates(ctx, set(client_gates), REPO_ROOT)
+        for gate, ids in sorted(client_gates.items()):
+            entry = results.get(gate, (ledger_tool.UNRUNNABLE, 'no result'))
+            if entry[0] != ledger_tool.GREEN:
+                failures.append(f"{', '.join(sorted(ids))}: client-gate:{gate}: {entry[0]}: {entry[1]}")
     if cargo and cargo_junit is not None:
         failures.extend(_cargo_junit_failures(cargo_junit, cargo))
     elif cargo:

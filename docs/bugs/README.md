@@ -481,6 +481,27 @@ reversed hunks and the client checkout head; `regressions` refuses the receipt o
 `test_only_fix` is refused as well: that flag is a core oracle plus a defect patch.
 `CLIENT-SETTINGS-TEST-POLLUTION` is the first row promoted this way.
 
+### Strict client gates (`client-gate:<id>`)
+
+A client-repository gate is one whole-repository command — a strict lint, not a scene a pinned client
+could show. It registers as `client-gate:<id>`; the command is registered by id in
+[`client_gates.py`](../../tools/harness/client_gates.py) (`clippy-workspace-all-targets`,
+`clippy-client-all-targets`), never inline on the row, so the tooling refuses an id it does not know
+by name. A gate ref runs in the client checkout (`KRASNOKAMEN_CLIENT_ROOT`, else the sibling) and
+passes only on exit 0 with no compiler diagnostic. Its red is the compiler's own located diagnostic
+(`error: <lint>` or `warning: ...` with a `--> file:line:column` block); a missing checkout, an
+unregistered id, a dirty checkout (any modified `.rs`/`.toml`/`.lock`/`build.rs`), a checkout with no
+HEAD, a build failure or a timeout is unrunnable, never evidence. Gates run only in the client tier
+(`regressions --include-regression-client`) and in `ledger promote`, never in the default L2.
+
+A gate row is proved like a client unit row: `fix_commit = "client-test:<sha>"` and
+`client_test_reason` (no scene can flip a repository command), and the promotion reverses that client
+commit's own non-test hunks in a disposable copy of the checkout; the gate must red there with the
+located diagnostic and be green on the checkout that contains the fix. `CODE-CLIENT-CLIPPY` is the
+first row promoted this way. A bulk commit whose hunks straddle a `#[cfg(test)]` module cannot be
+split, so such a row names the latest lint-fix commit that reverses cleanly as its pair and says so in
+`repro_check`.
+
 ### Loader fixes (`loader:<sha>`)
 
 The Loader (`../solaris-loader`, `KRASNOKAMEN_LOADER_ROOT`) is its own repository with its own python
