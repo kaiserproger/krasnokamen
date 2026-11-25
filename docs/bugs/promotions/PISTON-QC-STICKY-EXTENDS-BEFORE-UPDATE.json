@@ -1,0 +1,46 @@
+{
+  "id": "PISTON-QC-STICKY-EXTENDS-BEFORE-UPDATE",
+  "verdict": "promoted",
+  "fix_commit": "dc8569b0ac1152499cd463cdc6fabdaf79b72f88",
+  "fix_commit_full": "dc8569b0ac1152499cd463cdc6fabdaf79b72f88",
+  "promoted_at": "2026-11-25T14:33:54+00:00",
+  "tree_head": "34420162bc863c556f3c74a906359bf5ac77db8e",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "386c62bf9b0125683b32a5ff6d00a85d1f4dad3288956d5659e620d224c7dbac",
+  "control_tree_head": "34420162bc863c556f3c74a906359bf5ac77db8e",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/redstone/mod.rs",
+    "crates/mc-core/src/redstone/signal.rs",
+    "crates/mc-core/src/sculk.rs",
+    "crates/mc-core/src/world.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/redstone/gap_tests.rs",
+    "crates/mc-core/src/redstone/redstone_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:redstone::tests::non_component_writes_do_not_wake_a_quasi_connected_sticky_piston": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/redstone/redstone_tests.rs",
+        "line": 1068,
+        "error": "panic",
+        "class": "assertion"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-core:redstone::tests::non_component_writes_do_not_wake_a_quasi_connected_sticky_piston": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123MechanicsG/.analysis/validation/20261125T141640-ledger-promote-h6i1vl61"
+}
