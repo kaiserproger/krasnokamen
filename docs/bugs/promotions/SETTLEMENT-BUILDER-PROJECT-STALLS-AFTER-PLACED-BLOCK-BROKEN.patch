@@ -1,5 +1,5 @@
 diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-index 9d134b3..c94d307 100644
+index 9211a85..8fc1806 100644
 --- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
 +++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
 @@ -405,6 +405,57 @@ pub(crate) fn recover(
@@ -60,7 +60,7 @@ index 9d134b3..c94d307 100644
      if let Some(proof) = &record.liquid {
          crate::settlements::construction::preparation::liquid::revalidate(
              target,
-@@ -443,6 +494,24 @@ pub(crate) fn recover(
+@@ -444,6 +495,24 @@ pub(crate) fn recover(
              record.snapshot.completed_work_units = 0;
          }
      }
