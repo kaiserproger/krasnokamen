@@ -276,6 +276,22 @@ SCENARIOS: dict[str, Scenario] = {
                "falling kind and no second saved tick.",
     ),
 
+    "native-v2-ledger-daylight-detector": _entry(
+        id="native-v2-ledger-daylight-detector",
+        summary="A daylight detector placed under settled thunder does not report full power",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-daylight-detector",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_daylight_detector.py"),
+        fixture="operator pad; `/tick freeze`; `/weather thunder` advanced 200 ticks to a settled "
+                "ramp; one `daylight_detector` placed with `/setblock` and advanced one tick",
+        proves="the client reads the detector's `power` property as something other than 15 after a "
+               "single tick, and the same value after a second tick",
+        limits="One frozen world, one settled thunder ramp and one detector; no clear-sky "
+               "comparison, no sensor chain and no live ramp.",
+    ),
+
     "native-v2-ledger-summon-horse-cargo": _entry(
         id="native-v2-ledger-summon-horse-cargo",
         summary="A summoned chested mount carries its vanilla Items cargo",

@@ -1207,6 +1207,12 @@ def _ledger_sculk_downward(steps: ProbeSteps, origin: tuple[int, int, int]) -> N
     run(steps, origin)
 
 
+def _ledger_daylight_detector(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_ledger_daylight_detector import run
+
+    run(steps, origin)
+
+
 def _ledger_summon_horse_cargo(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from .native_ledger_summon_horse_cargo import run
 
@@ -1263,6 +1269,7 @@ RUNNERS = {
     "native-v2-ledger-datapack-hover": _ledger_datapack_hover,
     "native-v2-ledger-forceload-ring": _ledger_forceload_ring,
     "native-v2-ledger-summon-horse-cargo": _ledger_summon_horse_cargo,
+    "native-v2-ledger-daylight-detector": _ledger_daylight_detector,
     "native-v2-ledger-gravity-tick": _ledger_gravity_tick,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
