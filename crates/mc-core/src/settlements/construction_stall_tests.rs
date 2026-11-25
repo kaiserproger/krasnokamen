@@ -799,6 +799,25 @@ fn a_committed_house_upgrade_reports_its_missing_certificate_requirement() {
         builder: Some((state.entities.row(builder).uuid, None)),
         order_seq: None,
     }];
+    // A level-2 record inherits the level-1 shell, and `reopen_emptied` now repairs an emptied
+    // inherited cell (`settlement_builds::inherited`), so this committed upgrade needs its shell
+    // standing or the repair refuses before the certificate is attempted. The subject of this test
+    // is the certificate refusal's wording, not the repair policy.
+    let blueprint = blueprints::get(&state.registry, "spanish_house").expect("blueprint");
+    let shell = blueprint.inherited(2, Rotation::from_quarter_turns(0));
+    assert!(
+        !shell.is_empty(),
+        "the level-2 spanish_house inherits its level-1 shell"
+    );
+    for (offset, inherited) in shell {
+        state.world.set_block(
+            4 + i32::from(offset[0]),
+            201 + i32::from(offset[1]),
+            4 + i32::from(offset[2]),
+            inherited.0,
+        );
+    }
+    state.world.fold_overlay();
     state.world.set_block(10, 202, 10, block);
     let uuid = state.entities.row(builder).uuid;
     executor::advance(&mut state, id, &handle, uuid).unwrap();

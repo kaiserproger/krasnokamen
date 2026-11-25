@@ -1,4 +1,4 @@
-use super::tests::{attempt, complete, fixture, fund, start};
+use super::tests::{attempt, complete, fixture, fund, open_plan, start};
 use super::*;
 use crate::entities::EntitySlot;
 
@@ -544,4 +544,92 @@ fn a_second_break_during_the_repair_requeues_the_repair_stage() {
         "one repair stage, requeued"
     );
     crate::plugin_structures::validate(&state).unwrap();
+}
+
+#[test]
+fn an_upgrade_repairs_an_inherited_perimeter_cell_emptied_mid_build() {
+    // Gate 20261124T231255 (house.L2_upgrade): the level-2 certificate inspects the whole level
+    // box, and its min-x wall is an *unchanged level-1 wall* — not in the level-2 plan's diff. A
+    // survival player emptied exactly such a cell mid-upgrade, so `finish_project` refused
+    // `missing=enclosure: 0/1` every tick and the project never closed. The repair scan must cover
+    // the level image the previous level authored, not only this record's own cells.
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "house", 1);
+    start(&mut state, id, "house", 1, None);
+    complete(&mut state, id, slot);
+    let building = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    assert_eq!(
+        state.settlements.get(id).unwrap().buildings[&building].level,
+        1
+    );
+    fund(&mut state, "house", 2);
+    start(&mut state, id, "house", 2, Some(building));
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
+    assert_eq!(project.level, 2, "the upgrade is planned before the break");
+    let blueprint = blueprints::get(&state.registry, "house").expect("house blueprint");
+    let bounds = blueprint
+        .level(2)
+        .expect("level 2")
+        .rotated(Rotation::from_quarter_turns(project.rotation))
+        .bounds(project.origin);
+    // Level 1's corner log stands on the level-2 certificate's min-x wall at its own origin, and
+    // level 2's image keeps that block, so no cell of the level-2 increment owns it.
+    let at = [project.origin[0], project.origin[1] + 1, project.origin[2]];
+    assert_eq!(
+        (at[0], at[2]),
+        (bounds.min[0], bounds.min[2]),
+        "the inherited cell is on the level-2 certificate wall"
+    );
+    let (_, planned) = planned_cells(&state, &project, "oak", &mut Default::default())
+        .expect("the level-2 increment plans");
+    assert!(
+        !planned.iter().any(|cell| cell.at == at),
+        "the level-2 diff does not place the inherited wall cell"
+    );
+    let expected = state
+        .world
+        .block_at(at[0], at[1], at[2])
+        .expect("level 1 placed the inherited wall cell");
+    assert_eq!(
+        state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(expected))
+            .expect("known block")
+            .block
+            .id
+            .path(),
+        "oak_log",
+        "the inherited cell is the level-1 corner log"
+    );
+    // The repair pays the cell's material again: one spare log keeps the repair fundable.
+    let log = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
+        .unwrap();
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    *slots.iter_mut().find(|stack| stack.is_empty()).unwrap() = mc_data::ItemStack::new(log, 2);
+    state
+        .world
+        .set_block(at[0], at[1], at[2], state.registry.states.air);
+    state.world.fold_overlay();
+    assert!(
+        crate::settlements::buildings::inspect(&state, BuildingKind::House, 2, bounds).is_err(),
+        "the emptied inherited cell is what the level-2 certificate inspects"
+    );
+    complete_authored(&mut state, id, slot, &[(at, expected)]);
+    assert_eq!(
+        state.settlements.get(id).unwrap().buildings[&building].level,
+        2,
+        "the repaired level-2 house certifies"
+    );
 }
