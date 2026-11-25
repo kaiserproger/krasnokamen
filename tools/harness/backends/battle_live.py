@@ -184,7 +184,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         # The row's symptom from the server's own published truth: the respawned holder must
         # have an enemy soldier inside weapon reach in the next battle image. Log fields are
         # not evidence here (contact=/rule=centre are strings the fix writes).
-        witness = _respawn_enemy_witness(run_dir, holder_entity, HOLDER_SIDE)
+        witness = _respawn_enemy_witness(run_dir)
         report["observations"]["respawn_enemy_witness"] = witness
         check(report, "holder_sees_an_enemy_after_respawn",
               witness.get("min_enemy_distance") is not None
@@ -247,62 +247,55 @@ def _point(state: dict[str, Any]) -> list[float] | None:
     return None
 
 
-def _respawn_enemy_witness(run_dir: Path, holder_entity: int, holder_side: int) -> dict[str, Any]:
-    """Distances from the respawned holder to every enemy soldier in the latest battle image.
+def _respawn_enemy_witness(run_dir: Path, holder: str = HOLDER) -> dict[str, Any]:
+    """The respawned holder's distance to the nearest soldier of another faction.
 
-    Reads the runner's `wal-archive/` (enabled with `--crash-handoff`): the `Entity` rows carry the
-    positions and the battle image carries the sides, so this is the server's own view of who stood
-    within weapon reach of the respawn — not a log line (review wave2-13 M3).
+    Reads the runner's `wal-archive/` (enabled with `--crash-handoff`) and folds the battle images:
+    the hold carries the holder's own position and regiment, the member anchors carry the line, and
+    `regiments[i].spec.faction` separates the sides. That is the server's own truth about who stood
+    within weapon reach of the respawn — no log string, no client feed (review wave2-13 M3).
     """
     archive = run_dir / "wal-archive"
-    result: dict[str, Any] = {"archive": str(archive), "archive_exists": archive.is_dir(),
-                              "images": 0, "entities": 0, "min_enemy_distance": None}
+    result: dict[str, Any] = {"archive_exists": archive.is_dir(), "images": 0,
+                              "holder": None, "holder_at": None,
+                              "enemy_fighters": 0, "min_enemy_distance": None}
     if not archive.is_dir():
         return result
-    battle = battle_recovery._runner_module()
     fold = None
-    positions: dict[int, list[float]] = {}
     for path in sorted(archive.glob("batch-*.bin")):
-        decoded = battle.wal_frame(path.name, path.read_bytes())
+        decoded = battle_recovery.wal_frame(path.name, path.read_bytes())
         if decoded is None:
             continue
         for line in decoded[2].splitlines():
-            if b'"Entity"' not in line and b'"Battle' not in line:
+            if b'"Battle' not in line:
                 continue
-            for dimension, entry in battle._visit(json.loads(line)):
+            for dimension, entry in battle_recovery._visit(json.loads(line)):
                 if dimension != "minecraft:overworld":
                     continue
-                entity = entry.get("Entity")
-                if isinstance(entity, dict):
-                    pos = entity.get("pos") or entity.get("position")
-                    if isinstance(pos, list) and len(pos) == 3:
-                        positions[int(entity["id"])] = [float(v) for v in pos]
-                if "Battle" in entry or "BattlePatch" in entry:
-                    fold = battle.fold_battle(fold, entry)
-                    if fold is not None:
-                        result["images"] += 1
-    result["entities"] = len(positions)
+                folded = battle_recovery.fold_battle(fold, entry)
+                if folded is not None:
+                    fold = folded
+                    result["images"] += 1
     if fold is None:
         return result
-    members = {member["id"]: member for member in fold["battle"]["formation"]["members"]}
-    holder_pos = positions.get(holder_entity)
-    if holder_pos is None:
-        result["holder_position"] = None
+    battle = fold["battle"]
+    hold = next((row for row in battle["live"]["holds"] if row.get("name") == holder), None)
+    if hold is None or not hold.get("at"):
         return result
-    result["holder_position"] = holder_pos
+    at = [float(value) for value in hold["at"]]
+    result["holder"], result["holder_at"] = hold.get("name"), at
+    regiments = battle["formation"]["regiments"]
+    own = regiments[hold["regiment"]]["spec"]["faction"]
     distances = []
-    for entity_id, member in members.items():
-        if member.get("side") == holder_side:
+    for member in battle["formation"]["members"]:
+        faction = regiments[member["regiment"]]["spec"]["faction"]
+        if faction == own or not member.get("anchor"):
             continue
-        pos = positions.get(entity_id)
-        if pos is None:
-            continue
-        distances.append((sum((a - b) ** 2 for a, b in zip(pos, holder_pos)) ** 0.5, entity_id))
+        anchor = member["anchor"]
+        distances.append((((anchor[0] - at[0]) ** 2 + (anchor[1] - at[2]) ** 2) ** 0.5, member["id"]))
     result["enemy_fighters"] = len(distances)
-    if distances:
-        distances.sort()
-        result["min_enemy_distance"] = round(distances[0][0], 2)
-        result["nearest_enemy"] = distances[0][1]
+    # The last image is the freshest reading; a fighter row may vanish on death, so keep the min.
+    result["min_enemy_distance"] = round(min(d[0] for d in distances), 2) if distances else None
     return result
 
 
