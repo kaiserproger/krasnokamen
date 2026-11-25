@@ -1,3 +1,18 @@
+diff --git a/crates/mc-core/src/native_checkpoint.rs b/crates/mc-core/src/native_checkpoint.rs
+index 66d6cb070..5807ba0a8 100644
+--- a/crates/mc-core/src/native_checkpoint.rs
++++ b/crates/mc-core/src/native_checkpoint.rs
+@@ -607,8 +607,8 @@ pub fn open_refusal(
+              export-anvil` (binary `solaris` in the release archive, `solaris-v2` from \
+              source) and import the export with `krasnokamen world import-anvil` into a \
+              directory that does not exist yet; blocks, containers, entities and players \
+-             carry over, but plugin state, settlements and the block log are lost and \
+-             pre-rename solaris:* entity data is kept but not read"
++             carry over and the import renames the export's solaris:* fields to the names \
++             this build reads, but plugin state, settlements and the block log are lost"
+         ));
+     }
+     CoreError::Storage(error.to_string())
 diff --git a/crates/mc-world-conversion/src/import.rs b/crates/mc-world-conversion/src/import.rs
 index fba316259..793de16c5 100644
 --- a/crates/mc-world-conversion/src/import.rs
@@ -74,18 +89,40 @@ index fba316259..793de16c5 100644
          let source_location = player_missing_dimension_source(&tag)?;
          // Versionless players report -1 (vanilla PlayerDataStorage/NbtUtils
          // default), NOT 1343: -1 runs the full legacy fixer chain, while
-diff --git a/crates/mc-core/src/native_checkpoint.rs b/crates/mc-core/src/native_checkpoint.rs
-index 66d6cb070..5807ba0a8 100644
---- a/crates/mc-core/src/native_checkpoint.rs
-+++ b/crates/mc-core/src/native_checkpoint.rs
-@@ -607,8 +607,8 @@ pub fn open_refusal(
-              export-anvil` (binary `solaris` in the release archive, `solaris-v2` from \
-              source) and import the export with `krasnokamen world import-anvil` into a \
-              directory that does not exist yet; blocks, containers, entities and players \
--             carry over, but plugin state, settlements and the block log are lost and \
--             pre-rename solaris:* entity data is kept but not read"
-+             carry over and the import renames the export's solaris:* fields to the names \
-+             this build reads, but plugin state, settlements and the block log are lost"
+diff --git a/crates/mc-world-conversion/src/lib.rs b/crates/mc-world-conversion/src/lib.rs
+index f8dc3ab03..06d1f1be4 100644
+--- a/crates/mc-world-conversion/src/lib.rs
++++ b/crates/mc-world-conversion/src/lib.rs
+@@ -86,6 +86,7 @@ struct ConversionStats {
+     pub reminted_ids: u64,
+     pub opaque_retention: Vec<String>,
+     pub upgrades: Vec<RecordUpgradeReceipt>,
++    pub pre_rename: pre_rename::PreRename,
+ }
+ 
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+@@ -410,6 +411,24 @@ fn convert(
+             "Anvil {} uses DataVersion {} and recovered checkpoint time",
+             operation, receipt.data_version
          ));
-     }
-     CoreError::Storage(error.to_string())
++        let renamed = &stats.pre_rename;
++        if renamed.keys > 0 {
++            receipt
++                .counts
++                .insert("pre_rename_keys".into(), renamed.keys);
++            receipt.normalizations.push(format!(
++                "{} pre-rename solaris/Solaris fields renamed to their krasnokamen/Krasnokamen names \
++                 (a solaris:Rider player rider became krasnokamen:Riders)",
++                renamed.keys
++            ));
++        }
++        if let Some(first) = &renamed.first_value {
++            receipt.known_gaps.push(format!(
++                "PRE-RENAME VALUES: {} string values in the old solaris: namespace kept verbatim \
++                 (first: {first}); this build reads only krasnokamen: identifiers",
++                renamed.values
++            ));
++        }
+         receipt
+             .opaque_retention
+             .push("unknown NBT fields and safe auxiliary files retained except explicit empty-chunk regeneration and duplicate-UUID dispositions".into());

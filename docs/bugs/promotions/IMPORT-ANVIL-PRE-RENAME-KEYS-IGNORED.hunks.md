@@ -24,6 +24,8 @@ production `import_anvil` path, so its own assertions are the control.
 | `import.rs @@ -1334,6 +1345,9 @@` chunk NBT | `import.rs:641-644` | `rename(&mut tag, Owner::Chunk, ..)` in the chunk `visit` |
 | `import.rs @@ -1705,6 +1720,9 @@` entity regions | `import.rs:1034-1039` | `rename(&mut tag, Owner::EntityRegion, ..)` in the entity-region `visit` |
 | `import.rs @@ -2037,6 +2056,9 @@` player records | `import.rs:1372-1375` | `rename(&mut tag, Owner::Player, ..)` |
+| `lib.rs @@ -69,6 +70,7 @@` `ConversionStats.pre_rename` field | `crates/mc-world-conversion/src/lib.rs:89` | carried: the field feeds the receipt blocks below (the field is `pub` inside the crate-private struct, so leaving it would compile but be a kept consumer of the module outside the carried hunks) |
+| `lib.rs @@ -395,6 +397,24 @@` the `pre_rename_keys` count, the rename normalization and the `PRE-RENAME VALUES` gap | `lib.rs:414-431` | carried: these are the callers of the module outside the carried hunks (README:255-257), so they belong to the control, not to kept API |
 | `native_checkpoint.rs @@ -534,8 +534,8 @@` `open_refusal` message | `crates/mc-core/src/native_checkpoint.rs:604-612` | the refusal text telling operators the import now renames `solaris:*`; carried so no hunk is left out without a class |
 
 The HEAD adaptation carried here (named per README:234-258): the call sites use the module's `Owner`
@@ -35,9 +37,11 @@ exactly the pre-fix tree (nothing else in `import.rs` names `Owner`).
 
 - `crates/mc-world-conversion/src/pre_rename.rs` (new, 119 lines) — (b) whole module kept: the kept ref
   calls `PreRename::rename`/`current_name` and the pre-rename refusal test drives it directly.
-- `crates/mc-world-conversion/src/lib.rs` (`mod pre_rename;`, `ConversionStats.pre_rename`, the
-  `pre_rename_keys` count and `PRE-RENAME VALUES` gap blocks) — (b) module declaration, field and
-  receipt surface the kept refs read; reversing them stops the control from compiling.
+- `crates/mc-world-conversion/src/lib.rs` `@@ -22,6 +22,7 @@` (`mod pre_rename;`) — (b) the module
+  declaration the kept ref needs (`pre_rename::tests::...` runs inside it); everything else in
+  `lib.rs` is carried above. Reversing the declaration would stop the control from compiling and
+  running the ref, which is the class-(b) test, not the false claim earlier made for the field/receipt
+  blocks.
 - `crates/mc-world-conversion/src/pre_rename_tests.rs` (283 lines) and `roundtrip_tests.rs` (4 lines) —
   test files, kept so the control compiles and runs the registered ref.
 - `docs/MIGRATION.md` — documentation.
@@ -48,8 +52,15 @@ exactly the pre-fix tree (nothing else in `import.rs` names `Owner`).
   — the test drives the real `import_anvil` over an RC5-shaped world. With the wiring reversed the
   receipt carries no `pre_rename_keys` count and no rename normalization, so
   `pre_rename_tests.rs:418` (`assert_eq!(receipt.counts.get("pre_rename_keys"), Some(&renamed))`) with
-  `left: None, right: Some(4)` on the promote's control
-  (`.analysis/validation/20261125T220349-ledger-promote-fso_8gx6`), class `assertion`; the same test's
-  later assertions (the imported horse's `mount.riders == [player]`, `mentions_pre_rename(exported_player)`
-  false, `krasnokamen:PortalTime` present, `solaris*` absent) encode the row's symptom and cannot pass on
-  the control either. The restore is green.
+  `left: None, right: Some(4)`, class `assertion`. That is the receipt value the row names ("reports no
+  gap"): pre-fix the receipt carries no `pre_rename_keys` at all. The test stops at :418, so its later
+  assertions (the imported horse's `mount.riders == [player]`, the export's `krasnokamen:PortalTime` and
+  `solaris*` absence) are **not** claimed as control evidence. Measured twice: on the reversed worktree
+  before the promote (`.analysis/codex-logs/import-control2/run.log`) and by the promote (see below).
+  The restore is green.
+
+## Superseded promotion
+
+The first promotion (`patch:00479158…`, artifact `20261125T220349-ledger-promote-fso_8gx6`) carried only
+the six calls and left the `lib.rs` field/receipt blocks labelled (b), which was false. It is superseded
+by this patch (`patch:166abc98…`) and a fresh promote; its receipt stays as evidence of the same red.
