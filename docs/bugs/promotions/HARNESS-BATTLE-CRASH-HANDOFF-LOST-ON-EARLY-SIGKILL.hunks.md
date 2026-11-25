@@ -37,3 +37,25 @@ path, and a reversed tree fails `assertIsNotNone` at line 742), so the fix is pr
 and unproven at the scene level. The needed fixture: stage the SIGKILL *before* the console `start`, so
 `mark_alive` never flips the staged startup and the reversed tree's crash watcher deterministically
 reports `handoff: null` on every run.
+
+## Measured control, 2026-11-25 (D123BattleL)
+
+Control tree = this head + `git apply -R` of the pre-image patch, run **from the reversed tree** (the
+scene executes that tree's `tools/battle/run-battle.py`; running it from the fixed tree passes with any
+server binary, which is how three earlier "control" runs came out green):
+
+- `062846-cx5cvec4` passed — the watcher thread had already released Popen's waitpid lock when the
+  telemetry exception reached the handler, so the old `poll()` sampled `-SIGKILL`.
+- `063126-n2gmvb2q` red: `crash_handoff_preserved_staged: handoff null, runner_exit 1`
+- `063307-30ftkveb` red: the same assertion.
+
+So the scene reds 2 of 3, not 3 of 3. A deterministic scene cannot be built without changing the fix:
+holding `Popen._waitpid_lock` before the handler makes the fix's own `wait(timeout=10)` time out, and any
+later hold happens after the reversed `poll()` has already sampled. What the fix needs to be promotable
+is a runner change that makes the exception path observe the exit regardless of the watcher's lock
+(the current fix samples through `wait`, which the lock defeats when held), or a scene that reproduces
+`telemetry exporter failed` before the watcher thread starts.
+
+Candidate side, same day: three runs on the clean-tree pin `af9e4adcfcb1` are green
+(`063921-v2c57hb1` 157.5 s, `064159-ei26jqqo` 160.6 s, `064445-fc0xpsid` 164.8 s), so the pair is
+3/3 green (candidate) against 2/3 red (control). Promotion stays refused until the control is 3/3.

@@ -6,6 +6,7 @@ severity = "major"
 status = "open"
 source = "A11SigkillBreaker 2026-11-16: run-battle.py --crash-handoff exited 1 with 'telemetry exporter failed: Remote end closed connection without response' and no crash-handoff.json/crash-copy in 2/5 pre-stage/staged SIGKILL cuts. The crash watcher thread blocks in Popen.wait() holding the waitpid lock, so the except branch's poll() returned None and re-raised. Work-root receipts/A11SigkillBreaker/REPORT.md; fixed-runner real-client verification receipts/BattleResume/runner-sigkill-race/RECEIPT.txt (0/6 failures)."
 repro = "client"
+proving_assertions = { "harness:battle-crash-recovery:battle-crash-handoff" = "crash_handoff_preserved_prestage" }
 regression = ["python:tools.battle.test_run_battle:BattleRunnerTests.test_crash_handoff_sees_sigkill_while_crash_watcher_holds_waitpid", "harness:battle-crash-recovery:battle-crash-handoff"]
 fix_commit = "patch:2855347b0693a86d7d07d0c99798469007a57f0f1933585c43686dc85b502f8b"
 failing_first = "reported"
