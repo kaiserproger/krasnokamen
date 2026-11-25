@@ -147,6 +147,45 @@ fn roofed_enclosed_house_with_real_bed_certifies() {
 }
 
 #[test]
+fn roofed_enclosed_house_with_an_open_door_certifies() {
+    // The House L2 select of 20261125T090331 refused with `enclosure: 0/1` while the house was
+    // otherwise complete: an open door has no collision box, so a resident walking through it made
+    // the whole perimeter read "not enclosed" and the upgrade could never certify.
+    let mut state = test_state();
+    let id = town(&mut state);
+    let stone = state.registry.states.stone;
+    for x in 3..=7 {
+        for z in 3..=7 {
+            state.world.set_block(x, 204, z, stone);
+            if x == 3 || x == 7 || z == 3 || z == 7 {
+                for y in 201..204 {
+                    state.world.set_block(x, y, z, stone);
+                }
+            }
+        }
+    }
+    let door = block(
+        &state,
+        "minecraft:oak_door",
+        &[("half", "lower"), ("open", "true")],
+    );
+    let upper = block(
+        &state,
+        "minecraft:oak_door",
+        &[("half", "upper"), ("open", "true")],
+    );
+    state.world.set_block(3, 201, 5, door);
+    state.world.set_block(3, 202, 5, upper);
+    crate::settlements::allocator::tests::bed(&mut state, 5, 5);
+    state.world.fold_overlay();
+    let result = certify(&mut state, id, BuildingKind::House, bounds());
+    assert!(
+        result.is_ok(),
+        "an open door still encloses the house: {result:?}"
+    );
+}
+
+#[test]
 fn ordinary_sleep_bed_certifies_without_breeding_headroom() {
     let mut state = test_state();
     let id = town(&mut state);
