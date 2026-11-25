@@ -40,15 +40,17 @@ proves the *clock source* the row lacked, not the signature. `ReplayChunkClock::
 - `journal/replay.rs @@ -43,6 +43,9 @@` (`Replay::game_clock`, `Replay::clock_fault`) — (b) fields the
   kept tests and `native_checkpoint.rs` set/read.
 - `journal/replay.rs @@ -621,6 +638,45 @@` and `@@ -629,651 +685,646 @@` (`apply_batch_images`,
-  `apply_batch_images_with_clock`, `apply_batch_entries`, every `game`-threaded match arm) — (c) later
-  commits rewrote these functions (the `legacy` flag, the `SimDebt` anchored-epoch refusal, the
-  `image.at(tick, held_ticks)` debt projection, the streamed `lo` boundary). At HEAD the same code is
-  kept API: it constructs and passes the clock, and reversing it refuses to build without the clock the
-  kept wrappers expect.
+  `apply_batch_images_with_clock`, `apply_batch_entries`, every `game`-threaded match arm) — (b) kept
+  API: at HEAD these functions construct, observe and pass the `ReplayGameClock` the kept tests and
+  `native_checkpoint.rs` call; reversing them removes that API and the control does not build. Later
+  commits also extended the area (the `legacy` flag, the `SimDebt` anchored-epoch refusal, the
+  `image.at(tick, held_ticks)` projection, the streamed `lo` boundary), which is why the class is kept
+  API rather than a carried hunk.
 - `journal/replay.rs @@ -1302,6 +1353,9 @@`, `@@ -1313,12 +1367,26 @@`, `@@ -1326,7 +1394,8 @@`,
   `@@ -1357,6 +1426,7 @@` (`validate_replay`, `advance_replay_clocks`,
-  `advance_replay_clocks_with_clock`) — (c) later commits added the `legacy` parameter, debt-anchor
-  validation and the `image.at` projection; the surviving HEAD text is kept API the kept refs call.
+  `advance_replay_clocks_with_clock`) — (b) kept API: these wrappers and the `legacy`/held-tick
+  parameters they pass are called by the kept tests and `native_checkpoint.rs`; later commits added the
+  debt-anchor validation and the `image.at` projection to the same text.
 - `native_checkpoint.rs` (3 hunks) — (b) constructs `ReplayGameClock`, observes the unrouted batches and
   passes the clock into `apply_batch_images_with_clock`/`advance_replay_clocks_with_clock`; reversing
   removes the API the kept refs use. The control keeps the clock computed and threaded.
@@ -56,9 +58,12 @@ proves the *clock source* the row lacked, not the signature. `ReplayChunkClock::
   (b) `held_since` is the durable witness `GameClockImage::held_ticks` and the kept
   `tick_control::tests::game_clock_held_restore_...` ref call; reversing it stops the control from
   compiling. It is the restart/restore half of the same row, not this control's proving path.
-- `villager/persistence.rs` (2 hunks: `advance_running_clocks`, panic-deadline gate) — (b)
-  `advance_running_clocks` is called by the kept `journal_touched.rs` production mirror and by the fixed
-  `advance_villager`; `advance_clocks` (the pre-image body the control uses) is kept.
+- `villager/persistence.rs @@ -333,7 +333,15 @@` (`advance_running_clocks`) — (b) the helper is called
+  by the kept `journal_touched.rs` production mirror and by the fixed `advance_villager`; `advance_clocks`
+  (the pre-image body the control uses) is kept.
+- `villager/persistence.rs @@ -348,7 +356,11 @@` (the panic-deadline `panic_until >= first` gate) — (a)
+  another row's behaviour: the control's reversed arithmetic never reaches it (the op is a no-op for
+  `from + 99 == panic_until`, as the review measured against A1Int), and no registered ref asserts it.
 - `weather.rs` (2 hunks: `GameClockImage::Held { held_since }`, `held_ticks`, `LEGACY_CLOCK_ERROR`) —
   (b) the kept module calls `held_ticks`/`LEGACY_CLOCK_ERROR` and the kept tests construct `held_since`.
 - Test files (`entity_state_game_clock_tests.rs`, `entity_state_persistence_tests.rs`,
