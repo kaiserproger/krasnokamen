@@ -1,0 +1,40 @@
+diff --git a/crates/mc-core/src/mounts.rs b/crates/mc-core/src/mounts.rs
+--- a/crates/mc-core/src/mounts.rs
++++ b/crates/mc-core/src/mounts.rs
+@@ -191,12 +191,12 @@ fn dash(state: &mut TickState, actor: EntityId, slot: EntitySlot, power: i32) {
+     state.entities.set_ground(slot, false);
+ }
+ 
+-/// Only the camel has a seat per passenger; every other vehicle seats exactly
+-/// one rider, whatever its contract says.
++/// Only the camel and the happy ghast have a seat per passenger; every other
++/// vehicle seats exactly one rider, whatever its contract says.
+ pub(crate) fn seat_capacity(type_id: u32) -> usize {
+     mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id).map_or(1, |kind| {
+         match kind.name {
+-            "minecraft:camel" => {
++            "minecraft:camel" | "minecraft:happy_ghast" => {
+                 usize::from(kind.behavior.vehicle_passenger.max_passengers).min(MAX_PASSENGERS)
+             }
+             _ => 1,
+@@ -265,6 +265,12 @@ fn action(
+         {
+             return Some(Action::Saddle);
+         }
++        if kind == "minecraft:happy_ghast"
++            && item.ends_with("_harness")
++            && row.loot.body_armor.is_none()
++        {
++            return Some(Action::Armor);
++        }
+         if item == "minecraft:wolf_armor"
+             && kind == "minecraft:wolf"
+             && row.entity_life.tamed
+@@ -340,6 +346,7 @@ fn action(
+             capabilities.riding,
+             RidingProfile::CarrotStick | RidingProfile::FungusStick
+         ) || row.loot.saddle.is_some())
++        && (kind != "minecraft:happy_ghast" || row.loot.body_armor.is_some())
+     {
+         return Some(Action::Ride);
+     }

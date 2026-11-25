@@ -7,12 +7,12 @@ The scenario summons an item entity with `NoGravity` in the ring chunk (its `Pos
 static either way) and reads `Age` twice through the client's own `data get entity`
 command: the fixed tree never advances it, the pre-image does.
 
-Verdicts are assertions; the two reads use the summon-nbt gate's answer idiom (a chat
-marker after the command, the `has the following entity data:` line before it).
+Verdicts are assertions; each read enables `gamerule send_command_feedback true` and
+waits for a new `has the following entity data:` line, the same answer path the tags
+gate uses.
 """
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
 from .probe_steps import ProbeSteps
@@ -24,21 +24,29 @@ TICKS_PER_STEP = 10
 WAIT_STEPS = 8
 
 
-def _read_age(steps: ProbeSteps, marker: str, uuid_text: str) -> str | None:
-    """One `data get entity <uuid> Age` answer, fenced by a chat marker."""
-    steps.call("minecraft_send_chat", {"message": marker, "command": False})
-    steps.wait(lambda s: any(isinstance(line, str) and marker in line
-                            for line in s["recent_chat"]), f"marker_{marker.split()[-1]}")
+def _data_lines(state: dict[str, Any]) -> list[str]:
+    return [line for line in state["recent_chat"]
+            if isinstance(line, str) and DATA in line]
+
+
+def _read_age(steps: ProbeSteps, uuid_text: str) -> str | None:
+    """One `data get entity <uuid> Age` answer, newest chat line wins.
+
+    The answer is success feedback, so the run enables
+    `gamerule send_command_feedback true` first; `recent_chat` is newest-first.
+    """
+    before = len(_data_lines(steps.observe()))
     steps.fixture(f"data get entity {uuid_text} Age")
 
-    def reply(state: dict[str, Any]) -> str | None:
-        chat = [line for line in state["recent_chat"] if isinstance(line, str)]
-        newer = chat[:next((i for i, line in enumerate(chat) if marker in line), 0)]
-        return next((line for line in reversed(newer) if DATA in line), None)
+    def newer(state: dict[str, Any]) -> bool:
+        return len(_data_lines(state)) > before
 
-    seen = steps.wait(lambda s: reply(s) is not None, f"age_read_{marker.split()[-1]}")
-    line = reply(seen)
-    return None if line is None else line.split(DATA, 1)[1].strip()
+    try:
+        state = steps.wait(newer, "age_answer_received", timeout_seconds=20)
+    except TimeoutError:  # a refused or absent entity answers without the data line
+        return None
+    lines = _data_lines(state)
+    return lines[0].split(DATA, 1)[1].strip() if lines else None
 
 
 def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
@@ -46,6 +54,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # A chunk far outside the client's own simulation range, forced by the ticket.
     base = {"x": x + 1536, "y": y, "z": z}
     ring = {"x": base["x"] + RING_OFFSET, "y": y, "z": z}
+    steps.fixture("gamerule send_command_feedback true")
     steps.fixture(f"forceload add {base['x']} {base['z']}")
     steps.fixture(f"forceload add {ring['x']} {ring['z']}")
     # The item entity's Age advances only while its chunk simulates entities.
@@ -54,14 +63,14 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture(
         f"summon minecraft:item {ring['x'] + 0.5} {y + 1.0} {ring['z'] + 0.5} "
         '{Item:{id:"minecraft:stone",count:1},Age:0s,NoGravity:1b,UUID:[I;0,0,0,123456]}')
-    first = _read_age(steps, f"ring age first {uuid.uuid4().hex}", entity_uuid)
+    first = _read_age(steps, entity_uuid)
     steps.check("ring_entity_exists", first is not None)
     steps.report["ring_age_first"] = first
 
     second = first
     for _ in range(WAIT_STEPS):
         steps.call("minecraft_wait_ticks", {"ticks": TICKS_PER_STEP})
-        second = _read_age(steps, f"ring age next {uuid.uuid4().hex}", entity_uuid)
+        second = _read_age(steps, entity_uuid)
         if second != first:
             break
     steps.report["ring_age_second"] = second
