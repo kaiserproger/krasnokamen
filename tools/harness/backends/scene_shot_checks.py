@@ -157,13 +157,15 @@ def check_entity_visuals(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("fire_overlay_present", burning_orange > 5000)
     rope_n = _count(shots["leashed"][1], (560, 400, 760, 500), rope)
     probe.report["leash_rope_pixels"] = rope_n
-    # Threshold derived from the model, not from a measurement: the rope is a 0.036-block
-    # diameter tube (`tube_segment(..., 0.018, ...)`) on the 4.03-block sheep-cow gap, whose
-    # `rope_point` sag caps at 0.403 blocks; the camera is 4.7-4.9 blocks away at fov 70 on
-    # 1280x720, so one block is 360 / (depth * tan(35 deg)) = 105-109 px, the tube projects to
-    # 3.8-4.0 px, and the ROI's +/-0.125 ndc spans 0.125 * tan(hfov/2) * depth = 0.76 blocks
-    # either side, i.e. ~1.5 blocks / ~160 px of rope. The model's lower bound inside this ROI
-    # is ~160 * 3.8 = 600 px; 300 asks for half of one visible crossing and cannot be reached
+    # Threshold derived from the model, not from a measurement (arithmetic corrected in review
+    # round 3): the rope is a 0.036-block diameter tube (`tube_segment(..., 0.018, ...)`) on the
+    # 4.03-block sheep-cow gap, whose `rope_point` sag caps at 0.403 blocks; the anchors sit at
+    # z = 1004.95/1005.45 against a camera at z = 1000.5, so the rope is ~4.45 blocks away at
+    # fov 70 on 1280x720: one block is 360 / (depth * tan(35 deg)) = 115.5 px, the tube projects
+    # to ~4.2 px, and the ROI x 560..760 is ndc -0.125..+0.1875, i.e. -0.69..+1.04 blocks
+    # (tan(hfov/2) = tan(35 deg) * 16/9 = 1.2448), about 1.73 blocks / 200 px of rope. The
+    # model's lower bound inside this ROI is therefore ~200 * 4.2 = 840 px (the review computed
+    # ~760 with the sag); 300 asks for under half of one visible crossing and cannot be reached
     # by the rig, its shadow or the sky.
     probe.check("leash_rope_drawn", rope_n > 300)
     probe.report["visual_review_required"] = [
