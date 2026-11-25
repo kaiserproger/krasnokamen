@@ -3,7 +3,7 @@ id = "HARNESS-EXCLUSIVE-WINDOW-SCENE-SLOT-DEADLOCK"
 title = "A mem-run -x window waiting for a scene slot deadlocks every build and gate on the host"
 area = "harness"
 severity = "major"
-status = "fixed-unpromoted"
+status = "open"
 repro_check = """manual fleet repro, recorded 2026-11-25 from the lane's own evidence (no scripted control
 exists). Observed at the pre-fix tree c7fc3ab52^ on the owner host 2026-11-14 18:53-19:48
 (receipts/BvItemCache/g2x/window-V2-killed.neighbours:265 `-- 19:18:54`; the window was killed at
