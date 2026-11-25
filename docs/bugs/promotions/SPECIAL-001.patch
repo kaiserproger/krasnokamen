@@ -1,0 +1,14 @@
+diff --git a/crates/mc-core/src/tick/input/interact.rs b/crates/mc-core/src/tick/input/interact.rs
+index dccd4b2cb..a856be0b8 100644
+--- a/crates/mc-core/src/tick/input/interact.rs
++++ b/crates/mc-core/src/tick/input/interact.rs
+@@ -190,7 +190,8 @@ pub(in crate::tick) fn use_item_on(
+     if crate::maps::banner::use_on(state, entity, *hand, *position) {
+         return;
+     }
+-    if crate::chiseled_shelf::use_on(state, entity, *hand, *position, *face, *cursor)
++    if crate::special_storage::use_on(state, entity, *hand, *position, *face, *cursor)
++        || crate::chiseled_shelf::use_on(state, entity, *hand, *position, *face, *cursor)
+     {
+         return;
+     }

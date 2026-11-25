@@ -450,8 +450,20 @@ def _ledger_pot_shelf(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         "item_id": "minecraft:diamond", "count": 3, "timeout_seconds": steps.remaining()})
     steps.call("minecraft_set_hotbar_slot", {"slot": 1})
     _use(steps, pot, "up")
-    steps.wait(lambda state: item_count(state, "minecraft:diamond") == 2, "pot_stored_one_diamond")
-    steps.check("pot_stored_one_item", True)
+    # Read the client's own count in bounded steps and assert it, instead of
+    # waiting for a change: a scenario whose verdict is a wait timeout cannot be
+    # a ledger control (a timeout is unrunnable, never a red assertion), and
+    # SPEC-001's product question is exactly "did one diamond leave the hand".
+    counts: list[int] = []
+    state = steps.observe()
+    for _ in range(20):
+        counts.append(item_count(state, "minecraft:diamond"))
+        if counts[-1] == 2:
+            break
+        steps.call("minecraft_wait_ticks", {"ticks": 10})
+        state = steps.observe()
+    steps.report["diamond_counts_after_pot_use"] = counts
+    steps.check("pot_stored_one_item", counts[-1] == 2)
     steps.fixture(f"data get block {pot['x']} {pot['y']} {pot['z']}")
     _chat_has(steps, "pot_block_entity_lists_diamond", "minecraft:diamond")
     steps.check("pot_block_entity_holds_diamond", True)
