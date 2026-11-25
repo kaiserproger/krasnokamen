@@ -1,0 +1,11 @@
+[[bug]]
+id = "SETTLEMENT-AUTONOMY-VILLAGE-ROTATION-STARVES-TICK-GATES"
+title = "With eight villages pending in the autonomy queue, half of them are only ever stepped on odd ticks, so their `tick % 20 == 0` gates never fire and their natural zones are never proved"
+area = "gameplay"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "Opus round-3 review of wt/D123CivQ (receipts/D123/D123Civ/REVIEW-QUEUENATURAL3-Opus.md, 'Вне рамок'): `autonomy.rs` steps `min(len, VILLAGES_PER_TICK=4)` pending villages per tick by `pop_front` / `push_back`. With 8 pending villages the queue alternates [0..3] on even ticks and [4..7] on odd ticks forever, so villages 4..7 never see `state.tick.is_multiple_of(20)` and neither `prove_natural` nor the `tick % 20` zone-probe gate (`autonomy.rs` ~401, ~417) ever runs for them; other queue lengths whose rotation period shares a factor with 20 (twelve gives period 3 and is fine; sixteen gives period 4 and is not) starve the same way - derive the full set in the proof rather than trusting this sentence. Read from the code; not reproduced. Rare in practice (it needs several generated villages adopted in one session) and predates D123."
+failing_first = "not recorded"
+regression = []
+repro_check = ["Filed from the review, no repro yet. Proof shape: a cargo test in settlements::autonomy tests that queues eight pending villages, ticks 400 times, and asserts every village was passed to `prove_natural` (or its zone probe ran) at least once; a reversal control restores the plain `pop_front`/`push_back` rotation. The cheap fix is to step every pending village on a tick whose number matches its own slot (e.g. a per-village `next_tick` counter) or to rotate by a stride coprime to 20."]
