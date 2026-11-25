@@ -285,24 +285,6 @@ fn advance(
                 pending.uncertified.push_back(index);
                 continue;
             }
-            if !bounds_generated(state, &bounds) {
-                // Not a refusal: the box is real, its generation is not finished.
-                pending.piece_attempts[index] = pending.piece_attempts[index].saturating_add(1);
-                if pending.piece_attempts[index] < PIECE_ATTEMPTS {
-                    pending.uncertified.push_back(index);
-                } else {
-                    tracing::debug!(
-                        target: "settlements::construction",
-                        settlement = id.0,
-                        template = ?piece.template,
-                        min = ?lo,
-                        max = ?hi,
-                        "adopted piece never reached full generation"
-                    );
-                    pending.piece_kinds[index] = Some(Vec::new());
-                }
-                continue;
-            }
             if !overlaps_existing(state, id, &bounds) {
                 let kinds = match pending.piece_kinds[index].clone() {
                     Some(kinds) => kinds.clone(),
@@ -1070,18 +1052,6 @@ fn open_entrance(
         }
     }
     None
-}
-
-/// Whether every chunk of `bounds` has finished generation, so its blocks are the
-/// placed ones. Adoption used to certify on residency alone and logged
-/// `footprint(0/9) roof(0/1) enclosure(0/1)` about 31 s into a run whose boxes held
-/// their houses by the end: the columns were resident at `structure_starts`, not
-/// `full`, so the village blocks had not been placed yet.
-fn bounds_generated(state: &TickState, bounds: &ScriptWorldBounds) -> bool {
-    (bounds.min[0].div_euclid(16)..=bounds.max[0].div_euclid(16)).all(|x| {
-        (bounds.min[2].div_euclid(16)..=bounds.max[2].div_euclid(16))
-            .all(|z| state.world.chunk_generation_status(x, z) == Some("full"))
-    })
 }
 
 fn bounds_loaded(state: &TickState, bounds: &ScriptWorldBounds) -> bool {

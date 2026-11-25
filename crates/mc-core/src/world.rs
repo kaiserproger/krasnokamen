@@ -932,26 +932,6 @@ impl ChunkWorld {
         self.chunks.contains_key(&ChunkPos { x: cx, z: cz })
     }
 
-    /// Vanilla generation status of a resident column (`Some("full")` once its
-    /// terrain and features, village pieces included, are placed). Residency is
-    /// not generation: a column at `structure_starts` has structure starts but no
-    /// village blocks, so a block read there answers air.
-    #[must_use]
-    pub fn chunk_generation_status(&self, cx: i32, cz: i32) -> Option<&str> {
-        self.chunks
-            .get(&ChunkPos { x: cx, z: cz })
-            .map(|chunk| chunk.status.as_str())
-    }
-
-    /// Tests only: put a resident column at an earlier generation status so the
-    /// adoption guard can be exercised without a partial generation run.
-    #[cfg(test)]
-    pub(crate) fn set_chunk_generation_status(&mut self, cx: i32, cz: i32, status: &str) {
-        if let Some(chunk) = self.chunks.get_mut(&ChunkPos { x: cx, z: cz }) {
-            Arc::make_mut(chunk).status = status.to_string();
-        }
-    }
-
     /// 001 slice0 + radius split (roadmap C/G5): simulation gate.
     /// Single debt authority: `sim_debt.active` implies residency (eviction
     /// removes the record; quarantine clears it at its mutation boundary).
