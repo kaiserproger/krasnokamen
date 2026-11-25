@@ -1662,20 +1662,30 @@ fn probe_retained_village_site_supply() {
         .expect("retained store")
         .0,
     );
+    // The settlements and their certificates live in the checkpoint globals, not in
+    // the dimension replay: recover them exactly as `Core::open` does, otherwise the
+    // state has no settlement and the probe has nothing to measure.
+    let reader = store.checkpoint_reader().expect("checkpoint reader");
+    let mut recovered =
+        crate::native_checkpoint::recover_with_reader(&config, registry.clone(), reader)
+            .expect("checkpoint recovery");
+    let replay = recovered
+        .dimensions
+        .remove(&crate::dimensions::Dimension::Overworld)
+        .expect("overworld replay");
     let mut state = crate::core::load_dimension_state(
         &config,
         registry,
         crate::dimensions::Dimension::Overworld,
-        &crate::journal::CheckpointManifest {
-            world_spawn: Some([0, 128, 0]),
-            ..Default::default()
-        },
-        crate::journal::Replay::default(),
+        &recovered.manifest,
+        replay,
         store,
-        &std::collections::BTreeMap::new(),
+        &recovered.checkpoint.globals,
         None,
     )
     .expect("retained dimension state");
+    state.native_globals = recovered.checkpoint.globals;
+    crate::settlements::persistence::finish_recovery(&mut state).expect("settlement recovery");
     let want: rustc_hash::FxHashMap<crate::boundary::ChunkPos, i32> = (-12..=12)
         .flat_map(|dx| {
             (-12..=12).map(move |dz| {
@@ -1737,8 +1747,10 @@ fn probe_retained_village_site_supply() {
             println!("PROBE site origin={origin:?} size={size:?} -> {outcome:?}");
         }
     }
-    let blueprint = blueprints::get(&state.registry, "storage").expect("storage blueprint");
-    let network = layout::Network::for_construction(&state, &record);
+    let blueprint_name = std::env::var("D123_CIV_BLUEPRINT").unwrap_or_else(|_| "storage".into());
+    let blueprint = blueprints::get(&state.registry, &blueprint_name)
+        .unwrap_or_else(|| panic!("blueprint {blueprint_name:?} is not in the catalogue"));
+    let mut network = layout::Network::for_construction(&state, &record);
     let fronts = network.frontage();
     println!("PROBE frontages={}", fronts.len());
     let mut counts: std::collections::BTreeMap<String, (u32, Option<[i32; 3]>)> =
