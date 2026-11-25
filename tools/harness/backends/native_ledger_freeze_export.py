@@ -116,6 +116,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     source = steps.call("minecraft_read_block", {**placed})
     steps.report["placed_now"] = {**source}
     steps.check("reimport_sand_fell_one_block",
-                landed["block_id"] == "minecraft:sand"
+                landed.get("status") == "matched"
+                and landed["block"]["block_id"] == "minecraft:sand"
                 and source["block_id"] == "minecraft:air")
     _echo(steps, "frozen_export_landed_ordered")
