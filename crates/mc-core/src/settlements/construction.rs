@@ -1817,6 +1817,19 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
                 } else {
                     waiting |= pass.waiting;
                 }
+                // Why a funded kind still has no site is the question the gates
+                // could not answer: autonomous refusals were never logged, so
+                // "no House in the run" had no cause on disk (ReviewD123Civ13).
+                if pass.site.is_none() {
+                    tracing::debug!(
+                        target: "settlements::construction",
+                        settlement = id.0,
+                        frontages = pass.report.frontages,
+                        examined = pass.report.examined,
+                        refusals = ?pass.report,
+                        "funded kinds found no legal site"
+                    );
+                }
                 funded_site = Some(pass);
             }
         }
