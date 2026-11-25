@@ -468,7 +468,12 @@ fn relative_movement_drift_bound_compares_the_policies() {
         };
         (q(position) - q(baseline)) as i32
     });
-    let floor = measure(|position, baseline| {
+    // The reported pre-image floors the raw displacement and keeps the raw baseline:
+    // floor(+40.96) = +40 up, floor(-40.96) = -41 down, so every cycle leaks 1/4096.
+    let floor = measure(|position, baseline| ((position - baseline) * 4096.0).floor() as i32);
+    // Endpoint-flooring (both ends to 1/4096 before subtracting) does NOT drift on this cycle: it is
+    // the same rounding as the tree, which is why the tree keeps the endpoint form.
+    let endpoints_floor = measure(|position, baseline| {
         ((position * 4096.0).floor() - (baseline * 4096.0).floor()) as i32
     });
     let reanchor = 0.0_f64; // an absolute position every packet cannot drift
@@ -478,10 +483,12 @@ fn relative_movement_drift_bound_compares_the_policies() {
         "the pre-image accumulates: {floor} blocks over 1024 cycles"
     );
     assert_eq!(reanchor, 0.0);
+    assert_eq!(
+        endpoints_floor, 0.0,
+        "endpoint flooring is not the drifting pre-image"
+    );
     // Bytes per packet: relative move = 3 x i16 delta; absolute = 3 x f64 (+ the same header).
     // Re-anchoring costs 24 bytes against 6, for a drift the in-tree policy already removes.
-    assert!(
-        6 * 4 < 24,
-        "relative packets are a quarter of an absolute sync: {in_tree} {floor}"
-    );
+    // 6 bytes of delta against 24 bytes of absolute position, for a drift the tree already removes.
+    assert!(6 < 24, "relative packets are cheaper: {in_tree} {floor}");
 }
