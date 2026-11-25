@@ -70,6 +70,20 @@ The threshold is **derived from the model and registered before the rebuilt run*
   earlier pair measured 0 px on the control and 1041 px on the fix (receipts `20261125T140748` /
   `20261125T140830` on the pre-current head).
 
+## The measured pair (2026-11-25, server pin `pins/8607c5d7634f-server-*` = core `8607c5d76`)
+
+Three takes per side on `native-entity-visuals`, all six on the same clean server pin:
+
+| side | receipts | result | `leash_rope_pixels` |
+|---|---|---|---|
+| control `client:df888507` | `20261125T181048` / `181119` / `181154` | FAIL at `leash_rope_drawn` on all three | 0 / 0 / 0 |
+| restore `client:03c4675b` | `20261125T181228` / `181307` / `181341` | PASS on all three | 1041 / 1041 / 1041 |
+
+Every earlier assertion (vindicator, ghastling, fire, plain) is green on both halves, so the red is
+the missing rope alone. `ledger promote MODEL-ENTITY-LEASH` receipt
+`20261125T181432-ledger-promote-wdy6djxt`; `promote.json` records `fix_patch_id 98f3534d…` and the
+delta paths as `src/entities/render_special.rs` only.
+
 ## What the scene does not prove
 
 The rope's colour and length only: its texel parity, the sag curve against vanilla's
