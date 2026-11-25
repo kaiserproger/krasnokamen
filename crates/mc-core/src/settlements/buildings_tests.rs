@@ -147,6 +147,42 @@ fn roofed_enclosed_house_with_real_bed_certifies() {
 }
 
 #[test]
+fn the_house_upgrade_composition_covers_the_level_two_perimeter() {
+    // Design intent (`blueprints.rs:112`): a level's `blocks` are the diff vs the previous level,
+    // "whole level for L1". So a finished level-2 house is L1 cells + L2 diff, and the level-2
+    // certificate over the level-2 bounds is correct only if that composition covers the perimeter.
+    let mut state = test_state();
+    let blueprint = crate::settlements::blueprints::get(&mut state.registry, "house")
+        .expect("the house blueprint is registered")
+        .clone();
+    let level = &blueprint.levels[1];
+    let size = [
+        i32::from(level.size[0]),
+        i32::from(level.size[1]),
+        i32::from(level.size[2]),
+    ];
+    let mut covered = std::collections::BTreeSet::new();
+    for layer in &blueprint.levels[..2] {
+        for (at, _) in &layer.blocks {
+            covered.insert((i32::from(at[0]), i32::from(at[2])));
+        }
+    }
+    let mut missing = Vec::new();
+    for x in 0..size[0] {
+        for z in 0..size[2] {
+            let edge = x == 0 || z == 0 || x == size[0] - 1 || z == size[2] - 1;
+            if edge && !covered.contains(&(x, z)) {
+                missing.push([x, z]);
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "L1 + L2 diff must cover the level-2 perimeter; missing {missing:?}"
+    );
+}
+
+#[test]
 fn every_house_level_builds_the_perimeter_its_certificate_inspects() {
     // The L2 refusal reads `enclosure: 0/1` with air on the certificate perimeter
     // (`[54, 74..=77, 11]`, 20261125T093116). This asserts what would make that impossible: each
