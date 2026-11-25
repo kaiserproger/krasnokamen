@@ -115,7 +115,20 @@ def _summon_age(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
 def _data_query(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _give(steps, "minecraft:stone")
     steps.fixture("data get entity @s Health")
-    _chat_has(steps, "data_get_entity_health_20", "entity data", "20.0f")
+    # Assert the answer from bounded reads instead of waiting for it: a wait
+    # timeout is unrunnable as a ledger control, and DATA-QUERY's product
+    # question is exactly "did /data answer at all".
+    health: list[str] = []
+    state = steps.observe()
+    for _ in range(20):
+        health = [line for line in state["recent_chat"]
+                  if "entity data" in line and "20.0f" in line]
+        if health:
+            break
+        steps.call("minecraft_wait_ticks", {"ticks": 10})
+        state = steps.observe()
+    steps.report["health_answer_lines"] = health
+    steps.check("data_get_entity_health_20", bool(health))
     steps.fixture("data get entity @s Inventory")
     _chat_has(steps, "data_get_entity_inventory_lists_stone", "minecraft:stone")
     chest = _point(origin, dx=2, dz=2)

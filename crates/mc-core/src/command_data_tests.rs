@@ -2092,3 +2092,88 @@ fn data_edit_of_one_field_keeps_love_and_persistence_the_entity_already_had() {
         4
     );
 }
+
+/// DATA-QUERY's dispatch: `/data` reaches `command_data` from the console pipeline.
+///
+/// The other refs call `query`/`entity`/`block` directly, so they cannot see a
+/// missing registration: a direct call still answers. This test enters where
+/// production does and reads the answer the console was given.
+#[test]
+fn data_queries_answer_through_the_native_command_pipeline() {
+    let (mut state, id, context) = fixture();
+    state.players.get_mut(&id).unwrap().vitals.health = 13.5;
+    pipeline(&mut state, context, "data get entity @s Health");
+    let shown = replies(&mut state);
+    assert_eq!(shown.len(), 1, "one answer for one query: {shown:?}");
+    assert_eq!(key(&shown[0]), "commands.data.entity.query");
+    let values: Vec<String> = items(field(&shown[0], "with"))
+        .iter()
+        .map(|value| string(field(value, "text")).to_owned())
+        .collect();
+    assert!(
+        values.iter().any(|value| value == "13.5f"),
+        "the answer carries the live value: {values:?}"
+    );
+    // A target that does not exist is a refusal on the same route, never a
+    // silent empty answer.
+    pipeline(&mut state, context, "data get block 1 60 2");
+    let refused = replies(&mut state);
+    let lines: Vec<String> = refused
+        .iter()
+        .map(|line| string(field(line, "text")).to_owned())
+        .collect();
+    assert_eq!(lines.len(), 1, "one refusal line: {lines:?}");
+    assert!(
+        lines[0].contains("not a block entity"),
+        "an absent target is refused: {lines:?}"
+    );
+}
+
+/// The console's own entry point: production result, not the direct handler.
+fn pipeline(state: &mut TickState, context: Context, command: &str) -> i32 {
+    state.command_context.current = None;
+    crate::command_context::run(state, command, context, &mut ChangeSet::default())
+}
+
+/// Everything the console was told since the last call, as components.
+fn replies(state: &mut TickState) -> Vec<mc_nbt::Tag> {
+    state
+        .outbox
+        .remove(&crate::command_console::CONNECTION)
+        .unwrap_or_default()
+        .into_iter()
+        .flat_map(|change| match change {
+            crate::boundary::PlayerChange::StyledChat { content } => vec![content],
+            crate::boundary::PlayerChange::Chat { message } => vec![text(message)],
+            _ => Vec::new(),
+        })
+        .collect()
+}
+
+fn field<'a>(tag: &'a mc_nbt::Tag, name: &str) -> &'a mc_nbt::Tag {
+    let mc_nbt::Tag::Compound(fields) = tag else {
+        panic!("{tag:?} is not a compound");
+    };
+    fields
+        .iter()
+        .find_map(|(key, value)| (key == name).then_some(value))
+        .unwrap_or_else(|| panic!("{tag:?} has no {name}"))
+}
+
+fn items(tag: &mc_nbt::Tag) -> &[mc_nbt::Tag] {
+    let mc_nbt::Tag::List(list) = tag else {
+        panic!("{tag:?} is not a list");
+    };
+    &list.elements
+}
+
+fn string(tag: &mc_nbt::Tag) -> &str {
+    let mc_nbt::Tag::String(value) = tag else {
+        panic!("{tag:?} is not a string");
+    };
+    value
+}
+
+fn key(tag: &mc_nbt::Tag) -> &str {
+    string(field(tag, "translate"))
+}

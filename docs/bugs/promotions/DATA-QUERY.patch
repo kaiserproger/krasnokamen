@@ -1,0 +1,14 @@
+diff --git a/crates/mc-core/src/datapacks.rs b/crates/mc-core/src/datapacks.rs
+index 6b3ea6ecd..036ceef29 100644
+--- a/crates/mc-core/src/datapacks.rs
++++ b/crates/mc-core/src/datapacks.rs
+@@ -1839,6 +1839,9 @@ pub(crate) fn command(
+     let Some(root) = text.split_whitespace().next() else {
+         return Unavailable;
+     };
++    if root == "data" {
++        return crate::command_data::command(state, connection, executor, text);
++    }
+     if root == "datapack" {
+         return management::command(state, connection, text);
+     }
