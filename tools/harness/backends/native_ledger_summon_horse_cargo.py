@@ -17,6 +17,7 @@ Control: the fix is `ee71ee684`; its non-test hunks (the `supports` predicate an
 """
 from __future__ import annotations
 
+from .native_p1 import _aim
 from .probe_steps import ProbeSteps, container_slot
 
 DONKEY = "minecraft:donkey"
@@ -45,15 +46,19 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         "entity_id": identity["entity_id"], "timeout_seconds": steps.remaining()})
     steps.call("minecraft_wait_ticks", {"ticks": 10})
 
-    # Sneak + use is the ordinary mount-menu input; no chest item is involved, the summon
-    # already made the donkey chested.
+    # Sneak + use is the ordinary mount-menu input, but only when the donkey is in the
+    # crosshair: aim at its body centre first (a plain approach does not turn the view).
+    _aim(steps, {**identity, **donkey})
     steps.call("minecraft_set_hotbar_slot", {"slot": 8})
     steps.call("minecraft_press_inputs", {"keys": ["sneak", "use"], "ticks": 1})
     state = steps.wait(
         lambda state: state["container"]["container_id"] != 0
         and state["container"]["menu_class"] == MENU,
         "chested_donkey_cargo_menu_received",
+        timeout_seconds=30,
     )
+    steps.report["chat_after_use"] = [
+        line for line in state["recent_chat"] if isinstance(line, str)][:8]
     steps.check("cargo_menu_has_53_slots", state["container"]["slot_count"] == MENU_SLOTS)
     first = container_slot(state, CARGO_FIRST)
     last = container_slot(state, LAST_CARGO)
