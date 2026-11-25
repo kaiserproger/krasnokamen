@@ -764,3 +764,61 @@ fn an_order_nobody_was_bound_to_keeps_its_site_through_stall_windows() {
         ScriptStructureState::Cancelled
     );
 }
+
+/// The House L2 shape on the real client (`20261125T053949`, `20261125T063133`): the upgrade
+/// record is `Committed` and terminal, so `next_cell` is `None`, `advance` never runs and the
+/// builder is released every shift. This test drives the watcher through `builders::assign_builder`
+/// and records what the watcher does with it — it is the harness for the L2 refusal, not a fix.
+#[test]
+fn a_committed_terminal_structure_reaches_the_finish_attempt_each_shift() {
+    let (mut state, id, builder) = fixture();
+    let bounds = ScriptWorldBounds::new([4, 201, 4], [14, 209, 14]).unwrap();
+    let block = super::super::allocator::tests::block(&state, "minecraft:dirt", &[]);
+    let handle = executor::prepare(
+        &mut state,
+        id,
+        "spanish_fortress".into(),
+        bounds,
+        bounds,
+        vec![executor::PlannedCell {
+            portion: executor::PortionKind::Build,
+            at: [10, 202, 10],
+            state: block,
+            resource: None,
+            quantity: 0,
+        }],
+    )
+    .unwrap();
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
+        settlement: id,
+        blueprint: "spanish_fortress".into(),
+        level: 1,
+        origin: [4, 201, 4],
+        rotation: 0,
+        building: None,
+        structure: handle.clone(),
+        ordered: true,
+        builder: Some((state.entities.row(builder).uuid, None)),
+        order_seq: None,
+    }];
+    state.world.set_block(10, 202, 10, block);
+    let uuid = state.entities.row(builder).uuid;
+    executor::advance(&mut state, id, &handle, uuid).unwrap();
+    assert_eq!(
+        executor::status(&state, id, &handle).unwrap().state,
+        ScriptStructureState::Committed
+    );
+
+    let warnings = Warnings::default();
+    tracing::subscriber::with_default(warnings.clone(), || {
+        for _ in 0..=300 {
+            state.tick += 20;
+            super::builders::assign_builder(&mut state, id);
+        }
+    });
+    let text = warnings.0.lock().unwrap().join("\n");
+    assert!(
+        text.contains("watch_project: finish a committed structure"),
+        "the watcher must attempt the finish for a committed terminal structure: {text}"
+    );
+}

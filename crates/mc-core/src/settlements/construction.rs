@@ -2988,15 +2988,36 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
         return true;
     }
     let Ok(building) = buildings::certify(state, id, blueprint.kind, bounds) else {
+        tracing::warn!(
+            settlement = id.0,
+            blueprint = %project.blueprint,
+            level = project.level,
+            cause = "certify_failed",
+            "finish_project: the building did not certify"
+        );
         return false;
     };
     if project
         .building
         .is_some_and(|expected| expected != building)
     {
+        tracing::warn!(
+            settlement = id.0,
+            structure = %project.structure,
+            cause = "building_mismatch",
+            "finish_project: the certificate is another building"
+        );
         return false;
     }
     if project.level > 1 && buildings::upgrade(state, building).is_err() {
+        tracing::warn!(
+            settlement = id.0,
+            blueprint = %project.blueprint,
+            level = project.level,
+            building = building.0,
+            cause = "upgrade_failed",
+            "finish_project: the level upgrade did not certify"
+        );
         return false;
     }
     let record = state.settlements.get_mut(id).expect("certified settlement");
