@@ -39,5 +39,28 @@ redesign is therefore: implement the setupAnim wing rotation, then assert `|span
 two-sided, on a scene of the allay alone. Until then the row cannot be promoted, and the
 `native-rig-parity` span check is labelled withdrawn evidence in the scenario entry.
 
+## The pair that promotes it (2026-11-25, second pack)
+
+Main's decision on the evidence class: the row's fix is the invented-rig -> vanilla-rig re-land
+PLUS the setupAnim pose, and the derived envelope separates the invented-rig control from the
+vanilla-rig+pose client. A pose-less control is not the row's pre-image and is out of the scene's
+reach; that half is pinned by the client unit test.
+
+| half | client | content |
+|---|---|---|
+| control | `bafbf78b40` | CM-4 list-form frame report + the fourteen invented rigs (`allay.json` with the wings baked spread), no pose |
+| fix | `715a7110af` | the vanilla rig and the `AllayModel.setupAnim` wing pose |
+
+Non-test hunks carried: the fourteen rig JSONs (the same patch that `client:3bfbd7b6` carries) plus
+the `procedural_part` hunk of `715a7110af` (the allay arm and its `walk_pos` parameter, threaded from
+`evaluate_posed_rig`). The unit-test hunks (`allay_wings_take_the_vanilla_setup_anim_pose`, and the
+fire test's own) are test hunks and are not part of the non-test patch. `fix_commit` is therefore a
+multi-commit value: the promote run prints the exact `patch:<sha256>` (or `client:<sha>`) to record,
+and that value goes into the row.
+
+Scene: `native-rig-allay` (`tools/harness/rig_allay_scene.json`), one stationary allay, fixture
+checks first, assertion `allay_wing_span_within_wings` = 0.68..1.03, derived before the run from the
+dump plus the flap sweep (posed 0.7014..1.0135, invented 1.122, rest 0.6937).
+
 Rabbit/fox/panda/vex moved to MODEL-OPUS-11-RABBIT-FOX-PANDA-VEX and the horse family to
 MODEL-OPUS-11-HORSES; both are open and unit-covered only.

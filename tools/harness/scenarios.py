@@ -982,6 +982,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the two rigs' own entity-pass index counts (CM-4 `entity_indices_by_material`, cloud-free) equal the vanilla 26.1.2 layer dump: guardian 792 (22 cubes x 6 faces x 6 indices), baby bee 324 (9), against the pre-image 612 and 468, and the guardian's own cutout height is 1.4912 blocks +-0.04 - the dump's twelve spikes reach 27.89 px above and 4.03 px below, where the pre-image reads 1.3761 and a spike-less rig 1.0 (all in `guardian_spikes_and_bee_legs_submitted`)",
         limits="cube counts and the cutout's bounding height, one species per shot and a fixed camera; the spikes' pivot placement and the parts' exact shapes stay with the client's model regression tests",
     ),
+    "native-rig-allay": _entry(
+        id="native-rig-allay", summary="The allay submits the vanilla rig and holds the game's wing pose",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-rig-allay", requires=("xvfb",),
+        sources=("tools/harness/rig_allay_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, one stationary allay at a fixed pad and camera, HUD default",
+        proves="the allay's own `EntityCutout` slice (CM-4, cloud-free) inside the derived flap envelope 0.68..1.03 (`allay_wing_span_within_wings`): the pre-image's baked-spread wings read 1.122, the vanilla rig with AllayModel.setupAnim sweeps 0.7014..1.0135 over the flap, and both bounds are computed from the dump before the pair",
+        limits="one entity and one bbox: the envelope cannot separate a rig without the pose from one with it (0.6937 rest pose), which the client unit test allay_wings_take_the_vanilla_setup_anim_pose pins instead",
+    ),
     "native-rig-parity": _entry(
         id="native-rig-parity", summary="A re-authored rig submits the vanilla layer's own parts",
         owner="core:harness", evidence="graphical", profile="scene-shot",

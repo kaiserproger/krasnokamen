@@ -414,6 +414,47 @@ def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
     ]
 
 
+def check_rig_allay(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-11: the allay submits the vanilla rig and holds its wings in the game's pose.
+
+    Two things move this row off the invented rig, and the scene witnesses both only as a bbox:
+    the pre-image baked the wings spread (a 1.122-block horizontal span, measured 2026-11-25 in
+    receipt 20261125T134025 on client e3678206), while the vanilla rig with `AllayModel.setupAnim`
+    applied sweeps 0.7014..1.0135 blocks as the flap runs. The envelope 0.68..1.03 is derived, not
+    fitted: the low bound is the posed minimum 0.7014 minus 0.02 of float slack, the high bound the
+    posed maximum 1.0135 plus 0.016, and both ends come from the dump's own geometry evaluated with
+    the client's bone convention (pivot relative to the parent, rotation Z then Y then X, cube origin
+    relative to the pivot), before any pair was run. The rest pose without the pose reads 0.6937, so
+    the envelope cannot separate "rig without the pose" from "rig with the pose" - that half of the
+    row is pinned by the client unit test
+    `entities::presentation::tests::allay_wings_take_the_vanilla_setup_anim_pose` instead, and the
+    row says so.
+
+    Fixture checks come first: one allay per frame and a rendered rig, so a leaked entity or a
+    missing binding cannot read as the row's symptom.
+    """
+    shots = _qa._load_shots(probe, artifact, ("empty", "allay"))
+    extraction = shots["allay"][0].get("entity_extraction") or {}
+    probe.report["allay_entity_extraction"] = extraction
+    layers = extraction.get("entity_layer_geometry") or []
+    cutout = next((entry for entry in layers if entry.get("material") == "EntityCutout"), {})
+    lo, hi = cutout.get("min"), cutout.get("max")
+    span = None
+    if isinstance(lo, list) and isinstance(hi, list) and len(lo) >= 3 and len(hi) >= 3:
+        span = round(max(abs(hi[0] - lo[0]), abs(hi[2] - lo[2])), 3)
+    probe.report["allay_horizontal_span"] = span
+    probe.report["allay_cutout_indices"] = int(
+        (extraction.get("entity_indices_by_material") or {}).get("EntityCutout") or 0
+    )
+    probe.check("allay_single_entity", extraction.get("submitted") == 1)
+    probe.check("allay_rig_rendered", not extraction.get("unrendered"))
+    probe.check("allay_wing_span_within_wings", span is not None and 0.68 <= span <= 1.03)
+    probe.report["visual_review_required"] = [
+        "Inspect allay.png: the span proves the rig's wing footprint inside the posed envelope, not"
+        " the wing angle itself."
+    ]
+
+
 def check_rig_guardian(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-OPUS-10: the guardian's 22 cubes and the baby bee's 9, exactly as the vanilla layer has them.
 
