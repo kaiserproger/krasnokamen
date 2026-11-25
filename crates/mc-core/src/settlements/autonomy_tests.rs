@@ -361,10 +361,46 @@ fn an_adopted_house_piece_that_holds_a_workstation_certifies_both() {
         state.settlements.get(id).unwrap().buildings
     );
 }
-/// The relaxation is only the House+Workshop pair on the piece's own bounds: a
-/// second workshop, or the same workshop shifted off the piece, is still refused.
+/// The pair is the generated caller's alone: on a house-only piece an owner, an
+/// operator or construction certifying a workshop on the house's bounds is refused,
+/// and even the generated caller only adds the House+Workshop pair.
 #[test]
-fn a_workshop_certifies_on_a_house_piece_only_on_its_own_bounds() {
+fn the_pair_rule_is_only_for_the_generated_caller() {
+    let claim = generated_claim("minecraft:village/plains/houses", [0, 201, 0]);
+    let (mut state, chunks) = fixture_furnished(
+        vec![BELL],
+        vec![(claim, [2.5, 202.0, 2.5], "none".into())],
+        vec![],
+        hut_blocks(),
+    );
+    adopt(&mut state, &chunks);
+    let id = state.settlements.records().next().expect("adopted").id;
+    let house = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .values()
+        .find(|building| building.kind == BuildingKind::House)
+        .expect("the piece's House")
+        .bounds;
+    let mason = BuildingKind::Workshop(crate::villager::VillagerProfession::Mason);
+    let error = super::super::buildings::certify(&mut state, id, mason, house)
+        .expect_err("a strict caller may not add a workshop on a house's bounds");
+    assert!(
+        format!("{error:?}").contains("overlaps another certificate"),
+        "{error:?}"
+    );
+    assert!(
+        super::super::buildings::certify_generated(&mut state, id, mason, house).is_err(),
+        "the generated caller still refuses a workshop with no workstation in the piece"
+    );
+}
+
+/// On a piece that holds both, the generated caller re-certifies the existing
+/// pair, and still refuses a third kind or a workshop off the piece's bounds.
+#[test]
+fn a_generated_pair_is_reused_and_nothing_else_shares_its_bounds() {
     let claim = generated_claim("minecraft:village/plains/houses", [0, 201, 0]);
     let mut furniture = hut_blocks();
     furniture.push(([10, 202, 10], "stonecutter", Vec::new()));
@@ -383,27 +419,36 @@ fn a_workshop_certifies_on_a_house_piece_only_on_its_own_bounds() {
         .expect("the piece's House")
         .bounds;
     let mason = BuildingKind::Workshop(crate::villager::VillagerProfession::Mason);
-    assert!(
-        buildings.values().any(|building| building.kind == mason),
-        "the piece's own bounds certify the workshop beside its house: {buildings:?}"
+    let workshop = buildings
+        .values()
+        .find(|building| building.kind == mason)
+        .expect("the piece's workshop");
+    assert_eq!(
+        super::super::buildings::certify_generated(&mut state, id, mason, house)
+            .expect("the same workshop"),
+        workshop.id,
+        "a re-certification returns the existing record instead of a third one"
     );
     let armorer = BuildingKind::Workshop(crate::villager::VillagerProfession::Armorer);
-    let error = super::super::buildings::certify(&mut state, id, armorer, house)
-        .expect_err("a second workshop on the same bounds is still refused");
     assert!(
-        format!("{error:?}").contains("overlaps another certificate"),
-        "the refusal is the overlap rule: {error:?}"
+        super::super::buildings::certify_generated(&mut state, id, armorer, house).is_err(),
+        "a third certificate may not share the pair's bounds"
+    );
+    assert!(
+        super::super::buildings::certify_generated(&mut state, id, BuildingKind::Storage, house)
+            .is_err(),
+        "a Storage may not share the pair's bounds"
     );
     let shifted = ScriptWorldBounds::new(
         [house.min[0] + 4, house.min[1], house.min[2] + 4],
         [house.max[0] + 4, house.max[1], house.max[2] + 4],
     )
     .unwrap();
-    let error = super::super::buildings::certify(&mut state, id, mason, shifted)
+    let error = super::super::buildings::certify_generated(&mut state, id, armorer, shifted)
         .expect_err("a workshop off the piece's bounds may not overlap it");
     assert!(
         format!("{error:?}").contains("overlaps another certificate"),
-        "the refusal is the overlap rule: {error:?}"
+        "{error:?}"
     );
 }
 

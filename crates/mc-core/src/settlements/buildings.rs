@@ -429,11 +429,37 @@ pub(crate) fn inspect(
     Ok(points.into_iter().take(cap).collect())
 }
 
+/// Certify a building an owner, an operator or construction authored.
+///
+/// Every different-kind overlap is refused; see `certify_generated` for the one
+/// generated piece that is both a house and its own workplace.
 pub(crate) fn certify(
     state: &mut TickState,
     settlement: SettlementId,
     kind: BuildingKind,
     bounds: ScriptWorldBounds,
+) -> Result<BuildingId, CertError> {
+    certify_impl(state, settlement, kind, bounds, false)
+}
+
+/// Certify one kind of a generated piece: only this caller may add a Workshop to
+/// a House's exact bounds (and the other way round), because a plains library
+/// really is both. Owner, operator and construction callers keep the strict rule.
+pub(crate) fn certify_generated(
+    state: &mut TickState,
+    settlement: SettlementId,
+    kind: BuildingKind,
+    bounds: ScriptWorldBounds,
+) -> Result<BuildingId, CertError> {
+    certify_impl(state, settlement, kind, bounds, true)
+}
+
+fn certify_impl(
+    state: &mut TickState,
+    settlement: SettlementId,
+    kind: BuildingKind,
+    bounds: ScriptWorldBounds,
+    allow_pair: bool,
 ) -> Result<BuildingId, CertError> {
     let record = state
         .settlements
@@ -442,23 +468,34 @@ pub(crate) fn certify(
     if dimensions(bounds).is_none() || !within(record, bounds) {
         return Err(failure("invalid bounds or outside settlement"));
     }
-    let mut overlapping = record
+    let overlapping: Vec<&Building> = record
         .buildings
         .values()
-        .filter(|b| overlaps(b.bounds, bounds));
-    if let Some(existing) = overlapping.next() {
-        if overlapping.next().is_some() {
+        .filter(|b| overlaps(b.bounds, bounds))
+        .collect();
+    // This exact certificate already exists: a second re-certification of the
+    // same building is satisfied by it, even when a House shares its bounds.
+    if let Some(exact) = overlapping
+        .iter()
+        .find(|b| b.kind == kind && b.bounds.min == bounds.min && b.bounds.max == bounds.max)
+    {
+        return Ok(exact.id);
+    }
+    if let Some(existing) = overlapping.first() {
+        if overlapping.len() > 1 {
             return Err(failure(
                 "building overlaps another certificate; expansion must contain the original bounds",
             ));
         }
+        let existing = *existing;
         if existing.kind != kind {
             // One generated piece can be both a house and its own workstation
             // (a plains library holds a lectern beside beds), so exactly that
             // pair certifies twice, on the piece's own bounds: the House record
             // owns the beds and the Workshop record the job site, and neither
             // fact is counted twice.
-            if !(house_workshop_pair(existing.kind, kind)
+            if !(allow_pair
+                && house_workshop_pair(existing.kind, kind)
                 && existing.bounds.min == bounds.min
                 && existing.bounds.max == bounds.max)
             {

@@ -254,7 +254,7 @@ Certification inspects loaded blocks without placing them or charging materials.
 - `/settlement building upgrade <id>` checks the existing bounds for the next certificate level, up to 3; build the extra blocks first. This does not order Builder work.
 - `/settlement building list` shows IDs, kinds, levels and bounds.
 
-Re-certifying the same kind with bounds containing an existing certificate refreshes or expands it without changing its ID or level. Other overlapping certificates are rejected. Bounds must fit inside the settlement and loaded chunks, with at most 64 blocks per axis and 32,768 blocks in total. A settlement can have at most 1,024 buildings.
+Re-certifying the same kind with bounds containing an existing certificate refreshes or expands it without changing its ID or level, and re-certifying the exact bounds of a certificate of the same kind returns that certificate unchanged. Other overlapping certificates are rejected; the one exception is adoption of a generated village, whose own piece may certify a House and one profession workshop on the exact same bounds (a plains library holds a lectern beside its beds) - an owner, an operator or construction still cannot add either over the other. Bounds must fit inside the settlement and loaded chunks, with at most 64 blocks per axis and 32,768 blocks in total. A settlement can have at most 1,024 buildings.
 
 Kinds are `house`, `storage`, `barracks`, `wall`, `tower`, `gate`, `mine`, `lumber_camp` and profession workshops: `armorer`, `butcher`, `cartographer`, `cleric`, `farmer`, `fisherman`, `fletcher`, `leatherworker`, `librarian`, `mason`, `builder`, `shepherd`, `toolsmith`, `weaponsmith`.
 

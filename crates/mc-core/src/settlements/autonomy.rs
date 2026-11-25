@@ -19,6 +19,8 @@ const INITIAL_REGION_QUERIES_PER_TICK: usize = 8;
 const PENDING_REGION_QUERIES_PER_TICK: usize = 2;
 const VILLAGES_PER_TICK: usize = 4;
 const BINDS_PER_TICK: usize = 32;
+/// Unreadable classification retries per generated piece before it is dropped.
+const PIECE_ATTEMPTS: u8 = 8;
 const PIECES_PER_PASS: usize = 8;
 const ZONE_PROBES_PER_PASS: usize = 4;
 const NATURAL_ZONE_CYCLES: usize = 2;
@@ -46,6 +48,9 @@ struct PendingVillage {
     /// `None` = not classified yet (an unreadable column retries); `Some(vec![])`
     /// = classified as no building.
     piece_kinds: Vec<Option<Vec<BuildingKind>>>,
+    /// Unreadable classifications per piece; `PIECE_ATTEMPTS` bounds the retries
+    /// so a permanently unreadable column cannot hold the village's queue alive.
+    piece_attempts: Vec<u8>,
     zone_cursor: usize,
     natural_candidates: VecDeque<NaturalCandidate>,
 }
@@ -131,6 +136,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 queue.villages.push_back(PendingVillage {
                     uncertified: (0..site.pieces.len()).collect(),
                     piece_kinds,
+                    piece_attempts: vec![0; site.pieces.len()],
                     site,
                     source,
                     residents: VecDeque::new(),
@@ -291,13 +297,19 @@ fn advance(
                         // position and retry, never a "no building" for the
                         // world's life.
                         None => {
-                            pending.uncertified.push_back(index);
+                            pending.piece_attempts[index] =
+                                pending.piece_attempts[index].saturating_add(1);
+                            if pending.piece_attempts[index] >= PIECE_ATTEMPTS {
+                                pending.piece_kinds[index] = Some(Vec::new());
+                            } else {
+                                pending.uncertified.push_back(index);
+                            }
                             continue;
                         }
                     },
                 };
                 for kind in kinds {
-                    let _ = super::buildings::certify(state, id, kind, bounds);
+                    let _ = super::buildings::certify_generated(state, id, kind, bounds);
                 }
             }
         }
@@ -1050,7 +1062,7 @@ fn overlaps_existing(state: &TickState, id: SettlementId, bounds: &ScriptWorldBo
 /// A piece that holds both beds and its own workstation certifies as both: a
 /// plains library's lectern stands beside its beds, so the House keeps the beds
 /// and the Workshop keeps the profession slot.
-fn piece_kinds(
+pub(crate) fn piece_kinds(
     piece: &GeneratedVillagePiece,
     state: &TickState,
     bounds: &ScriptWorldBounds,
