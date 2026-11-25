@@ -70,10 +70,52 @@ def _restart(steps: ProbeSteps) -> None:
         steps.report["restart_grounded_observation"] = {
             "player": {key: state["player"].get(key) for key in
                        ("position", "server_position", "on_ground", "pose_known", "yaw", "pitch")},
+            "player_keys": sorted(state["player"]),
             "loading_readiness": state.get("loading_readiness"),
             "dimension": state.get("dimension"),
+            "loaded_chunks": state.get("loaded_chunks"),
+            "loaded_blocks": len(state.get("loaded_blocks") or []),
+            "packets": state.get("packets"),
+            "terrain": state.get("terrain"),
             "entity_rows": len((state.get("entities") or {}).get("entities") or []),
+            "entities_truncated": (state.get("entities") or {}).get("truncated"),
         }
+        # Does the client hold the block it stands on at all? A client with no terrain and a
+        # client with terrain but a frozen pose look identical in the observation.
+        floor = [int(state["player"]["x"]) if isinstance(state["player"].get("x"), (int, float)) else 0,
+                 int(state["player"]["y"]) if isinstance(state["player"].get("y"), (int, float)) else 0,
+                 int(state["player"]["z"]) if isinstance(state["player"].get("z"), (int, float)) else 0]
+        floor[1] -= 1
+        try:
+            steps.report["restart_grounded_observation"]["floor_block"] = steps.call(
+                "minecraft_read_block", {**dict(zip(("x", "y", "z"), floor))})
+        except Exception as error:  # noqa: BLE001 - the absence is the datum
+            steps.report["restart_grounded_observation"]["floor_block_error"] = str(error)[:200]
+        try:
+            steps.report["restart_grounded_observation"]["nearby_entities"] = len(
+                steps.call("minecraft_list_entities", {"radius": 8, "limit": 32})["entities"])
+        except Exception as error:  # noqa: BLE001
+            steps.report["restart_grounded_observation"]["nearby_entities_error"] = str(error)[:200]
+        # Residency of the block AT the feet (not only below): the local player predicts only when
+        # both are loaded (`Player::environment`), and a received block update does not make a
+        # chunk resident.
+        try:
+            feet = [floor[0], floor[1] + 1, floor[2]]
+            steps.report["restart_grounded_observation"]["feet_block"] = steps.call(
+                "minecraft_wait_for_loaded_block", {**dict(zip(("x", "y", "z"), feet)),
+                                                   "timeout_seconds": 3})
+        except Exception as error:  # noqa: BLE001
+            steps.report["restart_grounded_observation"]["feet_block_error"] = str(error)[:200]
+        try:
+            before = steps.observe()["player"]
+            steps.call("minecraft_press_inputs", {"keys": ["forward"], "ticks": 5})
+            after = steps.observe()["player"]
+            steps.report["restart_grounded_observation"]["forward_probe"] = {
+                "before": [before.get("x"), before.get("y"), before.get("z")],
+                "after": [after.get("x"), after.get("y"), after.get("z")],
+            }
+        except Exception as error:  # noqa: BLE001
+            steps.report["restart_grounded_observation"]["forward_probe_error"] = str(error)[:200]
         steps.check("restart_player_grounded", state["player"]["on_ground"] is True)
     steps.check("restart_same_player_uuid", state["player"]["entity_uuid"] == identity)
     _echo(steps, "restart_ordered_server_receipt")
