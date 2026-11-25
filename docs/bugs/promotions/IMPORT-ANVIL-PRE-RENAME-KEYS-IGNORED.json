@@ -1,0 +1,41 @@
+{
+  "id": "IMPORT-ANVIL-PRE-RENAME-KEYS-IGNORED",
+  "verdict": "promoted",
+  "fix_commit": "patch:004791584d3fe3ad556dce4cb22b04fc26c386985eeae8bab677be1dac4bec8c",
+  "fix_commit_full": "patch:004791584d3fe3ad556dce4cb22b04fc26c386985eeae8bab677be1dac4bec8c",
+  "promoted_at": "2026-11-25T23:17:55+00:00",
+  "tree_head": "c6bb021dea7ecfc7a9a3a95b50d56b283e8e29b8",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "a0a8caf97310423a8d286d9131139ab54a7ab57ce8727cd9fa4f6ea708c9b715",
+  "control_tree_head": "c6bb021dea7ecfc7a9a3a95b50d56b283e8e29b8",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "004791584d3fe3ad556dce4cb22b04fc26c386985eeae8bab677be1dac4bec8c",
+  "reversed_files": [
+    "crates/mc-world-conversion/src/import.rs",
+    "crates/mc-core/src/native_checkpoint.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-world-conversion:pre_rename::tests::rc5_export_with_a_player_rider_keeps_its_fields_and_the_rider": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-world-conversion/src/pre_rename_tests.rs",
+        "line": 418,
+        "error": "panic",
+        "class": "assertion"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-world-conversion:pre_rename::tests::rc5_export_with_a_player_rider_keeps_its_fields_and_the_rider": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123KeptApiP/.analysis/validation/20261125T220349-ledger-promote-fso_8gx6"
+}

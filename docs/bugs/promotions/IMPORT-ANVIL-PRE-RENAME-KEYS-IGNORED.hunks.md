@@ -47,7 +47,9 @@ exactly the pre-fix tree (nothing else in `import.rs` names `Owner`).
 - `cargo:mc-world-conversion:pre_rename::tests::rc5_export_with_a_player_rider_keeps_its_fields_and_the_rider`
   — the test drives the real `import_anvil` over an RC5-shaped world. With the wiring reversed the
   receipt carries no `pre_rename_keys` count and no rename normalization, so
-  `pre_rename_tests.rs:418` (`assert_eq!(receipt.counts.get("pre_rename_keys"), Some(&renamed))`) fails
-  first; the same test's later assertions (the imported horse's `mount.riders == [player]`,
-  `mentions_pre_rename(exported_player)` false, `krasnokamen:PortalTime` present, `solaris*` absent)
-  encode the row's symptom and cannot pass on the control either.
+  `pre_rename_tests.rs:418` (`assert_eq!(receipt.counts.get("pre_rename_keys"), Some(&renamed))`) with
+  `left: None, right: Some(4)` on the promote's control
+  (`.analysis/validation/20261125T220349-ledger-promote-fso_8gx6`), class `assertion`; the same test's
+  later assertions (the imported horse's `mount.riders == [player]`, `mentions_pre_rename(exported_player)`
+  false, `krasnokamen:PortalTime` present, `solaris*` absent) encode the row's symptom and cannot pass on
+  the control either. The restore is green.
