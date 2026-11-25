@@ -1180,7 +1180,6 @@ fn natural_mine_requires_a_route_from_entrance_to_stock() {
         queued_at: 0,
         stock_proved: false,
         after_resident: None,
-        entrance_waits: 0,
     }]);
     for _ in 0..8 {
         state.tick += 20;
@@ -1232,7 +1231,6 @@ fn loaded_but_unsimulated_natural_worksite_is_not_certified() {
         queued_at: 0,
         stock_proved: false,
         after_resident: None,
-        entrance_waits: 0,
     }]);
     assert!(state.world.has_chunk(5, 0));
     assert!(!state.world.is_active(5, 0));
@@ -1241,15 +1239,19 @@ fn loaded_but_unsimulated_natural_worksite_is_not_certified() {
     prove_natural(&mut state, id, None, &residents, &mut candidates);
     // A resident-but-unsimulated entrance is retried, never certified: the zone
     // stays queued while the chunk may still become simulated (the player walks
-    // over the village) and is dropped once the bounded wait is spent.
+    // over the village) and is dropped once its age passes the bound - one bound
+    // for the whole probe batch, not a per-candidate counter.
     assert!(!has_kind(&state, id, BuildingKind::Mine));
     assert_eq!(candidates.len(), 1, "the worksite waits for its chunk");
-    for _ in 0..=NATURAL_ZONE_ENTRANCE_WAITS {
-        state.tick += 20;
-        state.tick_budget.reset(state.tick);
-        prove_natural(&mut state, id, None, &residents, &mut candidates);
-    }
-    assert!(candidates.is_empty(), "the wait is bounded");
+    state.tick = NATURAL_ZONE_ENTRANCE_HOLD_TICKS - 20;
+    state.tick_budget.reset(state.tick);
+    prove_natural(&mut state, id, None, &residents, &mut candidates);
+    assert_eq!(candidates.len(), 1, "still inside the bound");
+    assert!(!has_kind(&state, id, BuildingKind::Mine));
+    state.tick = NATURAL_ZONE_ENTRANCE_HOLD_TICKS;
+    state.tick_budget.reset(state.tick);
+    prove_natural(&mut state, id, None, &residents, &mut candidates);
+    assert!(candidates.is_empty(), "the age bound expires it");
     assert!(!has_kind(&state, id, BuildingKind::Mine));
 }
 
@@ -1579,6 +1581,60 @@ fn natural_quarry_never_undermines_a_generated_piece_at_another_height() {
     assert!(
         candidates.is_empty(),
         "a piece standing inside the certificate box is not even queued"
+    );
+    // 4. The boundary is the quarry top: a piece whose floor *is* the top is still
+    //    reachable (rows cut `entrance-1..entrance`), one block higher is not.
+    site.pieces.pop();
+    site.pieces.push(piece(
+        mc_world::BlockPos {
+            x: 17,
+            y: 203,
+            z: 6,
+        },
+        mc_world::BlockPos {
+            x: 31,
+            y: 210,
+            z: 20,
+        },
+    ));
+    let mut candidates = VecDeque::new();
+    queue_natural(
+        &site,
+        BuildingKind::Mine,
+        bounds,
+        [17, 202, 7],
+        state.tick,
+        &mut candidates,
+    );
+    assert!(
+        candidates.is_empty(),
+        "a piece whose floor is the quarry top is still in reach"
+    );
+    site.pieces.pop();
+    site.pieces.push(piece(
+        mc_world::BlockPos {
+            x: 17,
+            y: 204,
+            z: 6,
+        },
+        mc_world::BlockPos {
+            x: 31,
+            y: 210,
+            z: 20,
+        },
+    ));
+    let mut candidates = VecDeque::new();
+    queue_natural(
+        &site,
+        BuildingKind::Mine,
+        bounds,
+        [17, 202, 7],
+        state.tick,
+        &mut candidates,
+    );
+    assert!(
+        !candidates.is_empty(),
+        "a piece wholly above the quarry top is out of reach"
     );
 }
 
@@ -2265,7 +2321,6 @@ fn busy_gatherer_can_prove_the_other_natural_source() {
         queued_at: 0,
         stock_proved: false,
         after_resident: None,
-        entrance_waits: 0,
     }]);
     for _ in 0..8 {
         state.tick += 20;
