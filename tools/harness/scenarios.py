@@ -971,7 +971,7 @@ SCENARIOS: dict[str, Scenario] = {
         sources=("tools/harness/entity_fire_scene.json", "tools/harness/backends/scene_shot_checks.py"),
         fixture="private native client, one stationary pig at a fixed pad and camera, burning and then plain, HUD default",
         proves="the burning frame's own submitted fire layer (`entity_extraction.entity_layer_geometry`): one fire slice with all 12 indices and a 2.331-block band span against the pre-fix loop's 1.827, so `fire_band_span` separates the 26.3 bands from the camera-billboard overlay without pixels",
-        limits="one entity (a pig, two bands) and the layer geometry only; the sprite alternation for taller entities, the light-15 emission and the exact texel parity stay unit-covered",
+        limits="one entity (a pig, two bands) and the layer geometry only; the sprite parity, the u mirroring, the camera-facing rotation, the light-15 emission and the exact texel parity stay unit-covered, and the row's title symptom (a client that never reads the on-fire flag) needs a dispatch-deleted control on `fire_layer_present`",
     ),
     "native-rig-guardian": _entry(
         id="native-rig-guardian", summary="The guardian and baby bee submit exactly the vanilla layer's cubes",
@@ -979,8 +979,8 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="native-rig-guardian", requires=("xvfb",),
         sources=("tools/harness/rig_guardian_scene.json", "tools/harness/backends/scene_shot_checks.py"),
         fixture="private native client, one stationary mob per shot at a fixed pad and camera (guardian, baby bee), HUD default",
-        proves="the two rigs' own entity-pass index counts (CM-4 `entity_indices_by_material`, cloud-free) equal the vanilla 26.1.2 layer dump: guardian 792 (22 cubes x 6 faces x 6 indices), baby bee 324 (9), against the pre-image 612 and 468 (`guardian_spikes_and_bee_legs_submitted`)",
-        limits="cube counts only, one species per shot and a fixed camera; the twelve head spikes' pivot and the parts' exact shapes stay with the client's model regression tests",
+        proves="the two rigs' own entity-pass index counts (CM-4 `entity_indices_by_material`, cloud-free) equal the vanilla 26.1.2 layer dump: guardian 792 (22 cubes x 6 faces x 6 indices), baby bee 324 (9), against the pre-image 612 and 468, and the guardian's own cutout height is 1.4912 blocks +-0.04 - the dump's twelve spikes reach 27.89 px above and 4.03 px below, where the pre-image reads 1.3761 and a spike-less rig 1.0 (all in `guardian_spikes_and_bee_legs_submitted`)",
+        limits="cube counts and the cutout's bounding height, one species per shot and a fixed camera; the spikes' pivot placement and the parts' exact shapes stay with the client's model regression tests",
     ),
     "native-rig-parity": _entry(
         id="native-rig-parity", summary="A re-authored rig submits the vanilla layer's own parts",
@@ -988,8 +988,8 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="native-rig-parity", requires=("xvfb",),
         sources=("tools/harness/rig_parity_scene.json", "tools/harness/backends/scene_shot_checks.py"),
         fixture="private native client, one stationary mob per shot at a fixed pad and camera (hoglin, guardian, allay, vex, baby bee), HUD default",
-        proves="each rig's own entity-pass index count (CM-4 `entity_indices_by_material`, cloud-free): guardian minus baby bee 144 -> 468 on the pair actually run (`guardian_spikes_and_bee_legs_submitted`, floor 350) and the allay's cutout span 1.122 -> 0.69 (`allay_wing_span_within_body`, floor 0.85, WITHDRAWN 2026-11-25 - see the row)",
-        limits="one species per shot and part counts only: the rig is the `EntityCutout` slice of CM-4's cloud-free per-material pass, each frame must hold exactly one entity, and the parts' exact vanilla shapes plus the rigs whose count did not change (hoglin, rabbit, fox, panda, vex, crowd-rendered horse family) stay unit-covered",
+        proves="each framed rig's own entity-pass `EntityCutout` count (CM-4, cloud-free) as evidence only: MODEL-OPUS-10 promotes on `native-rig-guardian` now, and the allay span 1.122 -> 0.69 is the withdrawn one-sided evidence MODEL-OPUS-11's row records (vanilla `AllayModel.setupAnim` holds the wings at 25 degrees about x and -+45 about y, so the rest-pose span is not the game's pose)",
+        limits="one species per shot, counts only and no promotion: the rig is the `EntityCutout` slice of CM-4's cloud-free per-material pass, each frame must hold exactly one entity, and the parts' exact vanilla shapes plus the rigs whose count did not change (hoglin, rabbit, fox, panda, vex, crowd-rendered horse family) stay unit-covered",
     ),
     "native-shield-gui": _entry(
         id="native-shield-gui", summary="The shield's GUI icon is the vanilla 26.3 plate size",

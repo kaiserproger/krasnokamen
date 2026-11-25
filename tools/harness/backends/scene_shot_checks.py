@@ -281,22 +281,27 @@ def check_shield_gui(probe: ProbeSteps, artifact: Path) -> None:
 def check_entity_fire(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-ENTITY-FIRE: the burning entity's fire layer carries the vanilla flame bands.
 
-    The row's fix (`client:a3f2a486`) does not change how *many* bands are emitted - both loops give
-    `ceil(bbHeight / (bbWidth * 0.63))`, two for a pig - so a total index count cannot separate it.
-    What changes is the layer and the shape: the pre-fix overlay alternates the two sprites per band
-    (`textures[row % 2]`) and draws billboarded quads of `width` height starting at the feet, while
-    26.3 uses one sprite for two bands (`textures[(band / 2) % 2]`), 1.4 scaled units per quad, steps
-    `y_bottom` down by 0.45 so the second band reaches below the feet, and a z offset from 0.3
-    stepping -0.03. The frame reports all of that from its own submitted vertices
-    (`entity_extraction.entity_layer_geometry`, CM-4), so the check needs no pixels and no load
-    margin:
+    From `javap -p -c` on the local 26.3 client jar: `EntityRenderDispatcher.submit` calls
+    `submitFlame(pose, state, Mth.rotationAroundAxis(Mth.Y_AXIS, camera.orientation, ...))`, so the
+    bands billboard with the CAMERA's yaw; `FlameFeatureRenderer.renderFlame` scales by
+    `bbWidth * 1.4`, draws 1.4-unit quads from `yTop = bbHeight / scale` with `half` starting at 0.5
+    and shrinking by 0.9, steps the loop counter and `y_bottom` by 0.45 (so each later band sits
+    0.45 units HIGHER, not below the feet), the z offset starts at `0.3 - (int)yTop * 0.02` and
+    steps -0.03, and the sprite is `textures[band % 2]` with its u mirrored when
+    `(band / 2) % 2 == 0`.
 
-    - one `EntityFire#<layer>` slice carrying all 12 indices (both clients report a single fire
-      layer, so the sprite alternation is not observable here and stays unit-covered);
-    - the slice's bbox is 2.331 blocks tall on the fix against 1.827 on the control (measured
-      2026-11-25 on the pinned pair): 1.85 scaled units times the pig's 1.26-unit scale, where the
-      pre-fix loop only reaches 1.45 units. This is the row's discriminator;
-    - the plain frame has no fire slice at all.
+    That detail is not observable here: both the pre-fix billboard and the 26.3 bands submit a
+    single `EntityFire` texture layer, so the sprite parity and the mirroring stay unit-covered
+    (`presentation::tests::fire_bands_follow_the_vanilla_flame_feature_numbers`). What the frame can
+    witness is the shape. Both loops give two bands for a pig, so the count cannot separate them;
+    the vertical span can: 26.3 stacks 1.85 scaled units (1.4 plus the 0.45 first step) at the
+    pig's 1.26 scale, where the pre-fix loop only reaches 1.45 units - measured 2.331 against
+    1.827 on the pinned pair, so the band is 2.2..2.5. The remaining assertions are fixtures:
+    the plain frame has no fire slice, the burning one has exactly one, and it carries 12 indices.
+
+    This check does not prove the row's title symptom (a client that never reads the on-fire flag):
+    its control already draws an overlay. `fire_layer_present` is the assertion that would, and it
+    needs a control with the fire dispatch deleted.
     """
     shots = _qa._load_shots(probe, artifact, ("burning", "plain"))
     burning = shots["burning"][0].get("entity_extraction") or {}
@@ -336,26 +341,26 @@ def check_entity_fire(probe: ProbeSteps, artifact: Path) -> None:
 
 
 def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
-    """MODEL-OPUS-10/11: the re-authored rigs submit the vanilla layer's own parts.
+    """Evidence scene: the re-authored rigs' own entity-pass counts, one species per shot.
 
-    The frame's `entity_extraction.entity_indices` is the whole dynamic pass and the cloud layer is
-    appended into the same `scene.dynamic` first, so a total count cannot isolate a rig (measured:
-    about 51,500 for one mob). CM-4's `entity_indices_by_material` is the *entity pass only* — the
-    observation snapshots the per-material lengths before `append_geometry` — so its sum is the
-    frame's own entity submission and the per-entity shadow quad (6 indices) cancels in a
-    difference of two subjects.
+    No row promotes on this scene any more (Opus code review, 2026-11-25, receipts/D123/
+    D123ClientModel/REVIEW-CODE-1-Opus.md). MODEL-OPUS-10 moved to `native-rig-guardian`, its own
+    scene and check with the fixture assertions first and the exact vanilla counts plus the spike
+    height; the guardian-minus-bee floor this docstring used to describe (240 -> 498, floor 350) is
+    gone with it, because the rig changes it summed came from the head and tail, not from the
+    spikes, and its bee term was inverted. MODEL-OPUS-11's `allay_wing_span_within_body`
+    survives here only as the withdrawn one-sided evidence the row records: the pre-image spread its
+    wings to a 1.122-block cutout span where the fix's rest pose reads 0.69, but the vanilla
+    `AllayModel.setupAnim` holds the wings at 25 degrees about x and -+45 about y (javap on the local
+    26.3 jar), so neither number is the pose the game shows and the check must not be used to
+    promote until the client applies that pose and the span is asserted two-sided around 0.770.
 
-    `client:92dcb25d` re-authored the guardian family from 17 cubes (102 quads, 612 indices) to 22
-    (132, 792), the baby bee from 13 (62, 372) to 9 (49, 294), and the allay from 34 quads (204) to
-    42 (252) while the hoglin (66) and vex (42) kept theirs. The assertions are the two differences
-    the fix moves: guardian minus baby bee 240 -> 498 (floor 350) and allay minus vex -48 -> 0
-    (floor -20). The hoglin frame stays evidence (its ears and tusks changed shape, not count).
-
-    Measured 2026-11-25 on the pinned pair: the sum over all entity materials is NOT the rig - a vex
-    holds a sword (`ItemCutout` up to 1080 indices), every entity adds one `EntityShadow` quad, and a
-    just-killed mob's death pass lingers for tens of ticks (the first version read guardian-minus-bee
-    -24/+516 instead of 240/498). The rig itself is the `EntityCutout` slice, and each shot asserts
-    `submitted == 1` so a leaked entity fails loudly instead of skewing the arithmetic.
+    What remains true of the frame: `entity_extraction.entity_indices` is the whole dynamic pass and
+    the cloud layer is appended into the same `scene.dynamic` first, so a total count cannot isolate
+    a rig (about 51,500 for one mob); CM-4's `entity_indices_by_material` is the *entity pass only*,
+    so the rig is its `EntityCutout` slice (a vex's held sword adds `ItemCutout`, every entity adds
+    one `EntityShadow` quad), and each shot asserts `submitted == 1` so a leaked entity or a
+    lingering death pass fails loudly instead of skewing the arithmetic.
     """
     names = ("hoglin", "guardian", "allay", "vex", "bee-baby")
     shots = _qa._load_shots(probe, artifact, names)
@@ -382,12 +387,11 @@ def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
     allay_vex = rigs["allay"] - rigs["vex"]
     probe.report["guardian_minus_bee_indices"] = guardian_bee
     probe.report["allay_minus_vex_indices"] = allay_vex
-    # The rows' assertions first: a fixture leak must not mask which symptom is red. `check` raises
-    # on the first false, and each row's control must be red on ITS assertion, so the live row
-    # (MODEL-OPUS-11's span) is evaluated before the closed one (MODEL-OPUS-10's count).
-    # The allay's pre-image rig submits the same quads as the fix (42), only at animated wing angles:
-    # measured horizontal span 1.10 blocks on the control vs 0.70 on the fix (wings folded onto the
-    # body, body depth 0.70), so the span - not the count - is what this row can assert.
+    # The allay's pre-image rig submits the same quads as the fix (42), only at spread wing angles:
+    # measured horizontal span 1.10 blocks on the control vs 0.70 on the fix. That is withdrawn
+    # evidence (see the docstring and MODEL-OPUS-11): vanilla `AllayModel.setupAnim` holds the wings
+    # at 25 degrees about x and -+45 about y, so the rest-pose span neither matches the game nor
+    # fixes the check; it stays reported and asserted only until that row's redesign lands.
     layers = (shots["allay"][0].get("entity_extraction") or {}).get("entity_layer_geometry") or []
     cutout = next((entry for entry in layers if entry.get("material") == "EntityCutout"), {})
     lo, hi = cutout.get("min"), cutout.get("max")
@@ -396,7 +400,6 @@ def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
         allay_span = round(max(abs(hi[0] - lo[0]), abs(hi[2] - lo[2])), 3)
     probe.report["allay_horizontal_span"] = allay_span
     probe.check("allay_wing_span_within_body", allay_span is not None and allay_span <= 0.85)
-    probe.check("guardian_spikes_and_bee_legs_submitted", guardian_bee >= 350)
     probe.check("allay_wing_faces_submitted", allay_vex >= -20)
     for name in names:
         # One mob per frame: a killed mob's death pass or its dropped loot would ride along.
@@ -417,9 +420,20 @@ def check_rig_guardian(probe: ProbeSteps, artifact: Path) -> None:
     pre-image tree draws 17 cubes (102 quads, 612) and 13 (78, 468), so equality separates them
     both ways - the earlier difference floor let a tree with the baby bee's legs removed pass.
 
-    The twelve head spikes are cubes of size [2, 9, 2] at o = [-1, -4.5, -1] inside the head bone
-    in the same dump; that pivot claim is a property of the rig JSON, not of the frame, so it is
-    covered by the client's model regression tests, not here.
+    The twelve head spikes are cubes of size [2, 9, 2] at o = [-1, -4.5, -1] on bones at radius
+    ~8 px around the head in the same dump. A count cannot witness them (the pre-image already
+    submits twelve), but their protrusion can: evaluated with the client's own bone convention
+    (pivot relative to the parent, rotation Z then Y then X, cube origin relative to the pivot) the
+    dump's spikes put the guardian's own `EntityCutout` bbox between y = 4.03 px and y = 27.89 px,
+    a 23.86 px = 1.4912-block height, where both bounds are spike tips; the pre-image's shorter
+    spikes (1.8x5.2x1.8 at half the radius) reach 1.3761 and a rig without spikes reads 1.0. The
+    guardian is summoned `NoAI:1b` and the client only breathes the spike pivots by +-1% there, so
+    the height is a stable property of the rig, not of the sampled pose. The window 1.44..1.53 is
+    1.4912 +-0.04: it is pre-registered from the dump, it excludes the pre-image and a spike-less
+    rig, and it keeps 3.4% headroom to the fix. Both terms live in
+    `guardian_spikes_and_bee_legs_submitted` so one assertion carries the row's symptom. The
+    spikes' pivot placement inside the head is a property of the rig JSON, so it stays covered by
+    the client's model regression tests.
     """
     shots = _qa._load_shots(probe, artifact, ("empty", "guardian", "bee-baby"))
     guardian = (shots["guardian"][0].get("entity_extraction") or {})
@@ -435,9 +449,26 @@ def check_rig_guardian(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("bee_single_entity", bee.get("submitted") == 1)
     probe.check("guardian_rig_rendered", not guardian.get("unrendered"))
     probe.check("bee_rig_rendered", not bee.get("unrendered"))
-    probe.check("guardian_spikes_and_bee_legs_submitted", guardian_rig == 792 and bee_rig == 324)
+    # The dump-derived spike protrusion, from the same guardian frame's own layer bounds.
+    guardian_layers = guardian.get("entity_layer_geometry") or []
+    guardian_cutout = next(
+        (entry for entry in guardian_layers if entry.get("material") == "EntityCutout"), {}
+    )
+    lo, hi = guardian_cutout.get("min"), guardian_cutout.get("max")
+    height = None
+    if isinstance(lo, list) and isinstance(hi, list) and len(lo) >= 3 and len(hi) >= 3:
+        height = round(float(hi[1]) - float(lo[1]), 3)
+    probe.report["guardian_cutout_height"] = height
+    probe.check(
+        "guardian_spikes_and_bee_legs_submitted",
+        guardian_rig == 792
+        and bee_rig == 324
+        and height is not None
+        and 1.44 <= height <= 1.53,
+    )
     probe.report["visual_review_required"] = [
-        "Inspect guardian/bee-baby frames: the counts prove 22 and 9 cubes were submitted, not their shape."
+        "Inspect guardian/bee-baby frames: the counts prove 22 and 9 cubes were submitted and the"
+        " height proves the spikes protrude, not their exact shape."
     ]
 
 
