@@ -1,8 +1,18 @@
 diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-index c6600df..3da7517 100644
+index 6bbcce0..5c68af8 100644
 --- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
 +++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-@@ -405,6 +405,57 @@ pub(crate) fn recover(
+@@ -331,7 +331,8 @@ pub(crate) fn recover(
+     let record = structure(&ledger, &owner(settlement), handle)?;
+     let paused = record.snapshot.state == ScriptStructureState::Paused
+         && record.snapshot.pause_reason.as_deref() == Some("footprint_changed");
+-    if !paused {
++    let committed = record.snapshot.state == ScriptStructureState::Committed;
++    if !paused && !committed {
+         return Ok(false);
+     }
+     let retry = (paused
+@@ -383,6 +384,54 @@ pub(crate) fn recover(
          return Ok(true);
      }
      let target = world(state, &record.snapshot.dimension)?;
@@ -13,10 +23,7 @@ index c6600df..3da7517 100644
 +            continue;
 +        }
 +        let current = record.snapshot.current_stage_index as usize;
-+        // A terminal index has no stage of its own, so every stage is behind it and its cells
-+        // count as placed: an abandoned site must still show its empty cells, or the tail below
-+        // commits a structure whose blocks were never there (BuildQA house L1, 20261124T221059).
-+        let completed = if terminal || current > index {
++        let completed = if current > index {
 +            record.cells[index].len()
 +        } else if current == index {
 +            record.snapshot.completed_work_units as usize
@@ -60,7 +67,7 @@ index c6600df..3da7517 100644
      if let Some(proof) = &record.liquid {
          crate::settlements::construction::preparation::liquid::revalidate(
              target,
-@@ -444,6 +495,24 @@ pub(crate) fn recover(
+@@ -411,6 +460,24 @@ pub(crate) fn recover(
              record.snapshot.completed_work_units = 0;
          }
      }
@@ -85,17 +92,41 @@ index c6600df..3da7517 100644
      record.snapshot.resource_plan_hash =
          inventories::resource_plan_hash(&resource_plan(&record.snapshot.stages));
      record.snapshot.remaining = remaining(&record);
+@@ -514,6 +581,7 @@ pub(crate) fn reopen_emptied(
+         if !seen.insert(cell.at)
+             || cell.state == target.registry.states.air
+             || free_soil_work(target, cell)
++            || harvestable_crop(target, cell)
+         {
+             continue;
+         }
 diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
-index 7a75741..fd7c392 100644
+index 52a6525..6bad4d9 100644
 --- a/crates/mc-core/src/settlements/construction.rs
 +++ b/crates/mc-core/src/settlements/construction.rs
-@@ -2899,6 +2899,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+@@ -2905,6 +2905,9 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+     // Recovery that opens a repair keeps the project; recovery that finishes a
+     // terminal-index structure in place (SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE)
+     // leaves it completable, so only an uncommitted outcome refuses.
++    if executor::recover(state, id, &project.structure) != Ok(false) {
++        return false;
++    }
+     if !executor::status(state, id, &project.structure)
+         .is_ok_and(|snapshot| snapshot.state == ScriptStructureState::Committed)
+     {
+@@ -2932,6 +2935,17 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
          record.revision = record.revision.saturating_add(1);
          return true;
      }
 +    // A placed cell that a foreign edit emptied is queued for re-placement and
 +    // the project stays open; the hole would otherwise block the certificate.
 +    if executor::reopen_emptied(state, id, &project.structure) != Ok(false) {
++        tracing::warn!(
++            settlement = id.0,
++            structure = %project.structure,
++            cause = "reopen_emptied",
++            "finish_project: a placed cell was reopened"
++        );
 +        return false;
 +    }
      let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {
