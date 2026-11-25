@@ -1031,3 +1031,49 @@ def load_tests(loader, tests, pattern):
 
 if __name__ == "__main__":
     raise SystemExit(unittest.main())
+
+
+class XvfbGlExtensionTests(unittest.TestCase):
+    """Java/NeoForge clients need GLX on their display; native scenes do not ask for it."""
+
+    def test_gl_args(self):
+        self.assertEqual(runtime.xvfb_gl_args(True), ["+extension", "GLX"])
+        self.assertEqual(runtime.xvfb_gl_args(False), [])
+
+    def test_gl_start_passes_the_flag_and_starts(self):
+        commands = []
+        real_popen = runtime.subprocess.Popen
+
+        def launch(argv, *args, **kwargs):
+            commands.append([str(part) for part in argv])
+            return real_popen(argv, *args, **kwargs)
+
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(runtime.subprocess, "Popen", launch):
+                process, display, handle = runtime.start_xvfb(Path(tmp), gl=True)
+            try:
+                self.assertIn("+extension", commands[0])
+                self.assertIn("GLX", commands[0])
+                self.assertTrue(Path(f"/tmp/.X11-unix/X{display.removeprefix(':')}").exists())
+            finally:
+                runtime.stop_process(process)
+                handle.close()
+
+    def test_plain_start_keeps_the_native_flags(self):
+        commands = []
+        real_popen = runtime.subprocess.Popen
+
+        def launch(argv, *args, **kwargs):
+            commands.append([str(part) for part in argv])
+            return real_popen(argv, *args, **kwargs)
+
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(runtime.subprocess, "Popen", launch):
+                process, display, handle = runtime.start_xvfb(Path(tmp))
+            try:
+                self.assertNotIn("GLX", commands[0])
+            finally:
+                runtime.stop_process(process)
+                handle.close()
