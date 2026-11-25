@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import math
+import os
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -13,7 +14,19 @@ from .probe_steps import ProbeSteps
 
 SPRINT_TICKS = 3000
 STALL_TICKS = 24000  # One complete day/night cycle, not merely a work shift.
-MAX_TICKS = 96000
+def _bound_ticks(default: int = 96000) -> int:
+    """Diagnostic runs may extend the bound; only the owner decides whether it counts."""
+    raw = os.environ.get("KRASNOKAMEN_SEED_QA_MAX_TICKS")
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return max(default, value)
+
+
+MAX_TICKS = _bound_ticks()
 # A console teleport of the observer is scaffolding for the block scan, never
 # evidence: it may cost this long, not the rest of the scenario deadline.
 OBSERVER_MOVE_TIMEOUT = 30.0
@@ -1004,6 +1017,11 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
     detail["milestones"] = {}
     verdicts = detail.setdefault("verdicts", {**dict.fromkeys(STAGES, False), "all": False})
     detail["interpretation"] = "Initial buildings, beds and villagers are generated baseline, not later construction or births."
+    detail["observation_bound_ticks"] = MAX_TICKS
+    detail["diagnostic_bound"] = (
+        "extended by KRASNOKAMEN_SEED_QA_MAX_TICKS; a pass at this bound needs the owner's acceptance"
+        if MAX_TICKS > 96000 else ""
+    )
     started = time.monotonic()
     detail["snapshots"] = []
     previous = None
