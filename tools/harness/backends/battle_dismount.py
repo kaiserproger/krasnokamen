@@ -163,8 +163,9 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         report["observations"].update({"samples": len(samples), "steps": len(steps),
                                        "max_step": max(steps) if steps else None,
                                        "mean_step": (sum(steps) / len(steps)) if steps else None})
-        battle_recovery.check(report, "rider_sample_window_complete", len(steps) >= TICKS_AFTER_KILL // 2,
-                              report["observations"])
+        battle_recovery.check(report, "rider_sample_window_complete",
+                              len(steps) >= TICKS_AFTER_KILL // 2,
+                              {"samples": len(samples), "steps": len(steps)})
         battle_recovery.check(report, "dismounted_rider_keeps_walk_speed",
                               bool(steps) and max(steps) <= TICK_SPEED * 1.35,
                               {"max_step": report["observations"]["max_step"],
