@@ -289,7 +289,7 @@ def run_near_camera(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     must reach in_play too, and the restart helper's own restart_client_entered_play check is
     the assertion.
     """
-    from .native_p4 import _restart
+    from .native_p4 import _restart, walk_to_refused_column
 
     import math
 
@@ -315,3 +315,11 @@ def run_near_camera(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _prepare(steps, origin, fixtures, points)
     _restart(steps)
     steps.check("server_never_panicked", "panicked" not in _server_log(steps))
+    # p-m5: the row's symptom is a body pinned beside the hole, not only "on_ground false". Walk it
+    # one step into the refused column and read both halves of that: the reconciliation counter
+    # stays zero and the body stops at the column's face. Only a grounded player can be walked, and
+    # a run that never grounded is already red on the row's own assertion.
+    grounded = steps.observe()["player"]["on_ground"] is True
+    steps.report["refused_column_stop"] = {"ran": grounded}
+    if grounded:
+        walk_to_refused_column(steps, origin, chunk_x)

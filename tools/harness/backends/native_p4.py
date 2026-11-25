@@ -153,6 +153,48 @@ def _restart(steps: ProbeSteps) -> None:
     _echo(steps, "restart_ordered_server_receipt")
 
 
+def walk_to_refused_column(steps: ProbeSteps, origin: tuple[int, int, int], chunk_x: int) -> None:
+    """One forward step toward the quarantined column the scene refused.
+
+    The row's symptom is a body pinned beside the hole: the pre-fix client refused the whole
+    prediction, so it never moved and every step it did send was answered with a position
+    correction. Both readings are asserted here on a grounded player: the reconciliation counter
+    stays zero, and the body stops at the column's face (one half width, 0.3, from its edge)
+    instead of standing still or walking in. A frozen body reds both, which is why the scene only
+    runs this after `restart_player_grounded` held.
+    """
+    own = origin[0] // 16
+    if chunk_x == own:
+        raise RuntimeError("the refused column must not be the player's own")
+    # The client's own `HeldInput::strafe` is left - right, and at yaw 0 "right" walks toward -x
+    # (measured: a 20-tick "right" press moved a body from x 15.0 to 12.4); yaw 180 mirrors that to
+    # +x. Setting the yaw makes the direction independent of where the server left the camera.
+    if chunk_x < own:
+        face, yaw = chunk_x * 16 + 16, 0
+    else:
+        face, yaw = chunk_x * 16, 180
+    expected_x = face + 0.3 if chunk_x < own else face - 0.3
+    before = steps.observe()
+    steps.call("minecraft_look", {"yaw_deg": yaw, "pitch_deg": 0})
+    steps.call("minecraft_press_inputs", {"keys": ["right"], "ticks": 20})
+    after = steps.observe()
+    steps.report["refused_column_stop"] = {
+        "refused_chunk": chunk_x, "player_chunk": own, "face": face, "expected_x": expected_x,
+        "before": [before["player"].get("x"), before["player"].get("y"), before["player"].get("z")],
+        "after": [after["player"].get("x"), after["player"].get("y"), after["player"].get("z")],
+        "corrections": after["player"].get("corrections"),
+        "last_correction_distance": after["player"].get("last_correction_distance"),
+        "on_ground": after["player"].get("on_ground"),
+        "movement_blocked": after["player"].get("movement_blocked"),
+        "velocity": after["player"].get("velocity"),
+    }
+    steps.check("refused_column_step_made_no_correction",
+                after["player"].get("corrections") == 0)
+    x = after["player"].get("x")
+    steps.check("refused_column_step_stopped_at_its_face",
+                isinstance(x, (int, float)) and abs(x - expected_x) <= 0.05)
+
+
 def _entity_at(steps: ProbeSteps, kind: str, x: float, z: float) -> dict[str, Any]:
     found: dict[str, Any] = {}
 

@@ -587,8 +587,8 @@ SCENARIOS: dict[str, Scenario] = {
                  "tools/harness/backends/anvil_corrupt.py", "tools/harness/backends/native_promotion_custody.py",
                  "tools/harness/backends/client_probes.py"),
         fixture="private world; one jukebox in the player's own chunk, six blocks from the player, record corrupted through an Anvil export and imported again; the same player rejoins",
-        proves="when green: the client reaches in_play with a refused chunk under or within about 12 blocks of the camera, as a vanilla client does with a hole in the world",
-        limits="red today (krasnokamen-client play_world_presentation_ready needs the biome-neighbour chunks); a repro, not a regression gate",
+        proves="when green: the client reaches in_play with a refused chunk beside the camera, stands on the delivered floor beside it (restart_player_grounded), and a forward step toward the refused column makes no server correction and stops at the column's face",
+        limits="a repro of the client's loading/prediction gates, not a visual review: no frame is compared; the walk leg runs only on a grounded player (a run that never grounded is already red on restart_player_grounded); whether the refused column blocks an entering body and grounds one standing on it is asserted by the client unit tests, not here",
     ),
     "native-command-feedback": _entry(
         id="native-command-feedback",
