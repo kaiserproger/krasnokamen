@@ -796,7 +796,10 @@ fn interact_parity_dragon_egg_guards_its_drop_paths() {
             }],
         );
     }
-    fn requested_chunk(state: &TickState, own: crate::boundary::ChunkPos) -> crate::boundary::ChunkPos {
+    fn requested_chunk(
+        state: &TickState,
+        own: crate::boundary::ChunkPos,
+    ) -> crate::boundary::ChunkPos {
         state
             .desired_chunks()
             .into_iter()
@@ -824,7 +827,9 @@ fn interact_parity_dragon_egg_guards_its_drop_paths() {
     click(&mut state, pos);
     let air = state.registry.states.air;
     put(&mut state, pos.x, pos.y, pos.z, air);
-    state.world.ensure_blocking(&[(requested_chunk(&state, own), 0)].into_iter().collect());
+    state
+        .world
+        .ensure_blocking(&[(requested_chunk(&state, own), 0)].into_iter().collect());
     crate::tick::run_tick(&mut state, &[]);
     assert_eq!(egg_count(&state, pos, egg), 0);
 
@@ -843,7 +848,9 @@ fn interact_parity_dragon_egg_guards_its_drop_paths() {
         }
     }
     state.world.fold_overlay();
-    state.world.ensure_blocking(&[(requested_chunk(&state, own), 0)].into_iter().collect());
+    state
+        .world
+        .ensure_blocking(&[(requested_chunk(&state, own), 0)].into_iter().collect());
     crate::tick::run_tick(&mut state, &[]);
     assert_eq!(state.world.block_at(pos.x, pos.y, pos.z), Some(egg));
     assert_eq!(egg_count(&state, pos, egg), 1);
