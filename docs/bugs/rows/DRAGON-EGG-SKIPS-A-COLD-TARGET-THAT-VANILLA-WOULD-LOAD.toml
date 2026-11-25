@@ -14,4 +14,6 @@ repro_check = "Implemented as OD-1 option 1. `vanilla_interact::dragon_egg` reco
 fix_commit = "patch:92ca0cba74a2e60785588c48234dcf793fa40c3fe59f117e57c276ffe18fe8da"
 failing_first = "not recorded"
 promotion = "docs/bugs/promotions/DRAGON-EGG-SKIPS-A-COLD-TARGET-THAT-VANILLA-WOULD-LOAD.json"
-repro_check_note = "Guard sensitivity, measured 2026-11-25: with the requested chunk admitted, deleting the egg_in_place guard does NOT red interact_parity_dragon_egg_guards_its_drop_paths (the test passed), so the guard test is not proof of that path - it is kept as a guard only, and the premature-move case needs a fixture where the completion actually reaches the write (e.g. egg replaced by a different state id after the click)."
+# Guard sensitivity: deleting egg_in_place with the requested chunk admitted does NOT red
+# interact_parity_dragon_egg_guards_its_drop_paths (measured 2026-11-25), so it is a guard,
+# not proof; a sensitive fixture would replace the egg with a different state id after the click.
