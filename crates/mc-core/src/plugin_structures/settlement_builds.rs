@@ -497,51 +497,41 @@ pub(crate) fn recover(
 /// Name of the final stage that re-places authored cells a foreign edit emptied.
 const REPAIR: &str = "repair";
 
-/// The authored cells of the record's own level image that this plan did not
-/// place: an upgrade inherits the previous level's shell and the certificate
-/// inspects the whole level box, so a foreign edit that empties an inherited
-/// cell would leave a hole the plan can never repair and the upgrade could
-/// never certify (SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE,
-/// 20261124T231255: the gate emptied a level-1 fence on the level-2 perimeter,
-/// `finish_project` refused with `missing=enclosure: 0/1` every tick).
+/// The cells the executed build chain authored at this site, last write per
+/// position: a level record stores only its diff, so an upgrade's own image is
+/// the fold of every committed record (oldest first, a later level overriding
+/// an earlier one). `previous_committed` proves the same chain to the upgrade
+/// fence; here the whole cell is needed, because a plan writes the state,
+/// material and quantity it actually paid for — the raw blueprint image is oak
+/// and white regardless of the species and bed colour the village chose.
+/// Records are read as they stand committed now; a removed cell is folded to
+/// air and drops out.
 fn inherited(state: &TickState, settlement: SettlementId, structure: &Structure) -> Vec<Cell> {
-    let Some(project) = state.settlements.get(settlement).and_then(|record| {
-        crate::settlements::construction::project_for_structure(
-            record,
-            &structure.snapshot.structure_id,
-        )
-    }) else {
-        return Vec::new();
-    };
     let Some(blueprint) = structure
         .snapshot
         .blueprint_id
         .strip_prefix("krasnokamen-settlements:")
-        .and_then(|id| crate::settlements::blueprints::get(&state.registry, id))
     else {
         return Vec::new();
     };
-    let rotation = crate::settlements::blueprints::Rotation::from_quarter_turns(project.rotation);
-    let origin = structure.snapshot.origin;
-    blueprint
-        .inherited(project.level, rotation)
-        .into_iter()
-        .map(|(offset, id)| {
-            let (resource, quantity) =
-                match crate::settlements::blueprints::material_for(&state.registry, id) {
-                    Some((item, quantity)) => (
-                        state.registry.items.name_of(item).map(ToString::to_string),
-                        quantity,
-                    ),
-                    None => (None, 0),
-                };
-            Cell {
-                at: std::array::from_fn(|axis| origin[axis] + i32::from(offset[axis])),
-                state: id.0,
-                resource,
-                quantity,
-            }
-        })
+    let Ok(ledger) = ledger(state) else {
+        return Vec::new();
+    };
+    let mut cells: BTreeMap<[i32; 3], Cell> = BTreeMap::new();
+    for record in committed_chain(
+        state,
+        &ledger,
+        settlement,
+        blueprint,
+        structure.snapshot.origin,
+    ) {
+        for cell in record.cells.iter().flatten() {
+            cells.insert(cell.at, cell.clone());
+        }
+    }
+    cells
+        .into_values()
+        .filter(|cell| cell.state != state.registry.states.air)
         .collect()
 }
 

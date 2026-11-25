@@ -101,39 +101,6 @@ impl Blueprint {
             [x, y, z]
         }
     }
-    /// The authored cells of `level`'s complete image at `rotation`, offset from
-    /// the structure origin: every level up to `level` applied in order, each
-    /// with its own removals.
-    fn image(&self, level: u8, rotation: Rotation) -> BTreeMap<[i8; 3], BlockStateId> {
-        let mut cells: BTreeMap<[i8; 3], BlockStateId> = BTreeMap::new();
-        for current in self.levels.iter().take(usize::from(level)) {
-            let current = current.rotated(rotation);
-            for at in &current.removals {
-                cells.remove(at);
-            }
-            for (at, id) in &current.blocks {
-                cells.insert(*at, *id);
-            }
-        }
-        cells
-    }
-    /// The cells `level` inherits *unchanged* from the previous level's image at
-    /// `rotation`. `BlueprintLevel::blocks` is only the increment a plan places,
-    /// so an upgrade inherits most of its shell; the certificate inspects the
-    /// whole level box, and a plan can never repair a hole in a cell it does not
-    /// own. Level 1 inherits nothing: its own plan is the authority for what it
-    /// builds (a plan may be a fenced subset, e.g. paving or retirement).
-    #[must_use]
-    pub(crate) fn inherited(&self, level: u8, rotation: Rotation) -> Vec<([i8; 3], BlockStateId)> {
-        if level < 2 {
-            return Vec::new();
-        }
-        let previous = self.image(level - 1, rotation);
-        self.image(level, rotation)
-            .into_iter()
-            .filter(|(at, id)| previous.get(at) == Some(id))
-            .collect()
-    }
 }
 
 #[derive(Debug, Clone)]

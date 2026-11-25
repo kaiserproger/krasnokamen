@@ -132,13 +132,17 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // and the ordinary-revisit merge): 1142. The next extraction candidate
         // is `site_project` itself, which belongs beside the sweeps it drives
         // in `construction_site_refusals.rs`.
-        // The house-upgrade lane (D123, 2026-11-25) adds 22: `finish_project`'s
+        // The house-upgrade lane (D123, 2026-11-25) adds 16: `finish_project`'s
         // named refusals (`cause=`, `missing=`) and the pure `certificate_missing`
-        // query the watcher logs, both cold diagnostic paths on the certificate
-        // tail (1142 -> 1164). The certificate/refusal tail is the next
-        // extraction candidate: it belongs in a `construction_certificate`
-        // module beside `buildings.rs`.
-        ("settlements/construction.rs", 1_164),
+        // query the stall watcher reads on the certificate tail (1142 -> 1158).
+        // That tail is not cold: the watcher calls it every stall window of a
+        // committed-but-uncertified project, and the gate's own stall logged it
+        // per tick - which is why the refusal path warns nothing and names its
+        // cause and missing requirement once, at `finish_project`. Measured 1158
+        // on the D123UpgradeCell tree (code-health 20261125T170814). The
+        // certificate/refusal tail is the next extraction candidate: it belongs
+        // in a `construction_certificate` module beside `buildings.rs`.
+        ("settlements/construction.rs", 1_158),
         // B3 (EdgeScale, 2026-11-18): the edge-visible unlocked-session mirror
         // is projected only when its inputs move, so `Connections` carries one
         // membership generation and advances it in `insert`,

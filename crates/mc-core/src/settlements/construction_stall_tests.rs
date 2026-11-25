@@ -765,8 +765,9 @@ fn an_order_nobody_was_bound_to_keeps_its_site_through_stall_windows() {
     );
 }
 
-/// Diagnostic harness for the House L2 stall: drive the watcher over a committed terminal record and
-/// print what `finish_project` says is missing. `missing = <description>: found/required`.
+/// Diagnostic harness for the House L2 stall: the watcher over a committed terminal record reports
+/// what the certificate is missing, once per shift, from the pure query (`certificate_missing`).
+/// `finish_project` itself no longer logs on every builder tick. `missing = <description>: found/required`.
 #[test]
 fn a_committed_house_upgrade_reports_its_missing_certificate_requirement() {
     let (mut state, id, builder) = fixture();
@@ -799,35 +800,21 @@ fn a_committed_house_upgrade_reports_its_missing_certificate_requirement() {
         builder: Some((state.entities.row(builder).uuid, None)),
         order_seq: None,
     }];
-    // A level-2 record inherits the level-1 shell, and `reopen_emptied` now repairs an emptied
-    // inherited cell (`settlement_builds::inherited`), so this committed upgrade needs its shell
-    // standing or the repair refuses before the certificate is attempted. The subject of this test
-    // is the certificate refusal's wording, not the repair policy.
-    let blueprint = blueprints::get(&state.registry, "spanish_house").expect("blueprint");
-    let shell = blueprint.inherited(2, Rotation::from_quarter_turns(0));
-    assert!(
-        !shell.is_empty(),
-        "the level-2 spanish_house inherits its level-1 shell"
-    );
-    for (offset, inherited) in shell {
-        state.world.set_block(
-            4 + i32::from(offset[0]),
-            201 + i32::from(offset[1]),
-            4 + i32::from(offset[2]),
-            inherited.0,
-        );
-    }
-    state.world.fold_overlay();
     state.world.set_block(10, 202, 10, block);
     let uuid = state.entities.row(builder).uuid;
     executor::advance(&mut state, id, &handle, uuid).unwrap();
+    // The refusal is named by the watcher's pure query, not by a per-tick warn in the finish path.
     let warnings = Warnings::default();
     tracing::subscriber::with_default(warnings.clone(), || {
-        super::finish_project(&mut state, id, &handle);
+        // The watcher reports once per stall shift (3000 ticks of no progress).
+        for _ in 0..=450 {
+            state.tick += 20;
+            super::release_stalled_builder(&mut state, id);
+        }
     });
     let text = warnings.0.lock().unwrap().join("\n");
     assert!(
-        text.contains("cause=\"certify_failed\"") && text.contains("missing="),
+        text.contains("cause=\"certificate_incomplete\"") && text.contains("missing="),
         "the refusal names its missing requirements: {text}"
     );
 }

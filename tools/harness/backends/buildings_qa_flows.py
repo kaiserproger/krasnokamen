@@ -177,6 +177,11 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             origin = _qa._wait_certified_origin_here(probe, sub, tag, bp, level, ctx, artifact)
             if origin is None:
                 if bp == "house" and level == 1:
+                    # A house whose injected break is never re-placed never certifies: the repair
+                    # outcome is a product verdict on this path too, and `probe.check` below raises
+                    # immediately, so it must be recorded first (a negative control reads it).
+                    _verdict(sub, "broken_cell_replaced", "FAIL",
+                             "the injected break was not re-placed; the L1 certificate never appeared")
                     probe.check(f"{tag}_L1_broken_cell_repaired", False)
                 probe.check(f"{tag}_L{level}_built", False)
                 _verdict(sub, f"L{level}_upgrade", "FAIL",
