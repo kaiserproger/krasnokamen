@@ -25,7 +25,7 @@ drops `nearest_file` and the test tree does not build (`E0425`), which is why th
 
 ## The control as built (REVIEW-wave2-14 Major-2, Main's ruling)
 
-`docs/bugs/promotions/BATTLE-LIVE-RESPAWN-FAR-FROM-FIGHT.preimage.patch` (`patch:e3aed88d9e10d318ca3fbf5b510f8220ebaa073d10af6eb754073978adcac7e0b22ac22eeafd24fec986da4c447101331e48b401f959d232`) turns HEAD's
+`docs/bugs/promotions/BATTLE-LIVE-RESPAWN-FAR-FROM-FIGHT.preimage.patch` (`patch:0cf17053a18f903a5e067a51671ebf4322e659e6a0b639c558d268ec5e6a48a8b22ac22eeafd24fec986da4c447101331e48b401f959d232`) turns HEAD's
 `respawn_slot` back into the decision `reenter` took at `f90997cc1^` — the historical a-side, taken from
 `git show f90997cc1^:crates/mc-core/src/battle/live_players.rs` — with that commit's own `contact_file`
 helper. Only these lines are adaptations to symbols that exist at HEAD (no behaviour invented):

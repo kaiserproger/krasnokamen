@@ -1,114 +1,114 @@
 diff --git a/crates/mc-core/src/battle/live_players.rs b/crates/mc-core/src/battle/live_players.rs
-index c5583c33a..df356b29b 100644
+index df356b29b..c5583c33a 100644
 --- a/crates/mc-core/src/battle/live_players.rs
 +++ b/crates/mc-core/src/battle/live_players.rs
-@@ -657,55 +657,66 @@ struct Pick {
+@@ -657,65 +657,54 @@
  /// contact; else the old rule (`choose_slot`). He never changes regiment
  /// without the reason in the log.
  fn respawn_slot(state: &TickState, hold: &Hold) -> Result<Pick, String> {
-+    // The pre-fix decision, verbatim from `reenter` at f90997cc1^ (only the wrapper name and the
-+    // `Pick` type differ, which the fix introduced), with its own `contact_file` below.
+-    // The pre-fix decision, verbatim from `reenter` at f90997cc1^ (only the wrapper name and the
+-    // `Pick` type differ, which the fix introduced), with its own `contact_file` below.
      let keep = (hold.regiment, hold.file);
--    let own = &state.hostile.battle.formation.regiments[hold.regiment];
--    if let Some((_, file)) = nearest_file(state, hold.regiment, keep, hold.alive_at, true) {
--        return Ok(Pick {
--            slot: (hold.regiment, file),
--            contact: true,
--            reason: None,
--            centre: false,
--        });
--    }
--    let living = nearest_file(state, hold.regiment, keep, hold.alive_at, false);
--    if let Some((_, file)) = living
--        && eligible(state, own, hold.side, 1)
--    {
--        return Ok(Pick {
--            slot: (hold.regiment, file),
--            contact: false,
--            reason: None,
--            centre: false,
--        });
--    }
--    let reason = if living.is_some() {
--        "regiment_broken"
-+    let running = state.hostile.battle.running;
-+    let contact = if running {
-+        contact_file(state, hold)
+-    let running = state.hostile.battle.running;
+-    let contact = if running {
+-        contact_file(state, hold)
++    let own = &state.hostile.battle.formation.regiments[hold.regiment];
++    if let Some((_, file)) = nearest_file(state, hold.regiment, keep, hold.alive_at, true) {
++        return Ok(Pick {
++            slot: (hold.regiment, file),
++            contact: true,
++            reason: None,
++            centre: false,
++        });
++    }
++    let living = nearest_file(state, hold.regiment, keep, hold.alive_at, false);
++    if let Some((_, file)) = living
++        && eligible(state, own, hold.side, 1)
++    {
++        return Ok(Pick {
++            slot: (hold.regiment, file),
++            contact: false,
++            reason: None,
++            centre: false,
++        });
++    }
++    let reason = if living.is_some() {
++        "regiment_broken"
      } else {
--        "regiment_gone"
-+        None
-     };
--    let formation = &state.hostile.battle.formation;
--    let contact = (0..formation.regiments.len())
--        .filter(|&i| i != hold.regiment && eligible(state, &formation.regiments[i], hold.side, 1))
--        .filter_map(|i| {
--            nearest_file(state, i, keep, hold.alive_at, true).map(|(d, file)| (d, (i, file)))
--        })
--        .min_by(|a, b| a.0.total_cmp(&b.0));
--    Ok(match contact {
--        Some((_, slot)) => Pick {
--            slot,
--            contact: true,
--            reason: Some(reason),
--            centre: false,
--        },
--        None => Pick {
--            slot: choose_slot(state, hold.side, Some(keep))?,
--            contact: false,
--            reason: Some(reason),
--            centre: true,
--        },
-+    let (regiment, file) = match contact {
-+        Some(file) => (hold.regiment, file),
-+        None if running => choose_slot(state, hold.side, Some(keep))?,
-+        None => keep,
+-        None
+-    };
+-    let (regiment, file) = match contact {
+-        Some(file) => (hold.regiment, file),
+-        None if running => choose_slot(state, hold.side, Some(keep))?,
+-        None => keep,
+-    };
+-    Ok(Pick {
+-        slot: (regiment, file),
+-        contact: contact.is_some(),
+-        reason: None,
+-        centre: contact.is_none() && running,
++        "regiment_gone"
 +    };
-+    Ok(Pick {
-+        slot: (regiment, file),
-+        contact: contact.is_some(),
-+        reason: None,
-+        centre: contact.is_none() && running,
++    let formation = &state.hostile.battle.formation;
++    let contact = (0..formation.regiments.len())
++        .filter(|&i| i != hold.regiment && eligible(state, &formation.regiments[i], hold.side, 1))
++        .filter_map(|i| {
++            nearest_file(state, i, keep, hold.alive_at, true).map(|(d, file)| (d, (i, file)))
++        })
++        .min_by(|a, b| a.0.total_cmp(&b.0));
++    Ok(match contact {
++        Some((_, slot)) => Pick {
++            slot,
++            contact: true,
++            reason: Some(reason),
++            centre: false,
++        },
++        None => Pick {
++            slot: choose_slot(state, hold.side, Some(keep))?,
++            contact: false,
++            reason: Some(reason),
++            centre: true,
++        },
      })
  }
+-
+-
+-/// The file of the holder's own line, while it still stands, that is in
+-/// contact (a soldier of it has an enemy within his weapon reach) and whose
+-/// front soldier stands nearest where the holder fell (trial-7: the centre
+-/// rule put PovRed 230 blocks from the fight, with no enemy near for four
+-/// minutes). Files another holder holds are skipped; `None` when no file of
+-/// his line is in contact.
+-fn contact_file(state: &TickState, hold: &Hold) -> Option<usize> {
+-    let battle = &state.hostile.battle;
+-    let formation = &battle.formation;
+-    let r = &formation.regiments[hold.regiment];
+-    if !eligible(state, r, hold.side, 1) {
+-        return None;
+-    }
+-    let mut best: Option<(f64, usize)> = None;
+-    for file in 0..usize::from(r.spec.files).min(r.len) {
+-        if file != hold.file && formation.held.contains(&(hold.regiment, file)) {
+-            continue;
+-        }
+-        if !file_members(formation, hold.regiment, file)
+-            .into_iter()
+-            .any(|bi| in_contact(&state.entities, battle, bi))
+-        {
+-            continue;
+-        }
+-        let Some(front) = front_soldier(state, hold.regiment, file) else {
+-            continue;
+-        };
+-        let distance =
+-            (front[0] - hold.alive_at[0]).powi(2) + (front[2] - hold.alive_at[2]).powi(2);
+-        if best.is_none_or(|(d, _)| distance < d) {
+-            best = Some((distance, file));
+-        }
+-    }
+-    best.map(|(_, file)| file)
+-}
+-
  
-+
-+/// The file of the holder's own line, while it still stands, that is in
-+/// contact (a soldier of it has an enemy within his weapon reach) and whose
-+/// front soldier stands nearest where the holder fell (trial-7: the centre
-+/// rule put PovRed 230 blocks from the fight, with no enemy near for four
-+/// minutes). Files another holder holds are skipped; `None` when no file of
-+/// his line is in contact.
-+fn contact_file(state: &TickState, hold: &Hold) -> Option<usize> {
-+    let battle = &state.hostile.battle;
-+    let formation = &battle.formation;
-+    let r = &formation.regiments[hold.regiment];
-+    if !eligible(state, r, hold.side, 1) {
-+        return None;
-+    }
-+    let mut best: Option<(f64, usize)> = None;
-+    for file in 0..usize::from(r.spec.files).min(r.len) {
-+        if file != hold.file && formation.held.contains(&(hold.regiment, file)) {
-+            continue;
-+        }
-+        if !file_members(formation, hold.regiment, file)
-+            .into_iter()
-+            .any(|bi| in_contact(&state.entities, battle, bi))
-+        {
-+            continue;
-+        }
-+        let Some(front) = front_soldier(state, hold.regiment, file) else {
-+            continue;
-+        };
-+        let distance =
-+            (front[0] - hold.alive_at[0]).powi(2) + (front[2] - hold.alive_at[2]).powi(2);
-+        if best.is_none_or(|(d, _)| distance < d) {
-+            best = Some((distance, file));
-+        }
-+    }
-+    best.map(|(_, file)| file)
-+}
-+
-+
  /// The equipment of the first soldier of the file whose body still exists,
  /// else of any soldier of the regiment.
- fn kit_of(
