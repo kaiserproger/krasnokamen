@@ -2,7 +2,7 @@
 id = "DRAGON-EGG-SKIPS-A-COLD-TARGET-THAT-VANILLA-WOULD-LOAD"
 title = "Dragon egg teleport parity: vanilla loads the sampled target chunk and lands the egg, HEAD refuses a cold target"
 area = "gameplay"
-repro = "manual"
+repro = "cargo"
 severity = "minor"
 status = "open"
 source = "Split from DRAGON-EGG-TELEPORTS-INTO-COLD-CHUNK-OVERLAY (review 7 B2; docs/bugs/README.md 'one row describes one symptom'): the fixed row closes the write into the cold overlay. This row keeps the remaining parity gap at the edge of the resident zone - vanilla's Level.getChunk loads the sampled target and the egg lands there, while HEAD now skips a target whose column is not resident."
