@@ -282,6 +282,22 @@ SCENARIOS: dict[str, Scenario] = {
                "falling kind and no second saved tick.",
     ),
 
+    "native-v2-ledger-map-pocket": _entry(
+        id="native-v2-ledger-map-pocket",
+        summary="A map carried in a pocket never explores terrain",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-map-pocket",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_map_pocket.py"),
+        fixture="operator pad; one filled scale-zero map moved to inventory slot 20 with the "
+                "client's own drag; the player then walks six short legs",
+        proves="the client's own `maps` observation reports zero explored pixels for that record "
+               "through the whole walk, so no carried-copy exploration happened",
+        limits="One map in one pocket slot and one walk; no wall map, no clone, no cartography "
+               "table and no deposit.",
+    ),
+
     "native-v2-ledger-daylight-detector": _entry(
         id="native-v2-ledger-daylight-detector",
         summary="A daylight detector placed under settled thunder does not report full power",
