@@ -1,45 +1,128 @@
 diff --git a/crates/mc-core/src/settlements/autonomy.rs b/crates/mc-core/src/settlements/autonomy.rs
-index 5ff0da26c..9ab4bdabb 100644
+index 98a62a94a..e71edb799 100644
 --- a/crates/mc-core/src/settlements/autonomy.rs
 +++ b/crates/mc-core/src/settlements/autonomy.rs
-@@ -794,18 +794,34 @@ fn queue_natural(
+@@ -273,7 +273,9 @@ fn advance(
+         }
+     }
+     // Unloaded pieces retain their queue position without starving loaded
+-    // workplaces. All advertised piece footprints remain protected from zones.
++    // workplaces. A zone may only take ground where no built piece stands (a
++    // street or road may cross it), so adopting a piece after a zone was
++    // certified never finds its box already taken (`queue_natural`).
+     for _ in 0..pending.uncertified.len().min(PIECES_PER_PASS) {
+         let index = pending.uncertified.pop_front().expect("counted piece");
+         let piece = &pending.site.pieces[index];
+@@ -794,33 +796,43 @@ fn queue_natural(
      queued_at: u64,
      candidates: &mut VecDeque<NaturalCandidate>,
  ) {
--    if site
-+    // A grove is taken where nothing stands: its zone is the visible stand. A
-+    // mine is dug below the surface, so a village piece standing over the same
-+    // columns is not in its way - only the entrance it opens must stand clear.
-+    // Comparing X/Z alone refused every mine box on a plains village (the
-+    // village spans 117 pieces; HANDOFF-42 section 2).
-+    let blocked = site
-         .pieces
-         .iter()
-         .filter_map(|piece| piece.bounds)
-         .any(|(min, max)| {
-             let min = [min.x, min.y, min.z];
-             let max = [max.x, max.y, max.z];
--            [0, 2]
--                .into_iter()
--                .all(|axis| min[axis] <= bounds.max[axis] && max[axis] >= bounds.min[axis])
--        })
--    {
-+            match kind {
-+                BuildingKind::Mine => {
-+                    (0..3).all(|axis| min[axis] <= entrance[axis] && max[axis] >= entrance[axis])
-+                        || (1..=2).all(|dy| {
-+                            (0..3).all(|axis| {
-+                                let at = entrance[axis] + if axis == 1 { dy } else { 0 };
-+                                min[axis] <= at && max[axis] >= at
-+                            })
-+                        })
-+                }
-+                _ => [0, 2]
-+                    .into_iter()
-+                    .all(|axis| min[axis] <= bounds.max[axis] && max[axis] >= bounds.min[axis]),
-+            }
-+        });
-+    if blocked {
+-    // A grove is taken where nothing stands: its zone is the visible stand. A
+-    // mine is dug below the surface, so a village piece standing over the same
+-    // columns is not in its way - only the entrance it opens must stand clear.
+-    // Comparing X/Z alone refused every mine box on a plains village (the
+-    // village spans 117 pieces; HANDOFF-42 section 2).
+-    let blocked = site
+-        .pieces
+-        .iter()
+-        .filter_map(|piece| piece.bounds)
+-        .any(|(min, max)| {
+-            let min = [min.x, min.y, min.z];
+-            let max = [max.x, max.y, max.z];
+-            match kind {
+-                BuildingKind::Mine => {
+-                    (0..3).all(|axis| min[axis] <= entrance[axis] && max[axis] >= entrance[axis])
+-                        || (1..=2).all(|dy| {
+-                            (0..3).all(|axis| {
+-                                let at = entrance[axis] + if axis == 1 { dy } else { 0 };
+-                                min[axis] <= at && max[axis] >= at
+-                            })
+-                        })
+-                }
+-                _ => [0, 2]
+-                    .into_iter()
+-                    .all(|axis| min[axis] <= bounds.max[axis] && max[axis] >= bounds.min[axis]),
+-            }
+-        });
++    // A grove is taken where nothing stands: its zone is the visible stand.
++    //
++    // A mine's box spans the village too - its floor is 14 below the entrance but
++    // its top is the village's ground level (`natural_zones`), and the quarry
++    // reaches the surface. Depth is not what protects a house: `safe()` and
++    // `natural()` keep house and artificial blocks intact, while the ground
++    // between houses is dug (mining.rs level 4 cuts `entrance-1..entrance` rows
++    // right across that area). What a mine must not do is take a piece's ground:
++    // `certify_zone` refuses a zone that intersects any existing certificate, and
++    // the acceptance rule (`overlaps_existing` in `advance`) silently drops a
++    // piece a certified mine covers - a house lost for the world's life, since
++    // the piece queue is not persisted and a certificate is. So a mine is taken
++    // only where no built piece stands; streets and roads may cross it, they
++    // never certify (`piece_kinds`). An earlier rule compared X/Z alone and
++    // refused every mine box on a plains village (117 pieces, HANDOFF-42); an
++    // entrance-only fence misses a roof-ridge or cave entrance (HANDOFF-43
++    // review). The visible ground a certified mine may still cut is an owner
++    // decision, not this rule's (docs/settlements/construction.md section 3).
++    let blocked = site.pieces.iter().any(|piece| {
++        let Some((min, max)) = piece.bounds else {
++            return false;
++        };
++        let min = [min.x, min.y, min.z];
++        let max = [max.x, max.y, max.z];
++        let street = piece
++            .template
++            .as_deref()
++            .is_some_and(|template| template.contains("/streets/") || template.contains("/roads/"));
++        let intersects = |axes: [usize; 3]| {
++            axes.into_iter()
++                .all(|axis| min[axis] <= bounds.max[axis] && max[axis] >= bounds.min[axis])
++        };
++        match kind {
++            BuildingKind::Mine => !street && intersects([0, 1, 2]),
++            _ => intersects([0, 2]),
++        }
++    });
+     if blocked {
          return;
      }
-     candidates.push_back(NaturalCandidate {
+@@ -957,21 +969,36 @@ fn prove_natural(
+             BuildingKind::LumberCamp => grove_bounds(state, settlement, site, candidate.bounds),
+             _ => candidate.bounds,
+         };
+-        if super::buildings::certify_zone(
++        let refused = match super::buildings::certify_zone(
+             state,
+             settlement,
+             candidate.kind,
+             grown,
+             candidate.entrance,
+-        )
+-        .is_err()
+-        {
+-            let _ = super::buildings::certify_zone(
++        ) {
++            Ok(_) => None,
++            Err(_) => super::buildings::certify_zone(
+                 state,
+                 settlement,
+                 candidate.kind,
+                 candidate.bounds,
+                 candidate.entrance,
++            )
++            .err(),
++        };
++        // A refused zone is otherwise invisible: the planner just probes the
++        // next cursor and the gate can only report "no certified Mine". Name the
++        // zone and what it lacked (docs/settlements/construction.md section 3).
++        if let Some(error) = refused {
++            tracing::info!(
++                target: "settlements::construction",
++                settlement = settlement.0,
++                kind = ?candidate.kind,
++                min = ?candidate.bounds.min,
++                max = ?candidate.bounds.max,
++                entrance = ?candidate.entrance,
++                missing = %error,
++                "natural zone refused certification"
+             );
+         }
+     } else {
