@@ -66,12 +66,20 @@ proves the *clock source* the row lacked, not the signature. `ReplayChunkClock::
   `*_clock_tests.rs`, `weather_tests.rs`) — (b) kept so the control compiles and runs the registered
   refs. `docs/architecture/state-ownership.md` and `docs/bugs/ledger.toml` — documentation/ledger.
 
-## Proving refs (the row's own age assertions)
+## Proving refs (the row's own age assertions; measured 2026-11-25 by the promote)
+
+Every red below is an `assertion` panic on the row's own age/memory line, not a count or a fixture
+(`.analysis/validation/20261125T202736-ledger-promote-20chdygl/promote.json`):
 
 - `cargo:mc-core:core::entity_state_persistence_tests::game_clock_tests::frozen_game_clock_keeps_resident_item_age_equal_to_live_through_wal_replay`
-  — `entity_state_game_clock_tests.rs:50-52`: with only the clock source reversed the frozen item ages
-  by the 32 held frames and the `assert_eq!(replay.entities[&id.0].age, 5999)` / `state.age` assertions
-  fail. This is the row's "held item 5999 became 6030" line.
-- The other proving refs exercise the same `ReplayChunkClock` arithmetic through the checkpoint/WAL
-  recovery path and must also flip; `tick_control::tests::game_clock_held_restore_...` cannot flip (it
-  tests restore/capture, kept API) and is excluded by `proving_refs`.
+  — red at `entity_state_game_clock_tests.rs:47`
+  (`assert_eq!(replay.entities[&id.0].age, 5999)`), the row's "held item 5999 became 6030" line.
+- `cargo:mc-core:core::entity_state_persistence_tests::game_clock_tests::game_clock_mid_hold_checkpoint_bridges_fresh_memories_not_stale_or_expired_ones`
+  — red at `entity_state_game_clock_tests.rs:309` (`assert_eq!(memory.age, -200)`).
+- `cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::game_clock_tests::native_frozen_item_clock_survives_checkpoint_tail_recovery_and_frozen_open`
+  — red at `native_game_clock_drill_tests.rs:39` (`assert_eq!(restored.state.entities.row(slot).age, 5999)`).
+- `cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::game_clock_tests::native_game_clock_overworld_only_transition_controls_nether_and_end_items`
+  — red at `native_game_clock_drill_tests.rs:149` (`assert_eq!(record.age, 5999)`).
+- `cargo:mc-core:tick_control::tests::game_clock_held_restore_preserves_capture_before_first_tick_and_restart_modes`
+  — green in the control (it tests capture/restore of `TickControl`, kept API), so it is excluded by
+  `proving_refs` as the rule requires.
