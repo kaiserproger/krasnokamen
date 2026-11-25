@@ -1,0 +1,91 @@
+diff --git a/crates/mc-world-conversion/src/import.rs b/crates/mc-world-conversion/src/import.rs
+index fba316259..793de16c5 100644
+--- a/crates/mc-world-conversion/src/import.rs
++++ b/crates/mc-world-conversion/src/import.rs
+@@ -1,4 +1,5 @@
+ //! Offline Java 1.18+ Anvil admission into an unpublished native database.
++use super::pre_rename::Owner;
+ use super::{
+     ConversionStats, RecordUpgradeReceipt, check_version, fail, files, player_source_version,
+     read_nbt, saved_data_source_version, source_version,
+@@ -132,6 +133,9 @@ pub(super) fn convert(
+     let mut metadata = mc_core::level_metadata::MetadataTags::new();
+     let level_path = source.join("level.dat");
+     let mut level = read_nbt(&level_path)?;
++    stats
++        .pre_rename
++        .rename(&mut level, Owner::Level, &|| "level.dat".into())?;
+     let level_version = source_version(&level, &level_path)?;
+     stats.data_version = level_version.max(mc_world::anvil::TARGET_DATA_VERSION);
+     let data = field(&level, "Data")?.ok_or_else(|| fail("level.dat: missing Data"))?;
+@@ -238,7 +242,10 @@ pub(super) fn convert(
+     for path in METADATA.into_iter().filter(|path| *path != "level.dat") {
+         let relative = PathBuf::from(path);
+         if paths.contains(&relative) {
+-            let tag = read_nbt(&source.join(path))?;
++            let mut tag = read_nbt(&source.join(path))?;
++            stats
++                .pre_rename
++                .rename(&mut tag, Owner::metadata(Path::new(path)), &|| path.into())?;
+             check_version(&tag, &source.join(path))?;
+             metadata.insert(path.into(), tag);
+             consumed.insert(relative);
+@@ -262,6 +269,11 @@ pub(super) fn convert(
+         }
+         let path = source.join(relative);
+         let mut tag = read_nbt(&path)?;
++        stats
++            .pre_rename
++            .rename(&mut tag, Owner::metadata(destination), &|| {
++                relative.display().to_string()
++            })?;
+         let version = saved_data_source_version(&tag, &path)?;
+         // No saved-data payload fixer is registered between 4790 and 5023.
+         // File-only hardcore spectator settings do not change these codecs.
+@@ -627,6 +639,9 @@ pub(super) fn convert(
+                 .binary_search(&entities.join(relative.file_name().expect("region filename")))
+                 .is_ok();
+             visit(&path, |pos, mut tag, _| {
++                stats.pre_rename.rename(&mut tag, Owner::Chunk, &|| {
++                    format!("{}#chunk({}, {})", relative.display(), pos.x, pos.z)
++                })?;
+                 let from = source_version(&tag, &path)?;
+                 // `__context.generator` is the worldgen generator type for this
+                 // dimension (absent stays absent: vanilla defaults to empty and
+@@ -1017,6 +1032,11 @@ pub(super) fn convert(
+         {
+             let path = source.join(relative);
+             visit(&path, |pos, mut tag, _| {
++                stats
++                    .pre_rename
++                    .rename(&mut tag, Owner::EntityRegion, &|| {
++                        format!("{}#chunk({}, {})", relative.display(), pos.x, pos.z)
++                    })?;
+                 let from = source_version(&tag, &path)?;
+                 let report = upgrade::upgrade_entity_region(&mut tag, from).map_err(|error| {
+                     fail(format!(
+@@ -1349,6 +1369,9 @@ pub(super) fn convert(
+         }
+         let path = source.join(relative);
+         let mut tag = read_nbt(&path)?;
++        stats
++            .pre_rename
++            .rename(&mut tag, Owner::Player, &|| relative.display().to_string())?;
+         let source_location = player_missing_dimension_source(&tag)?;
+         // Versionless players report -1 (vanilla PlayerDataStorage/NbtUtils
+         // default), NOT 1343: -1 runs the full legacy fixer chain, while
+diff --git a/crates/mc-core/src/native_checkpoint.rs b/crates/mc-core/src/native_checkpoint.rs
+index 66d6cb070..5807ba0a8 100644
+--- a/crates/mc-core/src/native_checkpoint.rs
++++ b/crates/mc-core/src/native_checkpoint.rs
+@@ -607,8 +607,8 @@ pub fn open_refusal(
+              export-anvil` (binary `solaris` in the release archive, `solaris-v2` from \
+              source) and import the export with `krasnokamen world import-anvil` into a \
+              directory that does not exist yet; blocks, containers, entities and players \
+-             carry over, but plugin state, settlements and the block log are lost and \
+-             pre-rename solaris:* entity data is kept but not read"
++             carry over and the import renames the export's solaris:* fields to the names \
++             this build reads, but plugin state, settlements and the block log are lost"
+         ));
+     }
+     CoreError::Storage(error.to_string())
