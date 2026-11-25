@@ -1,0 +1,81 @@
+{
+  "id": "SETTLEMENT-BUILDER-PROJECT-STALLS-AFTER-PLACED-BLOCK-BROKEN",
+  "verdict": "promoted",
+  "fix_commit": "patch:b15befd95b2fcfdf8205ca9b5ed51c32dd45f02de45bea47fe1c68ff61bc0625",
+  "fix_commit_full": "patch:b15befd95b2fcfdf8205ca9b5ed51c32dd45f02de45bea47fe1c68ff61bc0625",
+  "promoted_at": "2026-11-25T15:42:33+00:00",
+  "tree_head": "f5328644326dd6011b47ef015ed048659e4e0549",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "b15befd95b2fcfdf8205ca9b5ed51c32dd45f02de45bea47fe1c68ff61bc0625",
+  "reversed_files": [
+    "crates/mc-core/src/plugin_structures/settlement_builds.rs",
+    "crates/mc-core/src/settlements/construction.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::construction::fencing_tests::a_second_break_during_the_repair_requeues_the_repair_stage": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/settlements/construction_fencing_tests.rs",
+        "line": 385,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "cargo:mc-core:settlements::construction::fencing_tests::a_placed_cell_broken_to_air_is_replaced_before_the_house_certifies": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/settlements/construction_fencing_tests.rs",
+        "line": 385,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "cargo:mc-core:settlements::construction::fencing_tests::a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_project": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/settlements/construction_fencing_tests.rs",
+        "line": 385,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "harness:buildings-qa:house.broken_cell_replaced": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::construction::fencing_tests::a_second_break_during_the_repair_requeues_the_repair_stage": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::construction::fencing_tests::a_placed_cell_broken_to_air_is_replaced_before_the_house_certifies": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:settlements::construction::fencing_tests::a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_project": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261125T141741-buildings-qa-bdfzq_2x/result.json",
+    "tree_head": "f5328644326dd6011b47ef015ed048659e4e0549",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "9ef041deccf4dcc29bcfd26347be07167d275f46a2f01071d69bd02258b98905",
+    "covers": [
+      "harness:buildings-qa:house.broken_cell_replaced"
+    ],
+    "profile": "buildings-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261125T151515-ledger-promote-sw96dj1t"
+}

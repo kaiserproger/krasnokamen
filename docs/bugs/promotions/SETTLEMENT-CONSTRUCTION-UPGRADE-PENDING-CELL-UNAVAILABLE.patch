@@ -1,0 +1,87 @@
+diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
+--- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
++++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
+@@ -497,6 +497,54 @@
+ /// Name of the final stage that re-places authored cells a foreign edit emptied.
+ const REPAIR: &str = "repair";
+ 
++/// The authored cells of the record's own level image that this plan did not
++/// place: an upgrade inherits the previous level's shell and the certificate
++/// inspects the whole level box, so a foreign edit that empties an inherited
++/// cell would leave a hole the plan can never repair and the upgrade could
++/// never certify (SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE,
++/// 20261124T231255: the gate emptied a level-1 fence on the level-2 perimeter,
++/// `finish_project` refused with `missing=enclosure: 0/1` every tick).
++fn inherited(state: &TickState, settlement: SettlementId, structure: &Structure) -> Vec<Cell> {
++    let Some(project) = state.settlements.get(settlement).and_then(|record| {
++        crate::settlements::construction::project_for_structure(
++            record,
++            &structure.snapshot.structure_id,
++        )
++    }) else {
++        return Vec::new();
++    };
++    let Some(blueprint) = structure
++        .snapshot
++        .blueprint_id
++        .strip_prefix("krasnokamen-settlements:")
++        .and_then(|id| crate::settlements::blueprints::get(&state.registry, id))
++    else {
++        return Vec::new();
++    };
++    let rotation = crate::settlements::blueprints::Rotation::from_quarter_turns(project.rotation);
++    let origin = structure.snapshot.origin;
++    blueprint
++        .inherited(project.level, rotation)
++        .into_iter()
++        .map(|(offset, id)| {
++            let (resource, quantity) =
++                match crate::settlements::blueprints::material_for(&state.registry, id) {
++                    Some((item, quantity)) => (
++                        state.registry.items.name_of(item).map(ToString::to_string),
++                        quantity,
++                    ),
++                    None => (None, 0),
++                };
++            Cell {
++                at: std::array::from_fn(|axis| origin[axis] + i32::from(offset[axis])),
++                state: id.0,
++                resource,
++                quantity,
++            }
++        })
++        .collect()
++}
++
+ /// Whether a manifest cell is free soil work: no material was ever charged, so
+ /// the cell only rewrites the ground already there.
+ fn free_soil_work(state: &TickState, cell: &Cell) -> bool {
+@@ -595,6 +643,28 @@
+             stale.push(cell.clone());
+         }
+     }
++    // The level image's inherited shell counts as authored at completion too
++    // (settlement_builds::inherited): a hole in a wall the previous level placed
++    // still blocks this level's certificate. `seen` already holds every planned
++    // position, so the plan's own cells keep their material accounting.
++    for cell in inherited(state, settlement, record) {
++        if !seen.insert(cell.at)
++            || cell.state == target.registry.states.air
++            || free_soil_work(target, &cell)
++            || harvestable_crop(target, &cell)
++        {
++            continue;
++        }
++        let now = target
++            .world
++            .block_at(cell.at[0], cell.at[1], cell.at[2])
++            .ok_or(Failure::Unloaded)?;
++        if identity(now) != identity(cell.state)
++            && crate::settlements::construction::clearable(target, now)
++        {
++            stale.push(cell);
++        }
++    }
+     if stale.is_empty() {
+         return Ok(false);
+     }

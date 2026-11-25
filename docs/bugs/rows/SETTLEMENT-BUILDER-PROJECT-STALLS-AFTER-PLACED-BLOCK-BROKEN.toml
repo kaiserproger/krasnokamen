@@ -4,13 +4,18 @@ title = "A player breaking an already-placed cell of an active Builder project l
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Issue1Breaker (qa-breaker) on main fa637b84, receipts/Issue1Breaker/REPORT.md 'Actual player site interference' (1/1): on a copy of an active House L1 world at [122,69,-5], a survival-mode real native client broke the already-placed corner [122,70,-5] (oak_log[axis=y]) at 88/250; the block read air, work continued to 160/250 with the corner still air, and after a copied-world restart the project stayed active at 250/250 with the cell air across eight 200-tick observations (wt/Issue1Breaker/.analysis/validation/20261113T075452-scene-shot-o4m1dbb1, 20261113T075614-scene-shot-ca1o3e5m; retained under receipts/Issue1Breaker retained/player-site-break and retained/player-break-followup). docs/settlements/construction.md#builders-and-supplies says already placed cells are not re-planned after a foreign edit, so the project can never pass its geometric certificate and blocks further construction. A foreign SOLID block in a placed cell (operator diamond at the same corner) still certifies, which that rule documents and is not this defect. Expected: Builders re-place an authored cell that a foreign edit emptied, and the project finishes."
 regression = ["cargo:mc-core:settlements::construction::fencing_tests::a_placed_cell_broken_to_air_is_replaced_before_the_house_certifies", "cargo:mc-core:settlements::construction::fencing_tests::a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_project", "cargo:mc-core:settlements::construction::fencing_tests::a_second_break_during_the_repair_requeues_the_repair_stage", "harness:buildings-qa:house.broken_cell_replaced"]
 failing_first = "reported"
+# Every one of the row's cargo controls reds at `complete_authored`'s own assertion that the
+# project must close — the `construction did not finish` panic naming the stalled project — which is
+# the row's symptom. Name the panic site so the classifier counts it as an assertion.
+proving_assertions = { "cargo:mc-core:settlements::construction::fencing_tests::a_placed_cell_broken_to_air_is_replaced_before_the_house_certifies" = "crates/mc-core/src/settlements/construction_fencing_tests.rs:385", "cargo:mc-core:settlements::construction::fencing_tests::a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_project" = "crates/mc-core/src/settlements/construction_fencing_tests.rs:385", "cargo:mc-core:settlements::construction::fencing_tests::a_second_break_during_the_repair_requeues_the_repair_stage" = "crates/mc-core/src/settlements/construction_fencing_tests.rs:385" }
 fix_commit = "patch:b15befd95b2fcfdf8205ca9b5ed51c32dd45f02de45bea47fe1c68ff61bc0625"
 # 95dc2a9bd is the fix under test (repair scan + reopen_emptied guard). The handoff
 # `recover` head this patch deletes around also carries 6b3e5a5b31 (the upgrade-cell
 # fix), which the control tree keeps, so the patch is HEAD-adapted, not the original
 # 7df36624 pre-image.
 repro_check = "HEAD-adapted control: docs/bugs/promotions/SETTLEMENT-BUILDER-PROJECT-STALLS-AFTER-PLACED-BLOCK-BROKEN.patch (patch:21cd1b06) reverses on 55d5e5bf1e (git apply -R --check): it deletes the repair scan and its tail consumer in settlement_builds::recover and the executor::reopen_emptied guard in construction::finish_project, keeping the 6b3e5a5b31 upgrade-cell head, and the reversed tree is red at the row's own stall (construction did not finish, broken cell still air); the original pre-image evidence is 7df36624 with the 20261123T200456 red receipt."
+promotion = "docs/bugs/promotions/SETTLEMENT-BUILDER-PROJECT-STALLS-AFTER-PLACED-BLOCK-BROKEN.json"
