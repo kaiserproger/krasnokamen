@@ -60,6 +60,9 @@ def _hold_key(steps: ProbeSteps, key: int, ticks: int) -> None:
     pointer.xt.XTestFakeKeyEvent.argtypes = [c.c_void_p, c.c_uint, c.c_int, c.c_ulong]
     code = pointer.x.XKeysymToKeycode(pointer.display, key)
     try:
+        # The keys go to the window under the pointer, so enter it first (the same route _input uses).
+        pointer.move(640, 360)  # the owned window is 1280x720
+        steps.call("minecraft_wait_ticks", {"ticks": 1})
         if not code or not pointer.xt.XTestFakeKeyEvent(pointer.display, code, 1, 0):
             raise RuntimeError(f"owned Xvfb refused keycode {key}")
         pointer.x.XFlush(pointer.display)
