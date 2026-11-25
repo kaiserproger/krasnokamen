@@ -4,7 +4,7 @@ title = "The graphical damage fixture sends an unsupported regeneration gamerule
 area = "harness"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Independent graphical damage QA observed rejection of gamerule natural_regeneration, so later health assertions did not have the intended regeneration-off fixture. The owning native P4 fixture now sends natural_health_regeneration false and requires actual command feedback. The corrected full run observes that feedback, but the full graphical gate still fails physical fall readiness and has no acceptance or ledger promotion."
 # Wave 4: the scene cannot observe the guard (see repro_check: both the candidate and the
 # ack-wait-reversed trees pass), so the scene ref is not part of the proof; the unit ref is.
@@ -16,3 +16,4 @@ fix_commit = "patch:c09ff7087e87159e21724dfe361b69bb79d7c1139cb204aee890f9758510
 # conflict on HEAD), so the row records the ack-wait hunk as it stands in native_p4.py: reversing
 # it removes the "Game rule ... is now set to false" wait — the row's recorded fix-lines-only
 # control (receipts/XHarnessGates/neg-damage-regeneration.log).
+promotion = "docs/bugs/promotions/DAMAGE-GATE-REJECTED-REGENERATION-RULE.json"

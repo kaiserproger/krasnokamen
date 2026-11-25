@@ -1,0 +1,39 @@
+{
+  "id": "DAMAGE-GATE-REJECTED-REGENERATION-RULE",
+  "verdict": "promoted",
+  "fix_commit": "patch:c09ff7087e87159e21724dfe361b69bb79d7c1139cb204aee890f975851054ce",
+  "fix_commit_full": "patch:c09ff7087e87159e21724dfe361b69bb79d7c1139cb204aee890f975851054ce",
+  "promoted_at": "2026-11-25T00:01:38+00:00",
+  "tree_head": "390b1d14e9c01017152a5aeb26c60cc11fd1d158",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "eaafd1ac63a9671cf33628d913eaa19b1696f2001ff83a5ca70a3e4170d3fe10",
+  "control_tree_head": "390b1d14e9c01017152a5aeb26c60cc11fd1d158",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "c09ff7087e87159e21724dfe361b69bb79d7c1139cb204aee890f975851054ce",
+  "reversed_files": [
+    "tools/harness/backends/native_p4.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_gamerule_fixture_requires_supported_rule_and_ack": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/usr/lib/python3.14/unittest/mock.py",
+        "line": 965,
+        "error": "AssertionError"
+      }
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_gamerule_fixture_requires_supported_rule_and_ack": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Harness/.analysis/validation/20261125T000128-ledger-promote-x1g8xlbw"
+}
