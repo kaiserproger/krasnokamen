@@ -905,6 +905,42 @@ fn a_terminal_index_running_structure_is_committed_by_recovery() {
 }
 
 #[test]
+fn the_watcher_step_over_an_empty_stage_names_the_following_cell() {
+    let (mut state, id, _slot) = crate::settlements::construction::tests::fixture();
+    crate::settlements::construction::tests::start(&mut state, id, "house", 1, None);
+    crate::settlements::construction::tests::fund(&mut state, "house", 1);
+    let handle = state.settlements.get(id).unwrap().projects[0]
+        .structure
+        .clone();
+    {
+        let mut ledger = ledger_mut(&mut state).unwrap();
+        let mut record = take_structure(&mut ledger, &owner(id), &handle).unwrap();
+        // Insert an empty stage in the middle so the step-over must leave the index on a stage
+        // that has a cell: the watcher path of the House L2 stall.
+        let index = record.snapshot.current_stage_index as usize;
+        record.snapshot.stages.insert(
+            index,
+            ScriptStructureStagePlan::new("build".into(), 0, 0, Vec::new()),
+        );
+        record.cells.insert(index, Vec::new());
+        record.snapshot.completed_work_units = 0;
+        record.snapshot.state = ScriptStructureState::Running;
+        ledger.insert_structure(handle.clone(), record);
+        save(&mut state, ledger);
+    }
+    assert_eq!(
+        next_cell(&state, id, &handle).unwrap(),
+        None,
+        "the empty stage names no cell"
+    );
+    assert_eq!(step_empty_stage(&mut state, id, &handle), Ok(true));
+    assert!(
+        next_cell(&state, id, &handle).unwrap().is_some(),
+        "stepping past the empty stage names the following stage's first cell"
+    );
+}
+
+#[test]
 fn an_empty_planned_stage_is_stepped_over_by_recovery() {
     let (mut state, id, _slot) = crate::settlements::construction::tests::fixture();
     crate::settlements::construction::tests::start(&mut state, id, "house", 1, None);

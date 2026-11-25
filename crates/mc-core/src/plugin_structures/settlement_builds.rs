@@ -696,6 +696,45 @@ pub(crate) fn next_cell(
         .map(|cell| cell.at))
 }
 
+/// Step over a stage that was planned with no cells, so the next cell can be named.
+///
+/// The House L2 upgrade reports `stage=2 work=0 next=None` on the real client
+/// (20261124T231255, `20261125T001250`) while its index is still inside `cells`: an empty stage has
+/// no cell, and `advance` can never reach a `work_units` of zero, so the builder is released on
+/// every shift and the project never finishes. Recovery does the same step-over, but recovery only
+/// runs when a project is finished; this runs where the cell is asked for.
+pub(crate) fn step_empty_stage(
+    state: &mut TickState,
+    settlement: SettlementId,
+    handle: &str,
+) -> Result<bool, Failure> {
+    if status(state, settlement, handle)?.state == ScriptStructureState::Committed {
+        return Ok(false);
+    }
+    let mut ledger = ledger_mut(state)?;
+    let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
+    let mut stepped = false;
+    while record
+        .cells
+        .get(record.snapshot.current_stage_index as usize)
+        .is_some_and(|cells| cells.is_empty())
+    {
+        record.snapshot.current_stage_index += 1;
+        record.snapshot.completed_work_units = 0;
+        stepped = true;
+    }
+    if stepped {
+        ledger.revision = next(ledger.revision)?;
+        record.snapshot.revision = ledger.revision;
+        record.snapshot.resource_plan_hash =
+            inventories::resource_plan_hash(&resource_plan(&record.snapshot.stages));
+        record.snapshot.remaining = remaining(&record);
+        ledger.insert_structure(handle.to_owned(), record);
+        save(state, ledger);
+    }
+    Ok(stepped)
+}
+
 /// The planned world state of the next cell, for naming a wait: the gate reads
 /// the plan, not the block that is about to be replaced.
 pub(crate) fn next_plan_state(

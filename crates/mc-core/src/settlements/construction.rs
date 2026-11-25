@@ -2353,9 +2353,17 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     // The incumbent is the resident bound to this project, never another
     // project's builder standing first in the resident list (D8).
     let incumbent = incumbent_slot(state, id, project);
-    let next = executor::next_cell(state, id, &project.structure)
+    let mut next = executor::next_cell(state, id, &project.structure)
         .ok()
         .flatten();
+    if next.is_none() && executor::step_empty_stage(state, id, &project.structure).unwrap_or(false)
+    {
+        // A stage planned with no cells is already complete; naming the next stage's cell here
+        // keeps the builder working instead of releasing it on every shift (House L2).
+        next = executor::next_cell(state, id, &project.structure)
+            .ok()
+            .flatten();
+    }
     let lot = super::forestry::lot_bounds(state, project);
     let protected = snapshot
         .stages
