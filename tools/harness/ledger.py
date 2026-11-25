@@ -1253,7 +1253,7 @@ def proving_refs(row):
     return list(named)
 
 
-def _check_proving_choice(ident, row, control):
+def _check_proving_choice(ident, row, control, control_refs=None):
     """Refuse a `proving_refs` that shrinks the proof dishonestly.
 
     Every excluded ref must be GREEN on the control — a check that does not flip with the fix and
@@ -1272,7 +1272,8 @@ def _check_proving_choice(ident, row, control):
             if not graphical:
                 raise Refused(f"{ident}: proving_refs keeps no real-client ref; the scene carries the "
                               'symptom, so at least one graphical ref stays proving')
-        bad = {ref: (control.get(ref) or {}).get('state') for ref in excluded}
+        observed = set(control_refs) if control_refs is not None else set(row.get('regression') or [])
+        bad = {ref: (control.get(ref) or {}).get('state') for ref in excluded if ref in observed}
         bad = {ref: state for ref, state in bad.items() if state != GREEN}
         if bad:
             raise Refused(f"{ident}: proving_refs excludes " + ', '.join(
@@ -1957,7 +1958,8 @@ def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client
                                            row.get('proving_assertions', {}))
     restored_info = check_client_restore_receipt(root, client_receipt, graphical, fix_full, tree_now)
     delta = _check_client_control_delta(root, control['client_head'], restored_info['client_head'], fix_full)
-    graphical_proving = [ref for ref in _check_proving_choice(ident, row, control) if ref in graphical]
+    graphical_proving = [ref for ref in _check_proving_choice(ident, row, control, control_refs=graphical)
+                         if ref in graphical]
     if not graphical_proving:
         raise Refused(f'{ident}: proving_refs names no real-client ref, but a client:<sha> fix is proved by a '
                       'real-client receipt')

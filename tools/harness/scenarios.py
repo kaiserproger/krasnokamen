@@ -1087,6 +1087,20 @@ SCENARIOS: dict[str, Scenario] = {
         limits="one goat and one sheep per shot; other horned mobs are not covered",
         client="native",
     ),
+    "command-selector-permission": _entry(
+        id="command-selector-permission",
+        summary="The client carries the permission level the server granted (COMMAND-SELECTOR-PERMISSION-SYNC)",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="command-selector-permission", requires=("xvfb",),
+        sources=("tools/harness/command_selector_permission_scene.json",),
+        fixture="private native client joined to the scene server as an operator, no world fixture",
+        proves="the client observation's `command.permission_level` is 4 while the player is an "
+               "operator and 0 within 40 ticks of `deop @s`, so `@s` selector completion can be "
+               "asserted from what the server actually granted (never inferred from the local menu)",
+        limits="one permission change per run; the suggestion list itself is not asserted because the "
+               "client has no command-suggestion machinery to observe",
+        client="native",
+    ),
     "issue1-19-hostile-motion": _entry(
         id="issue1-19-hostile-motion", summary="A zombie chases at the Java 26.3 pace and the fixture kinds move (ISSUE-1-19)",
         owner="core:harness", evidence="graphical", profile="scene-shot",

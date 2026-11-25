@@ -40,7 +40,7 @@ def scene_mcp_calls(steps: list[dict[str, Any]], client: str = 'native'):
             yield SCENE_TOOLS[kind], value
         elif kind == "assert_block":
             yield "minecraft_read_block", value["args"]
-        elif kind == "assert_screen":
+        elif kind == "assert_screen" or kind == "assert_observation":
             yield "minecraft_observe", {}
         elif kind in ("render_draw_sample", "assert_render_bounded", "assert_chat_components",
                       "hover_chat_component"):
@@ -117,6 +117,13 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                              and all(isinstance(item, str) and bool(item) for item in value[key])
                              for key in ("contains", "excludes"))
                      and bool(value["contains"]))
+        elif kind == "assert_observation":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"name", "path", "equals"}
+                     and isinstance(value["name"], str)
+                     and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and isinstance(value["path"], list) and 1 <= len(value["path"]) <= 4
+                     and all(isinstance(key, str) and key for key in value["path"]))
         elif kind == "assert_player_sleeping":
             valid = (client == "native" and isinstance(value, dict)
                      and set(value) == {"name", "sleeping"}

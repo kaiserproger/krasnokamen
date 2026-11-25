@@ -123,6 +123,19 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             if value["eof"]:
                 probe.check(f"{value['name']}_eof", state.get("disconnect_reason") == "server closed connection")
             (artifact / f"{value['name']}.json").write_text(json.dumps(state, indent=2) + "\n")
+        elif kind == "assert_observation":
+            # One observation, then a JSON path inside it compared exactly: the client's own view of
+            # what the server told it (COMMAND-SELECTOR-PERMISSION-SYNC asserts the permission level).
+            state = probe.call("minecraft_observe")
+            (artifact / f"{value['name']}.json").write_text(json.dumps(state, indent=2) + "\n")
+            node, found = state, True
+            for key in value["path"]:
+                if isinstance(node, dict) and key in node:
+                    node = node[key]
+                else:
+                    found = False
+                    break
+            probe.check(f"{value['name']}", found and node == value["equals"])
         elif kind == "walk_capture":
             args = {"radius": 32, "limit": 128}
             attempts = []
