@@ -380,8 +380,22 @@ fn plain_drop_joins_a_journal_writer_holding_the_world_directory() {
         drop(core);
         let _ = dropped_tx.send(());
     });
-    // `entered` is sent from inside the journal owner's exit path, i.e. only
-    // after the drop signalled the owners: the writer is alive and joined.
+    // The row's loss, detected first: a plain drop that detaches its owners
+    // returns while the journal owner is still a live writer of the world
+    // directory. A joined drop cannot return before `release` (the owner is
+    // parked on the exit hold), so this window can only fire on the defect;
+    // it is a detection bound, not a timing prediction of the fixed path.
+    if dropped_rx
+        .recv_timeout(Duration::from_secs(2))
+        .is_ok()
+    {
+        panic!(
+            "the plain drop returned while the journal owner was still alive: a writer was \
+             left in the world directory"
+        );
+    }
+    // `entered` is sent from inside the journal owner's exit path: the writer is
+    // alive and joined, and the drop must still be waiting for it.
     entered_rx
         .recv_timeout(Duration::from_secs(90))
         .expect("the journal owner never reached its exit path");

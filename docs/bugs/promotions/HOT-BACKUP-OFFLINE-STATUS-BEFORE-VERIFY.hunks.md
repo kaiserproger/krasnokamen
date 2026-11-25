@@ -24,7 +24,7 @@ on this candidate, so the patch is exactly them.
 | original | HEAD |
 |---|---|
 | `backup.rs` `-226,7`: `run_backup` returns `Result<usize>` | `crates/mc-edge/src/backup.rs:233` |
-| `backup.rs` `-268,13`: the final `println!` replaced by `Ok(manifest.files.len())` | `crates/mc-edge/src/backup.rs:271-279` |
+| `backup.rs` `-268,13`: the final `println!` replaced by `Ok(manifest.files.len())` | `crates/mc-edge/src/backup.rs:297-300` |
 | `operator_cli.rs` `-314,15`: `Command::Backup` arm prints one final status after `verify_written_backup` | `crates/mc-edge/src/operator_cli.rs:326-350` |
 
 Blob pair `3450417f7` -> `d3f02c038` is the commit's own pair for the whole

@@ -899,9 +899,10 @@ fn external_custody_refresh_closes_a_menu_anchored_on_the_cold_half() {
 #[test]
 fn external_custody_refresh_with_a_cold_partner_of_a_right_anchor_closes_the_menu() {
     // The mirror of the case above: the menu is anchored on the right half and
-    // the left half — its partner — goes cold. A viewer anchored on a cold half
-    // is never matched by a refresh of the resident half (that residual is
-    // REFRESH-CONTAINER-VIEWERS-COLD-ANCHOR-STALE).
+    // the left half — its partner — goes cold. A refresh of the resident half
+    // then closes the menu because its imaged cells include the cold partner;
+    // a viewer whose own anchor went cold is closed by the anchor test
+    // (`external_custody_refresh_closes_a_menu_anchored_on_the_cold_half`).
     let rig = refreshed_with_a_cold_partner(false);
     assert!(rig.state.players[&rig.player].open.is_none());
     assert!(!rig.state.open_containers.contains(&rig.player));

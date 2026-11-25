@@ -1,0 +1,57 @@
+diff --git a/crates/mc-core/src/core.rs b/crates/mc-core/src/core.rs
+--- a/crates/mc-core/src/core.rs
++++ b/crates/mc-core/src/core.rs
+@@ -1781,7 +1781,19 @@
+     /// final checkpoint) is durable. Idempotent; a plain drop runs the same
+     /// order (see `CoreInner::stop_owners`).
+     pub fn shutdown(&self) {
+-        if let Ok(mut guard) = self.inner.shutdown_tx.lock()
++        self.inner.stop_owners();
++    }
++}
++
++impl CoreInner {
++    /// The one safe stop order, shared by [`Core::shutdown`] and [`Drop`]:
++    /// signal the owners, join the tick (its final checkpoint and the journal
++    /// `Shutdown`), then join the journal (final WAL flush), and only then
++    /// release the world lease. Releasing the lease before the join would let a
++    /// second core open a world an owner thread may still write. Idempotent:
++    /// both callers take the same `Option` handles.
++    fn stop_owners(&self) {
++        if let Ok(mut guard) = self.shutdown_tx.lock()
+             && let Some(tx) = guard.take()
+             && tx.send(()).is_err()
+         {
+@@ -1792,20 +1804,29 @@
+         }
+         // Join tick first (it sends the journal Shutdown after its final
+         // checkpoint flush), then the journal (final flush on exit).
+-        if let Ok(mut guard) = self.inner.tick_handle.lock()
++        if let Ok(mut guard) = self.tick_handle.lock()
+             && let Some(handle) = guard.take()
+         {
+             handle.thread().unpark();
+             stop::join(handle);
+         }
+-        if let Ok(mut guard) = self.inner.journal_handle.lock()
++        if let Ok(mut guard) = self.journal_handle.lock()
+             && let Some(handle) = guard.take()
+         {
+             stop::join(handle);
+         }
+-        if let Ok(mut lease) = self.inner.world_lease.lock() {
++        if let Ok(mut lease) = self.world_lease.lock() {
+             lease.take();
+         }
++    }
++}
++
++impl Drop for CoreInner {
++    /// A plain `drop(core)` must not detach a running tick/journal owner or
++    /// release the world lease while it may still write the world
++    /// (CORE-DROP-RELEASES-LEASE-BEFORE-OWNERS-JOIN).
++    fn drop(&mut self) {
++        self.stop_owners();
+     }
+ }
+ 
