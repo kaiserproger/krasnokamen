@@ -29,6 +29,13 @@ pub(super) fn menu_source_cold(state: &TickState, actor: EntityId) -> bool {
         .is_some_and(|&(x, _, z)| !state.world.has_chunk(x.div_euclid(16), z.div_euclid(16)))
 }
 
+/// Whether the cell a menu is anchored on has left residency.
+fn anchor_chunk_cold(state: &TickState, open: &(i32, i32, i32)) -> bool {
+    !state
+        .world
+        .has_chunk(open.0.div_euclid(16), open.2.div_euclid(16))
+}
+
 fn animated_block(state: &TickState, pos: BlockPos) -> Option<(BlockEntityKind, u32, u32)> {
     let id = state.world.block_at(pos.x, pos.y, pos.z)?;
     let block = state.registry.blocks.by_id(mc_world::BlockStateId(id))?;
@@ -340,10 +347,15 @@ pub(crate) fn inventory_transition_refused(
 /// native custody mutation, with one fresh revision per affected menu.
 pub(crate) fn refresh_container_viewers(state: &mut TickState, position: BlockPos) {
     let cells = container_cells(state, (position.x, position.y, position.z));
+    // A viewer anchored on a half that is now cold is stale by definition: a
+    // cold half resolves to itself alone, so a refresh of the resident partner
+    // never matches it, and the menu would keep the old image until the first
+    // click closed it through the residency check (a refresh of another
+    // container could never serve it either). Close it on any custody refresh.
     let viewers: Vec<_> = state
         .open_containers
         .menu_viewers()
-        .filter(|(_, open)| container_cells(state, **open) == cells)
+        .filter(|(_, open)| anchor_chunk_cold(state, *open) || container_cells(state, **open) == cells)
         .filter_map(|(viewer, _)| {
             state
                 .connections
@@ -365,12 +377,16 @@ pub(crate) fn refresh_container_viewers(state: &mut TickState, position: BlockPo
         .iter()
         .any(|&(x, y, z)| state.world.block_at(x, y, z).is_none());
     for (viewer, connection) in viewers {
+        let anchor_cold = state
+            .open_containers
+            .menu_at(&viewer)
+            .is_some_and(|open| anchor_chunk_cold(state, open));
         let shape_mismatch = state
             .players
             .get(&viewer)
             .and_then(|player| player.open.as_ref())
             .is_some_and(|menu| menu.kind.container_size() != contents.len());
-        if cold || shape_mismatch {
+        if anchor_cold || cold || shape_mismatch {
             super::players::close_player_menu(state, connection);
             let changes = state
                 .players

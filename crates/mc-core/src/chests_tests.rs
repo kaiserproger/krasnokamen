@@ -839,6 +839,63 @@ fn external_custody_refresh_with_a_cold_partner_closes_the_menu() {
     assert!(!rig.state.open_containers.contains(&rig.player));
 }
 
+/// The residual the row names: the menu is anchored on the half whose own
+/// chunk goes cold while the partner stays resident. `container_cells` of the
+/// cold half resolves to itself, so a custody refresh of the resident partner
+/// never matched the viewer and the menu kept the old image until the first
+/// click closed it. A refresh must close it instead.
+#[test]
+fn external_custody_refresh_closes_a_menu_anchored_on_the_cold_half() {
+    let mut rig = Rig::new();
+    // Put the halves across a chunk boundary so they evict separately.
+    rig.left.x = rig.left.x.div_euclid(16) * 16 + 15;
+    rig.right.x = rig.left.x + 1;
+    let slot = rig.state.entities.slot_of(rig.player).unwrap();
+    rig.state.entities.set_pos(
+        slot,
+        [
+            f64::from(rig.left.x),
+            f64::from(Y + 1),
+            f64::from(rig.left.z) + 2.0,
+        ],
+    );
+    let diamond = item(&rig.state, "minecraft:diamond", 3);
+    rig.double_chest(std::slice::from_ref(&diamond), &[]);
+    // The menu is anchored on the half that will go cold.
+    rig.open(rig.left);
+    let window = rig.state.players[&rig.player].open.as_ref().unwrap().window;
+    let connection = rig.state.players[&rig.player].connection;
+    let anchor = rig.left;
+    evict_halves(&mut rig, &[anchor]);
+    // The resident partner's custody change is the only refresh this menu gets.
+    crate::tick::refresh_container_viewers(&mut rig.state, rig.right);
+    let queue = rig
+        .state
+        .outbox
+        .get(&connection)
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        queue.iter().any(|change| matches!(
+            change,
+            PlayerChange::MenuClosed { window: closed } if *closed == window
+        )),
+        "the refresh closes a menu anchored on the cold half: {queue:?}"
+    );
+    assert!(
+        !queue.iter().any(|change| matches!(
+            change,
+            PlayerChange::MenuContents { window: sent, .. } if *sent == window
+        )),
+        "the closed window is never republished: {queue:?}"
+    );
+    assert!(
+        rig.state.players[&rig.player].open.is_none(),
+        "the cold anchor closes the menu"
+    );
+    assert!(!rig.state.open_containers.contains(&rig.player));
+}
+
 #[test]
 fn external_custody_refresh_with_a_cold_partner_of_a_right_anchor_closes_the_menu() {
     // The mirror of the case above: the menu is anchored on the right half and
