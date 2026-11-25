@@ -3,17 +3,17 @@
   "verdict": "promoted",
   "fix_commit": "client:3bfbd7b6",
   "fix_commit_full": "3bfbd7b6902c8265f57be8ca3890359e691bfe87",
-  "promoted_at": "2026-11-25T15:32:49+00:00",
-  "tree_head": "c20a0d18bee552b8690031398ea80bfcb3ac7006",
+  "promoted_at": "2026-11-25T15:50:07+00:00",
+  "tree_head": "d4a60da3dd816f71d7e95c4996a03b083ee67143",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "client_fix": true,
   "control_tree": "client",
   "control": "client_receipt_pair",
   "negative_control": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T152848-native-rig-guardian-_dusv2q0/result.json",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T154503-native-rig-guardian-bejkavea/result.json",
     "client_head": "bafbf78b400a583f972252c3f376e090c3f5b859",
-    "server_binary_sha256": "06ba83364da39a7e6e1b1d99ab9ccc6d34c0edb626bff43babd8cb4abff8bb4c",
+    "server_binary_sha256": "c281301a7311a7dd28036a155a05a74d07e51f32673a1e03f241eff3725ba73a",
     "red": [
       "harness:scene-shot:native-rig-guardian"
     ],
@@ -22,30 +22,30 @@
     }
   },
   "restored": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T152915-native-rig-guardian-b4j5_vjb/result.json",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T154546-native-rig-guardian-o7decd_1/result.json",
     "client_head": "0eb3e0ea1eec0648144d521bf55bb5ba86d3fe4d",
-    "server_binary_sha256": "06ba83364da39a7e6e1b1d99ab9ccc6d34c0edb626bff43babd8cb4abff8bb4c",
+    "server_binary_sha256": "c281301a7311a7dd28036a155a05a74d07e51f32673a1e03f241eff3725ba73a",
     "green": [
       "harness:scene-shot:native-rig-guardian"
     ],
     "states": {
       "harness:scene-shot:native-rig-guardian": "green"
     },
-    "tree_head": "c20a0d18bee552b8690031398ea80bfcb3ac7006",
+    "tree_head": "d4a60da3dd816f71d7e95c4996a03b083ee67143",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "client_receipt": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T152915-native-rig-guardian-b4j5_vjb/result.json",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T154546-native-rig-guardian-o7decd_1/result.json",
     "client_head": "0eb3e0ea1eec0648144d521bf55bb5ba86d3fe4d",
-    "server_binary_sha256": "06ba83364da39a7e6e1b1d99ab9ccc6d34c0edb626bff43babd8cb4abff8bb4c",
+    "server_binary_sha256": "c281301a7311a7dd28036a155a05a74d07e51f32673a1e03f241eff3725ba73a",
     "green": [
       "harness:scene-shot:native-rig-guardian"
     ],
     "states": {
       "harness:scene-shot:native-rig-guardian": "green"
     },
-    "tree_head": "c20a0d18bee552b8690031398ea80bfcb3ac7006",
+    "tree_head": "d4a60da3dd816f71d7e95c4996a03b083ee67143",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
@@ -78,5 +78,5 @@
       "detail": ""
     }
   },
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T152958-ledger-promote-51ymyblk"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T154725-ledger-promote-q90gwygp"
 }
