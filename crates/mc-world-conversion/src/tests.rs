@@ -517,3 +517,119 @@ fn player_backup_relocation_requires_canonical_uuid_names() {
         assert!(auxiliary_destination(Path::new(&format!("playerdata/{filename}"))).is_err());
     }
 }
+
+const HELD: &str = "KrasnokamenSimHeldTicks";
+
+/// A world exported at tick 308 whose Overworld chunk anchors simulation debt at
+/// held 11 (written at the freeze boundary, `KrasnokamenSimLastTick` 251). The
+/// held prefix travels as `Data.KrasnokamenSimHeldTicks`; `witness` sets it and
+/// `None` strips it, which is what an export written before the field looked
+/// like.
+fn source(dir: &Path, witness: Option<u64>) -> CoreConfig {
+    let root = dir.join("source");
+    std::fs::create_dir_all(&root).unwrap();
+    let manifest = mc_core::journal::CheckpointManifest {
+        tick: 308,
+        world_spawn: Some([8, 80, 8]),
+        climate: Some(mc_core::weather::ClimateImage {
+            day_time: 240,
+            game_clock: mc_core::weather::GameClockImage::Running {
+                held_ticks: witness.unwrap_or(0),
+            },
+            sim_debt_anchored_since: Some(240),
+            weather_kind: 0,
+            remaining_ticks: 12000,
+            thunder_remaining_ticks: 12000,
+            clear_remaining_ticks: 0,
+            thundering: false,
+            rain_level_bits: 0.0_f32.to_bits(),
+            thunder_level_bits: 0.0_f32.to_bits(),
+            advance_time: true,
+            advance_weather: true,
+        }),
+        ..Default::default()
+    };
+    let mut metadata = mc_core::level_metadata::MetadataTags::new();
+    mc_core::level_metadata::checkpoint_tags(&mut metadata, 42, &manifest).unwrap();
+    if witness.is_none() {
+        let Some(Tag::Compound(level)) = metadata.get_mut("level.dat") else {
+            panic!("missing level.dat")
+        };
+        let Some((_, Tag::Compound(data))) = level.iter_mut().find(|(key, _)| key == "Data") else {
+            panic!("missing level.dat data")
+        };
+        data.retain(|(key, _)| key != HELD);
+    }
+    for (path, tag) in metadata {
+        write_nbt(&root.join(path), &tag).unwrap();
+    }
+    let registry = crate::test_support::registry().unwrap();
+    let mut chunk = mc_world::Chunk::empty_with_geometry(
+        mc_world::ChunkPos { x: 12, z: -28 },
+        mc_world::BlockStateId(registry.states.air),
+        mc_data::Identifier::parse("minecraft:plains").unwrap(),
+        mc_core::dimensions::Dimension::Overworld.geometry(),
+    );
+    chunk.status = "minecraft:full".into();
+    for (key, value) in [
+        ("KrasnokamenSimLastTick", 251),
+        ("KrasnokamenSimDebt", 0),
+        (HELD, 11),
+    ] {
+        chunk.extras.push((key.into(), Tag::Long(value)));
+    }
+    let payload = mc_world::anvil::chunk_to_payload_with_items_at_tick(
+        &chunk,
+        &registry.blocks,
+        Some(&registry.items),
+        0,
+        308,
+    )
+    .unwrap();
+    let regions = mc_core::dimensions::Dimension::Overworld
+        .directory(&root)
+        .join("region");
+    std::fs::create_dir_all(&regions).unwrap();
+    mc_world::anvil::write_region(regions.join("r.0.-1.mca"), &[payload]).unwrap();
+    crate::test_support::config(root, 42)
+}
+
+fn import(config: &CoreConfig, dir: &Path) -> Result<ConversionReceipt, String> {
+    import_anvil(
+        config,
+        &config.world_dir,
+        &dir.join("native"),
+        &dir.join("receipt.json"),
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[test]
+fn import_refuses_anchored_chunks_when_the_export_lacks_the_witness() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = source(dir.path(), None);
+    let error = import(&config, dir.path()).unwrap_err();
+    assert!(error.contains("simulation debt"), "{error}");
+    assert!(
+        error.contains(HELD),
+        "the refusal must name the witness: {error}"
+    );
+    assert!(
+        !dir.path().join("native").exists(),
+        "a refused import publishes nothing"
+    );
+}
+
+#[test]
+fn import_serves_anchored_chunks_with_the_exported_witness() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = source(dir.path(), Some(68));
+    let receipt = import(&config, dir.path()).unwrap();
+    assert_eq!(receipt.status, "PASS");
+    let imported = crate::test_support::config(dir.path().join("native"), 42);
+    let world = mc_core::native_checkpoint::recover_offline(&imported).unwrap();
+    assert_eq!(
+        world.manifest.climate.unwrap().game_clock,
+        mc_core::weather::GameClockImage::Running { held_ticks: 68 }
+    );
+}

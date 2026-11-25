@@ -339,6 +339,23 @@ checkpoint and its WAL tail also share the climate image's debt epoch; a test
 that captures a checkpoint and then keeps writing with the same live state
 must persist that image rather than synthesizing a legacy base.
 
+An Anvil export carries that prefix as `level.dat/Data/KrasnokamenSimHeldTicks`
+(the chunk extras' `KrasnokamenSimHeldTicks` is anchored at each chunk's own
+`KrasnokamenSimLastTick`, so it cannot be served by a store whose prefix
+restarts at zero). The import installs it as the running clock's prefix: a
+freeze is session state, the simulated age it produced is durable. The field is
+unowned by vanilla, like `Data.Time`, and derived the same way: every checkpoint
+rewrites it from the live clock (or drops it when the clock is not frozen), so a
+re-export of an imported store carries the installed prefix again. An export
+without it (a vanilla world, one re-saved by vanilla without the unowned field, or
+one written before the witness existed) imports with a zero prefix and its
+anchored chunks stay invalid — fail closed, `repair required`. `import-anvil`
+validates every chunk's extras against the clock it is about to serve and refuses
+the conversion — naming the missing `Data.KrasnokamenSimHeldTicks` — rather than
+publishing a store that quarantines them at play; it also refuses a witness that
+is negative, above `Data.Time`, or present without a climate or weather image it
+could describe.
+
 A process SIGKILL exercises process recovery, not arbitrary power-loss or storage
 hardware durability. The [drills below](#hazards-and-defense-layers) state their
 fault model; [crash-census evidence](../QA_AGENT_PROTOCOL.md#crash-census-evidence)

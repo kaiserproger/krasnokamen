@@ -105,8 +105,20 @@ pub(crate) fn adopt_native_extras(
     if records.contains_key(&pos) {
         return Ok(());
     }
+    validate_extras(pos, &chunk.extras, records, tick, held_ticks)
+}
+
+/// Read one chunk's stored extras. Shared by admission (`adopt_native_extras`,
+/// which needs a record map) and the offline import's fail-closed check.
+fn validate_extras(
+    pos: mc_world::ChunkPos,
+    extras: &[(String, mc_nbt::Tag)],
+    records: &mut rustc_hash::FxHashMap<mc_world::ChunkPos, SimDebtRecord>,
+    tick: u64,
+    held_ticks: u64,
+) -> Result<(), CoreError> {
     let read = |key: &str| -> Result<Option<u64>, CoreError> {
-        let mut values = chunk.extras.iter().filter(|(name, _)| name == key);
+        let mut values = extras.iter().filter(|(name, _)| name == key);
         let Some((_, tag)) = values.next() else {
             return Ok(None);
         };
@@ -146,6 +158,19 @@ pub(crate) fn adopt_native_extras(
         active: false,
     });
     Ok(())
+}
+
+/// Validate one stored chunk's simulation-debt root extras against the clock a
+/// reader will serve at `tick` with `held_ticks` already held.
+///
+/// An offline Anvil import runs this before the chunk enters custody: an export
+/// whose held-time witness cannot serve its own anchors refuses the conversion
+/// instead of publishing a store that quarantines the chunk at every admission.
+/// Admission re-runs this same check through `adopt_native_extras`; this is the
+/// earlier, louder boundary, never a relaxation of it.
+pub fn validate_chunk_sim_debt(chunk: &Chunk, tick: u64, held_ticks: u64) -> Result<(), CoreError> {
+    let mut records = rustc_hash::FxHashMap::default();
+    validate_extras(chunk.pos, &chunk.extras, &mut records, tick, held_ticks)
 }
 
 /// A held prefix cannot exceed either its native anchor or the current prefix;

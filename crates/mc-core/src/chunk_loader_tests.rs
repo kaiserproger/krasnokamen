@@ -956,3 +956,82 @@ fn refusing_a_resident_chunk_keeps_custody_of_folded_block_edits() {
     assert!(capture.refused()[0].unsaved >= 1);
     assert!(capture.write().is_err());
 }
+
+/// Negative control for the frozen-world Anvil round trip
+/// (`FREEZE-EXPORT-IMPORT-QUARANTINE`): a stored chunk whose debt anchor is
+/// ahead of the prefix the served clock offers must stay refused, and a clock
+/// that carries the exported prefix must admit the same chunk. The fix travels
+/// the prefix; it never weakens this admission check.
+#[test]
+fn stored_debt_anchor_ahead_of_the_served_held_prefix_stays_refused() {
+    let directory = tempfile::tempdir().unwrap();
+    let registry = CoreRegistry::load(Some(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"),
+    ))
+    .unwrap();
+    let store = crate::world::world_tests::native_store(directory.path(), &registry);
+    let pos = ChunkPos { x: 12, z: -28 };
+    let air = mc_world::BlockStateId(registry.states.air);
+    let mut chunk = Chunk::empty(
+        pos,
+        air,
+        mc_data::Identifier::parse("minecraft:plains").unwrap(),
+    );
+    // The row's exported chunk: frozen at 240, last simulated 251, anchor 11.
+    crate::debt::project(&mut chunk, 251, 0, Some(11)).unwrap();
+    store
+        .import_chunk(0, &chunk, &registry.blocks, &registry.items)
+        .unwrap();
+    let original_counts = store.record_counts().unwrap();
+    let generated = Arc::new(AtomicUsize::new(0));
+    let source = source(
+        Arc::clone(&store),
+        0,
+        mc_world::OVERWORLD_GEOMETRY,
+        &registry,
+        &generated,
+    );
+    let world = |recovered_held_ticks: u64| {
+        let mut world = ChunkWorld::new_native(
+            42,
+            Arc::clone(&store),
+            0,
+            Arc::clone(&source.generator),
+            &registry,
+            air,
+            [13, 100, -28],
+            mc_world::OVERWORLD_GEOMETRY,
+        );
+        let replay = crate::journal::Replay {
+            tick: 308,
+            recovered_held_ticks,
+            ..Default::default()
+        };
+        world.restore_sim_debt(&replay, None).unwrap();
+        world
+    };
+    let want = [(pos, 0)].into_iter().collect();
+    // No exported prefix (an older export): the anchor is ahead of the clock.
+    let mut refused = world(0);
+    assert!(refused.ensure_blocking(&want).is_empty());
+    assert!(!refused.has_chunk(pos.x, pos.z));
+    assert_eq!(
+        refused.load_error(pos).unwrap().to_string(),
+        format!(
+            "native dimension 0 chunk (12, -28): storage: simulation debt at chunk (12, -28): \
+             invalid held anchor 11 at native 251; current tick 308, held ticks 0"
+        )
+    );
+    assert_eq!(
+        generated.load(Ordering::Relaxed),
+        0,
+        "a refused stored chunk is never regenerated"
+    );
+    assert_eq!(store.record_counts().unwrap(), original_counts);
+    // The fixed export's witness (308 - 240): the same chunk is admitted.
+    let mut admitted = world(68);
+    assert_eq!(admitted.ensure_blocking(&want).len(), 1);
+    assert!(admitted.has_chunk(pos.x, pos.z));
+    assert!(admitted.load_error(pos).is_none());
+    assert_eq!(generated.load(Ordering::Relaxed), 0);
+}
