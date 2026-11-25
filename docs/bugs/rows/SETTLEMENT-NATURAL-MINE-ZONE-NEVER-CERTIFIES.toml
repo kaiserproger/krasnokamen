@@ -1,0 +1,12 @@
+[[bug]]
+id = "SETTLEMENT-NATURAL-MINE-ZONE-NEVER-CERTIFIES"
+title = "An adopted village with a staffed lumber camp gets no natural Mine zone, so the stone chain (cobblestone, torch coal) has no source and every bill that needs it waits forever"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "civilization-seed-qa 20261125T114412-civilization-seed-qa-m0ns24g5 (pin 5060bc323f19-42bc4e0a): nothing planned from sprint 15000 to 39000; retained-world probe (receipts/D123/D123Civ/HANDOFF-39.md) shows 13 buildings including a natural lumber_camp but no Mine, residents Lumberjack (job site at the camp), Nitwit, Farmer, Nitwit, Weaponsmith, Librarian, stock 66 logs / 24 cobblestone / 2 coal, and the House 19 cobblestone + 1 torch short. Terrain is NOT the blocker: at seed 24 the first zone probe column certifies a Mine zone (bounds [140,64,-219]-[154,79,-205], entrance [140,78,-218]). The proof/staffing rule is: prove_natural (autonomy.rs) and staff_gatherer (allocator.rs:1435) accept only job_site.is_none() && profession == None, or an untraded Miner/Lumberjack; traded = xp > 0 || level > 1 || offers used (allocator.rs:2175), so once the lumberjack works the camp nobody can prove a new zone or become a Miner."
+failing_first = "reported"
+regression = ["cargo:mc-core:settlements::autonomy::tests::natural_mine_queue_tests::a_plains_village_queues_proves_and_certifies_its_mine", "harness:civilization-seed-qa:new_house"]
+fix_commit = "patch:71c73361e498bb818537bf6c7253be2d9f0ce9d936bd17c7cd624b3aac5268f6"
+repro_check = "HEAD re-break control: docs/bugs/promotions/SETTLEMENT-NATURAL-MINE-ZONE-NEVER-CERTIFIES.patch reverses only `queue_natural`'s overlap rule (the single non-test hunk in autonomy.rs, commit 3e1a8f229). The reversed tree builds, and the row's cargo ref reds at its own first assertion ('no mine candidate queued: the village overlap rule refused every probe box'), which is exactly how it reds on the clean base checkout at 46ce57f61 (.analysis/d123civ/h42-base-red.log). Measured cause: seed 24's plains village has 117 pieces and every mine probe box overlapped 1-12 of them on X/Z, so the zone was never queued (HANDOFF-42 section 3). Real-client receipt is the civilization-seed-qa gate that must reach new_house."

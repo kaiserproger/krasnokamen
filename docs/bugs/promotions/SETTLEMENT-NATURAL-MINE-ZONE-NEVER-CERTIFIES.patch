@@ -1,0 +1,45 @@
+diff --git a/crates/mc-core/src/settlements/autonomy.rs b/crates/mc-core/src/settlements/autonomy.rs
+index 5ff0da26c..9ab4bdabb 100644
+--- a/crates/mc-core/src/settlements/autonomy.rs
++++ b/crates/mc-core/src/settlements/autonomy.rs
+@@ -794,18 +794,34 @@ fn queue_natural(
+     queued_at: u64,
+     candidates: &mut VecDeque<NaturalCandidate>,
+ ) {
+-    if site
++    // A grove is taken where nothing stands: its zone is the visible stand. A
++    // mine is dug below the surface, so a village piece standing over the same
++    // columns is not in its way - only the entrance it opens must stand clear.
++    // Comparing X/Z alone refused every mine box on a plains village (the
++    // village spans 117 pieces; HANDOFF-42 section 2).
++    let blocked = site
+         .pieces
+         .iter()
+         .filter_map(|piece| piece.bounds)
+         .any(|(min, max)| {
+             let min = [min.x, min.y, min.z];
+             let max = [max.x, max.y, max.z];
+-            [0, 2]
+-                .into_iter()
+-                .all(|axis| min[axis] <= bounds.max[axis] && max[axis] >= bounds.min[axis])
+-        })
+-    {
++            match kind {
++                BuildingKind::Mine => {
++                    (0..3).all(|axis| min[axis] <= entrance[axis] && max[axis] >= entrance[axis])
++                        || (1..=2).all(|dy| {
++                            (0..3).all(|axis| {
++                                let at = entrance[axis] + if axis == 1 { dy } else { 0 };
++                                min[axis] <= at && max[axis] >= at
++                            })
++                        })
++                }
++                _ => [0, 2]
++                    .into_iter()
++                    .all(|axis| min[axis] <= bounds.max[axis] && max[axis] >= bounds.min[axis]),
++            }
++        });
++    if blocked {
+         return;
+     }
+     candidates.push_back(NaturalCandidate {
