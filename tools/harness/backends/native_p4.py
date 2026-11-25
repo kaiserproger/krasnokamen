@@ -59,6 +59,9 @@ def _restart(steps: ProbeSteps) -> None:
     # Bounded: a fixture whose floor never arrives would otherwise hold the whole scenario to its
     # deadline (measured on 20261125T030306/031825, where both clients stayed in play with
     # `player.grounded` false for the rest of the run). The assertion, not the deadline, carries it.
+    # The private world's default mode is creative, where the player may fly: a flying player
+    # never grounds, so the gate only means something on a survival player who cannot fly.
+    steps.fixture("gamemode survival")
     try:
         state = steps.wait(lambda state: state["player"]["on_ground"], "restart_player_grounded",
                            timeout_seconds=min(60.0, steps.remaining()))
@@ -107,18 +110,91 @@ def _restart(steps: ProbeSteps) -> None:
         except Exception as error:  # noqa: BLE001
             steps.report["restart_grounded_observation"]["feet_block_error"] = str(error)[:200]
         try:
-            before = steps.observe()["player"]
+            before = steps.observe()
             steps.call("minecraft_press_inputs", {"keys": ["forward"], "ticks": 5})
-            after = steps.observe()["player"]
+            after = steps.observe()
+            # The App drains the session's tick timings into the render report every frame
+            # (`take_tick_detail`), so the session's own array always reads back zero; the
+            # published per-stage numbers live under render.cpu_session_tick_detail_ms.
+            def detail(step):
+                return ((step.get("render") or {}).get("cpu_session_tick_detail_ms") or {})
+            physics = [detail(step).get("player") for step in (before, after)]
             steps.report["restart_grounded_observation"]["forward_probe"] = {
-                "before": [before.get("x"), before.get("y"), before.get("z")],
-                "after": [after.get("x"), after.get("y"), after.get("z")],
+                "before": [before["player"].get("x"), before["player"].get("y"), before["player"].get("z")],
+                "after": [after["player"].get("x"), after["player"].get("y"), after["player"].get("z")],
+                "pose_known": after["player"].get("pose_known"),
+                "local_position": after["player"].get("local_position"),
+                "server_position": after["player"].get("server_position"),
+                "tick_path": after.get("tick_path"),
+                "phase": after.get("phase"),
+                "game_mode": (after.get("player") or {}).get("game_mode"),
+                "abilities_flying": after["player"].get("abilities_flying"),
+                "predict_ticks": after["player"].get("predict_ticks"),
+                "corrections": after["player"].get("corrections"),
+                "last_branch": after["player"].get("last_branch"),
+                "gliding": after["player"].get("gliding"),
+                "swimming": after["player"].get("swimming"),
+                "last_correction_distance": after["player"].get("last_correction_distance"),
+                "on_ground": (after.get("player") or {}).get("on_ground"),
+                "velocity": (after.get("player") or {}).get("velocity"),
+                "outer_pose_known": (after.get("player") or {}).get("pose_known"),
+                "feet_block_loaded": after["player"].get("feet_block_loaded"),
+                "terrain_waits": after["player"].get("terrain_waits"),
+                "below_block_loaded": after["player"].get("below_block_loaded"),
+                "player_stage_ms_before": physics[0],
+                "player_stage_ms_after": physics[1],
+                "tick_detail_render_before": detail(before),
+                "tick_detail_render_after": detail(after),
             }
         except Exception as error:  # noqa: BLE001
             steps.report["restart_grounded_observation"]["forward_probe_error"] = str(error)[:200]
         steps.check("restart_player_grounded", state["player"]["on_ground"] is True)
     steps.check("restart_same_player_uuid", state["player"]["entity_uuid"] == identity)
     _echo(steps, "restart_ordered_server_receipt")
+
+
+def walk_to_refused_column(steps: ProbeSteps, origin: tuple[int, int, int], chunk_x: int) -> None:
+    """One forward step toward the quarantined column the scene refused.
+
+    The row's symptom was a body pinned beside the hole: the pre-fix client refused the whole
+    prediction, so it never moved. The carrier below is the stop: on a grounded player the body
+    must reach the column's face (one half width, 0.3, from its edge) and not walk in or stand
+    still. `corrections == 0` is not that carrier - it is the client/server agreement guard
+    (measured 0 on the control too, where the body never moved) - so a frozen body reds the stop
+    check, which is why the scene only runs this after `restart_player_grounded` held.
+    """
+    own = origin[0] // 16
+    if chunk_x == own:
+        raise RuntimeError("the refused column must not be the player's own")
+    # The client's own `HeldInput::strafe` is left - right, and at yaw 0 "right" walks toward -x
+    # (measured: a 20-tick "right" press moved a body from x 15.0 to 12.4); yaw 180 mirrors that to
+    # +x. Setting the yaw makes the direction independent of where the server left the camera.
+    if chunk_x < own:
+        face, yaw = chunk_x * 16 + 16, 0
+    else:
+        face, yaw = chunk_x * 16, 180
+    expected_x = face + 0.3 if chunk_x < own else face - 0.3
+    before = steps.observe()
+    steps.call("minecraft_look", {"yaw_deg": yaw, "pitch_deg": 0})
+    steps.call("minecraft_press_inputs", {"keys": ["right"], "ticks": 20})
+    # Ordered receipt: the read below must be causally after the press, not a race with it.
+    _echo(steps, "refused_column_walk_ordered")
+    after = steps.observe()
+    steps.report["refused_column_stop"] = {
+        "refused_chunk": chunk_x, "player_chunk": own, "face": face, "expected_x": expected_x,
+        "before": [before["player"].get("x"), before["player"].get("y"), before["player"].get("z")],
+        "after": [after["player"].get("x"), after["player"].get("y"), after["player"].get("z")],
+        "corrections": after["player"].get("corrections"),
+        "last_correction_distance": after["player"].get("last_correction_distance"),
+        "on_ground": after["player"].get("on_ground"),
+        "movement_blocked": after["player"].get("movement_blocked"),
+        "velocity": after["player"].get("velocity"),
+    }
+    steps.check("refused_column_step_made_no_correction",
+                after["player"].get("corrections") == 0)
+    x = after["player"].get("x")
+    steps.check("refused_column_step_stopped_at_its_face",
+                isinstance(x, (int, float)) and abs(x - expected_x) <= 0.05)
 
 
 def _entity_at(steps: ProbeSteps, kind: str, x: float, z: float) -> dict[str, Any]:
