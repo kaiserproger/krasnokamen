@@ -1,8 +1,8 @@
 diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-index 29a3e6c..bc6fcab 100644
+index ef55b29..8540beb 100644
 --- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
 +++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-@@ -395,6 +395,57 @@ pub(crate) fn recover(
+@@ -405,6 +405,57 @@ pub(crate) fn recover(
          return Ok(true);
      }
      let target = world(state, &record.snapshot.dimension)?;
@@ -60,7 +60,7 @@ index 29a3e6c..bc6fcab 100644
      if let Some(proof) = &record.liquid {
          crate::settlements::construction::preparation::liquid::revalidate(
              target,
-@@ -423,6 +474,24 @@ pub(crate) fn recover(
+@@ -443,6 +494,24 @@ pub(crate) fn recover(
              record.snapshot.completed_work_units = 0;
          }
      }
@@ -86,10 +86,10 @@ index 29a3e6c..bc6fcab 100644
          inventories::resource_plan_hash(&resource_plan(&record.snapshot.stages));
      record.snapshot.remaining = remaining(&record);
 diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
-index 4fd936d..cc22cbd 100644
+index f0ee733..b3eba08 100644
 --- a/crates/mc-core/src/settlements/construction.rs
 +++ b/crates/mc-core/src/settlements/construction.rs
-@@ -2869,6 +2869,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+@@ -2881,6 +2881,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
          record.revision = record.revision.saturating_add(1);
          return true;
      }
