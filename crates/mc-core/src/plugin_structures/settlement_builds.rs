@@ -343,7 +343,17 @@ pub(crate) fn recover(
     let terminal = !record.cells.is_empty()
         && record.snapshot.current_stage_index as usize == record.cells.len()
         && record.snapshot.completed_work_units == 0;
-    if !paused && !committed && !terminal {
+    // A stage can also be planned with no cells at all — the House L2 upgrade reported
+    // `stage=2 work=0 next=None` on the real client (20261124T231255) while its stage index was
+    // still inside `cells`, so `next_cell` is None and `advance` can never reach `work_units`.
+    // Recovery steps over such a stage; the tail below commits when the index is terminal.
+    let empty_stage = !committed
+        && record.snapshot.completed_work_units == 0
+        && record
+            .cells
+            .get(record.snapshot.current_stage_index as usize)
+            .is_some_and(|cells| cells.is_empty());
+    if !paused && !committed && !terminal && !empty_stage {
         return Ok(false);
     }
     let retry = (paused
@@ -458,6 +468,16 @@ pub(crate) fn recover(
     drop(ledger);
     let mut ledger = ledger_mut(state)?;
     let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
+    // A stage planned with no cells is already complete: step over it so `next_cell` can name the
+    // next stage's first cell, and the tail below commits once the index is terminal.
+    while record
+        .cells
+        .get(record.snapshot.current_stage_index as usize)
+        .is_some_and(|cells| cells.is_empty())
+    {
+        record.snapshot.current_stage_index += 1;
+        record.snapshot.completed_work_units = 0;
+    }
     // The repair stage is derived afresh, so repeated interference cannot
     // accumulate stages or charge again for cells already repaired.
     if let Some(index) = record
