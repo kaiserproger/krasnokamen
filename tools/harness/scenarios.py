@@ -970,8 +970,8 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="native-entity-fire", requires=("xvfb",),
         sources=("tools/harness/entity_fire_scene.json", "tools/harness/backends/scene_shot_checks.py"),
         fixture="private native client, one stationary pig at a fixed pad and camera, burning and then plain, HUD default",
-        proves="the burning frame's own submitted fire layer (`entity_extraction.entity_layer_geometry`): one fire slice with all 12 indices and a 2.331-block band span against the pre-fix loop's 1.827, so `fire_band_span` separates the 26.3 bands from the camera-billboard overlay without pixels",
-        limits="one entity (a pig, two bands) and the layer geometry only; the sprite parity, the u mirroring, the camera-facing rotation, the light-15 emission and the exact texel parity stay unit-covered, and the row's title symptom (a client that never reads the on-fire flag) needs a dispatch-deleted control on `fire_layer_present`",
+        proves="two rows on one scene: `fire_layer_present` (MODEL-ENTITY-FIRE) - the burning frame submits one `EntityFire` slice only when the client dispatches the overlay, proven by the committed dispatch-deletion pair (control client:6608f21c, restore client:07d879cd, 3+3 takes) - and `fire_band_span` (MODEL-ENTITY-FIRE-BANDS) - 2.331 blocks for the 26.3 bands against the pre-image's 1.827, both read from `entity_extraction.entity_layer_geometry` without pixels",
+        limits="one entity (a pig, two bands) and the layer geometry only; the sprite parity, the u mirroring, the camera-facing rotation, the light-15 emission and the exact texel parity stay unit-covered (`fire_bands_follow_the_vanilla_flame_feature_numbers`), and the dispatch pair is recorded in docs/bugs/promotions/MODEL-ENTITY-FIRE.hunks.md",
     ),
     "native-entity-tnt": _entry(
         id="native-entity-tnt", summary="A primed TNT submits its block in the entity pass",

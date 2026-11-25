@@ -1,6 +1,6 @@
 [[bug]]
 id = "MODEL-ENTITY-FIRE-BANDS"
-title = "The fire overlay's bands are the wrong size and step: the pre-image draws unit-height quads from the feet instead of the vanilla 1.4-unit bands stacked 0.45 apart (both billboard with the camera yaw)"
+title = "The fire overlay's bands are the wrong height and z: the pre-image draws unit-height quads (1.0 scaled unit) where vanilla draws 1.4-unit quads, so the same two-band pig spans 1.827 instead of 2.331 blocks (both step 0.45 units upward from the feet and billboard with the camera yaw)"
 area = "client"
 repro = "source"
 severity = "major"
