@@ -97,6 +97,12 @@ the entity (`submitted: 1`, `entity_indices: 51108`). `ledger promote
 MODEL-ENTITY-TNT-FALLING-LIGHTNING` receipt `20261125T183634-ledger-promote-5df3vsc9`;
 `promote.json` records `fix_patch_id b924ddca…`.
 
+**Round-3 re-take** on the clean server pin `pins/38fe67d13d1a-server-*` (core `38fe67d13`, the tree
+with the `tnt_reached_client` fixture): control `20261125T191306` reports `eligible: 1`, the
+`tnt-entities` dump lists `minecraft:tnt`, `tnt_reached_client` TRUE, and `tnt_block_layer_present`
+FALSE; fix `20261125T191327` PASS with spans `[1.0, 1.0, 1.0]` and `tnt_reached_client` TRUE. The
+fixture therefore separates a deleted dispatch from a failed summon, which the first pair could not.
+
 ## What the scene does not prove
 
 The falling-block and lightning paths beyond the shared guard clause (they stay unit-covered), the

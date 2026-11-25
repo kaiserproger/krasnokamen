@@ -34,6 +34,12 @@ and GPU checks) is green on both halves — so the red is the band geometry and 
 `ledger promote MODEL-ENTITY-FIRE-BANDS` receipt `20261125T175952-ledger-promote-oqob4f51`;
 `promote.json` records `fix_patch_id e37f4b12…` and the client unit ref green on the restore.
 
+**Round-3 re-take** on the clean server pin `pins/38fe67d13d1a-server-*` (core `38fe67d13`, the tree
+with `|span - 2.331| <= 0.01` and `fire_bands_start_at_the_feet`): control `20261125T191213` FAIL at
+`fire_band_span` (span 1.827, feet 160.000 on the body's 160.001 — the feet assertion is green and the
+exact span is what fails), restore `20261125T191241` PASS (span 2.331, feet 160.000). A `fixed` row
+cannot be re-promoted, so this is recorded evidence; the promotion above stands.
+
 ## Original commit `a3f2a486` (`fix(client): draw entity fire with the vanilla flame feature bands`)
 
 Its non-test hunks, each with its HEAD equivalent or omission class:

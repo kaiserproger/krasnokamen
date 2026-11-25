@@ -74,10 +74,20 @@ corrected in round 3):
 
 ## The measured pair
 
+Three takes per side on `native-entity-visuals`, all six on the clean round-3 server pin
+`pins/38fe67d13d1a-server-*` (core `38fe67d13`):
+
 | side | receipts | result | `leash_rope_pixels` |
 |---|---|---|---|
-| control `client:fd4d1f5b` | to be filled | FAIL at `leash_rope_drawn` expected | 0 expected |
-| restore `client:a8c18847` | to be filled | PASS expected | ~1041 expected |
+| control `client:fd4d1f5b` | `20261125T190755` / `190838` / `190913` | FAIL at `leash_rope_drawn` on all three | 0 / 0 / 0 |
+| restore `client:a8c18847` | `20261125T190946` / `191015` / `191045` | PASS on all three | 1041 / 1041 / 1041 |
+
+`ledger promote MODEL-ENTITY-LEASH` receipt `20261125T191401-ledger-promote-r1e_2hif`;
+`promote.json` records `fix_patch_id e1cc83d3…` and the delta path
+`src/entities/render_special.rs` only. The earlier pair (control `df888507`, restore `03c4675b`,
+receipts `20261125T181048`/`181119`/`181154` vs `181228`/`181307`/`181341`, promote
+`20261125T181432-ledger-promote-wdy6djxt`) is SUPERSEDED: its control inserted the early return
+round 3 rejected.
 
 ## What the scene does not prove
 

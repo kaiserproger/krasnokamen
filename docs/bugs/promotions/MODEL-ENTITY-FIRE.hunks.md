@@ -64,7 +64,15 @@ Three takes per side on `native-entity-fire`, all six on the same clean pin:
 | control `client:6608f21c` | `20261125T172859` / `172924` / `172949` | FAIL at `fire_layer_present` on all three (fire layer `[]`) |
 | restore `client:07d879cd` | `20261125T173014` / `173045` / `173119` | PASS on all three (one `EntityFire` layer, 12 indices) |
 
-`ledger promote MODEL-ENTITY-FIRE` receipt `20261125T173150-ledger-promote-gs_g1cu7`. An earlier
+`ledger promote MODEL-ENTITY-FIRE` receipt `20261125T173150-ledger-promote-gs_g1cu7`.
+
+**Round-3 re-take** on the clean server pin `pins/38fe67d13d1a-server-*` (core `38fe67d13`, the
+tree with the exact fire assertions): control `20261125T191116` FAIL at `fire_layer_present` (no fire
+layer), restore `20261125T191141` PASS with span 2.331 and the lowest fire vertex on the body's bbox
+bottom (160.000 vs 160.001) — so the tightened `|span - 2.331| <= 0.01` and
+`fire_bands_start_at_the_feet` are green on the restore and the control is still red on the row's own
+ref. A `fixed` row cannot be re-promoted (`ledger promote` needs `status = "open"`), so this is
+recorded evidence only; the promotion above stands. An earlier
 dirty-pin attempt (`172108` / `172137` / `172205` red, `172234` / `172308` / `172337` green) is not
 part of the promotion; it was re-taken clean because `ledger promote` refuses a dirty pin.
 

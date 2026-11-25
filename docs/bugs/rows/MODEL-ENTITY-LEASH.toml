@@ -4,10 +4,11 @@ title = "Leash rope is never drawn (leash holder tracked; material has no produc
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:88"
 regression = ["harness:scene-shot:native-entity-visuals"]
 proving_refs = ["harness:scene-shot:native-entity-visuals"]
 proving_assertions = { "harness:scene-shot:native-entity-visuals" = "leash_rope_drawn" }
 fix_commit = "client:a8c18847"
 repro_check = "26.3 LeashFeatureRenderer needs the holder transform in the emit path; the scene counts the rope's pixels. The rope producer was CREATED by e8fe40c2 in src/entities/render_special/world_fx.rs (that path does not exist at e8fe40c2^), so there is no pre-image blob; the faithful control is the pure deletion of the e8fe40c2 leash hunks. REBUILT IN REVIEW ROUND 3 (receipts/D123/D123ClientModel/REVIEW-CODE-3-Opus.md section 3): the first rebuild client:df888507 replaced the dispatch with an inserted early return, which README:306-307 forbids as a hand re-break. The registered pair is now the pure deletion: control client:fd4d1f5b removes the top guard's leash_value()/leash_holder_id clauses (the e8fe40c2 hunk-3 shape) AND the leash branch of render_special::append, inserting nothing (one CONTROL comment only), so a leashed entity falls out of append with no rope; restore client:a8c18847 re-applies exactly that diff and is the fix_commit. Threshold registered BEFORE the run and derived from the model, not from a measurement (arithmetic corrected in round 3): the rope is tube_segment(..., 0.018, ...), a 0.036-block-diameter tube on the 4.03-block sheep-cow gap whose rope_point sag caps at 0.403 blocks; the anchors sit at z = 1004.95/1005.45 against a camera at z = 1000.5, so the rope is ~4.45 blocks away at fov 70 on 1280x720, one block is 360 / (4.45 * tan(35 deg)) = 115.5 px, the tube projects to ~4.2 px, and the ROI x 560..760 is ndc -0.125..+0.1875 = -0.69..+1.04 blocks (tan(hfov/2) = tan(35 deg) * 16/9 = 1.2448), about 1.73 blocks / 200 px of rope. The model's lower bound inside the ROI is therefore ~760-840 px; the registered rope_n > 300 asks for under half of one visible crossing and cannot be reached by the rig, its shadow or the sky. Hunk map: docs/bugs/promotions/MODEL-ENTITY-LEASH.hunks.md (its row 3 now carries the guard clauses)."
+promotion = "docs/bugs/promotions/MODEL-ENTITY-LEASH.json"
