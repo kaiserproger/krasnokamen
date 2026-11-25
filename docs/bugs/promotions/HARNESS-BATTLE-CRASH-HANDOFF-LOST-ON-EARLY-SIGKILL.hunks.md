@@ -55,3 +55,7 @@ later hold happens after the reversed `poll()` has already sampled. What the fix
 is a runner change that makes the exception path observe the exit regardless of the watcher's lock
 (the current fix samples through `wait`, which the lock defeats when held), or a scene that reproduces
 `telemetry exporter failed` before the watcher thread starts.
+
+Candidate side, same day: three runs on the clean-tree pin `af9e4adcfcb1` are green
+(`063921-v2c57hb1` 157.5 s, `064159-ei26jqqo` 160.6 s, `064445-fc0xpsid` 164.8 s), so the pair is
+3/3 green (candidate) against 2/3 red (control). Promotion stays refused until the control is 3/3.
