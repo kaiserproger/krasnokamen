@@ -132,7 +132,12 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // and the ordinary-revisit merge): 1142. The next extraction candidate
         // is `site_project` itself, which belongs beside the sweeps it drives
         // in `construction_site_refusals.rs`.
-        ("settlements/construction.rs", 1_142),
+        // SETTLEMENT-BUILDER-PROJECT-STALLS / F12 gatherer guard (D123, 2026-11-25): a
+        // staffed gatherer holds back the street work only; the fortification site
+        // is tried first and the `gathering` early return now guards the streets
+        // alone: 1144. The ordering is pinned by the row's control patch (its `+`
+        // comment lines), so the arm cannot shrink without re-generating it.
+        ("settlements/construction.rs", 1_144),
         // B3 (EdgeScale, 2026-11-18): the edge-visible unlocked-session mirror
         // is projected only when its inputs move, so `Connections` carries one
         // membership generation and advances it in `insert`,
@@ -146,7 +151,8 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // D9 motion-gate extraction, 2026-11-17: the native motion gate policy
         // moved byte-for-byte to its owner `entities/motion_gate.rs`; measured
         // 864 on the CutLand integration tree (main 31c50392e + D9), 2026-11-19.
-        ("entities.rs", 864),
+        // D123 drift: 852 measured on the integrated tree, 2026-11-25.
+        ("entities.rs", 852),
     ],
 };
 
