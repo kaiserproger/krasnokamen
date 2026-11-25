@@ -73,16 +73,24 @@ fn decode(state: &TickState, chunk: &mc_world::Chunk) -> Result<Decoded, String>
 /// Pull resident chunks' typed block-entity maps into live storage.
 /// Journal post-images overwrite per position; unloaded chunks' records stay
 /// until their chunk reloads (eviction does not delete storage).
+///
+/// A chunk becoming resident also re-seeds the beds it holds whose durable
+/// `occupied` property outlived the runtime set that owns it
+/// ([`crate::sleep::seed_occupied_beds`]).
 pub(crate) fn sync_chunk_block_entities(state: &mut TickState) {
+    let mut stale_beds = Vec::new();
     for chunk_pos in state.world.take_hydration_chunks() {
         let Some(chunk) = state.world.chunk(chunk_pos) else {
             continue;
         };
-        match decode(state, chunk) {
+        let decoded = decode(state, chunk);
+        crate::sleep::seed_occupied_beds(state, chunk_pos, chunk, &mut stale_beds);
+        match decoded {
             Ok(decoded) => apply(state, chunk_pos, decoded),
             Err(error) => state.world.reject_resident(chunk_pos, error),
         }
     }
+    state.occupied_beds.extend(stale_beds);
 }
 
 /// Runtime readers of lazily decoded records (beacon, conduit, sculk, shrieker)

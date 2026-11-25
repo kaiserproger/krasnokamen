@@ -3985,3 +3985,147 @@ fn a_funded_liquid_lot_charges_once_across_a_real_checkpoint_and_root_tick() {
         "two cells cost exactly two units"
     );
 }
+
+/// A checkpoint taken while a player sleeps persists the bed's `occupied`
+/// property, but the sleeper map does not survive the process. The first tick
+/// after the reopen must clear the halves no sleeper owns, from the chunk's own
+/// bed states, rather than leaving the stale property until someone sleeps
+/// there again.
+#[test]
+fn checkpoint_mid_sleep_leaves_no_stale_occupied_bed_after_reopen() {
+    use crate::boundary::{BlockPos, ConnectionId, Hand, PlayerInput};
+    const CONNECTION: ConnectionId = ConnectionId(88);
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.run(&[PlayerInput::Join {
+        connection: CONNECTION,
+        uuid: uuid::Uuid::from_u128(88),
+        name: "Sleeper".into(),
+        permission_level: 0,
+    }]);
+    let player = world.state.connections.entity_of(CONNECTION).unwrap();
+    let mut bed = None;
+    world.tick(|state| {
+        state.world.ensure_blocking(&state.desired_chunks());
+        let player_slot = slot(state, player);
+        let at = state.entities.pos(player_slot);
+        let foot = BlockPos {
+            x: at[0].floor() as i32,
+            y: 201,
+            z: at[2].floor() as i32,
+        };
+        let head = BlockPos { x: foot.x + 1, ..foot };
+        for dx in -2..=2 {
+            for dz in -2..=2 {
+                state
+                    .world
+                    .set_block(foot.x + dx, 200, foot.z + dz, state.registry.states.stone);
+            }
+        }
+        state
+            .world
+            .set_block(foot.x, foot.y, foot.z, bed_state(state, "foot"));
+        state
+            .world
+            .set_block(head.x, head.y, head.z, bed_state(state, "head"));
+        state.world.fold_overlay();
+        state.entities.set_pos(
+            player_slot,
+            [
+                f64::from(foot.x) + 0.5,
+                f64::from(foot.y),
+                f64::from(foot.z) - 2.5,
+            ],
+        );
+        state.entities.set_vel(player_slot, [0.0; 3]);
+        state.entities.set_ground(player_slot, true);
+        state.day_time = 13_000;
+        bed = Some((foot, head));
+    });
+    let (foot, head) = bed.unwrap();
+    world.run(&[PlayerInput::UseItemOn {
+        connection: CONNECTION,
+        hand: Hand::Main,
+        position: foot,
+        face: 1,
+        cursor: [0.5; 3],
+        sequence: 1,
+    }]);
+    assert!(
+        bed_occupied(&world.state, foot),
+        "the sleeper's bed is occupied mid-sleep"
+    );
+    assert!(
+        bed_occupied(&world.state, head),
+        "both halves carry the durable property"
+    );
+    world.checkpoint();
+    let chunk = mc_world::ChunkPos {
+        x: foot.x.div_euclid(16),
+        z: foot.z.div_euclid(16),
+    };
+    let config = world.config.clone();
+    // Stop without a further tick: the checkpoint is the whole durable state.
+    drop(world);
+    let mut reopened = World::open(config);
+    reopened
+        .state
+        .world
+        .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+    reopened.state.world.fold_overlay();
+    assert!(
+        bed_occupied(&reopened.state, foot),
+        "the checkpoint really carried the stale property"
+    );
+    reopened.run(&[]);
+    assert!(
+        !bed_occupied(&reopened.state, foot),
+        "the first tick clears the stale foot half"
+    );
+    assert!(
+        !bed_occupied(&reopened.state, head),
+        "the first tick clears the stale head half"
+    );
+    assert!(
+        reopened.state.occupied_beds.is_empty(),
+        "no bed stays owned by the mirror"
+    );
+}
+
+fn bed_state(state: &TickState, part: &str) -> u32 {
+    let name = mc_data::Identifier::parse("minecraft:red_bed").unwrap();
+    let default = state.registry.blocks.block(&name).unwrap().default;
+    let mut properties = state
+        .registry
+        .blocks
+        .by_id(default)
+        .unwrap()
+        .properties
+        .clone();
+    for (key, value) in properties.iter_mut() {
+        match key.as_str() {
+            "part" => *value = part.to_owned(),
+            "facing" => *value = "east".to_owned(),
+            _ => {}
+        }
+    }
+    state
+        .registry
+        .blocks
+        .by_name_and_props(&name, &properties)
+        .unwrap()
+        .0
+}
+
+fn bed_occupied(state: &TickState, pos: crate::boundary::BlockPos) -> bool {
+    state
+        .world
+        .block_at(pos.x, pos.y, pos.z)
+        .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
+        .is_some_and(|block| {
+            block
+                .properties
+                .iter()
+                .any(|(name, value)| name == "occupied" && value == "true")
+        })
+}
