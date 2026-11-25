@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -90,11 +91,18 @@ class DismountObserver:
     def rider_by_uuid(self, uuid: str) -> dict[str, Any] | None:
         return self.entities.get(self.by_uuid.get(uuid, -1))
 
-    def wait_for(self, condition):
-        def ready():
+    def wait_for(self, condition, label: str, timeout_seconds: float = 900.0, interval: float = 0.5):
+        """Poll the archive: the runner publishes batches continuously and has no single marker file
+        the harness could watch, so this is a bounded re-read, not an inotify wait."""
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
             self.update()
-            return condition(), None
-        return runtime.wait_for_path_condition(self.archive / "published", 600, ready)
+            found = condition()
+            if found:
+                return found
+            time.sleep(interval)
+        raise RuntimeError(f"{label}: the published battle did not reach the scene's condition in "
+                           f"{timeout_seconds:.0f}s")
 
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
@@ -122,7 +130,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         mark = console.mark()
         console.send("say A11DismountWatching")
         console.wait(r"\[Server\] A11DismountWatching", mark)
-        target = observer.wait_for(observer.charging_rider)
+        target = observer.wait_for(observer.charging_rider, "a charging rider")
         report["observations"] = {"charging_rider": target}
         mark = console.mark()
         console.send(f"kill {target['mount_uuid']}")
@@ -143,7 +151,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             if entity is not None and entity["alive"] and horse is not None and not horse["alive"]:
                 samples.append({"tick": observer.last_tick, "pos": entity["pos"], "vel": entity["vel"]})
             return observer.last_tick >= deadline
-        observer.wait_for(hundred_ticks)
+        observer.wait_for(hundred_ticks, "100 published ticks after the kill")
         steps = []
         for before, after in zip(samples, samples[1:]):
             if after["tick"] - before["tick"] != 1:
