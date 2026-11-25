@@ -2880,7 +2880,21 @@ pub(crate) fn certificate_missing(state: &TickState, project: &Project) -> Optio
         .bounds(project.origin);
     match buildings::inspect(state, blueprint.kind, 1, bounds) {
         Ok(_) => None,
-        Err(error) => Some(error.to_string()),
+        Err(error) => {
+            // Name the geometry too: the certificate reads the level-2 bounds, so a cell that is air
+            // is either outside the plan (plan gap) or placed at another origin (bounds mismatch).
+            tracing::warn!(
+                blueprint = %project.blueprint,
+                level = project.level,
+                rotation = project.rotation,
+                origin = ?project.origin,
+                min = ?bounds.min,
+                max = ?bounds.max,
+                missing = %error,
+                "certificate_missing: certificate bounds"
+            );
+            Some(error.to_string())
+        }
     }
 }
 
