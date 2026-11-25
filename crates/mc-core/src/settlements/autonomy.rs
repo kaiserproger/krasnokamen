@@ -327,6 +327,38 @@ fn advance(
                                 )
                             })
                             .collect();
+                        // Read the same accessor `assess` reads, so a refusal can be
+                        // told apart from a mismatch: air answers mean the blocks are
+                        // not there, ids mean the predicates disagree.
+                        let centre = [(lo.x + hi.x) / 2, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2];
+                        let corner_min = block_name(state, [lo.x, lo.y, lo.z]);
+                        let centre_block = block_name(state, centre);
+                        let corner_max = block_name(state, [hi.x, hi.y, hi.z]);
+                        let mut non_air = 0;
+                        for dx in -1..=1 {
+                            for dy in -1..=1 {
+                                for dz in -1..=1 {
+                                    if state
+                                        .world
+                                        .block_at(centre[0] + dx, centre[1] + dy, centre[2] + dz)
+                                        .is_some_and(|id| id != state.registry.states.air)
+                                    {
+                                        non_air += 1;
+                                    }
+                                }
+                            }
+                        }
+                        let mut chunks = Vec::new();
+                        for cx in lo.x.div_euclid(16)..=hi.x.div_euclid(16) {
+                            for cz in lo.z.div_euclid(16)..=hi.z.div_euclid(16) {
+                                chunks.push((
+                                    cx,
+                                    cz,
+                                    state.world.has_chunk(cx, cz),
+                                    state.world.is_active(cx, cz),
+                                ));
+                            }
+                        }
                         tracing::debug!(
                             target: "settlements::construction",
                             settlement = id.0,
@@ -334,6 +366,11 @@ fn advance(
                             template = ?piece.template,
                             min = ?lo,
                             max = ?hi,
+                            corner_min,
+                            centre_block,
+                            corner_max,
+                            centre_non_air = non_air,
+                            chunks = ?chunks,
                             missing = ?missing,
                             "adopted piece refused certification"
                         );
@@ -1079,6 +1116,17 @@ const RETRY_SPACING_TICKS: u64 = 1200;
 
 fn should_retry_refusal(retry_tick: bool, attempts: u8) -> bool {
     retry_tick && attempts < PIECE_ATTEMPTS
+}
+
+fn block_name(state: &TickState, at: [i32; 3]) -> String {
+    state
+        .world
+        .block_at(at[0], at[1], at[2])
+        .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
+        .map_or_else(
+            || "unloaded".to_owned(),
+            |block| block.block.id.path().to_owned(),
+        )
 }
 
 fn bounds_loaded(state: &TickState, bounds: &ScriptWorldBounds) -> bool {
