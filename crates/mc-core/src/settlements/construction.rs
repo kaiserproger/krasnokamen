@@ -2356,6 +2356,27 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     let mut next = executor::next_cell(state, id, &project.structure)
         .ok()
         .flatten();
+    if next.is_none()
+        && executor::status(state, id, &project.structure).is_ok_and(|status| {
+            status.state == ScriptStructureState::Committed
+                && status.current_stage_index as usize >= status.stages.len()
+        })
+    {
+        // A structure that is committed and terminal has no cell left to place, so no builder pass
+        // will ever close its project; the watcher is the only caller that still holds both. The
+        // L2 upgrade stalls exactly here (20261125T053949, 20261125T063133).
+        let closed = finish_project(state, id, &project.structure);
+        tracing::warn!(
+            settlement = id.0,
+            structure = %project.structure,
+            cause = "watcher_finish",
+            closed,
+            "watch_project: finish a committed structure"
+        );
+        if closed {
+            return true;
+        }
+    }
     if next.is_none() {
         match executor::step_empty_stage(state, id, &project.structure) {
             Ok(true) => {
@@ -2865,6 +2886,12 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
         .and_then(|record| access::project_for_structure(record, structure))
         .cloned()
     else {
+        tracing::warn!(
+            settlement = id.0,
+            structure,
+            cause = "no_project",
+            "finish_project: no project for the structure"
+        );
         return false;
     };
     // Certification is not a substitute for matching the placed blueprint:
@@ -2881,6 +2908,12 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
     if !executor::status(state, id, &project.structure)
         .is_ok_and(|snapshot| snapshot.state == ScriptStructureState::Committed)
     {
+        tracing::warn!(
+            settlement = id.0,
+            structure = %project.structure,
+            cause = "not_committed",
+            "finish_project: the structure is not committed"
+        );
         return false;
     }
     // Every cell is placed: project stock the bound builder still carries is a
@@ -2902,6 +2935,12 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
     // A placed cell that a foreign edit emptied is queued for re-placement and
     // the project stays open; the hole would otherwise block the certificate.
     if executor::reopen_emptied(state, id, &project.structure) != Ok(false) {
+        tracing::warn!(
+            settlement = id.0,
+            structure = %project.structure,
+            cause = "reopen_emptied",
+            "finish_project: a placed cell was reopened"
+        );
         return false;
     }
     let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {
@@ -2909,6 +2948,7 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
             settlement = id.0,
             blueprint = %project.blueprint,
             level = project.level,
+            cause = "unknown_blueprint",
             "finish_project: unknown blueprint"
         );
         return false;
@@ -2919,6 +2959,7 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
             blueprint = %project.blueprint,
             level = project.level,
             levels = blueprint.levels.len(),
+            cause = "no_such_level",
             "finish_project: the blueprint has no such level"
         );
         return false;
