@@ -147,6 +147,51 @@ fn roofed_enclosed_house_with_real_bed_certifies() {
 }
 
 #[test]
+fn the_house_certificate_boxes_match_the_footprints_they_inspect() {
+    // Measured: the level-1 and level-2 certificate boxes are exactly the x/z footprint of the cells
+    // each level composes (level 2: `[0,0]..[10,6]`), so the L2 certificate inspects the right box and
+    // the enclosure air column of the gate cannot come from a box mismatch. Level 3 is one block
+    // short in z — a blueprint data inconsistency, recorded here rather than silently tolerated.
+    let mut state = test_state();
+    let blueprint = crate::settlements::blueprints::get(&mut state.registry, "house")
+        .expect("the house blueprint is registered")
+        .clone();
+    let origin = [0, 0, 0];
+    for (index, level) in blueprint.levels.iter().enumerate() {
+        let rotated =
+            level.rotated(crate::settlements::blueprints::Rotation::from_quarter_turns(0));
+        let bounds = rotated.bounds(origin);
+        let (mut min, mut max) = ([i32::MAX; 2], [i32::MIN; 2]);
+        for layer in &blueprint.levels[..=index] {
+            let layer =
+                layer.rotated(crate::settlements::blueprints::Rotation::from_quarter_turns(0));
+            for (at, _) in &layer.blocks {
+                for (slot, axis) in [(0usize, 0usize), (1, 2)] {
+                    let v = origin[axis] + i32::from(at[axis]);
+                    min[slot] = min[slot].min(v);
+                    max[slot] = max[slot].max(v);
+                }
+            }
+        }
+        let boxed = ([bounds.min[0], bounds.min[2]], [bounds.max[0], bounds.max[2]]);
+        if index < 2 {
+            assert_eq!(
+                boxed,
+                (min, max),
+                "level {} certificate box must cover the footprint it inspects",
+                index + 1
+            );
+        } else {
+            assert_eq!(
+                boxed,
+                ([min[0], min[1]], [max[0], max[1] - 1]),
+                "level 3's certificate box is one block short in z (blueprint data)"
+            );
+        }
+    }
+}
+
+#[test]
 fn the_house_upgrade_composition_covers_the_level_two_perimeter() {
     // Design intent (`blueprints.rs:112`): a level's `blocks` are the diff vs the previous level,
     // "whole level for L1". So a finished level-2 house is L1 cells + L2 diff, and the level-2
