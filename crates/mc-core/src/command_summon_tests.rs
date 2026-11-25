@@ -10,6 +10,14 @@ mod variant_disk_tests;
 #[path = "command_summon_variant_refusal_tests.rs"]
 mod variant_refusal_tests;
 
+fn item(state: &TickState, name: &str) -> u32 {
+    state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
+        .unwrap()
+}
+
 fn summon(kind: &str, nbt: &str) -> (TickState, EntityId) {
     let (mut state, actor, _) = crate::hostile_tests::setup(8.0);
     let parsed = crate::commands::parse(&format!("summon {kind} ~ ~ ~ {nbt}"), true).unwrap();
@@ -1309,6 +1317,67 @@ fn item_summon_no_gravity_and_invulnerability_survive_checkpoint() {
         .unwrap();
     let restored = EntityStateImage::from_record(&state.registry, record).unwrap();
     assert!(restored.controls.no_gravity && restored.controls.invulnerable);
+}
+
+#[test]
+fn container_vehicle_summon_carries_vanilla_items_cargo() {
+    let (state, id) = summon(
+        "chest_minecart",
+        "{Items:[{Slot:0b,id:\"minecraft:diamond\",count:3},{Slot:26b,id:\"minecraft:apple\",count:1}]}",
+    );
+    let slot = state.entities.slot_of(id).unwrap();
+    let vehicle = state.entities.row(slot)
+        .entity_life
+        .vehicle
+        .as_ref()
+        .expect("a chest minecart has cargo");
+    assert_eq!(vehicle.slots.len(), 27);
+    assert_eq!(vehicle.slots[0].item_id, item(&state, "diamond"));
+    assert_eq!(vehicle.slots[0].count, 3);
+    assert_eq!(vehicle.slots[26].item_id, item(&state, "apple"));
+    assert!(vehicle.slots[1].is_empty());
+
+    // The hopper minecart's five slots are the other vanilla container.
+    let (state, id) = summon(
+        "hopper_minecart",
+        "{Items:[{Slot:4b,id:\"minecraft:iron_ingot\",count:1}]}",
+    );
+    let slot = state.entities.slot_of(id).unwrap();
+    let vehicle = state.entities.row(slot)
+        .entity_life
+        .vehicle
+        .as_ref()
+        .expect("a hopper minecart has cargo");
+    assert_eq!(vehicle.slots.len(), 5);
+    assert_eq!(vehicle.slots[4].item_id, item(&state, "iron_ingot"));
+
+    // A vehicle without a container does not take `Items`, and the slot bound is
+    // the container's own.
+    let (mut state, actor, _) = crate::hostile_tests::setup(8.0);
+    for nbt in [
+        "{Items:[{Slot:0b,id:\"minecraft:diamond\",count:1}]}",
+        "{Items:[{Slot:5b,id:\"minecraft:diamond\",count:1}]}",
+        "{Items:[{Slot:0b,id:\"minecraft:diamond\",count:1}],MinecartImproper:1}",
+    ] {
+        let kind = if nbt.contains("Slot:5b") {
+            "hopper_minecart"
+        } else {
+            "minecart"
+        };
+        let parsed = crate::commands::parse(&format!("summon {kind} ~ ~ ~ {nbt}"), true).unwrap();
+        let mut changes = ChangeSet::default();
+        crate::command_execution::execute(
+            &mut state,
+            ConnectionId(1),
+            actor,
+            &parsed,
+            &mut changes,
+        );
+        assert!(
+            changes.entities_spawned.is_empty(),
+            "{kind} {nbt} must be refused"
+        );
+    }
 }
 
 #[test]
