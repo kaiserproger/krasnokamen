@@ -979,7 +979,7 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="native-rig-parity", requires=("xvfb",),
         sources=("tools/harness/rig_parity_scene.json", "tools/harness/backends/scene_shot_checks.py"),
         fixture="private native client, one stationary mob per shot at a fixed pad and camera (hoglin, guardian, allay, vex, baby bee), HUD default",
-        proves="each rig's own entity-pass index count (CM-4 `entity_indices_by_material`, cloud-free) and the two differences the 26.3 re-authoring moves: guardian minus baby bee 240 -> 498 (`guardian_spikes_and_bee_legs_submitted`) and allay minus vex -48 -> 0 (`allay_wing_faces_submitted`)",
+        proves="each rig's own entity-pass index count (CM-4 `entity_indices_by_material`, cloud-free): guardian minus baby bee 144 -> 468 on the pair actually run (`guardian_spikes_and_bee_legs_submitted`, floor 350) and the allay's cutout span 1.122 -> 0.69 (`allay_wing_span_within_body`, floor 0.85, WITHDRAWN 2026-11-25 - see the row)",
         limits="one species per shot and part counts only: the rig is the `EntityCutout` slice of CM-4's cloud-free per-material pass, each frame must hold exactly one entity, and the parts' exact vanilla shapes plus the rigs whose count did not change (hoglin, rabbit, fox, panda, vex, crowd-rendered horse family) stay unit-covered",
     ),
     "native-shield-gui": _entry(
@@ -988,7 +988,7 @@ SCENARIOS: dict[str, Scenario] = {
         scenario_id="native-shield-gui", requires=("xvfb",),
         sources=("tools/harness/shield_gui_scene.json", "tools/harness/backends/scene_shot_checks.py"),
         fixture="private native client, empty hotbar then a shield in slot 0 and paper in slot 1, fixed camera and GUI scale",
-        proves="the shield icon's own height and width in the first hotbar cell (`shield_icon_height_is_vanilla_plate`), so the cell draws the 12x22 vanilla plate (46x25 px here) instead of the earlier 10x16 one (34x21 px)",
+        proves="the shield icon's own height in the first hotbar cell (`shield_icon_height_is_vanilla_plate`), so the cell draws the 12x22 vanilla plate (46x25 px here) instead of the earlier 10x16 one (34x21 px); the width is reported, not asserted",
         limits="one item model and the icon's plate height only; the held/first-person shield poses and the banner-pattern overlay stay unit-covered",
     ),
     "native-toast": _entry(

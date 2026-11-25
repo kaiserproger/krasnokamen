@@ -247,8 +247,9 @@ def check_shield_gui(probe: ProbeSteps, artifact: Path) -> None:
     that the item pipeline drew at all.
 
     Measured on the pinned pair (2026-11-25): control `d1eb6064` 34 px tall / 21 wide /
-    469 px, re-land `323f801c` 46 tall / 25 wide / 802 px. The floor is 40 px tall and
-    23 wide: 13% below the candidate, 18% above the control.
+    469 px, re-land `323f801c` 46 tall / 25 wide / 802 px. The floor is 40 px tall (13% below the
+    candidate, 18% above the control); the width is reported but not asserted (10 px of headroom
+    to the candidate, 4 to the control is too little to be a check).
     """
     shots = _qa._load_shots(probe, artifact, ("cells-empty", "cells-items"))
     empty_f, items_f = shots["cells-empty"][0], shots["cells-items"][0]

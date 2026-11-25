@@ -2,7 +2,7 @@
 
 Promotion receipt: `promotions/MODEL-SHIELD-GUI.json` (written by `ledger promote`).
 Client pair: control `client:d1eb6064` (the lane tip `980b8618` with the shield rig put back to its
-pre-fix blob) → restore `<re-land>` (the same tip, restored). Both pins clean.
+pre-fix blob) → restore `323f801c` (the same tip, restored). Both pins clean.
 
 ## Why a committed pair, and what it carries
 
