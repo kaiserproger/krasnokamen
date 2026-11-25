@@ -7,6 +7,12 @@
 //! chunks listed in `changes.chunks_loaded`, generated villagers spawned via
 //! `generated::load` BEFORE `autonomy::tick`.
 use super::*;
+
+/// The generated-piece certification tests live beside these: this file is only
+/// compiled under `cfg(test)`, so a reversal of the production hunks in
+/// `autonomy.rs`/`buildings.rs` cannot take the test module with it.
+#[path = "generated_certification_tests.rs"]
+mod generated_certification_tests;
 use crate::boundary::{ChangeSet, ChunkPos};
 use crate::registry::CoreRegistry;
 use crate::settlements::buildings::BuildingKind;
@@ -15,12 +21,16 @@ use std::sync::Arc;
 
 const BELL: [i32; 3] = [8, 201, 8];
 
+/// Extra blocks written inside a chunk: (position, block, properties).
+type Furniture = Vec<([i32; 3], &'static str, Vec<(&'static str, &'static str)>)>;
+
 struct VillageGenerator {
     terrain: mc_worldgen::TerrainGenerator,
     registry: Arc<CoreRegistry>,
     bells: Vec<[i32; 3]>,
     villagers: Vec<(String, [f64; 3], String)>,
     logs: Vec<[i32; 2]>,
+    furniture: Furniture,
 }
 
 impl VillageGenerator {
@@ -81,6 +91,17 @@ impl mc_world::ChunkGenerator for VillageGenerator {
                     bell[1],
                     bell[2].rem_euclid(16) as u8,
                     bell_id,
+                );
+            }
+        }
+        for (at, name, props) in &self.furniture {
+            if at[0].div_euclid(16) == position.x && at[2].div_euclid(16) == position.z {
+                let id = self.block(name, props);
+                chunk.set_block(
+                    at[0].rem_euclid(16) as u8,
+                    at[1],
+                    at[2].rem_euclid(16) as u8,
+                    id,
                 );
             }
         }
@@ -202,6 +223,15 @@ fn fixture(
     villagers: Vec<(String, [f64; 3], String)>,
     logs: Vec<[i32; 2]>,
 ) -> (TickState, Vec<ChunkPos>) {
+    fixture_furnished(bells, villagers, logs, Vec::new())
+}
+
+fn fixture_furnished(
+    bells: Vec<[i32; 3]>,
+    villagers: Vec<(String, [f64; 3], String)>,
+    logs: Vec<[i32; 2]>,
+    furniture: Furniture,
+) -> (TickState, Vec<ChunkPos>) {
     let registry = Arc::new(CoreRegistry::load(None).unwrap());
     let generator = Arc::new(VillageGenerator {
         terrain: mc_worldgen::TerrainGenerator::new(42, Arc::clone(&registry.blocks)),
@@ -209,6 +239,7 @@ fn fixture(
         bells,
         villagers,
         logs,
+        furniture,
     });
     let mut world = crate::world::ChunkWorld::new(
         42,
@@ -252,6 +283,281 @@ fn settle_natural_proofs(state: &mut TickState, kinds: &[BuildingKind]) {
     panic!(
         "reachable natural zones did not certify: {:?}",
         state.settlements.get(id)
+    );
+}
+
+/// A roofed hut inside a claim piece's bounds, the shape a plains house
+/// template has: solid floor, walls, roof, a door and one bed pair.
+fn hut_blocks() -> Furniture {
+    let (x0, x1, y0, y1, z0, z1) = (0, 15, 201, 205, 0, 15);
+    let mut out = Vec::new();
+    for x in x0..=x1 {
+        for z in z0..=z1 {
+            out.push(([x, y1, z], "stone", Vec::new()));
+            if x == x0 || x == x1 || z == z0 || z == z1 {
+                for y in y0 + 1..y1 {
+                    out.push(([x, y, z], "stone", Vec::new()));
+                }
+            }
+        }
+    }
+    out.push(([x0, y0 + 1, 7], "oak_door", vec![("half", "lower")]));
+    out.push(([x0, y0 + 2, 7], "oak_door", vec![("half", "upper")]));
+    // A bed pair as placement writes it: the foot sits behind the head's facing.
+    out.push((
+        [7, y0 + 1, 6],
+        "red_bed",
+        vec![("part", "head"), ("facing", "east")],
+    ));
+    out.push((
+        [6, y0 + 1, 6],
+        "red_bed",
+        vec![("part", "foot"), ("facing", "east")],
+    ));
+    out
+}
+
+/// Seed-24 gate 20261124T212153: the adopted village owns beds but reports
+/// `beds=0` because a generated piece that holds beds *and* its own workstation
+/// classified as the workshop only, and its beds were lost. A plains library is
+/// exactly that shape (lectern beside beds).
+#[test]
+fn an_adopted_house_piece_that_holds_a_workstation_certifies_both() {
+    let claim = generated_claim("minecraft:village/plains/houses", [0, 201, 0]);
+    let mut furniture = hut_blocks();
+    furniture.push(([3, 202, 3], "smoker", Vec::new()));
+    let (mut state, chunks) = fixture_furnished(
+        vec![BELL],
+        vec![(claim, [2.5, 202.0, 2.5], "butcher".into())],
+        vec![],
+        furniture,
+    );
+    adopt(&mut state, &chunks);
+    let id = state.settlements.records().next().expect("adopted").id;
+    let butcher = BuildingKind::Workshop(crate::villager::VillagerProfession::Butcher);
+    for _ in 0..512 {
+        if has_kind(&state, id, BuildingKind::House) && has_kind(&state, id, butcher) {
+            break;
+        }
+        state.tick += 20;
+        state.tick_budget.reset(state.tick);
+        tick(&mut state, &mut ChangeSet::default());
+    }
+    if !has_kind(&state, id, BuildingKind::House)
+        && let Err(err) = super::super::buildings::certify(
+            &mut state,
+            id,
+            BuildingKind::House,
+            ScriptWorldBounds::new([0, 201, 0], [15, 205, 15]).unwrap(),
+        )
+    {
+        panic!(
+            "the piece's house does not certify: {err:?}; nothing else certified: {:?}",
+            state.settlements.get(id).unwrap().buildings
+        );
+    }
+    assert!(
+        has_kind(&state, id, BuildingKind::House),
+        "the piece's beds certify a House: {:?}",
+        state.settlements.get(id).unwrap().buildings
+    );
+    assert!(
+        has_kind(&state, id, butcher),
+        "the same piece keeps its workstation: {:?}",
+        state.settlements.get(id).unwrap().buildings
+    );
+}
+/// The pair is the generated caller's alone: on a house-only piece an owner, an
+/// operator or construction certifying a workshop on the house's bounds is refused,
+/// and even the generated caller only adds the House+Workshop pair.
+#[test]
+fn the_pair_rule_is_only_for_the_generated_caller() {
+    let claim = generated_claim("minecraft:village/plains/houses", [0, 201, 0]);
+    let (mut state, chunks) = fixture_furnished(
+        vec![BELL],
+        vec![(claim, [2.5, 202.0, 2.5], "none".into())],
+        vec![],
+        hut_blocks(),
+    );
+    adopt(&mut state, &chunks);
+    let id = state.settlements.records().next().expect("adopted").id;
+    let house = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .values()
+        .find(|building| building.kind == BuildingKind::House)
+        .expect("the piece's House")
+        .bounds;
+    let mason = BuildingKind::Workshop(crate::villager::VillagerProfession::Mason);
+    let error = super::super::buildings::certify(&mut state, id, mason, house)
+        .expect_err("a strict caller may not add a workshop on a house's bounds");
+    assert!(
+        format!("{error:?}").contains("overlaps another certificate"),
+        "{error:?}"
+    );
+    assert!(
+        super::super::buildings::certify_generated(&mut state, id, mason, house).is_err(),
+        "the generated caller still refuses a workshop with no workstation in the piece"
+    );
+}
+
+/// On a piece that holds both, the generated caller re-certifies the existing
+/// pair, and still refuses a third kind or a workshop off the piece's bounds.
+#[test]
+fn a_generated_pair_is_reused_and_nothing_else_shares_its_bounds() {
+    let claim = generated_claim("minecraft:village/plains/houses", [0, 201, 0]);
+    let mut furniture = hut_blocks();
+    furniture.push(([10, 202, 10], "stonecutter", Vec::new()));
+    let (mut state, chunks) = fixture_furnished(
+        vec![BELL],
+        vec![(claim, [2.5, 202.0, 2.5], "none".into())],
+        vec![],
+        furniture,
+    );
+    adopt(&mut state, &chunks);
+    let id = state.settlements.records().next().expect("adopted").id;
+    let buildings = state.settlements.get(id).unwrap().buildings.clone();
+    let house = buildings
+        .values()
+        .find(|building| building.kind == BuildingKind::House)
+        .expect("the piece's House")
+        .bounds;
+    let mason = BuildingKind::Workshop(crate::villager::VillagerProfession::Mason);
+    let workshop = buildings
+        .values()
+        .find(|building| building.kind == mason)
+        .expect("the piece's workshop");
+    assert_eq!(
+        super::super::buildings::certify_generated(&mut state, id, mason, house)
+            .expect("the same workshop"),
+        workshop.id,
+        "a re-certification returns the existing record instead of a third one"
+    );
+    let armorer = BuildingKind::Workshop(crate::villager::VillagerProfession::Armorer);
+    assert!(
+        super::super::buildings::certify_generated(&mut state, id, armorer, house).is_err(),
+        "a third certificate may not share the pair's bounds"
+    );
+    assert!(
+        super::super::buildings::certify_generated(&mut state, id, BuildingKind::Storage, house)
+            .is_err(),
+        "a Storage may not share the pair's bounds"
+    );
+    let shifted = ScriptWorldBounds::new(
+        [house.min[0] + 4, house.min[1], house.min[2] + 4],
+        [house.max[0] + 4, house.max[1], house.max[2] + 4],
+    )
+    .unwrap();
+    let error = super::super::buildings::certify_generated(&mut state, id, armorer, shifted)
+        .expect_err("a workshop off the piece's bounds may not overlap it");
+    assert!(
+        format!("{error:?}").contains("overlaps another certificate"),
+        "{error:?}"
+    );
+}
+
+/// A piece that holds beds and no job site is a House, and one that holds only a
+/// job site is still a workshop.
+#[test]
+fn piece_kinds_separates_the_house_the_workstation_and_neither() {
+    let claim = generated_claim("minecraft:village/plains/houses", [0, 201, 0]);
+    let mut furniture = hut_blocks();
+    furniture.push(([3, 202, 3], "smoker", Vec::new()));
+    let (state, _chunks) = fixture_furnished(
+        vec![BELL],
+        vec![(claim, [2.5, 202.0, 2.5], "butcher".into())],
+        vec![],
+        furniture,
+    );
+    let piece = mc_world::GeneratedVillagePiece {
+        template: Some("minecraft:village/plains/houses/plains_house_1".into()),
+        position: mc_world::BlockPos { x: 0, y: 201, z: 0 },
+        rotation: 0,
+        entity_owner: Some("minecraft:village/plains/houses".into()),
+        bounds: Some((
+            mc_world::BlockPos { x: 0, y: 201, z: 0 },
+            mc_world::BlockPos {
+                x: 15,
+                y: 205,
+                z: 15,
+            },
+        )),
+    };
+    let bounds = ScriptWorldBounds::new([0, 201, 0], [15, 205, 15]).unwrap();
+    let kinds = super::piece_kinds(&piece, &state, &bounds).expect("readable piece");
+    assert!(
+        kinds.contains(&BuildingKind::House)
+            && kinds.contains(&BuildingKind::Workshop(
+                crate::villager::VillagerProfession::Butcher
+            )),
+        "a house that holds its own workstation certifies both: {kinds:?}"
+    );
+}
+
+#[test]
+fn a_street_whose_bounds_graze_a_bed_is_not_a_house_site() {
+    let claim = generated_claim("minecraft:village/plains/streets", [0, 201, 0]);
+    let (state, _chunks) = fixture_furnished(
+        vec![BELL],
+        vec![(claim, [2.5, 202.0, 2.5], "butcher".into())],
+        vec![],
+        hut_blocks(),
+    );
+    let piece = mc_world::GeneratedVillagePiece {
+        template: Some("minecraft:village/plains/streets/straight_02".into()),
+        position: mc_world::BlockPos { x: 0, y: 201, z: 0 },
+        rotation: 0,
+        entity_owner: Some("minecraft:village/plains/streets".into()),
+        bounds: Some((
+            mc_world::BlockPos { x: 0, y: 201, z: 0 },
+            mc_world::BlockPos {
+                x: 15,
+                y: 205,
+                z: 15,
+            },
+        )),
+    };
+    let bounds = ScriptWorldBounds::new([0, 201, 0], [15, 205, 15]).unwrap();
+    let kinds = super::piece_kinds(&piece, &state, &bounds).expect("readable piece");
+    assert!(
+        kinds.is_empty(),
+        "a street piece must certify no building, even with a bed in its bounds: {kinds:?}"
+    );
+}
+
+/// An unreadable column is not a verdict: classification returns `None`, so the
+/// caller keeps the piece queued instead of memoising "no building" forever.
+#[test]
+fn a_piece_over_an_unreadable_column_is_classified_later_not_never() {
+    let (state, _chunks) = fixture(vec![BELL], vec![], vec![]);
+    let piece = mc_world::GeneratedVillagePiece {
+        template: Some("minecraft:village/plains/houses/plains_house_1".into()),
+        position: mc_world::BlockPos {
+            x: 900,
+            y: 201,
+            z: 900,
+        },
+        rotation: 0,
+        entity_owner: Some("minecraft:village/plains/houses".into()),
+        bounds: Some((
+            mc_world::BlockPos {
+                x: 900,
+                y: 201,
+                z: 900,
+            },
+            mc_world::BlockPos {
+                x: 915,
+                y: 205,
+                z: 915,
+            },
+        )),
+    };
+    let bounds = ScriptWorldBounds::new([900, 201, 900], [915, 205, 915]).unwrap();
+    assert!(
+        super::piece_kinds(&piece, &state, &bounds).is_none(),
+        "an unloaded column must retry, not classify"
     );
 }
 
@@ -648,6 +954,71 @@ fn natural_lumber_and_mine_zones_certify_after_deferred_route_proofs() {
 }
 
 #[test]
+fn natural_lumber_camp_certifies_the_grove_not_one_tree_column() {
+    // CIV-6: the gate's phase log (20261124T020538) found the natural camp
+    // certified from a 1x8x1 column, so a lumberjack's zone was one trunk and
+    // the town never harvested wood. The grove west of the bell spans several
+    // columns; certification must cover the grove, not the probed column.
+    let logs: Vec<[i32; 2]> = (-14..=-9)
+        .flat_map(|x| (4..=7).map(move |z| [x, z]))
+        .collect();
+    let (mut state, chunks) = fixture(
+        vec![BELL],
+        vec![(
+            generated_claim(
+                "minecraft:village/plains/houses/plains_house_1",
+                [0, 201, 0],
+            ),
+            [6.5, 202.0, 6.5],
+            "none".into(),
+        )],
+        logs,
+    );
+    adopt(&mut state, &chunks);
+    settle_natural_proofs(&mut state, &[BuildingKind::LumberCamp]);
+    let camp = state
+        .settlements
+        .records()
+        .next()
+        .unwrap()
+        .buildings
+        .values()
+        .find(|building| building.kind == BuildingKind::LumberCamp)
+        .expect("the grove certifies a natural lumber camp");
+    assert!(camp.natural_zone);
+    let width = camp.bounds.max[0] - camp.bounds.min[0] + 1;
+    let depth = camp.bounds.max[2] - camp.bounds.min[2] + 1;
+    assert!(
+        width > 2 && depth > 2,
+        "a natural camp's zone is the grove, not one tree column: {width}x{depth} at {:?}..{:?}",
+        camp.bounds.min,
+        camp.bounds.max
+    );
+    // The grove is a bounded square around the proved trunk, not a log census:
+    // the zone must still cover every column of the fixture stand (x -14..=-9,
+    // z 4..=7) and must stop before the generated house piece, whose bounds
+    // start at x = 0.
+    assert!(
+        camp.bounds.min[0] <= -14 && camp.bounds.max[0] >= -9,
+        "the zone covers the whole stand, not one trunk: x {:?}..{:?}",
+        camp.bounds.min[0],
+        camp.bounds.max[0]
+    );
+    assert!(
+        camp.bounds.min[2] <= 4 && camp.bounds.max[2] >= 7,
+        "the zone covers the whole stand, not one trunk: z {:?}..{:?}",
+        camp.bounds.min[2],
+        camp.bounds.max[2]
+    );
+    assert!(
+        camp.bounds.max[0] < 0,
+        "the generated house piece stays outside the zone: x {:?}..{:?}",
+        camp.bounds.min[0],
+        camp.bounds.max[0]
+    );
+}
+
+#[test]
 fn natural_grove_ignores_structure_logs_and_finds_an_unblocked_side() {
     let (mut state, chunks) = fixture(
         vec![BELL],
@@ -811,7 +1182,7 @@ fn natural_mine_requires_a_route_from_entrance_to_stock() {
     for _ in 0..8 {
         state.tick += 20;
         state.tick_budget.reset(state.tick);
-        prove_natural(&mut state, id, &residents, &mut candidates);
+        prove_natural(&mut state, id, None, &residents, &mut candidates);
         if candidates.is_empty() {
             break;
         }
@@ -863,7 +1234,7 @@ fn loaded_but_unsimulated_natural_worksite_is_not_certified() {
     assert!(!state.world.is_active(5, 0));
     state.tick = 20;
     state.tick_budget.reset(state.tick);
-    prove_natural(&mut state, id, &residents, &mut candidates);
+    prove_natural(&mut state, id, None, &residents, &mut candidates);
     assert!(candidates.is_empty());
     assert!(!has_kind(&state, id, BuildingKind::Mine));
 }
@@ -998,7 +1369,7 @@ fn dense_village_finds_natural_zones_beyond_generated_footprints() {
         while !candidates.is_empty() {
             state.tick += 20;
             state.tick_budget.reset(state.tick);
-            prove_natural(&mut state, id, &residents, &mut candidates);
+            prove_natural(&mut state, id, None, &residents, &mut candidates);
         }
         if has_kind(&state, id, BuildingKind::Mine)
             && has_kind(&state, id, BuildingKind::LumberCamp)
@@ -1230,6 +1601,7 @@ pub(super) fn native_state(config: &crate::CoreConfig) -> TickState {
             "none".into(),
         )],
         logs: vec![],
+        furniture: Vec::new(),
     });
     let mut world = crate::world::ChunkWorld::new_native(
         42,
@@ -1820,6 +2192,7 @@ fn busy_gatherer_can_prove_the_other_natural_source() {
         prove_natural(
             &mut state,
             id,
+            None,
             &[uuid].into_iter().collect(),
             &mut candidates,
         );

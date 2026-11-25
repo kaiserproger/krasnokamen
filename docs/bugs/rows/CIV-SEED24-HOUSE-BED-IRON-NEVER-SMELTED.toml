@@ -10,6 +10,8 @@ failing_first = "reported"
 regression = [
   "cargo:mc-core:settlements::construction::planner_tests::funded_project_keeps_iron_demand_for_the_skipped_house_bed",
   "cargo:mc-core:villager::smelting_tests::employed_miner_smelts_construction_iron_through_native_ticks",
+  "cargo:mc-core:settlements::construction::planner_tests::a_furnace_site_stays_at_the_store_level_not_on_a_platform_above_it",
   "harness:civilization-seed-qa:new_house",
 ]
 fix_commit = "patch:113c2e042ed5a6f8f35ea038c69f31447b3f19e68a625d24cd65b20743080c79"
+repro_check = "Second fix commit 9026719a07 (wt/D123Civ, 2026-11-24): the current world placed the town's furnace on a floating 4x4 cobblestone platform five blocks above the plaza (run 20261124T131853: furnace [132,82,-219], plaza y=76); the saved state shows the smelting tender holding phase Load with 2 raw iron and 2 coal and never reaching it, so no iron smelted in 75 000 ticks. furnace::plan now skips a site column whose surface is more than two blocks from the storage chest's level, which reaches the terrace column the green run used ([134,78,-217]). Regression a_furnace_site_stays_at_the_store_level_not_on_a_platform_above_it (the furnace filter passes on the candidate, 20261124T163043-test-_6lzkq5o; the guarded hunk reversed on a worktree of 9026719a07 is the control, prepared as wt/D123Civ-ctl-furnace and still queued for a build slot when this note was written). The earlier patch:113c2e04 covers the tender/admission work; a promotion needs a combined patch over both commits plus the passed harness:civilization-seed-qa:new_house receipt, which does not exist yet."

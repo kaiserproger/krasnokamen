@@ -1039,7 +1039,9 @@ pub(super) fn needed_kinds(
         .sum();
     let kinds: [(BuildingKind, bool); AUTONOMOUS_KINDS] = [
         (BuildingKind::Storage, !has(BuildingKind::Storage)),
-        (BuildingKind::House, beds < residents),
+        // A newborn needs a free bed (the breeding path checks spare beds), so
+        // housing is short while no bed is spare, not only when beds run out.
+        (BuildingKind::House, beds <= residents),
         (
             BuildingKind::Workshop(Profession::Farmer),
             !has(BuildingKind::Workshop(Profession::Farmer)),
@@ -1814,6 +1816,19 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
                     waiting = pass.waiting;
                 } else {
                     waiting |= pass.waiting;
+                }
+                // Why a funded kind still has no site is the question the gates
+                // could not answer: autonomous refusals were never logged, so
+                // "no House in the run" had no cause on disk (ReviewD123Civ13).
+                if pass.site.is_none() {
+                    tracing::debug!(
+                        target: "settlements::construction",
+                        settlement = id.0,
+                        frontages = pass.report.frontages,
+                        examined = pass.report.examined,
+                        refusals = ?pass.report,
+                        "funded kinds found no legal site"
+                    );
                 }
                 funded_site = Some(pass);
             }

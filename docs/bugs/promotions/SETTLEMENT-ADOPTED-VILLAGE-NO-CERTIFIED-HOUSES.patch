@@ -1,0 +1,238 @@
+diff --git a/crates/mc-core/src/settlements/buildings.rs b/crates/mc-core/src/settlements/buildings.rs
+index a57068949..e19e77d73 100644
+--- a/crates/mc-core/src/settlements/buildings.rs
++++ b/crates/mc-core/src/settlements/buildings.rs
+@@ -405,16 +405,149 @@ pub(crate) fn assess(
+     })
+ }
+ 
+-pub(crate) fn inspect(
++/// Solid cells a generated piece must hold before its function is counted at
++/// all: the seed-24 plains_small_house_1 box measures 169 and
++/// plains_medium_house_1 543 solid cells, while a lone bed pair and door is 4
++/// and an air or open-water box is 0.
++const GENERATED_STRUCTURE_CELLS: u32 = 32;
++
++/// What adoption requires of a generated piece, or `None` for a kind adoption
++/// never produces (the strict `requirements` list then applies unchanged).
++///
++/// A vanilla jigsaw box is not a filled box: the gabled ridge and eaves leave
++/// air on its top layer, the door opening and porch leave gaps on its perimeter,
++/// and part of its bottom layer is yard. `assess`'s envelope flags are
++/// all-or-nothing over the whole box, so a completed generated house cannot meet
++/// them. They stay in force for every box this engine places itself (owner,
++/// operator, construction, discovery); adoption only confirms that the piece is
++/// present (`structure`) and carries its function (beds and a door, a
++/// workstation, a container).
++fn generated_requirements(kind: BuildingKind, level: u8) -> Option<Vec<Requirement>> {
++    let l = u32::from(level.clamp(1, 3));
++    let entries: Vec<(&str, u32)> = match kind {
++        BuildingKind::House => vec![("beds", l), ("entrance", 1)],
++        BuildingKind::Workshop(_) => vec![("workstations", l)],
++        BuildingKind::Storage => vec![("containers", l)],
++        BuildingKind::Mine
++        | BuildingKind::LumberCamp
++        | BuildingKind::Barracks
++        | BuildingKind::Wall
++        | BuildingKind::Tower
++        | BuildingKind::Gate => return None,
++    };
++    Some(
++        entries
++            .into_iter()
++            .chain(std::iter::once(("structure", GENERATED_STRUCTURE_CELLS)))
++            .map(|(description, required)| Requirement {
++                description: description.into(),
++                required,
++                found: 0,
++            })
++            .collect(),
++    )
++}
++
++/// The generated-piece counterpart of `assess`: the same functional counts, with
++/// the piece's substance instead of the envelope. See `generated_requirements`.
++pub(crate) fn assess_generated(
+     state: &TickState,
+     kind: BuildingKind,
+     level: u8,
+     bounds: ScriptWorldBounds,
++) -> Result<Inspection, CertError> {
++    let Some(functional) = generated_requirements(kind, level) else {
++        return assess(state, kind, level, bounds);
++    };
++    dimensions(bounds).ok_or_else(|| {
++        failure("bounds must be ordered, at most 64 blocks per axis and 32768 blocks total")
++    })?;
++    let (mut beds, mut entrances, mut solid) = (0_u32, 0_u32, 0_u32);
++    let mut points = BTreeSet::new();
++    for x in bounds.min[0]..=bounds.max[0] {
++        for z in bounds.min[2]..=bounds.max[2] {
++            for y in bounds.min[1]..=bounds.max[1] {
++                let id = state
++                    .world
++                    .block_at(x, y, z)
++                    .ok_or_else(|| failure("all building chunks must be loaded"))?;
++                let definition = state
++                    .registry
++                    .blocks
++                    .by_id(mc_world::BlockStateId(id))
++                    .ok_or_else(|| failure("unknown block"))?;
++                let name = definition.block.id.path();
++                if !state.registry.collision_boxes[id as usize].is_empty() {
++                    solid += 1;
++                }
++                // A generated House needs a bed a resident can sleep in, so the
++                // same roof predicate the allocator and migration use decides
++                // whether the piece's bed counts (`certified_beds`,
++                // `bed_allowed`): a floor or terrain cell above nothing is not
++                // a House, and a certified bed that no resident may claim would
++                // only inflate the housing demand `needed_kinds` reads.
++                if name.ends_with("_bed")
++                    && definition
++                        .properties
++                        .iter()
++                        .any(|(key, value)| key == "part" && value == "head")
++                    && super::allocator::bed_pair(
++                        &state.world,
++                        &state.registry,
++                        BlockPos { x, y, z },
++                    )
++                    .is_some()
++                    && super::allocator::roofed(&state.world, &state.registry, BlockPos { x, y, z })
++                {
++                    beds += 1;
++                }
++                if name.ends_with("_door")
++                    && definition
++                        .properties
++                        .iter()
++                        .any(|(key, value)| key == "half" && value == "lower")
++                {
++                    entrances += 1;
++                }
++                if kind == BuildingKind::Storage
++                    && matches!(name, "chest" | "trapped_chest" | "barrel")
++                {
++                    points.insert([x, y, z]);
++                }
++                if workstation_matches(&state.registry, kind, id) {
++                    points.insert([x, y, z]);
++                }
++            }
++        }
++    }
++    let checks = functional
++        .into_iter()
++        .map(|mut r| {
++            r.found = match r.description.as_str() {
++                "beds" => beds,
++                "containers" | "workstations" => points.len() as u32,
++                "entrance" => entrances,
++                "structure" => solid,
++                _ => 0,
++            };
++            r
++        })
++        .collect();
++    Ok(Inspection {
++        requirements: checks,
++        points,
++    })
++}
++
++fn inspection_points(
++    kind: BuildingKind,
++    level: u8,
++    inspection: Result<Inspection, CertError>,
+ ) -> Result<Vec<[i32; 3]>, CertError> {
+     let Inspection {
+         mut requirements,
+         points,
+-    } = assess(state, kind, level, bounds)?;
++    } = inspection?;
+     requirements.retain(|requirement| requirement.found < requirement.required);
+     if !requirements.is_empty() {
+         return Err(CertError {
+@@ -429,6 +562,25 @@ pub(crate) fn inspect(
+     Ok(points.into_iter().take(cap).collect())
+ }
+ 
++pub(crate) fn inspect(
++    state: &TickState,
++    kind: BuildingKind,
++    level: u8,
++    bounds: ScriptWorldBounds,
++) -> Result<Vec<[i32; 3]>, CertError> {
++    inspection_points(kind, level, assess(state, kind, level, bounds))
++}
++
++/// Generated-piece admission: the functional rule of `assess_generated`.
++pub(crate) fn inspect_generated(
++    state: &TickState,
++    kind: BuildingKind,
++    level: u8,
++    bounds: ScriptWorldBounds,
++) -> Result<Vec<[i32; 3]>, CertError> {
++    inspection_points(kind, level, assess_generated(state, kind, level, bounds))
++}
++
+ /// Certify a building an owner, an operator or construction authored.
+ ///
+ /// Every different-kind overlap is refused; see `certify_generated` for the one
+@@ -439,19 +591,29 @@ pub(crate) fn certify(
+     kind: BuildingKind,
+     bounds: ScriptWorldBounds,
+ ) -> Result<BuildingId, CertError> {
+-    certify_impl(state, settlement, kind, bounds, false)
++    certify_impl(state, settlement, kind, bounds, Caller::Strict)
+ }
+ 
+ /// Certify one kind of a generated piece: only this caller may add a Workshop to
+ /// a House's exact bounds (and the other way round), because a plains library
+-/// really is both. Owner, operator and construction callers keep the strict rule.
++/// really is both, and only this caller inspects by piece function and substance
++/// (`assess_generated`) instead of the builder envelope. Owner, operator and
++/// construction callers keep the strict rule.
+ pub(crate) fn certify_generated(
+     state: &mut TickState,
+     settlement: SettlementId,
+     kind: BuildingKind,
+     bounds: ScriptWorldBounds,
+ ) -> Result<BuildingId, CertError> {
+-    certify_impl(state, settlement, kind, bounds, true)
++    certify_impl(state, settlement, kind, bounds, Caller::Generated)
++}
++
++/// Which inspection a certification answers to. `Generated` is the adoption
++/// caller alone; expansion of an existing certificate stays strict either way.
++#[derive(Debug, Clone, Copy)]
++enum Caller {
++    Strict,
++    Generated,
+ }
+ 
+ fn certify_impl(
+@@ -459,8 +621,9 @@ fn certify_impl(
+     settlement: SettlementId,
+     kind: BuildingKind,
+     bounds: ScriptWorldBounds,
+-    allow_pair: bool,
++    caller: Caller,
+ ) -> Result<BuildingId, CertError> {
++    let allow_pair = matches!(caller, Caller::Generated);
+     let record = state
+         .settlements
+         .get(settlement)
+@@ -523,7 +686,10 @@ fn certify_impl(
+     if settlement.0 > u64::from(u32::MAX) {
+         return Err(failure("settlement identity exhausted"));
+     }
+-    let points = inspect(state, kind, 1, bounds)?;
++    let points = match caller {
++        Caller::Generated => inspect_generated(state, kind, 1, bounds)?,
++        Caller::Strict => inspect(state, kind, 1, bounds)?,
++    };
+     let id = BuildingId((settlement.0 << 32) | sequence);
+     let record = state
+         .settlements

@@ -8,11 +8,24 @@ pub(super) fn candidate_kinds<'a>(
     images: &'a [Image],
 ) -> impl Iterator<Item = BuildingKind> + 'a {
     let cleric = BuildingKind::Workshop(Profession::Cleric);
-    std::iter::once(BuildingKind::Storage)
-        .filter(move |_| needed(state, record, images))
+    let farmer = BuildingKind::Workshop(Profession::Farmer);
+    // Food before capacity: a town that grows nothing cannot feed anyone, so a
+    // missing farm outranks further storehouse work (it never outranks the
+    // first store, and once staffed the ordinary priority table decides).
+    let farm_first = has_storage(record)
+        && !record
+            .buildings
+            .values()
+            .any(|building| building.kind == farmer && !building.natural_zone);
+    std::iter::once(farmer)
+        .filter(move |_| farm_first)
         .chain(
-            needed_kinds(record, state.settlements.member_count(record.id))
-                .filter(|kind| *kind != BuildingKind::Storage),
+            std::iter::once(BuildingKind::Storage).filter(move |_| needed(state, record, images)),
+        )
+        .chain(
+            needed_kinds(record, state.settlements.member_count(record.id)).filter(move |kind| {
+                *kind != BuildingKind::Storage && !(farm_first && *kind == farmer)
+            }),
         )
         .chain(
             (spanish_faction(state, record)

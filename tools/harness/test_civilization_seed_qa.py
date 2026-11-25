@@ -1,6 +1,8 @@
 """Evidence scanning must not turn generated/natural geometry into stage proof."""
 import copy
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from .backends import civilization_seed_qa as qa
@@ -168,8 +170,11 @@ class CivilizationEvidenceTests(unittest.TestCase):
             result = qa.capture_target(probe, "artifact", "baby", (160.5, 75.5, -280.5),
                                        entity=baby, teleport=teleport)
         self.assertTrue(result["observer_teleported"])
+        # The capture stands beside the baby (first BABY_TELEPORT_SIDES entry,
+        # +1.5 x): from the baby's own block the client sees its own body and the
+        # report showed the wall. The return teleport goes back to the walker.
         self.assertEqual([c.args for c in teleport.call_args_list],
-                         [(160.5, 75.0, -280.5), (131.0, 77.0, -215.0)])
+                         [(162.0, 75.0, -280.5), (131.0, 77.0, -215.0)])
 
     def test_sparse_building_whose_centre_aim_misses_is_aimed_at_the_nearest_solid_block(self):
         # Seed-24 Lumber camp (runs 0yj9abeh, p1pmn34d): the centre-nearest solid
@@ -426,21 +431,35 @@ class CivilizationEvidenceTests(unittest.TestCase):
     def test_remote_building_loads_each_chunk_and_returns_observer(self):
         building = {"natural": False, "min": [234, 72, -213], "max": [240, 76, -207]}
         probe = Mock()
-        probe.observe.return_value = {"player": {"x": 131.5, "y": 78.0, "z": -217.5}}
-        probe.remaining.return_value = 120.0
+        probe.remaining.side_effect = lambda limit=None: min(120.0, limit or 120.0)
         probe.call.return_value = {"blocks": [{"block_id": "minecraft:red_bed"}], "truncated": False}
         server = Mock()
+        moves: list[str] = []
+        # The tp lands the observer outside the footprint (lo[0] - 4, review M1:
+        # a creative observer inside the bounds tramples crops), so the mock
+        # reports that stand after the first console move.
+        probe.observe.side_effect = lambda: {"player":
+            {"x": 230.0, "y": 79.0, "z": -210.0} if len(moves) == 1
+            else {"x": 131.5, "y": 78.0, "z": -217.5}}
         with patch.object(qa.village, "_listed_buildings", return_value=[building]), \
-             patch.object(qa.item_merge, "_console") as console:
+             patch.object(qa.item_merge, "_console", side_effect=lambda _s, command: moves.append(command)) as console:
             evidence = qa.building_blocks(probe, [], server)
         self.assertEqual(evidence[0]["blocks"][0]["block_id"], "minecraft:red_bed")
+        self.assertTrue(evidence[0]["observer_teleported"])
+        self.assertTrue(evidence[0]["observer_moved"])
+        # A remote menu holds the observer, so the scan closes it first, loads each
+        # chunk of the 2x2 chunk footprint, scans, and returns the observer through
+        # the console tp with a bounded horizontal wait (move_observer).
         self.assertEqual([call.args[0] for call in probe.call.call_args_list], [
+            "minecraft_close_screen",
             "minecraft_wait_for_loaded_block", "minecraft_wait_for_loaded_block",
             "minecraft_wait_for_loaded_block", "minecraft_wait_for_loaded_block",
-            "minecraft_scan_blocks", "minecraft_wait_for_loaded_block"])
+            "minecraft_scan_blocks", "minecraft_wait_for_loaded_block",
+            "minecraft_close_screen"])
         self.assertEqual(console.call_count, 2)
-        self.assertEqual([call.args[1] for call in probe.wait.call_args_list],
-                         ["building_scan_observer_arrived", "building_scan_observer_returned"])
+        landed_x = float(moves[0].split()[2])
+        self.assertLess(landed_x, 234, "the observer must land outside the scanned bounds")
+        self.assertGreaterEqual(landed_x, 228.0)
 
     def test_iron_capture_opens_furnace_and_requires_visible_output(self):
         probe = Mock()
@@ -560,6 +579,69 @@ class ApproachRetryTests(unittest.TestCase):
         self.assertFalse(teleported)
 
 
+    def test_a_not_client_visible_refusal_is_approached_again_not_fatal(self):
+        # Run 20261125T040502: the same class of failure arrived in another wording,
+        # "entity is not client-visible", and aborted the gate before verdicts.
+        baby = {"entity_id": 7, "entity_uuid": "b7", "entity_type": "minecraft:villager",
+                "received_baby": True, "x": 130.5, "y": 78.0, "z": -218.5}
+        calls = {"approach": 0}
+
+        def call(name, arguments):
+            if name == "minecraft_approach_entity":
+                calls["approach"] += 1
+                if calls["approach"] == 1:
+                    raise RuntimeError('minecraft_approach_entity failed: {"code": "entity is not '
+                                       'client-visible", "retryable": false, "stage": "automation"}')
+                return {"in_reach": True}
+            if name == "minecraft_list_entities":
+                return {"entities": [baby], "visible_count": 1, "truncated": False,
+                        "next_cursor": None}
+            return {}
+
+        probe = Mock()
+        probe.call.side_effect = call
+        probe.observe.return_value = {"player": {"x": 130.0, "y": 78.0, "z": -215.0}}
+        hit = {"type": "entity", "entity_uuid": "b7"}
+        with patch.object(qa, "_aim", return_value=hit):
+            observed, teleported = qa._aim_at_baby(probe, baby, None)
+        self.assertEqual(calls["approach"], 2, "the not-visible refusal is retried, not fatal")
+        self.assertEqual(observed, hit)
+        self.assertFalse(teleported)
+
+    def test_a_baby_inside_a_house_is_observed_from_beside_it(self):
+        # 20261124T205323: the observer was teleported onto the baby's own cell
+        # inside its house and the raycast hit cobblestone at 120,71,-274, which
+        # aborted the whole gate before any other milestone was observed.
+        baby = {"entity_id": 7, "entity_uuid": "b7", "entity_type": "minecraft:villager",
+                "received_baby": True, "x": 120.5, "y": 71.0, "z": -274.5}
+        approaches = []
+        teleports = []
+
+        def call(name, arguments):
+            if name == "minecraft_approach_entity":
+                approaches.append(1)
+                return {"in_reach": len(approaches) > 1}
+            if name == "minecraft_list_entities":
+                return {"entities": [baby], "visible_count": 1, "truncated": False,
+                        "next_cursor": None}
+            return {}
+
+        probe = Mock()
+        probe.call.side_effect = call
+        probe.observe.return_value = {"player": {"x": 120.0, "y": 71.0, "z": -272.0}}
+        hit = {"type": "entity", "entity_uuid": "b7"}
+        with patch.object(qa, "_aim", return_value=hit):
+            observed, teleported = qa._aim_at_baby(
+                probe, baby, lambda x, y, z: teleports.append((x, y, z)))
+        self.assertTrue(teleported)
+        self.assertEqual(observed, hit)
+        self.assertTrue(teleports, "the unreachable baby still needs the observer beside it")
+        for x, _y, z in teleports:
+            self.assertGreaterEqual(
+                abs(x - baby["x"]) + abs(z - baby["z"]), 1.0,
+                f"the observer must stand beside the baby, never on its own cell: {teleports}")
+
+
 class GatedCensusTests(unittest.TestCase):
     """Seed 24 (2026-11-24): the 128-block all-entity census never stabilised over a
     village that harvests into the world, so the gate refused before its milestones."""
@@ -599,6 +681,182 @@ class GatedCensusTests(unittest.TestCase):
         self.assertFalse(census["truncated"])
         self.assertEqual(census["census_types"], ["minecraft:villager", "minecraft:sheep"])
 
+
+class ObserverMoveTests(unittest.TestCase):
+    """20261124T170423: the observer's console teleport landed 1.5 blocks off the
+    requested column and 6 below the requested height, the unbounded wait for that
+    landing spent the last 1 h 45 min of the scenario, and the milestones the world
+    completed meanwhile (house L1 at server tick 99 816) were never observed."""
+
+    def _probe(self, states, *, clock=None):
+        probe = Mock()
+        probe.remaining.side_effect = lambda *, limit=120.0: min(1800.0, limit)
+        probe.waits = []
+        sequence = list(states)
+
+        def observe():
+            current = sequence.pop(0) if len(sequence) > 1 else sequence[0]
+            return {"player": dict(current)}
+
+        def wait(predicate, label, *, timeout_seconds=None):
+            probe.waits.append((label, timeout_seconds))
+            return {"player": dict(sequence[0])}
+
+        def call(name, arguments=None):
+            if clock is not None:
+                clock["t"] += 1.0
+            return {"blocks": [], "truncated": False}
+
+        probe.observe.side_effect = observe
+        probe.wait.side_effect = wait
+        probe.call.side_effect = call
+        return probe
+
+    def test_an_observer_that_never_lands_cannot_consume_the_scenario(self):
+        clock = {"t": 0.0}
+        # Requested point of the farm at [78,68,-320]..[84,72,-311] is (81, 75, -315.5);
+        # the server leaves the observer on the field at (82.5, 69, -317).
+        probe = self._probe([{"x": 0.0, "y": 64.0, "z": 0.0},
+                             {"x": 82.5, "y": 69.0, "z": -317.0}], clock=clock)
+        lines = ["Buildings: #7 farm level 1 [78, 68, -320]-[84, 72, -311]"]
+        with patch.object(qa, "time", SimpleNamespace(monotonic=lambda: clock["t"])):
+            evidence = qa.building_blocks(probe, lines, Mock())
+        self.assertEqual(evidence[0].get("observer_moved"), False,
+                         "a landing the server clamps is a recorded miss, not a hang")
+        self.assertEqual(probe.wait.call_count, 0,
+                         f"the observer move must never use an unbounded probe.wait: {probe.waits}")
+        self.assertLessEqual(probe.call.call_count, 2 * int(qa.OBSERVER_MOVE_TIMEOUT) + 8,
+                             "both observer moves are bounded by their own timeout")
+
+    def test_a_landing_below_the_requested_height_is_still_an_arrival(self):
+        clock = {"t": 0.0}
+        probe = self._probe([{"x": 82.5, "y": 69.0, "z": -316.0}], clock=clock)
+        with patch.object(qa, "time", SimpleNamespace(monotonic=lambda: clock["t"])):
+            self.assertTrue(qa.move_observer(probe, {"x": 82.0, "y": 75.0, "z": -316.0}))
+        self.assertEqual(probe.call.call_count, 0)
+
+    def test_a_remote_building_is_observed_after_the_observer_moves_there(self):
+        events = []
+        probe = Mock()
+        probe.remaining.side_effect = lambda *, limit=120.0: min(600.0, limit)
+        probe.observe.return_value = {"player": {"x": 131.0, "y": 78.0, "z": -217.0}}
+
+        stand = [{"x": 77, "y": 66, "z": -316, "collision_empty": False, "is_air": False},
+                 {"x": 77, "y": 67, "z": -316, "collision_empty": True, "is_air": True, "fluid": {"empty": True}},
+                 {"x": 77, "y": 68, "z": -316, "collision_empty": True, "is_air": True, "fluid": {"empty": True}}]
+
+        def call(name, arguments=None):
+            events.append(name)
+            if name == "minecraft_scan_blocks":
+                return {"blocks": stand, "truncated": False}
+            return {}
+
+        def teleport(x, y, z):
+            events.append(("tp", round(x, 1), round(y, 1), round(z, 1)))
+
+        probe.call.side_effect = call
+        building = {"min": [78, 68, -320], "max": [84, 72, -311], "kind": "farm"}
+        seen = {"type": "block", "x": 81, "y": 68, "z": -316}
+        with patch.object(qa, "_aim", return_value=seen), \
+             patch.object(qa.native_client, "capture", return_value={}):
+            qa.capture_target(probe, Path("/tmp"), "civilization-building", (81.0, 68.0, -316.0),
+                              building=building, solid=[], teleport=teleport)
+        teleports = [index for index, event in enumerate(events) if isinstance(event, tuple)]
+        scans = [index for index, event in enumerate(events) if event == "minecraft_scan_blocks"]
+        self.assertTrue(teleports and scans and min(teleports) < min(scans),
+                        f"the observer must move to the site before its faces are scanned: {events}")
+
+    def test_an_observer_that_never_lands_stops_at_its_own_timeout(self):
+        clock = {"t": 0.0}
+        probe = self._probe([{"x": 0.0, "y": 64.0, "z": 0.0}], clock=clock)
+        with patch.object(qa, "time", SimpleNamespace(monotonic=lambda: clock["t"])):
+            self.assertFalse(qa.move_observer(probe, {"x": 100.0, "y": 70.0, "z": 100.0}))
+        self.assertLessEqual(probe.call.call_count, int(qa.OBSERVER_MOVE_TIMEOUT) + 1)
+
+
+
+class IronEvidenceTests(unittest.TestCase):
+    """CIV-B2 (1) review: which observation proves the town smelted iron."""
+
+    def test_a_town_furnace_counter_proves_a_smelt(self) -> None:
+        furnace = {"container_totals": {}, "recipes_used": {"minecraft:iron_ingot_from_smelting_raw_iron": 2}}
+        self.assertEqual(qa.iron_evidence(furnace, baseline=False), "furnace_recipes")
+
+    def test_a_stored_ingot_is_the_stronger_evidence(self) -> None:
+        furnace = {"container_totals": {"minecraft:iron_ingot": 1},
+                   "recipes_used": {"minecraft:iron_ingot_from_smelting_raw_iron": 1}}
+        self.assertEqual(qa.iron_evidence(furnace, baseline=False), "output_slot")
+
+    def test_a_baseline_furnace_with_a_prewritten_counter_proves_nothing(self) -> None:
+        # A furnace that stood before the fixture can carry a counter an earlier
+        # world or a reviewer fixture wrote, so only the output slot would count.
+        furnace = {"container_totals": {}, "recipes_used": {"minecraft:iron_ingot_from_smelting_raw_iron": 7}}
+        self.assertIsNone(qa.iron_evidence(furnace, baseline=True))
+        self.assertIsNone(qa.iron_evidence({"container_totals": {"minecraft:iron_ingot": 1}}, baseline=True))
+
+    def test_empty_zero_and_blasting_only_counters_are_no_evidence(self) -> None:
+        for furnace in ({}, {"container_totals": {}, "recipes_used": {}},
+                        {"recipes_used": {"minecraft:iron_ingot_from_smelting_raw_iron": 0}},
+                        {"recipes_used": {"minecraft:iron_ingot_from_blasting_raw_iron": 3}}):
+            with self.subTest(furnace=furnace):
+                self.assertIsNone(qa.iron_evidence(furnace, baseline=False))
+
+    def test_a_fixture_command_that_writes_block_entity_nbt_fails_closed(self) -> None:
+        qa.assert_no_evidence_writes(["console: gamemode creative VillageAuto",
+                                      "console: time set day", "console: weather clear 24000"])
+        for command in ("console: data merge block 132 78 -222 {RecipesUsed: {}}",
+                        "console: setblock 132 78 -222 minecraft:furnace{RecipesUsed: {\"minecraft:iron_ingot_from_smelting_raw_iron\": 9}}",
+                        "console: data modify block 132 78 -222 recipes_used set value 9"):
+            with self.subTest(command=command):
+                with self.assertRaisesRegex(RuntimeError, "NBT"):
+                    qa.assert_no_evidence_writes([command])
+
+
+class BabyCaptureRetryTests(unittest.TestCase):
+    """Review wave2-10: run 20261124T232341 aborted after 947 s when the listed
+    newborn left the client's view before its capture."""
+
+    def test_a_baby_that_left_the_view_is_a_miss_not_an_abort(self) -> None:
+        baby = {"entity_uuid": "new", "x": 160.5, "y": 75.0, "z": -280.5}
+        with patch.object(qa, "capture_target",
+                          side_effect=qa._BabyLeftView("baby left the client-visible set")):
+            observation, miss = qa.capture_baby(Mock(), "artifact", baby, 600, Mock())
+        self.assertIsNone(observation, "a vanished baby yields no observation")
+        self.assertIn("left the client-visible set", miss)
+        self.assertEqual(qa.BABY_CAPTURE_ATTEMPTS, 12)
+
+    def test_the_next_snapshot_captures_the_same_baby(self) -> None:
+        baby = {"entity_uuid": "new", "x": 160.5, "y": 75.0, "z": -280.5}
+        shot = {"retained_path": "baby.png"}
+        with patch.object(qa, "capture_target", side_effect=[qa._BabyLeftView("gone"), shot]):
+            first, miss = qa.capture_baby(Mock(), "artifact", baby, 600, Mock())
+            second, second_miss = qa.capture_baby(Mock(), "artifact", baby, 900, Mock())
+        self.assertIsNone(first)
+        self.assertIsNotNone(miss)
+        self.assertEqual(second["screenshot"], shot)
+        self.assertEqual(second["sprint_ticks"], 900)
+        self.assertIsNone(second_miss)
+
+    def test_an_occluded_baby_is_a_miss_not_an_abort(self) -> None:
+        # Run 20261125T005852: the observer stood on the roof and the aim hit
+        # dirt; _aim_at_baby now reports that as a miss for the next snapshot.
+        baby = {"entity_uuid": "new", "entity_id": 17, "x": 114.5, "y": 70.0, "z": -278.5}
+        probe = Mock()
+        probe.call.return_value = {"in_reach": False}
+        with patch.object(qa, "entity_census", return_value={"entities": [baby]}), \
+             patch.object(qa, "_aim", return_value={"type": "block", "block_id": "minecraft:dirt"}):
+            with self.assertRaises(qa._BabyLeftView):
+                qa._aim_at_baby(probe, baby, lambda *_: None)
+        self.assertEqual(qa.BABY_AIM_ATTEMPTS, 10)
+
+    def test_a_hard_capture_error_still_aborts(self) -> None:
+        # The old refusal: a RuntimeError other than _BabyLeftView is a real
+        # gate failure and must still propagate.
+        baby = {"entity_uuid": "new", "x": 160.5, "y": 75.0, "z": -280.5}
+        with patch.object(qa, "capture_target",
+                          side_effect=RuntimeError("baby no longer visible for milestone capture")):
+            with self.assertRaisesRegex(RuntimeError, "baby no longer visible"):
+                qa.capture_baby(Mock(), "artifact", baby, 600, Mock())
 
 if __name__ == "__main__":
     unittest.main()

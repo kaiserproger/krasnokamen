@@ -405,16 +405,149 @@ pub(crate) fn assess(
     })
 }
 
-pub(crate) fn inspect(
+/// Solid cells a generated piece must hold before its function is counted at
+/// all: the seed-24 plains_small_house_1 box measures 169 and
+/// plains_medium_house_1 543 solid cells, while a lone bed pair and door is 4
+/// and an air or open-water box is 0.
+const GENERATED_STRUCTURE_CELLS: u32 = 32;
+
+/// What adoption requires of a generated piece, or `None` for a kind adoption
+/// never produces (the strict `requirements` list then applies unchanged).
+///
+/// A vanilla jigsaw box is not a filled box: the gabled ridge and eaves leave
+/// air on its top layer, the door opening and porch leave gaps on its perimeter,
+/// and part of its bottom layer is yard. `assess`'s envelope flags are
+/// all-or-nothing over the whole box, so a completed generated house cannot meet
+/// them. They stay in force for every box this engine places itself (owner,
+/// operator, construction, discovery); adoption only confirms that the piece is
+/// present (`structure`) and carries its function (beds and a door, a
+/// workstation, a container).
+fn generated_requirements(kind: BuildingKind, level: u8) -> Option<Vec<Requirement>> {
+    let l = u32::from(level.clamp(1, 3));
+    let entries: Vec<(&str, u32)> = match kind {
+        BuildingKind::House => vec![("beds", l), ("entrance", 1)],
+        BuildingKind::Workshop(_) => vec![("workstations", l)],
+        BuildingKind::Storage => vec![("containers", l)],
+        BuildingKind::Mine
+        | BuildingKind::LumberCamp
+        | BuildingKind::Barracks
+        | BuildingKind::Wall
+        | BuildingKind::Tower
+        | BuildingKind::Gate => return None,
+    };
+    Some(
+        entries
+            .into_iter()
+            .chain(std::iter::once(("structure", GENERATED_STRUCTURE_CELLS)))
+            .map(|(description, required)| Requirement {
+                description: description.into(),
+                required,
+                found: 0,
+            })
+            .collect(),
+    )
+}
+
+/// The generated-piece counterpart of `assess`: the same functional counts, with
+/// the piece's substance instead of the envelope. See `generated_requirements`.
+pub(crate) fn assess_generated(
     state: &TickState,
     kind: BuildingKind,
     level: u8,
     bounds: ScriptWorldBounds,
+) -> Result<Inspection, CertError> {
+    let Some(functional) = generated_requirements(kind, level) else {
+        return assess(state, kind, level, bounds);
+    };
+    dimensions(bounds).ok_or_else(|| {
+        failure("bounds must be ordered, at most 64 blocks per axis and 32768 blocks total")
+    })?;
+    let (mut beds, mut entrances, mut solid) = (0_u32, 0_u32, 0_u32);
+    let mut points = BTreeSet::new();
+    for x in bounds.min[0]..=bounds.max[0] {
+        for z in bounds.min[2]..=bounds.max[2] {
+            for y in bounds.min[1]..=bounds.max[1] {
+                let id = state
+                    .world
+                    .block_at(x, y, z)
+                    .ok_or_else(|| failure("all building chunks must be loaded"))?;
+                let definition = state
+                    .registry
+                    .blocks
+                    .by_id(mc_world::BlockStateId(id))
+                    .ok_or_else(|| failure("unknown block"))?;
+                let name = definition.block.id.path();
+                if !state.registry.collision_boxes[id as usize].is_empty() {
+                    solid += 1;
+                }
+                // A generated House needs a bed a resident can sleep in, so the
+                // same roof predicate the allocator and migration use decides
+                // whether the piece's bed counts (`certified_beds`,
+                // `bed_allowed`): a floor or terrain cell above nothing is not
+                // a House, and a certified bed that no resident may claim would
+                // only inflate the housing demand `needed_kinds` reads.
+                if name.ends_with("_bed")
+                    && definition
+                        .properties
+                        .iter()
+                        .any(|(key, value)| key == "part" && value == "head")
+                    && super::allocator::bed_pair(
+                        &state.world,
+                        &state.registry,
+                        BlockPos { x, y, z },
+                    )
+                    .is_some()
+                    && super::allocator::roofed(&state.world, &state.registry, BlockPos { x, y, z })
+                {
+                    beds += 1;
+                }
+                if name.ends_with("_door")
+                    && definition
+                        .properties
+                        .iter()
+                        .any(|(key, value)| key == "half" && value == "lower")
+                {
+                    entrances += 1;
+                }
+                if kind == BuildingKind::Storage
+                    && matches!(name, "chest" | "trapped_chest" | "barrel")
+                {
+                    points.insert([x, y, z]);
+                }
+                if workstation_matches(&state.registry, kind, id) {
+                    points.insert([x, y, z]);
+                }
+            }
+        }
+    }
+    let checks = functional
+        .into_iter()
+        .map(|mut r| {
+            r.found = match r.description.as_str() {
+                "beds" => beds,
+                "containers" | "workstations" => points.len() as u32,
+                "entrance" => entrances,
+                "structure" => solid,
+                _ => 0,
+            };
+            r
+        })
+        .collect();
+    Ok(Inspection {
+        requirements: checks,
+        points,
+    })
+}
+
+fn inspection_points(
+    kind: BuildingKind,
+    level: u8,
+    inspection: Result<Inspection, CertError>,
 ) -> Result<Vec<[i32; 3]>, CertError> {
     let Inspection {
         mut requirements,
         points,
-    } = assess(state, kind, level, bounds)?;
+    } = inspection?;
     requirements.retain(|requirement| requirement.found < requirement.required);
     if !requirements.is_empty() {
         return Err(CertError {
@@ -429,12 +562,68 @@ pub(crate) fn inspect(
     Ok(points.into_iter().take(cap).collect())
 }
 
+pub(crate) fn inspect(
+    state: &TickState,
+    kind: BuildingKind,
+    level: u8,
+    bounds: ScriptWorldBounds,
+) -> Result<Vec<[i32; 3]>, CertError> {
+    inspection_points(kind, level, assess(state, kind, level, bounds))
+}
+
+/// Generated-piece admission: the functional rule of `assess_generated`.
+pub(crate) fn inspect_generated(
+    state: &TickState,
+    kind: BuildingKind,
+    level: u8,
+    bounds: ScriptWorldBounds,
+) -> Result<Vec<[i32; 3]>, CertError> {
+    inspection_points(kind, level, assess_generated(state, kind, level, bounds))
+}
+
+/// Certify a building an owner, an operator or construction authored.
+///
+/// Every different-kind overlap is refused; see `certify_generated` for the one
+/// generated piece that is both a house and its own workplace.
 pub(crate) fn certify(
     state: &mut TickState,
     settlement: SettlementId,
     kind: BuildingKind,
     bounds: ScriptWorldBounds,
 ) -> Result<BuildingId, CertError> {
+    certify_impl(state, settlement, kind, bounds, Caller::Strict)
+}
+
+/// Certify one kind of a generated piece: only this caller may add a Workshop to
+/// a House's exact bounds (and the other way round), because a plains library
+/// really is both, and only this caller inspects by piece function and substance
+/// (`assess_generated`) instead of the builder envelope. Owner, operator and
+/// construction callers keep the strict rule.
+pub(crate) fn certify_generated(
+    state: &mut TickState,
+    settlement: SettlementId,
+    kind: BuildingKind,
+    bounds: ScriptWorldBounds,
+) -> Result<BuildingId, CertError> {
+    certify_impl(state, settlement, kind, bounds, Caller::Generated)
+}
+
+/// Which inspection a certification answers to. `Generated` is the adoption
+/// caller alone; expansion of an existing certificate stays strict either way.
+#[derive(Debug, Clone, Copy)]
+enum Caller {
+    Strict,
+    Generated,
+}
+
+fn certify_impl(
+    state: &mut TickState,
+    settlement: SettlementId,
+    kind: BuildingKind,
+    bounds: ScriptWorldBounds,
+    caller: Caller,
+) -> Result<BuildingId, CertError> {
+    let allow_pair = matches!(caller, Caller::Generated);
     let record = state
         .settlements
         .get(settlement)
@@ -442,34 +631,49 @@ pub(crate) fn certify(
     if dimensions(bounds).is_none() || !within(record, bounds) {
         return Err(failure("invalid bounds or outside settlement"));
     }
-    let mut overlapping = record
+    let overlapping: Vec<&Building> = record
         .buildings
         .values()
-        .filter(|b| overlaps(b.bounds, bounds));
-    if let Some(existing) = overlapping.next() {
-        if overlapping.next().is_some()
-            || existing.kind != kind
-            || !inside(bounds, existing.bounds.min)
-            || !inside(bounds, existing.bounds.max)
-        {
+        .filter(|b| overlaps(b.bounds, bounds))
+        .collect();
+    // This exact certificate already exists: a second re-certification of the
+    // same building is satisfied by it, even when a House shares its bounds.
+    if let Some(exact) = overlapping
+        .iter()
+        .find(|b| b.kind == kind && b.bounds.min == bounds.min && b.bounds.max == bounds.max)
+    {
+        return Ok(exact.id);
+    }
+    if let Some(existing) = overlapping.first() {
+        if overlapping.len() > 1 {
             return Err(failure(
                 "building overlaps another certificate; expansion must contain the original bounds",
             ));
         }
-        let (id, level) = (existing.id, existing.level);
-        let points = inspect(state, kind, level, bounds)?;
-        let record = state
-            .settlements
-            .get_mut(settlement)
-            .expect("validated settlement");
-        record.revision = record.revision.saturating_add(1);
-        let building = record.buildings.get_mut(&id).expect("validated building");
-        building.bounds = bounds;
-        building.work_points = points;
-        building.natural_zone = false;
-        building.revision = building.revision.saturating_add(1);
-        wake_residents(state, settlement);
-        return Ok(id);
+        let existing = *existing;
+        if existing.kind != kind {
+            // One generated piece can be both a house and its own workstation
+            // (a plains library holds a lectern beside beds), so exactly that
+            // pair certifies twice, on the piece's own bounds: the House record
+            // owns the beds and the Workshop record the job site, and neither
+            // fact is counted twice.
+            if !(allow_pair
+                && house_workshop_pair(existing.kind, kind)
+                && existing.bounds.min == bounds.min
+                && existing.bounds.max == bounds.max)
+            {
+                return Err(failure(
+                    "building overlaps another certificate; expansion must contain the original bounds",
+                ));
+            }
+        } else {
+            if !inside(bounds, existing.bounds.min) || !inside(bounds, existing.bounds.max) {
+                return Err(failure(
+                    "building overlaps another certificate; expansion must contain the original bounds",
+                ));
+            }
+            return expand(state, settlement, existing.id, existing.level, kind, bounds);
+        }
     }
     if record.buildings.len() >= 1024 {
         return Err(failure("maximum 1024 buildings per settlement"));
@@ -482,7 +686,10 @@ pub(crate) fn certify(
     if settlement.0 > u64::from(u32::MAX) {
         return Err(failure("settlement identity exhausted"));
     }
-    let points = inspect(state, kind, 1, bounds)?;
+    let points = match caller {
+        Caller::Generated => inspect_generated(state, kind, 1, bounds)?,
+        Caller::Strict => inspect(state, kind, 1, bounds)?,
+    };
     let id = BuildingId((settlement.0 << 32) | sequence);
     let record = state
         .settlements
@@ -506,6 +713,42 @@ pub(crate) fn certify(
     wake_residents(state, settlement);
     Ok(id)
 }
+/// The one generated piece that is both a house and its own workplace: a plains
+/// library's lectern beside its beds. Only this pair certifies twice, and only on
+/// the piece's own bounds.
+fn house_workshop_pair(a: BuildingKind, b: BuildingKind) -> bool {
+    matches!(
+        (a, b),
+        (BuildingKind::House, BuildingKind::Workshop(_))
+            | (BuildingKind::Workshop(_), BuildingKind::House)
+    )
+}
+
+/// Grow an existing certificate to contain `bounds`; the caller checked same kind
+/// and containment.
+fn expand(
+    state: &mut TickState,
+    settlement: SettlementId,
+    id: BuildingId,
+    level: u8,
+    kind: BuildingKind,
+    bounds: ScriptWorldBounds,
+) -> Result<BuildingId, CertError> {
+    let points = inspect(state, kind, level, bounds)?;
+    let record = state
+        .settlements
+        .get_mut(settlement)
+        .expect("validated settlement");
+    record.revision = record.revision.saturating_add(1);
+    let building = record.buildings.get_mut(&id).expect("validated building");
+    building.bounds = bounds;
+    building.work_points = points;
+    building.natural_zone = false;
+    building.revision = building.revision.saturating_add(1);
+    wake_residents(state, settlement);
+    Ok(id)
+}
+
 pub(crate) fn upgrade(state: &mut TickState, id: BuildingId) -> Result<(), CertError> {
     let settlement = SettlementId(id.0 >> 32);
     let record = state

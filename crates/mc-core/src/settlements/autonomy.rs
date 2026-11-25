@@ -19,11 +19,16 @@ const INITIAL_REGION_QUERIES_PER_TICK: usize = 8;
 const PENDING_REGION_QUERIES_PER_TICK: usize = 2;
 const VILLAGES_PER_TICK: usize = 4;
 const BINDS_PER_TICK: usize = 32;
+/// Unreadable classification retries per generated piece before it is dropped.
+const PIECE_ATTEMPTS: u8 = 8;
 const PIECES_PER_PASS: usize = 8;
 const ZONE_PROBES_PER_PASS: usize = 4;
 const NATURAL_ZONE_CYCLES: usize = 2;
 // VillagePlanSource documents a maximum reach of seven chunks plus a margin.
 const START_SEARCH_RADIUS: i32 = 8;
+/// Columns a natural lumber camp's zone may grow beyond the proved trunk: the
+/// grove a camp is for, not the single column the tree search probes (CIV-6).
+const GROVE_RADIUS: i32 = 6;
 
 #[derive(Debug, Default)]
 pub(crate) struct AutonomyQueue {
@@ -40,7 +45,12 @@ struct PendingVillage {
     known_residents: BTreeSet<uuid::Uuid>,
     meeting_bell: Option<Option<[i32; 3]>>,
     uncertified: VecDeque<usize>,
-    piece_kinds: Vec<Option<Option<BuildingKind>>>,
+    /// `None` = not classified yet (an unreadable column retries); `Some(vec![])`
+    /// = classified as no building.
+    piece_kinds: Vec<Option<Vec<BuildingKind>>>,
+    /// Unreadable classifications per piece; `PIECE_ATTEMPTS` bounds the retries
+    /// so a permanently unreadable column cannot hold the village's queue alive.
+    piece_attempts: Vec<u8>,
     zone_cursor: usize,
     natural_candidates: VecDeque<NaturalCandidate>,
 }
@@ -126,6 +136,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 queue.villages.push_back(PendingVillage {
                     uncertified: (0..site.pieces.len()).collect(),
                     piece_kinds,
+                    piece_attempts: vec![0; site.pieces.len()],
                     site,
                     source,
                     residents: VecDeque::new(),
@@ -275,15 +286,98 @@ fn advance(
                 continue;
             }
             if !overlaps_existing(state, id, &bounds) {
-                let kind = if let Some(kind) = pending.piece_kinds[index] {
-                    kind
-                } else {
-                    let kind = piece_kind(piece, state, &bounds);
-                    pending.piece_kinds[index] = Some(kind);
-                    kind
+                let kinds = match pending.piece_kinds[index].clone() {
+                    Some(kinds) => kinds.clone(),
+                    None => match piece_kinds(piece, state, &bounds) {
+                        Some(kinds) => {
+                            pending.piece_kinds[index] = Some(kinds.clone());
+                            kinds
+                        }
+                        // An unreadable column is not a verdict: keep the queue
+                        // position and retry, never a "no building" for the
+                        // world's life.
+                        None => {
+                            pending.piece_attempts[index] =
+                                pending.piece_attempts[index].saturating_add(1);
+                            if pending.piece_attempts[index] >= PIECE_ATTEMPTS {
+                                pending.piece_kinds[index] = Some(Vec::new());
+                            } else {
+                                pending.uncertified.push_back(index);
+                            }
+                            continue;
+                        }
+                    },
                 };
-                if let Some(kind) = kind {
-                    let _ = super::buildings::certify(state, id, kind, bounds);
+                for kind in kinds {
+                    // A refused adopted piece used to vanish here: the gate could
+                    // only report "no certified House", never why (ReviewD123Civ13).
+                    // Certification is by piece function and substance
+                    // (`buildings::assess_generated`), so a piece that refuses now
+                    // really lacks the thing it was classified for; a village's
+                    // blocks are written by the generator before admission, and
+                    // re-examining the same box later never changed the verdict.
+                    if let Err(error) = super::buildings::certify_generated(state, id, kind, bounds)
+                    {
+                        let missing: Vec<String> = error
+                            .missing
+                            .iter()
+                            .map(|requirement| {
+                                format!(
+                                    "{}({}/{})",
+                                    requirement.description,
+                                    requirement.found,
+                                    requirement.required
+                                )
+                            })
+                            .collect();
+                        // Read the same accessor `assess` reads, so a refusal can be
+                        // told apart from a mismatch: air answers mean the blocks are
+                        // not there, ids mean the predicates disagree.
+                        let centre = [(lo.x + hi.x) / 2, (lo.y + hi.y) / 2, (lo.z + hi.z) / 2];
+                        let corner_min = block_name(state, [lo.x, lo.y, lo.z]);
+                        let centre_block = block_name(state, centre);
+                        let corner_max = block_name(state, [hi.x, hi.y, hi.z]);
+                        let mut non_air = 0;
+                        for dx in -1..=1 {
+                            for dy in -1..=1 {
+                                for dz in -1..=1 {
+                                    if state
+                                        .world
+                                        .block_at(centre[0] + dx, centre[1] + dy, centre[2] + dz)
+                                        .is_some_and(|id| id != state.registry.states.air)
+                                    {
+                                        non_air += 1;
+                                    }
+                                }
+                            }
+                        }
+                        let mut chunks = Vec::new();
+                        for cx in lo.x.div_euclid(16)..=hi.x.div_euclid(16) {
+                            for cz in lo.z.div_euclid(16)..=hi.z.div_euclid(16) {
+                                chunks.push((
+                                    cx,
+                                    cz,
+                                    state.world.has_chunk(cx, cz),
+                                    state.world.is_active(cx, cz),
+                                ));
+                            }
+                        }
+                        tracing::debug!(
+                            target: "settlements::construction",
+                            settlement = id.0,
+                            ?kind,
+                            template = ?piece.template,
+                            min = ?lo,
+                            max = ?hi,
+                            corner_min,
+                            centre_block,
+                            corner_max,
+                            centre_non_air = non_air,
+                            chunks = ?chunks,
+                            missing = ?missing,
+                            "adopted piece refused certification"
+                        );
+                    }
                 }
             }
         }
@@ -294,6 +388,7 @@ fn advance(
         prove_natural(
             state,
             id,
+            Some(&pending.site),
             &pending.known_residents,
             &mut pending.natural_candidates,
         );
@@ -726,6 +821,7 @@ fn queue_natural(
 fn prove_natural(
     state: &mut TickState,
     settlement: SettlementId,
+    site: Option<&GeneratedVillageSite>,
     residents: &BTreeSet<uuid::Uuid>,
     candidates: &mut VecDeque<NaturalCandidate>,
 ) {
@@ -838,13 +934,30 @@ fn prove_natural(
     }
     if reached {
         let candidate = candidates.pop_front().expect("proved candidate");
-        let _ = super::buildings::certify_zone(
+        // A natural lumber camp is the grove it stands in, not the one tree the
+        // probe found: the zone grows sideways at certification time (CIV-6), and
+        // the plain column stays the fallback when the wider rectangle is refused.
+        let grown = match candidate.kind {
+            BuildingKind::LumberCamp => grove_bounds(state, settlement, site, candidate.bounds),
+            _ => candidate.bounds,
+        };
+        if super::buildings::certify_zone(
             state,
             settlement,
             candidate.kind,
-            candidate.bounds,
+            grown,
             candidate.entrance,
-        );
+        )
+        .is_err()
+        {
+            let _ = super::buildings::certify_zone(
+                state,
+                settlement,
+                candidate.kind,
+                candidate.bounds,
+                candidate.entrance,
+            );
+        }
     } else {
         // A failed bounded route never installs a job. Try another resident on
         // a later pass, then let the existing terrain sweep seek another zone.
@@ -853,6 +966,104 @@ fn prove_natural(
             .expect("unproved candidate")
             .after_resident = Some(uuid);
     }
+}
+
+/// The zone a natural lumber camp is certified from: the proved tree's column
+/// widened sideways, so the camp's zone is the grove the design describes
+/// instead of one trunk (CIV-6; the phase log of 20261124T020538 found certified
+/// bounds of `1x8x1`, and a lumberjack's `plant_zone` walk could then only ever
+/// cover one tree).
+///
+/// The grove is a bounded square around the trunk (at most `GROVE_RADIUS`
+/// columns per side), not a log census: the tree search already proved this
+/// stand is reachable, and a census would walk the world volume on every
+/// certification. Each side grows only while the rectangle's corners stay
+/// inside the settlement sphere (`buildings::certify_zone`'s own `within`
+/// rule), every column of the rectangle is simulated (`bounds_active`, not
+/// mere residency), and no certificate or generated village piece already
+/// stands there.
+///
+/// Cost per call: at most `4 * GROVE_RADIUS` = 24 probes, each an O(1) corner
+/// test, an O(1) chunk-activity lookup and one clearance scan over `B`
+/// certificates and `P` village pieces (`O(B + P)`); no world volume walk and
+/// no new per-tick work.
+///
+/// Certification still owns the remaining rules — overlap with another
+/// certificate, at least four zone logs, an open entrance — and `prove_natural`
+/// keeps the plain column when the wider rectangle is refused; a grove is an
+/// improvement, never a new failure. A natural zone keeps only its own columns
+/// against other worksites (`villager::lumber::base_protected` shields the
+/// grove from every camp but its own), and the lot planner reserves a natural
+/// zone's own footprint only (`construction_site_refusals`).
+fn grove_bounds(
+    state: &TickState,
+    settlement: SettlementId,
+    site: Option<&GeneratedVillageSite>,
+    bounds: ScriptWorldBounds,
+) -> ScriptWorldBounds {
+    let Some(record) = state.settlements.get(settlement) else {
+        return bounds;
+    };
+    let inside = |min: [i32; 3], max: [i32; 3]| {
+        [min[0], max[0]].into_iter().all(|x| {
+            [min[1], max[1]].into_iter().all(|y| {
+                [min[2], max[2]].into_iter().all(|z| {
+                    [x, y, z]
+                        .into_iter()
+                        .zip(record.anchor)
+                        .map(|(v, a)| (i128::from(v) - i128::from(a)).pow(2))
+                        .sum::<i128>()
+                        <= i128::from(record.radius).pow(2)
+                })
+            })
+        })
+    };
+    let loaded = |min: [i32; 3], max: [i32; 3]| {
+        ScriptWorldBounds::new(min, max).is_ok_and(|rect| bounds_active(state, &rect))
+    };
+    // A certificate or a generated village piece already standing there ends
+    // the grove on that side (`queue_natural` refuses a tree inside a piece for
+    // the same reason: the zone never covers a house); the narrower rectangle
+    // still certifies, the plain column still falls back.
+    let clear = |min: [i32; 3], max: [i32; 3]| {
+        !record.buildings.values().any(|building| {
+            (0..3).all(|axis| {
+                building.bounds.min[axis] <= max[axis] && building.bounds.max[axis] >= min[axis]
+            })
+        }) && !site.is_some_and(|site| {
+            site.pieces
+                .iter()
+                .filter_map(|piece| piece.bounds)
+                .any(|(lo, hi)| {
+                    let lo = [lo.x, lo.y, lo.z];
+                    let hi = [hi.x, hi.y, hi.z];
+                    [0, 2]
+                        .into_iter()
+                        .all(|axis| lo[axis] <= max[axis] && hi[axis] >= min[axis])
+                })
+        })
+    };
+    let mut min = bounds.min;
+    let mut max = bounds.max;
+    for axis in [0_usize, 2] {
+        for (sign, limit) in [(-1_i32, GROVE_RADIUS), (1, GROVE_RADIUS)] {
+            for _ in 0..limit {
+                let mut probe = [min, max];
+                let index = usize::from(sign > 0);
+                probe[index][axis] += sign;
+                let (next_min, next_max) = (probe[0], probe[1]);
+                if !inside(next_min, next_max)
+                    || !loaded(next_min, next_max)
+                    || !clear(next_min, next_max)
+                {
+                    break;
+                }
+                min = next_min;
+                max = next_max;
+            }
+        }
+    }
+    ScriptWorldBounds::new(min, max).unwrap_or(bounds)
 }
 
 fn open_entrance(
@@ -885,10 +1096,31 @@ fn open_entrance(
     None
 }
 
+fn block_name(state: &TickState, at: [i32; 3]) -> String {
+    state
+        .world
+        .block_at(at[0], at[1], at[2])
+        .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
+        .map_or_else(
+            || "unloaded".to_owned(),
+            |block| block.block.id.path().to_owned(),
+        )
+}
+
 fn bounds_loaded(state: &TickState, bounds: &ScriptWorldBounds) -> bool {
     (bounds.min[0].div_euclid(16)..=bounds.max[0].div_euclid(16)).all(|x| {
         (bounds.min[2].div_euclid(16)..=bounds.max[2].div_euclid(16))
             .all(|z| state.world.has_chunk(x, z))
+    })
+}
+
+/// Whether every chunk column of `bounds` is *simulated*, not merely resident:
+/// a zone column in a resident-but-inactive chunk cannot tick its worker or the
+/// blocks it edits, so a grove never grows into one.
+fn bounds_active(state: &TickState, bounds: &ScriptWorldBounds) -> bool {
+    (bounds.min[0].div_euclid(16)..=bounds.max[0].div_euclid(16)).all(|x| {
+        (bounds.min[2].div_euclid(16)..=bounds.max[2].div_euclid(16))
+            .all(|z| state.world.is_active(x, z))
     })
 }
 
@@ -903,36 +1135,62 @@ fn overlaps_existing(state: &TickState, id: SettlementId, bounds: &ScriptWorldBo
     })
 }
 
-fn piece_kind(
+/// What one generated piece certifies, or `None` when a column could not be read
+/// (the caller retries on a later tick rather than dropping the piece forever).
+///
+/// A piece that holds both beds and its own workstation certifies as both: a
+/// plains library's lectern stands beside its beds, so the House keeps the beds
+/// and the Workshop keeps the profession slot.
+pub(crate) fn piece_kinds(
     piece: &GeneratedVillagePiece,
     state: &TickState,
     bounds: &ScriptWorldBounds,
-) -> Option<BuildingKind> {
+) -> Option<Vec<BuildingKind>> {
     let template = piece.template.as_deref()?;
+    // A street is never a building. Its bounds frequently graze the beds of the
+    // houses it runs past, and the bed probe below then certified the street as a
+    // house site (seed-24 listing: streets/straight_02/03/06 and turn_01 all came
+    // back as House pieces).
+    if template.contains("/streets/") || template.contains("/roads/") {
+        return Some(Vec::new());
+    }
     if template.contains("farm") || template.contains("field") || template.contains("crop") {
-        return Some(BuildingKind::Workshop(
+        return Some(vec![BuildingKind::Workshop(
             crate::villager::VillagerProfession::Farmer,
-        ));
+        )]);
     }
     use super::allocator::{PoiKind, poi_kind};
     let mut bed = false;
+    let mut job = None;
     for x in bounds.min[0]..=bounds.max[0] {
         for z in bounds.min[2]..=bounds.max[2] {
             for y in bounds.min[1]..=bounds.max[1] {
                 let id = state.world.block_at(x, y, z)?;
                 let block = state.registry.blocks.by_id(mc_world::BlockStateId(id))?;
-                if let Some(PoiKind::Job(profession)) = poi_kind(&state.registry, id) {
-                    return Some(BuildingKind::Workshop(profession));
+                if job.is_none()
+                    && let Some(PoiKind::Job(profession)) = poi_kind(&state.registry, id)
+                {
+                    job = Some(profession);
                 }
                 bed |= block.block.id.path().ends_with("_bed")
                     && block
                         .properties
                         .iter()
                         .any(|(name, value)| name == "part" && value == "head");
+                if bed && job.is_some() {
+                    break;
+                }
             }
         }
     }
-    bed.then_some(BuildingKind::House)
+    let mut kinds = Vec::new();
+    if bed {
+        kinds.push(BuildingKind::House);
+    }
+    if let Some(profession) = job {
+        kinds.push(BuildingKind::Workshop(profession));
+    }
+    Some(kinds)
 }
 
 #[cfg(test)]

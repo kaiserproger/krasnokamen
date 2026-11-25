@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import math
+import os
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -13,13 +14,63 @@ from .probe_steps import ProbeSteps
 
 SPRINT_TICKS = 3000
 STALL_TICKS = 24000  # One complete day/night cycle, not merely a work shift.
-MAX_TICKS = 96000
+def _bound_ticks(default: int = 96000) -> int:
+    """Diagnostic runs may extend the bound; only the owner decides whether it counts."""
+    raw = os.environ.get("KRASNOKAMEN_SEED_QA_MAX_TICKS")
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return max(default, value)
+
+
+MAX_TICKS = _bound_ticks()
+# A console teleport of the observer is scaffolding for the block scan, never
+# evidence: it may cost this long, not the rest of the scenario deadline.
+OBSERVER_MOVE_TIMEOUT = 30.0
+OBSERVER_STAND_MARGIN = 4.0
+BABY_CAPTURE_ATTEMPTS = 12
 FOUNDING_STOCK = {"minecraft:oak_log": 32, "minecraft:bread": 16,
                   "minecraft:raw_iron": 8, "minecraft:coal": 8,
                   "minecraft:cobblestone": 32}
 
 STAGES = ("new_house", "births", "second_building", "iron_smelted")
 BIRTHS_LIMITATION = "Birth proof requires retained server claim/birth audit events and a current clean checkpoint."
+IRON_INGOT = "minecraft:iron_ingot"
+NBT_WRITE_TOKENS = ("data merge", "data modify", "recipes_used", "recipesused")
+
+
+def iron_evidence(furnace: dict[str, Any], *, baseline: bool) -> str | None:
+    """Which observation proves the town smelted iron, or `None`.
+
+    `output_slot` is the stronger evidence (a menu capture with a screenshot);
+    `furnace_recipes` is the block entity's persistent RecipesUsed counter, which
+    survives the resident collecting an ingot between samples. A furnace that
+    stood before the fixture (`baseline`) may carry a counter an earlier world
+    wrote, so it proves nothing; only a furnace the town built does.
+    """
+    if baseline:
+        return None
+    if (furnace.get("container_totals") or {}).get(IRON_INGOT, 0) > 0:
+        return "output_slot"
+    if village.iron_smelted_by_recipes(furnace.get("recipes_used")):
+        return "furnace_recipes"
+    return None
+
+
+def assert_no_evidence_writes(commands: list[str]) -> None:
+    """Fail closed when a fixture command writes block-entity NBT.
+
+    `data merge`, `data modify` or `setblock{...}` would forge a furnace's
+    RecipesUsed counter (and with it the iron proof), so the gate refuses to run
+    with such a command in its own transcript.
+    """
+    for command in commands:
+        text = str(command).lower()
+        if any(token in text for token in NBT_WRITE_TOKENS):
+            raise RuntimeError(f"fixture writes block-entity NBT, the iron proof would be forged: {command!r}")
 
 
 def acceptance_verdict(stages: dict[str, bool], *, stalled: bool) -> dict[str, bool]:
@@ -316,14 +367,28 @@ def capture_house(probe: ProbeSteps, artifact: Path, label: str,
             "properties": {"half": half, "open": "true"}, "timeout_seconds": 10.0,
         })
     shot = capture_target(probe, artifact, label, target)
-    probe.call("minecraft_navigate_to_block", {
-        "x": math.floor(initial["x"]), "y": math.floor(initial["y"]),
-        "z": math.floor(initial["z"]), "timeout_seconds": 120.0,
-    })
+    try:
+        probe.call("minecraft_navigate_to_block", {
+            "x": math.floor(initial["x"]), "y": math.floor(initial["y"]),
+            "z": math.floor(initial["z"]), "timeout_seconds": 120.0,
+        })
+    except RuntimeError as error:
+        if "unreachable" not in str(error):
+            raise
     return shot
 
 
-BABY_AIM_ATTEMPTS = 6
+BABY_AIM_ATTEMPTS = 10
+BABY_TELEPORT_SIDES = ((1.5, 0.0), (-1.5, 0.0), (0.0, 1.5), (0.0, -1.5))
+
+
+class _BabyLeftView(RuntimeError):
+    """The newborn left the client-visible set between listing and capture.
+
+    Run 20261124T232341 aborted the whole gate after 947 s on this: the baby was
+    listed, walked out of view, and the capture refused. The caller re-lists on a
+    later snapshot, bounded by BABY_CAPTURE_ATTEMPTS and the sprint deadline.
+    """
 
 
 def _aim(probe: ProbeSteps, target: tuple[float, float, float]) -> dict[str, Any]:
@@ -334,6 +399,15 @@ def _aim(probe: ProbeSteps, target: tuple[float, float, float]) -> dict[str, Any
         "pitch_deg": int(round(-math.degrees(math.atan2(dy, math.hypot(dx, dz))))),
     })
     return probe.observe().get("target") or {}
+
+
+def _approach_timeout(probe: ProbeSteps) -> float:
+    """One approach may not eat the rest of the scenario deadline."""
+    try:
+        remaining = float(probe.remaining())
+    except (AttributeError, TypeError, ValueError):
+        return 120.0
+    return min(120.0, remaining)
 
 
 Teleport = Callable[[float, float, float], None]
@@ -352,39 +426,54 @@ def _aim_at_baby(probe: ProbeSteps, entity: dict[str, Any],
     observation points."""
     observed: dict[str, Any] = {}
     teleported = False
+    teleports = 0
     for _ in range(BABY_AIM_ATTEMPTS):
         try:
             reply = probe.call("minecraft_approach_entity",
-                               {"entity_id": entity["entity_id"], "timeout_seconds": 120.0})
+                               {"entity_id": entity["entity_id"],
+                                "timeout_seconds": _approach_timeout(probe)})
         except RuntimeError as error:
             # A walking baby can leave the client's received set mid-approach
             # (20261124T035536: "entity identity left client-visible state while
             # approaching"). Re-read the census and approach again; an identity
             # that is genuinely gone trips the visibility check below.
-            if "left client-visible state" not in str(error):
+            # Run 20261125T040502 refused with the same class of error in another
+            # wording ("entity is not client-visible"), so both wordings retry.
+            text = str(error)
+            if "left client-visible state" not in text and "not client-visible" not in text:
                 raise
             probe.call("minecraft_wait_ticks", {"ticks": 10})
             seen = entity_census(probe, "minecraft:villager")
             current = next((e for e in seen.get("entities", [])
                            if e.get("entity_uuid") == entity["entity_uuid"]), None)
             if current is None or current.get("received_baby") is not True:
-                raise RuntimeError("baby no longer visible for milestone capture") from error
+                raise _BabyLeftView("baby left the client-visible set while approaching") from error
             entity = current
             continue
         seen = entity_census(probe, "minecraft:villager")
         current = next((e for e in seen.get("entities", [])
                         if e.get("entity_uuid") == entity["entity_uuid"]), None)
         if current is None or current.get("received_baby") is not True:
-            raise RuntimeError("baby no longer visible for milestone capture")
+            raise _BabyLeftView("baby left the client-visible set before its capture")
         if reply.get("in_reach") is False and teleport is not None:
-            teleport(current["x"], current["y"], current["z"])
+            # The newborn stays inside its parents' house: put the observer
+            # beside it, never on its own cell. Aiming from the baby's feet
+            # inside a wall lands on the floor and aborts the whole gate
+            # (20261124T205323 hit minecraft:cobblestone at 120,71,-274). One
+            # side per attempt, so a wall on one side is retried on the next.
+            dx, dz = BABY_TELEPORT_SIDES[teleports % len(BABY_TELEPORT_SIDES)]
+            teleport(current["x"] + dx, current["y"], current["z"] + dz)
             probe.call("minecraft_wait_ticks", {"ticks": 20})
             teleported = True
+            teleports += 1
             continue
         observed = _aim(probe, (current["x"], current["y"] + 0.5, current["z"]))
         if observed.get("type") == "entity" and observed.get("entity_uuid") == entity["entity_uuid"]:
             return observed, teleported
-    raise RuntimeError(f"milestone target is occluded or out of reach: baby {entity['entity_uuid']}: {observed}")
+    # Not fatal: the baby is behind a wall, under a roof or walked away; the caller
+    # re-lists it on the next snapshot (bounded by BABY_CAPTURE_ATTEMPTS).
+    raise _BabyLeftView(
+        f"baby occluded or out of reach: {entity['entity_uuid']}: {observed}")
 
 
 BUILDING_AIM_CANDIDATES = 8
@@ -397,6 +486,24 @@ def _solid_targets_by_distance(solid: list[dict[str, Any]],
     eye = (player["x"], player["y"] + 1.62, player["z"])
     centres = [tuple(block[axis] + 0.5 for axis in ("x", "y", "z")) for block in solid]
     return sorted(centres, key=lambda c: sum((c[i] - eye[i]) ** 2 for i in range(3)))
+
+
+def capture_baby(probe: ProbeSteps, artifact: Path, baby: dict[str, Any], advanced: int,
+                 teleport: Teleport) -> tuple[dict[str, Any] | None, str | None]:
+    """Capture the newborn, or name why it was not captured this snapshot.
+
+    A baby that walked out of the client's view is not a gate failure (run
+    20261124T232341 aborted on it after 947 s): the caller re-lists on the next
+    snapshot and stops after `BABY_CAPTURE_ATTEMPTS`.
+    """
+    target = (baby["x"], baby["y"] + 0.5, baby["z"])
+    try:
+        return {"sprint_ticks": advanced, "entity": baby,
+                "screenshot": capture_target(
+                    probe, artifact, f"civilization-births-{advanced:06d}", target,
+                    entity=baby, teleport=teleport)}, None
+    except _BabyLeftView as error:
+        return None, str(error)
 
 
 def capture_target(probe: ProbeSteps, artifact: Path, label: str,
@@ -414,6 +521,19 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
         destination = [math.floor(value) for value in target]
         if building:
             low, high = building["min"], building["max"]
+            remote = max(abs(coord - initial[axis]) for coord, axis in (
+                (low[0], "x"), (high[0], "x"), (low[2], "z"), (high[2], "z"))) > 48
+            if remote and teleport is not None:
+                # A block scan reads only the chunks the client has loaded: from
+                # the bell a certified farm 110 blocks out is not loaded, and the
+                # scan aborts the whole gate ("client chunk is not loaded at
+                # 77, 66, -320", run 20261124T192024). Move the creative
+                # observer beside the building first, bounded like the scan's
+                # own move in building_blocks.
+                beside = {"x": (low[0] + high[0]) / 2, "y": high[1] + 3, "z": (low[2] + high[2]) / 2}
+                teleport(beside["x"], beside["y"], beside["z"])
+                probe.call("minecraft_wait_ticks", {"ticks": 20})
+                teleported = True
             faces = ((low[0] - 1, low[0] - 1, low[2], high[2]),
                      (high[0] + 1, high[0] + 1, low[2], high[2]),
                      (low[0], high[0], low[2] - 1, low[2] - 1),
@@ -425,7 +545,20 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
                           "min_z": min_z, "max_z": max_z, "max_blocks": 4096}
                 offset = 0
                 while True:
-                    scan = probe.call("minecraft_scan_blocks", {**bounds, "offset": offset})
+                    try:
+                        scan = probe.call("minecraft_scan_blocks", {**bounds, "offset": offset})
+                    except RuntimeError as error:
+                        if "client chunk is not loaded" not in str(error):
+                            raise
+                        # The observer did not come close enough for the client to
+                        # hold this face: ask for one loaded cell there, once, and
+                        # let a second refusal name the capture instead of hiding
+                        # every later milestone.
+                        probe.call("minecraft_wait_for_loaded_block", {
+                            "x": max(min_x, low[0]), "y": low[1], "z": max(min_z, low[2]),
+                            "timeout_seconds": min(120.0, probe.remaining()),
+                        })
+                        scan = probe.call("minecraft_scan_blocks", {**bounds, "offset": offset})
                     blocks.extend(scan.get("blocks", []))
                     if not scan.get("truncated"):
                         break
@@ -486,10 +619,22 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
         teleport(initial["x"], initial["y"], initial["z"])
         probe.call("minecraft_wait_ticks", {"ticks": 20})
         return shot
-    probe.call("minecraft_navigate_to_block", {
-        "x": math.floor(initial["x"]), "y": math.floor(initial["y"]), "z": math.floor(initial["z"]),
-        "timeout_seconds": 120.0,
-    })
+    try:
+        probe.call("minecraft_navigate_to_block", {
+            "x": math.floor(initial["x"]), "y": math.floor(initial["y"]), "z": math.floor(initial["z"]),
+            "timeout_seconds": 120.0,
+        })
+    except RuntimeError as error:
+        # Run 20261125T011226 aborted on the walk back ("target is unreachable
+        # from the current loaded client position"). The observer's position only
+        # loads what the next capture reads, so a refused walk back is moved by
+        # the console when a teleport exists, and otherwise left for the next
+        # capture to navigate from.
+        if "unreachable" not in str(error):
+            raise
+        if teleport is not None:
+            teleport(initial["x"], initial["y"], initial["z"])
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
     return shot
 
 
@@ -544,6 +689,17 @@ def fund(probe: ProbeSteps, detail: dict[str, Any], server: Any,
         b["kind"] == "storage" and all(b["min"][i] <= chest[i] <= b["max"][i]
                                        for i in range(3)) for b in buildings))
     detail["certified_buildings_before_stock"] = buildings
+    # Adoption certifies a generated House before any construction happens. This
+    # verdict exists so the ledger can cite the fact directly (row
+    # SETTLEMENT-ADOPTED-VILLAGE-NO-CERTIFIED-HOUSES): no other gate measurement
+    # distinguishes an adopted certificate from a resident-built House.
+    adopted_houses = [b for b in buildings if b["kind"] == "house"]
+    detail["adopted_houses_certified"] = {
+        "count": len(adopted_houses),
+        "houses": [{"id": b["id"], "min": b["min"], "max": b["max"]} for b in adopted_houses],
+        "observed": "certified_buildings_before_stock at claim, before any founding stock",
+    }
+    probe.check("adopted_houses_at_claim", bool(adopted_houses))
     detail["founding_grants"] = dict(FOUNDING_STOCK)
     for item, count in FOUNDING_STOCK.items():
         command = f"give {village.USERNAME} {item} {count}"
@@ -578,6 +734,42 @@ def fund(probe: ProbeSteps, detail: dict[str, Any], server: Any,
     })
     probe.call("minecraft_close_screen", {})
 
+def _observer_horizontal(probe: ProbeSteps, destination: dict[str, float]) -> bool:
+    try:
+        player = probe.observe().get("player") or {}
+        return all(abs(float(player[axis]) - float(destination[axis])) < 1.0 for axis in ("x", "z"))
+    except Exception:
+        return False
+
+
+def move_observer(probe: ProbeSteps, destination: dict[str, float]) -> bool:
+    """Wait, bounded, for a console `tp` to land the observer at `destination`.
+
+    Only the horizontal position is compared: a teleport to a point above a site
+    lands the player on whatever ground the server picks, so an exact `y` is not
+    a property of a successful move (`hi[1] + 3` over a farm leaves the observer
+    on the field). A move that does not land - a refused teleport, or a client
+    still holding a screen - costs at most `OBSERVER_MOVE_TIMEOUT`, never the
+    rest of the scenario: the observer position only loads the chunks the scan
+    reads, so a failed move must not hide a milestone. Run 20261124T170423 spent
+    its last 1 h 45 min in the unbounded wait while the observed house completed
+    at server tick 99 816.
+    """
+    try:
+        deadline = time.monotonic() + probe.remaining(limit=OBSERVER_MOVE_TIMEOUT)
+    except TimeoutError:
+        return False
+    while True:
+        if _observer_horizontal(probe, destination):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        try:
+            probe.call("minecraft_wait_ticks", {"ticks": 5})
+        except Exception:
+            return _observer_horizontal(probe, destination)
+
+
 def building_blocks(probe: ProbeSteps, lines: list[str], server: Any) -> list[dict[str, Any]]:
     evidence = []
     for building in village._listed_buildings(lines)[:30]:
@@ -591,13 +783,21 @@ def building_blocks(probe: ProbeSteps, lines: list[str], server: Any) -> list[di
         initial = probe.observe()["player"]
         remote = max(abs(coord - initial[axis]) for coord, axis in (
             (lo[0], "x"), (hi[0], "x"), (lo[2], "z"), (hi[2], "z"))) > 48
+        moved = None
         try:
             if remote:
-                destination = ((lo[0] + hi[0]) / 2, hi[1] + 3, (lo[2] + hi[2]) / 2)
-                item_merge._console(server, f"tp {village.USERNAME} {destination[0]} {destination[1]} {destination[2]}")
-                probe.wait(lambda state: all(abs(state["player"][axis] - value) < 1
-                                             for axis, value in zip(("x", "y", "z"), destination)),
-                           "building_scan_observer_arrived")
+                # A menu holds the observer where it stands: close it before the
+                # teleport, as the founding transfer and the furnace capture do.
+                probe.call("minecraft_close_screen", {})
+                # Land outside the footprint: a creative observer dropped inside
+                # the bounds mutates the world under observation (tramples crops
+                # on a farm, review M1), and the scan is a read that needs only
+                # loaded chunks, not line of sight.
+                destination = {"x": lo[0] - OBSERVER_STAND_MARGIN if initial["x"] <= (lo[0] + hi[0]) / 2
+                               else hi[0] + OBSERVER_STAND_MARGIN,
+                               "y": hi[1] + 3, "z": (lo[2] + hi[2]) / 2}
+                item_merge._console(server, f"tp {village.USERNAME} {destination['x']} {destination['y']} {destination['z']}")
+                moved = move_observer(probe, destination)
                 for x in range(lo[0] // 16, hi[0] // 16 + 1):
                     for z in range(lo[2] // 16, hi[2] // 16 + 1):
                         probe.call("minecraft_wait_for_loaded_block", {
@@ -611,18 +811,19 @@ def building_blocks(probe: ProbeSteps, lines: list[str], server: Any) -> list[di
         finally:
             if remote:
                 item_merge._console(server, f"tp {village.USERNAME} {initial['x']} {initial['y']} {initial['z']}")
-                probe.wait(lambda state: all(abs(state["player"][axis] - initial[axis]) < 1
-                                             for axis in ("x", "y", "z")),
-                           "building_scan_observer_returned")
+                returned = move_observer(probe, initial)
+                moved = returned if moved is None else moved and returned
                 probe.call("minecraft_wait_for_loaded_block", {
                     **{axis: math.floor(initial[axis]) for axis in ("x", "y", "z")},
                     "timeout_seconds": min(120.0, probe.remaining()),
                 })
+                probe.call("minecraft_close_screen", {})
         relevant = [block for block in scan.get("blocks", [])
                     if str(block.get("block_id", "")).endswith(("_bed", "_door", ":furnace", ":blast_furnace"))]
         evidence.append({"building": building, "blocks": relevant, "truncated": scan.get("truncated", False),
                          "solid": [block for block in scan.get("blocks", [])
-                                   if block.get("is_air") is False and block.get("collision_empty") is False]})
+                                   if block.get("is_air") is False and block.get("collision_empty") is False],
+                         "observer_teleported": remote, "observer_moved": moved})
     return evidence
 
 
@@ -836,7 +1037,16 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
     projects: list[dict[str, Any]] = []
     detail["milestones"] = {}
     verdicts = detail.setdefault("verdicts", {**dict.fromkeys(STAGES, False), "all": False})
+    # Not part of the four accepted milestones (`all`): this one records that
+    # adoption itself produced certified Houses, which the four never see because
+    # they all require a resident-built or resident-made thing.
+    verdicts["adopted_houses_certified"] = (detail.get("adopted_houses_certified") or {}).get("count", 0) > 0
     detail["interpretation"] = "Initial buildings, beds and villagers are generated baseline, not later construction or births."
+    detail["observation_bound_ticks"] = MAX_TICKS
+    detail["diagnostic_bound"] = (
+        "extended by KRASNOKAMEN_SEED_QA_MAX_TICKS; a pass at this bound needs the owner's acceptance"
+        if MAX_TICKS > 96000 else ""
+    )
     started = time.monotonic()
     detail["snapshots"] = []
     previous = None
@@ -845,6 +1055,7 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
     iron_captured: set[tuple[int, int, int]] = set()
     advanced = 0
     while True:
+        assert_no_evidence_writes(probe.report.get("fixture_commands") or [])
         project_shot: dict[str, Any] = {}
         def capture_project() -> None:
             project_shot.update(native_client.capture(probe.client, artifact, f"civilization-project-{advanced:06d}"))
@@ -874,6 +1085,11 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                 furnace["container_observation"] = "read-only data get block; totals across slots"
             except Exception as exc:
                 furnace["container_error"] = str(exc)
+            try:
+                furnace["recipes_used"] = village.read_recipes(
+                    server, server_log, pos, min(15.0, probe.remaining()))
+            except Exception as exc:
+                furnace["recipes_error"] = str(exc)
             if pos not in seen_furnaces:
                 probe.call("minecraft_close_screen", {})
                 player = probe.observe()["player"]
@@ -885,18 +1101,27 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                 workstation_shots.append(native_client.capture(
                     probe.client, artifact, f"civilization-workstation-{advanced:06d}"))
                 seen_furnaces.add(pos)
-            if ((furnace.get("container_totals") or {}).get("minecraft:iron_ingot", 0) > 0
-                    and pos not in baseline_furnaces and pos not in iron_captured):
-                iron_menu = capture_iron_menu(probe, server, read_container, artifact, pos, advanced)
-                if iron_menu is None:
-                    furnace["iron_menu_skipped"] = "output collected before the simulation hold"
-                    continue
-                furnace["iron_menu"] = iron_menu
-                iron_captured.add(pos)
-                detail["milestones"].setdefault("iron_smelted", {
-                    "sprint_ticks": advanced, "screenshot": iron_menu["screenshot"],
-                    "furnace": pos, "menu": iron_menu["container"],
-                })
+            if "iron_smelted" not in detail["milestones"]:
+                evidence = iron_evidence(furnace, baseline=pos in baseline_furnaces)
+                if evidence == "output_slot" and pos not in iron_captured:
+                    iron_menu = capture_iron_menu(probe, server, read_container, artifact, pos, advanced)
+                    if iron_menu is None:
+                        furnace["iron_menu_skipped"] = "output collected before the simulation hold"
+                    else:
+                        furnace["iron_menu"] = iron_menu
+                        iron_captured.add(pos)
+                        detail["milestones"]["iron_smelted"] = {
+                            "sprint_ticks": advanced, "screenshot": iron_menu["screenshot"],
+                            "furnace": pos, "menu": iron_menu["container"],
+                            "source": "output_slot",
+                        }
+                if "iron_smelted" not in detail["milestones"] and evidence == "furnace_recipes":
+                    detail["milestones"]["iron_smelted"] = {
+                        "sprint_ticks": advanced, "furnace": pos,
+                        "recipes_used": furnace["recipes_used"],
+                        "source": "furnace_recipes",
+                        "note": "persistent RecipesUsed counter; the ingot was collected between samples",
+                    }
         shot = native_client.capture(probe.client, artifact, f"civilization-{advanced:06d}")
         row = {"sprint_ticks": advanced, "elapsed_seconds": time.monotonic() - started,
                "client_game_time": village._gametime(probe),
@@ -915,15 +1140,21 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                 "screenshot": native_client.capture(probe.client, artifact, f"civilization-census-{advanced:06d}"),
             }
         baby = newborn(entities, baseline_villagers, detail["baseline_client_complete"])
-        if baby and "baby_observation" not in detail:
+        if (baby and "baby_observation" not in detail
+                and detail.get("baby_capture_attempts", 0) < BABY_CAPTURE_ATTEMPTS):
             target = (baby["x"], baby["y"] + 0.5, baby["z"])
-            detail["baby_observation"] = {
-                "sprint_ticks": advanced, "entity": baby,
-                "screenshot": capture_target(
-                    probe, artifact, f"civilization-births-{advanced:06d}", target, entity=baby,
-                    teleport=lambda x, y, z: item_merge._console(
-                        server, f"tp {village.USERNAME} {x:.2f} {y:.2f} {z:.2f}")),
-            }
+            detail["baby_capture_attempts"] = detail.get("baby_capture_attempts", 0) + 1
+            observation, miss = capture_baby(
+                probe, artifact, baby, advanced,
+                lambda x, y, z: item_merge._console(
+                    server, f"tp {village.USERNAME} {x:.2f} {y:.2f} {z:.2f}"))
+            if observation is not None:
+                detail["baby_observation"] = observation
+            else:
+                # Re-list on the next snapshot; a baby that never comes back
+                # leaves the stage unset once BABY_CAPTURE_ATTEMPTS is spent.
+                detail.setdefault("baby_capture_misses", []).append(
+                    {"sprint_ticks": advanced, "reason": miss})
         if ("growth_observation" in detail and "baby_observation" in detail
                 and "births" not in detail["milestones"]):
             detail["milestones"]["births"] = {

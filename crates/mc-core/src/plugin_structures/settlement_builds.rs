@@ -399,7 +399,10 @@ pub(crate) fn recover(
             0
         };
         for cell in record.cells[index].iter().take(completed).rev() {
-            if !seen.insert(cell.at) || free_soil_work(target, cell) {
+            if !seen.insert(cell.at)
+                || free_soil_work(target, cell)
+                || harvestable_crop(target, cell)
+            {
                 continue;
             }
             let now = target
@@ -505,6 +508,26 @@ fn free_soil_work(state: &TickState, cell: &Cell) -> bool {
             .is_some_and(|definition| matches!(definition.block.id.path(), "dirt" | "dirt_path"))
 }
 
+/// Whether a manifest cell holds a farm crop: a farmer harvests it and the
+/// farming pass replants into the same farmland, so an emptied crop is the
+/// farm's own work, not damage to repair. Seed-24 gate 20261124T195404: a
+/// harvested farm reopened a 12-wheat_seeds repair stage (structure
+/// `settlement-1-229`, watermark 215) that no stock could fund, and it held the
+/// settlement's only construction slot for 39 000 ticks, so no House was ever
+/// admitted.
+fn harvestable_crop(state: &TickState, cell: &Cell) -> bool {
+    state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(cell.state))
+        .is_some_and(|definition| {
+            matches!(
+                definition.block.id.path(),
+                "wheat" | "carrots" | "potatoes" | "beetroots"
+            )
+        })
+}
+
 /// Free soil work can only rewrite the ground already present, never create
 /// ground or destroy a foreign block. Debit and publication share this gate.
 pub(super) fn soil_work_noop(state: &TickState, cell: &Cell, current: u32) -> bool {
@@ -558,6 +581,7 @@ pub(crate) fn reopen_emptied(
         if !seen.insert(cell.at)
             || cell.state == target.registry.states.air
             || free_soil_work(target, cell)
+            || harvestable_crop(target, cell)
         {
             continue;
         }

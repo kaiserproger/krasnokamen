@@ -520,6 +520,91 @@ fn pending_house_allows_only_its_own_furnace_prerequisite() {
     assert_eq!(record.orders[0].blueprint, "house");
 }
 
+/// The gate's furnace landed on a floating platform five blocks above the plaza
+/// (`20261124T131853`: furnace `[132,82,-219]`, plaza `y=76`) where no tender
+/// could ever stand, so the town owned a furnace it could never load and the
+/// iron chain (shears -> wool -> the house's bed) stopped. `surface_y` takes the
+/// highest standable surface in its band, so a furnace site must stay at the
+/// store's own level.
+#[test]
+fn a_furnace_site_stays_at_the_store_level_not_on_a_platform_above_it() {
+    let (mut state, id, _) = smelting_house_stock();
+    for stack in &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots {
+        if state
+            .registry
+            .items
+            .name_of(stack.item_id)
+            .is_some_and(|name| name.path().ends_with("_bed") || name.path().ends_with("_wool"))
+        {
+            *stack = mc_data::ItemStack::EMPTY;
+        }
+    }
+    // A one-block platform five above the chest's level on the first site the
+    // search tries (distance 2 on +x), with headroom: the gate's shape.
+    let stone = crate::settlements::allocator::tests::block(&state, "minecraft:cobblestone", &[]);
+    state.world.set_block(3, 205, 1, stone);
+    request_build(&mut state, id, "house").unwrap();
+    plan(&mut state, id);
+    let record = state.settlements.get(id).unwrap();
+    let project = record
+        .projects
+        .iter()
+        .find(|project| project.blueprint == furnace::NAME)
+        .expect("the house's furnace prerequisite")
+        .clone();
+    assert_ne!(
+        project.origin,
+        [3, 206, 1],
+        "the furnace must not stand on the platform above the store"
+    );
+    assert_eq!(
+        project.origin[1], 201,
+        "the furnace stands at the store's level: {:?}",
+        project.origin
+    );
+    // The same class one step later (review wave2-9 minor): the tender's stand
+    // took the highest surface in the anchor's band, so a roof on the first side
+    // the search tries became the furnace's stand five blocks up.
+    let (sx, sy, sz) = (
+        project.origin[0] + 1,
+        project.origin[1] + 5,
+        project.origin[2],
+    );
+    for dz in -1..=1 {
+        state.world.set_block(sx, sy, sz + dz, stone);
+    }
+    state.world.fold_overlay();
+    let stand = furnace::stand(&state, &project, project.origin, None).expect("a furnace stand");
+    assert!(
+        (stand[1] - project.origin[1]).abs() <= 2,
+        "the stand stays at the furnace's level, not on a roof: {stand:?}"
+    );
+}
+
+/// D123 (CIV-B3): a newborn needs a spare bed, so a town whose beds merely equal
+/// its residents must still ask for a House - with one bed spare it may not.
+#[test]
+fn a_house_is_needed_while_no_bed_is_spare() {
+    let (mut state, id, _) = fixture();
+    let residents = 4;
+    let record = state.settlements.get_mut(id).unwrap();
+    certificate(record, BuildingKind::Storage, 1, false);
+    for _ in 0..residents {
+        certificate(record, BuildingKind::House, 1, false);
+    }
+    assert_eq!(
+        needed_kinds(record, residents).next(),
+        Some(BuildingKind::House),
+        "beds == residents leaves no spare bed for a birth"
+    );
+    certificate(record, BuildingKind::House, 1, false);
+    assert_ne!(
+        needed_kinds(record, residents).next(),
+        Some(BuildingKind::House),
+        "one spare bed is enough housing"
+    );
+}
+
 #[test]
 fn pending_noniron_order_blocks_unrelated_furnaces_and_funded_houses() {
     let (mut state, id, _) = smelting_house_stock();
@@ -545,6 +630,30 @@ fn pending_noniron_order_blocks_unrelated_furnaces_and_funded_houses() {
     assert_eq!(
         crate::villager::smelting::owned_furnaces(&state, id).count(),
         0
+    );
+}
+
+#[test]
+fn a_missing_farm_is_planned_before_a_house_a_lumber_camp_and_a_mine() {
+    let (mut state, id, _) = fixture();
+    let farmer = BuildingKind::Workshop(Profession::Farmer);
+    certificate(
+        state.settlements.get_mut(id).unwrap(),
+        BuildingKind::Storage,
+        1,
+        false,
+    );
+    let record = state.settlements.get(id).unwrap();
+    assert_eq!(
+        super::candidate_kinds(&state, record, &[]).next(),
+        Some(farmer),
+        "a town with a store but no farm plans the farm before a house, a lumber camp and a mine"
+    );
+    certificate(state.settlements.get_mut(id).unwrap(), farmer, 1, false);
+    let record = state.settlements.get(id).unwrap();
+    assert_ne!(
+        super::candidate_kinds(&state, record, &[]).next(),
+        Some(farmer)
     );
 }
 
@@ -1184,6 +1293,8 @@ fn autonomous_upgrade_requires_blueprint_provenance_and_materials() {
     ] {
         certificate(record, kind, 1, false);
     }
+    // A spare bed is housing, so no new kind is needed and only the upgrade remains.
+    certificate(record, BuildingKind::House, 1, false);
     assert_eq!(needed_kinds(record, 1).next(), None);
     let player_certificate = record
         .buildings

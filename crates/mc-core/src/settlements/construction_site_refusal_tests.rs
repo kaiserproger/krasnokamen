@@ -557,3 +557,56 @@ fn natural_zone_terrain_keeps_its_shape_without_a_building_setback() {
         "the fill below the floor may not cross a mine's zone"
     );
 }
+
+/// Review wave2-8 minor 2: a grove-sized natural zone at the bell must not
+/// starve the lot search. A natural zone keeps only its own columns, so the
+/// planner still has a legal lot beside it; `villager::lumber::base_protected`
+/// keeps shielding the grove from every camp but its own (decision: a natural
+/// zone is a certified worksite, not terrain, so the owner's "terrain inside
+/// the settlement never refuses a lot" rule does not turn its columns into
+/// buildable ground).
+#[test]
+fn a_grove_sized_natural_zone_keeps_a_lot_beside_it() {
+    use crate::settlements::buildings::{Building, BuildingId, BuildingKind};
+    let (mut state, id, _) = fixture();
+    open_plan(&mut state);
+    let size = [3, 4, 3];
+    // The gate's own certified grove shape, 12x7x13, beside the bell.
+    let grove = ScriptWorldBounds::new([4, 200, 3], [15, 206, 15]).unwrap();
+    let zone_id = BuildingId((id.0 << 32) | 702);
+    state.settlements.get_mut(id).unwrap().buildings.insert(
+        zone_id,
+        Building {
+            id: zone_id,
+            settlement: id,
+            kind: BuildingKind::LumberCamp,
+            level: 1,
+            bounds: grove,
+            work_points: vec![[grove.min[0], grove.min[1] + 1, grove.min[2]]],
+            revision: 1,
+            natural_zone: true,
+        },
+    );
+    let check_at = |state: &TickState, origin: [i32; 3]| {
+        check(
+            state,
+            state.settlements.get(id).unwrap(),
+            origin,
+            size,
+            None,
+            &mut Default::default(),
+            None,
+        )
+        .map(|_| ())
+    };
+    assert_eq!(
+        check_at(&state, [10, 201, 10]),
+        Err(Reason::BuildingBuffer),
+        "a lot inside the grove is still a zone overlap"
+    );
+    assert_eq!(
+        check_at(&state, [0, 201, 10]),
+        Ok(()),
+        "a lot beside the grove is admitted: a grove at the bell does not starve the lot search"
+    );
+}

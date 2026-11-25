@@ -354,7 +354,14 @@ fn facts(state: &TickState, id: SettlementId, now: u64) -> Facts {
         food_points,
         open_jobs: jobs.len(),
         recent_deaths,
-        completed_buildings: record.buildings.len(),
+        // A generated piece may certify a House and its own workshop on one
+        // footprint: development counts distinct footprints, not records.
+        completed_buildings: record
+            .buildings
+            .values()
+            .map(|building| (building.bounds.min, building.bounds.max))
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
     }
 }
 

@@ -1,0 +1,15 @@
+[[bug]]
+id = "HARNESS-CIV-GATE-REMOTE-SCAN-UNLOADED"
+title = "The civilization gate aborts its whole run when a milestone capture scans a remote completed building's faces from the bell, because the client has no chunk loaded there."
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa 20261124T192024-civilization-seed-qa-1plri8w2 (pin d38c666a1fda, windowed native client, 1183.6 s). The observer hang was fixed (HARNESS-CIV-GATE-OBSERVER-WAIT-HANGS), the run recorded 24 snapshots up to sprint 42 000, and then the snapshot after 42 000 detected the newly certified farm at [78,68,-320]..[84,72,-311] as the second building and called capture_target(building=farm). Its perimeter scan reads the four faces before choosing a stand, from wherever the observer stands (the bell at [131,78,-217]); the farm is 110 blocks out, the client holds no chunk there, and the tool failed closed: minecraft_scan_blocks failed: {\"code\": \"client chunk is not loaded at 77, 66, -320\", \"retryable\": false, \"stage\": \"automation\"} (bounds of that west face: min_x/max_x 77, min_y 66, max_y 74, min_z -320, max_z -311). The run ended with iron_smelted true and every other verdict false; the same building had been scanned successfully seconds earlier only because the same run's building_blocks teleports the observer first."
+failing_first = "reported"
+regression = [
+  "python:tools.harness.test_civilization_seed_qa:ObserverMoveTests.test_a_remote_building_is_observed_after_the_observer_moves_there",
+  "harness:civilization-seed-qa:all",
+]
+fix_commit = "354e288e6a365618c8962a50db57d6db0f15584c"
+repro_check = "Fix 354e288e6a: capture_target measures the building against the observer the same way building_blocks does (>48 blocks on either horizontal axis) and, when it is remote and a teleport is available, moves the creative observer beside it before the face scans; a scan still refused for an unloaded chunk asks for one loaded cell there and retries once, so a second refusal names the capture instead of hiding every later milestone. Negative control: the production hunk reverted alone on this tree (tools/harness/backends/civilization_seed_qa.py at HEAD~, the new tests kept) makes test_a_remote_building_is_observed_after_the_observer_moves_there fail at its own assertion 'the observer must move to the site before its faces are scanned: ['minecraft_close_screen', 'minecraft_scan_blocks', ...]' (log receipts/D123/D123Civ/remote-capture-control.log). Green on the candidate: the four ObserverMoveTests pass. The gate proof is harness:civilization-seed-qa:all on a pinned candidate: a run that observes new_house, births, second_building and iron_smelted without an unloaded-chunk abort."

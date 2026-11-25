@@ -306,19 +306,30 @@ def _open_chest(probe: ProbeSteps, chest: tuple[int, int, int]) -> dict[int, dic
             probe.call("minecraft_wait_ticks", {"ticks": 40})
         except Exception:
             pass
-    probe.call(
-        "minecraft_use_item_on",
-        {"x": chest[0], "y": chest[1], "z": chest[2], "face": "up"},
-    )
-    state = probe.wait(
-        lambda observed: (
-            (observed.get("container") or {}).get("menu_class")
-            == "net.minecraft.world.inventory.ChestMenu"
-            and (observed.get("container") or {}).get("container_id", 0) > 0
-        ),
-        "founding_chest_opened",
-        timeout_seconds=15.0,
-    )
+    # A builder working beside the chest (run 20261125T034259: a farm project at
+    # [78, 68, -320]) can refuse the interaction, so approach again and retry in
+    # game ticks instead of failing the whole planner/storage snapshot once.
+    for attempt in range(3):
+        probe.call(
+            "minecraft_use_item_on",
+            {"x": chest[0], "y": chest[1], "z": chest[2], "face": "up"},
+        )
+        try:
+            state = probe.wait(
+                lambda observed: (
+                    (observed.get("container") or {}).get("menu_class")
+                    == "net.minecraft.world.inventory.ChestMenu"
+                    and (observed.get("container") or {}).get("container_id", 0) > 0
+                ),
+                "founding_chest_opened",
+                timeout_seconds=15.0,
+            )
+            break
+        except Exception:
+            if attempt == 2:
+                raise
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
+            _compass_step(probe, (float(chest[0]), float(chest[1]), float(chest[2])))
     container = state["container"]
     storage_slots = int(container["slot_count"]) - 36
     out: dict[int, dict[str, Any]] = {}
@@ -432,6 +443,54 @@ def _snbt_fields(source: str) -> dict[str, str]:
     return fields
 
 
+IRON_SMELT_RECIPE = "minecraft:iron_ingot_from_smelting_raw_iron"
+
+
+def iron_smelted_by_recipes(recipes: dict[str, int] | None) -> bool:
+    """A furnace's persistent counter proves a smelt even when the output was collected.
+
+    The counter lives in the block entity for the world's life, so it survives the
+    resident collecting an ingot between samples (seed-24 gate 20261124T212153:
+    two ingots smelted, shears in storage, no ingot in a slot at any sample).
+    """
+    return (recipes or {}).get(IRON_SMELT_RECIPE, 0) >= 1
+
+
+def _recipe_counts(source: str) -> dict[str, int]:
+    """`RecipesUsed: {"minecraft:...": N}` from one block-entity read."""
+    match = re.search(r"RecipesUsed: \{([^}]*)\}", source)
+    if match is None:
+        return {}
+    return {key: int(count) for key, count in re.findall(r'"([^"]+)"\s*:\s*(\d+)', match.group(1))}
+
+
+def read_recipes(
+    server: subprocess.Popen[Any], log_path: Path, pos: tuple[int, int, int], timeout: float,
+) -> dict[str, int]:
+    """Read one block entity's persistent RecipesUsed counters (read-only)."""
+    if server.stdin is None:
+        raise RuntimeError("server console is unavailable for a recipe read")
+    offset = log_path.stat().st_size
+    x, y, z = pos
+    command = f"data get block {x} {y} {z}"
+    prefix = f"{x}, {y}, {z} has the following block data: "
+    server.stdin.write((command + "\n").encode())
+    server.stdin.flush()
+
+    def replied() -> tuple[bool, str]:
+        with log_path.open("rb") as stream:
+            stream.seek(offset)
+            lines = stream.read().decode(errors="replace").splitlines()
+        for line in lines:
+            if line.startswith(prefix):
+                return True, line
+            if line in ("That position is not loaded", "The target block is not a block entity") or line.startswith("Command failed:"):
+                raise RuntimeError(f"recipe read refused {command!r}: {line}")
+        return False, ""
+
+    return _recipe_counts(runtime.wait_for_path_condition(log_path, timeout, replied))
+
+
 def _container_totals(source: str) -> dict[str, int]:
     """Read one physical block's live Items; absent Items means an empty block."""
     items = _snbt_fields(source).get("Items", "[]").strip()
@@ -543,7 +602,22 @@ def _settlement_stock(
         containers.append(entry)
         try:
             if founding in members:
-                stock = _chest_totals(_open_chest(probe, founding))
+                try:
+                    stock = _chest_totals(_open_chest(probe, founding))
+                except Exception as exc:
+                    # The client menu is a view of the same physical block; when a
+                    # builder or a clipped screen keeps it shut, the server read is
+                    # the same stock (run 20261125T034259: farm project in flight,
+                    # founding_chest_opened timed out and the whole snapshot failed).
+                    entry["menu_fallback"] = f"{type(exc).__name__}: {exc}"[:160]
+                    # The stock below is the server's view of the same block, so the
+                    # source must say so: a verdict that needs the client menu
+                    # (workers_produce_unfunded) requires at least one real read.
+                    entry["source"] = "server-data-get-block"
+                    stock = {}
+                    for member in identity:
+                        for item, count in read_container(member).items():
+                            stock[item] = stock.get(item, 0) + count
             else:
                 stock = {}
                 # /data reads a physical block, unlike the client's merged menu.
@@ -1617,9 +1691,20 @@ def _scenario(
     detail["storage_observe_ticks"] = _gametime(probe) - storage_start_tick
     grown = _storage_covers(totals_now)
     any_stock = bool(totals_now)
-    _verdict(detail, "workers_produce_unfunded", "PASS" if grown else "FAIL",
-             f"storage={totals_now} over {detail['storage_observe_ticks']} game ticks (time add {day_advanced})",
-             "observe founding menu and live server Storage items; combined stock must cover Storage-L1 base needs with no /give")
+    # The client menu is the evidence this verdict names; a stock read only from
+    # the server cannot make it PASS (review ReviewD123Civ13, M4).
+    menu_read = any(
+        entry.get("source") == "client-menu"
+        for entry in (detail.get("storage_observation") or {}).get("containers") or []
+    )
+    if grown and not menu_read:
+        _verdict(detail, "workers_produce_unfunded", "FAIL",
+                 f"storage={totals_now} was read only from the server; no client menu opened",
+                 "observe founding menu; a stock only the server saw cannot prove the client path")
+    else:
+        _verdict(detail, "workers_produce_unfunded", "PASS" if grown else "FAIL",
+                 f"storage={totals_now} over {detail['storage_observe_ticks']} game ticks (time add {day_advanced})",
+                 "observe founding menu and live server Storage items; combined stock must cover Storage-L1 base needs with no /give")
     if not grown:
         # Builders consume stock while workers deliver it. A later, fully
         # client-verified Storage also proves its canonical material bill.
