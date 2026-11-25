@@ -4,7 +4,7 @@ title = "The spectator bound to the live player stays where the player died afte
 area = "gameplay"
 repro = "client"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "G2R calibration trial-7: CamSpec ('battle spectate CamSpec PovRed') stayed underground at PovRed's death spot after PovRed respawned about 230 blocks away; the camera recording was a dark cave for four minutes. Initial placement and later behind-player repositioning did not provide continuous entity-camera following. Native /spectate and battle named intent now share real Set Camera binding, with death/disconnect release and battle respawn/reconnect rebind. Acceptance and ledger promotion remain pending."
 regression = ["cargo:mc-core:battle::live_players::tests::the_bound_spectator_follows_the_holder_after_a_respawn_and_a_rearm", "cargo:mc-core:tick::spectator::tests::spectator_tick_follows_target_and_publishes_tracking_anchor_without_teleport_spam", "cargo:mc-edge:plan::plan_tests::camera_tests::camera_binding_follows_pairing_and_release_precedes_target_removal",
   "harness:battle-live:battle-live-spectator-follows-respawn",
@@ -13,3 +13,4 @@ regression = ["cargo:mc-core:battle::live_players::tests::the_bound_spectator_fo
 failing_first = "reported"
 fix_commit = "patch:58f02bb7959a01a3a4ca24e750f090e138eee5e0e057c9210f0cbd0d2e66f29d"
 repro_check = ["The client proof is the same `battle-live` profile with the spectator arm: CamSpec is bound to PovRed before his death and the gate asserts his camera stays bound to the holder and that his camera eye stays on the holder he follows after the respawn (1.62 blocks = the eye offset). Run `20261124T220448-battle-live-spectator-follows-respawn-k1qlvk0e` (pin `1aee24a97872`, 56.8 s): camera=1 bound before death and after the respawn, gap 1.62 blocks, holder back in play. Still missing for promotion: a real pre-image control; c6fa94da3's hunks no longer reverse at HEAD, and the ledger has no path to consume a pre-image-pin receipt for a non-client fix_commit."]
+promotion = "docs/bugs/promotions/BATTLE-LIVE-SPECTATOR-LEFT-BEHIND.json"

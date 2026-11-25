@@ -1,0 +1,68 @@
+{
+  "id": "BATTLE-LIVE-SPECTATOR-LEFT-BEHIND",
+  "verdict": "promoted",
+  "fix_commit": "patch:58f02bb7959a01a3a4ca24e750f090e138eee5e0e057c9210f0cbd0d2e66f29d",
+  "fix_commit_full": "patch:58f02bb7959a01a3a4ca24e750f090e138eee5e0e057c9210f0cbd0d2e66f29d",
+  "promoted_at": "2026-11-25T04:11:08+00:00",
+  "tree_head": "0137ad88bbc386d22c0c942eb112974e118fea2a",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "58f02bb7959a01a3a4ca24e750f090e138eee5e0e057c9210f0cbd0d2e66f29d",
+  "reversed_files": [
+    "crates/mc-core/src/battle/live_players.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:tick::spectator::tests::spectator_tick_follows_target_and_publishes_tracking_anchor_without_teleport_spam": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:plan::plan_tests::camera_tests::camera_binding_follows_pairing_and_release_precedes_target_removal": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::live_players::tests::the_bound_spectator_follows_the_holder_after_a_respawn_and_a_rearm": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/battle/live_players_tests.rs",
+        "line": 1410,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "harness:battle-live:battle-live-spectator-follows-respawn": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick::spectator::tests::spectator_tick_follows_target_and_publishes_tracking_anchor_without_teleport_spam": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:plan::plan_tests::camera_tests::camera_binding_follows_pairing_and_release_precedes_target_removal": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:battle::live_players::tests::the_bound_spectator_follows_the_holder_after_a_respawn_and_a_rearm": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123BattleJ/.analysis/validation/20261125T040219-battle-live-spectator-follows-respawn-od0wra9e/result.json",
+    "tree_head": "0137ad88bbc386d22c0c942eb112974e118fea2a",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "00fe22d51741eabfcc0206a2c355fe7366b0fc0889684f864c5ba695ef005e41",
+    "covers": [
+      "harness:battle-live:battle-live-spectator-follows-respawn"
+    ],
+    "profile": "battle-live"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123BattleJ/.analysis/validation/20261125T040323-ledger-promote-v3n04_p1"
+}
