@@ -59,6 +59,9 @@ def _restart(steps: ProbeSteps) -> None:
     # Bounded: a fixture whose floor never arrives would otherwise hold the whole scenario to its
     # deadline (measured on 20261125T030306/031825, where both clients stayed in play with
     # `player.grounded` false for the rest of the run). The assertion, not the deadline, carries it.
+    # The private world's default mode is creative, where the player may fly: a flying player
+    # never grounds, so the gate only means something on a survival player who cannot fly.
+    steps.fixture("gamemode survival")
     try:
         state = steps.wait(lambda state: state["player"]["on_ground"], "restart_player_grounded",
                            timeout_seconds=min(60.0, steps.remaining()))
@@ -107,12 +110,34 @@ def _restart(steps: ProbeSteps) -> None:
         except Exception as error:  # noqa: BLE001
             steps.report["restart_grounded_observation"]["feet_block_error"] = str(error)[:200]
         try:
-            before = steps.observe()["player"]
+            before = steps.observe()
             steps.call("minecraft_press_inputs", {"keys": ["forward"], "ticks": 5})
-            after = steps.observe()["player"]
+            after = steps.observe()
+            # The App drains the session's tick timings into the render report every frame
+            # (`take_tick_detail`), so the session's own array always reads back zero; the
+            # published per-stage numbers live under render.cpu_session_tick_detail_ms.
+            def detail(step):
+                return ((step.get("render") or {}).get("cpu_session_tick_detail_ms") or {})
+            physics = [detail(step).get("player") for step in (before, after)]
             steps.report["restart_grounded_observation"]["forward_probe"] = {
-                "before": [before.get("x"), before.get("y"), before.get("z")],
-                "after": [after.get("x"), after.get("y"), after.get("z")],
+                "before": [before["player"].get("x"), before["player"].get("y"), before["player"].get("z")],
+                "after": [after["player"].get("x"), after["player"].get("y"), after["player"].get("z")],
+                "pose_known": after["player"].get("pose_known"),
+                "local_position": after["player"].get("local_position"),
+                "server_position": after["player"].get("server_position"),
+                "tick_path": after.get("tick_path"),
+                "phase": after.get("phase"),
+                "game_mode": (after.get("player") or {}).get("game_mode"),
+                "abilities_flying": (after.get("minecraft") or {}).get("player", {}).get("abilities_flying"),
+                "on_ground": (after.get("player") or {}).get("on_ground"),
+                "velocity": (after.get("player") or {}).get("velocity"),
+                "outer_pose_known": (after.get("player") or {}).get("pose_known"),
+                "feet_block_loaded": after["player"].get("feet_block_loaded"),
+                "below_block_loaded": after["player"].get("below_block_loaded"),
+                "player_stage_ms_before": physics[0],
+                "player_stage_ms_after": physics[1],
+                "tick_detail_render_before": detail(before),
+                "tick_detail_render_after": detail(after),
             }
         except Exception as error:  # noqa: BLE001
             steps.report["restart_grounded_observation"]["forward_probe_error"] = str(error)[:200]
