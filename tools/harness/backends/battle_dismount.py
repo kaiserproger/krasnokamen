@@ -79,11 +79,13 @@ class DismountObserver:
         for horse in self.entities.values():
             if horse["type_id"] != self.horse_type or not horse["alive"] or not horse["riders"]:
                 continue
+            # The horse carries the rider, so the charge speed is the horse's own velocity; the
+            # rider's record follows it and, after the kill, carries his foot drive alone.
+            speed = sum(component * component for component in horse["vel"]) ** 0.5
             for uuid in horse["riders"]:
                 rider = self.entities.get(self.by_uuid.get(uuid, -1))
                 if rider is None or not rider["alive"]:
                     continue
-                speed = sum(component * component for component in rider["vel"]) ** 0.5
                 if speed >= CHARGE_SPEED:
                     return {**rider, "speed": speed, "mount_uuid": horse["uuid"], "mount_id": horse["id"]}
         return None
