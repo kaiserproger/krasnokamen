@@ -532,7 +532,22 @@ def _read_storage_container(
                 raise RuntimeError(f"storage read refused {command!r}: {line}")
         return False, ""
 
-    answer = runtime.wait_for_path_condition(log_path, timeout, replied)
+    try:
+        answer = runtime.wait_for_path_condition(log_path, timeout, replied)
+    except TimeoutError:
+        # Name the container and what the log did hold: a 15 s storage timeout in
+        # a gate left no position on disk (HANDOFF-47 run 1), so the next one can
+        # be explained instead of guessed.
+        tail = ""
+        try:
+            with log_path.open("rb") as stream:
+                stream.seek(max(0, offset))
+                tail = stream.read(1200).decode(errors="replace")[-600:]
+        except OSError:
+            pass
+        raise TimeoutError(
+            f"storage read of block {x},{y},{z} got no reply in {timeout:.1f}s; log tail: {tail!r}"
+        ) from None
     return _container_totals(answer.removeprefix(prefix))
 
 
