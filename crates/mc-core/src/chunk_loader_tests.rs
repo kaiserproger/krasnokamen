@@ -1017,10 +1017,8 @@ fn stored_debt_anchor_ahead_of_the_served_held_prefix_stays_refused() {
     assert!(!refused.has_chunk(pos.x, pos.z));
     assert_eq!(
         refused.load_error(pos).unwrap().to_string(),
-        format!(
-            "native dimension 0 chunk (12, -28): storage: simulation debt at chunk (12, -28): \
-             invalid held anchor 11 at native 251; current tick 308, held ticks 0"
-        )
+        "native dimension 0 chunk (12, -28): storage: simulation debt at chunk (12, -28): \
+         invalid held anchor 11 at native 251; current tick 308, held ticks 0"
     );
     assert_eq!(
         generated.load(Ordering::Relaxed),
