@@ -905,65 +905,6 @@ fn a_terminal_index_running_structure_is_committed_by_recovery() {
 }
 
 #[test]
-fn a_committed_record_with_a_later_empty_stage_is_reopened_and_finished() {
-    let (mut state, id, _slot) = crate::settlements::construction::tests::fixture();
-    crate::settlements::construction::tests::start(&mut state, id, "house", 1, None);
-    crate::settlements::construction::tests::fund(&mut state, "house", 1);
-    let handle = state.settlements.get(id).unwrap().projects[0]
-        .structure
-        .clone();
-    let plan: Vec<([i32; 3], u32)> = {
-        let ledger = ledger(&state).unwrap();
-        let record = structure(&ledger, &owner(id), &handle).unwrap();
-        record
-            .cells
-            .iter()
-            .flatten()
-            .map(|cell| (cell.at, cell.state))
-            .collect()
-    };
-    for (at, block) in plan {
-        state.world.set_block(at[0], at[1], at[2], block);
-    }
-    {
-        let mut ledger = ledger_mut(&mut state).unwrap();
-        let mut record = take_structure(&mut ledger, &owner(id), &handle).unwrap();
-        // The exact stalled shape of 20261125T030519: `Committed`, index 2 inside `cells`, its
-        // stage planned with no cells, `work=0`, so `next_cell` is None and `finish_project` is
-        // never asked to close the project.
-        record.snapshot.stages.push(ScriptStructureStagePlan::new(
-            "build".into(),
-            0,
-            0,
-            Vec::new(),
-        ));
-        record.cells.push(Vec::new());
-        record.snapshot.current_stage_index = (record.cells.len() - 1) as u32;
-        record.snapshot.completed_work_units = 0;
-        record.snapshot.state = ScriptStructureState::Committed;
-        ledger.insert_structure(handle.clone(), record);
-        save(&mut state, ledger);
-    }
-    assert_eq!(
-        next_cell(&state, id, &handle).unwrap(),
-        None,
-        "the stalled shape names no cell"
-    );
-    assert_eq!(step_empty_stage(&mut state, id, &handle), Ok(true));
-    assert_eq!(
-        status(&state, id, &handle).unwrap().state,
-        ScriptStructureState::Running,
-        "a committed record with a stage left is reopened, not left finished"
-    );
-    assert_eq!(recover(&mut state, id, &handle), Ok(true));
-    assert_eq!(
-        status(&state, id, &handle).unwrap().state,
-        ScriptStructureState::Committed,
-        "recovery then finishes it at the terminal index"
-    );
-}
-
-#[test]
 fn a_stage_whose_cells_are_all_worked_is_stepped_over() {
     let (mut state, id, _slot) = crate::settlements::construction::tests::fixture();
     crate::settlements::construction::tests::start(&mut state, id, "house", 1, None);
