@@ -836,6 +836,17 @@ fn queue_natural(
     if blocked {
         return;
     }
+    // The queue is transient (popped on a refused route, never re-probed), so the
+    // gate must see what entered it: a mine that vanishes before certification
+    // leaves no other trace.
+    tracing::debug!(
+        target: "settlements::construction",
+        kind = ?kind,
+        min = ?bounds.min,
+        max = ?bounds.max,
+        entrance = ?entrance,
+        "natural zone queued"
+    );
     candidates.push_back(NaturalCandidate {
         kind,
         bounds,
@@ -871,6 +882,14 @@ fn prove_natural(
     // A loaded route can lead beyond entity simulation. Such a job strands
     // its worker before they can take the profession or bring stock home.
     if !state.world.is_active(x.div_euclid(16), z.div_euclid(16)) {
+        // The queue is not persisted and the cursor never returns: a candidate
+        // dropped here is lost for the world's life, so the gate must name it.
+        tracing::debug!(
+            target: "settlements::construction",
+            kind = ?candidate.kind,
+            entrance = ?candidate.entrance,
+            "natural zone dropped: entrance chunk inactive"
+        );
         candidates.pop_front();
         return;
     }
@@ -899,6 +918,13 @@ fn prove_natural(
         })
     });
     let Some((uuid, start, width, height)) = resident else {
+        tracing::debug!(
+            target: "settlements::construction",
+            kind = ?candidate.kind,
+            entrance = ?candidate.entrance,
+            tried = ?candidate.after_resident,
+            "natural zone dropped: no eligible resident left to prove it"
+        );
         candidates.pop_front();
         return;
     };
@@ -956,6 +982,15 @@ fn prove_natural(
                 .expect("proved candidate")
                 .stock_proved = true;
         } else {
+            tracing::debug!(
+                target: "settlements::construction",
+                kind = ?candidates.front().map(|candidate| candidate.kind),
+                entrance = ?candidates.front().map(|candidate| candidate.entrance),
+                resident = %uuid,
+                from = ?start,
+                to = ?target,
+                "natural zone dropped: no route from the resident to the storage"
+            );
             candidates.pop_front();
         }
         return;
