@@ -18,6 +18,7 @@ MAX_TICKS = 96000
 # evidence: it may cost this long, not the rest of the scenario deadline.
 OBSERVER_MOVE_TIMEOUT = 30.0
 OBSERVER_STAND_MARGIN = 4.0
+BABY_CAPTURE_ATTEMPTS = 12
 FOUNDING_STOCK = {"minecraft:oak_log": 32, "minecraft:bread": 16,
                   "minecraft:raw_iron": 8, "minecraft:coal": 8,
                   "minecraft:cobblestone": 32}
@@ -364,6 +365,15 @@ BABY_AIM_ATTEMPTS = 6
 BABY_TELEPORT_SIDES = ((1.5, 0.0), (-1.5, 0.0), (0.0, 1.5), (0.0, -1.5))
 
 
+class _BabyLeftView(RuntimeError):
+    """The newborn left the client-visible set between listing and capture.
+
+    Run 20261124T232341 aborted the whole gate after 947 s on this: the baby was
+    listed, walked out of view, and the capture refused. The caller re-lists on a
+    later snapshot, bounded by BABY_CAPTURE_ATTEMPTS and the sprint deadline.
+    """
+
+
 def _aim(probe: ProbeSteps, target: tuple[float, float, float]) -> dict[str, Any]:
     player = probe.observe()["player"]
     dx, dy, dz = target[0] - player["x"], target[1] - (player["y"] + 1.62), target[2] - player["z"]
@@ -407,14 +417,14 @@ def _aim_at_baby(probe: ProbeSteps, entity: dict[str, Any],
             current = next((e for e in seen.get("entities", [])
                            if e.get("entity_uuid") == entity["entity_uuid"]), None)
             if current is None or current.get("received_baby") is not True:
-                raise RuntimeError("baby no longer visible for milestone capture") from error
+                raise _BabyLeftView("baby left the client-visible set while approaching") from error
             entity = current
             continue
         seen = entity_census(probe, "minecraft:villager")
         current = next((e for e in seen.get("entities", [])
                         if e.get("entity_uuid") == entity["entity_uuid"]), None)
         if current is None or current.get("received_baby") is not True:
-            raise RuntimeError("baby no longer visible for milestone capture")
+            raise _BabyLeftView("baby left the client-visible set before its capture")
         if reply.get("in_reach") is False and teleport is not None:
             # The newborn stays inside its parents' house: put the observer
             # beside it, never on its own cell. Aiming from the baby's feet
@@ -443,6 +453,24 @@ def _solid_targets_by_distance(solid: list[dict[str, Any]],
     eye = (player["x"], player["y"] + 1.62, player["z"])
     centres = [tuple(block[axis] + 0.5 for axis in ("x", "y", "z")) for block in solid]
     return sorted(centres, key=lambda c: sum((c[i] - eye[i]) ** 2 for i in range(3)))
+
+
+def capture_baby(probe: ProbeSteps, artifact: Path, baby: dict[str, Any], advanced: int,
+                 teleport: Teleport) -> tuple[dict[str, Any] | None, str | None]:
+    """Capture the newborn, or name why it was not captured this snapshot.
+
+    A baby that walked out of the client's view is not a gate failure (run
+    20261124T232341 aborted on it after 947 s): the caller re-lists on the next
+    snapshot and stops after `BABY_CAPTURE_ATTEMPTS`.
+    """
+    target = (baby["x"], baby["y"] + 0.5, baby["z"])
+    try:
+        return {"sprint_ticks": advanced, "entity": baby,
+                "screenshot": capture_target(
+                    probe, artifact, f"civilization-births-{advanced:06d}", target,
+                    entity=baby, teleport=teleport)}, None
+    except _BabyLeftView as error:
+        return None, str(error)
 
 
 def capture_target(probe: ProbeSteps, artifact: Path, label: str,
@@ -1047,15 +1075,21 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                 "screenshot": native_client.capture(probe.client, artifact, f"civilization-census-{advanced:06d}"),
             }
         baby = newborn(entities, baseline_villagers, detail["baseline_client_complete"])
-        if baby and "baby_observation" not in detail:
+        if (baby and "baby_observation" not in detail
+                and detail.get("baby_capture_attempts", 0) < BABY_CAPTURE_ATTEMPTS):
             target = (baby["x"], baby["y"] + 0.5, baby["z"])
-            detail["baby_observation"] = {
-                "sprint_ticks": advanced, "entity": baby,
-                "screenshot": capture_target(
-                    probe, artifact, f"civilization-births-{advanced:06d}", target, entity=baby,
-                    teleport=lambda x, y, z: item_merge._console(
-                        server, f"tp {village.USERNAME} {x:.2f} {y:.2f} {z:.2f}")),
-            }
+            detail["baby_capture_attempts"] = detail.get("baby_capture_attempts", 0) + 1
+            observation, miss = capture_baby(
+                probe, artifact, baby, advanced,
+                lambda x, y, z: item_merge._console(
+                    server, f"tp {village.USERNAME} {x:.2f} {y:.2f} {z:.2f}"))
+            if observation is not None:
+                detail["baby_observation"] = observation
+            else:
+                # Re-list on the next snapshot; a baby that never comes back
+                # leaves the stage unset once BABY_CAPTURE_ATTEMPTS is spent.
+                detail.setdefault("baby_capture_misses", []).append(
+                    {"sprint_ticks": advanced, "reason": miss})
         if ("growth_observation" in detail and "baby_observation" in detail
                 and "births" not in detail["milestones"]):
             detail["milestones"]["births"] = {

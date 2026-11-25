@@ -14,6 +14,54 @@ fn observe(state: &mut TickState, id: SettlementId) {
         .observe(id, state.tick, observed);
 }
 
+/// A generated piece may certify a House and its own workshop on one footprint
+/// (review wave2-10): development counts distinct footprints, not records.
+#[test]
+fn a_house_and_its_workshop_on_one_footprint_count_as_one_building() {
+    let mut state = fixture();
+    let destination = town(&mut state, "destination", 8, 32);
+    house(&mut state, destination, 8);
+    let bounds = state
+        .settlements
+        .get(destination)
+        .unwrap()
+        .buildings
+        .values()
+        .next()
+        .expect("the town's house")
+        .bounds;
+    let mut record = state.settlements.get_mut(destination).unwrap();
+    let next = record.building_sequence + 1;
+    record.building_sequence = next;
+    let id = crate::settlements::buildings::BuildingId((destination.0 << 32) | next);
+    record.buildings.insert(
+        id,
+        crate::settlements::buildings::Building {
+            id,
+            settlement: destination,
+            kind: crate::settlements::buildings::BuildingKind::Workshop(
+                crate::villager::VillagerProfession::Mason,
+            ),
+            level: 1,
+            bounds,
+            work_points: vec![],
+            revision: 1,
+            natural_zone: false,
+        },
+    );
+    drop(record);
+    assert_eq!(
+        state.settlements.get(destination).unwrap().buildings.len(),
+        2,
+        "fixture: two records share one footprint"
+    );
+    assert_eq!(
+        facts(&state, destination, state.tick).completed_buildings,
+        1,
+        "one footprint is one completed building"
+    );
+}
+
 #[test]
 fn loaded_reachable_family_relocates_without_a_transit_record_or_teleport() {
     let mut state = fixture();

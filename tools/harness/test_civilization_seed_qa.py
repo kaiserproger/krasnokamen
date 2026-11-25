@@ -782,5 +782,40 @@ class IronEvidenceTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "NBT"):
                     qa.assert_no_evidence_writes([command])
 
+
+class BabyCaptureRetryTests(unittest.TestCase):
+    """Review wave2-10: run 20261124T232341 aborted after 947 s when the listed
+    newborn left the client's view before its capture."""
+
+    def test_a_baby_that_left_the_view_is_a_miss_not_an_abort(self) -> None:
+        baby = {"entity_uuid": "new", "x": 160.5, "y": 75.0, "z": -280.5}
+        with patch.object(qa, "capture_target",
+                          side_effect=qa._BabyLeftView("baby left the client-visible set")):
+            observation, miss = qa.capture_baby(Mock(), "artifact", baby, 600, Mock())
+        self.assertIsNone(observation, "a vanished baby yields no observation")
+        self.assertIn("left the client-visible set", miss)
+        self.assertEqual(qa.BABY_CAPTURE_ATTEMPTS, 12)
+
+    def test_the_next_snapshot_captures_the_same_baby(self) -> None:
+        baby = {"entity_uuid": "new", "x": 160.5, "y": 75.0, "z": -280.5}
+        shot = {"retained_path": "baby.png"}
+        with patch.object(qa, "capture_target", side_effect=[qa._BabyLeftView("gone"), shot]):
+            first, miss = qa.capture_baby(Mock(), "artifact", baby, 600, Mock())
+            second, second_miss = qa.capture_baby(Mock(), "artifact", baby, 900, Mock())
+        self.assertIsNone(first)
+        self.assertIsNotNone(miss)
+        self.assertEqual(second["screenshot"], shot)
+        self.assertEqual(second["sprint_ticks"], 900)
+        self.assertIsNone(second_miss)
+
+    def test_a_hard_capture_error_still_aborts(self) -> None:
+        # The old refusal: a RuntimeError other than _BabyLeftView is a real
+        # gate failure and must still propagate.
+        baby = {"entity_uuid": "new", "x": 160.5, "y": 75.0, "z": -280.5}
+        with patch.object(qa, "capture_target",
+                          side_effect=RuntimeError("baby no longer visible for milestone capture")):
+            with self.assertRaisesRegex(RuntimeError, "baby no longer visible"):
+                qa.capture_baby(Mock(), "artifact", baby, 600, Mock())
+
 if __name__ == "__main__":
     unittest.main()

@@ -136,13 +136,23 @@ pub(crate) fn stand(
         .into_iter()
         .find_map(|(dx, dz)| {
             let (x, z) = (next[0] + dx, next[2] + dz);
-            let y = surface_y(state, record.anchor[1], x, z)?;
-            // The stand serves this workstation: a neighbour's roof (the seed-24
-            // well roof five blocks up, the class 9026719a07 fixed in the
-            // planner) is not a stand for it.
-            if (y - next[1]).abs() > 2 {
-                return None;
-            }
+            // The stand serves this workstation: search this column's surface
+            // around the furnace's own level instead of taking the highest
+            // surface in the anchor's band, which can be a neighbour's roof five
+            // blocks up (the seed-24 well, the class 9026719a07 fixed in the
+            // planner).
+            let mut clearance = crate::settlements::forestry::Clearance::prepared();
+            let y = super::preparation::liquid::surface_y_between(
+                state,
+                next[1] - 3..=next[1] + 1,
+                x,
+                z,
+                None,
+                &mut clearance,
+            )
+            .or_else(|| {
+                surface_y(state, record.anchor[1], x, z).filter(|y| (y - next[1]).abs() <= 2)
+            })?;
             let at = [x, y + 1, z];
             let free = state.world.physics_block_at(x, y + 1, z) == Some(state.registry.states.air)
                 && state.world.physics_block_at(x, y + 2, z) == Some(state.registry.states.air);
