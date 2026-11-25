@@ -146,7 +146,10 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         report["observations"]["placed_line"] = placed
         regiment = int(re.search(r"regiment=(\d+)", placed).group(1))
         report["observations"]["holder_regiment"] = regiment
-        contacts = _wait_for_holder_regiment_out_of_contact(console, regiment, run_dir, report)
+        # The front regiment keeps contact until its enemy line breaks; give the battle the whole
+        # scenario window (900 s of ticks) before calling the fixture unreachable.
+        contacts = _wait_for_holder_regiment_out_of_contact(
+            console, regiment, run_dir, report, bound=180_000)
         (run_dir / "before-death-telemetry.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
         report.setdefault("observations", {})["fighting"] = (strike.get("battle") or {}).get("fighting")
         mark = console.mark()
