@@ -715,6 +715,23 @@ pub(crate) fn step_empty_stage(
     }
     let mut ledger = ledger_mut(state)?;
     let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
+    // PROBE (temporary, remove with the diagnosis): the client reports `stage=2 work=0 next=None`
+    // and the step-over never visibly fires. Warn level so the gate log carries it.
+    let probe_cells = record
+        .cells
+        .get(record.snapshot.current_stage_index as usize)
+        .map(Vec::len);
+    tracing::warn!(
+        settlement = settlement.0,
+        handle,
+        stages = record.snapshot.stages.len(),
+        cells = record.cells.len(),
+        index = record.snapshot.current_stage_index,
+        work = record.snapshot.completed_work_units,
+        ?probe_cells,
+        state = ?record.snapshot.state,
+        "step_empty_stage: probe"
+    );
     let mut stepped = false;
     while record
         .cells

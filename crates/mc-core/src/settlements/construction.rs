@@ -2356,13 +2356,23 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     let mut next = executor::next_cell(state, id, &project.structure)
         .ok()
         .flatten();
-    if next.is_none() && executor::step_empty_stage(state, id, &project.structure).unwrap_or(false)
-    {
-        // A stage planned with no cells is already complete; naming the next stage's cell here
-        // keeps the builder working instead of releasing it on every shift (House L2).
-        next = executor::next_cell(state, id, &project.structure)
-            .ok()
-            .flatten();
+    if next.is_none() {
+        match executor::step_empty_stage(state, id, &project.structure) {
+            Ok(true) => {
+                // A finished stage is stepped over; naming the next stage's cell here keeps the
+                // builder working instead of releasing it on every shift (House L2).
+                next = executor::next_cell(state, id, &project.structure)
+                    .ok()
+                    .flatten();
+            }
+            Ok(false) => {}
+            Err(error) => tracing::warn!(
+                settlement = id.0,
+                structure = %project.structure,
+                ?error,
+                "watch_project: step over a finished stage failed"
+            ),
+        }
     }
     let lot = super::forestry::lot_bounds(state, project);
     let protected = snapshot
