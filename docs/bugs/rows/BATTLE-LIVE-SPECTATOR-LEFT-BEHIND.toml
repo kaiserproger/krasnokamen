@@ -11,5 +11,5 @@ regression = ["cargo:mc-core:battle::live_players::tests::the_bound_spectator_fo
 ]
 
 failing_first = "reported"
-fix_commit = "patch:04faa68d6053860574eb2fd563d254ac90828a4495280f963dd052a33d43cb85"
+fix_commit = "patch:58f02bb7959a01a3a4ca24e750f090e138eee5e0e057c9210f0cbd0d2e66f29d"
 repro_check = ["The client proof is the same `battle-live` profile with the spectator arm: CamSpec is bound to PovRed before his death and the gate asserts his camera stays bound to the holder and that his camera eye stays on the holder he follows after the respawn (1.62 blocks = the eye offset). Run `20261124T220448-battle-live-spectator-follows-respawn-k1qlvk0e` (pin `1aee24a97872`, 56.8 s): camera=1 bound before death and after the respawn, gap 1.62 blocks, holder back in play. Still missing for promotion: a real pre-image control; c6fa94da3's hunks no longer reverse at HEAD, and the ledger has no path to consume a pre-image-pin receipt for a non-client fix_commit."]

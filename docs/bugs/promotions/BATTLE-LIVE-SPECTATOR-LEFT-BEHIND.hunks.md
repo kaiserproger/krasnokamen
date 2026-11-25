@@ -1,7 +1,7 @@
 # BATTLE-LIVE-SPECTATOR-LEFT-BEHIND — fix-hunk map
 
 Fix `c6fa94da3` in tree; this map's patch is its **behaviour-only** form,
-`patch:04faa68d6053860574eb2fd563d254ac90828a4495280f963dd052a33d43cb85` (`docs/bugs/promotions/BATTLE-LIVE-SPECTATOR-LEFT-BEHIND.preimage.patch`), which
+`patch:58f02bb7959a01a3a4ca24e750f090e138eee5e0e057c9210f0cbd0d2e66f29d` (`docs/bugs/promotions/BATTLE-LIVE-SPECTATOR-LEFT-BEHIND.preimage.patch`), which
 reverses at HEAD.
 
 | file | what it does |

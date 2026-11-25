@@ -1,7 +1,7 @@
-diff --git b/crates/mc-core/src/battle/live_players.rs a/crates/mc-core/src/battle/live_players.rs
+diff --git a/crates/mc-core/src/battle/live_players.rs b/crates/mc-core/src/battle/live_players.rs
 index 67407c3a3..c5583c33a 100644
---- b/crates/mc-core/src/battle/live_players.rs
-+++ a/crates/mc-core/src/battle/live_players.rs
+--- a/crates/mc-core/src/battle/live_players.rs
++++ b/crates/mc-core/src/battle/live_players.rs
 @@ -292,7 +292,7 @@ pub(crate) fn update(state: &mut TickState) {
                  }
              }
