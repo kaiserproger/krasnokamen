@@ -332,38 +332,49 @@ def check_entity_fire(probe: ProbeSteps, artifact: Path) -> None:
 
 
 def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
-    """MODEL-OPUS-10/11: each re-authored rig is submitted and rendered in its own frame.
+    """MODEL-OPUS-10/11: the re-authored rigs submit the vanilla layer's own parts.
 
-    The scene shoots one stationary mob per shot at a fixed pad and camera. The per-subject
-    submission is proved (`submitted >= 1`, the kind absent from `unrendered`); the rig's *size* is
-    reported but not asserted, because the frame's `entity_extraction.entity_indices` is the whole
-    dynamic pass: the cloud layer is appended into the same `scene.dynamic` before the entities
-    (`session/observation.rs`), so one mob's frame reads about 51,500 indices and the value moves
-    with the camera and the cloud offset. Measured 2026-11-25 on the pinned pair
-    (`4092ac53` control vs `92dcb25d` fix): guardian-minus-baby-bee -264 / +60 against the expected
-    240 / 498 from the rig JSONs (guardian 102 -> 132 quads, baby bee 62 -> 49) and allay-minus-vex
-    -396 / -396 against the expected -48 / 0 - the cloud term swamps the 78-180 index difference.
-    A per-material or per-entity counter in the client observation (CM-4 in the lane's
-    OWNER-DECISIONS-NEEDED.md) is what this row needs; until it exists the counts stay evidence.
+    The frame's `entity_extraction.entity_indices` is the whole dynamic pass and the cloud layer is
+    appended into the same `scene.dynamic` first, so a total count cannot isolate a rig (measured:
+    about 51,500 for one mob). CM-4's `entity_indices_by_material` is the *entity pass only* — the
+    observation snapshots the per-material lengths before `append_geometry` — so its sum is the
+    frame's own entity submission and the per-entity shadow quad (6 indices) cancels in a
+    difference of two subjects.
+
+    `client:92dcb25d` re-authored the guardian family from 17 cubes (102 quads, 612 indices) to 22
+    (132, 792), the baby bee from 13 (62, 372) to 9 (49, 294), and the allay from 34 quads (204) to
+    42 (252) while the hoglin (66) and vex (42) kept theirs. The assertions are the two differences
+    the fix moves: guardian minus baby bee 240 -> 498 (floor 350) and allay minus vex -48 -> 0
+    (floor -20). The hoglin frame stays evidence (its ears and tusks changed shape, not count).
     """
     names = ("hoglin", "guardian", "allay", "vex", "bee-baby")
     shots = _qa._load_shots(probe, artifact, names)
-    counts = {}
+    totals = {}
     for name in names:
         extraction = shots[name][0].get("entity_extraction") or {}
-        counts[name] = int(extraction.get("entity_indices") or 0)
+        by_material = extraction.get("entity_indices_by_material") or {}
+        total = sum(int(value or 0) for value in by_material.values())
+        totals[name] = total
         probe.report[f"{name}_entity_extraction"] = {
-            key: extraction.get(key) for key in ("submitted", "entity_indices", "unrendered")
+            "submitted": extraction.get("submitted"),
+            "entity_indices": extraction.get("entity_indices"),
+            "entity_indices_by_material": by_material,
+            "entity_pass_indices": total,
+            "unrendered": extraction.get("unrendered"),
         }
         probe.check(f"{name}_entity_submitted", extraction.get("submitted", 0) >= 1)
         probe.check(f"{name}_rig_rendered", not extraction.get("unrendered"))
-    probe.report["guardian_minus_bee_indices"] = counts["guardian"] - counts["bee-baby"]
-    probe.report["allay_minus_vex_indices"] = counts["allay"] - counts["vex"]
-    probe.report["rig_index_note"] = (
-        "entity_indices includes the cloud layer; it is reported, not asserted (see the docstring)"
-    )
+        # The per-material map must exclude the cloud layer the total still carries.
+        probe.check(f"{name}_entity_pass_excludes_clouds",
+                    total < int(extraction.get("entity_indices") or 0))
+    guardian_bee = totals["guardian"] - totals["bee-baby"]
+    allay_vex = totals["allay"] - totals["vex"]
+    probe.report["guardian_minus_bee_indices"] = guardian_bee
+    probe.report["allay_minus_vex_indices"] = allay_vex
+    probe.check("guardian_spikes_and_bee_legs_submitted", guardian_bee >= 350)
+    probe.check("allay_wing_faces_submitted", allay_vex >= -20)
     probe.report["visual_review_required"] = [
-        "Inspect guardian/allay/bee-baby frames: the submission proves the rig was drawn, not its vanilla shape."
+        "Inspect guardian/allay/bee-baby frames: the counts prove parts were submitted, not their shape."
     ]
 
 
