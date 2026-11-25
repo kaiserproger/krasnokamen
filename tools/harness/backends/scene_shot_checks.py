@@ -222,6 +222,61 @@ def check_item_bars(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("fullness_bar_drawn", _count(damaged, (420, 698, 464, 710), blue) > 15)
 
 
+def check_shield_gui(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-SHIELD-GUI: the shield's GUI icon carries the vanilla 26.3 plate size.
+
+    A 3D `minecraft:special` item is drawn in the GUI with its base item model's own
+    `gui` display transform (`ui::state::append_item`), never fitted to the cell, so the
+    authored plate is what the icon shows. 26.3 `ShieldModel` is a 12x22x1 plate, which
+    at `item/shield`'s gui scale 0.65 spans 22/16*0.65 = 0.894 of the cell's height; the
+    pre-fix rig was a 10x16x1 plate (16/16*0.65 = 0.65). One frame in an empty hotbar and
+    one with a shield in slot 0 and paper in slot 1 give the ruler inside the run: a
+    generated item is a 16x16 sprite that fills its cell exactly, so the ratio of the two
+    icons' heights is the plate's own size, independent of GUI scale, window size, where
+    the hotbar is drawn and how the cell background is textured.
+    """
+    shots = _qa._load_shots(probe, artifact, ("cells-empty", "cells-items"))
+    empty_f, items_f = shots["cells-empty"][0], shots["cells-items"][0]
+    probe.check("cells_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(empty_f["camera_position"], items_f["camera_position"])
+    ) and abs(empty_f["yaw"] - items_f["yaw"]) < 0.01
+      and abs(empty_f["pitch"] - items_f["pitch"]) < 0.01)
+    empty, items = shots["cells-empty"][1], shots["cells-items"][1]
+    # The hotbar strip: 182x22 GUI px centred at GUI scale 3 on a 1280x720 frame.
+    strip = (330, 640, 950, 720)
+    changed = lambda x, y: max(
+        abs(p - q) for p, q in zip(empty.getpixel((x, y)), items.getpixel((x, y)))) > 25
+    runs: list[list[int]] = []
+    for x in range(strip[0], strip[2]):
+        if not any(changed(x, y) for y in range(strip[1], strip[3])):
+            continue
+        if runs and x - runs[-1][1] <= 6:
+            runs[-1][1] = x
+        else:
+            runs.append([x, x])
+    boxes = []
+    for x0, x1 in runs:
+        ys = [y for x in range(x0, x1 + 1) for y in range(strip[1], strip[3]) if changed(x, y)]
+        if ys:
+            boxes.append((x0, min(ys), x1, max(ys)))
+    heights = [box[3] - box[1] + 1 for box in boxes]
+    widths = [box[2] - box[0] + 1 for box in boxes]
+    shield_h = heights[0] if heights else 0
+    paper_h = heights[1] if len(heights) > 1 else 0
+    ratio = shield_h / paper_h if paper_h else 0.0
+    probe.report["shield_gui_strip"] = list(strip)
+    probe.report["shield_gui_icon_boxes"] = [list(box) for box in boxes]
+    probe.report["shield_gui_icon_heights"] = heights
+    probe.report["shield_gui_icon_widths"] = widths
+    probe.report["shield_gui_height_ratio"] = round(ratio, 3)
+    probe.check("two_hotbar_icons_drawn", len(boxes) == 2)
+    probe.check("shield_icon_visible", shield_h >= 15 and paper_h >= 15)
+    probe.check("shield_icon_is_vanilla_plate_height", ratio >= 0.82)
+    probe.report["visual_review_required"] = [
+        "Inspect cells-items.png: the pixels prove the icon's plate height, not its vanilla texture."
+    ]
+
+
 def check_shade_override(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-SHADE-OVERRIDE: a face named by the model's shade override takes the up weight.
 

@@ -964,6 +964,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="checks the received hotbar/durability observation and the framed shot",
         limits="one fixture and one camera per shot; the visual review of each frame stays with the operator",
     ),
+    "native-shield-gui": _entry(
+        id="native-shield-gui", summary="The shield's GUI icon is the vanilla 26.3 plate size",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-shield-gui", requires=("xvfb",),
+        sources=("tools/harness/shield_gui_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, empty hotbar then a shield in slot 0 and paper in slot 1, fixed camera and GUI scale",
+        proves="the shield icon's height against the same-frame generated-item ruler (`shield_icon_is_vanilla_plate_height`), so the cell draws the 12x22 vanilla plate instead of the earlier 10x16 one",
+        limits="one item model and the icon's plate height only; the held/first-person shield poses and the banner-pattern overlay stay unit-covered",
+    ),
     "native-toast": _entry(
         id="native-toast", summary="The join-time unsecure-server toast is drawn and then clears",
         owner="core:harness", evidence="graphical", profile="scene-shot",
