@@ -288,19 +288,30 @@ def _open_chest(probe: ProbeSteps, chest: tuple[int, int, int]) -> dict[int, dic
             probe.call("minecraft_wait_ticks", {"ticks": 40})
         except Exception:
             pass
-    probe.call(
-        "minecraft_use_item_on",
-        {"x": chest[0], "y": chest[1], "z": chest[2], "face": "up"},
-    )
-    state = probe.wait(
-        lambda observed: (
-            (observed.get("container") or {}).get("menu_class")
-            == "net.minecraft.world.inventory.ChestMenu"
-            and (observed.get("container") or {}).get("container_id", 0) > 0
-        ),
-        "founding_chest_opened",
-        timeout_seconds=15.0,
-    )
+    # A builder working beside the chest (run 20261125T034259: a farm project at
+    # [78, 68, -320]) can refuse the interaction, so approach again and retry in
+    # game ticks instead of failing the whole planner/storage snapshot once.
+    for attempt in range(3):
+        probe.call(
+            "minecraft_use_item_on",
+            {"x": chest[0], "y": chest[1], "z": chest[2], "face": "up"},
+        )
+        try:
+            state = probe.wait(
+                lambda observed: (
+                    (observed.get("container") or {}).get("menu_class")
+                    == "net.minecraft.world.inventory.ChestMenu"
+                    and (observed.get("container") or {}).get("container_id", 0) > 0
+                ),
+                "founding_chest_opened",
+                timeout_seconds=15.0,
+            )
+            break
+        except Exception:
+            if attempt == 2:
+                raise
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
+            _compass_step(probe, (float(chest[0]), float(chest[1]), float(chest[2])))
     container = state["container"]
     storage_slots = int(container["slot_count"]) - 36
     out: dict[int, dict[str, Any]] = {}
@@ -573,7 +584,18 @@ def _settlement_stock(
         containers.append(entry)
         try:
             if founding in members:
-                stock = _chest_totals(_open_chest(probe, founding))
+                try:
+                    stock = _chest_totals(_open_chest(probe, founding))
+                except Exception as exc:
+                    # The client menu is a view of the same physical block; when a
+                    # builder or a clipped screen keeps it shut, the server read is
+                    # the same stock (run 20261125T034259: farm project in flight,
+                    # founding_chest_opened timed out and the whole snapshot failed).
+                    entry["menu_fallback"] = f"{type(exc).__name__}: {exc}"[:160]
+                    stock = {}
+                    for member in identity:
+                        for item, count in read_container(member).items():
+                            stock[item] = stock.get(item, 0) + count
             else:
                 stock = {}
                 # /data reads a physical block, unlike the client's merged menu.

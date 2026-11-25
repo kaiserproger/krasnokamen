@@ -116,6 +116,27 @@ class VillageAutonomyQaTests(unittest.TestCase):
         self.assertTrue(all(0 < call.args[1]["timeout_seconds"] <= 15.0
                             for call in probe.call.call_args_list))
 
+    def test_stock_falls_back_to_server_read_when_the_chest_menu_will_not_open(self) -> None:
+        # Run 20261125T034259: a farm project in flight kept the founding chest shut
+        # and the whole planner/storage snapshot failed. The same physical block is
+        # readable from the server, so the snapshot must survive on that read.
+        probe = Mock()
+        probe.call.side_effect = lambda tool, arguments: (
+            {"blocks": [{"id": "minecraft:chest", "x": 130, "y": 76, "z": -218,
+                         "properties": {}}], "truncated": False}
+            if tool == "minecraft_scan_blocks" else {}
+        )
+        probe.wait.side_effect = TimeoutError("founding_chest_opened")
+        detail: dict = {}
+        lines = ["#4294967300 storage level 1 [130, 76, -218]-[132, 79, -216]"]
+        totals = qa._settlement_stock(
+            probe, detail, (130, 76, -218), lines,
+            lambda pos: {"minecraft:bread": 3},
+        )
+        self.assertEqual(totals, {"minecraft:bread": 3})
+        self.assertIn("menu_fallback", detail["storage_observation"]["containers"][0])
+        self.assertEqual(probe.wait.call_count, 3)
+
     def test_cut_status_dialog_is_accepted_only_as_a_proven_clipped_view(self) -> None:
         # Laptop 2026-11-18 22:28, pin 38c3f1cdf358: the rendered body ends inside the third project.
         road = [f"Road L1 · Prepared\n0/9\n115 68 {z}\nBuilder: b{z}" for z in (4, 7, 10, 13)]
