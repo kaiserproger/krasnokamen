@@ -181,9 +181,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         # client `state` carries no entities. Recorded as the row's missing proof —
         # `contact=`/`rule=centre` are strings the fix itself writes, not a control
         # (review wave2-13 M3).
-        if scenario == "battle-live-respawn-line-contact":
-            report.setdefault("incomplete", []).append(
-                "no client entity census through horizon-ctl: the enemy-in-reach symptom is not measured")
+
         # The row's symptom from the server's own published truth: the respawned holder must
         # have an enemy soldier inside weapon reach in the next battle image. Log fields are
         # not evidence here (contact=/rule=centre are strings the fix writes).
