@@ -152,8 +152,8 @@ fn the_house_certificate_boxes_match_the_footprints_they_inspect() {
     // each level composes (level 2: `[0,0]..[10,6]`), so the L2 certificate inspects the right box and
     // the enclosure air column of the gate cannot come from a box mismatch. Level 3 is one block
     // short in z — a blueprint data inconsistency, recorded here rather than silently tolerated.
-    let mut state = test_state();
-    let blueprint = crate::settlements::blueprints::get(&mut state.registry, "house")
+    let state = test_state();
+    let blueprint = crate::settlements::blueprints::get(&state.registry, "house")
         .expect("the house blueprint is registered")
         .clone();
     let origin = [0, 0, 0];
@@ -199,8 +199,8 @@ fn the_house_upgrade_composition_covers_the_level_two_perimeter() {
     // Design intent (`blueprints.rs:112`): a level's `blocks` are the diff vs the previous level,
     // "whole level for L1". So a finished level-2 house is L1 cells + L2 diff, and the level-2
     // certificate over the level-2 bounds is correct only if that composition covers the perimeter.
-    let mut state = test_state();
-    let blueprint = crate::settlements::blueprints::get(&mut state.registry, "house")
+    let state = test_state();
+    let blueprint = crate::settlements::blueprints::get(&state.registry, "house")
         .expect("the house blueprint is registered")
         .clone();
     let level = &blueprint.levels[1];
@@ -235,8 +235,8 @@ fn every_house_level_builds_the_perimeter_its_certificate_inspects() {
     // The L2 refusal reads `enclosure: 0/1` with air on the certificate perimeter
     // (`[54, 74..=77, 11]`, 20261125T093116). This asserts what would make that impossible: each
     // level's plan covers the whole perimeter column of its own bounds.
-    let mut state = test_state();
-    let blueprint = crate::settlements::blueprints::get(&mut state.registry, "house")
+    let state = test_state();
+    let blueprint = crate::settlements::blueprints::get(&state.registry, "house")
         .expect("the house blueprint is registered")
         .clone();
     assert!(!blueprint.levels.is_empty(), "the house has levels");

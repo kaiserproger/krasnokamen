@@ -363,7 +363,7 @@ pub(crate) fn work(
     }
     let stand = site_target(
         state,
-        &project,
+        project,
         next,
         slot,
         v.navigation_target.filter(|_| !v.navigation_search_failed),
