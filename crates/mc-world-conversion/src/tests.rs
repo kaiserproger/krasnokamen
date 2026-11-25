@@ -608,7 +608,15 @@ fn import(config: &CoreConfig, dir: &Path) -> Result<ConversionReceipt, String> 
 fn import_refuses_anchored_chunks_when_the_export_lacks_the_witness() {
     let dir = tempfile::tempdir().unwrap();
     let config = source(dir.path(), None);
-    let error = import(&config, dir.path()).unwrap_err();
+    // Assert the verdict, never unwrap it: a control that panics inside
+    // `unwrap_err` reads as a fixture failure, not as this check's red.
+    let result = import(&config, dir.path());
+    let refused = result.is_err();
+    assert!(
+        refused,
+        "an anchored export without the witness must refuse instead of publishing a store"
+    );
+    let error = result.err().unwrap_or_default();
     assert!(error.contains("simulation debt"), "{error}");
     assert!(
         error.contains(HELD),

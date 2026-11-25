@@ -15,9 +15,12 @@ a floating sand block up, the enclosing harness performs the real offline
 export/import on the stopped private world (`convert_world`) and restarts on the
 imported store, and the reconnected client must
 
-* enter play (`reimport_entered_play`, the assertion that failed before),
 * find no quarantine line in the restarted server's log
-  (`reimport_no_quarantined_chunks`),
+  (`reimport_no_quarantined_chunks`, the row's proving assertion: it flips with
+  the fix and without the client, while `reimport_entered_play` is a connection
+  assertion the ledger never accepts as control evidence),
+* enter play (`reimport_entered_play`, the assertion the failing artifact died
+  on),
 * continue the simulated age instead of jumping to the native tick
   (`reimport_gametime_continues_from_the_frozen_age`: the server's own
   `/time query gametime` answer after the reimport is not ahead of the frozen
@@ -91,12 +94,18 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.report["frozen_export_address"] = address
     steps.call("minecraft_connect", {"server_addr": address})
     play = steps.call("minecraft_wait_for_play", {"timeout_seconds": steps.remaining()})
-    steps.check("reimport_entered_play", play["in_play"] is True)
+    # Chunk custody is the row's own question and answers independently of the
+    # client: the pre-fix import logs `stored chunk unavailable` for every
+    # anchored chunk on the join attempt and quarantines them, so read the log
+    # before the join verdict. A ledger control may not rest on a connection
+    # assertion (`*_entered_play` is a flake class): the custody check has to be
+    # the one that flips.
     log = _server_log(steps)
     steps.report["server_log_bytes"] = len(log)
     steps.report["quarantine_lines"] = [line for line in log.splitlines()
                                         if any(marker in line for marker in QUARANTINE_MARKERS)]
     steps.check("reimport_no_quarantined_chunks", not steps.report["quarantine_lines"])
+    steps.check("reimport_entered_play", play["in_play"] is True)
     # The exported held prefix is what the pre-fix export dropped: with it, the
     # imported world continues the frozen simulated age (tick - held) and only
     # the restart's own ticks separate the two answers; without it the answer
