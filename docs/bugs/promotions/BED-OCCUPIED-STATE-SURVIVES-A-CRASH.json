@@ -1,44 +1,50 @@
 {
   "id": "BED-OCCUPIED-STATE-SURVIVES-A-CRASH",
   "verdict": "promoted",
-  "fix_commit": "59f68649f10dcbdbcf8d28680a3b268c3f6f1cd0",
-  "fix_commit_full": "59f68649f10dcbdbcf8d28680a3b268c3f6f1cd0",
-  "promoted_at": "2026-11-25T19:03:29+00:00",
-  "tree_head": "ef9323122252e25288c9e302dec73e62c7427cd5",
+  "fix_commit": "patch:b299f880de3250e234f5d527be8c19bacab85af3cbe32f2ec158f74ac4ff6e34",
+  "fix_commit_full": "patch:b299f880de3250e234f5d527be8c19bacab85af3cbe32f2ec158f74ac4ff6e34",
+  "promoted_at": "2026-11-25T22:14:06+00:00",
+  "tree_head": "febee2d55b81d3ab38b0a94bb86e395683aea639",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
-  "control_tree_sha256": "73f8c42aaf6705dfc805c8a66cee6240e5f9d67601e05f78606109e810805123",
-  "control_tree_head": "ef9323122252e25288c9e302dec73e62c7427cd5",
+  "control_tree_sha256": "7eb4eaff7f63887867fdff46119f6fb6f997034909a2c6b8c288c68fbcc8c52c",
+  "control_tree_head": "febee2d55b81d3ab38b0a94bb86e395683aea639",
   "control": "reversed_fix_hunks",
   "control_b": null,
-  "fix_patch_sha256": null,
+  "fix_patch_sha256": "b299f880de3250e234f5d527be8c19bacab85af3cbe32f2ec158f74ac4ff6e34",
   "reversed_files": [
     "crates/mc-core/src/sleep.rs",
     "crates/mc-core/src/tick.rs",
     "crates/mc-core/src/tick/hydration.rs"
   ],
-  "kept_test_files": [
-    "crates/mc-core/src/core_checkpoint_custody_tests.rs"
-  ],
+  "kept_test_files": [],
   "negative_control": {
+    "cargo:mc-core:sleep::tests::a_sleepers_bed_is_not_rewritten_on_the_next_tick": {
+      "state": "green",
+      "detail": ""
+    },
     "cargo:mc-core:core::checkpoint_custody_tests::checkpoint_mid_sleep_leaves_no_stale_occupied_bed_after_reopen": {
       "state": "red",
       "detail": "FAIL",
       "assertion": {
         "file": "crates/mc-core/src/core_checkpoint_custody_tests.rs",
-        "line": 4081,
+        "line": 4084,
         "error": "panic",
         "class": "assertion"
       }
     }
   },
   "restored": {
+    "cargo:mc-core:sleep::tests::a_sleepers_bed_is_not_rewritten_on_the_next_tick": {
+      "state": "green",
+      "detail": ""
+    },
     "cargo:mc-core:core::checkpoint_custody_tests::checkpoint_mid_sleep_leaves_no_stale_occupied_bed_after_reopen": {
       "state": "green",
       "detail": ""
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123GameplayP/.analysis/validation/20261125T184507-ledger-promote-kxgntxp9"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123GameplayP/.analysis/validation/20261125T214523-ledger-promote-gnmt1dj7"
 }
