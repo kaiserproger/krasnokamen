@@ -6,7 +6,8 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "Same RC5 Windows VM smoke as SP-START-TIMEOUT-SLOW-MACHINE (Play #3); the session was stopped without seeing the overlay clear. Software rendering may be the whole cause."
-regression = []
+regression = ["harness:singleplayer-regressions:native-sp-slow-machine"]
+proving_assertions = { "harness:singleplayer-regressions:native-sp-slow-machine" = "loading_overlay_gate_released" }
 failing_first = "reported"
-fix_commit = "client:803f0e00"
-repro_check = "real-hunk control red (same loading-screen gate as NATIVE-INPLAY-BLOCKED-BY-MISSING-CHUNK); the only check is the real gate harness:singleplayer-regressions:native-sp-slow-machine; area=client, candidate"
+fix_commit = "client:fdc19309818760c2086494acabf2ed9108702f3b"
+repro_check = "The row's symptom is the full-screen 'Preparing terrain and light' text over an already live world. The gate is Session::play_world_presentation_ready (sync_ui_state renders the overlay from it, the observation carries it as loading_readiness.world_ready) and the fix is the same 803f0e00 + 108c8b2a pair promoted for NATIVE-INPLAY-BLOCKED-BY-MISSING-CHUNK, so the control is the client pinned at the committed pre-image A (30183eef7bd6) and the restore the client pinned at the re-land B (fdc193098187, the fix_commit). The scene's old terrain_overlay_cleared only reads screen.open, and the overlay is not a screen (the observation's overlay field is a stub), so a client that never releases the gate was invisible to it; the scene now asserts loading_overlay_gate_released (loading_readiness.world_ready true) after a bounded wait (300 s) that keeps the observation on timeout instead of erroring, and that assertion is the row's proving one."

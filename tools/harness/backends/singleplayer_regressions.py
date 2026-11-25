@@ -199,15 +199,28 @@ def run(ctx: ProfileContext) -> dict:
                         # This canonical wait follows the connection epoch across
                         # title-to-Play; a plain observe can race that handoff.
                         probe.call("minecraft_wait_for_play", {"timeout_seconds": probe.remaining()})
-                    final = probe.wait(
-                        lambda s: (s.get("in_play") is True and s["screen"].get("open") is False)
-                        or s["screen"].get("class") == SELECT,
-                        "slow_world_play_or_failure")
+                    try:
+                        final = probe.wait(
+                            lambda s: (s.get("in_play") is True and s["screen"].get("open") is False)
+                            or s["screen"].get("class") == SELECT,
+                            "slow_world_play_or_failure",
+                            timeout_seconds=min(300.0, probe.remaining(limit=None)))
+                    except TimeoutError:
+                        # A gate that never released is this row's datum, not an unrunnable run:
+                        # keep the observation and let the assertions below carry it
+                        # (SP-PREPARING-TERRAIN-STUCK-SLOW-MACHINE).
+                        final = probe.observe()
                     probe.report["slow_final_observation"] = final
                     probe.check("slow_server_listened", result == "listening")
                     probe.check("slow_entered_world", final.get("in_play") is True)
                     probe.report["play_to_first_view_seconds"] = time.monotonic() - started
                     probe.check("terrain_overlay_cleared", final["screen"].get("open") is False)
+                    # The full-screen "Preparing terrain and light" text is rendered from the same
+                    # value (Session::sync_ui_state takes play_world_presentation_ready), and the
+                    # observation carries it as loading_readiness.world_ready: while it is false the
+                    # overlay is up over a live world, which is exactly this row.
+                    probe.check("loading_overlay_gate_released",
+                                (final.get("loading_readiness") or {}).get("world_ready") is True)
                     player = final["player"]
                     yaw = 10 if abs(player["yaw"] - 10) > 1 else 0
                     probe.call("minecraft_look", {"yaw_deg": yaw, "pitch_deg": 0})
