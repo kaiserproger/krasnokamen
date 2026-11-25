@@ -378,9 +378,9 @@ def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
     allay_vex = rigs["allay"] - rigs["vex"]
     probe.report["guardian_minus_bee_indices"] = guardian_bee
     probe.report["allay_minus_vex_indices"] = allay_vex
-    # The row's own assertions first: a fixture leak must not mask which symptom is red.
-    probe.check("guardian_spikes_and_bee_legs_submitted", guardian_bee >= 350)
-    probe.check("allay_wing_faces_submitted", allay_vex >= -20)
+    # The rows' assertions first: a fixture leak must not mask which symptom is red. `check` raises
+    # on the first false, and each row's control must be red on ITS assertion, so the live row
+    # (MODEL-OPUS-11's span) is evaluated before the closed one (MODEL-OPUS-10's count).
     # The allay's pre-image rig submits the same quads as the fix (42), only at animated wing angles:
     # measured horizontal span 1.10 blocks on the control vs 0.70 on the fix (wings folded onto the
     # body, body depth 0.70), so the span - not the count - is what this row can assert.
@@ -392,6 +392,8 @@ def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
         allay_span = round(max(abs(hi[0] - lo[0]), abs(hi[2] - lo[2])), 3)
     probe.report["allay_horizontal_span"] = allay_span
     probe.check("allay_wing_span_within_body", allay_span is not None and allay_span <= 0.85)
+    probe.check("guardian_spikes_and_bee_legs_submitted", guardian_bee >= 350)
+    probe.check("allay_wing_faces_submitted", allay_vex >= -20)
     for name in names:
         # One mob per frame: a killed mob's death pass or its dropped loot would ride along.
         probe.check(f"{name}_single_entity", submitted[name] == 1)
