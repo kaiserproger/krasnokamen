@@ -46,3 +46,20 @@ by the unit test alone. The 2026-11-25 client fix corrected all three against `j
 `Mth.rotationAroundAxis(Y_AXIS, camera.orientation)`), which is why the hunk above describes the
 older `(band / 2) % 2` sprite choice: the pair was cut before that correction and must be re-run on
 the pinned tree that carries both it and this row.
+
+## The pair, corrected (Opus round 2)
+
+The `e017c320 -> de93dc7e` pair cannot be run against the HEAD check: those pins emit the pre-CM-4
+string-keyed `entity_layer_geometry` and the check reads the CM-4 list (`scene_shot_checks.py:309-310`).
+`54ca14f778` also rewrote the lines `a3f2a486` touched, so a pair on HEAD cannot be verbatim-equal to
+`a3f2a486`; computed, not assumed: `a3f2a486`'s non-test digest is `patch:ac0a6624…`, `54ca14f778`'s
+is `patch:30db35e5…`. Rebuild route: side branch from `d0b6708c` plus the `17e806e8aa` frame-report
+equivalent; on it reverse the band hunks (`append_entity_fire`'s rotation source, sprite parity,
+signature and four call sites) as the control, re-apply them as the restore, run
+`native-entity-fire` **three takes per side**, and record `client:54ca14f778` (the digest above) as
+the `fix_commit` the pair must equal. The measured span 1.827 (control) / 2.331 (fix) still comes
+from receipts 20261125T122429 / 20261125T123333.
+
+Note on the title: vanilla billboards the bands with the camera's yaw too (`EntityRenderDispatcher.submit`
+passes `Mth.rotationAroundAxis(Y_AXIS, camera.orientation)`), so the camera-facing plane is not the
+defect - the band size and the 0.45 step are.

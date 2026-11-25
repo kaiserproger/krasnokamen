@@ -281,9 +281,13 @@ def check_shield_gui(probe: ProbeSteps, artifact: Path) -> None:
 def check_entity_fire(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-ENTITY-FIRE: the burning entity's fire layer carries the vanilla flame bands.
 
-    From `javap -p -c` on the local 26.3 client jar: `EntityRenderDispatcher.submit` calls
+    From `javap -p -c` on the real 26.3 client jar
+    (`qa-armada/template-data/mojang/versions/26.3/client.jar`, `version.json` id 26.3, protocol
+    777 - the older `solaris/.analysis/decompile/client.jar` is 26.1.2/protocol 775 and the two
+    agree on every constant below): `EntityRenderDispatcher.submit` calls
     `submitFlame(pose, state, Mth.rotationAroundAxis(Mth.Y_AXIS, camera.orientation, ...))`, so the
-    bands billboard with the CAMERA's yaw; `FlameFeatureRenderer.renderFlame` scales by
+    bands billboard with the CAMERA's yaw; in 26.3 `FlameFeatureRenderer.prepare(Submit, ...)` (the
+    26.1.2 `renderFlame` of the same numbers) scales by
     `bbWidth * 1.4`, draws 1.4-unit quads from `yTop = bbHeight / scale` with `half` starting at 0.5
     and shrinking by 0.9, steps the loop counter and `y_bottom` by 0.45 (so each later band sits
     0.45 units HIGHER, not below the feet), the z offset starts at `0.3 - (int)yTop * 0.02` and
@@ -426,7 +430,10 @@ def check_rig_allay(probe: ProbeSteps, artifact: Path) -> None:
     the client's bone convention (pivot relative to the parent, rotation Z then Y then X, cube origin
     relative to the pivot), before any pair was run. The rest pose without the pose reads 0.6937, so
     the envelope cannot separate "rig without the pose" from "rig with the pose" - that half of the
-    row is pinned by the client unit test
+    row is pinned by the client unit test. Re-derived on the real 26.3 jar (protocol 777,
+    `AllayModel.setupAnim`): the idle flap is `cos(ageInTicks * 20 deg + walkPos) * PI * 0.15`, i.e.
+    +-27 degrees with an 18-tick period, which is exactly the sweep the bounds above cover. That half
+    of the row is pinned by the client unit test
     `entities::presentation::tests::allay_wings_take_the_vanilla_setup_anim_pose` instead, and the
     row says so.
 
@@ -471,10 +478,14 @@ def check_rig_guardian(probe: ProbeSteps, artifact: Path) -> None:
     dump's spikes put the guardian's own `EntityCutout` bbox between y = 4.03 px and y = 27.89 px,
     a 23.86 px = 1.4912-block height, where both bounds are spike tips; the pre-image's shorter
     spikes (1.8x5.2x1.8 at half the radius) reach 1.3761 and a rig without spikes reads 1.0. The
-    guardian is summoned `NoAI:1b` and the client only breathes the spike pivots by +-1% there, so
-    the height is a stable property of the rig, not of the sampled pose. The window 1.44..1.53 is
-    1.4912 +-0.04: it is pre-registered from the dump, it excludes the pre-image and a spike-less
-    rig, and it keeps 3.4% headroom to the fix. Both terms live in
+    guardian is summoned `NoAI:1b`, and the client breathes the spikes by scaling the ABSOLUTE
+    pivot (`presentation::procedural_part`, `*pivot *= (1 +- 0.01)`), where the vanilla model breathes
+    about the head centre (0, 16, 0) - so the height is NOT constant run to run: the same fix pin
+    read 1.491 and 1.516 in receipts 20261125T154546 / 20261125T152915 (bottom 159.746/159.747,
+    top 161.262/161.238), and the window 1.44..1.53 is the analytic envelope for that breathing
+    (spike tips 4.031..27.889 px at the JSON's own phase, +-1% of the pivot radius), not a
+    measurement. Being a variable gate it wants at least three fix-side runs (see the row's
+    repro_check). Both terms live in
     `guardian_spikes_and_bee_legs_submitted` so one assertion carries the row's symptom. The
     spikes' pivot placement inside the head is a property of the rig JSON, so it stays covered by
     the client's model regression tests.

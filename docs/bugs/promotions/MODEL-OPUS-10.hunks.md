@@ -56,16 +56,23 @@ The 78/54 (and 62/49) counts the older text used are the same rigs counted in qu
 
 ## The pair that promoted it
 
-The pre-CM-4 pair above could not carry the height term (its frames report the layer summary as a
-string-keyed map without bounds), so the pair was rebuilt on the CM-4 client and re-run against the
-server pinned at core `c20a0d18be`:
+The pair that actually promoted the row ran on server `pins/d4a60da3dd81-server-*` (core
+`d4a60da3dd`), receipts `20261125T154503-native-rig-guardian-bejkavea` (control, FAIL at
+`guardian_spikes_and_bee_legs_submitted`: guardian 612, bee 468, height **1.369**) and
+`20261125T154546-native-rig-guardian-o7decd_1` (fix, PASS: 792, 324, height **1.491**). The earlier
+pair on `c20a0d18bee5` (`20261125T152848` / `20261125T152915`, the latter height 1.516) proved the
+same thing on a head the promote then refused because a docs commit had moved it.
 
-- control `bafbf78b40` (the fourteen rigs restored from `e3678206`, frame report in place) →
-  receipt `20261125T152848-native-rig-guardian-_dusv2q0`, FAIL at
-  `guardian_spikes_and_bee_legs_submitted` with guardian 612 / bee 468 / height 1.373;
-- fix `0eb3e0ea1e` (the same fourteen rigs at the fix content) → receipt
-  `20261125T152915-native-rig-guardian-b4j5_vjb`, PASS with 792 / 324 / 1.516.
+Three different ids describe this pair and they are not interchangeable:
 
-diff(control, fix) carries patch id `6cf9f2be…`, equal to `client:3bfbd7b6`'s non-test patch. The
-measured numbers match the dump-derived predictions (612/468/1.3761 against 792/324/1.4912) within
-0.3%, which is the evidence that the window was derived rather than fitted.
+| id | what it is |
+|---|---|
+| `0622414eba9c…` | `client_control_delta.fix_patch_id` in `promotions/MODEL-OPUS-10.json`, computed verbatim by `ledger promote` (`ledger.py:1913-1931`) over the two pinned client heads |
+| `patch:d4787b5017…` | the non-test digest of the fix commit `3bfbd7b6` AND of `92dcb25d` (both computed with the ledger's own non-test split: 14 files, 4 test hunks) - they are equal, which is what makes the rig re-land the same fix as `92dcb25d` |
+| `6cf9f2be…` | `git diff bafbf78b40 0eb3e0ea1e -- assets/ \| git patch-id --stable`, i.e. the plain patch-id of the fourteen rig files only |
+
+No "within 0.3%" claim: the measured fix height 1.491 versus the dump's 1.4912 happens to agree, but
+the value is not stable run to run (1.491 at `154546` against 1.516 at `152915` on the same pin,
+because the client's spike breathing scales the absolute pivot where vanilla breathes about the head
+centre). The window 1.44..1.53 is the analytic envelope for that breathing, and the row records that
+a variable gate wants at least three fix-side runs.
