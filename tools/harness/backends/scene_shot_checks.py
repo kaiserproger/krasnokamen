@@ -271,7 +271,10 @@ def check_shield_gui(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["shield_gui_height_ratio"] = round(ratio, 3)
     probe.check("two_hotbar_icons_drawn", len(boxes) == 2)
     probe.check("shield_icon_visible", shield_h >= 15 and paper_h >= 15)
-    probe.check("shield_icon_is_vanilla_plate_height", ratio >= 0.82)
+    # 26.3's plate projects to about 0.87 of the cell height under the gui transform
+    # (rotation [15,-25,-5], scale 0.65), the pre-fix plate to 0.64; 0.78 sits 12% below
+    # the fixed value and 22% above the pre-fix one.
+    probe.check("shield_icon_is_vanilla_plate_height", ratio >= 0.78)
     probe.report["visual_review_required"] = [
         "Inspect cells-items.png: the pixels prove the icon's plate height, not its vanilla texture."
     ]
