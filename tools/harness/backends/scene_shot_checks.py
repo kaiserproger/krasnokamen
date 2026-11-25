@@ -277,6 +277,62 @@ def check_shield_gui(probe: ProbeSteps, artifact: Path) -> None:
     ]
 
 
+def check_entity_fire(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-ENTITY-FIRE: the burning entity's fire layer carries the vanilla flame bands.
+
+    The row's fix (`client:a3f2a486`) does not change how *many* bands are emitted - both loops give
+    `ceil(bbHeight / (bbWidth * 0.63))`, two for a pig - so a total index count cannot separate it.
+    What changes is the layer and the shape: the pre-fix overlay alternates the two sprites per band
+    (`textures[row % 2]`) and draws billboarded quads of `width` height starting at the feet, while
+    26.3 uses one sprite for two bands (`textures[(band / 2) % 2]`), 1.4 scaled units per quad, steps
+    `y_bottom` down by 0.45 so the second band reaches below the feet, and a z offset from 0.3
+    stepping -0.03. The frame reports all of that from its own submitted vertices
+    (`entity_extraction.entity_layer_geometry`, CM-4), so the check needs no pixels and no load
+    margin:
+
+    - one `EntityFire#<layer>` slice carrying all 12 indices (the pre-fix client splits them 6/6
+      over both fire sprites);
+    - the fire layer's bbox is 2.33 blocks tall against 1.83 before, and its bottom sits 0.567
+      blocks below the pig's own body bottom, where the pre-fix overlay starts exactly at it;
+    - the plain frame has no fire slice at all.
+    """
+    shots = _qa._load_shots(probe, artifact, ("burning", "plain"))
+    burning = shots["burning"][0].get("entity_extraction") or {}
+    plain = shots["plain"][0].get("entity_extraction") or {}
+    burning_layers = burning.get("entity_layer_geometry") or {}
+    plain_layers = plain.get("entity_layer_geometry") or {}
+    fire = {key: value for key, value in burning_layers.items() if key.startswith("EntityFire#")}
+    body = {key: value for key, value in burning_layers.items()
+            if key.startswith(("EntitySolid#", "EntityCutout#", "EntityTranslucent#"))}
+    probe.report["burning_layers"] = burning_layers
+    probe.report["plain_layers"] = plain_layers
+    probe.report["fire_layer_keys"] = sorted(fire)
+    probe.report["fire_indices"] = sum(int(layer.get("indices") or 0) for layer in fire.values())
+    probe.check("plain_frame_has_no_fire_layer",
+                not any(key.startswith("EntityFire#") for key in plain_layers))
+    probe.check("fire_layer_present", bool(fire))
+    probe.check("fire_sprite_pairs_two_bands", len(fire) == 1)
+    probe.check("fire_band_count", probe.report["fire_indices"] == 12)
+    if not fire or not body:
+        probe.check("fire_band_below_the_entity", False)
+        probe.check("fire_band_span", False)
+        return
+    fire_min_y = min(float(layer["min"][1]) for layer in fire.values())
+    fire_max_y = max(float(layer["max"][1]) for layer in fire.values())
+    body_min_y = min(float(layer["min"][1]) for layer in body.values())
+    probe.report["fire_min_y"] = round(fire_min_y, 3)
+    probe.report["fire_max_y"] = round(fire_max_y, 3)
+    probe.report["body_min_y"] = round(body_min_y, 3)
+    probe.report["fire_span"] = round(fire_max_y - fire_min_y, 3)
+    # 26.3 puts the second band's bottom 0.45 scaled units below the feet (0.567 blocks for a pig);
+    # the pre-fix billboard starts at the feet, so the bottom is the discriminator.
+    probe.check("fire_band_below_the_entity", fire_min_y <= body_min_y - 0.25)
+    probe.check("fire_band_span", fire_max_y - fire_min_y >= 2.0)
+    probe.report["visual_review_required"] = [
+        "Inspect burning.png: the layer geometry proves the bands, not the sprite's texel parity."
+    ]
+
+
 def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-OPUS-10/11: each re-authored rig is submitted and rendered in its own frame.
 

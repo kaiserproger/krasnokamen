@@ -964,6 +964,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="checks the received hotbar/durability observation and the framed shot",
         limits="one fixture and one camera per shot; the visual review of each frame stays with the operator",
     ),
+    "native-entity-fire": _entry(
+        id="native-entity-fire", summary="A burning entity's fire layer carries the vanilla flame bands",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-entity-fire", requires=("xvfb",),
+        sources=("tools/harness/entity_fire_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, one stationary pig at a fixed pad and camera, burning and then plain, HUD default",
+        proves="the burning frame's own submitted fire layer (`entity_extraction.entity_layer_geometry`): one sprite slice with all 12 indices, a 2.33-block band span, and a bottom 0.567 blocks below the pig's body, so `fire_sprite_pairs_two_bands`/`fire_band_below_the_entity` separate the 26.3 bands from the pre-fix camera-billboard overlay without pixels",
+        limits="one entity (a pig, two bands) and the layer geometry only; the sprite alternation for taller entities, the light-15 emission and the exact texel parity stay unit-covered",
+    ),
     "native-rig-parity": _entry(
         id="native-rig-parity", summary="A re-authored rig submits the vanilla layer's own parts",
         owner="core:harness", evidence="graphical", profile="scene-shot",
