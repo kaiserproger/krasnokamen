@@ -1633,3 +1633,147 @@ fn a_corridor_tree_on_ground_above_a_low_lot_gets_a_felling_stand() {
         executor::next_cell(&state, id, &project.structure)
     );
 }
+
+/// Diagnostic (not a regression): measure the retained seed-24 village's site
+/// supply with the planner's own lot check, and print which reason refuses each
+/// frontage. Ignored by default; run with `D123_CIV_ARTIFACT=<artifact dir>`:
+///
+/// ```text
+/// D123_CIV_ARTIFACT=/path/to/20261125T213859-... cargo test -p mc-core --lib \
+///   settlements::construction_site_tests::probe_retained_village_site_supply -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore = "diagnostic probe: needs D123_CIV_ARTIFACT pointing at a civilization-seed-qa artifact"]
+fn probe_retained_village_site_supply() {
+    let root = std::env::var("D123_CIV_ARTIFACT").expect("D123_CIV_ARTIFACT=<artifact dir>");
+    let artifact = std::path::PathBuf::from(&root);
+    let directory = tempfile::tempdir().unwrap();
+    let mut config = crate::config::CoreConfig::new(directory.path().to_owned(), 24);
+    config.vanilla_data_dir =
+        Some(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"));
+    let registry = std::sync::Arc::new(
+        crate::registry::CoreRegistry::load(config.vanilla_data_dir.as_deref()).unwrap(),
+    );
+    let store = std::sync::Arc::new(
+        mc_world::native::NativeStore::open_learning_identity(
+            &artifact.join("world/native/state.redb"),
+            64 * 1024 * 1024,
+        )
+        .expect("retained store")
+        .0,
+    );
+    let mut state = crate::core::load_dimension_state(
+        &config,
+        registry,
+        crate::dimensions::Dimension::Overworld,
+        &crate::journal::CheckpointManifest {
+            world_spawn: Some([0, 128, 0]),
+            ..Default::default()
+        },
+        crate::journal::Replay::default(),
+        store,
+        &std::collections::BTreeMap::new(),
+        None,
+    )
+    .expect("retained dimension state");
+    let want: rustc_hash::FxHashMap<crate::boundary::ChunkPos, i32> = (-12..=12)
+        .flat_map(|dx| {
+            (-12..=12).map(move |dz| {
+                (
+                    crate::boundary::ChunkPos {
+                        x: 8 + dx,
+                        z: -14 + dz,
+                    },
+                    0,
+                )
+            })
+        })
+        .collect();
+    state.world.ensure_blocking(&want);
+    state.refresh_active_chunks(state.tick);
+    let id = state
+        .settlements
+        .records()
+        .next()
+        .map(|record| record.id)
+        .expect("a settlement in the retained world");
+    let record = state.settlements.get(id).expect("record").clone();
+    println!(
+        "PROBE settlement anchor={:?} radius={} buildings={}",
+        record.anchor,
+        record.radius,
+        record.buildings.len()
+    );
+    for building in record.buildings.values() {
+        println!(
+            "PROBE building id={} kind={:?} min={:?} max={:?} natural={}",
+            building.id.0,
+            building.kind,
+            building.bounds.min,
+            building.bounds.max,
+            building.natural_zone
+        );
+    }
+    // Direct check of one authored lot (the old run's House footprint):
+    // D123_CIV_SITE="x,y,z,sx,sy,sz".
+    if let Ok(spec) = std::env::var("D123_CIV_SITE") {
+        let values: Vec<i32> = spec
+            .split(',')
+            .filter_map(|v| v.trim().parse().ok())
+            .collect();
+        if values.len() == 6 {
+            let origin = [values[0], values[1], values[2]];
+            let size = [values[3] as u8, values[4] as u8, values[5] as u8];
+            let mut survey = site_refusals::Survey::default();
+            let outcome = site_refusals::check(
+                &state,
+                &record,
+                origin,
+                size,
+                record.founding.as_ref(),
+                &mut survey,
+                None,
+            );
+            println!("PROBE site origin={origin:?} size={size:?} -> {outcome:?}");
+        }
+    }
+    let blueprint = blueprints::get(&state.registry, "storage").expect("storage blueprint");
+    let network = layout::Network::for_construction(&state, &record);
+    let fronts = network.frontage();
+    println!("PROBE frontages={}", fronts.len());
+    let mut counts: std::collections::BTreeMap<String, (u32, Option<[i32; 3]>)> =
+        Default::default();
+    let mut legal = Vec::new();
+    let mut examined = 0u32;
+    let mut survey = site_refusals::Survey::default();
+    for (front, (at, normal)) in fronts.into_iter().enumerate() {
+        let Some(lot) = network.lot(blueprint, at, normal) else {
+            continue;
+        };
+        examined += 1;
+        let size = blueprint.footprint(blueprints::Rotation::from_quarter_turns(lot.rotation));
+        match site_refusals::check(
+            &state,
+            &record,
+            lot.origin,
+            size,
+            record.founding.as_ref(),
+            &mut survey,
+            Some(&site_refusals::floor_columns(blueprint, lot.rotation)),
+        ) {
+            Ok(_) => legal.push((front, lot.origin, lot.rotation, size)),
+            Err(reason) => {
+                let entry = counts.entry(format!("{reason:?}")).or_insert((0, None));
+                entry.0 += 1;
+                entry.1.get_or_insert(lot.origin);
+            }
+        }
+    }
+    println!("PROBE examined={examined} legal={}", legal.len());
+    for (reason, (count, example)) in &counts {
+        println!("PROBE refused {reason} x{count} first={example:?}");
+    }
+    for (front, origin, rotation, size) in legal.iter().take(5) {
+        println!("PROBE legal front={front} origin={origin:?} rotation={rotation} size={size:?}");
+    }
+}

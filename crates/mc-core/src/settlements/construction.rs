@@ -1821,14 +1821,9 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
                 // could not answer: autonomous refusals were never logged, so
                 // "no House in the run" had no cause on disk (ReviewD123Civ13).
                 if pass.site.is_none() {
-                    // Name the kind: a run with several funded kinds could not tell
-                    // which one the refusals belonged to (HANDOFF-47: a House with
-                    // 194/224 cobblestone found no site for 708 passes).
                     tracing::debug!(
                         target: "settlements::construction",
                         settlement = id.0,
-                        blueprint = %blueprint.id,
-                        kind = ?blueprint.kind,
                         frontages = pass.report.frontages,
                         examined = pass.report.examined,
                         refusals = ?pass.report,
