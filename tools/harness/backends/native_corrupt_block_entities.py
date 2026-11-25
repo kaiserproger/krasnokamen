@@ -277,19 +277,41 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
 
 
 def run_near_camera(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
-    """Known-red client finding: a refused chunk under the spawn keeps the loading screen up.
+    """A refused chunk beside the spawn must not keep the loading screen up.
 
-    A vanilla client proceeds with a hole in the world; the native client never reaches in_play
-    while a refused or missing chunk lies within about 12 blocks of the camera
-    (play_world_presentation_ready needs the biome neighbourhood). The restart helper's own
-    restart_client_entered_play check is the failing assertion.
+    The fixture column is the chunk column WEST of the player, its last block: the pre-fix
+    gate demanded the columns `(floor(x/4 - 0.5) - 2) / 4 ..= (floor(x/4 - 0.5) + 3) / 4`,
+    which is the player's own column and the one west of it, so a refused column there held
+    the loading screen while the player's own chunk still arrived. With the player's own chunk
+    refused nobody can stand on anything, so the scene could not tell a held loading screen
+    from a fall in the void (measured: restart_player_grounded hung to the deadline on
+    20261125T024253). A vanilla client proceeds with a hole in the world; the native client
+    must reach in_play too, and the restart helper's own restart_client_entered_play check is
+    the assertion.
     """
     from .native_p4 import _restart
 
+    import math
+
     fixtures = FIXTURES[:1]
-    # The fixture sits in the player's own chunk, six blocks from the player.
-    chunk_x = origin[0] // 16
-    points = [{"x": chunk_x * 16 + (origin[0] % 16 + 6) % 16, "y": origin[1], "z": origin[2]}]
+    # Which chunk columns does the PRE-FIX gate demand? It read the camera at the player's
+    # position, `floor(x*0.25 - 0.5)`, and demanded columns `(f-2)/4 ..= (f+3)/4`; the range is
+    # the player's own column plus one neighbour on one side, and which side depends on where in
+    # its chunk the player stands. Put the refused fixture in a demanded column that is NOT the
+    # player's own, so a pre-fix client holds the loading screen while the player's own chunk
+    # still arrives (with the player's own chunk refused nothing can stand on anything, measured
+    # on 20261125T024253 where restart_player_grounded hung to the deadline).
+    camera = origin[0] + 0.5
+    floor_ = math.floor(camera * 0.25 - 0.5)
+    own = origin[0] // 16
+    demanded = [column for column in range((floor_ - 2) // 4, (floor_ + 3) // 4 + 1) if column != own]
+    if not demanded:
+        raise RuntimeError("the pre-fix gate demands no column beside the player to refuse")
+    chunk_x = demanded[0]
+    points = [{"x": chunk_x * 16 + 1, "y": origin[1], "z": origin[2]}]
+    steps.report["refused_chunk_beside_player"] = {
+        "player_chunk": own, "refused_chunk": chunk_x, "pre_fix_demanded_columns": [own, *demanded],
+        "block_offset_from_player": points[0]["x"] - origin[0]}
     _prepare(steps, origin, fixtures, points)
     _restart(steps)
     steps.check("server_never_panicked", "panicked" not in _server_log(steps))
