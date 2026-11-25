@@ -1454,6 +1454,11 @@ fn natural_quarry_uses_local_entrance_height_instead_of_bell_height() {
     assert!(mine.bounds.min[1] < 211 && mine.bounds.max[1] >= 212);
 }
 
+/// A quarry's volume is what a piece protects: a box at another height is out of
+/// its way (the mine's bounds top out at ground level, so it cannot undermine a
+/// piece 47 blocks above), while a piece whose volume the quarry would cut
+/// refuses it outright. The old rule refused on X/Z alone, which also refused
+/// every village box on a plains village (HANDOFF-42/44).
 #[test]
 fn natural_quarry_never_undermines_a_generated_piece_at_another_height() {
     let (mut state, id) = autonomously_adopted_state();
@@ -1466,25 +1471,60 @@ fn natural_quarry_never_undermines_a_generated_piece_at_another_height() {
         .world
         .village_sites_in_region((0, 0), (0, 0))
         .remove(0);
-    let min = mc_world::BlockPos {
-        x: 17,
-        y: 250,
-        z: 6,
-    };
-    let max = mc_world::BlockPos {
-        x: 31,
-        y: 260,
-        z: 20,
-    };
-    site.max.y = max.y;
-    site.pieces.push(mc_world::GeneratedVillagePiece {
-        template: Some("minecraft:village/plains/houses/plains_house_1".into()),
-        position: min,
-        rotation: 0,
-        entity_owner: Some("minecraft:village/plains/houses".into()),
-        bounds: Some((min, max)),
-    });
+    let piece =
+        |min: mc_world::BlockPos, max: mc_world::BlockPos| mc_world::GeneratedVillagePiece {
+            template: Some("minecraft:village/plains/houses/plains_house_1".into()),
+            position: min,
+            rotation: 0,
+            entity_owner: Some("minecraft:village/plains/houses".into()),
+            bounds: Some((min, max)),
+        };
     let bounds = ScriptWorldBounds::new([17, 188, 6], [31, 203, 20]).unwrap();
+    // 1. A house far above the quarry: not in its volume, so not in its way.
+    site.pieces.push(piece(
+        mc_world::BlockPos {
+            x: 17,
+            y: 250,
+            z: 6,
+        },
+        mc_world::BlockPos {
+            x: 31,
+            y: 260,
+            z: 20,
+        },
+    ));
+    site.max.y = 260;
+    let mut candidates = VecDeque::new();
+    queue_natural(
+        &site,
+        BuildingKind::Mine,
+        bounds,
+        [17, 202, 7],
+        state.tick,
+        &mut candidates,
+    );
+    assert!(
+        !candidates.is_empty(),
+        "a piece 47 blocks above the quarry is out of its volume"
+    );
+    assert!(
+        !has_kind(&state, id, BuildingKind::Mine),
+        "queueing is not certification"
+    );
+    // 2. A piece whose volume the quarry would cut: refused before any route.
+    site.pieces.pop();
+    site.pieces.push(piece(
+        mc_world::BlockPos {
+            x: 17,
+            y: 195,
+            z: 6,
+        },
+        mc_world::BlockPos {
+            x: 31,
+            y: 205,
+            z: 20,
+        },
+    ));
     let mut candidates = VecDeque::new();
     queue_natural(
         &site,
@@ -1496,11 +1536,7 @@ fn natural_quarry_never_undermines_a_generated_piece_at_another_height() {
     );
     assert!(
         candidates.is_empty(),
-        "protected footprints are not even queued"
-    );
-    assert!(
-        !has_kind(&state, id, BuildingKind::Mine),
-        "a physically valid quarry must still respect a piece's horizontal footprint"
+        "a piece standing in the quarry's volume is not even queued"
     );
 }
 
