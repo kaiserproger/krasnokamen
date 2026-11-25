@@ -4,8 +4,10 @@ title = "Forceload outer level32 ring ticks entities, rather than blocks only."
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FORCELOAD-RING"
-regression = ["cargo:mc-core:forceload::tests::forced_neighbour_ticks_blocks_but_freezes_entity_motion_and_age"]
+regression = ["cargo:mc-core:forceload::tests::forced_neighbour_ticks_blocks_but_freezes_entity_motion_and_age", "harness:entities:native-v2-ledger-forceload-ring"]
 fix_commit = "patch:d512890b4d8300361ce7ad940766621c143bb9ced864837c2a9da1c646e2eb6b"
-repro_check = "patch mode: 5d86de847 no longer reverses on HEAD (the module doc heading and the Boundary/command_args imports were rewritten later), so docs/bugs/promotions/FORCELOAD-RING.patch carries its two non-test hunks at their HEAD locations with the real pre-image as a/-sides (the three-line two-chunk-ring doc block and the pre-fix comment plus ENTITY_RADIUS = 1), and reverse-applies on HEAD. Control: with the patch reversed the ring chunk simulates the entity and forceload_tests.rs:303-304 red while the :305 block-tick assertion stays green (recorded reversal in control-A.log). NO real-client ref is possible: the symptom is the ring of a REMOTE forced chunk - with a player present the ring is normally simulated anyway, and with no player the client loads neither the chunk nor its entities - so no graphical scenario can separate the trees; the row needs Main's decision on the cargo ref through the real tick path for a symptom no client can observe."
+repro_check = "PROVEN by a real-client gate (REVIEW-wave2-3 asked for the attempt before any waiver): the client forces two chunks 96 chunks from the operator pad with its own /forceload add, summons a NoGravity item entity in the ring chunk and reads `data get entity <uuid> Age` twice through its own commands. Fixed tree: the two answers are equal (ring entity not simulated); pre-image: Age advances. Gate harness:forceload:native-v2-ledger-forceload-ring, assertions ring_entity_exists and ring_entity_age_frozen. Fix patch:d512890b… reverses on HEAD; with it reversed forceload_tests.rs:303-304 reds while the :305 block-tick assertion stays green (control-A.log). Receipts: <gate receipt on the promoted tree>."
+proving_assertions = { "cargo:mc-core:forceload::tests::forced_neighbour_ticks_blocks_but_freezes_entity_motion_and_age" = "crates/mc-core/src/forceload_tests.rs:303", "harness:entities:native-v2-ledger-forceload-ring" = "ring_entity_age_frozen" }
+promotion = "docs/bugs/promotions/FORCELOAD-RING.json"

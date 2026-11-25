@@ -33,11 +33,22 @@ Re-audit:
   (`crates/mc-core/src/vehicles_tests.rs:1650`). The neighbouring
   `assert_eq!(block_entities[..].slots[0].item_id, apple)` stays green in the control: it proves the
   transfer, not the stale-menu symptom.
-- **Missing real-client ref.** The row is `repro = manual`, so a real client must show the stale menu; no
-  fixture can today. `summon` refuses `Items` for a container vehicle (`command_summon::supports` has no
-  vehicle container field, observed as a cart that never appeared in
-  `20261124T120607-native-v2-ledger-hopper-vehicle-kua__3jb`), and
-  `/item replace entity <vehicle> container.N` is refused at `command_item_replace.rs:256-258`
-  (`Invalid entity slot`). Vanilla accepts both; until one exists here, or a world fixture ships a looted
-  chest minecart, the graphical half cannot be produced. The scenario was withdrawn rather than registered
-  as a permanent red.
+- **The real-client ref, delivered 2026-11-25.** The ingress that did not exist
+  (`summon` refused `Items` for a container vehicle: `command_summon::supports` had no vehicle container
+  field, observed as a cart that never appeared in
+  `20261124T120607-native-v2-ledger-hopper-vehicle-kua__3jb`) now exists: commit `89f9b15d5` accepts vanilla
+  `Items` cargo on the kinds whose `vehicles::container_size` is non-zero and validates the list shape, with
+  `cargo:mc-core:command_summon::tests::container_vehicle_summon_carries_vanilla_items_cargo`
+  (`crates/mc-core/src/command_summon_tests.rs:1323`) as the ingress ref. The gate
+  `harness:entities:native-v2-ledger-hopper-vehicle` (`tools/harness/backends/native_ledger_hopper_vehicle.py`)
+  opens the hopper's own menu, summons a chest minecart carrying one diamond in the block above it, and
+  asserts the open `HopperMenu` receives the pulled diamond
+  (`open_hopper_menu_receives_the_pulled_item`) before closing and reopening to show the same diamond
+  (`transfer_reached_the_hopper`), so a red is the stale menu, not the ingress. The ingress change is
+  instrumentation for this row, **not** its fix: the fix under test is only the `changed(state, pos)` hunk
+  above. Passed receipts: gate `20261125T020116-native-v2-ledger-hopper-vehicle-jkhhpt_v`, promotion
+  `20261125T023318-ledger-promote-2wfn6c8g`.
+- **The control cannot run the graphical ref**: the control trees have no reverted-pin build, so
+  `harness:entities:native-v2-ledger-hopper-vehicle` is `unrunnable` there and the red comes from the cargo
+  ref at `vehicles/../vehicles_tests.rs:1650` (the `#[path = "../vehicles_tests.rs"]` include makes the panic
+  path un-normalised; `proving_assertions` repeats it verbatim). POL-1 practice.

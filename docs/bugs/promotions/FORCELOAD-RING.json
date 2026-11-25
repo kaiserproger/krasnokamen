@@ -1,0 +1,52 @@
+{
+  "id": "FORCELOAD-RING",
+  "verdict": "promoted",
+  "fix_commit": "patch:d512890b4d8300361ce7ad940766621c143bb9ced864837c2a9da1c646e2eb6b",
+  "fix_commit_full": "patch:d512890b4d8300361ce7ad940766621c143bb9ced864837c2a9da1c646e2eb6b",
+  "promoted_at": "2026-11-25T04:48:01+00:00",
+  "tree_head": "eda66c3ffd47ab814e4d308c119785b603c9a0fd",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "d512890b4d8300361ce7ad940766621c143bb9ced864837c2a9da1c646e2eb6b",
+  "reversed_files": [
+    "crates/mc-core/src/forceload.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:forceload::tests::forced_neighbour_ticks_blocks_but_freezes_entity_motion_and_age": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/forceload_tests.rs",
+        "line": 303,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "harness:entities:native-v2-ledger-forceload-ring": {
+      "state": "unrunnable",
+      "detail": "release server: no registered pin-release server for this tree. Run `/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release /run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate` for the tree under test; a negative control needs its own reverted-tree pin. No build fallback."
+    }
+  },
+  "restored": {
+    "cargo:mc-core:forceload::tests::forced_neighbour_ticks_blocks_but_freezes_entity_motion_and_age": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261125T043641-native-v2-ledger-forceload-ring-pdlmkm_0/result.json",
+    "tree_head": "eda66c3ffd47ab814e4d308c119785b603c9a0fd",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "b4fd1988c6fc237b5819d3bcf9650059dc89f82cf2abd943ba9030044b53dcd4",
+    "covers": [
+      "harness:entities:native-v2-ledger-forceload-ring"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123Mechanics/.analysis/validation/20261125T043728-ledger-promote-ngsisr5c"
+}

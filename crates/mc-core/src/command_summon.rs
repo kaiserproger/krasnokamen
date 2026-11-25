@@ -377,6 +377,9 @@ pub(crate) fn supports(state: &TickState, type_id: u32, name: &str, key: &str) -
         }
         "fuse" | "explosion_power" | "block_state" => name == "minecraft:tnt",
         "BlockState" | "Time" => name == "minecraft:falling_block",
+        // Vanilla container vehicles save their cargo as `Items`; whether the
+        // field applies is the kind's own container size.
+        "Items" => crate::vehicles::container_size(name) != 0,
         _ => return None,
     })
 }
@@ -688,6 +691,22 @@ fn authored_fields(
             "block_state" | "BlockState" => {
                 if !matches!(value, Tag::Compound(_)) {
                     return Err(error(format!("Invalid {key}: expected compound")));
+                }
+                value.clone()
+            }
+            // Slot indices and stack counts are the vehicle parser's own bound
+            // (`vehicles/persistence.rs`); a summon reports its message.
+            "Items" => {
+                let Tag::List(list) = value else {
+                    return Err(error("Invalid Items: expected compound list"));
+                };
+                if !(list.element_type == tag_type::COMPOUND
+                    || (list.element_type == tag_type::END && list.elements.is_empty()))
+                {
+                    return Err(error("Invalid Items: expected compound list"));
+                }
+                if list.elements.iter().any(|e| !matches!(e, Tag::Compound(_))) {
+                    return Err(error("Invalid Items: expected compound item"));
                 }
                 value.clone()
             }

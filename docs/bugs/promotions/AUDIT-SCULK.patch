@@ -1,0 +1,58 @@
+diff --git a/crates/mc-core/src/redstone/mod.rs b/crates/mc-core/src/redstone/mod.rs
+index cd2fd1a70..809dc2164 100644
+--- a/crates/mc-core/src/redstone/mod.rs
++++ b/crates/mc-core/src/redstone/mod.rs
+@@ -114,6 +114,7 @@ pub(super) fn reactive(path: &str) -> bool {
+             | "calibrated_sculk_sensor"
+             | "target"
+     ) || path.ends_with("_door")
++        || path.ends_with("copper_bulb")
+         || path.ends_with("_trapdoor")
+         || path.ends_with("_fence_gate")
+         || path.ends_with("_button")
+@@ -842,6 +843,29 @@ fn tick_cell(
+                 schedule_cell(state, pos, 4, 6);
+             }
+         }
++        _ if path.ends_with("copper_bulb") => {
++            let powered = power_at(state, pos) > 0;
++            if powered && prop(block, "powered") != Some("true") {
++                change(
++                    state,
++                    writes,
++                    pos,
++                    "lit",
++                    if prop(block, "lit") == Some("true") {
++                        "false"
++                    } else {
++                        "true"
++                    },
++                );
++            }
++            change(
++                state,
++                writes,
++                pos,
++                "powered",
++                if powered { "true" } else { "false" },
++            );
++        }
+         _ if path.ends_with("_button") => {
+             let wooden = !matches!(path, "stone_button" | "polished_blackstone_button");
+             let arrow = wooden
+diff --git a/crates/mc-core/src/redstone/signal.rs b/crates/mc-core/src/redstone/signal.rs
+index 5cdacc643..3fc358be8 100644
+--- a/crates/mc-core/src/redstone/signal.rs
++++ b/crates/mc-core/src/redstone/signal.rs
+@@ -152,6 +152,11 @@ pub(super) fn analog(state: &TickState, pos: BlockPos) -> Option<u8> {
+         "jukebox" => crate::jukebox::comparator(state, pos),
+         "lectern" => crate::lectern::comparator(state, pos),
+         "chiseled_bookshelf" => Some(crate::chiseled_shelf::comparator(state, pos)),
++        _ if path.ends_with("copper_bulb") => Some(if prop(block, "lit") == Some("true") {
++            15
++        } else {
++            0
++        }),
+         _ if containers::has_analog_output(path) => Some(containers::signal(state, pos)),
+         _ => None,
+     }

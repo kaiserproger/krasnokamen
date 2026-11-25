@@ -82,7 +82,8 @@ fn name_kind(name: &str) -> Option<VehicleKind> {
         None
     }
 }
-fn container_size(name: &str) -> usize {
+/// Container slots a vehicle kind owns; non-container vehicles answer 0.
+pub(crate) fn container_size(name: &str) -> usize {
     if name.contains("chest_boat")
         || name == "minecraft:bamboo_chest_raft"
         || name == "minecraft:chest_minecart"
