@@ -241,6 +241,9 @@ _BOOLEAN_PROFILE_VERDICTS = {
     }),
     'civilization-seed-qa': frozenset({
         'new_house', 'births', 'second_building', 'iron_smelted', 'all',
+        # Adoption certifies the generated Houses before any construction; not a
+        # milestone of the four, but the only direct measurement of that fact.
+        'adopted_houses_certified',
     }),
     # backends/settlement_map_qa.py VERDICTS plus the quickwins-c1-race verdict
     # (settlement_quickwins_qa.C1_RACE_VERDICT); a test keeps them in step.

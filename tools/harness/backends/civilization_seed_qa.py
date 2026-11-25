@@ -689,6 +689,17 @@ def fund(probe: ProbeSteps, detail: dict[str, Any], server: Any,
         b["kind"] == "storage" and all(b["min"][i] <= chest[i] <= b["max"][i]
                                        for i in range(3)) for b in buildings))
     detail["certified_buildings_before_stock"] = buildings
+    # Adoption certifies a generated House before any construction happens. This
+    # verdict exists so the ledger can cite the fact directly (row
+    # SETTLEMENT-ADOPTED-VILLAGE-NO-CERTIFIED-HOUSES): no other gate measurement
+    # distinguishes an adopted certificate from a resident-built House.
+    adopted_houses = [b for b in buildings if b["kind"] == "house"]
+    detail["adopted_houses_certified"] = {
+        "count": len(adopted_houses),
+        "houses": [{"id": b["id"], "min": b["min"], "max": b["max"]} for b in adopted_houses],
+        "observed": "certified_buildings_before_stock at claim, before any founding stock",
+    }
+    probe.check("adopted_houses_at_claim", bool(adopted_houses))
     detail["founding_grants"] = dict(FOUNDING_STOCK)
     for item, count in FOUNDING_STOCK.items():
         command = f"give {village.USERNAME} {item} {count}"
@@ -1026,6 +1037,10 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
     projects: list[dict[str, Any]] = []
     detail["milestones"] = {}
     verdicts = detail.setdefault("verdicts", {**dict.fromkeys(STAGES, False), "all": False})
+    # Not part of the four accepted milestones (`all`): this one records that
+    # adoption itself produced certified Houses, which the four never see because
+    # they all require a resident-built or resident-made thing.
+    verdicts["adopted_houses_certified"] = (detail.get("adopted_houses_certified") or {}).get("count", 0) > 0
     detail["interpretation"] = "Initial buildings, beds and villagers are generated baseline, not later construction or births."
     detail["observation_bound_ticks"] = MAX_TICKS
     detail["diagnostic_bound"] = (
