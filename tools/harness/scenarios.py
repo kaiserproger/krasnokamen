@@ -305,8 +305,9 @@ SCENARIOS: dict[str, Scenario] = {
                "trip, a re-export of the imported store, or a blast-furnace tick under freeze. "
                "The held falling block and the placement are not client-observable while frozen "
                "(the landing and the gametime answer carry them). An export written before the "
-               "held-tick witness existed still imports with a zero prefix and keeps the pre-fix "
-               "quarantine (fail closed, repair required).",
+               "held-tick witness existed, or re-saved by vanilla without it, keeps a zero prefix "
+               "and its anchored chunk makes `import-anvil` refuse the conversion (fail closed, "
+               "naming the missing witness) rather than publish a store that quarantines it.",
     ),
 
     "native-v2-ledger-datapack-hover": _entry(
