@@ -77,6 +77,24 @@ and the flash are pinned by the existing unit tests
 `overlay_uv = [15., 10.]` swap; `tnt_uses_received_block_state_and_fuse_boundaries` asserts the
 boundary r = 4 vs 4.01 and the flash phase change).
 
+## The measured pair (2026-11-25, server pin `pins/51f5158b893b-server-*` = core `51f5158b8`)
+
+Three takes per side on `native-entity-tnt`, all six on the same clean server pin:
+
+| side | receipts | result | block layer |
+|---|---|---|---|
+| control `client:d2c556ed` | `20261125T183446` / `183515` / `183553` | FAIL at `tnt_block_layer_present` on all three | none (the entity pass carries no 36-index layer) |
+| restore `client:9f8b91c8` | `20261125T183331` / `183401` / `183422` | PASS on all three | 6 quads, spans `[1.0, 1.0, 1.0]`, material `ItemCutout` / `EntityCutout` / `ItemCutout` |
+
+The material alternation is the white-flash phase and is the reason the check matches the
+36-index block model instead of a material name: a first pair on the pre-`51f5158b8` check
+(`20261125T182556` PASS, `182619` / `182650` FAIL, server `pins/ae98d53c2531-server-*`) failed
+exactly because the same draw had moved from `ItemCutout` to `EntityCutout`; that attempt is kept
+as the calibration record for the material change, and its receipts prove the frame still submitted
+the entity (`submitted: 1`, `entity_indices: 51108`). `ledger promote
+MODEL-ENTITY-TNT-FALLING-LIGHTNING` receipt `20261125T183634-ledger-promote-5df3vsc9`;
+`promote.json` records `fix_patch_id b924ddca…`.
+
 ## What the scene does not prove
 
 The falling-block and lightning paths beyond the shared guard clause (they stay unit-covered), the
