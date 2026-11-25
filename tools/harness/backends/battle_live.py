@@ -188,9 +188,12 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         holder_at = _point(holder_after)
         witness = _respawn_enemy_witness(run_dir, holder_at)
         report["observations"]["respawn_enemy_witness"] = witness
-        check(report, "holder_sees_an_enemy_after_respawn",
-              witness.get("min_enemy_distance") is not None
-              and witness["min_enemy_distance"] <= ENEMY_REACH_BLOCKS, witness)
+        # The enemy-in-reach symptom is the RESPAWN row's proof; the spectator row's proof is the
+        # camera gap above (its scene stages the same death but not a contact-zone respawn).
+        if scenario == "battle-live-respawn-line-contact":
+            check(report, "holder_sees_an_enemy_after_respawn",
+                  witness.get("min_enemy_distance") is not None
+                  and witness["min_enemy_distance"] <= ENEMY_REACH_BLOCKS, witness)
         # Where he landed against where he fell: the row names a 230-block jump.
         if at is not None and died_at is not None:
             fall = sum((a - b) ** 2 for a, b in zip(at, died_at)) ** 0.5
