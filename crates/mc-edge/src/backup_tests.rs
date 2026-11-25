@@ -1568,3 +1568,90 @@ async fn the_cli_backup_and_restore_verify_under_the_configured_plugin_deploymen
     );
     assert!(error.contains("plugin startup"), "{error}");
 }
+
+/// The child of [`backup_announces_complete_only_after_verification`]: the real
+/// `backup` command on a copy that is corrupted after it is written, so
+/// `run_backup` succeeds and the caller's verification is what fails.
+#[tokio::test]
+#[ignore = "re-executed only by backup_announces_complete_only_after_verification"]
+async fn backup_status_child_reexec() {
+    use std::io::Write as _;
+    let world = PathBuf::from(std::env::var_os("KRASNOKAMEN_BACKUP_STATUS_WORLD").unwrap());
+    let out = PathBuf::from(std::env::var_os("KRASNOKAMEN_BACKUP_STATUS_OUT").unwrap());
+    let vanilla = PathBuf::from(std::env::var_os("KRASNOKAMEN_BACKUP_STATUS_VANILLA").unwrap());
+    // Corrupt the copied store once it is written and synced: the copy the
+    // command announces is then exactly what verification must refuse.
+    INTERRUPTION.with(|armed| {
+        *armed.borrow_mut() = Some(Box::new(|step: &Step<'_>| {
+            if let Step::Copied(path) = step
+                && path.file_name().is_some_and(|name| name == NATIVE_DATABASE)
+            {
+                std::fs::write(path, [0_u8; 4096]).unwrap();
+            }
+            false
+        }));
+    });
+    use clap::Parser;
+    let cli = crate::operator_cli::Cli::try_parse_from([
+        "krasnokamen",
+        "backup",
+        "--world-dir",
+        world.to_str().unwrap(),
+        "--out",
+        out.to_str().unwrap(),
+    ])
+    .unwrap();
+    let mut cfg = crate::config::EdgeConfig::default();
+    cfg.data.vanilla_data_dir = vanilla;
+    match crate::operator_cli::run_offline(&cli, &mut cfg).await {
+        Ok(_) => panic!("the backup command accepted a copy that cannot be verified"),
+        Err(error) => {
+            eprintln!("backup command failed: {error:#}");
+            std::io::stdout().flush().unwrap();
+            std::io::stderr().flush().unwrap();
+            // Non-zero for the parent, which judges the messages, not the code.
+            std::process::exit(101);
+        }
+    }
+}
+
+/// A copy that fails verification must never have been announced as complete:
+/// the final status is printed after the check. The parent runs the real
+/// `backup` command in a child process and reads what it printed; the child
+/// corrupts the copy between writing and verification, so the only difference
+/// between the fixed and the pre-fix code is the order of the announcement.
+#[test]
+fn backup_announces_complete_only_after_verification() {
+    let root = tempfile::tempdir().unwrap();
+    let world = root.path().join("world");
+    seed_world(&world);
+    let out = root.path().join("backups").join("copy-1");
+    let vanilla = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
+    let child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "backup::tests::backup_status_child_reexec",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env("KRASNOKAMEN_BACKUP_STATUS_WORLD", &world)
+        .env("KRASNOKAMEN_BACKUP_STATUS_OUT", &out)
+        .env("KRASNOKAMEN_BACKUP_STATUS_VANILLA", &vanilla)
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&child.stdout);
+    let stderr = String::from_utf8_lossy(&child.stderr);
+    assert!(
+        !child.status.success(),
+        "the corrupted copy fails verification; stdout {stdout}; stderr {stderr}"
+    );
+    assert!(
+        stderr.contains("withdrawn"),
+        "the copy was withdrawn after a failed verification; stderr {stderr}"
+    );
+    assert!(
+        !stdout.contains("complete"),
+        "a copy that failed verification was announced complete; stdout {stdout}"
+    );
+}

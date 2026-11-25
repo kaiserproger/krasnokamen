@@ -1,0 +1,68 @@
+diff --git a/crates/mc-edge/src/backup.rs b/crates/mc-edge/src/backup.rs
+index 3450417f7..d3f02c038 100644
+--- a/crates/mc-edge/src/backup.rs
++++ b/crates/mc-edge/src/backup.rs
+@@ -226,7 +226,7 @@ fn copy_reader_durable(input: &mut impl Read, destination: &Path) -> Result<Stri
+ 
+ /// Copy a stopped native-v2 world, including its WAL and world metadata.
+ /// Neither an active Core nor a separately opened native store may own it.
+-pub fn run_backup(world_dir: &Path, out: &Path) -> Result<()> {
++pub fn run_backup(world_dir: &Path, out: &Path) -> Result<usize> {
+     let world = std::fs::canonicalize(world_dir)
+         .with_context(|| format!("resolving world {}", world_dir.display()))?;
+     if !world.is_dir() {
+@@ -268,13 +268,9 @@ pub fn run_backup(world_dir: &Path, out: &Path) -> Result<()> {
+         manifest.files.insert(name, digest);
+     }
+     write_manifest(&out, &manifest)?;
+-    println!(
+-        "backup of {} into {} complete: {} files",
+-        world.display(),
+-        out.display(),
+-        manifest.files.len(),
+-    );
+-    Ok(())
++    // The caller prints the final status: a backup is not "complete" until the
++    // copy it just wrote has been verified or explicitly marked unverified.
++    Ok(manifest.files.len())
+ }
+ 
+ /// Create the manifest last: a directory without it is never a valid backup.
+diff --git a/crates/mc-edge/src/operator_cli.rs b/crates/mc-edge/src/operator_cli.rs
+index 00ff693a5..65426c33e 100644
+--- a/crates/mc-edge/src/operator_cli.rs
++++ b/crates/mc-edge/src/operator_cli.rs
+@@ -314,15 +314,26 @@ pub async fn run_offline(cli: &Cli, cfg: &mut crate::config::EdgeConfig) -> anyh
+             }
+         }
+         Command::Backup { world_dir, out } => {
+-            crate::backup::run_backup(world_dir, out)?;
++            let files = crate::backup::run_backup(world_dir, out)?;
+             // Books R5 G3: a backup is reported successful only after it
+-            // restores. Without a content cache there is nothing to replay
+-            // the copy against, so the report says it is unverified instead
+-            // of implying a check that did not run.
++            // restores, so the final status is printed here, after the check.
++            // Without a content cache there is nothing to replay the copy
++            // against; the status then says unverified instead of implying a
++            // check that did not run.
+             match verify_content(cfg) {
+-                Ok(content) => crate::backup::verify_written_backup(out, &content)?,
+-                Err(error) => eprintln!(
+-                    "backup written but NOT verified: no content cache for recovery: {error}"
++                Ok(content) => {
++                    crate::backup::verify_written_backup(out, &content)?;
++                    println!(
++                        "backup of {} into {} complete and verified: {files} files",
++                        world_dir.display(),
++                        out.display(),
++                    );
++                }
++                Err(error) => println!(
++                    "backup of {} into {} complete but NOT verified: {files} files; no content \
++                     cache for recovery: {error}",
++                    world_dir.display(),
++                    out.display(),
+                 ),
+             }
+         }
