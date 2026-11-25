@@ -20,22 +20,25 @@ from __future__ import annotations
 from typing import Any
 
 from .native_p1 import _aim
-from .native_v2 import _give, _use
+from .native_v2 import _give
 from .probe_steps import ProbeSteps, item_count
 
 MAP = "minecraft:map"
+FILLED = "minecraft:filled_map"
 # A slot outside the hotbar and the off hand: inventory slot 20 (row 2, column 3).
 POCKET = 20
+# Vanilla off-hand slot index in the native inventory.
+OFF_HAND = 40
 WALK_STEPS = 6
 TICKS_PER_STEP = 10
 
 
-def _maps(steps: ProbeSteps) -> dict[str, Any]:
-    return {row["id"]: row for row in steps.observe().get("maps") or []}
+def _maps(steps: ProbeSteps) -> dict[int, Any]:
+    return {int(row["id"]): row for row in steps.observe().get("maps") or []}
 
 
 def _explored(steps: ProbeSteps, map_id: int) -> int | None:
-    row = _maps(steps).get(str(map_id))
+    row = _maps(steps).get(map_id)
     return None if row is None else row.get("visible_pixels")
 
 
@@ -44,43 +47,55 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture("gamerule send_command_feedback true")
     _give(steps, MAP, 0)
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
-    # A held use allocates the map record on the server (maps.rs `allocate`).
-    _use(steps, {"x": x + 2, "y": y, "z": z + 2}, face="up")
-    steps.call("minecraft_wait_ticks", {"ticks": 10})
-    before = _maps(steps)
-    steps.report["maps_after_filling"] = before
-    allocated = [int(key) for key, row in before.items() if row.get("scale") == 0]
-    steps.check("a_scale_zero_map_record_exists", bool(allocated))
-    if not allocated:
+    # A plain held use turns the empty map into a filled one and makes the server
+    # allocate the record (maps.rs `allocate`); the map id is the item component.
+    steps.call("minecraft_press_inputs", {"keys": ["use"], "ticks": 1})
+    steps.wait(lambda state: item_count(state, FILLED) == 1,
+               "empty_map_used_into_a_filled_map", timeout_seconds=30)
+    stack = steps.call("minecraft_read_item_components", {"source": "selected"})
+    map_id = stack.get("components", {}).get("minecraft:map_id")
+    steps.report["filled_map_components"] = stack
+    steps.check("map_received_a_real_map_id_component", type(map_id) is int and map_id >= 0)
+    if type(map_id) is not int:
         return
-    map_id = allocated[0]
-    steps.check("fresh_map_starts_unexplored", (_explored(steps, map_id) or 0) == 0)
+    steps.wait(lambda _state: _explored(steps, map_id) is not None,
+               "map_record_received", timeout_seconds=30)
+    steps.report["maps_after_filling"] = {str(key): row for key, row in _maps(steps).items()}
+    steps.check("held_map_explores_before_the_pocket_move", (_explored(steps, map_id) or 0) > 0)
 
-    # The client's own drag puts the map in a pocket: not selected, not off-hand.
-    state = steps.call("minecraft_open_inventory")
-    slot = next((stack["slot"] for stack in state["container"]["slots"]
-                 if stack["item_id"] == MAP and stack["count"] == 1), None)
-    steps.check("map_is_carried_in_the_inventory", slot is not None)
-    if slot is None:
-        return
-    steps.call("minecraft_click_container_slot", {"slot": slot, "button": "primary"})
+    # The client's own drag puts the map in a pocket: hotbar slot 0 sits at menu slot 36 in
+    # the player inventory, and slot 20 is outside the hotbar and the off hand.
+    steps.call("minecraft_open_inventory")
+    steps.wait(lambda state: state["screen"]["open"] and state["container"]["container_id"] == 0,
+               "inventory_open", timeout_seconds=30)
+    steps.call("minecraft_click_container_slot", {"slot": 36, "button": "primary"})
     steps.call("minecraft_click_container_slot", {"slot": POCKET, "button": "primary"})
+    steps.wait(lambda state: any(stack["slot"] == POCKET and stack["item_id"] == FILLED
+                                 for stack in state["inventory"])
+               and state["container"]["carried"]["count"] == 0,
+               "map_moved_into_the_pocket", timeout_seconds=30)
     steps.call("minecraft_close_screen")
     carried = steps.observe()
     steps.report["pocket_slot"] = POCKET
-    steps.check("map_moved_out_of_the_hand",
-                item_count(carried, MAP) == 1 and carried["player"]["selected_hotbar_slot"] != 0)
+    # "In hand" is a hotbar slot (0..8) or the off hand (40); the hotbar selection itself
+    # stays where it was, so it cannot carry the check.
+    steps.check("map_left_the_hand", not any(stack["item_id"] == FILLED
+                                            and (stack["slot"] < 9 or stack["slot"] == OFF_HAND)
+                                            for stack in carried["inventory"]))
 
     # Walk a short leg away from the pad; only a held map may paint.
     _aim(steps, {"x": x, "z": z - 8, "bounding_box": {"min_y": y, "max_y": y + 2}})
+    # While held the map legitimately painted pixels; from here on it is a pocket copy, so
+    # the count must not move again.
     start = _explored(steps, map_id) or 0
+    steps.report["explored_when_pocketed"] = start
     samples: list[int | None] = []
     for _ in range(WALK_STEPS):
         steps.call("minecraft_press_inputs", {"keys": ["forward"], "ticks": TICKS_PER_STEP})
         samples.append(_explored(steps, map_id))
     steps.report["explored_samples"] = samples
     steps.check("pocket_map_never_explores", all(value in (None, start) for value in samples))
-    steps.check("pocket_map_still_unexplored", (_explored(steps, map_id) or 0) == 0)
+    steps.check("pocket_map_keeps_the_pixels_it_had", (_explored(steps, map_id) or 0) == start)
 
     steps.report["limits"] = [
         "One allocated scale-zero map carried in inventory slot 20 while the player walks six short "
