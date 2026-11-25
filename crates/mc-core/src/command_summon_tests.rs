@@ -1326,7 +1326,9 @@ fn container_vehicle_summon_carries_vanilla_items_cargo() {
         "{Items:[{Slot:0b,id:\"minecraft:diamond\",count:3},{Slot:26b,id:\"minecraft:apple\",count:1}]}",
     );
     let slot = state.entities.slot_of(id).unwrap();
-    let vehicle = state.entities.row(slot)
+    let vehicle = state
+        .entities
+        .row(slot)
         .entity_life
         .vehicle
         .as_ref()
@@ -1343,7 +1345,9 @@ fn container_vehicle_summon_carries_vanilla_items_cargo() {
         "{Items:[{Slot:4b,id:\"minecraft:iron_ingot\",count:1}]}",
     );
     let slot = state.entities.slot_of(id).unwrap();
-    let vehicle = state.entities.row(slot)
+    let vehicle = state
+        .entities
+        .row(slot)
         .entity_life
         .vehicle
         .as_ref()
