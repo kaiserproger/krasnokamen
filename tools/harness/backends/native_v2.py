@@ -1207,6 +1207,13 @@ def _ledger_sculk_downward(steps: ProbeSteps, origin: tuple[int, int, int]) -> N
     run(steps, origin)
 
 
+def _ledger_forceload_ring(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_ledger_forceload_ring import run
+
+    steps.fixture("forceload remove all")
+    run(steps, origin)
+
+
 def _ledger_datapack_hover(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from .native_ledger_datapack_hover import run
 
@@ -1242,6 +1249,7 @@ RUNNERS = {
     "native-v2-ledger-potion-custom": _ledger_potion_custom,
     "native-v2-ledger-sculk-downward": _ledger_sculk_downward,
     "native-v2-ledger-datapack-hover": _ledger_datapack_hover,
+    "native-v2-ledger-forceload-ring": _ledger_forceload_ring,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
     "native-v2-map-locked-banners": _promotion_maps,

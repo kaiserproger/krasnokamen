@@ -53,7 +53,17 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.check("datapack_list_names_the_vanilla_pack", line is not None)
     hover = _hover_text(line)
     steps.report["datapack_list_hover"] = hover
-    steps.check("datapack_list_entry_carries_a_description_hover", bool(hover))
+    # The row's symptom is the *discarded description*: a hover that only repeats
+    # the pack name leaves a non-empty show_text too, so the render is checked as
+    # the title line plus a second, different line, and the vanilla description is
+    # named when the client's language table provides it (`Default` is the pack
+    # title; its description is `The default data for Minecraft`).
+    lines = [part.strip() for part in hover.splitlines() if part.strip()]
+    steps.report["datapack_list_hover_lines"] = lines
+    steps.check("datapack_list_entry_carries_a_description_hover",
+                len(lines) >= 2 and lines[1] != lines[0])
+    steps.check("datapack_list_hover_shows_the_vanilla_description",
+                len(lines) >= 2 and lines[1] == "The default data for Minecraft")
 
     steps.report["limits"] = [
         "One `/datapack list` answer for the built-in vanilla pack; the description text is "

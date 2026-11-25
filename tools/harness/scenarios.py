@@ -259,6 +259,23 @@ SCENARIOS: dict[str, Scenario] = {
                "retransmission, cooldown ordering or player-caused vibration.",
     ),
 
+    "native-v2-ledger-forceload-ring": _entry(
+        id="native-v2-ledger-forceload-ring",
+        summary="A forced far chunk's ring ticks blocks but freezes entities",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-forceload-ring",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_forceload_ring.py"),
+        fixture="operator pad; two `/forceload add` tickets 96 chunks from the player (one forced "
+                "chunk plus its adjacent ring chunk); one NoGravity item entity in the ring chunk",
+        proves="the client's own `/data get entity <uuid> Age` answers do not advance across "
+               "eighty ticks, so the ring entity is not simulated",
+        limits="One forced chunk and one adjacent ring chunk, one item entity read through two "
+               "chat answers; no block half (forceload_tests.rs:305 keeps it), no unload/reload "
+               "boundary and no second ticket.",
+    ),
+
     "native-v2-ledger-datapack-hover": _entry(
         id="native-v2-ledger-datapack-hover",
         summary="A `/datapack list` entry carries its pack description on hover",
