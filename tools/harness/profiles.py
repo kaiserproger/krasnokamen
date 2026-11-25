@@ -1213,6 +1213,13 @@ def run_battle_live(ctx: ProfileContext) -> dict[str, Any]:
     return battle_live.run(ctx)
 
 
+def run_battle_dismount(ctx: ProfileContext) -> dict[str, Any]:
+    """A rider whose horse is killed mid-charge must walk, not keep a charge-sized drive."""
+    from .backends import battle_dismount
+
+    return battle_dismount.run(ctx)
+
+
 Profile = Callable[[ProfileContext], dict[str, Any]]
 
 PROFILES: dict[str, dict[str, Any]] = {
@@ -1525,6 +1532,12 @@ PROFILES: dict[str, dict[str, Any]] = {
                        "respawn lands in contact and the spectator's camera follows him (named scenarios only)",
         "run": run_battle_live,
     },
+    "battle-dismount": {
+        "scope": "real-client",
+        "description": "A staged battle whose rider loses his horse mid-charge: his own ground speed must "
+                       "fall to the walking speed (the sweep_drives skating symptom)",
+        "run": run_battle_dismount,
+    },
     "battle-crash-recovery": {
         "scope": "real-client",
         "description": "SIGKILL battle recovery with real Horizon clients: full kit crash census, runner crash handoff, auth-locked role hydration (named scenarios only)",
@@ -1678,6 +1691,7 @@ PROFILE_PREREQUISITES = {
     "java-battle-functional": (("server_binary", "loader", "xvfb"), (), (), ()),
     "battle-crash-recovery": (("server_binary", "xvfb"), (), (), ()),
     "battle-live": (("server_binary", "xvfb"), (), (), ()),
+    "battle-dismount": (("server_binary", "xvfb"), (), (), ()),
     "regression": ((), (), ("regression_client",), ()),
     "playable": ((), (), ("regression_client",), ()),
     "replay": ((), (), ("regression_client",), ()),
