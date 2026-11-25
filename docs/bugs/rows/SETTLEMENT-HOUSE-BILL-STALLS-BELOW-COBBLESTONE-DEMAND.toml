@@ -1,0 +1,9 @@
+[[bug]]
+id = "SETTLEMENT-HOUSE-BILL-STALLS-BELOW-COBBLESTONE-DEMAND"
+title = "With a natural Mine certified and a Miner working it, the settlement's cobblestone stock plateaus at 24-32 of the 43 a House bill wants, so the House never completes"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "civilization-seed-qa artifact 20261125T192842-civilization-seed-qa-kqg1eax4 (pin 1e61d14a97c7, server sha beb66cc8; village_center [136,70,-216], seed 24). The mine-zone row's symptom is gone in this run: `natural zone queued kind=Mine min=[108,57,-187] max=[122,72,-173]` at server.log:28242, the planner then reports `no_source: Some(Miner)` (tick 800, server.log:29811), i.e. the settlement owns a natural Mine. The House bill does not finish: cobblestone `have: 32, total: 43` at tick 2000 (server.log:75992) and `have: 24, total: 43` at tick 12000 (server.log:461758), with `have: 0, total: 106` dirt and `have: 16/32, total: 36` planks beside it. No `natural zone refused certification` line and no drop of the [108,57,-187] candidate, so the zone certified. The run was interrupted by the gate cap (no result.json), so `new_house` is unobserved rather than observed absent."
+failing_first = "reported"

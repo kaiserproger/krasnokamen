@@ -63,20 +63,18 @@ struct NaturalCandidate {
     queued_at: u64,
     stock_proved: bool,
     after_resident: Option<uuid::Uuid>,
-    /// Passes spent waiting for the entrance chunk to become simulated. The
-    /// cursor does not come back for a long time (`NATURAL_ZONE_CYCLES`), and the
-    /// chunk activates as soon as the player walks over the village, so an
-    /// unloaded-entrance candidate is held instead of dropped - bounded, because
-    /// a chunk that never activates must not pin the queue for the world's life.
-    entrance_waits: u32,
 }
 
-/// Passes (20 ticks each, ~2.7 min of game time) a candidate may wait for its
-/// resident-but-inactive entrance chunk to become simulated before it is
-/// dropped. A chunk that is not even loaded is dropped at once, as before
-/// (`treeless_village_leaves_queue_after_bounded_natural_zone_sweeps` bounds the
-/// whole sweep, and 160 stays inside the smallest probe cycle).
-const NATURAL_ZONE_ENTRANCE_WAITS: u32 = 160;
+/// Game ticks a candidate may wait for a *resident but unsimulated* entrance
+/// chunk before it is dropped. The bound is its age (`queued_at`), not a pass
+/// counter: one probe queues a Mine plus up to sixteen LumberCamp candidates, and
+/// a per-candidate counter would multiply the stall by that batch. The chunk is
+/// simulated again as soon as the player walks over the village - that is what
+/// the wait is for. An entrance chunk that is no longer resident is dropped at
+/// once: nothing can simulate it until a ticket reaches the zone, and that branch
+/// only happens after eviction (the entrance column was read when the candidate
+/// was queued).
+const NATURAL_ZONE_ENTRANCE_HOLD_TICKS: u64 = 3200;
 
 fn adopted_marker(source: &str) -> String {
     format!("settlement-village:{source}")
@@ -925,7 +923,6 @@ fn queue_natural(
         queued_at,
         stock_proved: false,
         after_resident: None,
-        entrance_waits: 0,
     });
 }
 
@@ -940,9 +937,8 @@ fn prove_natural(
     use crate::tick_budget::Consumer;
     use std::ops::Bound::{Excluded, Unbounded};
 
-    // Copy what this pass needs before touching the queue: the wait below takes a
-    // mutable borrow of the front candidate, and the rest of the pass must not
-    // hold one across it.
+    // Copy what this pass needs up front: the pass pops and re-queues as it goes,
+    // and a borrow of the front candidate would not survive that.
     let Some(candidate) = candidates.front() else {
         return;
     };
@@ -963,9 +959,9 @@ fn prove_natural(
     // its worker before they can take the profession or bring stock home.
     let (cx, cz) = (x.div_euclid(16), z.div_euclid(16));
     if !state.world.has_chunk(cx, cz) {
-        // Not even resident: nothing can activate it until a ticket reaches the
-        // zone, and the cursor does not come back for a long time. Drop it, as
-        // before (`treeless_village_leaves_queue_after_bounded_natural_zone_sweeps`).
+        // Evicted since queueing (the entrance column was legible then): nothing
+        // can simulate it until a ticket reaches the zone, and the cursor does not
+        // come back for a long time. Drop it at once, as before.
         tracing::debug!(
             target: "settlements::construction",
             kind = ?kind,
@@ -976,25 +972,22 @@ fn prove_natural(
         return;
     }
     if !state.world.is_active(cx, cz) {
-        // The chunk activates as soon as the player (or a ticket) reaches the
-        // village, and the cursor does not come back for a long time
-        // (`NATURAL_ZONE_CYCLES`), so hold the candidate and retry next pass.
-        // Gate run 20261125T192842 lost the village mine exactly here 2.6 s after
-        // queueing it; keeping it is what lets the zone be proved when the player
-        // walks in. A chunk that never activates must not pin the queue forever.
-        let waits = {
-            let held = candidates.front_mut().expect("counted candidate");
-            held.entrance_waits = held.entrance_waits.saturating_add(1);
-            held.entrance_waits
-        };
-        if waits < NATURAL_ZONE_ENTRANCE_WAITS {
+        // Resident but not simulated: the player is one chunk away and will walk
+        // in, so hold the candidate and retry next pass. Gate run 20261125T192842
+        // queued the village box at tick 492 and dropped it at tick 500 - the
+        // first pass after queueing - which is what the hold is for. The bound is
+        // the candidate's age so a whole probe batch expires together, and a chunk
+        // that never activates cannot pin the queue (every probe is blocked while
+        // the queue is non-empty).
+        let age = state.tick.saturating_sub(queued_at);
+        if age < NATURAL_ZONE_ENTRANCE_HOLD_TICKS {
             return;
         }
         tracing::debug!(
             target: "settlements::construction",
             kind = ?kind,
             entrance = ?entrance,
-            waits,
+            age,
             "natural zone dropped: entrance chunk inactive"
         );
         candidates.pop_front();
