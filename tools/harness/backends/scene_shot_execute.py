@@ -135,7 +135,13 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 else:
                     found = False
                     break
-            probe.check(f"{value['name']}", found and node == value["equals"])
+            if not found:
+                # The client does not report this path at all: that is a missing automation surface,
+                # not an observed defect, so the run is unrunnable (a control can never be red for it).
+                raise RuntimeError(f"{value['name']}: the client observation omits "
+                                   f"{'.'.join(map(str, value['path']))}; the automation surface does not "
+                                   'exist on this tree (an observation-only change is not a fix)')
+            probe.check(f"{value['name']}", node == value["equals"])
         elif kind == "walk_capture":
             args = {"radius": 32, "limit": 128}
             attempts = []

@@ -7,9 +7,9 @@ status = "fixed"
 source = "HzClientQA suggestions-1/2 and passive suggestions-4: give @s diamond_sw + Tab fails with Selector not allowed; named-player control completes. Core join and permission updates omitted own-entity permission status."
 repro = "client"
 regression = ["cargo:mc-core:tick::auth_gate_tests::permission_projection_follows_join_updates_and_authenticated_unlock", "cargo:mc-edge:plan::plan_tests::permission_updates_target_joined_self_reliably_in_order", "cargo:mc-edge:server::admin_tests::operator_changes_reach_own_entity_permission_consumer", "harness:scene-shot:command-selector-permission"]
-fix_commit = "client:d3b5eedf"
-proving_refs = ["harness:scene-shot:command-selector-permission"]
-proving_assertions = { "harness:scene-shot:command-selector-permission" = "op-permission" }
+fix_commit = "patch:a94bbc63e602a74055c29005435bb2b4c324de4ae09a9f8c6450415dca845ba9"
+proving_refs = ["cargo:mc-core:tick::auth_gate_tests::permission_projection_follows_join_updates_and_authenticated_unlock", "cargo:mc-edge:server::admin_tests::operator_changes_reach_own_entity_permission_consumer", "harness:scene-shot:command-selector-permission"]
+proving_assertions = { "harness:scene-shot:command-selector-permission" = "op-permission", "cargo:mc-edge:server::admin_tests::operator_changes_reach_own_entity_permission_consumer" = "crates/mc-edge/src/admin_tests.rs:714" }
 failing_first = "reported"
-repro_check = "Work-root receipts/HzClientQA/REPORT.md and suggestions-4-diagnostic.log; original selector assertion must pass unchanged on Main's integrated pin."
+repro_check = "Fixed by the server path: `sync_permission` publishes the the player own `PermissionLevel` on join and after an operator change; without those three calls the client never learns it, so an an operator `@s` selector is rejected. fix_commit is the forward-ported patch a94bbc63 (the fix is not a commit of this history; the helper stays, only its call sites are reversed). Control at 05c8f435f: auth_gate FAIL, admin_tests FAIL (admin_tests.rs:714, named), scene red with command.permission_level null; restore all green with 4 (promote 20261125T014648-yuyyldfd). The client commit d3b5eedf is instrumentation (declares command.permission_level) and is on both sides of the pair; the suggestion list is not exercised."
 promotion = "docs/bugs/promotions/COMMAND-SELECTOR-PERMISSION-SYNC.json"

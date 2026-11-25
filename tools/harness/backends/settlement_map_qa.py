@@ -326,6 +326,10 @@ SELECTED_CARD_ASSERTIONS = ("map_features_house_and_site", "selected_card_site_o
 # The `--scenario bell-hub` run's assertions: the client targeted the anchor bell and its own screen
 # is the settlement hub (the civil walk's first stage, without the pages that stop on the D63 dialog).
 BELL_ASSERTIONS = ("GUI bell target", "bell_opens_hub_dialog")
+# `--scenario program-unknown` (SETTLEMENT-PROJECT-BLUEPRINT-WITHOUT-NAME): the autonomous furnace
+# project carries no asset/layout blueprint entry, so its Construction-dialog label must come from the
+# display-name table, never "Unknown blueprint" or the raw `furnace` id.
+PROGRAM_UNKNOWN_ASSERTIONS = ("program_unknown_label",)
 STAGES = ("bell_opens_hub", "dashboard", "map", "building_order", "shortage_icons",
           "storage_transfer", "project_progress", "residents", "resources", "production_order")
 VERDICTS = (*STAGES, "localized_text", "all")
@@ -425,7 +429,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     parser.add_argument("--size", choices=("1280x720", "1920x1080"), default="1280x720")
     parser.add_argument("--wrong-click", action="store_true",
                         help="negative control: click Help instead of Settlement")
-    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race", "stage2", "stage2op", "blueprints", "selected-card", "verge", "bell-hub"), default="civil",
+    parser.add_argument("--scenario", choices=("civil", "quickwins", "maplabel", "quickwins-c1-race", "stage2", "stage2op", "blueprints", "selected-card", "program-unknown", "verge", "bell-hub"), default="civil",
                         help="quickwins: the owner-path acceptance of the D63 quick wins (native, ru_ru); "
                              "quickwins-c1-race: the starter chest (C1) founded under block churn in its chunk")
     parser.add_argument("--survey", action="store_true",
@@ -458,6 +462,22 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
                 ctx.client_evidence["verdicts"] = published
         return scene_shot.run(ctx, scenario={"steps": [], "java_plain": ctx.client == "java",
                                              "client_settings": settings}, script=verge_script)
+    if args.scenario == "program-unknown":
+        # One order for the autonomous furnace blueprint, then the Construction dialog's own text.
+        settings = {"gui_scale": args.gui_scale, "language": args.language,
+                    "screen_size": list(map(int, args.size.split("x")))} if ctx.client == "java" else {}
+
+        def program_script(probe, artifact, steps, client):
+            try:
+                return _program_unknown_script(probe, artifact, steps, client, args)
+            finally:
+                checks = probe.report["assertions"]
+                ok = all(checks.get(name) is True for name in PROGRAM_UNKNOWN_ASSERTIONS)
+                published = {"program_unknown": ok, "all": ok}
+                probe.report["verdicts"] = published
+                ctx.client_evidence["verdicts"] = published
+        return scene_shot.run(ctx, scenario={"steps": [], "java_plain": ctx.client == "java",
+                                             "client_settings": settings}, script=program_script)
     if args.scenario == "selected-card":
         # One live construction site and the storage; the site marker must open that project alone.
         settings = {"gui_scale": args.gui_scale, "language": args.language,
@@ -1049,6 +1069,49 @@ def _visible_text(state: dict[str, Any]) -> str:
     parts += [str(node.get("label")) for node in state.get("ui_nodes") or [] if node.get("label")]
     parts += [str(row.get("name")) for row in (state.get("container") or {}).get("slots", []) if row.get("name")]
     return "\n".join(parts)
+
+
+def _program_unknown_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
+                            args: argparse.Namespace) -> list[str]:
+    """`--scenario program-unknown` (SETTLEMENT-PROJECT-BLUEPRINT-WITHOUT-NAME): NOT registered yet.
+
+    Run 20261125T021513 reproduced the symptom the wrong way round: `settlement build furnace` answers
+    "Unknown blueprint." because the autonomous furnace is *not* a blueprint (`blueprints::get` has no
+    `furnace`), so the chat is not where the project card is read. The right fixture is the planner's
+    own one-cell furnace project on the Construction dialog (place a furnace, let the planner create the
+    project, read the dialog row with `_visible_text` the way `_selected_card_script` reads a card).
+    Until that fixture exists this scenario stays unregistered."""
+    size = tuple(map(int, args.size.split("x")))
+    scene_shot.resize_window(probe.client.p4_window, size)
+    ru = args.language == "ru_ru"
+    label = lambda en, russian: russian if ru else en
+    unknown = "Неизвестный чертёж" if ru else "Unknown blueprint"
+    name = label("Furnace", "Печь")
+    try:
+        _setup(probe)
+        probe.fixture("settlement build furnace")
+        deadline_ticks = 0
+        chat = ""
+        while True:
+            probe.fixture("settlement building list")
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
+            chat = "\n".join(str(line) for line in probe.observe().get("recent_chat", []))
+            if re.search(r"#\d+\s+" + re.escape(name), chat, re.IGNORECASE):
+                break
+            if unknown.lower() in chat.lower() or re.search(r"#\d+\s+furnace\b", chat, re.IGNORECASE):
+                break
+            deadline_ticks += 20
+            if deadline_ticks > 1200:
+                raise RuntimeError("the furnace order never reached the building list")
+        (artifact / "program-unknown-chat.txt").write_text(chat)
+        probe.report["program_unknown"] = {"chat": chat[-1600:]}
+        probe.check("program_unknown_label",
+                    re.search(r"#\d+\s+" + re.escape(name), chat, re.IGNORECASE) is not None
+                    and unknown.lower() not in chat.lower()
+                    and re.search(r"#\d+\s+furnace\b", chat, re.IGNORECASE) is None)
+    finally:
+        pass
+    return []
 
 
 def _selected_card_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,

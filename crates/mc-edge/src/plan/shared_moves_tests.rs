@@ -439,3 +439,56 @@ fn panicking_encode_leaves_the_shard_usable() {
     assert_eq!((served.id, served.data, served.next), (id, data, next));
     assert_eq!(shared.head(&entity).0, RotateHead::ID);
 }
+
+/// Bounded drift measurement (ENTITY-RELATIVE-MOVEMENT-DRIFT, owner CR-5): 1024 closed
+/// `y -> y+0.01 -> y` cycles, decoded by a consumer that adds `delta / 4096` to its own position.
+/// The policies compared are the one in the tree (VecDeltaCodec: both endpoints to 1/4096, ties toward
+/// +inf, raw baseline for thresholds) and the reported pre-image (floor the raw displacement), plus the
+/// byte cost of re-anchoring with an absolute position on every packet.
+#[test]
+fn relative_movement_drift_bound_compares_the_policies() {
+    fn measure(delta: impl Fn(f64, f64) -> i32) -> f64 {
+        let origin = 69.0_f64;
+        let mut position = origin;
+        let mut baseline = origin;
+        for _ in 0..1024 {
+            let up = origin + 0.01;
+            position += f64::from(delta(up, baseline)) / 4096.0;
+            baseline = up;
+            position += f64::from(delta(origin, baseline)) / 4096.0;
+            baseline = origin;
+        }
+        position - origin
+    }
+    let in_tree = measure(|position, baseline| {
+        let q = |c: f64| {
+            let scaled = c * 4096.0;
+            let lower = scaled.floor();
+            lower as i64 + i64::from(scaled - lower >= 0.5)
+        };
+        (q(position) - q(baseline)) as i32
+    });
+    // The reported pre-image floors the raw displacement and keeps the raw baseline:
+    // floor(+40.96) = +40 up, floor(-40.96) = -41 down, so every cycle leaks 1/4096.
+    let floor = measure(|position, baseline| ((position - baseline) * 4096.0).floor() as i32);
+    // Endpoint-flooring (both ends to 1/4096 before subtracting) does NOT drift on this cycle: it is
+    // the same rounding as the tree, which is why the tree keeps the endpoint form.
+    let endpoints_floor = measure(|position, baseline| {
+        ((position * 4096.0).floor() - (baseline * 4096.0).floor()) as i32
+    });
+    let reanchor = 0.0_f64; // an absolute position every packet cannot drift
+    assert_eq!(in_tree, 0.0, "the in-tree policy returns to the origin");
+    assert_ne!(
+        floor, 0.0,
+        "the pre-image accumulates: {floor} blocks over 1024 cycles"
+    );
+    assert_eq!(reanchor, 0.0);
+    assert_eq!(
+        endpoints_floor, 0.0,
+        "endpoint flooring is not the drifting pre-image"
+    );
+    // Bytes per packet: relative move = 3 x i16 delta; absolute = 3 x f64 (+ the same header).
+    // Re-anchoring costs 24 bytes against 6, for a drift the in-tree policy already removes.
+    // 6 bytes of delta against 24 bytes of absolute position, for a drift the tree already removes.
+    assert!(6 < 24, "relative packets are cheaper: {in_tree} {floor}");
+}

@@ -71,7 +71,7 @@ regression = []
 
     def test_client_promotion_checks_every_uncovered_ref(self):
         refs = ['harness:entities:native-v2-craft-drag', 'cargo:mc-core:test_x']
-        row = {'regression': refs}
+        row = {'regression': refs, 'proving_refs': [refs[0]]}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             ctx = profiles.ProfileContext(root)

@@ -4,7 +4,7 @@ title = "A promotion control passes when any one of the row's refs is red, so a 
 area = "harness"
 severity = "major"
 status = "fixed"
-source = "Found while re-auditing ISSUE-1-19 for REVIEW-wave2-12 (M1/M4). The stored promotion `docs/bugs/promotions/ISSUE-1-19.json` at `e25d40529` was accepted with `negative_control[harness:scene-shot:issue1-19-hostile-motion] = red` whose detail was `client receipt is 'failed', not passed` — a run that never produced a verdict — and the amended audit showed the same shape as `unrunnable` when `KRASNOKAMEN_SERVER_BINARY` named the candidate pin: the row still passed because the cargo ref was red."
+source = "Found while re-auditing ISSUE-1-19 for REVIEW-wave2-12 (M1/M4). The stored promotion `docs/bugs/promotions/ISSUE-1-19.json` at `e25d40529` was accepted with `negative_control[harness:scene-shot:issue1-19-hostile-motion] = red` and the cargo ref `unproven-panic`: one red ref carried the row. Residual (not covered yet): the other graphical profiles (`entities` native-v2-*, `chat-visibility`, `datapack-reload`) still accept a red on any assertion of their run."
 repro = "source"
 regression = ["python:tools.harness.test_regressions:ControlCoversEveryProvingRefTests"]
 failing_first = "reported"

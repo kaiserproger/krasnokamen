@@ -81,7 +81,7 @@ period is 3 ticks, so only a window many periods long measures a rate rather tha
 | `chase_approach_zombie` (>= 3 blocks closed) | 7.56, 8.28, 7.92 | 9.01, 9.92, 9.26 |
 | `chase_aggressive_zombie` (mob-flags bit 2) | set (flags 4) on first and last | set — a 3.8-speed chaser still hunts |
 | `chase_identity_zombie` | one uuid | one uuid |
-| `chase_cruise_zombie` (ends >= 5 blocks from the player) | 7.93 at the tip (receipt `20261124T230452-…-jqcf1b41`, 60 ticks, 0.1200) | 9.01, 9.92, 9.26 |
+| `chase_cruise_zombie` (ends >= 5 blocks from the player) | 7.93 at the tip (receipt `20261124T230452-…-jqcf1b41`, 60 ticks, 0.1200) | 2.12, 2.82 (the run that ends on top of the player fails cruise, as intended); a cruise-red control run is future work |
 
 The band comes from those numbers: the candidate sits at 0.1182-0.1200 (`2.4 / 20` per tick), the
 control at 0.1807-0.1814 (`3.8 / 20`), so 0.105..0.128 keeps a 0.008 margin below the candidate maximum (0.1200 vs 0.128) and 0.053 above the control minimum (0.1807-0.128). The approach and aggressive-bit checks are what stop a
