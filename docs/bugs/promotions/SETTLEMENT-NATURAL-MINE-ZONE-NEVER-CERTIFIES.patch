@@ -1,5 +1,5 @@
 diff --git a/crates/mc-core/src/settlements/autonomy.rs b/crates/mc-core/src/settlements/autonomy.rs
-index 0e2c120f2..dd7ce756f 100644
+index 0e2c120f2..efdd1b15f 100644
 --- a/crates/mc-core/src/settlements/autonomy.rs
 +++ b/crates/mc-core/src/settlements/autonomy.rs
 @@ -273,7 +273,9 @@ fn advance(
@@ -13,7 +13,7 @@ index 0e2c120f2..dd7ce756f 100644
      for _ in 0..pending.uncertified.len().min(PIECES_PER_PASS) {
          let index = pending.uncertified.pop_front().expect("counted piece");
          let piece = &pending.site.pieces[index];
-@@ -794,18 +796,44 @@ fn queue_natural(
+@@ -794,20 +796,57 @@ fn queue_natural(
      queued_at: u64,
      candidates: &mut VecDeque<NaturalCandidate>,
  ) {
@@ -69,8 +69,66 @@ index 0e2c120f2..dd7ce756f 100644
 +    if blocked {
          return;
      }
++    // The queue is transient (popped on a refused route, never re-probed), so the
++    // gate must see what entered it: a mine that vanishes before certification
++    // leaves no other trace.
++    tracing::debug!(
++        target: "settlements::construction",
++        kind = ?kind,
++        min = ?bounds.min,
++        max = ?bounds.max,
++        entrance = ?entrance,
++        "natural zone queued"
++    );
      candidates.push_back(NaturalCandidate {
-@@ -941,21 +969,36 @@ fn prove_natural(
+         kind,
+         bounds,
+@@ -843,6 +882,14 @@ fn prove_natural(
+     // A loaded route can lead beyond entity simulation. Such a job strands
+     // its worker before they can take the profession or bring stock home.
+     if !state.world.is_active(x.div_euclid(16), z.div_euclid(16)) {
++        // The queue is not persisted and the cursor never returns: a candidate
++        // dropped here is lost for the world's life, so the gate must name it.
++        tracing::debug!(
++            target: "settlements::construction",
++            kind = ?candidate.kind,
++            entrance = ?candidate.entrance,
++            "natural zone dropped: entrance chunk inactive"
++        );
+         candidates.pop_front();
+         return;
+     }
+@@ -871,6 +918,13 @@ fn prove_natural(
+         })
+     });
+     let Some((uuid, start, width, height)) = resident else {
++        tracing::debug!(
++            target: "settlements::construction",
++            kind = ?candidate.kind,
++            entrance = ?candidate.entrance,
++            tried = ?candidate.after_resident,
++            "natural zone dropped: no eligible resident left to prove it"
++        );
+         candidates.pop_front();
+         return;
+     };
+@@ -928,6 +982,15 @@ fn prove_natural(
+                 .expect("proved candidate")
+                 .stock_proved = true;
+         } else {
++            tracing::debug!(
++                target: "settlements::construction",
++                kind = ?candidates.front().map(|candidate| candidate.kind),
++                entrance = ?candidates.front().map(|candidate| candidate.entrance),
++                resident = %uuid,
++                from = ?start,
++                to = ?target,
++                "natural zone dropped: no route from the resident to the storage"
++            );
+             candidates.pop_front();
+         }
+         return;
+@@ -941,21 +1004,36 @@ fn prove_natural(
              BuildingKind::LumberCamp => grove_bounds(state, settlement, site, candidate.bounds),
              _ => candidate.bounds,
          };
