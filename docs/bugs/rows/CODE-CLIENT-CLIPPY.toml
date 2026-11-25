@@ -4,9 +4,10 @@ title = "Existing strict lint gate fails: `refactor/SplitClientLoader-client-fin
 area = "harness"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CODE-CLIENT-CLIPPY"
 fix_commit = "client-test:902db87c317c1810d8ce33b3e7b3ca231b283a3d"
 client_test_reason = "a whole-repository lint gate has no scene: the command itself is the oracle, and the client repository is where the lint debt lived"
 regression = ["client-gate:clippy-workspace-all-targets", "client-gate:clippy-client-all-targets"]
 repro_check = "candidate: the gate was re-measured green on client 9a645aa9 (workspace and the root crate explicitly, `cargo clippy --workspace --all-targets -- -D warnings` rc=0 plus `-p krasnokamen-client`, receipts/XHarnessInfra/client-clippy-9a645aa9*.log); the cited always-true assertion is gone (src/ui_hotfix_tests.rs has real assert_eq!/assert_ne! FOV assertions). No fix hunks exist to revert, and the --workspace run never printed 'Checking krasnokamen-client', which is why the root crate was checked explicitly. 2026-11-25 D123HarnessH re-measured on client main fa231b1b in a clean client worktree: `cargo clippy --workspace --all-targets -- -D warnings` rc=0 (receipts/D123/D123Harness/client-clippy-fa231b1b-workspace.log; it linted krasnokamen-paths and krasnokamen-launcher, the root crate was fresh in that slot) and `cargo clippy -p krasnokamen-client --all-targets -- -D warnings` rc=0 with krasnokamen-client compiled (client-clippy-fa231b1b-root-crate.log). The gate is satisfied at the current client head; the row stays open only for the missing `client-gate:` ref kind (owner decision H-4). 2026-11-25 D123HarnessH: the `client-gate:` kind now exists (tools/harness/client_gates.py, docs/bugs/README.md 'Strict client gates') and the row carries both gate refs. The pair is `client-test:902db87c317c1810d8ce33b3e7b3ca231b283a3d` ('style(client): satisfy clippy 1.95 on the tip'), whose non-test hunk reverses cleanly at client fa231b1b and makes the gate fail on a real clippy diagnostic; the bulk fix 9a645aa9 cannot be the pair because one of its hunks straddles a #[cfg(test)] module (non_test_patch refuses to split it)."
+promotion = "docs/bugs/promotions/CODE-CLIENT-CLIPPY.json"
