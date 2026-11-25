@@ -282,6 +282,29 @@ SCENARIOS: dict[str, Scenario] = {
                "boundary and no second ticket.",
     ),
 
+    "native-v2-ledger-freeze-export": _entry(
+        id="native-v2-ledger-freeze-export",
+        summary="A world exported while frozen imports playable, with no quarantined chunk",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-freeze-export",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py",
+                 "tools/harness/backends/native_ledger_freeze_export.py",
+                 "tools/harness/backends/client_probes.py",
+                 "tools/harness/backends/native_promotion_custody.py"),
+        fixture="operator pad; `/tick freeze`, then a floating sand block held one block above its "
+                "fixture support, `save-all`, clean stop; the harness runs the real "
+                "`world export-anvil`/`world import-anvil` on the stopped private world and "
+                "restarts the server on the imported store",
+        proves="the reconnected client enters play, the restarted server's log holds no `stored "
+               "chunk unavailable` or quarantined-chunk line, and the held sand lands one block "
+               "once the session-only freeze is gone",
+        limits="One freeze, one anchored chunk column and one export/import; not a second round "
+               "trip, a re-export of the imported store, or a blast-furnace tick under freeze. "
+               "An export written before the held-tick witness existed still imports with a zero "
+               "prefix and keeps the pre-fix quarantine (fail closed, repair required).",
+    ),
+
     "native-v2-ledger-datapack-hover": _entry(
         id="native-v2-ledger-datapack-hover",
         summary="A `/datapack list` entry carries its pack description on hover",

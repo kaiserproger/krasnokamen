@@ -596,6 +596,7 @@ seed = 81
                     or ctx.scenario_id in (native_light.SCENARIO_ID, "native-v2-end-restart",
                                            "native-v2-console-shutdown", "native-v2-command-persist",
                                            "native-v2-custody-mount-export",
+                                           "native-v2-ledger-freeze-export",
                                            "native-v2-corrupt-block-entities",
                                            "native-v2-corrupt-chunk-near-camera")
                     # BREAK_DL_ATTACK=hold* glue (not for merge): restart to read the store after the race.
@@ -621,7 +622,8 @@ seed = 81
                     if server.returncode != 0:
                         raise RuntimeError(f"P4 server did not stop cleanly: {server.returncode}")
                     server_log.close()
-                    if (ctx.scenario_id == "native-v2-custody-mount-export"
+                    if (ctx.scenario_id in ("native-v2-custody-mount-export",
+                                            "native-v2-ledger-freeze-export")
                             or (ctx.scenario_id in ("native-v2-corrupt-block-entities",
                                                     "native-v2-corrupt-chunk-near-camera")
                                 and getattr(mcp, "corrupt_fixture", None))):
