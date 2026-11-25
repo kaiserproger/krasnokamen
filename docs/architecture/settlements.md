@@ -13,7 +13,16 @@ All paths below are under `crates/mc-core/src/settlements/` unless noted:
 - `allocator.rs`: native resident home, job-site and meeting-point allocation;
   `crates/mc-core/src/villager/` owns resident brains and state.
 - `buildings.rs`, `construction.rs`, `autonomy.rs`, `blueprints.rs`: certified
-  buildings, construction and generated-village adoption.
+  buildings, construction and generated-village adoption. Certification has two
+  rules: a box this engine places itself (owner, operator, construction,
+  discovery) must satisfy the strict footprint/height/roof/enclosure envelope
+  (`assess`), while an adopted generated piece is admitted by piece function and
+  substance (`assess_generated`): paired beds and a door for a House, a
+  workstation for a Workshop, a container for Storage, and at least 32 solid
+  cells so air, water or loose furniture never certify. A vanilla jigsaw box
+  keeps its ridge, eaves, door opening and yard non-solid, so the envelope would
+  refuse every generated house; the generator, not adoption, owns the geometry
+  of a generated piece.
 - `building_discovery.rs`: bounded room discovery from a player's standing cell;
   its bounds feed the existing `buildings.rs` inspection and certificate record,
   without a new persistence format or a second certification authority.
@@ -204,8 +213,9 @@ military, conversion, economic or construction reservations refuse before
 mutation. Destination beds cover the whole unit, including inbound transit
 and pending walks. Those are free beds: certified-house beds that no resident,
 member or not, claims in the bed claim index, less one for each member who has
-no home or has no loaded body. Members sleeping in uncertified generated houses
-(savanna houses fail House certification) do not use them. An unsimulated
+no home or has no loaded body. Members sleeping in a generated piece that
+carries no paired bed or no door do not use them (adoption admits a generated
+piece by function and substance, not by the builder envelope). An unsimulated
 destination uses its observation's free beds less one for each member who
 arrived since. Beds the moving unit's own members already hold there count as
 free for that unit. One unit per source may leave daily; only
