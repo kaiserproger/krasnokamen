@@ -354,10 +354,14 @@ def capture_house(probe: ProbeSteps, artifact: Path, label: str,
             "properties": {"half": half, "open": "true"}, "timeout_seconds": 10.0,
         })
     shot = capture_target(probe, artifact, label, target)
-    probe.call("minecraft_navigate_to_block", {
-        "x": math.floor(initial["x"]), "y": math.floor(initial["y"]),
-        "z": math.floor(initial["z"]), "timeout_seconds": 120.0,
-    })
+    try:
+        probe.call("minecraft_navigate_to_block", {
+            "x": math.floor(initial["x"]), "y": math.floor(initial["y"]),
+            "z": math.floor(initial["z"]), "timeout_seconds": 120.0,
+        })
+    except RuntimeError as error:
+        if "unreachable" not in str(error):
+            raise
     return shot
 
 
@@ -589,10 +593,22 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
         teleport(initial["x"], initial["y"], initial["z"])
         probe.call("minecraft_wait_ticks", {"ticks": 20})
         return shot
-    probe.call("minecraft_navigate_to_block", {
-        "x": math.floor(initial["x"]), "y": math.floor(initial["y"]), "z": math.floor(initial["z"]),
-        "timeout_seconds": 120.0,
-    })
+    try:
+        probe.call("minecraft_navigate_to_block", {
+            "x": math.floor(initial["x"]), "y": math.floor(initial["y"]), "z": math.floor(initial["z"]),
+            "timeout_seconds": 120.0,
+        })
+    except RuntimeError as error:
+        # Run 20261125T011226 aborted on the walk back ("target is unreachable
+        # from the current loaded client position"). The observer's position only
+        # loads what the next capture reads, so a refused walk back is moved by
+        # the console when a teleport exists, and otherwise left for the next
+        # capture to navigate from.
+        if "unreachable" not in str(error):
+            raise
+        if teleport is not None:
+            teleport(initial["x"], initial["y"], initial["z"])
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
     return shot
 
 
