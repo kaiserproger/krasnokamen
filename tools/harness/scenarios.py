@@ -973,6 +973,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the burning frame's own submitted fire layer (`entity_extraction.entity_layer_geometry`): one fire slice with all 12 indices and a 2.331-block band span against the pre-fix loop's 1.827, so `fire_band_span` separates the 26.3 bands from the camera-billboard overlay without pixels",
         limits="one entity (a pig, two bands) and the layer geometry only; the sprite alternation for taller entities, the light-15 emission and the exact texel parity stay unit-covered",
     ),
+    "native-rig-guardian": _entry(
+        id="native-rig-guardian", summary="The guardian and baby bee submit exactly the vanilla layer's cubes",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-rig-guardian", requires=("xvfb",),
+        sources=("tools/harness/rig_guardian_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, one stationary mob per shot at a fixed pad and camera (guardian, baby bee), HUD default",
+        proves="the two rigs' own entity-pass index counts (CM-4 `entity_indices_by_material`, cloud-free) equal the vanilla 26.1.2 layer dump: guardian 792 (22 cubes x 6 faces x 6 indices), baby bee 324 (9), against the pre-image 612 and 468 (`guardian_spikes_and_bee_legs_submitted`)",
+        limits="cube counts only, one species per shot and a fixed camera; the twelve head spikes' pivot and the parts' exact shapes stay with the client's model regression tests",
+    ),
     "native-rig-parity": _entry(
         id="native-rig-parity", summary="A re-authored rig submits the vanilla layer's own parts",
         owner="core:harness", evidence="graphical", profile="scene-shot",

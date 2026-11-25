@@ -408,6 +408,39 @@ def check_rig_parity(probe: ProbeSteps, artifact: Path) -> None:
     ]
 
 
+def check_rig_guardian(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-10: the guardian's 22 cubes and the baby bee's 9, exactly as the vanilla layer has them.
+
+    Counts are derived from the vanilla 26.1.2 layer dump (`model-audit/opus-review/
+    vanilla-26.1.2-layers.json`, javap output kept outside Git): `minecraft:guardian#main` has 22
+    cubes (132 quads, 792 indices) and `minecraft:bee_baby#main` 9 (54 quads, 324 indices). The
+    pre-image tree draws 17 cubes (102 quads, 612) and 13 (78, 468), so equality separates them
+    both ways - the earlier difference floor let a tree with the baby bee's legs removed pass.
+
+    The twelve head spikes are cubes of size [2, 9, 2] at o = [-1, -4.5, -1] inside the head bone
+    in the same dump; that pivot claim is a property of the rig JSON, not of the frame, so it is
+    covered by the client's model regression tests, not here.
+    """
+    shots = _qa._load_shots(probe, artifact, ("empty", "guardian", "bee-baby"))
+    guardian = (shots["guardian"][0].get("entity_extraction") or {})
+    bee = (shots["bee-baby"][0].get("entity_extraction") or {})
+    guardian_rig = int((guardian.get("entity_indices_by_material") or {}).get("EntityCutout") or 0)
+    bee_rig = int((bee.get("entity_indices_by_material") or {}).get("EntityCutout") or 0)
+    probe.report["guardian_entity_extraction"] = guardian
+    probe.report["bee_entity_extraction"] = bee
+    probe.report["guardian_cutout_indices"] = guardian_rig
+    probe.report["bee_cutout_indices"] = bee_rig
+    # Fixture first: a leaked entity or a missing rig must not read as the row's symptom.
+    probe.check("guardian_single_entity", guardian.get("submitted") == 1)
+    probe.check("bee_single_entity", bee.get("submitted") == 1)
+    probe.check("guardian_rig_rendered", not guardian.get("unrendered"))
+    probe.check("bee_rig_rendered", not bee.get("unrendered"))
+    probe.check("guardian_spikes_and_bee_legs_submitted", guardian_rig == 792 and bee_rig == 324)
+    probe.report["visual_review_required"] = [
+        "Inspect guardian/bee-baby frames: the counts prove 22 and 9 cubes were submitted, not their shape."
+    ]
+
+
 def check_shade_override(probe: ProbeSteps, artifact: Path) -> None:
     """MODEL-SHADE-OVERRIDE: a face named by the model's shade override takes the up weight.
 
