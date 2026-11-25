@@ -118,22 +118,32 @@ class SceneShotTests(unittest.TestCase):
         step = {"require_entities": {"name": "subjects", "args": {"radius": 16},
                                      "types": ["minecraft:zombie", "minecraft:slime"]}}
         scenario = [{"cmd": "summon minecraft:invalid"}, step, {"shot": "frame"}]
+
+        def execute(probe, root, steps, client):
+            # A tree without the step kind rejects the whole scenario as an invalid step. That is
+            # this row's defect (nothing can require a subject), so report it as the failed
+            # assertion it is instead of letting a ValueError escape as an error.
+            try:
+                return scene_shot.execute(probe, root, steps, client)
+            except ValueError as error:
+                self.fail(f"require_entities is not an executable scene step in this tree: {error}")
+
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             for client in ("native", "java"):
                 with self.subTest(client=client), patch.object(scene_shot, f"capture_{client}", return_value="frame") as capture:
                     probe = Probe([{"entity_type": "minecraft:zombie"}])
                     with self.assertRaisesRegex(AssertionError, "subjects_minecraft:slime"):
-                        scene_shot.execute(probe, root, scenario, client)
+                        execute(probe, root, scenario, client)
                     capture.assert_not_called()
                     self.assertEqual(json.loads((root / "subjects.json").read_text())["entities"], probe.entities)
                     probe.entities.append({"entity_type": "minecraft:slime"})
-                    self.assertEqual(scene_shot.execute(probe, root, [step, {"shot": "frame"}], client), ["frame"])
+                    self.assertEqual(execute(probe, root, [step, {"shot": "frame"}], client), ["frame"])
                     self.assertIn(("minecraft_list_entities", {"radius": 16}),
                                   list(scene_shot.scene_mcp_calls([step])))
                     probe.entities = None
                     with self.assertRaisesRegex(RuntimeError, "entity snapshot omitted entities"):
-                        scene_shot.execute(probe, root, [step], client)
+                        execute(probe, root, [step], client)
 
     def test_entity_count_requires_complete_snapshot(self):
         class Probe:
