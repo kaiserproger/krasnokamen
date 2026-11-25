@@ -988,6 +988,9 @@ class _FakeProbe:
         self.fail_after_snapshot = False
         self.truncated = False
         self.jab_damages = True
+        self.target_vanishes = False
+        self.jab_evidence = True
+        self.snapshot_calls = 0
         self.snapshots = 0
 
     def observe(self, **kwargs):
@@ -1005,7 +1008,9 @@ class _FakeProbe:
             if self.fail_after_snapshot and self.snapshots > 1:
                 raise RuntimeError("list failed")
             # The server's damage is what the client receives: the second snapshot carries it.
-            entities = [dict(row) for row in self.entities]
+            self.snapshot_calls += 1
+            entities = [] if (self.target_vanishes and self.snapshots > 1) else [
+                dict(row) for row in self.entities]
             if self.attacked and self.jab_damages:
                 for row in entities:
                     if row.get("entity_uuid") == "u":
@@ -1013,6 +1018,10 @@ class _FakeProbe:
             return {"game_time": 120, "truncated": self.truncated, "entities": entities}
         if name == "minecraft_attack_entity_once":
             self.attacked = True
+            if not self.jab_evidence:
+                return {"entity_id": 7, "entity_uuid": "u", "entity_type": "minecraft:cow",
+                        "dispatched": True, "confirmed": False, "removed": False,
+                        "health_before": None, "health_after": None}
             return {"entity_id": 7, "entity_uuid": "u", "entity_type": "minecraft:cow",
                     "dispatched": True, "confirmed": True, "removed": False,
                     "health_before": 10.0, "health_after": 4.0}
@@ -1062,6 +1071,20 @@ class NewSceneStepTests(unittest.TestCase):
             probe.truncated = True
             with self.assertRaisesRegex(RuntimeError, "truncated"):
                 execute(probe, root, [step], "native")
+
+    def test_attack_entity_does_not_call_an_out_of_range_target_removed(self):
+        from tools.harness.backends.scene_shot_execute import execute
+
+        row = {"entity_id": 7, "entity_uuid": "u", "entity_type": "minecraft:cow",
+               "x": 3.5, "y": 99.0, "z": 0.5, "health": 10.0}
+        with tempfile.TemporaryDirectory() as directory:
+            probe = _FakeProbe(entities=[row])
+            probe.jab_damages = False
+            probe.target_vanishes = True
+            probe.jab_evidence = False
+            with self.assertRaisesRegex(RuntimeError, "not a removal"):
+                execute(probe, Path(directory), [{"attack_entity": {
+                    "name": "spear_jab", "entity_type": "minecraft:cow", "timeout_seconds": 20}}], "native")
 
     def test_attack_entity_reports_an_untouched_target_as_not_damaged(self):
         from tools.harness.backends.scene_shot_execute import execute

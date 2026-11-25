@@ -477,6 +477,16 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 attempt_receipt["health_after"] = None if after is None else after.get("health")
                 receipt["attempts"].append(attempt_receipt)
                 removed = after is None
+                if removed and not (attack.get("confirmed") is True
+                                    or (type(attack.get("health_before")) in (int, float)
+                                        and type(attack.get("health_after")) in (int, float)
+                                        and attack["health_after"] < attack["health_before"])):
+                    # Absence from a 32-block snapshot is not proof of a kill: a target pushed
+                    # out of the radius would look "removed" (review wave2-13 m6). Without the
+                    # tool's own kill evidence the step fails closed instead.
+                    raise RuntimeError(
+                        "attack_entity: the target left the 32-block snapshot without damage or "
+                        "kill evidence; that is not a removal")
                 confirmed = (attack.get("confirmed") is True
                              or (type(attack.get("health_before")) in (int, float)
                                  and type(attack.get("health_after")) in (int, float)
