@@ -1199,6 +1199,34 @@ def _require_control_red(ident, control, proving):
                       'unrunnable run never counts as red)')
 
 
+def _client_binary_hash(entry):
+    """sha256 of the client binary a harness ref's receipt ran (None when the entry has no receipt)."""
+    path = entry.get('receipt') if isinstance(entry, dict) else None
+    if not path:
+        return None
+    try:
+        return (json.loads(Path(path).read_text()).get('client_binary') or {}).get('sha256')
+    except (OSError, ValueError):
+        return None
+
+
+def _require_same_client_binary(ident, control, restored):
+    """A reversed-fix control and its restore must run the SAME client binary.
+
+    Otherwise a red can come from the client rather than the reversed hunks (REVIEW-wave2-14 B1: the
+    client gained an observation field between the two, so the control was red for a missing field)."""
+    bad = []
+    for ref in sorted(set(control) & set(restored)):
+        if not ref.startswith('harness:'):
+            continue
+        before, after = _client_binary_hash(control[ref]), _client_binary_hash(restored[ref])
+        if before and after and before != after:
+            bad.append(f'{ref}: control {before[:12]}, restore {after[:12]}')
+    if bad:
+        raise Refused(f'{ident}: the control and the restore ran different client binaries ('
+                      + '; '.join(bad) + '): the red would not be attributable to the reversed fix')
+
+
 def _classify_control(ident, control, row, tree):
     """Rewrite a control's entries so a fixture panic or an unnamed panic cannot pass as red.
 
@@ -2057,6 +2085,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
         # control: its restore proves the red was the reversal, not the environment.
         covered = set(receipt_info['covers']) - {ref for ref, entry in control.items() if entry['state'] == RED} if receipt_info else set()
         restored = runner(ctx, [ref for ref in refs if ref not in covered], candidate, True) if len(covered) < len(refs) else {}
+        _require_same_client_binary(ident, control, restored)
         bad = {ref: entry for ref, entry in restored.items() if entry['state'] != GREEN}
         if bad:
             raise Refused(f"{ident}: check not green on the tree being promoted ({head[:12]}): "

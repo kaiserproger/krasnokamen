@@ -1725,6 +1725,39 @@ class LedgerToolTests(unittest.TestCase):
                                          control_refs=[drag, scene])
         del root
 
+    def test_a_two_graphical_pair_with_one_green_exclusion_promotes(self):
+        """N1(1): two real-client refs, the excluded one GREEN in the receipt, the other red -> pass.
+
+        Replacing `pair_control` with the raw `control` dict at ledger.py (`_promote_client_fix`) turns
+        this red: the states live under `control['states']`, so the excluded ref reads as unreported."""
+        self.client_repo()
+        drag = 'harness:entities:native-v2-craft-drag'
+        dash = 'harness:settlement-map-qa:dashboard'
+        root = self.client_row(client_sha=self.client_fix[:12], refs=[drag, dash],
+                               extra='proving_refs = ["' + drag + '"]',
+                               replace_assertions={drag: 'initial_drag_keeps_server_cursor'})
+        control = self.client_receipt(root, self.client_base, verdict=False,
+                                      assertions={'initial_drag_keeps_server_cursor': False})
+        body = json.loads(control.read_text())
+        body['details'].setdefault('verdicts', {})['dashboard'] = True
+        control.write_text(json.dumps(body))
+        receipt = self.promote(root, self.runner(), client_control_receipt=control,
+                               client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+        self.assertEqual(receipt['verdict'], 'promoted')
+
+    def test_a_pair_that_names_a_cargo_ref_as_proving_is_refused(self):
+        """N1(2): the pair can only prove what its receipt observes (N1: `cannot observe`)."""
+        self.client_repo()
+        drag = 'harness:entities:native-v2-craft-drag'
+        root = self.client_row(client_sha=self.client_fix[:12], refs=['cargo:mc-core:t::flip', drag],
+                               extra='proving_refs = ["cargo:mc-core:t::flip", "' + drag + '"]',
+                               replace_assertions={drag: 'initial_drag_keeps_server_cursor'})
+        control = self.client_receipt(root, self.client_base, verdict=False,
+                                      assertions={'initial_drag_keeps_server_cursor': False})
+        with self.assertRaisesRegex(ledger.Refused, 'cannot observe|cannot be observed'):
+            self.promote(root, self.runner(), client_control_receipt=control,
+                         client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+
     def test_client_control_that_already_has_the_fix_is_refused(self):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
