@@ -1,19 +1,19 @@
 {
   "id": "MODEL-ENTITY-FIRE",
   "verdict": "promoted",
-  "fix_commit": "client:de93dc7e",
-  "fix_commit_full": "de93dc7eb37cb8ae09109eac4f0b6076f4bf3e6f",
-  "promoted_at": "2026-11-25T12:39:19+00:00",
-  "tree_head": "6487503e1b7895c0f6b396323f97ab5c30ca0a72",
+  "fix_commit": "client:07d879cd67",
+  "fix_commit_full": "07d879cd67323d7ac26c36851a50911716ac3ce9",
+  "promoted_at": "2026-11-25T17:33:08+00:00",
+  "tree_head": "38d60b3bcd9bad9ba2bddfe46d6f95873c8ffb73",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "client_fix": true,
   "control_tree": "client",
   "control": "client_receipt_pair",
   "negative_control": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T123256-native-entity-fire-14vnmxon/result.json",
-    "client_head": "e017c320d99b08a8954d71025bc19de20e8ba5f5",
-    "server_binary_sha256": "30fd6fc373496795a62d9837d64e5d28a6933aef214cfb092342dbef244750d5",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T172859-native-entity-fire-h2__rdvq/result.json",
+    "client_head": "6608f21c3d95958da648791200d6a85d7b36f3fc",
+    "server_binary_sha256": "06ba83364da39a7e6e1b1d99ab9ccc6d34c0edb626bff43babd8cb4abff8bb4c",
     "red": [
       "harness:scene-shot:native-entity-fire"
     ],
@@ -22,35 +22,35 @@
     }
   },
   "restored": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T123333-native-entity-fire-9rl6ldy9/result.json",
-    "client_head": "de93dc7eb37cb8ae09109eac4f0b6076f4bf3e6f",
-    "server_binary_sha256": "30fd6fc373496795a62d9837d64e5d28a6933aef214cfb092342dbef244750d5",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T173014-native-entity-fire-nosydewa/result.json",
+    "client_head": "07d879cd67323d7ac26c36851a50911716ac3ce9",
+    "server_binary_sha256": "06ba83364da39a7e6e1b1d99ab9ccc6d34c0edb626bff43babd8cb4abff8bb4c",
     "green": [
       "harness:scene-shot:native-entity-fire"
     ],
     "states": {
       "harness:scene-shot:native-entity-fire": "green"
     },
-    "tree_head": "6487503e1b7895c0f6b396323f97ab5c30ca0a72",
+    "tree_head": "38d60b3bcd9bad9ba2bddfe46d6f95873c8ffb73",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "client_receipt": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T123333-native-entity-fire-9rl6ldy9/result.json",
-    "client_head": "de93dc7eb37cb8ae09109eac4f0b6076f4bf3e6f",
-    "server_binary_sha256": "30fd6fc373496795a62d9837d64e5d28a6933aef214cfb092342dbef244750d5",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T173014-native-entity-fire-nosydewa/result.json",
+    "client_head": "07d879cd67323d7ac26c36851a50911716ac3ce9",
+    "server_binary_sha256": "06ba83364da39a7e6e1b1d99ab9ccc6d34c0edb626bff43babd8cb4abff8bb4c",
     "green": [
       "harness:scene-shot:native-entity-fire"
     ],
     "states": {
       "harness:scene-shot:native-entity-fire": "green"
     },
-    "tree_head": "6487503e1b7895c0f6b396323f97ab5c30ca0a72",
+    "tree_head": "38d60b3bcd9bad9ba2bddfe46d6f95873c8ffb73",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "client_control_delta": {
-    "fix_patch_id": "9071e74a398485475e5d6d0fed0abe263326f68b",
+    "fix_patch_id": "1bf0caa98a510fd63d860fa06a5f5b8243535cdb",
     "paths": [
       "src/entities/presentation.rs"
     ]
@@ -61,5 +61,5 @@
       "detail": ""
     }
   },
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T123709-ledger-promote-zx8o1xl5"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T173150-ledger-promote-gs_g1cu7"
 }
