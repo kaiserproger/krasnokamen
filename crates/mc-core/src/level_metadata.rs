@@ -5,12 +5,48 @@ use mc_nbt::{ListTag, Tag, tag_type};
 
 use crate::config::CoreError;
 use crate::journal::CheckpointManifest;
-use crate::weather::ClimateImage;
+use crate::weather::{ClimateImage, GameClockImage};
 
 type Fields = Vec<(String, Tag)>;
 
+/// `level.dat/Data` witness of the exported simulation clock's held prefix.
+///
+/// Chunk root extras (`KrasnokamenSimHeldTicks` at each chunk's own
+/// `KrasnokamenSimLastTick`) cannot be served by an imported store whose clock
+/// restarts its held prefix at zero, so the export travels the prefix with the
+/// export and the import installs it as the running clock. Unowned by vanilla,
+/// like `KrasnokamenTerrainEpoch`, and derived like `Data.Time`: every checkpoint
+/// rewrites it from the live clock or drops it when the clock is not frozen. An
+/// export written before the field existed lacks it; such a world imports under
+/// the pre-fix zero prefix only while no chunk carries held anchors, and a chunk
+/// set at its frozen-age boundary refuses naming this field.
+pub const SIM_HELD_TICKS_FIELD: &str = "KrasnokamenSimHeldTicks";
+
 /// Relative Anvil saved-data path to its complete, unknown-field-preserving NBT root.
 pub type MetadataTags = BTreeMap<String, Tag>;
+
+/// Read the exported held-tick witness from a metadata image.
+///
+/// `None` means the image has no witness: vanilla, or an export written before the
+/// field existed. The import then keeps the previous zero prefix and refuses any
+/// chunk whose anchors need the frozen age.
+pub fn sim_held_ticks_witness(tags: &MetadataTags) -> Result<Option<u64>, CoreError> {
+    let level_path = "level.dat";
+    let Some(level) = root_fields(tags, level_path)? else {
+        return Ok(None);
+    };
+    let Some(Tag::Compound(data)) = field(level, "Data") else {
+        return Err(failure(level_path, "missing compound Data"));
+    };
+    match field(data, SIM_HELD_TICKS_FIELD) {
+        None => Ok(None),
+        Some(Tag::Long(value)) if *value >= 0 => Ok(Some(*value as u64)),
+        Some(_) => Err(failure(
+            level_path,
+            format!("invalid Data.{SIM_HELD_TICKS_FIELD}"),
+        )),
+    }
+}
 
 const BORDER_PATHS: [(crate::dimensions::Dimension, &str); 3] = [
     (
@@ -169,6 +205,7 @@ pub fn import_tags(
     manifest: &mut CheckpointManifest,
 ) -> Result<(), CoreError> {
     let level_path = "level.dat";
+    let held_witness = sim_held_ticks_witness(tags)?;
     if let Some(level) = root_fields(tags, level_path)? {
         let Some(Tag::Compound(data)) = field(level, "Data") else {
             return Err(failure(level_path, "missing compound Data"));
@@ -233,6 +270,9 @@ pub fn import_tags(
                 }
             };
         }
+        // The exported held-tick prefix (see SIM_HELD_TICKS_FIELD). Absent on a
+        // vanilla world and on exports written before the field existed; those
+        // keep the previous running clock with a zero prefix.
     }
     let rules_path = "data/minecraft/game_rules.dat";
     if let Some(data) = saved_data(tags, rules_path)? {
@@ -326,6 +366,24 @@ pub fn import_tags(
         climate.rain_level_bits = if raining { 1.0_f32 } else { 0.0_f32 }.to_bits();
         climate.thunder_level_bits = if thundering { 1.0_f32 } else { 0.0_f32 }.to_bits();
         present = true;
+    }
+    if let Some(held) = held_witness {
+        if !present {
+            return Err(failure(
+                level_path,
+                format!("{SIM_HELD_TICKS_FIELD} without a climate or weather image"),
+            ));
+        }
+        if held > manifest.tick {
+            return Err(failure(
+                level_path,
+                format!("{SIM_HELD_TICKS_FIELD} exceeds Data.Time"),
+            ));
+        }
+        // A freeze is session state (the import cannot resume it), but the
+        // simulated age it produced is durable: the imported store runs with the
+        // exported prefix, so its chunks' anchored debt stays valid.
+        climate.game_clock = GameClockImage::Running { held_ticks: held };
     }
     if present {
         manifest.climate = Some(climate);
@@ -467,6 +525,22 @@ pub fn checkpoint_tags(
         "difficulty",
         Tag::String(difficulty.into()),
     );
+    match manifest.climate {
+        Some(climate) => {
+            // An anchored chunk debt image is servable only by a store whose
+            // held prefix covers it; the import installs this value, so an
+            // unresolvable prefix refuses the export instead of dropping it.
+            let held = climate.game_clock.held_ticks(manifest.tick)?;
+            put(
+                data,
+                SIM_HELD_TICKS_FIELD,
+                Tag::Long(i64::try_from(held).map_err(|err| failure(path, err))?),
+            );
+        }
+        // No clock image means no held prefix; never leave a stale witness in
+        // the retained template claiming one.
+        None => data.retain(|(key, _)| key != SIM_HELD_TICKS_FIELD),
+    }
     let rules_path = "data/minecraft/game_rules.dat";
     let rules = saved_data_mut(tags, rules_path)?;
     for rule in crate::command_rules::rules() {
@@ -833,6 +907,9 @@ mod trader_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+    // The fixed module's parent import is part of the fix hunks; the kept test
+    // module names the type itself so the pre-fix control still compiles.
+    use crate::weather::GameClockImage;
 
     #[test]
     fn unchanged_weather_preserves_independent_vanilla_timers() {
@@ -1408,5 +1485,145 @@ mod tests {
             }),
         );
         assert!(import_tags(&tags, &mut CheckpointManifest::default()).is_err());
+    }
+
+    /// Named literally, not through the production const: the negative control
+    /// reverses the const with the fix hunks and this module must still compile.
+    const HELD: &str = "KrasnokamenSimHeldTicks";
+
+    /// The row's failing world: frozen at tick 240 and exported at 308, so its
+    /// chunks anchor simulation debt at `KrasnokamenSimHeldTicks` 11 while the
+    /// export only carried day time.
+    fn frozen_export_manifest() -> CheckpointManifest {
+        CheckpointManifest {
+            tick: 308,
+            world_spawn: Some([8, 80, 8]),
+            default_game_mode: crate::commands::GameMode::Creative,
+            climate: Some(ClimateImage {
+                day_time: 240,
+                game_clock: GameClockImage::Held {
+                    // Freeze began at tick 241: the first frozen tick, so the
+                    // simulated age was still 240 there.
+                    game_ticks: 240,
+                    held_since: Some(241),
+                },
+                sim_debt_anchored_since: Some(240),
+                weather_kind: 0,
+                remaining_ticks: 12000,
+                thunder_remaining_ticks: 12000,
+                clear_remaining_ticks: 0,
+                thundering: false,
+                rain_level_bits: 0.0_f32.to_bits(),
+                thunder_level_bits: 0.0_f32.to_bits(),
+                advance_time: true,
+                advance_weather: true,
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn frozen_clock_held_prefix_survives_anvil_metadata_roundtrip() {
+        let manifest = frozen_export_manifest();
+        let mut tags = MetadataTags::new();
+        checkpoint_tags(&mut tags, 42, &manifest).unwrap();
+        let mut imported = CheckpointManifest::default();
+        import_tags(&tags, &mut imported).unwrap();
+        let climate = imported.climate.expect("imported clock");
+        // 308 - 240: the frozen prefix, installed as a running clock so the
+        // imported store keeps the simulated age (a freeze is session state).
+        // This is the row's assertion: with a zero prefix here the imported
+        // store quarantines every chunk anchored at the freeze.
+        assert_eq!(
+            climate.game_clock,
+            GameClockImage::Running { held_ticks: 68 }
+        );
+        assert_eq!(climate.game_clock.held_ticks(imported.tick).unwrap(), 68);
+        assert_eq!(climate.day_time, 240);
+        let level = root_fields(&tags, "level.dat").unwrap().unwrap();
+        let Some(Tag::Compound(data)) = field(level, "Data") else {
+            panic!("missing Data")
+        };
+        assert_eq!(
+            field(data, HELD),
+            Some(&Tag::Long(68)),
+            "the export must carry the held prefix its chunk anchors need"
+        );
+        // Durable anchors captured under the freeze stay servable with the
+        // exported prefix, and stay invalid with the pre-fix zero prefix.
+        let chunk = mc_world::ChunkPos { x: 12, z: -28 };
+        crate::debt::validate_anchor(chunk, 251, Some(11), imported.tick, 68).unwrap();
+        crate::debt::validate_anchor(chunk, 251, Some(11), imported.tick, 0).unwrap_err();
+    }
+
+    #[test]
+    fn anvil_metadata_without_a_held_witness_keeps_the_zero_prefix() {
+        let manifest = frozen_export_manifest();
+        let mut tags = MetadataTags::new();
+        checkpoint_tags(&mut tags, 42, &manifest).unwrap();
+        let level = root_fields_mut(&mut tags, "level.dat").unwrap();
+        let data = compound_field_mut(level, "Data", "level.dat").unwrap();
+        data.retain(|(key, _)| key != HELD);
+        let mut imported = CheckpointManifest::default();
+        import_tags(&tags, &mut imported).unwrap();
+        assert_eq!(
+            imported.climate.unwrap().game_clock,
+            GameClockImage::Running { held_ticks: 0 },
+            "an export without the witness imports exactly as before the fix"
+        );
+    }
+
+    #[test]
+    fn anvil_held_witness_must_be_a_nonnegative_prefix_with_clocks() {
+        let manifest = frozen_export_manifest();
+        let set = |tags: &mut MetadataTags, value: Tag| {
+            let level = root_fields_mut(tags, "level.dat").unwrap();
+            let data = compound_field_mut(level, "Data", "level.dat").unwrap();
+            put(data, HELD, value);
+        };
+        let mut tags = MetadataTags::new();
+        checkpoint_tags(&mut tags, 42, &manifest).unwrap();
+        set(&mut tags, Tag::Long(-1));
+        let error = import_tags(&tags, &mut CheckpointManifest::default()).unwrap_err();
+        assert!(
+            error.to_string().contains("KrasnokamenSimHeldTicks"),
+            "{error}"
+        );
+        set(&mut tags, Tag::Long(309));
+        let error = import_tags(&tags, &mut CheckpointManifest::default()).unwrap_err();
+        assert!(error.to_string().contains("exceeds Data.Time"), "{error}");
+        // A witness without the world clocks it describes is inconsistent too.
+        let mut tags = MetadataTags::new();
+        checkpoint_tags(&mut tags, 42, &manifest).unwrap();
+        tags.remove("data/minecraft/world_clocks.dat");
+        tags.remove("data/minecraft/weather.dat");
+        let error = import_tags(&tags, &mut CheckpointManifest::default()).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("without a climate or weather image"),
+            "{error}"
+        );
+    }
+    #[test]
+    fn re_export_keeps_the_installed_prefix() {
+        // A re-checkpoint of the imported store is a fresh export: the witness is
+        // derived from the clock, so Running{68} must be written back as 68.
+        let manifest = frozen_export_manifest();
+        let mut tags = MetadataTags::new();
+        checkpoint_tags(&mut tags, 42, &manifest).unwrap();
+        let mut imported = CheckpointManifest::default();
+        import_tags(&tags, &mut imported).unwrap();
+        assert_eq!(
+            imported.climate.unwrap().game_clock,
+            GameClockImage::Running { held_ticks: 68 }
+        );
+        let mut reexported = MetadataTags::new();
+        checkpoint_tags(&mut reexported, 42, &imported).unwrap();
+        let level = root_fields(&reexported, "level.dat").unwrap().unwrap();
+        let Some(Tag::Compound(data)) = field(level, "Data") else {
+            panic!("missing Data")
+        };
+        assert_eq!(field(data, HELD), Some(&Tag::Long(68)));
     }
 }

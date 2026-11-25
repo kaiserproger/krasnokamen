@@ -388,8 +388,12 @@ written as 26.1.2 (`DataVersion` 4790) unless a record had to be promoted to
 26.3 (5023); `level.dat` and the receipt report the highest version emitted
 (`Version.Name`), and a promoted export needs a vanilla server of that release.
 It is not a downgrade to older Minecraft versions. Retain a native-world backup
-as well. Export writes the WAL frame as `Data.Time`, so exporting and importing a
-world that was ever frozen adds the held (frozen) ticks to its game age.
+as well. Export writes the WAL frame as `Data.Time` and the held (frozen) prefix
+as `level.dat/Data/KrasnokamenSimHeldTicks`, so reimporting into Krasnokamen keeps
+the age of a world that was ever frozen. Vanilla ignores that unowned field and
+sees only the native `Data.Time`; re-saving the world in vanilla drops it, and
+`import-anvil` then refuses the export (its chunk anchors need the prefix) instead
+of quarantining those chunks.
 
 In a separate vanilla test installation of the reported release, put the export
 at the configured `level-name` path, keep your already accepted EULA, set a

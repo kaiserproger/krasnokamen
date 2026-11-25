@@ -40,7 +40,13 @@ impl Default for GameClockImage {
 pub(crate) const LEGACY_CLOCK_ERROR: &str = "world was frozen by an older binary; its catch-up debt cannot be reconstructed; run world upgrade-game-clock --copy <disposable-world-copy>";
 
 impl GameClockImage {
-    pub(crate) fn held_ticks(self, tick: u64) -> Result<u64, CoreError> {
+    /// Held-tick prefix this persisted image implies at native tick `tick`.
+    ///
+    /// Fails closed for a legacy `Held` image without its boundary and for an
+    /// image that cannot be valid at `tick`; offline export writes its result as
+    /// the Anvil held-time witness, so an unresolvable prefix refuses the export
+    /// instead of dropping it.
+    pub fn held_ticks(self, tick: u64) -> Result<u64, CoreError> {
         let held = match self {
             Self::Running { held_ticks } => (held_ticks <= tick).then_some(held_ticks),
             Self::Held {

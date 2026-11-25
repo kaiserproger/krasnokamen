@@ -421,6 +421,15 @@ pub(super) fn convert(
     }
     mc_core::level_metadata::import_tags(&metadata, &mut manifest)?;
     let tick = manifest.tick;
+    // The clock the imported store will serve. An exported held-tick prefix is
+    // required for any chunk whose root extras anchor simulation debt at a
+    // nonzero prefix; validating here refuses such an export as a conversion
+    // error instead of publishing a store that quarantines the chunk at play.
+    let held_ticks = match manifest.climate {
+        Some(climate) => climate.game_clock.held_ticks(tick)?,
+        None => 0,
+    };
+    let witness = mc_core::level_metadata::sim_held_ticks_witness(&metadata)?;
     for child in manifest.dimensions.values_mut() {
         child.tick = tick;
         child.difficulty = manifest.difficulty;
@@ -974,6 +983,25 @@ pub(super) fn convert(
                 for marker in chunk.generated_entities() {
                     claims.push((dimension, marker.claim.clone()));
                 }
+                mc_core::validate_chunk_sim_debt(&chunk, tick, held_ticks).map_err(|error| {
+                    // A stripped witness is the common cause: an export muxed
+                    // through vanilla drops the unowned field but keeps the
+                    // chunk anchors, so name the missing witness outright.
+                    let hint = if witness.is_none() {
+                        format!(
+                            " (the export carries no Data.{}, the held-prefix witness these anchors need)",
+                            mc_core::level_metadata::SIM_HELD_TICKS_FIELD
+                        )
+                    } else {
+                        String::new()
+                    };
+                    fail(format!(
+                        "{} chunk ({}, {}): {error}{hint}",
+                        relative.display(),
+                        pos.x,
+                        pos.z
+                    ))
+                })?;
                 ticks(&mut chunk, image(&mut manifest, dimension), &registry)?;
                 store
                     .import_staged_chunk(

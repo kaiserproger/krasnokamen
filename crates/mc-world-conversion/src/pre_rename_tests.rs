@@ -203,6 +203,10 @@ fn nested_owned_entity_block_and_metadata_keys_are_renamed_only_at_their_owner()
     }
 }
 
+/// Fields minted after the rename: they have no pre-rename image, so an RC5
+/// export carries them under their current name.
+const POST_RENAME_ONLY: [&str; 1] = ["KrasnokamenSimHeldTicks"];
+
 /// An RC5 export of `tag`: every Krasnokamen field name back in its pre-rename
 /// spelling. Returns how many names changed.
 fn rc5_names(tag: &mut Tag) -> u64 {
@@ -210,10 +214,13 @@ fn rc5_names(tag: &mut Tag) -> u64 {
         Tag::Compound(fields) => fields
             .iter_mut()
             .map(|(key, value)| {
-                let old = key
-                    .replace("krasnokamen", "solaris")
-                    .replace("Krasnokamen", "Solaris")
-                    .replace("KRASNOKAMEN", "SOLARIS");
+                let old = if POST_RENAME_ONLY.contains(&key.as_str()) {
+                    key.clone()
+                } else {
+                    key.replace("krasnokamen", "solaris")
+                        .replace("Krasnokamen", "Solaris")
+                        .replace("KRASNOKAMEN", "SOLARIS")
+                };
                 let changed = u64::from(old != *key);
                 *key = old;
                 changed + rc5_names(value)

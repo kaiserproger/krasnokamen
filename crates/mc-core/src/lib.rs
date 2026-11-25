@@ -279,6 +279,7 @@ mod view_negotiation_tests;
 
 pub use config::{CoreConfig, CoreError};
 pub use core::{Core, RemoteTicket, SpawnRequest};
+pub use debt::validate_chunk_sim_debt;
 pub use physical_defense::PhysicalImpact;
 
 #[doc(hidden)]

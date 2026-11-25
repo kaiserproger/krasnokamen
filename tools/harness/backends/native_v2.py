@@ -1268,6 +1268,12 @@ def _ledger_datapack_hover(steps: ProbeSteps, origin: tuple[int, int, int]) -> N
     run(steps, origin)
 
 
+def _ledger_freeze_export(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_ledger_freeze_export import run
+
+    run(steps, origin)
+
+
 RUNNERS = {
     "native-v2-happy-ghast-harness": _happy_ghast,
     "native-v2-mob-metadata-spot": _mob_metadata,
@@ -1306,6 +1312,7 @@ RUNNERS = {
     "native-v2-ledger-map-pocket": _ledger_map_pocket,
     "native-v2-ledger-mob-attack": _ledger_mob_attack,
     "native-v2-ledger-gravity-tick": _ledger_gravity_tick,
+    "native-v2-ledger-freeze-export": _ledger_freeze_export,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
     "native-v2-map-locked-banners": _promotion_maps,

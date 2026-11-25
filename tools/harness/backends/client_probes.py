@@ -597,6 +597,7 @@ seed = 81
                                            "native-v2-console-shutdown", "native-v2-command-persist",
                                            "native-v2-custody-mount-export",
                                            "native-v2-ledger-gravity-tick",
+                                           "native-v2-ledger-freeze-export",
                                            "native-v2-corrupt-block-entities",
                                            "native-v2-corrupt-chunk-near-camera")
                     # BREAK_DL_ATTACK=hold* glue (not for merge): restart to read the store after the race.
@@ -624,6 +625,7 @@ seed = 81
                     server_log.close()
                     if (ctx.scenario_id in ("native-v2-custody-mount-export",
                                             "native-v2-ledger-gravity-tick")
+                                            "native-v2-ledger-freeze-export")
                             or (ctx.scenario_id in ("native-v2-corrupt-block-entities",
                                                     "native-v2-corrupt-chunk-near-camera")
                                 and getattr(mcp, "corrupt_fixture", None))):

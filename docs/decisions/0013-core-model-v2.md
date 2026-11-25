@@ -445,6 +445,16 @@ bounded direct-directory-entry predicate. Removed-pack ownership remains valid
 diagnostic history. The normal checkpoint level-metadata path owns it (there is
 no WAL image of it), not a separate startup transaction.
 
+`level.dat/Data` also carries the unowned Krasnokamen identity and clock fields:
+`KrasnokamenTerrainEpoch` and `KrasnokamenEntitySalt` (world identity, above) and
+`KrasnokamenSimHeldTicks`, the exported held-prefix witness. The witness is derived
+like `Data.Time`: every checkpoint rewrites it from the live clock or drops it when
+the clock is not frozen, so re-exporting an imported store carries the installed
+prefix again. `import-anvil` refuses an export whose chunk extras anchor simulation
+debt when the witness is missing or inconsistent with the clock it would serve,
+naming `Data.KrasnokamenSimHeldTicks`, instead of publishing a store that
+quarantines those chunks at play.
+
 A valid startup change logs old/new identities and changed packs/cache, then
 continues: stored chunk baselines remain unchanged; new chunks use selected
 inputs. Changed inputs mint a terrain epoch. Fresh worlds record identity in
