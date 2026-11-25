@@ -17,19 +17,26 @@ imported store, and the reconnected client must
 
 * enter play (`reimport_entered_play`, the assertion that failed before),
 * find no quarantine line in the restarted server's log
-  (`reimport_no_quarantined_chunks`), and
+  (`reimport_no_quarantined_chunks`),
+* continue the simulated age instead of jumping to the native tick
+  (`reimport_gametime_continues_from_the_frozen_age`: the server's own
+  `/time query gametime` answer after the reimport is not ahead of the frozen
+  one by more than the restart itself, which is exactly the held prefix the
+  export used to drop), and
 * read the held sand landed one block below its placed position once the freeze
-  is gone (`reimport_sand_fell_one_block`), which also proves the chunk that
-  carried the anchor is genuinely simulated rather than merely unquarantined.
+  is gone (`reimport_sand_fell_one_block`), so the chunk that carried the anchor
+  is genuinely simulated rather than merely unquarantined.
 
-A frozen world pushes no block change into the client's model, so the placement
-itself is not asserted before the restart; the landing after it carries the
+A frozen world pushes no entity or block change into the client's model, so the
+held falling block and the placement are not asserted before the restart; the
+ordered freeze feedback plus the landing and gametime after it carry the
 fixture, as the row's notes record.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
+from .native_corrupt_block_entities import _gametime
 from .native_v2 import _block, _echo
 from .probe_steps import ProbeSteps
 
@@ -57,15 +64,22 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _block(steps, support, "minecraft:stone")
     steps.fixture(f"setblock {held['x']} {held['y']} {held['z']} minecraft:air")
     steps.fixture("tick freeze")
+    steps.wait(lambda state: any("The game is frozen" in line for line in state["recent_chat"]),
+               "frozen_export_world_frozen")
     _echo(steps, "frozen_export_freeze_ordered")
-    steps.check("frozen_export_world_frozen",
-                steps.observe().get("minecraft", {}).get("server_frozen") is True)
+    # The server keeps ticking while frozen, so the exported held prefix grows; a
+    # bounded client tick wait makes the pre-fix gametime jump unmistakable and
+    # keeps the exported prefix well above the restart's own ticks.
+    steps.call("minecraft_wait_ticks", {"ticks": 200})
     # A gravity block placed with open air below becomes a falling entity in the
-    # same (frozen) tick: the placed cell is already air, which is why the landing
-    # carries the fixture.
+    # same tick and is held there while frozen (`falling::run` returns), so the
+    # placed cell is already air. A frozen world pushes no entity or block change
+    # into the client's model; the landing after the restart carries the fixture.
     steps.fixture(f"setblock {placed['x']} {placed['y']} {placed['z']} minecraft:sand")
     steps.fixture("save-all")
     _echo(steps, "frozen_export_saved")
+    frozen_gametime = _gametime(steps, "before_export")
+    steps.report["frozen_gametime"] = frozen_gametime
     steps.call("minecraft_disconnect")
     steps.check("frozen_export_client_disconnected",
                 steps.call("minecraft_observe")["in_play"] is False)
@@ -81,6 +95,14 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.report["quarantine_lines"] = [line for line in log.splitlines()
                                         if any(marker in line for marker in QUARANTINE_MARKERS)]
     steps.check("reimport_no_quarantined_chunks", not steps.report["quarantine_lines"])
+    # The exported held prefix is what the pre-fix export dropped: with it, the
+    # imported world continues the frozen simulated age (tick - held) and only
+    # the restart's own ticks separate the two answers; without it the answer
+    # jumps forward by the whole held prefix.
+    imported_gametime = _gametime(steps, "after_reimport")
+    steps.report["imported_gametime"] = imported_gametime
+    steps.check("reimport_gametime_continues_from_the_frozen_age",
+                0 <= imported_gametime - frozen_gametime <= 60)
     # The freeze is session state (like vanilla): the imported world runs, so the
     # block the freeze held falls one block onto its fixture support.
     landed = _block(steps, held, "minecraft:sand")

@@ -297,12 +297,16 @@ SCENARIOS: dict[str, Scenario] = {
                 "`world export-anvil`/`world import-anvil` on the stopped private world and "
                 "restarts the server on the imported store",
         proves="the reconnected client enters play, the restarted server's log holds no `stored "
-               "chunk unavailable` or quarantined-chunk line, and the held sand lands one block "
-               "once the session-only freeze is gone",
+               "chunk unavailable` or quarantined-chunk line, the server's own `/time query "
+               "gametime` answer after the reimport continues the frozen age instead of jumping "
+               "by the dropped held prefix, and the held sand lands one block once the "
+               "session-only freeze is gone",
         limits="One freeze, one anchored chunk column and one export/import; not a second round "
                "trip, a re-export of the imported store, or a blast-furnace tick under freeze. "
-               "An export written before the held-tick witness existed still imports with a zero "
-               "prefix and keeps the pre-fix quarantine (fail closed, repair required).",
+               "The held falling block and the placement are not client-observable while frozen "
+               "(the landing and the gametime answer carry them). An export written before the "
+               "held-tick witness existed still imports with a zero prefix and keeps the pre-fix "
+               "quarantine (fail closed, repair required).",
     ),
 
     "native-v2-ledger-datapack-hover": _entry(
