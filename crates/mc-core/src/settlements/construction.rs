@@ -2356,16 +2356,6 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     let mut next = executor::next_cell(state, id, &project.structure)
         .ok()
         .flatten();
-    if next.is_none()
-        && executor::status(state, id, &project.structure)
-            .is_ok_and(|status| status.state == ScriptStructureState::Committed)
-        && finish_project(state, id, &project.structure)
-    {
-        // The structure is already finished (the L2 planner appends a stage to the committed L1
-        // record, then the executor commits it again): nothing will ever place a cell, so without
-        // this the watcher releases the builder on every shift forever (20261125T035022).
-        return true;
-    }
     if next.is_none() {
         match executor::step_empty_stage(state, id, &project.structure) {
             Ok(true) => {
