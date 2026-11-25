@@ -480,6 +480,12 @@ pub(crate) fn assess_generated(
                 if !state.registry.collision_boxes[id as usize].is_empty() {
                     solid += 1;
                 }
+                // A generated House needs a bed a resident can sleep in, so the
+                // same roof predicate the allocator and migration use decides
+                // whether the piece's bed counts (`certified_beds`,
+                // `bed_allowed`): a floor or terrain cell above nothing is not
+                // a House, and a certified bed that no resident may claim would
+                // only inflate the housing demand `needed_kinds` reads.
                 if name.ends_with("_bed")
                     && definition
                         .properties
@@ -491,6 +497,7 @@ pub(crate) fn assess_generated(
                         BlockPos { x, y, z },
                     )
                     .is_some()
+                    && super::allocator::roofed(&state.world, &state.registry, BlockPos { x, y, z })
                 {
                     beds += 1;
                 }

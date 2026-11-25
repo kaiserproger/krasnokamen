@@ -158,13 +158,38 @@ fn place_bed_and_door(state: &mut TickState, at: [i32; 3]) {
     state.world.fold_overlay();
 }
 
-fn missing(error: &buildings::CertError, description: &str) -> u32 {
+/// The `found` count of one unmet requirement, or `None` when the certificate
+/// does not report it at all: tests assert on this value so the row's reversal
+/// control fails at a behavioural assertion, never inside a helper panic.
+fn missing(error: &buildings::CertError, description: &str) -> Option<u32> {
     error
         .missing
         .iter()
         .find(|requirement| requirement.description == description)
-        .unwrap_or_else(|| panic!("no {description} in {:?}", error.missing))
-        .found
+        .map(|requirement| requirement.found)
+}
+
+/// Fills `cells` air cells of the box with stone from the top layer down, so the
+/// first cells land above the furniture and give its bed a roof.
+fn stone_roof_first(state: &mut TickState, bounds: ScriptWorldBounds, cells: u32) {
+    let stone = block(state, "minecraft:stone", &[]);
+    let air = state.registry.states.air;
+    let mut left = cells;
+    'fill: for y in (bounds.min[1]..=bounds.max[1]).rev() {
+        for x in bounds.min[0]..=bounds.max[0] {
+            for z in bounds.min[2]..=bounds.max[2] {
+                if left == 0 {
+                    break 'fill;
+                }
+                if state.world.block_at(x, y, z).is_some_and(|id| id == air) {
+                    state.world.set_block(x, y, z, stone);
+                    left -= 1;
+                }
+            }
+        }
+    }
+    assert_eq!(left, 0, "the box has room for the substance");
+    state.world.fold_overlay();
 }
 
 /// The builder envelope refuses a real house box: this is the measured reason
@@ -178,7 +203,7 @@ fn the_builder_envelope_still_refuses_a_real_house_box() {
     PLAINS_SMALL_HOUSE_1.place(&mut state, min);
     let error = buildings::inspect(&state, BuildingKind::House, 1, bounds)
         .expect_err("the strict envelope is the bug, not the house");
-    assert!(missing(&error, "footprint") == 0, "{error:?}");
+    assert_eq!(missing(&error, "footprint"), Some(0), "{error:?}");
 }
 
 #[test]
@@ -229,9 +254,9 @@ fn an_air_box_certifies_nothing() {
     air(&mut state, bounds);
     let error = buildings::certify_generated(&mut state, id, BuildingKind::House, bounds)
         .expect_err("air is not a house");
-    assert_eq!(missing(&error, "beds"), 0, "{error:?}");
-    assert_eq!(missing(&error, "entrance"), 0, "{error:?}");
-    assert_eq!(missing(&error, "structure"), 0, "{error:?}");
+    assert_eq!(missing(&error, "beds"), Some(0), "{error:?}");
+    assert_eq!(missing(&error, "entrance"), Some(0), "{error:?}");
+    assert_eq!(missing(&error, "structure"), Some(0), "{error:?}");
 }
 
 /// The furniture a ruin keeps is not the structure: four solid cells cannot
@@ -243,17 +268,17 @@ fn a_lone_bed_and_door_do_not_make_a_house() {
     let bounds = ScriptWorldBounds::new([1, 201, 1], [7, 207, 7]).unwrap();
     air(&mut state, bounds);
     place_bed_and_door(&mut state, [2, 202, 2]);
-    // The function is there (one paired bed, one door), so neither is reported
-    // missing; only the substance is, which is the point of the structure floor.
+    // A bed in the open is not a home and four solid cells are not a structure.
     // The test names no new API, so the row's reversal control still compiles.
     let error = buildings::certify_generated(&mut state, id, BuildingKind::House, bounds)
         .expect_err("a floating bed is not a house");
     assert_eq!(
         error.missing.len(),
-        1,
-        "only the substance is missing: {error:?}"
+        2,
+        "unroofed bed and no substance: {error:?}"
     );
-    assert_eq!(missing(&error, "structure"), 4);
+    assert_eq!(missing(&error, "beds"), Some(0), "{error:?}");
+    assert_eq!(missing(&error, "structure"), Some(4), "{error:?}");
 }
 
 /// The real small house stripped to its furniture refuses on substance alone: the
@@ -270,7 +295,71 @@ fn a_real_house_reduced_to_its_furniture_refuses() {
     });
     let error = buildings::certify_generated(&mut state, id, BuildingKind::House, bounds)
         .expect_err("beds and a door alone are not a house");
-    assert!(missing(&error, "structure") < 32, "{error:?}");
+    assert!(
+        missing(&error, "structure").is_some_and(|found| found < 32),
+        "the ruin has no substance: {error:?}"
+    );
+}
+
+/// A ruin that kept its floor and its bed but lost everything above the bed is
+/// the real boundary the substance count alone cannot see: the box still holds
+/// far more than 32 solid cells, and the bed is no longer roofed.
+#[test]
+fn a_floor_only_ruin_does_not_certify() {
+    let mut state = test_state();
+    let id = town(&mut state);
+    let min = [1, 201, 1];
+    let bounds = PLAINS_SMALL_HOUSE_1.bounds(min);
+    air(&mut state, bounds);
+    PLAINS_SMALL_HOUSE_1.place(&mut state, min);
+    let bed_head = PLAINS_SMALL_HOUSE_1
+        .cells
+        .iter()
+        .find(|(_, name, props)| {
+            name.ends_with("_bed") && props.iter().any(|(k, v)| *k == "part" && *v == "head")
+        })
+        .map(|(offset, _, _)| *offset)
+        .expect("the fixture has a bed head");
+    // Keep the floor, the ground and the bed; nothing stands above it.
+    let air = state.registry.states.air;
+    for x in bounds.min[0]..=bounds.max[0] {
+        for z in bounds.min[2]..=bounds.max[2] {
+            for y in (min[1] + bed_head[1] + 1)..=bounds.max[1] {
+                state.world.set_block(x, y, z, air);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    let error = buildings::certify_generated(&mut state, id, BuildingKind::House, bounds)
+        .expect_err("a floor and an open bed are not a house");
+    assert_eq!(
+        missing(&error, "beds"),
+        Some(0),
+        "the bed lost its roof: {error:?}"
+    );
+    assert!(
+        missing(&error, "structure").is_none(),
+        "the floor still satisfies the substance floor: {error:?}"
+    );
+}
+
+/// A stone platform under an open bed is terrain, not a house: the substance
+/// passes and the roof does not.
+#[test]
+fn a_stone_floor_with_an_open_bed_does_not_certify() {
+    let mut state = test_state();
+    let id = town(&mut state);
+    let bounds = ScriptWorldBounds::new([1, 201, 1], [7, 207, 7]).unwrap();
+    air(&mut state, bounds);
+    stone_box(&mut state, bounds, 40);
+    place_bed_and_door(&mut state, [2, 204, 2]);
+    let error = buildings::certify_generated(&mut state, id, BuildingKind::House, bounds)
+        .expect_err("a bed above a stone floor is still in the open");
+    assert_eq!(missing(&error, "beds"), Some(0), "{error:?}");
+    assert!(
+        missing(&error, "structure").is_none(),
+        "the platform is substance: {error:?}"
+    );
 }
 
 /// The substance floor is the boundary: 31 solid cells refuse, 32 certify, with
@@ -283,8 +372,9 @@ fn the_structure_floor_is_the_boundary() {
         let id = town(&mut state);
         air(&mut state, bounds);
         place_bed_and_door(&mut state, [2, 202, 2]);
-        // The bed pair and the door are 4 solid cells of their own.
-        stone_box(&mut state, bounds, stones);
+        // The bed pair and the door are 4 solid cells of their own; filling from
+        // the top makes the bed roofed, so only the substance count decides.
+        stone_roof_first(&mut state, bounds, stones);
         let outcome = buildings::certify_generated(&mut state, id, BuildingKind::House, bounds);
         assert_eq!(
             outcome.is_ok(),
@@ -293,7 +383,7 @@ fn the_structure_floor_is_the_boundary() {
             stones + 4
         );
         if let Err(error) = outcome {
-            assert_eq!(missing(&error, "structure"), stones + 4, "{error:?}");
+            assert_eq!(missing(&error, "structure"), Some(stones + 4), "{error:?}");
         }
     }
 }
