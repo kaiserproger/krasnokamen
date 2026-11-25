@@ -74,9 +74,10 @@ fn decode(state: &TickState, chunk: &mc_world::Chunk) -> Result<Decoded, String>
 /// Journal post-images overwrite per position; unloaded chunks' records stay
 /// until their chunk reloads (eviction does not delete storage).
 ///
-/// A chunk becoming resident also re-seeds the beds it holds whose durable
-/// `occupied` property outlived the runtime set that owns it
-/// ([`crate::sleep::seed_occupied_beds`]).
+/// Every hydration pass also re-seeds the head cells of the beds in the chunk
+/// whose durable `occupied` property outlived the runtime set that owns it
+/// ([`crate::sleep::seed_occupied_beds`]). The pass runs on every
+/// storage-revision bump, not only when a chunk becomes resident.
 pub(crate) fn sync_chunk_block_entities(state: &mut TickState) {
     let mut stale_beds = Vec::new();
     for chunk_pos in state.world.take_hydration_chunks() {

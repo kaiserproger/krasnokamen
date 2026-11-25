@@ -304,10 +304,10 @@ pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
 /// reassignment, dimension travel), not just [`wake`]. The tick calls it after
 /// `state.merge` and before the block phase, so an accepted write to a bed this
 /// tick (a break or a replace) wins over the mirror, and the mirror's own write
-/// still lands in this tick's block phase. A bed that became resident with a
-/// durable `occupied=true` no sleeper here owns enters `occupied_beds` through
-/// [`seed_occupied_beds`], so this same pass clears a property a mid-sleep
-/// checkpoint persisted across a restart.
+/// still lands in this tick's block phase. A bed whose durable `occupied=true`
+/// no sleeper here owns (a property a mid-sleep checkpoint persisted across a
+/// restart) enters `occupied_beds` through [`seed_occupied_beds`] on every
+/// hydration pass, so this same pass clears it.
 pub(crate) fn mirror_occupied_beds(state: &mut TickState) {
     let dimension = state.dimension.name();
     let previous = std::mem::take(&mut state.occupied_beds);
@@ -350,7 +350,7 @@ pub(crate) fn mirror_occupied_beds(state: &mut TickState) {
     state.occupied_beds = wanted;
 }
 
-/// Collect the cells of a newly resident chunk whose bed state carries
+/// Collect the head cell of every bed a hydration pass finds with
 /// `occupied=true`.
 ///
 /// Sleepers and a resident's `sleeping` flag are runtime state, so a
@@ -360,6 +360,16 @@ pub(crate) fn mirror_occupied_beds(state: &mut TickState) {
 /// [`mirror_occupied_beds`] pass clear the ones no sleeper wants, exactly as
 /// it clears a bed whose sleeper woke; a persisted sleeping resident keeps its
 /// bed because the mirror counts it as wanted.
+///
+/// The seed names the **head** cell for either half, because that is the key
+/// the mirror keeps ([`Sleeper::bed`] and a resident's `home`). Seeding both
+/// halves would put the foot in `previous` while `wanted` names only the head,
+/// so every hydration of a sleeping player's chunk would clear both halves and
+/// set them again (four block changes to clients and the WAL), and a bed
+/// straddling a chunk boundary could be double-counted. Hydration itself runs
+/// on every storage-revision bump (`ChunkWorld::bump_storage_revision`), not
+/// only when the chunk becomes resident, so this must agree with the mirror's
+/// keys exactly.
 pub(crate) fn seed_occupied_beds(
     state: &TickState,
     pos: mc_world::ChunkPos,
@@ -391,13 +401,21 @@ pub(crate) fn seed_occupied_beds(
         for y in 0..16u8 {
             for z in 0..16u8 {
                 for x in 0..16u8 {
-                    if matching.contains(&section.get(x, y, z).0) {
-                        out.push(BlockPos {
-                            x: pos.x * 16 + i32::from(x),
-                            y: base_y + i32::from(y),
-                            z: pos.z * 16 + i32::from(z),
-                        });
+                    let cell = section.get(x, y, z).0;
+                    if !matching.contains(&cell) {
+                        continue;
                     }
+                    let at = BlockPos {
+                        x: pos.x * 16 + i32::from(x),
+                        y: base_y + i32::from(y),
+                        z: pos.z * 16 + i32::from(z),
+                    };
+                    // The mirror keys by the head. A lone half (its partner
+                    // missing) keeps its own cell, and `set_bed_occupied` then
+                    // writes that cell only.
+                    let head = crate::placement::other_half(&state.registry.blocks, at, cell)
+                        .map_or(at, |(_, head)| head);
+                    out.push(head);
                 }
             }
         }

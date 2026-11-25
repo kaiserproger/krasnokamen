@@ -451,9 +451,10 @@ pub struct TickState {
     /// Bed cells whose block `occupied` property is true and still owned:
     /// derived from the sleepers and sleeping residents every tick
     /// ([`crate::sleep::mirror_occupied_beds`]), never persisted, and seeded
-    /// from a chunk's own bed states when it becomes resident
-    /// ([`crate::sleep::seed_occupied_beds`]) so a property persisted by a
-    /// checkpoint taken mid-sleep is cleared on the first pass after a restart.
+    /// from a chunk's own bed head cells on every hydration pass (every
+    /// storage-revision bump) ([`crate::sleep::seed_occupied_beds`]) so a
+    /// property persisted by a checkpoint taken mid-sleep is cleared on the
+    /// first pass after a restart.
     pub(crate) occupied_beds: HashSet<BlockPos>,
     /// Last journaled player / block-entity post-images. Images are
     /// absolute, so the journal writes one only when it differs from the
