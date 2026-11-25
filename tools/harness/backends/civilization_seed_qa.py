@@ -361,7 +361,7 @@ def capture_house(probe: ProbeSteps, artifact: Path, label: str,
     return shot
 
 
-BABY_AIM_ATTEMPTS = 6
+BABY_AIM_ATTEMPTS = 10
 BABY_TELEPORT_SIDES = ((1.5, 0.0), (-1.5, 0.0), (0.0, 1.5), (0.0, -1.5))
 
 
@@ -440,7 +440,10 @@ def _aim_at_baby(probe: ProbeSteps, entity: dict[str, Any],
         observed = _aim(probe, (current["x"], current["y"] + 0.5, current["z"]))
         if observed.get("type") == "entity" and observed.get("entity_uuid") == entity["entity_uuid"]:
             return observed, teleported
-    raise RuntimeError(f"milestone target is occluded or out of reach: baby {entity['entity_uuid']}: {observed}")
+    # Not fatal: the baby is behind a wall, under a roof or walked away; the caller
+    # re-lists it on the next snapshot (bounded by BABY_CAPTURE_ATTEMPTS).
+    raise _BabyLeftView(
+        f"baby occluded or out of reach: {entity['entity_uuid']}: {observed}")
 
 
 BUILDING_AIM_CANDIDATES = 8

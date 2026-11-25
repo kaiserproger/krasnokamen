@@ -808,6 +808,18 @@ class BabyCaptureRetryTests(unittest.TestCase):
         self.assertEqual(second["sprint_ticks"], 900)
         self.assertIsNone(second_miss)
 
+    def test_an_occluded_baby_is_a_miss_not_an_abort(self) -> None:
+        # Run 20261125T005852: the observer stood on the roof and the aim hit
+        # dirt; _aim_at_baby now reports that as a miss for the next snapshot.
+        baby = {"entity_uuid": "new", "entity_id": 17, "x": 114.5, "y": 70.0, "z": -278.5}
+        probe = Mock()
+        probe.call.return_value = {"in_reach": False}
+        with patch.object(qa, "entity_census", return_value={"entities": [baby]}), \
+             patch.object(qa, "_aim", return_value={"type": "block", "block_id": "minecraft:dirt"}):
+            with self.assertRaises(qa._BabyLeftView):
+                qa._aim_at_baby(probe, baby, lambda *_: None)
+        self.assertEqual(qa.BABY_AIM_ATTEMPTS, 10)
+
     def test_a_hard_capture_error_still_aborts(self) -> None:
         # The old refusal: a RuntimeError other than _BabyLeftView is a real
         # gate failure and must still propagate.
