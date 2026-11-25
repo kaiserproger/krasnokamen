@@ -6,6 +6,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-3"
-regression = ["cargo:mc-core:falling::tests::restored_due_gravity_tick_starts_the_fall_without_nearby_writes"]
+regression = ["cargo:mc-core:falling::tests::restored_due_gravity_tick_starts_the_fall_without_nearby_writes", "harness:entities:native-v2-ledger-gravity-tick"]
 fix_commit = "d3e8d4686"
-repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/nc-hs3-daylight.log: reversing the falling and redstone gravity fix fails the saved-due-tick ref. Manual repro still needs its client gate."
+repro_check = "Client gate candidate 2026-11-25: native-v2-ledger-gravity-tick freezes the world (/tick freeze), places a floating sand block six blocks above the pad with air below, saves, clean-stops, export-anvil/import-anvil (the exported chunk carries the due `block_ticks` entry, mc-world-conversion/src/export.rs:110-199 / import.rs:714-745) and restarts; after reconnecting it reads the block through its own chunk model until the sand leaves its position and lands one block down, with no command writing near it. Control: d3e8d4686 reverses on HEAD (`git apply --check -R`), and with it reversed the restored tick is never activated, so `restored_due_tick_starts_the_fall` fails while the fixture assertions stay green."
+proving_assertions = { "cargo:mc-core:falling::tests::restored_due_gravity_tick_starts_the_fall_without_nearby_writes" = "crates/mc-core/src/falling_tests.rs:517", "harness:entities:native-v2-ledger-gravity-tick" = "restored_due_tick_starts_the_fall" }
