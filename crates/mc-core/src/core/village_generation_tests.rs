@@ -197,7 +197,9 @@ fn seed24_generated_pieces_show_which_house_assessment_fails() {
         }
         if kinds.contains(&crate::settlements::buildings::BuildingKind::House) {
             house_pieces += 1;
-            match crate::settlements::buildings::assess(
+            // `assess` returns Ok with unmet requirements, so only `inspect`
+            // answers what certification requires (review ReviewD123Civ13, M1).
+            match crate::settlements::buildings::inspect(
                 &state,
                 crate::settlements::buildings::BuildingKind::House,
                 1,
@@ -212,7 +214,7 @@ fn seed24_generated_pieces_show_which_house_assessment_fails() {
         }
     }
     eprintln!(
-        "seed24 pieces={} house_pieces={} both={} assess_misses={}",
+        "seed24 pieces={} house_pieces={} both={} certify_misses={}",
         site.pieces.len(),
         house_pieces,
         both,

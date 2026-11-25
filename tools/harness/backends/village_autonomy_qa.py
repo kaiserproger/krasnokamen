@@ -592,6 +592,10 @@ def _settlement_stock(
                     # the same stock (run 20261125T034259: farm project in flight,
                     # founding_chest_opened timed out and the whole snapshot failed).
                     entry["menu_fallback"] = f"{type(exc).__name__}: {exc}"[:160]
+                    # The stock below is the server's view of the same block, so the
+                    # source must say so: a verdict that needs the client menu
+                    # (workers_produce_unfunded) requires at least one real read.
+                    entry["source"] = "server-data-get-block"
                     stock = {}
                     for member in identity:
                         for item, count in read_container(member).items():
@@ -1669,9 +1673,20 @@ def _scenario(
     detail["storage_observe_ticks"] = _gametime(probe) - storage_start_tick
     grown = _storage_covers(totals_now)
     any_stock = bool(totals_now)
-    _verdict(detail, "workers_produce_unfunded", "PASS" if grown else "FAIL",
-             f"storage={totals_now} over {detail['storage_observe_ticks']} game ticks (time add {day_advanced})",
-             "observe founding menu and live server Storage items; combined stock must cover Storage-L1 base needs with no /give")
+    # The client menu is the evidence this verdict names; a stock read only from
+    # the server cannot make it PASS (review ReviewD123Civ13, M4).
+    menu_read = any(
+        entry.get("source") == "client-menu"
+        for entry in (detail.get("storage_observation") or {}).get("containers") or []
+    )
+    if grown and not menu_read:
+        _verdict(detail, "workers_produce_unfunded", "FAIL",
+                 f"storage={totals_now} was read only from the server; no client menu opened",
+                 "observe founding menu; a stock only the server saw cannot prove the client path")
+    else:
+        _verdict(detail, "workers_produce_unfunded", "PASS" if grown else "FAIL",
+                 f"storage={totals_now} over {detail['storage_observe_ticks']} game ticks (time add {day_advanced})",
+                 "observe founding menu and live server Storage items; combined stock must cover Storage-L1 base needs with no /give")
     if not grown:
         # Builders consume stock while workers deliver it. A later, fully
         # client-verified Storage also proves its canonical material bill.
