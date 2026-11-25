@@ -334,7 +334,7 @@ VERDICTS = (*STAGES, "localized_text", "all")
 # so a receipt carries it; the civil walk never produces them. `regressions` registers this set
 # together with `VERDICTS` (the ledger ref must accept and read every one of them) and
 # `test_settlement_quickwins_qa` holds both sides to it.
-SCENARIO_VERDICTS = ("selected_card", "verge_connected", "program_unknown")
+SCENARIO_VERDICTS = ("selected_card", "verge_connected")
 
 
 def _stage_checks(language: str) -> dict[str, tuple[list[str], list[str]]]:
@@ -1052,9 +1052,14 @@ def _visible_text(state: dict[str, Any]) -> str:
 
 def _program_unknown_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
                             args: argparse.Namespace) -> list[str]:
-    """`--scenario program-unknown` (SETTLEMENT-PROJECT-BLUEPRINT-WITHOUT-NAME): found the civil fixture,
-    order the one-cell autonomous furnace and read the Construction dialog's label for it. The blueprint
-    has no asset/layout entry, so the pre-image prints `Unknown blueprint` (or the raw `furnace` id)."""
+    """`--scenario program-unknown` (SETTLEMENT-PROJECT-BLUEPRINT-WITHOUT-NAME): NOT registered yet.
+
+    Run 20261125T021513 reproduced the symptom the wrong way round: `settlement build furnace` answers
+    "Unknown blueprint." because the autonomous furnace is *not* a blueprint (`blueprints::get` has no
+    `furnace`), so the chat is not where the project card is read. The right fixture is the planner's
+    own one-cell furnace project on the Construction dialog (place a furnace, let the planner create the
+    project, read the dialog row with `_visible_text` the way `_selected_card_script` reads a card).
+    Until that fixture exists this scenario stays unregistered."""
     size = tuple(map(int, args.size.split("x")))
     scene_shot.resize_window(probe.client.p4_window, size)
     ru = args.language == "ru_ru"
