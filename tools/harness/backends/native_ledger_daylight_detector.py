@@ -47,19 +47,20 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture(f"tick step {SETTLE_TICKS}")
     steps.fixture(f"setblock {point['x']} {point['y']} {point['z']} {DETECTOR}")
     steps.report["placed"] = _read(steps, point)
-    # One tick: the pre-image's wake is swallowed by its queued recheck, the fixed tree
-    # resamples here.
+    # The detector's first tick installs the block (power 0), the next one is the wake the
+    # pre-image swallows (it would keep 15); by the third tick the settled value stands.
     steps.fixture("tick step 1")
-    first = _power(steps, point)
-    steps.report["power_after_one_tick"] = first
+    steps.report["power_after_first_tick"] = _power(steps, point)
+    steps.fixture("tick step 1")
+    woke = _power(steps, point)
+    steps.report["power_after_the_wake"] = woke
+    steps.fixture("tick step 1")
+    settled = _power(steps, point)
+    steps.report["power_after_settling"] = settled
     steps.check("daylight_detector_placed", _read(steps, point).get("block_id") == DETECTOR)
-    steps.check("daylight_detector_carries_power", first is not None)
-    steps.check("daylight_detector_reports_the_settled_sky_under_thunder", first != 15)
-
-    steps.fixture("tick step 1")
-    second = _power(steps, point)
-    steps.report["power_after_second_tick"] = second
-    steps.check("daylight_detector_power_is_stable", second == first)
+    steps.check("daylight_detector_carries_power", woke is not None)
+    steps.check("daylight_detector_reports_the_settled_sky_under_thunder", woke != 15)
+    steps.check("daylight_detector_power_is_stable", settled == woke)
     steps.fixture("tick unfreeze")
 
     steps.report["limits"] = [
