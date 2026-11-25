@@ -1176,3 +1176,54 @@ def check_worn_head(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["visual_review_required"] = [
         "Inspect dragon-head.png and piglin-head.png; the ear strips prove the flap direction only."
     ]
+
+
+def check_entity_tnt(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-ENTITY-TNT-FALLING-LIGHTNING: a primed TNT submits its block in the entity pass.
+
+    From `javap -p -c` on the real 26.3 client jar
+    (`qa-armada/template-data/mojang/versions/26.3/client.jar`, classes unzipped to /tmp, nothing
+    committed): `TntRenderer.extractRenderState` sets
+    `fuseRemainingInTicks = getFuse() - partial + 1`; `submit` scales by
+    `1 + getSwellAmount(fuseRemaining)` ONLY when `fuseRemaining < 10`, where
+    `getSwellAmount(f) = 0.3 * clamp(1 - f/10, 0, 1)^4`, and draws the block model otherwise at
+    scale 1. A TNT summoned with `{fuse:1000s}` therefore renders its one-cube model at scale 1:
+    six quads on the opaque layer, and a one-block span on every axis. The scene's own fuse is far
+    from the 10-tick threshold, so this assertion is exact and not a measured band; the swell and
+    the white flash (`isLit(f) = f >= 0 && (int)(f/5) % 2 == 0`) are already pinned by
+    `world_fx_tests::tnt_flashes_white_and_swells_only_at_fuse_end` and
+    `tnt_uses_received_block_state_and_fuse_boundaries`.
+
+    The unlit `empty` frame is the fixture: the entity pass there must carry no opaque block layer,
+    so the TNT frame's layer is the summoned entity and not the pad or a leftover.
+    """
+    shots = _qa._load_shots(probe, artifact, ("empty", "tnt"))
+    ref, frame = shots["empty"][0], shots["tnt"][0]
+    probe.check("tnt_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+    ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    empty_layers = (ref.get("entity_extraction") or {}).get("entity_layer_geometry") or []
+    layers = (frame.get("entity_extraction") or {}).get("entity_layer_geometry") or []
+    blocks = [layer for layer in layers if layer.get("material") == "ItemCutout"]
+    probe.report["tnt_empty_layers"] = empty_layers
+    probe.report["tnt_layers"] = layers
+    probe.report["tnt_block_quads"] = sum(int(layer.get("quads") or 0) for layer in blocks)
+    probe.check("empty_frame_has_no_tnt_block", not any(
+        layer.get("material") == "ItemCutout" for layer in empty_layers))
+    probe.check("tnt_block_layer_present", bool(blocks))
+    probe.check("tnt_block_layer_is_one", len(blocks) == 1)
+    probe.check("tnt_block_quads", probe.report["tnt_block_quads"] == 6)
+    if not blocks:
+        probe.check("tnt_block_span_is_one", False)
+        return
+    spans = [
+        max(float(layer["max"][axis]) for layer in blocks)
+        - min(float(layer["min"][axis]) for layer in blocks)
+        for axis in range(3)
+    ]
+    probe.report["tnt_block_spans"] = [round(span, 3) for span in spans]
+    # The vanilla block model is one cube, drawn at scale 1 while fuseRemaining >= 10.
+    probe.check("tnt_block_span_is_one", all(abs(span - 1.0) <= 0.002 for span in spans))
+    probe.report["visual_review_required"] = [
+        "Inspect tnt.png: the layer geometry proves the block draw, not the TNT texture's texels."
+    ]

@@ -973,6 +973,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the burning frame's own submitted fire layer (`entity_extraction.entity_layer_geometry`): one fire slice with all 12 indices and a 2.331-block band span against the pre-fix loop's 1.827, so `fire_band_span` separates the 26.3 bands from the camera-billboard overlay without pixels",
         limits="one entity (a pig, two bands) and the layer geometry only; the sprite parity, the u mirroring, the camera-facing rotation, the light-15 emission and the exact texel parity stay unit-covered, and the row's title symptom (a client that never reads the on-fire flag) needs a dispatch-deleted control on `fire_layer_present`",
     ),
+    "native-entity-tnt": _entry(
+        id="native-entity-tnt", summary="A primed TNT submits its block in the entity pass",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-entity-tnt", requires=("xvfb",),
+        sources=("tools/harness/entity_tnt_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, one stationary primed TNT with a 1000-tick fuse at a fixed pad and camera, HUD default",
+        proves="the frame's own submitted block layer (`entity_extraction.entity_layer_geometry`, CM-4): exactly one 6-quad `ItemCutout` layer spanning 1.000 blocks on every axis, which is the vanilla `TntRenderer` at scale 1 while `fuseRemaining >= 10` (the swell `1 + 0.3 * clamp(1 - r/10, 0, 1)^4` applies only below 10, so a 1000-tick fuse is exactly 1.0), against an empty frame with no such layer",
+        limits="the draw call and the unswelled block only; the swell and white-flash formulas, the falling-block path and the lightning bolt stay unit-covered (`world_fx_tests`), and the swell/flash scene is still to be written",
+    ),
     "native-rig-guardian": _entry(
         id="native-rig-guardian", summary="The guardian and baby bee submit exactly the vanilla layer's cubes",
         owner="core:harness", evidence="graphical", profile="scene-shot",
