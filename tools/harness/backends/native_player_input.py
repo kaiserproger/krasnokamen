@@ -346,22 +346,24 @@ def camera(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # previous tick. Probe first: record the drawn and the received x.
     steps.fixture(f"summon minecraft:zombie {x + 4.5} {y} {z + 4.5} {{PersistenceRequired:1b}}")
 
-    def witness(state: dict) -> dict | None:
-        return next((row for row in state["entities"]["entities"]
-                     if row.get("type") == "minecraft:zombie"), None)
-
-    summoned = steps.wait(witness, "frozen_witness_summoned")
+    # `minecraft_observe` publishes no entity list (it carries player/screen state only), so the
+    # summoned row comes from the entity tool, which is the same received census.
+    summoned = steps.call("minecraft_wait_for_visible_entity", {
+        "entity_type": "minecraft:zombie", "radius": 8, "timeout_seconds": steps.remaining()})
+    steps.check("frozen_witness_summoned", summoned.get("matched") is True)
     steps.fixture("tick step 3")
     steps.call("minecraft_wait_ticks", {"ticks": 5})
     _shot(steps, "frozen-witness-stepped")
     state = steps.observe()
     drawn = next((row for row in (state.get("gait_capture") or [])
-                  if row.get("entity_uuid") == summoned["uuid"]), None)
-    received = witness(state) or {}
+                  if row.get("entity_uuid") == summoned["entity_uuid"]), None)
+    received = steps.call("minecraft_list_entities", {
+        "radius": 8, "limit": 128}).get("entities") or []
+    received = next((row for row in received if row.get("entity_uuid") == summoned["entity_uuid"]), {})
     steps.report["frozen_witness"] = {
-        "uuid": summoned["uuid"],
+        "uuid": summoned["entity_uuid"],
         "drawn": (drawn or {}).get("position"),
-        "received": received.get("position"),
+        "received": {key: received.get(key) for key in ("x", "y", "z")},
         "server_frozen": state.get("minecraft", {}).get("server_frozen"),
     }
     steps.fixture("kill @e[type=minecraft:zombie]")
