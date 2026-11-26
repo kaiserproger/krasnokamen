@@ -1,7 +1,9 @@
 # HARNESS-AUDIBLE-SINK-IGNORED — fix-hunk map
 
-Fix: `patch:b26ba4d3c876957a968830f9a94c6551845d9f17541f67e45131e8d8328d24e2`, the launch-options
-hunk of the row's independent fix (`tools/harness/runtime.py`, the `start_client` options write).
+Fix: `patch:dd0f8b7a8b5dc3fcdfa132e410c86325373fd4e4ef1ce44191a8dc4810dd8fe4`, the split
+launch-options hunk the promotion reversed (committed at
+`docs/bugs/fix-patches/HARNESS-AUDIBLE-SINK-IGNORED.patch`; its non-test digest is the row's
+`fix_commit`). `patch:b26ba4d3…` was the earlier whole-options patch, superseded by the split below.
 The original patch carried two hunks of that file:
 
 | original hunk | HEAD equivalent | kept? |

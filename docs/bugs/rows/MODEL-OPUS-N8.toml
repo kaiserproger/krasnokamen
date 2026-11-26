@@ -1,13 +1,13 @@
 [[bug]]
 id = "MODEL-OPUS-N8"
-title = "Left/right mirror flags are inconsistent."
+title = "The bogged rig submitted 36 quads instead of the 26.3 rig's 78 (the left/right mirror flags, which change no count, stay unproven)"
 area = "client"
 repro = "source"
 severity = "major"
 status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:143"
 regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::left_side_mirror_flags_follow_the_26_3_layers", "client:krasnokamen-client:entities::asset_model_regression_tests::species_layer_scales_preserve_the_feet_and_distinguish_related_mobs", "client:krasnokamen-client:entities::presentation::tests::received_pet_sitting_flag_poses_and_restores_adult_and_baby_rigs", "harness:scene-shot:native-entity-bogged"]
-repro_check = "round 8 (client:b40b8d63): 19 rigs now carry the exact 26.3 mirror flags and the ref is red with the fix reverted - receipts/XHarnessGates/client-r8-revert-red.log (25 passed, 1 failed). candidate: area=client, real-client check required"
+repro_check = "Promotion pair on the lane client: control client:285dd467 (git apply -R of client:b40b8d63's non-test hunks at ba1971d7: 15 rig JSONs and four presentation.rs lines) -> restore ba1971d7; the pair's own scene is native-entity-bogged (tools/harness/bogged_scene.json). Measured: the bogged's largest EntityCutout slice is 216 indices / 36 quads on the control and 468 / 78 on the restore (artifacts 20261126T135624-native-entity-bogged-w4qetve1 red at rig_layer_indices, 20261126T140009-native-entity-bogged-0bc896vw green), which is the vanilla 26.3 cube list b40b8d63 authors. client:b40b8d63 is an ancestor of the client head fa231b1b, so the fix reaches the final client. The mirror flags themselves are UV winding with no count or bounds effect (tools/harness/scenarios.py:1059 and promotions/MODEL-OPUS-N8.hunks.md, What the frame separates), so this frame cannot prove them; the unit ref left_side_mirror_flags_follow_the_26_3_layers is candidate-green (promotion candidate_refs) and was not run in the pair's control. The historical revert-red log named before (receipts/XHarnessGates/client-r8-revert-red.log) is on another client tree and is not this promotion's control. The mirror-flag symptom is filed open as MODEL-OPUS-N8-REMAINDER."
 fix_commit = "client:b40b8d63"
 proving_refs = ["harness:scene-shot:native-entity-bogged"]
 proving_assertions = { "harness:scene-shot:native-entity-bogged" = "rig_layer_indices" }

@@ -1,0 +1,10 @@
+[[bug]]
+id = "MODEL-OPUS-9-REMAINDER"
+title = "Axolotl gill fans and tail, fish fins and silhouettes, and the pufferfish medium/big and tropical fish variants are unproven against vanilla"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Split from MODEL-OPUS-9 (D123 review, 2026-11-27). The promoted pair proves only the small pufferfish's quad-atlas UV window (harness:scene-shot:native-pufferfish, artifacts 20261126T155136-native-pufferfish-0yy3af7l red and 20261126T155158-native-pufferfish-enr6eivo green). The row's other audit items have no receipt: the three registered client unit refs (axolotl_gill_fans_and_tail_are_flat_vanilla_planes, post_rc4_reauthored_rigs_keep_their_reference_silhouettes, pufferfish_inflation_changes_body_volume_and_exposes_spines) were added after the promotion and were never run on the candidate (candidate_refs is empty); the scene reads one state (tools/harness/scenarios.py:1090 limits: one state's layer only, the medium and big states keep their own witnesses); and Main's round-5 decision to keep salmon, tropical_fish and pufferfish_big as authored rigs because the vanilla samples fall outside the 32x32 texture is a decision, not a parity proof."
+regression = []
+repro_check = "The check that would prove each: a scene that reads the axolotl's gill/tail layer UV digest against the 26.3 dump, the same for a cod (fish fins and silhouette) and a tropical fish variant, and the pufferfish_medium/big rigs the same commit touched; each needs its own client pair whose control omits the lookups so the digest assertion reds. The gill and fin geometry is authored planes, so the digest (not an index count) is the separator."

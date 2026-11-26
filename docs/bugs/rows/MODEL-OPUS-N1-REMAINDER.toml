@@ -1,0 +1,10 @@
+[[bug]]
+id = "MODEL-OPUS-N1-REMAINDER"
+title = "Baby chestplates' see-through shoulders are unproven: the promoted frame measures the armour shells' bbox, not their shoulder texels"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Split from MODEL-OPUS-N1 (D123 review, 2026-11-27). harness:scene-shot:native-baby-armor proves the armour layer's depth/width ratio (armour_z_over_x_in_range) for one drowned; its own limits (tools/harness/scenarios.py:1050 and scene_shot_checks.py:1503-1505 visual_review_required) say the ratio proves the shells' depth, not the shoulder texels, and the audit (/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:90) reports see-through shoulders for every family and every material."
+regression = []
+repro_check = "The check that would prove it: a pixel oracle on the shoulder texels of a baby chestplate at a fixed pad and camera (the shell edges and the texel row that shows through, compared against vanilla), repeated for at least one other family and material, because the audit says every family and material is affected. The promotion's bbox ratio cannot carry it and the scene only records an inspection note, which is not a machine assertion."

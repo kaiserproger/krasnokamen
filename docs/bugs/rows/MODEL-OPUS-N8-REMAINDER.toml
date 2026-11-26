@@ -1,0 +1,10 @@
+[[bug]]
+id = "MODEL-OPUS-N8-REMAINDER"
+title = "Left/right mirror flags are still unproven on the final client: no control reverses them and an index count cannot see UV winding"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Split from MODEL-OPUS-N8 (D123 review, 2026-11-27). The promoted pair proves the bogged rig's cube count (216 to 468 indices), and both the scene's limits (tools/harness/scenarios.py:1059) and the hunk map (docs/bugs/promotions/MODEL-OPUS-N8.hunks.md) record that mirror flags change UV winding only, with no count or bounds effect. The 26.3 mirror flags of client:b40b8d63's 15 rigs therefore have no control red on the candidate; the unit ref client:krasnokamen-client:entities::asset_model_regression_tests::left_side_mirror_flags_follow_the_26_3_layers is candidate-green only, and the one recorded red (receipts/XHarnessGates/client-r8-revert-red.log, 25 passed 1 failed) is on another client tree."
+regression = []
+repro_check = "The check that would prove it: the registered unit ref run in a control tree that reverses b40b8d63's mirror-flag hunks (a client-test reversal or a pinned control client whose receipt carries that ref red), or a scene assertion on the UV winding itself (a per-layer digest that changes with the mirror flag, like the pufferfish pufferfish_layer_uv_digest), because an index or quad count cannot flip on a mirror flag."

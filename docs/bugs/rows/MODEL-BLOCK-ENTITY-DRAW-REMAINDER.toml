@@ -1,0 +1,10 @@
+[[bug]]
+id = "MODEL-BLOCK-ENTITY-DRAW-REMAINDER"
+title = "The production native scene never draws `test_instance_block`: it has a factory and an append arm, but the static scene filter and the geometry dispatch skip it"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Split from MODEL-BLOCK-ENTITY-DRAW (D123 review, 2026-11-27): the promoted client pair's scene `native-structure-box` proves only the structure block's overlay submission, and the scene's own limits exclude the test instance (tools/harness/scenarios.py:1212). The registered unit refs for it (client:krasnokamen-client:entities::render_blocks::village_tests::every_factory_block_entity_reaches_the_static_scene and test_instance_scene_tracks_received_status_box_and_errors) ran green on the candidate only (promotion candidate_refs); the control client 7a653e5d84 never ran them."
+regression = []
+repro_check = "The check that would prove it: a scene-shot fixture that places a test instance box and one carrying an error marker at a fixed cell and camera and asserts the frame's own block-entity submission (the analogue of structure_block_submitted: block_entities >= 1 and block_entity_indices), with a client pair whose control client omits the test_instance_block append arm and the gateway predicate, so the frame reds at that assertion. The unit refs cannot carry it: they build the scene frame directly instead of reading a captured frame."

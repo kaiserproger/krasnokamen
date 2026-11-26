@@ -76,7 +76,11 @@ protocol path needs.
 
 ## Proving ref
 
-`harness:scene-shot:native-structure-box` → `structure_box_changed`. The control joins and captures
+`harness:scene-shot:native-structure-box` → `structure_block_submitted`
+(`tools/harness/backends/scene_shot_checks.py:663`; the control receipt's error reads
+`scene-shot assertion failed: structure_block_submitted`). `structure_box_changed` is not an
+assertion: it is the report key `structure_box_changed_pixels` (`scene_shot_checks.py:656`), and the
+scenario prose still names it (`tools/harness/scenarios.py:1211`). The control joins and captures
 both frames (the block entity is constructed and simply never submitted), so its red is an observed
 assertion failure, not a crash: 0 changed pad pixels on the control versus 2565-5679 on the re-land.
 The five unit refs in the row run on the candidate and stay green (`entities::render_blocks::village_tests`:

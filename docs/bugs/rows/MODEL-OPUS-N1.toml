@@ -1,6 +1,6 @@
 [[bug]]
 id = "MODEL-OPUS-N1"
-title = "Baby chestplates have see-through shoulders. This affects every family and every material, and is confirmed at runtime."
+title = "Baby armour shells carried hand-fitted depths: the drowned family's armour layer measured 0.641 depth/width against the jar's 1.071 (the see-through shoulders stay open)"
 area = "client"
 repro = "source"
 severity = "major"
@@ -9,5 +9,6 @@ source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261
 regression = ["harness:scene-shot:native-baby-armor"]
 proving_refs = ["harness:scene-shot:native-baby-armor"]
 proving_assertions = { "harness:scene-shot:native-baby-armor" = "armour_z_over_x_in_range" }
+repro_check = "Promotion pair on the lane client: control client:25a210cb (the fix's non-test hunks reversed at ba1971d7 - 27 model JSONs of client:da704d9b) -> restore ba1971d7. Both receipts were taken on a candidate tree that was dirty (tree_dirty true, tree_sha256 e629b798da6975fbf2a590106b8705d5bc2fd50ee593f2987733bac0644c9778, tree_head ba80d723); that fingerprint is the identity the promotion recorded. The frame asserts the largest Armor slice's own bbox as depth/width in 1.00..1.15 (tools/harness/backends/scene_shot_checks.py:1496-1508): measured 9.66/9.02 = 1.071 on the fix against 10.50/16.38 = 0.641 on the control, both on one NoAI baby drowned wearing a diamond helmet and chestplate. client:da704d9b is an ancestor of the client head fa231b1b, so the fix reaches the final client. The assertion proves the shells' depth only: scene_shot_checks.py:1503-1505 records visual_review_required (the ratio proves the shells' depth, not the shoulder texels) and tools/harness/scenarios.py:1050 hands the shoulder texels, the legging band and the generic armor_baby reachability to MODEL-OPUS-N5/N7. The see-through shoulders of the original title are unproven and filed open as MODEL-OPUS-N1-REMAINDER."
 fix_commit = "client:da704d9b"
 promotion = "docs/bugs/promotions/MODEL-OPUS-N1.json"

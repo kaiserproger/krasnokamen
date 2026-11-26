@@ -1,0 +1,10 @@
+[[bug]]
+id = "MODEL-OPUS-N10-REMAINDER"
+title = "The cow/mooshroom horn mirror flag and the glow squid's tentacle yaw are unproven: a rig frame cannot separate them"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Split from MODEL-OPUS-N10 (D123 review, 2026-11-27). The promoted pair reds only the stray's hat cube (216 to 252 indices). docs/bugs/promotions/MODEL-OPUS-N10.hunks.md records that the cow/mooshroom horn is a mirror flag (UV winding, no count or bounds change) and the glow-squid delta is a 1/16-px tentacle pivot plus a 0.02 body inflate; the round-7 audit also found no bed right-leg delta (the original title's bed clause was an overstatement, not an open defect). client:6d4540e3 changes cow.json, glow_squid.json and mooshroom.json as well, so those three edits have no control red."
+regression = []
+repro_check = "The check that would prove it: a UV-winding digest per layer (like the pufferfish pufferfish_layer_uv_digest) run on the cow, mooshroom and glow squid, with a control reversing 6d4540e3's hunks on those three files; the frame's index count cannot flip on a mirror flag, and the unit ref cow_horn_cube_and_humanoid_hat_follow_the_26_3_layers needs to run in that control to carry the red."
