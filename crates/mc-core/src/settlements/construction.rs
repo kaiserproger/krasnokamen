@@ -1078,6 +1078,13 @@ fn priority_house(
     }
     let cache = &state.villager_pois;
     if !cache.poi_initialized || !cache.pending_chunks.is_empty() {
+        tracing::debug!(
+            target: "settlements::construction",
+            settlement = record.id.0,
+            initialized = cache.poi_initialized,
+            pending = cache.pending_chunks.len(),
+            "priority house scan skipped: poi cache not ready"
+        );
         return None;
     }
     let residents = state.settlements.member_count(record.id);
@@ -1094,6 +1101,13 @@ fn priority_house(
         .take(residents.saturating_add(1))
         .count();
     if beds > residents {
+        tracing::debug!(
+            target: "settlements::construction",
+            settlement = record.id.0,
+            beds,
+            residents,
+            "priority house scan skipped: enough roofed beds"
+        );
         return None;
     }
     let blueprint = catalog(state, record).find(|bp| bp.kind == BuildingKind::House)?;
@@ -1106,9 +1120,20 @@ fn priority_house(
         return Some(blueprint);
     }
     let level = blueprint.level(1)?;
-    funded_variant(state, record.id, &level.materials, images)
-        .is_some()
-        .then_some(blueprint)
+    let funded = funded_variant(state, record.id, &level.materials, images).is_some();
+    // The House lane is the only path that creates a house project, and it used to
+    // fail silently: a settlement with 194 cobblestone and 186 legal House lots sat
+    // for 708 planning passes without one (HANDOFF-49). Name the reason.
+    tracing::debug!(
+        target: "settlements::construction",
+        settlement = record.id.0,
+        beds,
+        residents,
+        funded,
+        bill = ?level.materials,
+        "priority house scan"
+    );
+    funded.then_some(blueprint)
 }
 
 pub(crate) fn sources(state: &TickState, id: SettlementId) -> Vec<[i32; 3]> {
@@ -1821,11 +1846,16 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
                 // could not answer: autonomous refusals were never logged, so
                 // "no House in the run" had no cause on disk (ReviewD123Civ13).
                 if pass.site.is_none() {
+                    // Log-only diagnosis (HANDOFF-49): a settlement that never admits
+                    // has to say whether its sweeps finish, restart on a street change,
+                    // or finish without a lot. `sweeps` is (kind, next, frontages, best).
                     tracing::debug!(
                         target: "settlements::construction",
                         settlement = id.0,
+                        cursor = pass.cursor,
                         frontages = pass.report.frontages,
                         examined = pass.report.examined,
+                        sweeps = ?sweeps.summary(),
                         refusals = ?pass.report,
                         "funded kinds found no legal site"
                     );

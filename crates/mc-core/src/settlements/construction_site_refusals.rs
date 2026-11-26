@@ -239,6 +239,24 @@ impl Sweeps {
     pub(super) fn examined(&self, blueprint: &str) -> Option<u32> {
         self.live.get(blueprint).map(|sweep| sweep.next)
     }
+
+    /// One line per live sweep for the planner's refusal log: which kind, how far
+    /// its walk got, how many frontages it must cover, and whether it already
+    /// holds a candidate. A settlement that never admits has to say whether its
+    /// sweeps finish, restart on a street change, or finish without a lot.
+    pub(super) fn summary(&self) -> Vec<(String, u32, u32, bool)> {
+        self.live
+            .iter()
+            .map(|(id, sweep)| {
+                (
+                    id.clone(),
+                    sweep.next,
+                    sweep.frontages,
+                    sweep.best.is_some(),
+                )
+            })
+            .collect()
+    }
 }
 
 fn sweep_stale(id: &str, sweep: &Sweep, blueprint: &str, frontages: u32, topology: u64) -> bool {

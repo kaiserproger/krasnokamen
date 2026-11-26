@@ -1788,4 +1788,41 @@ fn probe_retained_village_site_supply() {
     for (front, origin, rotation, size) in legal.iter().take(5) {
         println!("PROBE legal front={front} origin={origin:?} rotation={rotation} size={size:?}");
     }
+    // The planner's own pass loop on a static world: if `site_project` admits here
+    // within frontages/64 passes, the live gate's failure is churn (topology
+    // restarts or kind interleaving); if it never admits although the sweep
+    // finishes, the admission path itself is the defect (HANDOFF-49 section 13).
+    if std::env::var("D123_CIV_SIMULATE").is_ok() {
+        let house = blueprints::get(&state.registry, "house").expect("house blueprint");
+        let images = crate::plugin_structures::settlement_builds::source_images(&state, id);
+        let mut sweeps = site_refusals::Sweeps::default();
+        let mut cursor = 0u32;
+        let mut admitted = None;
+        for pass in 0..200u32 {
+            let outcome = super::site_project(
+                &state,
+                &record,
+                std::iter::once(house),
+                &mut sweeps,
+                cursor,
+                64,
+                &images,
+            );
+            println!(
+                "PROBE pass={pass} site={} cursor={} examined={} running={} waiting={} sweeps={:?}",
+                outcome.site.is_some(),
+                outcome.cursor,
+                outcome.report.examined,
+                outcome.running,
+                outcome.waiting,
+                sweeps.summary()
+            );
+            if outcome.site.is_some() {
+                admitted = Some(pass);
+                break;
+            }
+            cursor = outcome.cursor;
+        }
+        println!("PROBE simulated_admitted_at_pass={admitted:?}");
+    }
 }
