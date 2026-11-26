@@ -7,6 +7,20 @@ pub(crate) mod liquid;
 /// A prepared plan: the executor's bounds and its ordered work cells.
 pub(super) type Plan = (ScriptWorldBounds, Vec<executor::PlannedCell>);
 
+// The stage the last refused plan stopped at, for tests and probes that run
+// without a tracing subscriber (HANDOFF-51: naming the refusing condition).
+#[cfg(test)]
+thread_local! {
+    pub(super) static LAST_STAGE: std::cell::Cell<Option<&'static str>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Clear and read the last refusal stage (test observer).
+#[cfg(test)]
+pub(super) fn take_last_stage() -> Option<&'static str> {
+    LAST_STAGE.with(|slot| slot.replace(None))
+}
+
 pub(super) fn planned_cells(
     state: &TickState,
     project: &Project,
@@ -27,8 +41,31 @@ fn cell_plan(
     fence: bool,
 ) -> Result<Plan, site_refusals::Reason> {
     use site_refusals::Reason::Preparation;
-    let blueprint = blueprints::get(&state.registry, &project.blueprint).ok_or(Preparation)?;
-    let level = blueprint.level(project.level).ok_or(Preparation)?;
+    // Every `Preparation` exit above names its stage in the planner log: a lot
+    // the sweep ranked but the plan refuses has to say which condition refused
+    // it, or the gate sees the same lot refused forever with no cause on disk
+    // (HANDOFF-51: seed-24 House lot [246,69,-176], `check` passes, `planned_cells`
+    // refuses, the sweep is dropped and the next walk re-finds the same lot).
+    let stage = |name: &'static str| {
+        // Tests read the stage directly: a debug line needs a subscriber.
+        #[cfg(test)]
+        LAST_STAGE.with(|slot| slot.set(Some(name)));
+        tracing::debug!(
+            target: "settlements::construction",
+            settlement = project.settlement.0,
+            blueprint = project.blueprint.as_str(),
+            origin = ?project.origin,
+            rotation = project.rotation,
+            stage = name,
+            "preparation refused a plan"
+        );
+        Preparation
+    };
+    let blueprint =
+        blueprints::get(&state.registry, &project.blueprint).ok_or_else(|| stage("blueprint"))?;
+    let level = blueprint
+        .level(project.level)
+        .ok_or_else(|| stage("level"))?;
     let rotated = level.rotated(Rotation::from_quarter_turns(project.rotation));
     let mut quota = level.materials.clone();
     let mut cells: Vec<_> = rotated
@@ -43,11 +80,12 @@ fn cell_plan(
         })
         .collect();
     let size = blueprint.footprint(Rotation::from_quarter_turns(project.rotation));
-    let lot = crate::settlements::forestry::lot_bounds(state, project).ok_or(Preparation)?;
+    let lot = crate::settlements::forestry::lot_bounds(state, project)
+        .ok_or_else(|| stage("lot_bounds"))?;
     let record = state
         .settlements
         .get(project.settlement)
-        .ok_or(Preparation)?;
+        .ok_or_else(|| stage("record"))?;
     // Owner D27.4: the plan reads no player history inside its own territory.
     clearance.within(record);
     // Village paths and farmland a new site covers: the detour stands before
@@ -55,7 +93,7 @@ fn cell_plan(
     // An upgrade's lot is its own certified ground, never village work.
     let village = if project.building.is_none() {
         super::relayout::plan(state, record, lot, &mut Default::default())
-            .map_err(|_| Preparation)?
+            .map_err(|_| stage("relayout_detour"))?
     } else {
         None
     };
@@ -69,7 +107,7 @@ fn cell_plan(
                 let ground =
                     liquid::ground_y_for_lot(state, project.origin[1], x, z, Some(lot), clearance)
                         .or_else(|| village.as_ref().and_then(|plan| plan.height(x, z)))
-                        .ok_or(Preparation)?;
+                        .ok_or_else(|| stage("ground_column"))?;
                 for y in ground + 1..=project.origin[1] {
                     // The authored floor already pays for its own cells.
                     if y == project.origin[1]
@@ -100,7 +138,10 @@ fn cell_plan(
     for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
         for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
             for y in project.origin[1] + 1..project.origin[1] + i32::from(size[1]) {
-                let block = state.world.physics_block_at(x, y, z).ok_or(Preparation)?;
+                let block = state
+                    .world
+                    .physics_block_at(x, y, z)
+                    .ok_or_else(|| stage("unloaded_cut_cell"))?;
                 if block != state.registry.states.air
                     && (clearable(state, block)
                         || (project.building.is_none() && excavatable(state, block)))
@@ -128,15 +169,17 @@ fn cell_plan(
                 let (_, remaining) = quota
                     .iter_mut()
                     .find(|(id, _)| *id == item)
-                    .ok_or(Preparation)?;
-                *remaining = remaining.checked_sub(quantity).ok_or(Preparation)?;
+                    .ok_or_else(|| stage("material_quota"))?;
+                *remaining = remaining
+                    .checked_sub(quantity)
+                    .ok_or_else(|| stage("quota_short"))?;
                 (
                     Some(
                         state
                             .registry
                             .items
                             .name_of(item)
-                            .ok_or(Preparation)?
+                            .ok_or_else(|| stage("item_name"))?
                             .to_string(),
                     ),
                     quantity,
@@ -155,12 +198,12 @@ fn cell_plan(
     // Catalog materials must map exactly to physical cells; never build free
     // blocks because a blueprint cannot be funded by its declared stock.
     if quota.iter().any(|(_, count)| *count != 0) {
-        return Err(Preparation);
+        return Err(stage("quota_left"));
     }
-    apply_species(state, &mut cells, species).ok_or(Preparation)?;
+    apply_species(state, &mut cells, species).ok_or_else(|| stage("species"))?;
     if project.building.is_none() {
         let preparation = crate::settlements::forestry::cells(state, project, size, clearance)
-            .ok_or(Preparation)?;
+            .ok_or_else(|| stage("forestry_cells"))?;
         corridor = preparation.corridor;
         let mut preparation = preparation.cells;
         if !preparation.is_empty() {

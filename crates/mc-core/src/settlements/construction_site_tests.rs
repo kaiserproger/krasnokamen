@@ -232,6 +232,57 @@ pub(super) fn pin_lot(state: &mut TickState, id: SettlementId, blueprint_name: &
 /// away, and 21 earlier orders were refused. Two free lots exist; the order
 /// scans the loaded plan once and takes one of them: as both cost nothing, the
 /// one the stable tie key ranks first.
+/// Agreement guard for the site search: a lot the sweep hands on must be one
+/// the plan can actually prepare. `check` cannot model the tree plan, so a lot
+/// whose own trees have no walking route used to win the cheapest ranking and be
+/// dropped in `materialize` every walk (HANDOFF-51: seed-24 House lot
+/// `[246,69,-176]`, `check` true, plan `no_route_with_trees`). The sweep now
+/// refuses that lot itself; this guard fails if any admitted lot is one the
+/// plan refuses.
+#[test]
+fn every_lot_the_sweep_admits_can_be_planned() {
+    let (mut state, id, builder) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "spanish_house", 1);
+    start(&mut state, id, "spanish_house", 1, None);
+    super::tests::complete(&mut state, id, builder);
+    super::growth_tests::stock_buildings(
+        &mut state,
+        &[("spanish_house", 1), ("farm", 1), ("storage", 1)],
+    );
+    let record = state.settlements.get(id).unwrap().clone();
+    let images = executor::source_images(&state, id);
+    let mut checked = 0;
+    for name in ["spanish_house", "farm", "storage"] {
+        let blueprint = blueprints::get(&state.registry, name).unwrap();
+        let Some(site) = site_project(
+            &state,
+            &record,
+            std::iter::once(blueprint),
+            &mut site_refusals::Sweeps::default(),
+            0,
+            u32::MAX,
+            &images,
+        )
+        .site
+        else {
+            // A kind the plan refuses everywhere simply admits nothing.
+            continue;
+        };
+        checked += 1;
+        let mut clearance = super::super::forestry::Clearance::prepared();
+        let planned =
+            super::preparation::planned_cells(&state, &site.project, "oak", &mut clearance);
+        assert!(
+            planned.is_ok(),
+            "the sweep admitted a {name} lot at {:?} the plan refuses ({:?})",
+            site.bounds.min,
+            planned.err().map(|_| super::preparation::take_last_stage())
+        );
+    }
+    assert!(checked > 0, "the open plan must admit at least one kind");
+}
+
 #[test]
 fn owner_order_takes_the_cheapest_free_lot() {
     let (mut state, id, _) = fixture();
@@ -1747,6 +1798,80 @@ fn probe_retained_village_site_supply() {
             println!("PROBE site origin={origin:?} size={size:?} -> {outcome:?}");
         }
     }
+    // R1 diagnosis (HANDOFF-51): a lot the sweep ranks can be refused later by
+    // `planned_cells`, which `check` does not model. Plan one authored lot
+    // directly: D123_CIV_PLAN="x,y,z,rotation,blueprint,species".
+    if let Ok(spec) = std::env::var("D123_CIV_PLAN") {
+        let parts: Vec<&str> = spec.split(',').map(str::trim).collect();
+        if parts.len() == 6 {
+            let origin = [
+                parts[0].parse().expect("x"),
+                parts[1].parse().expect("y"),
+                parts[2].parse().expect("z"),
+            ];
+            let rotation: u8 = parts[3].parse().expect("rotation");
+            let project = super::Project {
+                settlement: id,
+                blueprint: parts[4].to_owned(),
+                level: 1,
+                origin,
+                rotation,
+                building: None,
+                structure: String::new(),
+                ordered: false,
+                builder: None,
+                order_seq: None,
+            };
+            let mut survey = site_refusals::Survey::default();
+            let size = blueprints::get(&state.registry, parts[4])
+                .map(|blueprint| {
+                    blueprint.footprint(blueprints::Rotation::from_quarter_turns(rotation))
+                })
+                .expect("blueprint");
+            let checked = site_refusals::check(
+                &state,
+                &record,
+                origin,
+                size,
+                record.founding.as_ref(),
+                &mut survey,
+                Some(&site_refusals::floor_columns(
+                    blueprints::get(&state.registry, parts[4]).expect("blueprint"),
+                    rotation,
+                )),
+            );
+            super::preparation::take_last_stage();
+            let mut clearance = crate::settlements::forestry::Clearance::prepared();
+            let planned =
+                super::preparation::planned_cells(&state, &project, parts[5], &mut clearance);
+            println!(
+                "PROBE plan origin={origin:?} rotation={rotation} blueprint={} check={:?} trees_without_route={} planned={:?}",
+                parts[4],
+                checked.is_ok(),
+                {
+                    let record = state.settlements.get(id).unwrap();
+                    let network = layout::Network::for_construction(&state, record);
+                    let mut clearance = crate::settlements::forestry::Clearance::prepared();
+                    super::super::forestry::lot_trees_without_route(
+                        &state,
+                        &network,
+                        &project,
+                        size,
+                        &mut clearance,
+                    )
+                },
+                planned
+                    .as_ref()
+                    .map(|(bounds, cells)| (bounds.min, cells.len()))
+                    .map_err(|_| {
+                        (
+                            super::preparation::take_last_stage(),
+                            super::super::forestry::take_last_tree_stage(),
+                        )
+                    }),
+            );
+        }
+    }
     let blueprint_name = std::env::var("D123_CIV_BLUEPRINT").unwrap_or_else(|_| "storage".into());
     let blueprint = blueprints::get(&state.registry, &blueprint_name)
         .unwrap_or_else(|| panic!("blueprint {blueprint_name:?} is not in the catalogue"));
@@ -1758,6 +1883,12 @@ fn probe_retained_village_site_supply() {
     let mut legal = Vec::new();
     let mut examined = 0u32;
     let mut survey = site_refusals::Survey::default();
+    // The per-frontage cost is what sizes the planner's per-pass site budget:
+    // a full sweep of a real village must finish in a handful of passes, so the
+    // fix needs this number rather than a guess (HANDOFF-50, D123CivH).
+    let timed = std::env::var_os("D123_CIV_TIME").is_some();
+    let total_frontages = fronts.len();
+    let started = std::time::Instant::now();
     for (front, (at, normal)) in fronts.into_iter().enumerate() {
         let Some(lot) = network.lot(blueprint, at, normal) else {
             continue;
@@ -1780,6 +1911,82 @@ fn probe_retained_village_site_supply() {
                 entry.1.get_or_insert(lot.origin);
             }
         }
+    }
+    if std::env::var_os("D123_CIV_PLAN_COST").is_some() {
+        // The structural option: a candidate becomes `best` only if the real
+        // plan accepts it, run only on best improvements. Measure how many
+        // improvements a real sweep has and what each plan costs.
+        let blueprint = blueprints::get(&state.registry, &blueprint_name).expect("blueprint");
+        let fronts = layout::Network::for_construction(&state, &record).frontage();
+        let mut network = layout::Network::for_construction(&state, &record);
+        let mut best: Option<(u32, i64, [i32; 3], u8)> = None;
+        let mut improvements = 0u32;
+        let mut plan_ms = 0u128;
+        let mut plans_ok = 0u32;
+        for (at, normal) in fronts {
+            let Some(lot) = network.lot(blueprint, at, normal) else {
+                continue;
+            };
+            let size = blueprint.footprint(blueprints::Rotation::from_quarter_turns(lot.rotation));
+            let mut survey = site_refusals::Survey::default();
+            let Ok(cost) = site_refusals::check(
+                &state,
+                &record,
+                lot.origin,
+                size,
+                record.founding.as_ref(),
+                &mut survey,
+                Some(&site_refusals::floor_columns(blueprint, lot.rotation)),
+            ) else {
+                continue;
+            };
+            let key = (
+                cost.total(),
+                (0..3)
+                    .map(|axis| {
+                        (i64::from(lot.origin[axis]) - i64::from(record.anchor[axis])).pow(2)
+                    })
+                    .sum::<i64>(),
+                lot.origin,
+                lot.rotation,
+            );
+            if best.is_none_or(|known| key < known) {
+                best = Some(key);
+                improvements += 1;
+                let project = super::Project {
+                    settlement: id,
+                    blueprint: blueprint.id.clone(),
+                    level: 1,
+                    origin: lot.origin,
+                    rotation: lot.rotation,
+                    building: None,
+                    structure: String::new(),
+                    ordered: false,
+                    builder: None,
+                    order_seq: None,
+                };
+                let before = std::time::Instant::now();
+                let mut clearance = crate::settlements::forestry::Clearance::prepared();
+                let planned =
+                    super::preparation::planned_cells(&state, &project, "oak", &mut clearance);
+                plan_ms += before.elapsed().as_millis();
+                plans_ok += u32::from(planned.is_ok());
+            }
+        }
+        println!(
+            "PROBE plan_cost blueprint={blueprint_name} frontages={} improvements={improvements} plans_ok={plans_ok} plan_ms_total={plan_ms}",
+            total_frontages
+        );
+    }
+    if timed {
+        let elapsed = started.elapsed();
+        let per_frontage =
+            elapsed.as_nanos() / u128::from(u32::try_from(total_frontages).unwrap_or(1));
+        let per_examined = elapsed.as_nanos() / u128::from(examined.max(1));
+        println!(
+            "PROBE time frontages={total_frontages} examined={examined} total_ms={} ns_per_frontage={per_frontage} ns_per_lot={per_examined}",
+            elapsed.as_millis()
+        );
     }
     println!("PROBE examined={examined} legal={}", legal.len());
     for (reason, (count, example)) in &counts {

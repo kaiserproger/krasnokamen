@@ -1570,7 +1570,14 @@ fn site_project<'a>(
         };
     }
     let mut cursor = start % count;
-    let share = attempts / kinds.len().max(1) as u32;
+    let kinds_count = kinds.len().max(1) as u32;
+    // Every funded kind gets an equal share of the pass's lots, and the
+    // remainder (at most `kinds - 1` lots) now goes to the first kinds instead
+    // of being dropped. This is the only thing the hand-out changes: a kind was
+    // never starved by the kinds before it (each one already had its own share;
+    // a sweep standing still in the gate log was simply not funded that pass).
+    let share = attempts / kinds_count;
+    let mut leftover = attempts % kinds_count;
     let mut running = false;
     let mut advanced: Vec<&'a str> = Vec::with_capacity(kinds.len());
     let mut house_advanced = false;
@@ -1599,6 +1606,10 @@ fn site_project<'a>(
             );
         }
         let mut budget = share;
+        if leftover > 0 {
+            budget += 1;
+            leftover -= 1;
+        }
         // Any outcome below means this pass really walked the kind's sweep; the
         // flag is about the visit, not about what the walk found.
         if blueprint.kind == BuildingKind::House {
@@ -1848,7 +1859,8 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
                 if pass.site.is_none() {
                     // Log-only diagnosis (HANDOFF-49): a settlement that never admits
                     // has to say whether its sweeps finish, restart on a street change,
-                    // or finish without a lot. `sweeps` is (kind, next, frontages, best).
+                    // or finish without a lot. `sweeps` is
+                    // (kind, next, frontages, holds a lot, restarts).
                     tracing::debug!(
                         target: "settlements::construction",
                         settlement = id.0,

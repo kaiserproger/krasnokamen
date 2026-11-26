@@ -1020,21 +1020,34 @@ pub(crate) struct Preparation {
     pub(crate) corridor: Option<mc_script::ScriptWorldBounds>,
 }
 
-/// Clear the lot and its walking corridor in physical work order. Only tree
-/// blocks are added here; unrelated terrain keeps the planner's old refusals.
-pub(crate) fn cells(
+// Why the last `cells` call refused, for tests that run without a tracing
+// subscriber (HANDOFF-51: a lot the sweep ranks must say which tree condition
+// refuses it, or the gate sees the same lot refused forever).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static LAST_TREE_STAGE: std::cell::Cell<Option<&'static str>> =
+        const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_last_tree_stage() -> Option<&'static str> {
+    LAST_TREE_STAGE.with(|slot| slot.replace(None))
+}
+
+/// Whether the lot holds a tree (or a planted crown overlaps it): the condition
+/// `cells` refuses on when there is no walking route. ONE function, called by
+/// `cells` itself and by the site search, so the two cannot drift apart (the
+/// per-column scan starts at `surface + 1` through the same `surface_y_for_lot`,
+/// which is where a fill-gap sapling sits) - HANDOFF-51, review round 2 R2.
+/// `None` is `cells`' own `lot_surface` failure.
+pub(crate) fn lot_has_tree(
     state: &TickState,
     project: &super::construction::Project,
     size: [u8; 3],
     clearance: &mut Clearance,
-) -> Option<Preparation> {
-    use crate::plugin_structures::settlement_builds::PlannedCell;
-    let record = state.settlements.get(project.settlement)?;
+) -> Option<bool> {
     let bounds = lot_bounds(state, project)?;
-    // Proofs are scan-wide; the selected whole trees are candidate-local.
-    clearance.needed.clear();
-    let mut lot = Vec::new();
-    let mut lot_has_tree = false;
+    let mut lot_has_tree = planted_crown_overlaps(state, bounds);
     for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
         for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
             let y = super::construction::surface_y_for_lot(
@@ -1051,6 +1064,69 @@ pub(crate) fn cells(
                     .physics_block_at(x, above, z)
                     .is_some_and(|block| tree_or_sapling(state, block))
             });
+        }
+    }
+    Some(lot_has_tree)
+}
+
+/// The site search's version of the plan's tree refusal: the lot holds a tree
+/// and has no walking route, so `cells` cannot prepare it. `network` is the
+/// pass's own `Network` - never a fresh one, a full BFS per tree lot is what the
+/// tick fence cannot pay for (review round 2 R1). Cheap for a treeless lot.
+pub(crate) fn lot_trees_without_route(
+    state: &TickState,
+    network: &super::layout::Network<'_>,
+    project: &super::construction::Project,
+    size: [u8; 3],
+    clearance: &mut Clearance,
+) -> bool {
+    matches!(lot_has_tree(state, project, size, clearance), Some(true))
+        && network.construction_access(project).is_none()
+}
+
+/// Clear the lot and its walking corridor in physical work order. Only tree
+/// blocks are added here; unrelated terrain keeps the planner's old refusals.
+pub(crate) fn cells(
+    state: &TickState,
+    project: &super::construction::Project,
+    size: [u8; 3],
+    clearance: &mut Clearance,
+) -> Option<Preparation> {
+    use crate::plugin_structures::settlement_builds::PlannedCell;
+    let record = state.settlements.get(project.settlement)?;
+    let bounds = lot_bounds(state, project)?;
+    // Proofs are scan-wide; the selected whole trees are candidate-local.
+    clearance.needed.clear();
+    // The tree condition is ONE function shared with the site search: a copy
+    // here would drift (fill-gap saplings, the `surface+1` start) and the sweep
+    // would keep ranking a lot this plan refuses (HANDOFF-51, round 2 R2).
+    let lot_has_tree = match lot_has_tree(state, project, size, clearance) {
+        Some(tree) => tree,
+        None => {
+            #[cfg(test)]
+            {
+                LAST_TREE_STAGE.with(|slot| slot.set(Some("lot_surface")));
+            }
+            return None;
+        }
+    };
+    let mut lot = Vec::new();
+    for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
+        for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
+            let Some(y) = super::construction::surface_y_for_lot(
+                state,
+                project.origin[1],
+                x,
+                z,
+                Some(bounds),
+                clearance,
+            ) else {
+                #[cfg(test)]
+                {
+                    LAST_TREE_STAGE.with(|slot| slot.set(Some("lot_surface")));
+                }
+                return None;
+            };
             lot.push([x, y, z]);
         }
     }
@@ -1064,7 +1140,13 @@ pub(crate) fn cells(
                 corridor: None,
             });
         }
-        None => return None,
+        None => {
+            #[cfg(test)]
+            {
+                LAST_TREE_STAGE.with(|slot| slot.set(Some("no_route_with_trees")));
+            }
+            return None;
+        }
     };
     for &[x, y, z] in &columns {
         let on_lot = [0, 2]
@@ -1079,6 +1161,10 @@ pub(crate) fn cells(
                 mc_script::ScriptWorldBounds::new([x, y, z], [x, y + 2, z]).ok()?,
             )
         {
+            #[cfg(test)]
+            {
+                LAST_TREE_STAGE.with(|slot| slot.set(Some("corridor_planted_crown")));
+            }
             return None;
         }
     }
@@ -1129,6 +1215,10 @@ pub(crate) fn cells(
             if !clearance.clearable(state, [x, y, z], Some(lot)) {
                 // A protected crown above the actual work volume stays there.
                 if y <= floor + 2 || (on_lot && y < project.origin[1] + i32::from(size[1])) {
+                    #[cfg(test)]
+                    {
+                        LAST_TREE_STAGE.with(|slot| slot.set(Some("protected_crown")));
+                    }
                     return None;
                 }
                 continue;
@@ -1144,6 +1234,10 @@ pub(crate) fn cells(
                     .by_id(BlockStateId(block))
                     .is_some_and(|definition| definition.block.id.path().ends_with("_sapling"))
             {
+                #[cfg(test)]
+                {
+                    LAST_TREE_STAGE.with(|slot| slot.set(Some("whole_tree_unproven")));
+                }
                 return None;
             }
             cells.push(PlannedCell {

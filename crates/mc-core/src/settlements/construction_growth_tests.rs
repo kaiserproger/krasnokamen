@@ -48,7 +48,7 @@ fn housing_fixture(spare_bed: bool) -> (TickState, SettlementId) {
     (state, id)
 }
 
-fn stock_buildings(state: &mut TickState, levels: &[(&str, u8)]) {
+pub(super) fn stock_buildings(state: &mut TickState, levels: &[(&str, u8)]) {
     let mut bill = std::collections::BTreeMap::<u32, u32>::new();
     for &(name, level) in levels {
         for &(item, count) in &blueprints::get(&state.registry, name)
@@ -1521,6 +1521,110 @@ fn sweep_hold_fixture() -> (TickState, SettlementId, BuildingId, site_refusals::
     // House L1 and L2 paid; the Farm is not funded in the plan run.
     stock_buildings(&mut state, &[("spanish_house", 1), ("spanish_house", 2)]);
     (state, id, house, seeded)
+}
+
+/// One pass with the whole budget admits the cheapest lot of the whole street;
+/// the same village walked in small steps must admit exactly that lot, and no
+/// step may examine more lots than its share allows. This is the determinism
+/// guard for the carried-best change: a stable village keeps the rule.
+#[test]
+fn stepped_sweeps_admit_the_same_cheapest_lot_as_one_full_pass() {
+    let (mut state, id, builder) = fixture();
+    terrain_tests::wide_plan(&mut state);
+    terrain_tests::restore_stock(&mut state);
+    fund(&mut state, "spanish_house", 1);
+    start(&mut state, id, "spanish_house", 1, None);
+    complete(&mut state, id, builder);
+    stock_buildings(&mut state, &[("spanish_house", 1), ("farm", 1)]);
+    let record = state.settlements.get(id).unwrap();
+    let images = executor::source_images(&state, id);
+    let farm = blueprints::get(&state.registry, "farm").unwrap();
+    let frontages = u32::try_from(
+        layout::Network::for_construction(&state, record)
+            .frontage()
+            .len(),
+    )
+    .unwrap();
+    let one_pass = site_project(
+        &state,
+        record,
+        std::iter::once(farm),
+        &mut site_refusals::Sweeps::default(),
+        0,
+        u32::MAX,
+        &images,
+    );
+    let full_origin = one_pass
+        .site
+        .as_ref()
+        .map(|site| (site.bounds.min, site.project.rotation))
+        .expect("the open ground admits one Farm");
+    // The same walk in steps of four lots, each step examined against its share.
+    let step = 32;
+    let mut sweeps = site_refusals::Sweeps::default();
+    let mut steps = 0u32;
+    let stepped_origin = loop {
+        steps += 1;
+        assert!(
+            u64::from(steps) <= u64::from(frontages / step) + 2,
+            "the stepped walk must finish within its frontage count"
+        );
+        let pass = site_project(
+            &state,
+            record,
+            std::iter::once(farm),
+            &mut sweeps,
+            0,
+            step,
+            &images,
+        );
+        assert!(
+            pass.report.examined <= step,
+            "a pass examined {} lots with a {step}-lot budget",
+            pass.report.examined
+        );
+        if let Some(site) = pass.site {
+            break (site.bounds.min, site.project.rotation);
+        }
+    };
+    assert_eq!(
+        stepped_origin, full_origin,
+        "the stepped walk admitted a different lot than the whole-street pass"
+    );
+}
+
+/// A pass hands its whole budget out: with five lots and two kinds the leftover
+/// lot goes to the first kind instead of being dropped. (The hand-out is the
+/// only thing this changes; no kind used to be starved by the kinds before it -
+/// each already had its own share.)
+#[test]
+fn a_pass_spends_its_whole_budget_across_its_kinds() {
+    let (mut state, id, builder) = fixture();
+    terrain_tests::wide_plan(&mut state);
+    terrain_tests::restore_stock(&mut state);
+    fund(&mut state, "spanish_house", 1);
+    start(&mut state, id, "spanish_house", 1, None);
+    complete(&mut state, id, builder);
+    stock_buildings(&mut state, &[("spanish_house", 1), ("farm", 1)]);
+    let record = state.settlements.get(id).unwrap();
+    let images = executor::source_images(&state, id);
+    let kinds = [
+        blueprints::get(&state.registry, "spanish_house").unwrap(),
+        blueprints::get(&state.registry, "farm").unwrap(),
+    ];
+    let pass = site_project(
+        &state,
+        record,
+        kinds.into_iter(),
+        &mut site_refusals::Sweeps::default(),
+        0,
+        5,
+        &images,
+    );
+    assert_eq!(
+        pass.report.examined, 5,
+        "a five-lot pass over two funded kinds must examine all five lots"
+    );
 }
 
 /// The hold belongs to the kind whose own sweep is still running: a stale
