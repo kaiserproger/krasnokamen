@@ -1071,6 +1071,40 @@ def _visible_text(state: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+PROJECT_TITLES = ("Construction", "Строительство")
+_PROJECT_CARD = re.compile(r"^(.+?) L(\d+) · ")
+
+
+def _project_cards(probe: ProbeSteps) -> list[str]:
+    """The Construction status page's slot names through the product's own menu route.
+
+    The page is reached like the buildings gate reaches it (`settlement menu projects`, then the
+    Status action slot); this module reads it locally because importing `buildings_qa_project`
+    here closes an import cycle through the buildings profile entry point. A row is an admitted
+    project card `<label> L<level> · <phase>`; queued order books are excluded at the caller."""
+    from .buildings_qa_consts import PROJECT_STATUS_SLOT
+
+    def titled(state: dict[str, Any]) -> bool:
+        screen = state.get("screen") or {}
+        return screen.get("class") == CONTAINER and str(screen.get("title")) in PROJECT_TITLES
+
+    def names(state: dict[str, Any]) -> list[str]:
+        return [str(row.get("name")) for row in (state.get("container") or {}).get("slots", [])
+                if row.get("name")]
+
+    probe.call("minecraft_close_screen", {})
+    probe.call("minecraft_send_chat", {"message": "settlement menu projects", "command": True})
+    probe.wait(lambda state: titled(state) and any(re.fullmatch(r".+ L1", name) for name in names(state)),
+               "projects_menu_open", timeout_seconds=60)
+    probe.call("minecraft_click_container_slot", {"slot": PROJECT_STATUS_SLOT, "button": "primary",
+                                                 "timeout_seconds": probe.remaining()})
+    state = probe.wait(lambda state: titled(state) and (
+        any(_PROJECT_CARD.match(name) for name in names(state))
+        or any(re.match(r"^(?:Active projects|Активные стройки|Pending orders|Заказы|Заказов)\b", name)
+               for name in names(state))), "project_status_open", timeout_seconds=60)
+    return names(state)
+
+
 def _program_unknown_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
                             args: argparse.Namespace) -> list[str]:
     """`--scenario program-unknown` (SETTLEMENT-PROJECT-BLUEPRINT-WITHOUT-NAME).
@@ -1084,8 +1118,6 @@ def _program_unknown_script(probe: ProbeSteps, artifact: Path, _steps: list[dict
     iron), and smeltable iron, fuel and cobblestone in the certified storage
     (`construction_furnace::plan` + `availability::needs_furnace`). The Construction status page's
     card must then read `<Furnace|Печь> L1 ...`."""
-    from .buildings_qa_project import _project_page
-
     size = tuple(map(int, args.size.split("x")))
     scene_shot.resize_window(probe.client.p4_window, size)
     ru = args.language == "ru_ru"
