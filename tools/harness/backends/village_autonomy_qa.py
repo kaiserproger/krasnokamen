@@ -573,10 +573,32 @@ def _settlement_stock(
         lo, hi = building["min"], building["max"]
         offset = 0
         while True:
-            scan = probe.call("minecraft_scan_blocks", {
+            bounds = {
                 "min_x": lo[0], "min_y": lo[1], "min_z": lo[2],
                 "max_x": hi[0], "max_y": hi[1], "max_z": hi[2], "offset": offset,
-            })
+            }
+            try:
+                scan = probe.call("minecraft_scan_blocks", dict(bounds))
+            except RuntimeError as error:
+                if "client chunk is not loaded" not in str(error):
+                    raise
+                # A storage the settlement built away from the observer is scanned
+                # from wherever the observer stands (candidate run 20261126T205647:
+                # a Storage at [28, 68, -168] with the observer at the bell, 120
+                # blocks out). Ask for one loaded cell at this face and retry once,
+                # the same way civilization_seed_qa.building_blocks does for a
+                # remote building's faces, and name the storage if the second read
+                # is refused too.
+                probe.call("minecraft_wait_for_loaded_block", {
+                    "x": lo[0], "y": lo[1], "z": lo[2],
+                    "timeout_seconds": min(120.0, probe.remaining()),
+                })
+                try:
+                    scan = probe.call("minecraft_scan_blocks", dict(bounds))
+                except RuntimeError as second:
+                    raise RuntimeError(
+                        f"owned storage at {tuple(lo)}..{tuple(hi)} cannot be scanned: "
+                        f"{second}") from None
             for block in scan.get("blocks", []):
                 if not isinstance(block, dict) or _block_id(block) not in storage_blocks:
                     continue

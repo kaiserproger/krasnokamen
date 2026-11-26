@@ -345,22 +345,44 @@ def entity_census(probe: ProbeSteps, entity_type: str | None = None) -> dict[str
 # blocks from the observer at 132.2,77.0,-215.5, against the gate's own
 # `view_distance = 4` (64 blocks). `minecraft_navigate_to_block` refuses a
 # destination chunk the client does not hold (src/minecraft/navigation.rs:233,
-# `retryable: false`), so the walk to a remote door goes in bounded hops that each
-# first ask for one loaded cell, and a walk that stops making progress fails
-# closed with a named error instead of aborting on the client's raw refusal.
+# `retryable: false`), and a hop can then be refused as `unreachable` when the
+# straight line crosses a wall or a ravine (candidate run 20261126T190711), so the
+# walk asks for one loaded cell at the door first, hops with lateral candidates,
+# and - where the gate holds a console teleport, the same scaffolding
+# `capture_target` uses for a remote building - moves the creative observer beside
+# the door and back afterwards. Every ladder ends in a named error.
 DOOR_HOP_BLOCKS = 40
 DOOR_HOP_LIMIT = 8
 DOOR_LOADED_TIMEOUT = 120.0
+DOOR_SIDESTEP_BLOCKS = 8
+
+
+class _DoorOutOfReach(RuntimeError):
+    """The observer could not walk to a received house door."""
+
+
+def _door_position(door: dict[str, Any]) -> dict[str, int]:
+    return {axis: door[axis] for axis in ("x", "y", "z")}
+
+
+def _is_walk_refusal(error: Exception) -> bool:
+    return "chunk is not client-loaded" in str(error) or "unreachable" in str(error)
 
 
 def _walk_to_door(probe: ProbeSteps, door: dict[str, Any]) -> None:
-    """Walk to a received house door, hopping through loaded cells when it is remote."""
-    position = {axis: door[axis] for axis in ("x", "y", "z")}
+    """Walk to a received house door, loading it and hopping through loaded cells."""
+    position = _door_position(door)
+    try:
+        probe.call("minecraft_wait_for_loaded_block", {
+            **position, "timeout_seconds": DOOR_LOADED_TIMEOUT})
+    except RuntimeError:
+        # A load that never lands is reported by the walk below with its own code.
+        pass
     try:
         probe.call("minecraft_navigate_to_block", {**position, "timeout_seconds": 120.0})
         return
     except RuntimeError as error:
-        if "chunk is not client-loaded" not in str(error):
+        if not _is_walk_refusal(error):
             raise
         refused = str(error)
     for hop in range(1, DOOR_HOP_LIMIT + 1):
@@ -370,38 +392,66 @@ def _walk_to_door(probe: ProbeSteps, door: dict[str, Any]) -> None:
         if distance <= 1.0:
             break
         step = min(DOOR_HOP_BLOCKS, distance - 1.0)
-        waypoint = (math.floor(player["x"] + dx / distance * step),
-                    math.floor(player["y"]),
-                    math.floor(player["z"] + dz / distance * step))
-        probe.call("minecraft_wait_for_loaded_block", {
-            "x": waypoint[0], "y": waypoint[1], "z": waypoint[2],
-            "timeout_seconds": DOOR_LOADED_TIMEOUT})
-        try:
-            probe.call("minecraft_navigate_to_block", {
-                "x": waypoint[0], "y": waypoint[1], "z": waypoint[2], "timeout_seconds": 120.0})
-        except RuntimeError as error:
-            raise RuntimeError(
+        ahead = (player["x"] + dx / distance * step, player["z"] + dz / distance * step)
+        sideways = (dx / distance * DOOR_SIDESTEP_BLOCKS, dz / distance * DOOR_SIDESTEP_BLOCKS)
+        candidates = (ahead,
+                      (ahead[0] - sideways[1], ahead[1] + sideways[0]),
+                      (ahead[0] + sideways[1], ahead[1] - sideways[0]))
+        moved, refusals = False, []
+        for cx, cz in candidates:
+            waypoint = (math.floor(cx), math.floor(player["y"]), math.floor(cz))
+            probe.call("minecraft_wait_for_loaded_block", {
+                "x": waypoint[0], "y": waypoint[1], "z": waypoint[2],
+                "timeout_seconds": DOOR_LOADED_TIMEOUT})
+            try:
+                probe.call("minecraft_navigate_to_block", {
+                    "x": waypoint[0], "y": waypoint[1], "z": waypoint[2], "timeout_seconds": 120.0})
+            except RuntimeError as error:
+                refusals.append(f"{waypoint}: {error}")
+                continue
+            now = probe.observe()["player"]
+            if math.hypot(now["x"] - player["x"], now["z"] - player["z"]) < 1.0:
+                refusals.append(f"{waypoint}: no progress")
+                continue
+            moved = True
+            break
+        if not moved:
+            raise _DoorOutOfReach(
                 f"house door {tuple(position[axis] for axis in ('x', 'y', 'z'))} is out of the "
-                f"client's loaded radius: hop {hop} to {waypoint} was refused ({error}); "
-                f"the direct walk was refused ({refused[:160]})") from None
-        moved = probe.observe()["player"]
-        if math.hypot(moved["x"] - player["x"], moved["z"] - player["z"]) < 1.0:
-            raise RuntimeError(
-                f"house door {tuple(position[axis] for axis in ('x', 'y', 'z'))} is out of the "
-                f"client's loaded radius: hop {hop} did not move the observer from "
-                f"({player['x']:.1f}, {player['z']:.1f}); the client refused the direct walk "
-                f"({refused[:160]})")
+                f"client's loaded radius: hop {hop} was refused on every candidate "
+                f"({'; '.join(refusals)[:400]}); the direct walk was refused ({refused[:160]})")
     try:
         probe.call("minecraft_navigate_to_block", {**position, "timeout_seconds": 120.0})
     except RuntimeError as error:
-        raise RuntimeError(
+        if not _is_walk_refusal(error):
+            raise
+        raise _DoorOutOfReach(
             f"house door {tuple(position[axis] for axis in ('x', 'y', 'z'))} is out of the "
             f"client's loaded radius after {DOOR_HOP_LIMIT} hops: {error}") from None
 
 
+# The side a player stands on to open a door: `capture_house` clicks the face
+# opposite the door's `facing`, so the open approach is on that same side.
+_DOOR_SIDES = {"north": (0.0, -1.0), "south": (0.0, 1.0), "west": (-1.0, 0.0), "east": (1.0, 0.0)}
+
+
+def _door_approach_spot(door: dict[str, Any], player: dict[str, Any]) -> tuple[float, float, float]:
+    """Where the observer stands to use the door: its approach side, one step out."""
+    facing = str((door.get("properties") or {}).get("facing") or "")
+    side = {"north": "south", "south": "north", "west": "east", "east": "west"}.get(facing)
+    if side is not None:
+        dx, dz = _DOOR_SIDES[side]
+    else:
+        px, pz = player["x"] - (door["x"] + 0.5), player["z"] - (door["z"] + 0.5)
+        distance = math.hypot(px, pz) or 1.0
+        dx, dz = px / distance, pz / distance
+    return (door["x"] + 0.5 + dx * 1.5, float(door["y"]), door["z"] + 0.5 + dz * 1.5)
+
+
 def capture_house(probe: ProbeSteps, artifact: Path, label: str,
                   target: tuple[float, float, float],
-                  blocks: list[dict[str, Any]]) -> dict[str, Any]:
+                  blocks: list[dict[str, Any]],
+                  teleport: Teleport | None = None) -> dict[str, Any]:
     """Open the received entrance, prove the exact bed, then return outside."""
     door = next((block for block in blocks
                  if str(block.get("block_id", "")).endswith("_door")
@@ -410,8 +460,21 @@ def capture_house(probe: ProbeSteps, artifact: Path, label: str,
         raise RuntimeError("house capture has no received entrance door")
     probe.call("minecraft_close_screen", {})
     initial = probe.observe()["player"]
-    position = {axis: door[axis] for axis in ("x", "y", "z")}
-    _walk_to_door(probe, door)
+    position = _door_position(door)
+    teleported = False
+    try:
+        _walk_to_door(probe, door)
+    except _DoorOutOfReach as error:
+        if teleport is None:
+            raise
+        # A door the walking observer cannot reach (seed 24: the house stands behind
+        # a wall from the bell) is observed from where the creative observer is
+        # moved through the server console - the scaffolding capture_target already
+        # uses for a remote building - and moved back afterwards.
+        stand = _door_approach_spot(door, initial)
+        teleport(stand[0], stand[1], stand[2])
+        probe.call("minecraft_wait_ticks", {"ticks": 20})
+        teleported = True
     current = probe.call("minecraft_read_block", position)
     if current.get("block_id") != door["block_id"]:
         raise RuntimeError("house entrance changed before ordinary use")
@@ -426,6 +489,11 @@ def capture_house(probe: ProbeSteps, artifact: Path, label: str,
             "properties": {"half": half, "open": "true"}, "timeout_seconds": 10.0,
         })
     shot = capture_target(probe, artifact, label, target)
+    shot["observer_teleported"] = teleported
+    if teleported and teleport is not None:
+        teleport(initial["x"], initial["y"], initial["z"])
+        probe.call("minecraft_wait_ticks", {"ticks": 20})
+        return shot
     try:
         probe.call("minecraft_navigate_to_block", {
             "x": math.floor(initial["x"]), "y": math.floor(initial["y"]),
@@ -1254,7 +1322,9 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                         "sprint_ticks": advanced, "building": building, "project": project, "bed": bed,
                         "screenshot": capture_house(
                             probe, artifact, f"civilization-house-{advanced:06d}",
-                            target, evidence.get("blocks", [])),
+                            target, evidence.get("blocks", []),
+                            teleport=lambda x, y, z: item_merge._console(
+                                server, f"tp {village.USERNAME} {x:.2f} {y:.2f} {z:.2f}")),
                     }
             elif "second_building" not in detail["milestones"]:
                 target = building_aim_point(building, evidence.get("solid", []))

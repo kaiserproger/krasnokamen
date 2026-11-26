@@ -884,30 +884,38 @@ if __name__ == "__main__":
 
 
 class RemoteHouseDoorTests(unittest.TestCase):
-    """HARNESS-CIV-GATE-HOUSE-DOOR-UNLOADED: final-pin run 20261126T092432 aborted on it."""
+    """HARNESS-CIV-GATE-HOUSE-DOOR-UNLOADED: final-pin 20261126T092432 and candidate 20261126T190711."""
 
     DOOR = {"block_id": "minecraft:oak_door", "x": 96, "y": 64, "z": -297,
             "properties": {"half": "lower", "facing": "north", "open": "true"}}
+    DOOR_XYZ = (96, 64, -297)
 
-    def _probe(self, player, refusal_then_ok):
+    def _blocks(self):
+        """The house envelope plus one standable exterior column beside the door."""
+        blocks = [{"x": 93, "y": 63, "z": -297, "block_id": "minecraft:cobblestone",
+                   "collision_empty": False, "fluid": {"empty": True}},
+                  {"x": 99, "y": 67, "z": -291, "block_id": "minecraft:cobblestone",
+                   "collision_empty": False, "fluid": {"empty": True}}]
+        for y, block, empty in ((63, "minecraft:cobblestone", False),
+                                (64, "minecraft:air", True), (65, "minecraft:air", True)):
+            blocks.append({"x": 96, "y": y, "z": -298, "block_id": block,
+                           "collision_empty": empty, "fluid": {"empty": True}})
+        blocks.append(self.DOOR)
+        return blocks
+
+    def _probe(self, player, walk):
+        """`walk(name, arguments)` decides each navigation; returns the probe."""
         probe = Mock()
         probe.observe.side_effect = lambda: {"player": dict(player)}
-        refused = {"count": 0}
-
-        door = (self.DOOR["x"], self.DOOR["y"], self.DOOR["z"])
 
         def call(name, arguments):
-            if name == "minecraft_navigate_to_block" and (
-                    arguments["x"], arguments["y"], arguments["z"]) == door:
-                if refused["count"] == 0 and refusal_then_ok:
-                    refused["count"] += 1
-                    raise RuntimeError(
-                        'minecraft_navigate_to_block failed: {"code": "target chunk is not '
-                        'client-loaded: 96, 64, -297", "retryable": false, "stage": "automation"}')
-                return {"status": "ok"}
             if name == "minecraft_navigate_to_block":
-                player.update(x=float(arguments["x"]), y=float(arguments["y"]),
-                              z=float(arguments["z"]))
+                rejected = walk(arguments)
+                if rejected:
+                    raise RuntimeError(rejected)
+                if (arguments["x"], arguments["y"], arguments["z"]) != self.DOOR_XYZ:
+                    player.update(x=float(arguments["x"]), y=float(arguments["y"]),
+                                  z=float(arguments["z"]))
                 return {"status": "ok"}
             if name == "minecraft_wait_for_loaded_block":
                 return {"block_id": "minecraft:cobblestone"}
@@ -917,61 +925,88 @@ class RemoteHouseDoorTests(unittest.TestCase):
         probe.call.side_effect = call
         return probe
 
-    def test_a_remote_door_is_walked_in_a_loaded_hop_then_captured(self):
+    def test_a_remote_door_loads_its_chunk_then_walks_straight_to_the_capture(self):
         player = {"x": 132.2, "y": 77.0, "z": -215.5}
-        probe = self._probe(player, refusal_then_ok=True)
+        probe = self._probe(player, lambda arguments: None)
         target = (96.5, 64.5, -297.5)
         with patch.object(qa, "capture_target", return_value={"retained_path": "house.png"}) as capture:
-            shot = qa.capture_house(probe, "artifact", "house", target, [self.DOOR])
+            shot = qa.capture_house(probe, "artifact", "house", target, self._blocks())
         self.assertEqual(shot["retained_path"], "house.png")
-        hops = [call.args[1] for call in probe.call.call_args_list
-                if call.args[0] == "minecraft_wait_for_loaded_block"]
-        self.assertTrue(1 <= len(hops) <= qa.DOOR_HOP_LIMIT)
-        for hop in hops:
-            self.assertLessEqual(math.dist((hop["x"], hop["z"]), (96, -297)), 64)
+        self.assertFalse(shot["observer_teleported"])
+        loaded = [call.args[1] for call in probe.call.call_args_list
+                  if call.args[0] == "minecraft_wait_for_loaded_block"]
+        self.assertEqual((loaded[0]["x"], loaded[0]["z"]), (96, -297))
         walks = [call.args[1] for call in probe.call.call_args_list
                  if call.args[0] == "minecraft_navigate_to_block"]
         self.assertEqual((walks[0]["x"], walks[0]["z"]), (96, -297))
-        self.assertEqual((walks[1]["x"], walks[1]["z"]), (hops[0]["x"], hops[0]["z"]))
-        # the door walk after the hops, then the ordinary walk back outside
-        self.assertEqual((walks[-2]["x"], walks[-2]["z"]), (96, -297))
         self.assertEqual((walks[-1]["x"], walks[-1]["z"]), (132, -216))
         self.assertEqual(capture.call_args.args, (probe, "artifact", "house", target))
 
-    def test_a_door_the_hop_cannot_advance_towards_fails_with_a_named_error(self):
+    def test_a_refused_straight_walk_takes_a_lateral_hop_then_the_door(self):
         player = {"x": 132.2, "y": 77.0, "z": -215.5}
-        probe = self._probe(player, refusal_then_ok=True)
-        probe.call.side_effect = lambda name, arguments: (
-            (_ for _ in ()).throw(RuntimeError(
-                'minecraft_navigate_to_block failed: {"code": "target chunk is not '
-                'client-loaded: 96, 64, -297", "retryable": false, "stage": "automation"}'))
-            if name == "minecraft_navigate_to_block" else
-            {"block_id": "minecraft:cobblestone"} if name == "minecraft_wait_for_loaded_block" else {})
-        with patch.object(qa, "capture_target") as capture:
-            with self.assertRaisesRegex(RuntimeError, "hop 1 to .* was refused"):
-                qa.capture_house(probe, "artifact", "house", (96.5, 64.5, -297.5), [self.DOOR])
-        capture.assert_not_called()
+        refused = {"ahead": 0}
 
-    def test_a_door_still_remote_after_the_hop_bound_fails_with_a_named_error(self):
+        def walk(arguments):
+            if (arguments["x"], arguments["y"], arguments["z"]) == self.DOOR_XYZ:
+                # remote: the door's chunk is not held until the hops get close
+                if math.dist((player["x"], player["z"]), (96, -297)) > 64:
+                    return ('minecraft_navigate_to_block failed: {"code": "target chunk is not '
+                            'client-loaded: 96, 64, -297", "retryable": false}')
+                return None
+            # the straight ahead candidate is unreachable; a lateral one is not
+            if arguments["z"] == -253 and arguments["x"] == 115 and refused["ahead"] == 0:
+                refused["ahead"] += 1
+                return ('minecraft_navigate_to_block failed: {"code": "target is unreachable '
+                        'from the current loaded client position: 115, 76, -253", "retryable": false}')
+            return None
+        probe = self._probe(player, walk)
+        with patch.object(qa, "capture_target", return_value={"retained_path": "house.png"}) as capture:
+            shot = qa.capture_house(probe, "artifact", "house", (96.5, 64.5, -297.5), self._blocks())
+        self.assertFalse(shot["observer_teleported"])
+        walks = [call.args[1] for call in probe.call.call_args_list
+                 if call.args[0] == "minecraft_navigate_to_block"]
+        hops = [walk for walk in walks[:-1]          # the last walk is the return to outside
+                if (walk["x"], walk["y"], walk["z"]) != self.DOOR_XYZ]
+        self.assertGreaterEqual(len(hops), 2)         # ahead refused, a lateral one walked
+        start = (132, -216)
+        for previous, following in zip([start] + [(hop["x"], hop["z"]) for hop in hops],
+                                       [(hop["x"], hop["z"]) for hop in hops]):
+            self.assertLessEqual(math.dist(previous, following), qa.DOOR_HOP_BLOCKS + qa.DOOR_SIDESTEP_BLOCKS)
+        capture.assert_called_once()
+
+    def test_a_door_no_hop_can_reach_is_observed_from_the_console_teleport(self):
         player = {"x": 132.2, "y": 77.0, "z": -215.5}
-        probe = Mock()
-        probe.observe.side_effect = lambda: {"player": dict(player)}
+        refusal = ('minecraft_navigate_to_block failed: {"code": "target is unreachable from '
+                   'the current loaded client position", "retryable": false}')
 
-        def call(name, arguments):
-            if name == "minecraft_navigate_to_block" and arguments["x"] == 96:
-                raise RuntimeError('minecraft_navigate_to_block failed: {"code": "target chunk '
-                                   'is not client-loaded", "retryable": false}')
-            if name == "minecraft_navigate_to_block":
-                # progress toward the door, but never enough to make it local
-                player["z"] += 5.0
-                return {"status": "ok"}
-            if name == "minecraft_wait_for_loaded_block":
-                return {"block_id": "minecraft:cobblestone"}
-            return {}
-        probe.call.side_effect = call
+        def walk(arguments):
+            return ('minecraft_navigate_to_block failed: {"code": "target chunk is not '
+                    'client-loaded", "retryable": false}'
+                    if (arguments["x"], arguments["y"], arguments["z"]) == self.DOOR_XYZ else refusal)
+        probe = self._probe(player, walk)
+        teleport = Mock()
+        with patch.object(qa, "DOOR_HOP_LIMIT", 2), \
+                patch.object(qa, "capture_target", return_value={"retained_path": "house.png"}):
+            shot = qa.capture_house(probe, "artifact", "house", (96.5, 64.5, -297.5),
+                                    self._blocks(), teleport=teleport)
+        self.assertTrue(shot["observer_teleported"])
+        # door facing north: the player stands on its south side, one step out
+        self.assertEqual(teleport.call_args_list[0].args, (96.5, 64.0, -295.0))
+        self.assertEqual(teleport.call_args_list[-1].args, (132.2, 77.0, -215.5))
+
+    def test_a_door_no_hop_can_reach_without_a_teleport_fails_with_a_named_error(self):
+        player = {"x": 132.2, "y": 77.0, "z": -215.5}
+        refusal = ('minecraft_navigate_to_block failed: {"code": "target is unreachable from '
+                   'the current loaded client position", "retryable": false}')
+
+        def walk(arguments):
+            return ('minecraft_navigate_to_block failed: {"code": "target chunk is not '
+                    'client-loaded", "retryable": false}'
+                    if (arguments["x"], arguments["y"], arguments["z"]) == self.DOOR_XYZ else refusal)
+        probe = self._probe(player, walk)
         with patch.object(qa, "DOOR_HOP_LIMIT", 2), patch.object(qa, "capture_target") as capture:
-            with self.assertRaisesRegex(RuntimeError, "after 2 hops"):
-                qa.capture_house(probe, "artifact", "house", (96.5, 64.5, -297.5), [self.DOOR])
+            with self.assertRaisesRegex(RuntimeError, "hop 1 was refused on every candidate"):
+                qa.capture_house(probe, "artifact", "house", (96.5, 64.5, -297.5), self._blocks())
         capture.assert_not_called()
 
 
@@ -1039,3 +1074,54 @@ class PlannerReadRecoveryTests(unittest.TestCase):
             server = SimpleNamespace(stdin=_Stdin())
             totals = village._read_storage_container(server, log, (98, 67, -155), 2.0)
         self.assertEqual(totals, {"minecraft:cobblestone": 50})
+
+
+class RemoteStorageScanTests(unittest.TestCase):
+    """The settlement's own Storage can stand beyond the observer's loaded radius."""
+
+    LINE = "#3 storage level 1 [28, 66, -170]-[32, 70, -168]"
+
+    def _probe(self, outcomes):
+        probe = Mock()
+        probe.remaining.return_value = 300.0
+        scans = iter(outcomes)
+
+        def call(name, arguments):
+            if name == "minecraft_scan_blocks":
+                outcome = next(scans)
+                if isinstance(outcome, Exception):
+                    raise outcome
+                return outcome
+            if name == "minecraft_wait_for_loaded_block":
+                return {"block_id": "minecraft:cobblestone"}
+            return {}
+        probe.call.side_effect = call
+        return probe
+
+    def test_a_remote_storage_scan_waits_for_one_loaded_cell_then_reads(self):
+        refusal = RuntimeError('minecraft_scan_blocks failed: {"code": "client chunk is not '
+                               'loaded at 28, 68, -168", "retryable": false, "stage": "automation"}')
+        chest = {"x": 30, "y": 66, "z": -169, "block_id": "minecraft:chest"}
+        probe = self._probe([refusal, {"blocks": [chest], "truncated": False}])
+        stock = village._settlement_stock(probe, {}, (30, 66, -169), [self.LINE],
+                                         lambda pos: {"minecraft:birch_log": 128})
+        self.assertEqual(stock, {"minecraft:birch_log": 128})
+        waits = [call.args[1] for call in probe.call.call_args_list
+                 if call.args[0] == "minecraft_wait_for_loaded_block"]
+        self.assertEqual(len(waits), 1)
+        self.assertEqual((waits[0]["x"], waits[0]["z"]), (28, -170))
+
+    def test_a_storage_that_stays_unloaded_names_its_bounds(self):
+        refusal = RuntimeError('minecraft_scan_blocks failed: {"code": "client chunk is not '
+                               'loaded at 28, 68, -168", "retryable": false}')
+        probe = self._probe([refusal, refusal])
+        with self.assertRaisesRegex(RuntimeError, r"owned storage at \(28, 66, -170\)"):
+            village._settlement_stock(probe, {}, (30, 66, -169), [self.LINE],
+                                      lambda pos: {"minecraft:birch_log": 128})
+
+    def test_a_non_chunk_refusal_is_not_retried(self):
+        refusal = RuntimeError("minecraft_scan_blocks failed: server refused the read")
+        probe = self._probe([refusal])
+        with self.assertRaisesRegex(RuntimeError, "server refused the read"):
+            village._settlement_stock(probe, {}, (30, 66, -169), [self.LINE],
+                                      lambda pos: {"minecraft:birch_log": 128})
