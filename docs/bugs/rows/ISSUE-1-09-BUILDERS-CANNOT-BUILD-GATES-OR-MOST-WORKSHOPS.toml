@@ -10,3 +10,7 @@ regression = ["harness:buildings-qa:gate.L1_built", "harness:buildings-qa:gate.L
 failing_first = "not recorded"
 fix_commit = "patch:847e1fb125e326f5646c7c2fadb5d51ac7216305a49dfd83eb87044a1d15e581"
 repro_check = "HEAD re-break promotions/ISSUE-1-09-BUILDERS-CANNOT-BUILD-GATES-OR-MOST-WORKSHOPS.patch reverses on the committed tree (git apply -R --check): SOURCES keeps house/storage/farm/mason/shepherd/lumber_camp/mine/wall + the Spanish set, removing gate, barracks, watch_tower and the ten workshop blueprints. wall.json stays because ISSUE-1-16 carries its own patch; applying both removes the wall too. Real-client receipt is the integrated sweep."
+# 2026-11-26 (D123PackReceipts): a `BUILDINGS_QA_SELECT=wall` run on pin 36a1e35ad1a1 passes L1-L3
+# (`wall.L3_upgrade` PASS, receipt 20261126T185354), covering that one ref. The other thirteen
+# blueprint selects (gate, watch_tower, barracks and the ten workshop kinds, one 1800 s run each
+# per side) are unrun; the row still needs its own receipt series.

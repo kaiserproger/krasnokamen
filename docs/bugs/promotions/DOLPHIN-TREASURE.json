@@ -1,0 +1,71 @@
+{
+  "id": "DOLPHIN-TREASURE",
+  "verdict": "promoted",
+  "fix_commit": "patch:76fc3e613bf04ef8a38ff14927da187fdb3ed49fd009cd84cfcba98a21511a00",
+  "fix_commit_full": "patch:76fc3e613bf04ef8a38ff14927da187fdb3ed49fd009cd84cfcba98a21511a00",
+  "promoted_at": "2026-11-26T18:50:07+00:00",
+  "tree_head": "b8829f3f7d67f07711878f66da064b0d5ab9f565",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "eecacf19c685cd0c6d0836e8aef7bbd164cc533bdabe48619b49cf7dec944fa5",
+  "control_tree_head": "b8829f3f7d67f07711878f66da064b0d5ab9f565",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "76fc3e613bf04ef8a38ff14927da187fdb3ed49fd009cd84cfcba98a21511a00",
+  "reversed_files": [
+    "crates/mc-core/src/dolphin.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:dolphin::tests::fed_dolphin_locates_the_structure_through_its_normal_goal_tick": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/dolphin_tests.rs",
+        "line": 357,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "cargo:mc-core:dolphin::tests::dolphin_feed_debit_reaches_the_client_inventory": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:entities:native-v2-dolphin-treasure": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-dolphin-treasure --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123PackReceiptsCore/.analysis/validation/20261126T183615-ledger-promote-mzt3hpzg/regressions-client-2.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123PackReceiptsCore/.analysis/validation/20261126T183615-ledger-promote-mzt3hpzg/client-artifacts/20261126T184219-native-v2-dolphin-treasure-3cz0oiux/result.json",
+      "assertion": {
+        "name": "dolphin_moved_closer_to_located_structure"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-core:dolphin::tests::fed_dolphin_locates_the_structure_through_its_normal_goal_tick": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:dolphin::tests::dolphin_feed_debit_reaches_the_client_inventory": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:entities:native-v2-dolphin-treasure": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123PackReceiptsCore/.analysis/validation/20261126T183615-ledger-promote-mzt3hpzg/client-artifacts/20261126T184945-native-v2-dolphin-treasure-4wvy2kth/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackReceiptsCore/.analysis/validation/20261126T181838-native-v2-dolphin-treasure-l17tk4cg/result.json",
+    "tree_head": "b8829f3f7d67f07711878f66da064b0d5ab9f565",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "8dc8eddf191004e12adc1c31581577712195dd77b45080cdacb5e49c8989c59b",
+    "covers": [
+      "harness:entities:native-v2-dolphin-treasure"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PackReceiptsCore/.analysis/validation/20261126T183615-ledger-promote-mzt3hpzg"
+}

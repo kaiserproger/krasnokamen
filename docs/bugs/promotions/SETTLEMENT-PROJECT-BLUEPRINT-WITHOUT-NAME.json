@@ -1,0 +1,61 @@
+{
+  "id": "SETTLEMENT-PROJECT-BLUEPRINT-WITHOUT-NAME",
+  "verdict": "promoted",
+  "fix_commit": "a895cc853b",
+  "fix_commit_full": "a895cc853b010991fa1a7090b49f8cc753172c30",
+  "promoted_at": "2026-11-26T17:56:26+00:00",
+  "tree_head": "352c3a04f022aa335bff589ffc0a1373a534d887",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "5d359334cf9e735b85cb38972920b7d8d6e2267d105996f67a133177e92466f0",
+  "control_tree_head": "352c3a04f022aa335bff589ffc0a1373a534d887",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/settlements/ui_text.rs",
+    "tools/harness/backends/village_autonomy_qa.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::ui_text::tests::every_project_kind_has_a_display_name": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/settlements/ui_text.rs",
+        "line": 1006,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "harness:settlement-map-qa:program_unknown": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run settlement-map-qa --client native --windowed --timeout-seconds 3600 -- --scenario program-unknown exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123PackReceiptsCore/.analysis/validation/20261126T174247-ledger-promote-khx0edal/regressions-client-2.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123PackReceiptsCore/.analysis/validation/20261126T174247-ledger-promote-khx0edal/client-artifacts/20261126T174919-settlement-map-qa-uz2kpplh/result.json"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::ui_text::tests::every_project_kind_has_a_display_name": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:settlement-map-qa:program_unknown": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123PackReceiptsCore/.analysis/validation/20261126T174247-ledger-promote-khx0edal/client-artifacts/20261126T175610-settlement-map-qa-m7cbjq8u/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackReceiptsCore/.analysis/validation/20261126T171048-settlement-map-qa-a36zvnmt/result.json",
+    "tree_head": "352c3a04f022aa335bff589ffc0a1373a534d887",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "4646f6d616898fe855e68299260594b7fe9f02ddb5c178d6350bc581df9d9392",
+    "covers": [
+      "harness:settlement-map-qa:program_unknown"
+    ],
+    "profile": "settlement-map-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PackReceiptsCore/.analysis/validation/20261126T174247-ledger-promote-khx0edal"
+}

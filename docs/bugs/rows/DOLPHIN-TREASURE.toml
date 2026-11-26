@@ -4,8 +4,13 @@ title = "GotFish never triggered search."
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DOLPHIN-TREASURE Behaviour changed by 2c3e1fa2e (vanilla: the dolphin leads to a DOLPHIN_LOCATED structure, not a placed chest); the graphical `native-v2-dolphin-treasure` scenario still places a plain chest and asserts the dolphin approaches it, so it must be rewritten against a real buried-treasure/shipwreck structure and the row re-promoted."
-repro_check = ["The fix (patch:76fc3e61) is in tree and its cargo refs are green; `native-v2-dolphin-treasure` still places a player chest, which the fix correctly no longer treats as a treasure. The goal needs a `#minecraft:dolphin_located` structure (ocean ruin or shipwreck) the async locate worker can find. Missing proof: a world fixture with a generated dolphin-located structure within 48 blocks of the dolphin, the rewritten scene, and its receipt on the promotion tree."]
+repro_check = ["The fix (patch:76fc3e61) is in tree. The scene was rewritten on 2026-11-26: it asks the server for the nearest real `#minecraft:dolphin_located` site (`/locate structure`; run 20261126T181358 found `minecraft:shipwreck` at [272,~,-240], 222 blocks away), teleports beside it, builds the water channel at sea level beside the site and asserts the fed dolphin's horizontal distance to that structure falls. No chest is placed. The control (patch reversed at the tip) records `native-v2-dolphin-treasure assertion failed: dolphin_moved_closer_to_located_structure` (run 20261126T182538)."]
 regression = ["cargo:mc-core:dolphin::tests::fed_dolphin_locates_the_structure_through_its_normal_goal_tick", "harness:entities:native-v2-dolphin-treasure", "cargo:mc-core:dolphin::tests::dolphin_feed_debit_reaches_the_client_inventory"]
 fix_commit = "patch:76fc3e613bf04ef8a38ff14927da187fdb3ed49fd009cd84cfcba98a21511a00"
+# The feed-debit ref does not flip with the fix reversed (it proves the consume, not the lead); the two
+# refs below do, and the cargo test's own `panic!` line is the assertion the control reds on.
+proving_refs = ["harness:entities:native-v2-dolphin-treasure", "cargo:mc-core:dolphin::tests::fed_dolphin_locates_the_structure_through_its_normal_goal_tick"]
+proving_assertions = { "cargo:mc-core:dolphin::tests::fed_dolphin_locates_the_structure_through_its_normal_goal_tick" = "crates/mc-core/src/dolphin_tests.rs:357" }
+promotion = "docs/bugs/promotions/DOLPHIN-TREASURE.json"

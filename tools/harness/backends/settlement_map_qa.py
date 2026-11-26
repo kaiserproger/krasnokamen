@@ -337,7 +337,7 @@ VERDICTS = (*STAGES, "localized_text", "all")
 # so a receipt carries it; the civil walk never produces them. `regressions` registers this set
 # together with `VERDICTS` (the ledger ref must accept and read every one of them) and
 # `test_settlement_quickwins_qa` holds both sides to it.
-SCENARIO_VERDICTS = ("selected_card", "verge_connected")
+SCENARIO_VERDICTS = ("selected_card", "verge_connected", "program_unknown")
 
 
 def _stage_checks(language: str) -> dict[str, tuple[list[str], list[str]]]:
@@ -1071,46 +1071,136 @@ def _visible_text(state: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+PROJECT_TITLES = ("Construction", "Строительство")
+_PROJECT_CARD = re.compile(r"^(.+?) L(\d+) · ")
+
+
+def _project_cards(probe: ProbeSteps) -> list[str]:
+    """The Construction status page's slot names through the product's own menu route.
+
+    The page is reached like the buildings gate reaches it (`settlement menu projects`, then the
+    Status action slot); this module reads it locally because importing `buildings_qa_project`
+    here closes an import cycle through the buildings profile entry point. A row is an admitted
+    project card `<label> L<level> · <phase>`; queued order books are excluded at the caller."""
+    from .buildings_qa_consts import PROJECT_STATUS_SLOT
+
+    def titled(state: dict[str, Any]) -> bool:
+        screen = state.get("screen") or {}
+        return screen.get("class") == CONTAINER and str(screen.get("title")) in PROJECT_TITLES
+
+    def names(state: dict[str, Any]) -> list[str]:
+        return [str(row.get("name")) for row in (state.get("container") or {}).get("slots", [])
+                if row.get("name")]
+
+    probe.call("minecraft_close_screen", {})
+    probe.call("minecraft_send_chat", {"message": "settlement menu projects", "command": True})
+    probe.wait(lambda state: titled(state) and any(re.fullmatch(r".+ L1", name) for name in names(state)),
+               "projects_menu_open", timeout_seconds=60)
+    probe.call("minecraft_click_container_slot", {"slot": PROJECT_STATUS_SLOT, "button": "primary",
+                                                 "timeout_seconds": probe.remaining()})
+    state = probe.wait(lambda state: titled(state) and (
+        any(_PROJECT_CARD.match(name) for name in names(state))
+        or any(re.match(r"^(?:Active projects|Активные стройки|Pending orders|Заказы|Заказов)\b", name)
+               for name in names(state))), "project_status_open", timeout_seconds=60)
+    return names(state)
+
+
+def _program_fixture(probe: ProbeSteps) -> list[int]:
+    """A settlement whose planner can raise the one-cell furnace project and nothing else.
+
+    `_setup` cannot serve here: the House L1 it builds places a furnace block, and
+    `construction_furnace::plan` refuses a settlement that owns a furnace. This fixture founds a
+    bare settlement, certifies one physical storage chest and stocks only what the furnace plan
+    needs (eight cobblestone fund the item, raw iron is the smeltable iron, a lava bucket is fuel);
+    an unfunded House order supplies the iron demand (its bed bill asks for wool, so shears, so
+    two iron). Street work cannot be funded from that stock, and `plan_pass` tries the furnace
+    before the street plans anyway."""
+    from .buildings_qa import _chunked_fills
+
+    probe.report["setup_not_asserted"] = [
+        "creative-only private pad preparation, then survival before settlement/player actions",
+        "founded owned settlement and one certified physical storage chest",
+        "the stock is the furnace plan's own prerequisites, not a crafted or earned inventory",
+    ]
+    for command in ("gamemode creative @s", "gamerule advance_time false",
+                    "gamerule spawn_mobs false", "time set 6000", "weather clear", "clear @s"):
+        probe.fixture(command)
+    me = probe.observe(wait_for_play=True)["player"]
+    x, z = (math.floor(float(me[axis])) for axis in ("x", "z"))
+    y = math.floor(float(me["y"]))
+    for command in _chunked_fills(x - 24, y - 2, z - 24, x + 24, y - 2, z + 24, "minecraft:dirt"):
+        probe.fixture(command)
+    for command in _chunked_fills(x - 24, y - 1, z - 24, x + 24, y - 1, z + 24, "minecraft:grass_block"):
+        probe.fixture(command)
+    for command in _chunked_fills(x - 24, y, z - 24, x + 24, y + 8, z + 24, "minecraft:air"):
+        probe.fixture(command)
+    probe.fixture(f"tp @s {x + .5} {y} {z + .5}")
+    probe.wait(lambda state: all(state.get("player", {}).get(axis) == expected
+                                for axis, expected in (("x", x + .5), ("y", y), ("z", z + .5))),
+               "fixture_founder_at_anchor", timeout_seconds=30)
+    probe.fixture("gamemode survival @s")
+    _command(probe, "settlement create projqa 16", "Founded projqa")
+    chest = [x + 4, y, z + 4]
+    probe.fixture(f"setblock {chest[0]} {chest[1]} {chest[2]} minecraft:chest")
+    _command(probe, f"settlement building certify storage {chest[0] - 1} {chest[1] - 1} {chest[2] - 1} "
+                    f"{chest[0] + 1} {chest[1] + 2} {chest[2] + 1}", "Certified storage #")
+    probe.report["fixture"] = {"anchor": [x, y, z], "funding_chest": chest}
+    return chest
+
+
 def _program_unknown_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
                             args: argparse.Namespace) -> list[str]:
-    """`--scenario program-unknown` (SETTLEMENT-PROJECT-BLUEPRINT-WITHOUT-NAME): NOT registered yet.
+    """`--scenario program-unknown` (SETTLEMENT-PROJECT-BLUEPRINT-WITHOUT-NAME).
 
-    Run 20261125T021513 reproduced the symptom the wrong way round: `settlement build furnace` answers
-    "Unknown blueprint." because the autonomous furnace is *not* a blueprint (`blueprints::get` has no
-    `furnace`), so the chat is not where the project card is read. The right fixture is the planner's
-    own one-cell furnace project on the Construction dialog (place a furnace, let the planner create the
-    project, read the dialog row with `_visible_text` the way `_selected_card_script` reads a card).
-    Until that fixture exists this scenario stays unregistered."""
+    The symptom is the Construction dialog's own text for the planner's autonomous one-cell furnace
+    project: its blueprint id `furnace` has no asset or layout entry, so without a display name the
+    status page prints "Unknown blueprint" (and the civilization gate cannot read the project).
+    A player order cannot create it - `settlement build furnace` answers "Unknown blueprint." because
+    `furnace` is not in the blueprint catalog (run 20261125T021513) - so the fixture lets the planner
+    raise it: no owned furnace, an unfunded House order whose bed bill asks for wool (shears, two
+    iron), and smeltable iron, fuel and cobblestone in the certified storage
+    (`construction_furnace::plan` + `availability::needs_furnace`). The Construction status page's
+    card must then read `<Furnace|Печь> L1 ...`."""
     size = tuple(map(int, args.size.split("x")))
     scene_shot.resize_window(probe.client.p4_window, size)
     ru = args.language == "ru_ru"
-    label = lambda en, russian: russian if ru else en
     unknown = "Неизвестный чертёж" if ru else "Unknown blueprint"
-    name = label("Furnace", "Печь")
-    try:
-        _setup(probe)
-        probe.fixture("settlement build furnace")
-        deadline_ticks = 0
-        chat = ""
-        while True:
-            probe.fixture("settlement building list")
-            probe.call("minecraft_wait_ticks", {"ticks": 20})
-            chat = "\n".join(str(line) for line in probe.observe().get("recent_chat", []))
-            if re.search(r"#\d+\s+" + re.escape(name), chat, re.IGNORECASE):
-                break
-            if unknown.lower() in chat.lower() or re.search(r"#\d+\s+furnace\b", chat, re.IGNORECASE):
-                break
-            deadline_ticks += 20
-            if deadline_ticks > 1200:
-                raise RuntimeError("the furnace order never reached the building list")
-        (artifact / "program-unknown-chat.txt").write_text(chat)
-        probe.report["program_unknown"] = {"chat": chat[-1600:]}
-        probe.check("program_unknown_label",
-                    re.search(r"#\d+\s+" + re.escape(name), chat, re.IGNORECASE) is not None
-                    and unknown.lower() not in chat.lower()
-                    and re.search(r"#\d+\s+furnace\b", chat, re.IGNORECASE) is None)
-    finally:
-        pass
+    name = "Печь" if ru else "Furnace"
+    chest = _program_fixture(probe)
+    # The planner's own prerequisites, in real storage: eight cobblestone fund the furnace item,
+    # raw iron is the smeltable iron the missing furnace would smelt, and a lava bucket is furnace
+    # fuel that cannot fund the street work (lamp fences need planks, its torch coal/charcoal), so
+    # the furnace plan is the only one that can succeed. Run 20261126T163510 raised a street lamp
+    # instead while coal was in storage.
+    for slot, (item, count) in enumerate((("cobblestone", 16), ("raw_iron", 8), ("lava_bucket", 1))):
+        probe.fixture(f"item replace block {chest[0]} {chest[1]} {chest[2]} container.{slot} "
+                      f"with minecraft:{item} {count}")
+    # An unfunded House order is the iron demand (its bed bill asks for wool, so shears, so iron)
+    # while contributing no project of its own.
+    probe.fixture("settlement build house")
+    seen: list[str] = []
+    ticks = 0
+    while True:
+        cards = _project_cards(probe)
+        probe.call("minecraft_close_screen", {})
+        seen += [card for card in cards if card not in seen]
+        if any(re.search(rf"{re.escape(name)} L\d+", card) for card in cards) or any(
+                unknown.lower() in card.lower() for card in cards):
+            break
+        probe.call("minecraft_wait_ticks", {"ticks": 10})
+        ticks += 10
+        if ticks > 6000:
+            break
+    (artifact / "program-unknown-cards.txt").write_text("\n".join(seen))
+    text = "\n".join(seen)
+    card = next((line for line in seen if re.search(rf"{re.escape(name)} L\d+", line)), None)
+    probe.report["program_unknown"] = {"cards": seen, "card": card}
+    # The raw blueprint id `furnace` (lowercase) is the failure backstop: the display name is
+    # `Furnace`, so only a case-sensitive match separates the two.
+    probe.check("program_unknown_label",
+                card is not None
+                and unknown.lower() not in text.lower()
+                and re.search(r"\bfurnace L\d+", text) is None)
     return []
 
 

@@ -368,19 +368,64 @@ def _axolotl(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _capture(steps, "axolotl-playing-dead")
 
 
+def _locate_line(steps: ProbeSteps, structure: str) -> str:
+    """Ask the server where the nearest `structure` is; the reply is the player's chat line."""
+    marker = f"dolphinqa {uuid.uuid4().hex[:8]}"
+    steps.call("minecraft_send_chat", {"message": marker, "command": False})
+    steps.wait(lambda s: any(marker in str(line) for line in s["recent_chat"]),
+               "locate_marker", timeout_seconds=30)
+    steps.fixture(f"locate structure {structure}")
+
+    def answered(state: dict) -> bool:
+        lines = [str(line) for line in state["recent_chat"]]
+        start = next((i for i, line in enumerate(lines) if marker in line), None)
+        if start is None:
+            return False
+        return any((" is at " in line and "[") or "Could not find" in line
+                   or "There is no structure" in line for line in lines[:start])
+
+    state = steps.wait(answered, f"locate_{structure}", timeout_seconds=300)
+    lines = [str(line) for line in state["recent_chat"]]
+    start = next(i for i, line in enumerate(lines) if marker in line)
+    return next(line for line in lines[:start]
+                if (" is at " in line and "[") or "Could not find" in line
+                or "There is no structure" in line)
+
+
 def _dolphin(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = origin
     steps.fixture("gamerule spawn_mobs false")
     # Creative feeding does not debit the fish; survival proves the real consume.
     steps.fixture("gamemode survival @s")
-    # A 13-long channel: the server steers a fed dolphin 5 blocks per search toward
-    # the nearest chest within 48 blocks, and only while the dolphin stays in water.
-    steps.fixture(f"fill {x} {y} {z + 2} {x + 12} {y + 1} {z + 6} minecraft:water")
-    chest = _point(origin, dx=17, dz=4)
-    _set(steps, chest, "minecraft:chest")
-    steps.fixture(f"summon minecraft:dolphin {x + 1.5} {y + 1} {z + 2.5}")
-    dol = _wanderer_at(steps, "minecraft:dolphin", x + 1.5, z + 2.5)
+    # DOLPHIN-TREASURE (2c3e1fa2e): the fed dolphin's goal is vanilla's
+    # `findNearestMapStructure(#minecraft:dolphin_located, pos, 50, false)` - an ocean ruin or
+    # shipwreck, never a player-placed chest. Ask the server for the real site and build the
+    # channel beside it, so the scene proves the lead to an actual structure.
+    reply = _locate_line(steps, "#minecraft:dolphin_located")
+    steps.report["dolphin_locate_reply"] = reply
+    found = re.search(r"\[(-?\d+), ?(~|-?\d+), ?(-?\d+)\]", reply)
+    if "Could not find" in reply or "There is no structure" in reply or found is None:
+        raise RuntimeError(f"no dolphin_located structure to lead to: {reply}")
+    site_x, site_z = int(found.group(1)), int(found.group(3))
+    surface = 62  # sea level in this world; ocean_located structures sit below it
+    # The observer must load the site's chunks: stand 24 blocks east of it, above the sea.
+    steps.fixture(f"tp @s {site_x + 24.5} {surface + 12} {site_z + 0.5}")
+    steps.call("minecraft_wait_for_loaded_block", {
+        "x": site_x, "y": surface - 2, "z": site_z, "timeout_seconds": 120,
+    })
+    steps.fixture("gamemode creative @s")
+    # A walled 13-long water channel at the surface, 8..20 blocks east of the site, so the dolphin
+    # starts in water and the structure is 8 blocks beyond the channel's far end.
+    steps.fixture(f"fill {site_x + 7} {surface - 1} {site_z - 2} {site_x + 20} {surface - 1} {site_z + 2} minecraft:stone")
+    steps.fixture(f"fill {site_x + 8} {surface} {site_z - 1} {site_x + 19} {surface} {site_z + 1} minecraft:water")
+    steps.fixture(f"fill {site_x + 7} {surface} {site_z - 2} {site_x + 20} {surface + 3} {site_z + 2} minecraft:air")
+    start = _point((site_x + 18, surface, site_z), 0, 0, 0)
+    _block(steps, start, "minecraft:air")
+    steps.fixture(f"summon minecraft:dolphin {site_x + 17.5} {surface} {site_z + 0.5}")
+    dol = _wanderer_at(steps, "minecraft:dolphin", site_x + 17.5, site_z + 0.5)
     did = _identity(dol)
+    steps.fixture("gamemode survival @s")
+    steps.fixture(f"tp @s {site_x + 19.5} {surface} {site_z + 0.5}")
     # Real feeding: a held raw cod sets GotFish (`data merge entity` is unsupported).
     _give(steps, "minecraft:cod")
     steps.call("minecraft_set_hotbar_slot", {"slot": 0})
@@ -399,17 +444,23 @@ def _dolphin(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         raise RuntimeError("dolphin_ate_the_cod")
 
     def dist(row: dict) -> float:
-        return ((row["x"] - chest["x"]) ** 2 + (row["z"] - chest["z"]) ** 2) ** .5
+        return ((row["x"] - site_x) ** 2 + (row["z"] - site_z) ** 2) ** .5
     before = dist(fed_from)
 
-    def approached(_state: dict) -> bool:
+    # A bounded observation, not a raising wait: the pre-fix control must record a failed
+    # assertion here, never an unrunnable timeout.
+    after = before
+    for _ in range(60):
         row = _same_row(steps, did)
-        return row is not None and dist(row) < max(6.0, before - 6.0)
-    steps.wait(approached, "fed_dolphin_swims_toward_treasure_chest", timeout_seconds=90)
-    after = dist(_same_row(steps, did) or dol)
-    _capture(steps, "dolphin-leading-to-chest")
-    steps.report["dolphin_distance_to_chest"] = {"before": before, "after": after}
-    steps.check("dolphin_moved_closer_to_chest", after < before - 4)
+        if row is not None:
+            after = dist(row)
+            if after < before - 6.0:
+                break
+        steps.call("minecraft_wait_ticks", {"ticks": 20})
+    _capture(steps, "dolphin-leading-to-structure")
+    steps.report["dolphin_distance_to_structure"] = {"site": [site_x, site_z], "before": before, "after": after}
+    steps.check("dolphin_moved_closer_to_located_structure", after < before - 4)
+    steps.check("fed_dolphin_swims_toward_the_located_structure", after < before - 6.0)
 
 
 def _goat_ram(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
