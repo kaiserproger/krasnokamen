@@ -1912,6 +1912,81 @@ fn probe_retained_village_site_supply() {
             }
         }
     }
+    if std::env::var_os("D123_CIV_HORIZON").is_some() {
+        // Early-termination evidence in the units the walk counts: frontages
+        // EXAMINED (every frontage, legal or not), not legal lots.
+        let blueprint = blueprints::get(&state.registry, &blueprint_name).expect("blueprint");
+        let mut network = layout::Network::for_construction(&state, &record);
+        let fronts = network.frontage();
+        type Key = ((u32, u32, u32), i64, [i32; 3], u8);
+        let mut best_by_horizon: Vec<(usize, Option<Key>)> = [256usize, 512, 1024, 2048, 4096]
+            .into_iter()
+            .map(|h| (h, None))
+            .collect();
+        let mut best: Option<Key> = None;
+        let mut examined = 0usize;
+        let mut legal = 0usize;
+        let mut zero_work = 0usize;
+        let mut distances: Vec<i64> = Vec::new();
+        for (at, normal) in fronts {
+            examined += 1;
+            let Some(lot) = network.lot(blueprint, at, normal) else {
+                continue;
+            };
+            let size = blueprint.footprint(blueprints::Rotation::from_quarter_turns(lot.rotation));
+            let mut survey = site_refusals::Survey::default();
+            let Ok(cost) = site_refusals::check(
+                &state,
+                &record,
+                lot.origin,
+                size,
+                record.founding.as_ref(),
+                &mut survey,
+                Some(&site_refusals::floor_columns(blueprint, lot.rotation)),
+            ) else {
+                continue;
+            };
+            legal += 1;
+            let distance = (0..3)
+                .map(|axis| (i64::from(lot.origin[axis]) - i64::from(record.anchor[axis])).pow(2))
+                .sum::<i64>();
+            distances.push(distance);
+            let key = (cost.rank(), distance, lot.origin, lot.rotation);
+            if cost.rank() == (0, 0, 0) {
+                zero_work += 1;
+            }
+            if best.is_none_or(|known| key < known) {
+                best = Some(key);
+            }
+            for (horizon, slot) in &mut best_by_horizon {
+                if examined == *horizon {
+                    *slot = best;
+                }
+            }
+        }
+        let winner = best.expect("a legal lot");
+        for (horizon, snapshot) in &best_by_horizon {
+            let Some(found) = snapshot else { continue };
+            println!(
+                "PROBE horizon blueprint={blueprint_name} frontages={examined} legal={legal} h={horizon} best_rank={:?} best_dist={} winner_rank={:?} winner_dist={} same={}",
+                found.0,
+                found.1,
+                winner.0,
+                winner.1,
+                *found == winner
+            );
+        }
+        // The exact bound: a zero-work best whose every remaining frontage is
+        // farther from the bell. Suffix-min over the legal lots' distances.
+        let mut suffix = vec![i64::MAX; distances.len().saturating_add(1)];
+        for index in (0..distances.len()).rev() {
+            suffix[index] = suffix[index + 1].min(distances[index]);
+        }
+        println!(
+            "PROBE horizon_bound blueprint={blueprint_name} zero_work_lots={zero_work} winner_rank={:?} suffix_min_first={}",
+            winner.0, suffix[0]
+        );
+    }
     if std::env::var_os("D123_CIV_PLAN_COST").is_some() {
         // The structural option: a candidate becomes `best` only if the real
         // plan accepts it, run only on best improvements. Measure how many
