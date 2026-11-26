@@ -237,6 +237,13 @@ pub(crate) struct Sweeps {
     /// `construction_cursor` moved) and made completion re-insert a sweep
     /// instead of removing it (HANDOFF-51, review round 2 R3).
     restarts: BTreeMap<String, u32>,
+    /// The funded verdict per kind, taken by the settlement's own admission
+    /// pass: a step off the admission clock reuses it instead of re-proving
+    /// every kind's recipe bill on every stepped tick (the funding work
+    /// budget's cost, CIV-ADOPTED-CLOSURE-ROOT-TICK-COST). A step never
+    /// materializes its winner, so the verdict is all it needs; the next
+    /// admission pass re-proves and overwrites the entry.
+    funding: BTreeMap<String, bool>,
 }
 impl Sweeps {
     /// Drop sweeps of a topology that no longer exists, counting the restart so
@@ -260,6 +267,12 @@ impl Sweeps {
         self.live
             .get(blueprint)
             .is_some_and(|sweep| sweep.next < sweep.frontages)
+    }
+
+    /// This kind was funded when the settlement's own admission pass proved
+    /// its bill: a step's funding decision, without a proof (see `funding`).
+    fn funded(&self, blueprint: &str) -> bool {
+        self.funding.get(blueprint).copied().unwrap_or(false)
     }
 
     /// How often walks were restarted in total (log-only counters): a scan that
@@ -723,12 +736,30 @@ fn scan_site_kinds<'a>(
         let floors = std::array::from_fn(|turns| {
             floor_columns(blueprint, u8::try_from(turns).expect("quarter turns"))
         });
-        let Some((species, color)) =
-            storage::funded_variant(state, record, blueprint, &level.materials, images)
-        else {
+        // An admission pass proves the kind's bill and records the verdict on
+        // the sweeps; a step off the admission clock reuses that verdict, so a
+        // stepped tick never re-derives funding (its recipe scans were the work
+        // budget's cost, CIV-ADOPTED-CLOSURE-ROOT-TICK-COST). A step never
+        // materializes its winner, so the verdict is all it needs; the next
+        // admission pass re-proves and overwrites the entry.
+        let species = if slice.admit {
+            let proven =
+                storage::funded_variant(state, record, blueprint, &level.materials, images);
+            sweeps
+                .funding
+                .insert(blueprint.id.clone(), proven.is_some());
+            proven
+        } else {
+            None
+        };
+        if slice.admit && species.is_none() {
             report.reject(Reason::MaterialBill, record.anchor);
             continue;
-        };
+        }
+        if !slice.admit && !sweeps.funded(blueprint.id.as_str()) {
+            report.reject(Reason::MaterialBill, record.anchor);
+            continue;
+        }
         survey.storage = storage::Capacity::for_blueprint(state, record, blueprint, images);
         if blueprint.kind == BuildingKind::Storage {
             tracing::debug!(
@@ -777,6 +808,7 @@ fn scan_site_kinds<'a>(
                 let site = slice
                     .admit
                     .then(|| {
+                        let (species, color) = species.expect("an admission proved its species");
                         materialize(
                             state,
                             record,
@@ -867,6 +899,33 @@ pub(super) fn funded_kinds(
     (funded, count)
 }
 
+/// The kinds an off-cadence step may advance: the funded verdict its own
+/// admission pass recorded, re-read with no recipe proof at all (a step never
+/// adds funding work; the next admission pass decides again).
+fn funded_memo(
+    state: &TickState,
+    record: &SettlementRecord,
+    images: &[super::super::inventory::Image],
+    sweeps: &Sweeps,
+) -> (
+    [Option<&'static blueprints::Blueprint>; AUTONOMOUS_KINDS],
+    usize,
+) {
+    let mut funded = [None; AUTONOMOUS_KINDS];
+    let mut count = 0;
+    let catalog = catalog(state, record);
+    for kind in candidate_kinds(state, record, images) {
+        let Some(blueprint) = catalog.clone().find(|blueprint| blueprint.kind == kind) else {
+            continue;
+        };
+        if sweeps.funded(blueprint.id.as_str()) {
+            funded[count] = Some(blueprint);
+            count += 1;
+        }
+    }
+    (funded, count)
+}
+
 /// The settlement's site scan. `step` is an off-cadence step's already-taken
 /// single slice: the whole scan spends it, only one of the two passes runs (the
 /// priority House's walk while it is unfinished, else the funded kinds), and
@@ -917,7 +976,13 @@ pub(super) fn scan_sites(
     // An admission pass scans the funded kinds whenever the priority House has
     // no site; a step scans them only when it did not already spend its slice.
     if house.site.is_none() && (admit || !house_ran) {
-        let (kinds, count) = funded_kinds(state, record, id, images);
+        // An admission pass proves funding; a step reads the verdict that pass
+        // recorded (see `scan_site_kinds`).
+        let (kinds, count) = if admit {
+            funded_kinds(state, record, id, images)
+        } else {
+            funded_memo(state, record, images, sweeps)
+        };
         if count != 0 {
             let pass = scan_site_kinds(
                 state,
