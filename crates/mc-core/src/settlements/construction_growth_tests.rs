@@ -73,6 +73,438 @@ pub(super) fn stock_buildings(state: &mut TickState, levels: &[(&str, u8)]) {
     }
 }
 
+/// The round-3 cadence proof, on the four-tick admission clock: only a
+/// settlement whose own admission pass left an unfinished walk holding a legal
+/// lot is stepped off that clock, one site slice a tick, so the walk still
+/// finishes inside a quiet window between street changes and the tick keeps a
+/// slice for the order turn (a change clears the flag until the next admission
+/// pass, so the change lands 35 ticks into every 40). At the bare cadence (one
+/// pass per 20 ticks) the same scripted village restarts its walk at every
+/// change and never admits. The four-tick admission clock itself is asserted by
+/// `only_a_holding_settlement_steps_and_construction_keeps_its_four_tick_clock`.
+#[test]
+fn a_holding_walk_steps_off_the_admission_clock_and_finishes_between_changes() {
+    let (mut state, id, builder) = fixture();
+    terrain_tests::wide_plan(&mut state);
+    terrain_tests::restore_stock(&mut state);
+    fund(&mut state, "spanish_house", 1);
+    start(&mut state, id, "spanish_house", 1, None);
+    super::tests::complete(&mut state, id, builder);
+    super::growth_tests::stock_buildings(&mut state, &[("spanish_house", 1), ("farm", 1)]);
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    // The village's own work changes the walk's frontage list 35 ticks into
+    // every 40: a change clears the flag until that settlement's next 20-tick
+    // admission pass (review round 2 N3), so the quiet window has to outlast
+    // one walk (~10 stepping slices) without landing on an admission pass.
+    let roads: Vec<[i32; 2]> = (-14..=14)
+        .flat_map(|x| (-14..=14).map(move |z| [x, z]))
+        .filter(|[x, z]| matches!(layout::cell(anchor, *x, *z), layout::Cell::Road))
+        .map(|[x, z]| [anchor[0] + x, anchor[2] + z])
+        .collect();
+    assert!(roads.len() > 8, "the plan has roads to change");
+    let mut next_road = 0;
+    let mut admitted = None;
+    for tick in 1..=200u64 {
+        state.tick = tick;
+        if tick % 40 == 35 {
+            let [x, z] = roads[next_road % roads.len()];
+            next_road += 1;
+            for y in 190..=202 {
+                state.world.set_block(x, y, z, state.registry.states.stone);
+            }
+            state.world.fold_overlay();
+        }
+        let mut budget = site_turn::SiteBudget::default();
+        super::planner_tick(&mut state, &mut budget);
+        // A stepping tick takes one of the two slices and leaves a whole one
+        // for the order turn and the replanting proofs.
+        if !tick.is_multiple_of(4) {
+            assert!(
+                budget.slices() >= 1,
+                "tick {tick} spent the slice the order turn needs"
+            );
+        }
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
+            admitted = Some(tick);
+            break;
+        }
+    }
+    // Control (recorded, review round 2 N5): with the off-clock step removed
+    // (`planner_tick`'s off-cadence branch returning at once) this fails with
+    // "got None" - at the bare cadence the street changes restart the walk
+    // before it can finish.
+    assert!(
+        admitted.is_some_and(|tick| tick <= 80),
+        "the walk must finish inside a quiet window between street changes, got {admitted:?}"
+    );
+}
+
+/// The cadence contract with more than one settlement (review round 3 C1-C5):
+/// only the settlement whose own admission pass left an unfinished walk that
+/// already holds a legal lot is stepped, one site slice a tick; another
+/// settlement's frozen holding walk and a live walk that holds nothing are
+/// never stepped, even though their chunks are simulated; construction still
+/// admits at most once per four ticks, and every stepping tick leaves a whole
+/// site slice for the order turn.
+///
+/// Control (recorded, review round 2 N5): with the pre-review every-tick
+/// construction admission restored (an off-clock `building::tick` for every
+/// settlement holding a project) this fails at tick 9 with "tick 9 admitted
+/// construction off the clock" (1 call instead of 0).
+#[test]
+fn only_a_holding_settlement_steps_and_construction_keeps_its_four_tick_clock() {
+    let (mut state, id, _builder) = fixture();
+    terrain_tests::wide_plan(&mut state);
+    terrain_tests::restore_stock(&mut state);
+    // The walks are seeded before any project exists: an active project's
+    // executor reservation cuts the street plan's reachable frontages, and the
+    // stepping walks need the whole plan to stay unfinished.
+    stock_buildings(
+        &mut state,
+        &[("spanish_house", 1), ("farm", 1), ("mason", 1)],
+    );
+    // A second settlement in a simulated chunk: what keeps it out of the step
+    // is its own flag, not residency.
+    let second = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "steppees".into(),
+            "owner".into(),
+            [24, 201, 8],
+            48,
+        )
+        .expect("second settlement");
+    state.tickets.insert(
+        "cadence-second".into(),
+        (crate::boundary::ChunkPos { x: 1, z: 0 }, 0),
+    );
+    state.refresh_active_chunks(0);
+    assert!(
+        state.world.is_active(0, 0) && state.world.is_active(1, 0),
+        "both settlements must be simulated for the cadence test"
+    );
+    let frontages = |state: &TickState, id: SettlementId| {
+        u32::try_from(
+            layout::Network::for_construction(state, state.settlements.get(id).unwrap())
+                .frontage()
+                .len(),
+        )
+        .unwrap()
+    };
+    assert!(
+        frontages(&state, id) > 4 * super::SITE_ATTEMPTS,
+        "the fixture's walk must outlast the stepping slices"
+    );
+    // The kinds this fixture actually funds: a seeded walk of an unfunded kind
+    // is never advanced, so the seed must be the planner's own list.
+    let funded: Vec<&'static blueprints::Blueprint> = {
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(&state, id);
+        let (kinds, count) = super::funded_kinds(&state, record, id, &images);
+        let funded: Vec<_> = kinds.into_iter().take(count).flatten().collect();
+        assert!(
+            !funded.is_empty(),
+            "the fixture funds at least one autonomous kind"
+        );
+        funded
+    };
+    // The fixture village's own walk on the open ground: unfinished and holding
+    // a legal lot, the state its admission pass leaves when it must be stepped.
+    // The sweep map only has to carry that state; which settlement holds it is
+    // the flag under test.
+    let holding = |state: &mut TickState, kinds: &[&'static blueprints::Blueprint]| {
+        let mut sweeps = site_refusals::Sweeps::default();
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(state, id);
+        let lots = (frontages(state, id) / 3).max(1);
+        for blueprint in kinds {
+            let pass = site_project(
+                state,
+                record,
+                std::iter::once(*blueprint),
+                &mut sweeps,
+                record.construction_cursor,
+                lots,
+                &images,
+            );
+            assert!(
+                pass.site.is_none() && pass.running && pass.waiting,
+                "the open ground leaves {} unfinished and holding after {lots} lots: \
+                 site={} running={} waiting={} cursor={} report={:?}",
+                blueprint.id,
+                pass.site.is_some(),
+                pass.running,
+                pass.waiting,
+                pass.cursor,
+                pass.report,
+            );
+        }
+        sweeps
+    };
+    let mut stepping = holding(&mut state, &funded);
+    stepping.stepping = true;
+    state.settlements.site_sweep.insert(id, stepping);
+    let frozen = holding(&mut state, &funded[..1]);
+    assert!(
+        !frozen.stepping,
+        "a seeded settlement never steps by itself"
+    );
+    state.settlements.site_sweep.insert(second, frozen);
+    // The hopeless case: a pass whose budget was spent before its first lot (the
+    // order turn can take the last slice) leaves a live, unfinished walk that
+    // holds nothing.
+    let hopeless_id = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "hopeless".into(),
+            "owner".into(),
+            [-24, 201, -8],
+            48,
+        )
+        .expect("third settlement");
+    let hopeless = {
+        let mut sweeps = site_refusals::Sweeps::default();
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(&state, id);
+        let pass = site_project(
+            &state,
+            record,
+            std::iter::once(funded[0]),
+            &mut sweeps,
+            record.construction_cursor,
+            0,
+            &images,
+        );
+        assert!(
+            pass.site.is_none() && pass.running && !pass.waiting,
+            "a spent budget leaves a walk that holds nothing: {:?}",
+            pass.report
+        );
+        sweeps
+    };
+    state.settlements.site_sweep.insert(hopeless_id, hopeless);
+    let summary = |state: &TickState, id: SettlementId| {
+        state
+            .settlements
+            .site_sweep
+            .get(&id)
+            .map(site_refusals::Sweeps::summary)
+            .unwrap_or_default()
+    };
+    let frozen_before = summary(&state, second);
+    assert!(
+        frozen_before
+            .iter()
+            .any(|(_, next, frontages, holds, _)| *holds && *next < *frontages),
+        "the frozen settlement carries a live walk that holds a lot"
+    );
+    let hopeless_before = summary(&state, hopeless_id);
+    assert!(
+        hopeless_before
+            .iter()
+            .any(|(_, next, frontages, holds, _)| *next == 0 && !holds && *frontages > 0),
+        "the hopeless settlement carries a live walk that holds nothing"
+    );
+    let mut admissions = 0;
+    let mut steps = 0;
+    for tick in 1..=12u64 {
+        // From tick 9 the settlement has a project, so the four-tick clock has
+        // something to admit; until then the stepping assertions run on the
+        // whole plan.
+        if tick == 9 {
+            start(&mut state, id, "spanish_house", 1, None);
+        }
+        state.tick = tick;
+        let stepping_before = state
+            .settlements
+            .site_sweep
+            .get(&id)
+            .is_some_and(|sweeps| sweeps.stepping);
+        crate::villager::building::ADMISSIONS.with(|count| count.set(0));
+        site_refusals::EXAMINED.with(|count| count.set(0));
+        let mut budget = site_turn::SiteBudget::default();
+        super::planner_tick(&mut state, &mut budget);
+        let calls = crate::villager::building::ADMISSIONS.with(std::cell::Cell::get);
+        let examined = site_refusals::EXAMINED.with(std::cell::Cell::get);
+        if tick.is_multiple_of(4) {
+            admissions += calls;
+            continue;
+        }
+        assert_eq!(calls, 0, "tick {tick} admitted construction off the clock");
+        assert!(
+            budget.slices() >= 1,
+            "tick {tick} spent the slice the order turn needs"
+        );
+        assert!(
+            examined <= super::SITE_ATTEMPTS,
+            "tick {tick} examined {examined} lots instead of one slice"
+        );
+        if stepping_before {
+            assert!(
+                examined > 0,
+                "tick {tick} stepped a holding settlement to nothing"
+            );
+            steps += u32::from(tick < 9);
+        } else {
+            assert_eq!(examined, 0, "tick {tick} stepped without a holding walk");
+        }
+        assert_eq!(
+            summary(&state, second),
+            frozen_before,
+            "tick {tick} stepped a settlement whose flag is clear"
+        );
+        assert_eq!(
+            summary(&state, hopeless_id),
+            hopeless_before,
+            "tick {tick} stepped a walk that holds nothing"
+        );
+    }
+    assert!(
+        steps >= 5,
+        "the holding settlement stepped only {steps} ticks"
+    );
+    assert_eq!(
+        admissions, 1,
+        "construction admitted {admissions} times in twelve ticks"
+    );
+}
+
+/// The stepping flag is armed and cleared only by the passes that own it
+/// (review round 2 N1-N3), through those real paths rather than by hand:
+/// the settlement's own admission pass arms it, a step that restarted a walk
+/// clears it, an owner order's scan and a storehouse wait never arm it, and a
+/// pass that cannot scan (the builder gate) clears an armed one.
+#[test]
+fn the_stepping_flag_is_armed_and_cleared_by_its_own_passes() {
+    let (mut state, id, _builder) = fixture();
+    terrain_tests::wide_plan(&mut state);
+    terrain_tests::restore_stock(&mut state);
+    let armed = |state: &TickState| {
+        state
+            .settlements
+            .site_sweep
+            .get(&id)
+            .is_some_and(|sweeps| sweeps.stepping)
+    };
+    let examined = || site_refusals::EXAMINED.with(std::cell::Cell::get);
+    let set_flag = |state: &mut TickState, value: bool| {
+        state.settlements.site_sweep.entry(id).or_default().stepping = value;
+    };
+    // N2 (storehouse): `storage::plan` shares the order's rule and never arms
+    // the flag. Reaching its scan needs a full bank behind a standing store
+    // (an empty new store makes `needed` false), so the rule is not driven
+    // here; the order turn below covers the same no-arming rule on the path
+    // that runs every tick.
+    // The settlement's own admission pass arms it when it leaves an unfinished
+    // walk that already holds a legal lot.
+    stock_buildings(
+        &mut state,
+        &[("spanish_house", 1), ("farm", 1), ("mason", 1)],
+    );
+    assert!(!plan_pass(
+        &mut state,
+        id,
+        &mut site_turn::SiteBudget::default()
+    ));
+    assert!(armed(&state), "an unfinished holding walk arms the step");
+    // N3: a street change restarts the walk inside the step, which clears it.
+    // The change blocks a street column the walk really uses (near the far end
+    // of the frontage list), and the test proves it shortened the frontage list
+    // before asserting the flag.
+    let frontages = |state: &TickState| {
+        let record = state.settlements.get(id).unwrap();
+        layout::Network::for_construction(state, record)
+            .frontage()
+            .len()
+    };
+    let before = frontages(&state);
+    let cut = {
+        let record = state.settlements.get(id).unwrap();
+        let fronts = layout::Network::for_construction(&state, record).frontage();
+        fronts[fronts.len().saturating_sub(3)].0
+    };
+    for y in cut[1] - 2..=cut[1] + 2 {
+        state
+            .world
+            .set_block(cut[0], y, cut[2], state.registry.states.stone);
+    }
+    state.world.fold_overlay();
+    let after = frontages(&state);
+    assert!(
+        after < before,
+        "blocking the street column {cut:?} must shorten the walk ({before} -> {after})"
+    );
+    state.tick = 1;
+    super::planner_tick(&mut state, &mut site_turn::SiteBudget::default());
+    // The restarted walk still holds a legal lot while the flag is clear, so
+    // `scan.waiting` is true: the only thing that can have cleared the flag is
+    // the restart rule this asserts (review round 3 T1).
+    let summary = |state: &TickState| {
+        state
+            .settlements
+            .site_sweep
+            .get(&id)
+            .map(site_refusals::Sweeps::summary)
+            .unwrap_or_default()
+    };
+    assert!(
+        summary(&state)
+            .iter()
+            .any(|(_, next, frontages, holds, _)| *holds && next < frontages),
+        "the step restarted a walk that still holds a lot: {:?}",
+        summary(&state)
+    );
+    assert!(
+        !armed(&state),
+        "a step that restarted a walk clears the flag"
+    );
+    // The next admission pass re-arms the restarted walk once it holds a lot.
+    assert!(!plan_pass(
+        &mut state,
+        id,
+        &mut site_turn::SiteBudget::default()
+    ));
+    assert!(armed(&state), "the next pass re-arms the restarted walk");
+    // N2 (owner order): the order's own scan really scans, opens no project,
+    // leaves the farm walk unfinished and holding, and never arms the flag - so
+    // the removed arming line (`stepping = pass.waiting && pass.site.is_none()`)
+    // would have armed it (review round 3 T2).
+    set_flag(&mut state, false);
+    site_refusals::EXAMINED.with(|count| count.set(0));
+    let scan = super::start_build(&mut state, id, "farm", 64);
+    assert!(
+        scan.is_err(),
+        "a 64-lot order scan cannot finish this village's walk: {scan:?}"
+    );
+    assert!(examined() > 0, "the order's scan examined lots");
+    assert!(
+        state.settlements.get(id).unwrap().projects.is_empty(),
+        "the order scan opened no project"
+    );
+    assert!(
+        summary(&state)
+            .iter()
+            .any(|(kind, next, frontages, holds, _)| kind == "farm"
+                && *holds
+                && *next < *frontages),
+        "the order scan left the farm walk unfinished and holding: {:?}",
+        summary(&state)
+    );
+    assert!(!armed(&state), "an owner order's scan never arms the step");
+    // N1: a pass that cannot reach the scan (the builder gate, with an active
+    // project) clears an armed flag instead of leaving it standing.
+    start(&mut state, id, "spanish_house", 1, None);
+    set_flag(&mut state, true);
+    assert!(!plan_pass(
+        &mut state,
+        id,
+        &mut site_turn::SiteBudget::default()
+    ));
+    assert!(!armed(&state), "a pass that cannot scan clears the flag");
+}
+
 #[test]
 fn an_autonomous_house_selected_first_keeps_its_slot_before_a_later_cultural_order() {
     let (mut state, id) = housing_fixture(false);
@@ -1682,6 +2114,148 @@ fn a_funded_sweep_that_still_holds_a_candidate_keeps_the_slot() {
     assert!(state.settlements.get(id).unwrap().projects.is_empty());
 }
 
+/// The guard the removed terrace test held (review round 3 C7): a funded kind
+/// that won its whole walk and was refused only in `materialize` must not
+/// release an earlier kind's hold in the same pass.
+///
+/// The refusal is materialize-only. A registered planted tree stands beside the
+/// winner's walking corridor and its crown hangs over a corridor column at head
+/// height inside the territory, but one branch log in a second column leaves
+/// the whole component unprovable, so `forestry::cells` refuses with
+/// `whole_tree_unproven`. `check` and the sweep's route guard (`lot_has_tree`
+/// with no route) cannot see that cell, so the lot still wins the ranking.
+#[test]
+fn a_refused_materialization_keeps_the_earlier_hold() {
+    let (mut state, id, builder) = fixture();
+    terrain_tests::wide_plan(&mut state);
+    terrain_tests::restore_stock(&mut state);
+    fund(&mut state, "spanish_house", 1);
+    start(&mut state, id, "spanish_house", 1, None);
+    complete(&mut state, id, builder);
+    let house = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    // One bed against two residents: the planner still wants a House, so the
+    // funded scan advances the House walk before the Farm.
+    let resident = crate::settlements::allocator::tests::villager(&mut state, [1.5, 201.0, 3.5]);
+    let entity = state.entities.body(resident).id;
+    crate::settlements::bind(&mut state, id, entity).unwrap();
+    stock_buildings(
+        &mut state,
+        &[("spanish_house", 1), ("spanish_house", 2), ("farm", 1)],
+    );
+    let farm = blueprints::get(&state.registry, "farm").unwrap();
+    let house_blueprint = catalog(&state, state.settlements.get(id).unwrap())
+        .find(|blueprint| blueprint.kind == BuildingKind::House)
+        .expect("catalog House");
+    // Where the Farm would win on the open ground and how its walk reaches it.
+    let winner = {
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(&state, id);
+        site_project(
+            &state,
+            record,
+            std::iter::once(farm),
+            &mut site_refusals::Sweeps::default(),
+            0,
+            u32::MAX,
+            &images,
+        )
+        .site
+        .expect("the open ground admits one Farm")
+    };
+    let corridor = layout::Network::for_construction(&state, state.settlements.get(id).unwrap())
+        .construction_access(&winner.project)
+        .expect("the winning lot is reachable");
+    let street = corridor[0];
+    // A registered planted tree two columns off that walking column, its crown
+    // over the column at head height; a branch log in a second column makes the
+    // whole component ambiguous, so no cell of it can be proved owned.
+    let log = block(&state, "minecraft:oak_log", &[("axis", "y")]);
+    let leaves = block(&state, "minecraft:oak_leaves", &[("persistent", "false")]);
+    let root = [street[0] + 2, street[1] + 1, street[2] + 2];
+    for y in root[1]..=root[1] + 3 {
+        state.world.set_block(root[0], y, root[2], log);
+    }
+    state
+        .world
+        .set_block(root[0] + 1, root[1] + 2, root[2], log);
+    for y in street[1] + 1..=street[1] + 2 {
+        state.world.set_block(street[0], y, street[2], leaves);
+    }
+    state.world.fold_overlay();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .planted_trees
+        .insert(root);
+    // Real passes seed both live sweeps: the House stops halfway holding its
+    // ranked lot, the Farm stops one slice short of its winner.
+    let frontages = u32::try_from(
+        layout::Network::for_construction(&state, state.settlements.get(id).unwrap())
+            .frontage()
+            .len(),
+    )
+    .unwrap();
+    let mut sweeps = site_refusals::Sweeps::default();
+    let house_seed = {
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(&state, id);
+        site_project(
+            &state,
+            record,
+            std::iter::once(house_blueprint),
+            &mut sweeps,
+            0,
+            frontages / 2,
+            &images,
+        )
+    };
+    assert!(
+        house_seed.site.is_none() && house_seed.running && house_seed.waiting,
+        "the House sweep stays unfinished while holding its ranked lot"
+    );
+    let farm_seed = {
+        let record = state.settlements.get(id).unwrap();
+        let images = executor::source_images(&state, id);
+        site_project(
+            &state,
+            record,
+            std::iter::once(farm),
+            &mut sweeps,
+            0,
+            frontages - 8,
+            &images,
+        )
+    };
+    assert!(
+        farm_seed.site.is_none() && farm_seed.running && farm_seed.waiting,
+        "the Farm sweep stops one slice short of completing with its ranked lot"
+    );
+    state.settlements.site_sweep.insert(id, sweeps);
+    assert!(upgrade_available(&state, id, house));
+    let _ = super::super::forestry::take_last_tree_stage();
+    assert!(
+        !plan_pass(&mut state, id, &mut site_turn::SiteBudget::default()),
+        "the refused sweep is not an admission"
+    );
+    assert_eq!(
+        super::super::forestry::take_last_tree_stage(),
+        Some("whole_tree_unproven"),
+        "the winner's corridor tree is what refuses the plan"
+    );
+    assert!(
+        state.settlements.get(id).unwrap().projects.is_empty(),
+        "the House sweep's own hold survives the later kind's refused materialization"
+    );
+}
+
 /// The priority scan (physical beds) and the ordinary funded scan (certificate
 /// levels) fetch the same catalog House in one planning pass. A long real
 /// planner pass leaves that House sweep unfinished while already holding its
@@ -1810,181 +2384,4 @@ fn an_ordinary_revisit_of_the_priority_house_owns_the_hold() {
         assert_eq!(project.building, Some(house));
         assert!(!project.ordered, "the autonomous planner admitted it");
     }
-}
-
-/// The terrace fixture: a one-step avenue that climbs past the bell's elevation
-/// band and a flat, fully supported terrace whose village corridor has no
-/// bell-band support. A natural tree on the winning lot then makes the
-/// preparation refuse, while `check` still accepts the lot.
-fn terrace_fixture() -> (TickState, SettlementId, BuildingId, site_refusals::Sweeps) {
-    let (mut state, id, builder) = fixture();
-    terrain_tests::wide_plan(&mut state);
-    terrain_tests::restore_stock(&mut state);
-    fund(&mut state, "spanish_house", 1);
-    start(&mut state, id, "spanish_house", 1, None);
-    complete(&mut state, id, builder);
-    let house = *state
-        .settlements
-        .get(id)
-        .unwrap()
-        .buildings
-        .keys()
-        .next()
-        .unwrap();
-    // Two residents, one certificate level: the House is a funded kind, and a
-    // second resident keeps the L2 upgrade admissible.
-    let resident = crate::settlements::allocator::tests::villager(&mut state, [1.5, 201.0, 3.5]);
-    let entity = state.entities.body(resident).id;
-    crate::settlements::bind(&mut state, id, entity).unwrap();
-    stock_buildings(
-        &mut state,
-        &[("spanish_house", 1), ("spanish_house", 2), ("farm", 1)],
-    );
-    let stone = state.registry.states.stone;
-    let air = state.registry.states.air;
-    let anchor = state.settlements.get(id).unwrap().anchor;
-    // Seal every other lot, keeping the standing footprint and the stock
-    // chest's column clear.
-    for x in -48..64 {
-        for z in -48..64 {
-            if layout::cell(anchor, x, z) == layout::Cell::Lot
-                && !((0..17).contains(&x) && (0..14).contains(&z))
-            {
-                for y in 201..=250 {
-                    state.world.set_block(x, y, z, stone);
-                }
-            }
-        }
-    }
-    // The avenue climbs one block per column to y = 216, past the bell's band.
-    for x in 9..=24 {
-        for z in 7..=9 {
-            for y in 201..=200 + (x - 8) {
-                state.world.set_block(x, y, z, stone);
-            }
-        }
-    }
-    // A flat, fully supported terrace next to the avenue's top: flat ground
-    // needs no ramp, so `check` accepts the lot; the village corridor's own
-    // bell-band discovery still finds no support at this height.
-    for x in 24..=46 {
-        for z in 4..=22 {
-            for y in 201..=216 {
-                state.world.set_block(x, y, z, stone);
-            }
-            for y in 217..=250 {
-                state.world.set_block(x, y, z, air);
-            }
-        }
-    }
-    state.world.fold_overlay();
-    let farm = blueprints::get(&state.registry, "farm").unwrap();
-    // The planner itself says where the Farm's only legal lot is; a natural
-    // tree inside that footprint, away from its door line, is what turns the
-    // corridor's empty preparation into a refusal.
-    let winner = {
-        let record = state.settlements.get(id).unwrap();
-        let images = executor::source_images(&state, id);
-        let mut sweeps = site_refusals::Sweeps::default();
-        site_project(
-            &state,
-            record,
-            std::iter::once(farm),
-            &mut sweeps,
-            0,
-            u32::MAX,
-            &images,
-        )
-        .site
-        .map(|site| site.project.origin)
-    }
-    .expect("the terrace gives the funded Farm one legal lot");
-    let [ox, oy, oz] = winner;
-    let log =
-        crate::settlements::allocator::tests::block(&state, "minecraft:oak_log", &[("axis", "y")]);
-    let leaves = crate::settlements::allocator::tests::block(
-        &state,
-        "minecraft:oak_leaves",
-        &[("persistent", "false")],
-    );
-    for y in oy + 1..=oy + 4 {
-        state.world.set_block(ox + 2, y, oz + 2, log);
-    }
-    for x in ox + 1..=ox + 3 {
-        for z in oz + 1..=oz + 3 {
-            state.world.set_block(x, oy + 5, z, leaves);
-        }
-    }
-    state.world.fold_overlay();
-    // Real passes seed both live sweeps: the House keeps an unfinished sweep
-    // that already holds its ranked lot, and the Farm stops a few candidates
-    // short of the end of the street so this pass completes it.
-    let frontages = u32::try_from(
-        layout::Network::for_construction(&state, state.settlements.get(id).unwrap())
-            .frontage()
-            .len(),
-    )
-    .unwrap();
-    assert!(
-        frontages > 208,
-        "the terrace needs a street longer than two site grants: {frontages} frontages"
-    );
-    let house_blueprint = catalog(&state, state.settlements.get(id).unwrap())
-        .find(|blueprint| blueprint.kind == BuildingKind::House)
-        .unwrap();
-    let mut sweeps = site_refusals::Sweeps::default();
-    let house_seed = {
-        let record = state.settlements.get(id).unwrap();
-        let images = executor::source_images(&state, id);
-        site_project(
-            &state,
-            record,
-            std::iter::once(house_blueprint),
-            &mut sweeps,
-            0,
-            frontages - 200,
-            &images,
-        )
-    };
-    assert!(
-        house_seed.site.is_none() && house_seed.running && house_seed.waiting,
-        "the House sweep stays unfinished while holding its ranked lot"
-    );
-    let farm_seed = {
-        let record = state.settlements.get(id).unwrap();
-        let images = executor::source_images(&state, id);
-        site_project(
-            &state,
-            record,
-            std::iter::once(farm),
-            &mut sweeps,
-            0,
-            frontages - 8,
-            &images,
-        )
-    };
-    assert!(
-        farm_seed.site.is_none() && farm_seed.running && farm_seed.waiting,
-        "the Farm sweep stops just short of completing with its ranked lot"
-    );
-    (state, id, house, sweeps)
-}
-
-/// A funded later kind can win its sweep and still fail materialization (the
-/// terrace lot's village corridor has no bell-band support and a natural tree
-/// stands on it). That refusal must not release the earlier House sweep's own
-/// hold in the same pass, so the funded L2 upgrade still waits.
-#[test]
-fn a_refused_materialization_keeps_the_earlier_hold() {
-    let (mut state, id, house, seeded) = terrace_fixture();
-    assert!(upgrade_available(&state, id, house));
-    state.settlements.site_sweep.insert(id, seeded);
-    assert!(
-        !plan_pass(&mut state, id, &mut site_turn::SiteBudget::default()),
-        "the funded sweep's refusal is not an admission"
-    );
-    assert!(
-        state.settlements.get(id).unwrap().projects.is_empty(),
-        "the House sweep's own hold survives the later kind's refused materialization"
-    );
 }

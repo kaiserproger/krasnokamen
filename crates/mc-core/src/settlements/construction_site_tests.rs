@@ -1875,6 +1875,175 @@ fn probe_retained_village_site_supply() {
     let blueprint_name = std::env::var("D123_CIV_BLUEPRINT").unwrap_or_else(|_| "storage".into());
     let blueprint = blueprints::get(&state.registry, &blueprint_name)
         .unwrap_or_else(|| panic!("blueprint {blueprint_name:?} is not in the catalogue"));
+    if std::env::var_os("D123_CIV_STEP").is_some() {
+        // Review round 3 C6: one tick's site cost in release on this world.
+        // An off-cadence step is the pass prologue's storage images, one
+        // construction network and one 64-lot slice (`step_sites` takes one of
+        // the tick's two slices and runs one scan). The admission pass is the
+        // same prologue with two networks and two 64-lot slices. Eight samples;
+        // the median is the number to read.
+        let house = blueprints::get(&state.registry, "spanish_house")
+            .expect("spanish_house is in the catalogue");
+        let mut step_ms: Vec<f64> = Vec::new();
+        let mut pass_ms: Vec<f64> = Vec::new();
+        let mut network_ms: Vec<f64> = Vec::new();
+        let mut examined_step = 0u32;
+        let mut examined_pass = 0u32;
+        let scan = |state: &TickState, kind: &'static blueprints::Blueprint| {
+            let mut network = layout::Network::for_construction(state, &record);
+            let mut sweeps = site_refusals::Sweeps::default();
+            let mut survey = site_refusals::Survey::default();
+            let mut report = site_refusals::Report::default();
+            let mut budget = 64u32;
+            let floors: [std::collections::BTreeSet<[i32; 2]>; 4] = std::array::from_fn(|turns| {
+                site_refusals::floor_columns(kind, u8::try_from(turns).unwrap())
+            });
+            let _ = site_refusals::advance(
+                state,
+                &record,
+                &mut network,
+                kind,
+                &floors,
+                &mut survey,
+                &mut sweeps,
+                record.construction_cursor,
+                &mut budget,
+                &mut report,
+                true,
+            );
+            report.examined
+        };
+        for _ in 0..8 {
+            let started = std::time::Instant::now();
+            let images =
+                crate::plugin_structures::settlement_builds::source_images(&state, record.id);
+            examined_step = scan(&state, house);
+            step_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            std::hint::black_box(images.len());
+            let started = std::time::Instant::now();
+            let images =
+                crate::plugin_structures::settlement_builds::source_images(&state, record.id);
+            examined_pass = scan(&state, house) + scan(&state, blueprint);
+            pass_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            std::hint::black_box(images.len());
+        }
+        for _ in 0..8 {
+            let started = std::time::Instant::now();
+            let network = layout::Network::for_construction(&state, &record);
+            network_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            std::hint::black_box(network.frontage().len());
+        }
+        let median = |samples: &[f64]| {
+            let mut sorted = samples.to_vec();
+            sorted.sort_by(|a, b| a.partial_cmp(b).expect("finite"));
+            sorted[sorted.len() / 2]
+        };
+        let step_median = median(&step_ms);
+        let pass_median = median(&pass_ms);
+        let network_median = median(&network_ms);
+        println!(
+            "PROBE step house=spanish_house funded={blueprint_name} \
+             step_examined={examined_step} pass_examined={examined_pass} \
+             step_median_ms={step_median:.4} step_samples_ms={step_ms:?} \
+             pass_median_ms={pass_median:.4} pass_samples_ms={pass_ms:?} \
+             network_median_ms={network_median:.4}",
+        );
+        // The real path for comparison: stock the village's first container with
+        // the funded kind's bill (the recovered checkpoint's bank is empty, so
+        // nothing is funded and `step_sites` would examine nothing), arm the
+        // village's own flag, simulate its chunk, and time `step_sites` itself,
+        // which also runs `funded_kinds` and its funding proofs.
+        if let Some(&container) = super::sources(&state, record.id).first()
+            && let Some(entity) =
+                state
+                    .block_entities
+                    .get_mut(&(container[0], container[1], container[2]))
+            && let Some(level) = blueprint.level(1)
+        {
+            entity.slots.fill(mc_data::ItemStack::EMPTY);
+            let mut index = 0;
+            for &(item, mut count) in &level.materials {
+                while count > 0 && index < entity.slots.len() {
+                    let portion = count.min(64);
+                    entity.slots[index] = mc_data::ItemStack::new(item, portion as i32);
+                    index += 1;
+                    count -= portion;
+                }
+            }
+        }
+        let mut funded_ms: Vec<f64> = Vec::new();
+        let mut funded_count = 0usize;
+        for _ in 0..8 {
+            let images =
+                crate::plugin_structures::settlement_builds::source_images(&state, record.id);
+            let started = std::time::Instant::now();
+            let (kinds, count) = super::funded_kinds(&state, &record, record.id, &images);
+            funded_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            funded_count = count;
+            std::hint::black_box(kinds);
+        }
+        println!(
+            "PROBE step funded_kinds={funded_count} funded_median_ms={:.4} funded_samples_ms={funded_ms:?}",
+            median(&funded_ms),
+        );
+        // One kind's funding proof (`funded_variant`) is the unit `funded_kinds`
+        // pays per candidate kind: time it on the stocked bank.
+        let mut proof_ms: Vec<f64> = Vec::new();
+        let mut proof_ok = false;
+        if let Some(level) = blueprint.level(1) {
+            for _ in 0..8 {
+                let images =
+                    crate::plugin_structures::settlement_builds::source_images(&state, record.id);
+                let started = std::time::Instant::now();
+                let variant = super::storage::funded_variant(
+                    &state,
+                    &record,
+                    blueprint,
+                    &level.materials,
+                    &images,
+                );
+                proof_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+                proof_ok = variant.is_some();
+            }
+        }
+        println!(
+            "PROBE step proof_kind={blueprint_name} proof_funded={proof_ok} proof_median_ms={:.4} proof_samples_ms={proof_ms:?}",
+            median(&proof_ms),
+        );
+        let chunk = crate::boundary::ChunkPos {
+            x: record.anchor[0].div_euclid(16),
+            z: record.anchor[2].div_euclid(16),
+        };
+        state
+            .tickets
+            .insert("d123-civ-step-probe".into(), (chunk, 8));
+        state.refresh_active_chunks(state.tick);
+        if !state.world.is_active(chunk.x, chunk.z) {
+            println!("PROBE step real=unavailable:chunk-not-active chunk={chunk:?}");
+            return;
+        }
+        let mut real_ms: Vec<f64> = Vec::new();
+        let mut real_examined = 0u32;
+        for _ in 0..8 {
+            state
+                .settlements
+                .site_sweep
+                .entry(record.id)
+                .or_default()
+                .stepping = true;
+            site_refusals::EXAMINED.with(|count| count.set(0));
+            let mut budget = super::site_turn::SiteBudget::default();
+            let started = std::time::Instant::now();
+            super::step_sites(&mut state, &mut budget);
+            real_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            real_examined = site_refusals::EXAMINED.with(std::cell::Cell::get);
+        }
+        println!(
+            "PROBE step real_examined={real_examined} real_median_ms={:.4} real_samples_ms={real_ms:?}",
+            median(&real_ms),
+        );
+        return;
+    }
     let mut network = layout::Network::for_construction(&state, &record);
     let fronts = network.frontage();
     println!("PROBE frontages={}", fronts.len());
@@ -1911,6 +2080,81 @@ fn probe_retained_village_site_supply() {
                 entry.1.get_or_insert(lot.origin);
             }
         }
+    }
+    if std::env::var_os("D123_CIV_HORIZON").is_some() {
+        // Early-termination evidence in the units the walk counts: frontages
+        // EXAMINED (every frontage, legal or not), not legal lots.
+        let blueprint = blueprints::get(&state.registry, &blueprint_name).expect("blueprint");
+        let mut network = layout::Network::for_construction(&state, &record);
+        let fronts = network.frontage();
+        type Key = ((u32, u32, u32), i64, [i32; 3], u8);
+        let mut best_by_horizon: Vec<(usize, Option<Key>)> = [256usize, 512, 1024, 2048, 4096]
+            .into_iter()
+            .map(|h| (h, None))
+            .collect();
+        let mut best: Option<Key> = None;
+        let mut examined = 0usize;
+        let mut legal = 0usize;
+        let mut zero_work = 0usize;
+        let mut distances: Vec<i64> = Vec::new();
+        for (at, normal) in fronts {
+            examined += 1;
+            let Some(lot) = network.lot(blueprint, at, normal) else {
+                continue;
+            };
+            let size = blueprint.footprint(blueprints::Rotation::from_quarter_turns(lot.rotation));
+            let mut survey = site_refusals::Survey::default();
+            let Ok(cost) = site_refusals::check(
+                &state,
+                &record,
+                lot.origin,
+                size,
+                record.founding.as_ref(),
+                &mut survey,
+                Some(&site_refusals::floor_columns(blueprint, lot.rotation)),
+            ) else {
+                continue;
+            };
+            legal += 1;
+            let distance = (0..3)
+                .map(|axis| (i64::from(lot.origin[axis]) - i64::from(record.anchor[axis])).pow(2))
+                .sum::<i64>();
+            distances.push(distance);
+            let key = (cost.rank(), distance, lot.origin, lot.rotation);
+            if cost.rank() == (0, 0, 0) {
+                zero_work += 1;
+            }
+            if best.is_none_or(|known| key < known) {
+                best = Some(key);
+            }
+            for (horizon, slot) in &mut best_by_horizon {
+                if examined == *horizon {
+                    *slot = best;
+                }
+            }
+        }
+        let winner = best.expect("a legal lot");
+        for (horizon, snapshot) in &best_by_horizon {
+            let Some(found) = snapshot else { continue };
+            println!(
+                "PROBE horizon blueprint={blueprint_name} frontages={examined} legal={legal} h={horizon} best_rank={:?} best_dist={} winner_rank={:?} winner_dist={} same={}",
+                found.0,
+                found.1,
+                winner.0,
+                winner.1,
+                *found == winner
+            );
+        }
+        // The exact bound: a zero-work best whose every remaining frontage is
+        // farther from the bell. Suffix-min over the legal lots' distances.
+        let mut suffix = vec![i64::MAX; distances.len().saturating_add(1)];
+        for index in (0..distances.len()).rev() {
+            suffix[index] = suffix[index + 1].min(distances[index]);
+        }
+        println!(
+            "PROBE horizon_bound blueprint={blueprint_name} zero_work_lots={zero_work} winner_rank={:?} suffix_min_first={}",
+            winner.0, suffix[0]
+        );
     }
     if std::env::var_os("D123_CIV_PLAN_COST").is_some() {
         // The structural option: a candidate becomes `best` only if the real

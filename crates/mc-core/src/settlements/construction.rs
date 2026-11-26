@@ -904,6 +904,11 @@ fn start_build(
             &images,
         )
     };
+    // An owner order's own scan never arms the stepping flag (review round 2
+    // N2): `step_sites` repeats only the autonomous scan, and this very state
+    // (a pending order, a storehouse wait) is what blocks that scan, so arming
+    // here would step a walk the settlement cannot admit from. The settlement's
+    // own planner pass owns the flag.
     state.settlements.site_sweep.insert(id, sweeps);
     let SitePass {
         site,
@@ -1533,6 +1538,44 @@ struct SitePass {
     /// fetched by the priority scan (physical beds) and then by the ordinary
     /// funded scan (certificate levels); the later visit owns its final state.
     house_advanced: bool,
+    /// A walk finished in a pass that may not admit (an off-cadence step): its
+    /// proven winner is parked in the sweep and waits for the settlement's next
+    /// `PLAN_CADENCE` admission pass (up to 20 x settlements ticks), so the
+    /// settlement stops stepping until that pass reports again.
+    complete: bool,
+}
+
+/// Search the funded kinds in priority order over one shared street walk, for an
+/// admission: the winner is materialized and returned.
+fn site_project<'a>(
+    state: &TickState,
+    record: &SettlementRecord,
+    kinds: impl ExactSizeIterator<Item = &'a blueprints::Blueprint>,
+    sweeps: &mut site_refusals::Sweeps,
+    start: u32,
+    attempts: u32,
+    images: &[super::inventory::Image],
+) -> SitePass {
+    scan_site_kinds(
+        state,
+        record,
+        kinds,
+        sweeps,
+        start,
+        SiteSlice {
+            lots: attempts,
+            admit: true,
+        },
+        images,
+    )
+}
+
+/// One scan's slice: the lots it may examine, and whether a completed walk's
+/// winner may be materialized (an off-cadence step parks it instead).
+#[derive(Clone, Copy)]
+struct SiteSlice {
+    lots: u32,
+    admit: bool,
 }
 
 /// Search the funded kinds in priority order over one shared street walk.
@@ -1542,14 +1585,15 @@ struct SitePass {
 /// cannot starve a later one, and the first kind in priority order still wins
 /// when several are ready. Admission is decided on the authored bill only, so
 /// foundation material is a project shortfall, not a site refusal. Only the
-/// winner is materialized.
-fn site_project<'a>(
+/// winner is materialized, and only when `slice.admit`: a step off the
+/// admission clock parks a completed walk's winner in its sweep instead.
+fn scan_site_kinds<'a>(
     state: &TickState,
     record: &SettlementRecord,
     kinds: impl ExactSizeIterator<Item = &'a blueprints::Blueprint>,
     sweeps: &mut site_refusals::Sweeps,
     start: u32,
-    attempts: u32,
+    slice: SiteSlice,
     images: &[super::inventory::Image],
 ) -> SitePass {
     let mut network = layout::Network::for_construction(state, record);
@@ -1567,6 +1611,7 @@ fn site_project<'a>(
             running: false,
             waiting: false,
             house_advanced: false,
+            complete: false,
         };
     }
     let mut cursor = start % count;
@@ -1576,8 +1621,8 @@ fn site_project<'a>(
     // of being dropped. This is the only thing the hand-out changes: a kind was
     // never starved by the kinds before it (each one already had its own share;
     // a sweep standing still in the gate log was simply not funded that pass).
-    let share = attempts / kinds_count;
-    let mut leftover = attempts % kinds_count;
+    let share = slice.lots / kinds_count;
+    let mut leftover = slice.lots % kinds_count;
     let mut running = false;
     let mut advanced: Vec<&'a str> = Vec::with_capacity(kinds.len());
     let mut house_advanced = false;
@@ -1627,6 +1672,7 @@ fn site_project<'a>(
             cursor,
             &mut budget,
             &mut report,
+            !slice.admit,
         ) {
             site_refusals::Advance::Incomplete(next) => {
                 cursor = next;
@@ -1636,21 +1682,29 @@ fn site_project<'a>(
                 cursor = 0;
             }
             site_refusals::Advance::Cheapest(origin, rotation) => {
-                let site = site_refusals::materialize(
-                    state,
-                    record,
-                    site_refusals::Winner {
-                        blueprint,
-                        origin,
-                        rotation,
-                        species,
-                        color,
-                    },
-                    &floors[usize::from(rotation) % 4],
-                    &mut survey,
-                    images,
-                    &mut report,
-                );
+                // A step that may not admit leaves nothing to materialize: the
+                // completed walk is parked in its sweep (see `advance`) and
+                // waits for the settlement's next `PLAN_CADENCE` admission pass.
+                let site = slice
+                    .admit
+                    .then(|| {
+                        site_refusals::materialize(
+                            state,
+                            record,
+                            site_refusals::Winner {
+                                blueprint,
+                                origin,
+                                rotation,
+                                species,
+                                color,
+                            },
+                            &floors[usize::from(rotation) % 4],
+                            &mut survey,
+                            images,
+                            &mut report,
+                        )
+                    })
+                    .flatten();
                 // A refused materialization is not an admission: an earlier
                 // kind's unfinished sweep that holds a lot keeps the slot.
                 return SitePass {
@@ -1660,6 +1714,7 @@ fn site_project<'a>(
                     running,
                     waiting: sweeps.holding(advanced.iter().copied()),
                     house_advanced,
+                    complete: true,
                 };
             }
         }
@@ -1672,6 +1727,220 @@ fn site_project<'a>(
         // Only the kinds this pass advanced own the hold.
         waiting: sweeps.holding(advanced.iter().copied()),
         house_advanced,
+        complete: false,
+    }
+}
+
+/// One bounded site scan of a settlement: the priority House's walk first, then
+/// the funded kinds over the same runtime sweeps. Its two passes are the ones
+/// the settlement's admission turns run; a step off the admission clock runs at
+/// most one of them with one slice and may not admit.
+struct SiteScan {
+    house: Option<FundedSite>,
+    cursor: u32,
+    funded: Option<SitePass>,
+    /// A kind's whole sweep still has candidates to examine.
+    running: bool,
+    /// A kind this scan advanced is unfinished and already holds a legal lot.
+    waiting: bool,
+    /// A walk finished in a step that may not admit; its lot is parked in the
+    /// sweep and waits for the settlement's next `PLAN_CADENCE` admission pass.
+    complete: bool,
+}
+
+/// The funded autonomous kinds this scan may consider, in priority order. A
+/// kind whose level-one bill no stock can fund is skipped, so a funded kind
+/// later in the order is never starved by an unfunded one before it.
+fn funded_kinds(
+    state: &TickState,
+    record: &SettlementRecord,
+    id: SettlementId,
+    images: &[super::inventory::Image],
+) -> (
+    [Option<&'static blueprints::Blueprint>; AUTONOMOUS_KINDS],
+    usize,
+) {
+    let mut funded = [None; AUTONOMOUS_KINDS];
+    let mut count = 0;
+    let catalog = catalog(state, record);
+    for kind in candidate_kinds(state, record, images) {
+        let Some(blueprint) = catalog.clone().find(|blueprint| blueprint.kind == kind) else {
+            continue;
+        };
+        if blueprint
+            .level(1)
+            .is_some_and(|level| funded_variant(state, id, &level.materials, images).is_some())
+        {
+            funded[count] = Some(blueprint);
+            count += 1;
+        }
+    }
+    (funded, count)
+}
+
+/// The settlement's site scan. `step` is an off-cadence step's already-taken
+/// single slice: the whole scan spends it, only one of the two passes runs (the
+/// priority House's walk while it is unfinished, else the funded kinds), and
+/// nothing is materialized. `None` is the admission pass, which takes one slice
+/// per pass (the D42 planner budget) and materializes its winner.
+fn scan_sites(
+    state: &TickState,
+    id: SettlementId,
+    record: &SettlementRecord,
+    images: &[super::inventory::Image],
+    sweeps: &mut site_refusals::Sweeps,
+    budget: &mut site_turn::SiteBudget,
+    step: Option<u32>,
+) -> SiteScan {
+    let admit = step.is_none();
+    // In a step the priority House is scanned only while its own walk is
+    // unfinished; a finished (parked) one waits for the admission pass and
+    // leaves the slice to the funded kinds.
+    let house = match priority_house(state, record, images) {
+        Some(house) if admit || sweeps.unfinished(&house.id) => Some(scan_site_kinds(
+            state,
+            record,
+            std::iter::once(house),
+            sweeps,
+            record.construction_cursor,
+            SiteSlice {
+                lots: step.unwrap_or_else(|| budget.take()),
+                admit,
+            },
+            images,
+        )),
+        _ => None,
+    };
+    let house_ran = house.is_some();
+    let house = house.unwrap_or_else(|| SitePass {
+        site: None,
+        cursor: record.construction_cursor,
+        report: site_refusals::Report::default(),
+        running: false,
+        waiting: false,
+        house_advanced: false,
+        complete: false,
+    });
+    let mut running = house.running;
+    let mut waiting = house.waiting;
+    let mut complete = house.complete;
+    let mut funded = None;
+    // An admission pass scans the funded kinds whenever the priority House has
+    // no site; a step scans them only when it did not already spend its slice.
+    if house.site.is_none() && (admit || !house_ran) {
+        let (kinds, count) = funded_kinds(state, record, id, images);
+        if count != 0 {
+            let pass = scan_site_kinds(
+                state,
+                record,
+                kinds
+                    .into_iter()
+                    .take(count)
+                    .map(|blueprint| blueprint.expect("funded prefix")),
+                sweeps,
+                house.cursor,
+                SiteSlice {
+                    lots: step.unwrap_or_else(|| budget.take()),
+                    admit,
+                },
+                images,
+            );
+            running |= pass.running;
+            // The priority scan (physical beds) and the ordinary scan
+            // (certificate levels) can fetch the same catalog House in one
+            // pass. When the ordinary pass really walked that sweep again,
+            // its final state owns the House's hold: a completed sweep whose
+            // recheck moved the world carries no hold, and the stale
+            // priority hold must not survive it.
+            if pass.house_advanced {
+                waiting = pass.waiting;
+            } else {
+                waiting |= pass.waiting;
+            }
+            complete |= pass.complete;
+            // Why a funded kind still has no site is the question the gates
+            // could not answer: autonomous refusals were never logged, so
+            // "no House in the run" had no cause on disk (ReviewD123Civ13).
+            if pass.site.is_none() {
+                // Log-only diagnosis (HANDOFF-49): a settlement that never admits
+                // has to say whether its sweeps finish, restart on a street change,
+                // or finish without a lot. `sweeps` is
+                // (kind, next, frontages, holds a lot, restarts).
+                tracing::debug!(
+                    target: "settlements::construction",
+                    settlement = id.0,
+                    cursor = pass.cursor,
+                    frontages = pass.report.frontages,
+                    examined = pass.report.examined,
+                    sweeps = ?sweeps.summary(),
+                    refusals = ?pass.report,
+                    "funded kinds found no legal site"
+                );
+            }
+            funded = Some(pass);
+        }
+    }
+    SiteScan {
+        house: house.site,
+        cursor: house.cursor,
+        funded,
+        running,
+        waiting,
+        complete,
+    }
+}
+
+/// Off the four-tick construction clock, step the settlement whose last
+/// admission pass left an unfinished walk holding a legal lot: only its site
+/// scan, ONE slice for the whole tick, and never an admission, a construction
+/// cell or a duty. The slice taken is one of the tick's two, so the order turn
+/// and the replanting proofs keep one; the lowest settlement id with a holding
+/// walk steps first, and the next follows once that walk finishes or a street
+/// change restarts it (a restart clears the flag until the next admission pass).
+/// `drain_carry_duties`, the gatherer staffing and the builder assignment stay
+/// on `PLAN_CADENCE`; `villager::building::tick` stays on the four-tick clock,
+/// so construction's pace is unchanged (review round 3 C1/C2/C5, round 2 N3).
+fn step_sites(state: &mut TickState, budget: &mut site_turn::SiteBudget) {
+    let stepping: Vec<SettlementId> = state
+        .settlements
+        .site_sweep
+        .iter()
+        .filter(|(_, sweeps)| sweeps.stepping)
+        .map(|(id, _)| *id)
+        .collect();
+    for id in stepping {
+        // One slice per tick, and a whole slice always stays behind.
+        if budget.slices() < 2 {
+            break;
+        }
+        let active = state.settlements.get(id).is_some_and(|record| {
+            state.world.is_active(
+                record.anchor[0].div_euclid(16),
+                record.anchor[2].div_euclid(16),
+            )
+        });
+        if !active {
+            continue;
+        }
+        let slice = budget.take();
+        let images = executor::source_images(state, id);
+        let mut sweeps = state.settlements.site_sweep.remove(&id).unwrap_or_default();
+        let restarts = sweeps.restarts_total();
+        let scan = {
+            let record = state.settlements.get(id).expect("stepped settlement");
+            scan_sites(state, id, record, &images, &mut sweeps, budget, Some(slice))
+        };
+        // A finished walk waits for the settlement's next admission pass. An
+        // unfinished walk that still holds a lot keeps stepping; one that holds
+        // nothing clears the flag, so a village whose walk finds no legal lot
+        // returns to the normal cadence instead of paying a scan every tick
+        // (C4). A step whose scan restarted a walk (a street change dropped it,
+        // or its stored best lost its cost) clears it too: the new walk starts
+        // holding nothing and the next admission pass re-arms it, so continuous
+        // churn cannot become steady-state stepping, and the lowest settlement
+        // id cannot keep the tick to itself (review round 2 N3).
+        sweeps.stepping = scan.waiting && !scan.complete && sweeps.restarts_total() == restarts;
+        state.settlements.site_sweep.insert(id, sweeps);
     }
 }
 
@@ -1736,6 +2005,14 @@ fn plan(state: &mut TickState, id: SettlementId) {
 /// The settlement's planner pass; its site slices come from `budget`. True
 /// when it opened an autonomous project past the builder gate.
 fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::SiteBudget) -> bool {
+    // The settlement's own admission pass owns its stepping flag, and every
+    // early return below (a head order, the storehouse, the founding handover,
+    // the builder gate, no residents) must leave it cleared: a pass that cannot
+    // scan must not leave a walk stepped off the clock (review round 2 N1). The
+    // end of the scan sets it again when the pass leaves a holding walk.
+    if let Some(sweeps) = state.settlements.site_sweep.get_mut(&id) {
+        sweeps.stepping = false;
+    }
     // Pending orders permit an existing expedition's handover or cancellation,
     // never admission or construction of another outpost.
     if state
@@ -1785,98 +2062,22 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     // candidates still get their shared scan in this same planning pass. Both
     // read and extend the same runtime-only sweep scratch.
     let mut sweeps = state.settlements.site_sweep.remove(&id).unwrap_or_default();
-    let record = state.settlements.get(id).expect("planned settlement");
-    let (house, house_cursor, funded_site, search_running, search_waiting) = {
-        let sweeps = &mut sweeps;
-        let house = priority_house(state, record, &images).map_or_else(
-            || SitePass {
-                site: None,
-                cursor: record.construction_cursor,
-                report: site_refusals::Report::default(),
-                running: false,
-                waiting: false,
-                house_advanced: false,
-            },
-            |house| {
-                site_project(
-                    state,
-                    record,
-                    std::iter::once(house),
-                    sweeps,
-                    record.construction_cursor,
-                    budget.take(),
-                    &images,
-                )
-            },
-        );
-        let mut running = house.running;
-        let mut waiting = house.waiting;
-        let mut funded_site = None;
-        if house.site.is_none() {
-            let mut funded = [None; AUTONOMOUS_KINDS];
-            let mut funded_count = 0;
-            let catalog = catalog(state, record);
-            for kind in candidate_kinds(state, record, &images) {
-                let Some(blueprint) = catalog.clone().find(|blueprint| blueprint.kind == kind)
-                else {
-                    continue;
-                };
-                if blueprint.level(1).is_some_and(|level| {
-                    funded_variant(state, id, &level.materials, &images).is_some()
-                }) {
-                    funded[funded_count] = Some(blueprint);
-                    funded_count += 1;
-                }
-            }
-            if funded_count != 0 {
-                let pass = site_project(
-                    state,
-                    record,
-                    funded
-                        .into_iter()
-                        .take(funded_count)
-                        .map(|blueprint| blueprint.expect("funded prefix")),
-                    sweeps,
-                    house.cursor,
-                    budget.take(),
-                    &images,
-                );
-                running |= pass.running;
-                // The priority scan (physical beds) and the ordinary scan
-                // (certificate levels) can fetch the same catalog House in one
-                // pass. When the ordinary pass really walked that sweep again,
-                // its final state owns the House's hold: a completed sweep whose
-                // recheck moved the world carries no hold, and the stale
-                // priority hold must not survive it.
-                if pass.house_advanced {
-                    waiting = pass.waiting;
-                } else {
-                    waiting |= pass.waiting;
-                }
-                // Why a funded kind still has no site is the question the gates
-                // could not answer: autonomous refusals were never logged, so
-                // "no House in the run" had no cause on disk (ReviewD123Civ13).
-                if pass.site.is_none() {
-                    // Log-only diagnosis (HANDOFF-49): a settlement that never admits
-                    // has to say whether its sweeps finish, restart on a street change,
-                    // or finish without a lot. `sweeps` is
-                    // (kind, next, frontages, holds a lot, restarts).
-                    tracing::debug!(
-                        target: "settlements::construction",
-                        settlement = id.0,
-                        cursor = pass.cursor,
-                        frontages = pass.report.frontages,
-                        examined = pass.report.examined,
-                        sweeps = ?sweeps.summary(),
-                        refusals = ?pass.report,
-                        "funded kinds found no legal site"
-                    );
-                }
-                funded_site = Some(pass);
-            }
-        }
-        (house.site, house.cursor, funded_site, running, waiting)
+    let scan = {
+        let record = state.settlements.get(id).expect("planned settlement");
+        scan_sites(state, id, record, &images, &mut sweeps, budget, None)
     };
+    // Only a pass that ended with no candidate while a walk it advanced still
+    // holds a legal lot leaves the settlement stepping (review round 3 C3).
+    sweeps.stepping = scan.waiting
+        && scan.house.is_none()
+        && scan.funded.as_ref().is_none_or(|pass| pass.site.is_none());
+    let (house, house_cursor, funded_site, search_running, search_waiting) = (
+        scan.house,
+        scan.cursor,
+        scan.funded,
+        scan.running,
+        scan.waiting,
+    );
     state.settlements.site_sweep.insert(id, sweeps);
     if let Some(site) = house {
         return begin_cells(state, site.project, site.bounds, site.cells);
@@ -2780,14 +2981,20 @@ fn carry_debtor(state: &TickState, id: SettlementId, uuid: uuid::Uuid) -> bool {
 }
 
 /// Planning keeps its one-settlement/second budget; its site slices come from
-/// the tick's `budget` (`site_turn`). Construction has a separate four-tick
+/// the tick's `budget` (`site_turn`). Construction keeps its own four-tick
 /// admission clock, retaining the bounded round-robin settlement budget.
 fn planner_tick(state: &mut TickState, budget: &mut site_turn::SiteBudget) {
-    if !state.tick.is_multiple_of(4) {
-        return;
-    }
     let count = state.settlements.records().count();
     if count == 0 {
+        return;
+    }
+    if !state.tick.is_multiple_of(4) {
+        // Off the admission clock only a settlement whose last pass left an
+        // unfinished walk holding a legal lot is stepped, and only its site
+        // scan: no duties, no gatherer staffing, no builder assignment, no
+        // admission and no construction cell. A walk that finishes off the
+        // clock parks its lot for the next admission pass.
+        step_sites(state, budget);
         return;
     }
     let selected = |state: &TickState, turn: u64| {
@@ -2803,6 +3010,8 @@ fn planner_tick(state: &mut TickState, budget: &mut site_turn::SiteBudget) {
             })
             .map(|record| record.id)
     };
+    // The planner's once-per-PLAN_CADENCE admission pass; the four-tick clock
+    // below it only advances construction.
     if state.tick.is_multiple_of(PLAN_CADENCE)
         && let Some(id) = selected(state, state.tick / PLAN_CADENCE)
     {

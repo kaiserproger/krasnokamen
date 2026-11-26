@@ -23,6 +23,14 @@ pub(crate) struct WorkTarget {
     pub(crate) exact: bool,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Construction admissions this thread ran. The four-tick clock is a
+    /// contract of `construction::planner_tick`, so a cadence test counts the
+    /// calls instead of inferring them from placed cells.
+    pub(crate) static ADMISSIONS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
 fn block_pos([x, y, z]: [i32; 3]) -> BlockPos {
     BlockPos { x, y, z }
 }
@@ -534,6 +542,8 @@ fn builder_ready(state: &TickState, id: SettlementId, slot: EntitySlot) -> bool 
 /// Called once per construction admission, before the brain detaches carry.
 /// One transfer OR budgeted canonical cell advances, never both in an attempt.
 pub(crate) fn tick(state: &mut TickState, id: SettlementId) {
+    #[cfg(test)]
+    ADMISSIONS.with(|count| count.set(count.get() + 1));
     // One project per admission, round-robin over the active set: a tick still
     // writes one structure-registry image (D8).
     // The settlement is chosen every four ticks by `(tick/4) % S`, so the

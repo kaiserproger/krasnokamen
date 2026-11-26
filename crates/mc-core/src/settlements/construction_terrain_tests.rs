@@ -1019,6 +1019,7 @@ fn a_stale_ranking_restarts_instead_of_admitting_the_old_winner() {
         a.front,
         &mut budget,
         &mut report,
+        false,
     );
     assert!(
         matches!(first, site_refusals::Advance::Incomplete(_)),
@@ -1065,6 +1066,7 @@ fn a_stale_ranking_restarts_instead_of_admitting_the_old_winner() {
             0,
             &mut budget,
             &mut report,
+            false,
         ) {
             site_refusals::Advance::Incomplete(_) => {}
             site_refusals::Advance::Empty => panic!("the plan keeps legal lots"),
@@ -1161,6 +1163,7 @@ fn a_reordered_walk_of_the_same_length_restarts_the_sweep() {
         0,
         &mut budget,
         &mut report,
+        false,
     );
     assert!(matches!(first, site_refusals::Advance::Incomplete(_)));
     // The walk is reordered, same length; the old cursor would skip the winner.
@@ -1180,6 +1183,7 @@ fn a_reordered_walk_of_the_same_length_restarts_the_sweep() {
             0,
             &mut budget,
             &mut report,
+            false,
         ) {
             site_refusals::Advance::Incomplete(_) => {}
             site_refusals::Advance::Empty => panic!("the plan keeps legal lots"),
@@ -1225,6 +1229,7 @@ fn a_restart_keeps_the_tie_winner() {
             start,
             &mut budget,
             &mut report,
+            false,
         ) {
             site_refusals::Advance::Cheapest(origin, rotation) => (origin, rotation),
             other => panic!("a complete sweep ranks the lots: {other:?}"),
