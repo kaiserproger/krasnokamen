@@ -1424,3 +1424,71 @@ def check_entity_lightning(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["visual_review_required"] = [
         "Inspect one drawn bolt-*.png: the layer geometry proves the tubes, not the bolt's texels."
     ]
+
+
+def check_baby_armor(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-N1: a baby humanoid's armour shells carry the jar's own depths.
+
+    `HumanoidModel.createBabyArmorMeshSet(BABY_INNER, BABY_OUTER, PartPose.ZERO)` gives the baby
+    armour shells their own cube sizes; the pre-image hand-fitted them 1.3-1.75x oversized. The
+    armour layer is a separate material from the body, so one baby zombie in a full diamond set makes
+    the armour layer's own bbox readable from `entity_extraction.entity_layer_geometry` (CM-4).
+
+    The absolute span scales with the kind's baby scale, which the frame does not report, so the
+    assertion is the scale-free ratio `depth / width`: derived with the client's own bone convention
+    (parent pivots accumulated, cube origin relative to the bone pivot) the shells' spans are
+    8.8 x 16.9 x 8.6 px on the fixed tree and 9.0 x 16.75 x 7.5 on the control (`da704d9b`
+    reverted), i.e. **0.977 vs 0.833** - a 17 % separation that no scale, only the shell geometry,
+    moves. The scene summons with `Rotation:[0f,0f]` so the entity's own yaw cannot swap x and z.
+
+    Fixtures first: the `empty` frame carries no armour layer, the `baby-armor-entities` dump lists
+    `minecraft:zombie`, and the framed entity is one and rendered, so a missing summon or a leaked
+    entity cannot read as the row's symptom. The armour material is picked as the largest `Armor*`
+    slice (glint/translucent sub-layers are smaller), and its name is reported.
+    """
+    shots = _qa._load_shots(probe, artifact, ("empty", "baby-armor"))
+    ref, frame = shots["empty"][0], shots["baby-armor"][0]
+    probe.check("baby_armor_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+    ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+
+    def armour(candidate):
+        slices = [layer for layer in candidate
+                  if str(layer.get("material") or "").startswith("Armor")
+                  and int(layer.get("indices") or 0) > 0]
+        return max(slices, key=lambda layer: int(layer.get("indices") or 0)) if slices else None
+
+    empty_layers = (ref.get("entity_extraction") or {}).get("entity_layer_geometry") or []
+    extraction = frame.get("entity_extraction") or {}
+    layers = extraction.get("entity_layer_geometry") or []
+    probe.report["baby_armor_empty_layers"] = empty_layers
+    probe.report["baby_armor_layers"] = layers
+    probe.check("empty_frame_has_no_armour", armour(empty_layers) is None)
+    dump = artifact / "baby-armor-entities.json"
+    dumped = []
+    if dump.is_file():
+        dumped = (json.loads(dump.read_text()).get("entities") or [])
+    probe.report["baby_armor_eligible"] = int(extraction.get("eligible") or 0)
+    probe.report["baby_armor_dump_entities"] = [entity.get("entity_type") for entity in dumped]
+    probe.check("baby_armor_reached_client",
+                int(extraction.get("eligible") or 0) >= 1
+                and any(entity.get("entity_type") == "minecraft:zombie" for entity in dumped))
+    probe.check("baby_armor_single_entity", extraction.get("submitted") == 1)
+    probe.check("baby_armor_rig_rendered", not extraction.get("unrendered"))
+    layer = armour(layers)
+    probe.check("armour_layer_present", layer is not None)
+    if layer is None:
+        probe.check("armour_z_over_x_in_range", False)
+        return
+    spans = [round(float(layer["max"][axis]) - float(layer["min"][axis]), 4) for axis in range(3)]
+    probe.report["baby_armor_material"] = layer.get("material")
+    probe.report["baby_armor_indices"] = int(layer.get("indices") or 0)
+    probe.report["baby_armor_spans"] = spans
+    ratio = round(spans[2] / spans[0], 4) if spans[0] else None
+    probe.report["baby_armor_z_over_x"] = ratio
+    # Derived before the pair (both sides, from the rig JSONs): fixed 8.6/8.8 = 0.977, control
+    # 7.5/9.0 = 0.833. The window keeps the fixed shells and excludes the hand-fitted ones.
+    probe.check("armour_z_over_x_in_range", ratio is not None and 0.95 <= ratio <= 1.00)
+    probe.report["visual_review_required"] = [
+        "Inspect baby-armor.png: the ratio proves the shells' depth, not the shoulder texels."
+    ]

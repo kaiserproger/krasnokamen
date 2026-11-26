@@ -1031,6 +1031,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="at least one frame's own `Lightning` layer (`entity_extraction.entity_layer_geometry`, CM-4) with the 1008 indices `world_fx::append_lightning` derives (13 spine segments plus two 4-segment branches, each an inner 0.09 and an outer 0.28 tube, four quads of six indices per tube) and the 128-block spine height; the `empty` frame carries no `Lightning` layer and the `bolt-entities` dump lists `minecraft:lightning_bolt`, so a failed summon cannot read as the deleted dispatch",
         limits="the dispatch and the tube numbers only; the bolt's texels, the flash cadence (`lightning_life`/`lightning_flashes`) and the side branches' shape stay unit-covered (`world_fx_tests`), and the dispatch pair is recorded in docs/bugs/promotions/MODEL-ENTITY-LIGHTNING-DRAW.hunks.md",
     ),
+    "native-baby-armor": _entry(
+        id="native-baby-armor", summary="A baby humanoid's armour shells carry the jar's own depths",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-baby-armor", requires=("xvfb",),
+        sources=("tools/harness/baby_armor_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, one baby zombie (`Age:-24000`, NoAI, `Rotation:[0f,0f]`) wearing a full diamond set at a fixed pad and camera, HUD default",
+        proves="the armour layer's own bbox (`entity_extraction.entity_layer_geometry`, CM-4, the largest `Armor*` slice) as the scale-free ratio depth/width (`armour_z_over_x_in_range` 0.95..1.00): the jar's `createBabyArmorMeshSet` shells measure 8.8 x 16.9 x 8.6 px, ratio 0.977, against the hand-fitted pre-image's 9.0 x 16.75 x 7.5, ratio 0.833; both derived from the rig JSONs with the client's bone convention before the pair, and the yaw-0 summon keeps x and z apart",
+        limits="the shells' own bounding depths only; the shoulder texels (the see-through row), the legging band under the boots and the generic `armor_baby_*` reachability stay with MODEL-OPUS-N5/N7 and their own witnesses, and the dispatch pair is recorded in docs/bugs/promotions/MODEL-OPUS-N1.hunks.md",
+    ),
     "native-rig-guardian": _entry(
         id="native-rig-guardian", summary="The guardian and baby bee submit exactly the vanilla layer's cubes",
         owner="core:harness", evidence="graphical", profile="scene-shot",
