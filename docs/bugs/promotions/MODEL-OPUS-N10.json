@@ -1,0 +1,69 @@
+{
+  "id": "MODEL-OPUS-N10",
+  "verdict": "promoted",
+  "fix_commit": "client:6d4540e3",
+  "fix_commit_full": "6d4540e37e0ea520bf0292243e024aa1d5dd7595",
+  "promoted_at": "2026-11-26T14:25:55+00:00",
+  "tree_head": "14d44cdf85469a50003cb56a3cfe2ab03f177c60",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T141930-native-entity-stray-4gjf07d7/result.json",
+    "client_head": "c921de7cea9f30d827dd066c18310cfd674d2660",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "red": [
+      "harness:scene-shot:native-entity-stray"
+    ],
+    "states": {
+      "harness:scene-shot:native-entity-stray": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T142303-native-entity-stray-jzgfscda/result.json",
+    "client_head": "ba1971d76215a305929c8cadc60ddb21282a6799",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "green": [
+      "harness:scene-shot:native-entity-stray"
+    ],
+    "states": {
+      "harness:scene-shot:native-entity-stray": "green"
+    },
+    "tree_head": "14d44cdf85469a50003cb56a3cfe2ab03f177c60",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T142303-native-entity-stray-jzgfscda/result.json",
+    "client_head": "ba1971d76215a305929c8cadc60ddb21282a6799",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "green": [
+      "harness:scene-shot:native-entity-stray"
+    ],
+    "states": {
+      "harness:scene-shot:native-entity-stray": "green"
+    },
+    "tree_head": "14d44cdf85469a50003cb56a3cfe2ab03f177c60",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "0f9f271c08435aed4a921c158ee72af4d8391e86",
+    "paths": [
+      "assets/krasnokamen/models/entity/cow.json",
+      "assets/krasnokamen/models/entity/glow_squid.json",
+      "assets/krasnokamen/models/entity/mooshroom.json",
+      "assets/krasnokamen/models/entity/skeleton.json",
+      "assets/krasnokamen/models/entity/stray.json"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::asset_model_regression_tests::cow_horn_cube_and_humanoid_hat_follow_the_26_3_layers": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T142421-ledger-promote-3ff0ot8o"
+}
