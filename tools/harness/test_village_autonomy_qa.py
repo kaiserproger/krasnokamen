@@ -466,9 +466,12 @@ class SettlementStockObservationTests(unittest.TestCase):
         detail = {}
         probe, reader = Mock(), Mock()
         buildings = ["Buildings: #1 storage level 1 [10, 64, 0]-[13, 66, 3]."]
-        with patch.object(qa, "_send", side_effect=[
-            {"recent_chat": ["Projects"]}, {"recent_chat": buildings},
-        ]), patch.object(qa, "_settlement_stock", return_value={
+        def send(_probe, command):
+            # The project read is retried once on a failed read (a Mock probe fails it every time);
+            # answer by command so the number of Projects reads never shifts the buildings reply.
+            return {"recent_chat": buildings if command == "settlement building list" else ["Projects"]}
+
+        with patch.object(qa, "_send", side_effect=send), patch.object(qa, "_settlement_stock", return_value={
             "minecraft:cobblestone": 190, "minecraft:acacia_log": 37,
         }) as stock:
             status = qa._planner_status(probe, detail, (1, 64, 1), reader)
