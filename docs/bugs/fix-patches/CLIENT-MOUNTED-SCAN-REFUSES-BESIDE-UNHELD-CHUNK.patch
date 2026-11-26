@@ -36,6 +36,15 @@ index 484a3c84..c2d67a04 100644
                  let mut speed = movement_speed;
                  let mut travel = [
                      movement[0] * 0.5,
+@@ -789,7 +803,7 @@ impl Player {
+                     let power = v.pending_jump;
+                     v.pending_jump = 0.;
+                     let jump = entities.attribute(handle, "minecraft:jump_strength")? as f32
+-                        * content.info(below_state)?.jump_factor;
++                        * block_jump;
+                     match kind {
+                         Kind::Camel => {
+                             let d = f64::from(22.2222f32 * power)
 @@ -1015,13 +1029,14 @@ impl Player {
                  }
                  if kind == Kind::Strider && fluid.1 > 0. {
@@ -173,6 +182,54 @@ index 484a3c84..c2d67a04 100644
                  1.
              } else {
                  f64::from(0.66f32)
+@@ -1657,28 +1698,29 @@ fn finish_move(
+             0.
+         };
+     }
+-    if v.grounded && name == "minecraft:slime_block" && v.velocity[1].abs() < 0.1 {
++    if v.grounded && name == Some("minecraft:slime_block") && v.velocity[1].abs() < 0.1 {
+         let multiplier = 0.4 + v.velocity[1].abs() * 0.2;
+         v.velocity[0] *= multiplier;
+         v.velocity[2] *= multiplier;
+     }
+-    let state = world.block(p).ok_or("unloaded_mount_collision")?;
+-    let current = content.info(state)?;
+-    let factor = if current.speed_factor != 1.
+-        || current
+-            .fluid
+-            .is_some_and(|fluid| fluid.kind == FluidKind::Water)
+-        || content.name(state) == Some("minecraft:bubble_column")
+-    {
+-        current.speed_factor
+-    } else {
+-        content
+-            .info(
+-                world
+-                    .block([p[0], (v.position[1] - 0.5000001).floor() as i32, p[2]])
+-                    .ok_or("unloaded_mount_collision")?,
+-            )?
+-            .speed_factor
++    let factor = match world.block(p) {
++        Some(state) => {
++            let current = content.info(state)?;
++            if current.speed_factor != 1.
++                || current
++                    .fluid
++                    .is_some_and(|fluid| fluid.kind == FluidKind::Water)
++                || content.name(state) == Some("minecraft:bubble_column")
++            {
++                current.speed_factor
++            } else {
++                match world.block([p[0], (v.position[1] - 0.5000001).floor() as i32, p[2]]) {
++                    Some(below) => content.info(below)?.speed_factor,
++                    None => 1.,
++                }
++            }
++        }
++        None => 1.,
+     };
+     let factor = factor + (1. - factor) * efficiency;
+     v.velocity[0] *= f64::from(factor);
 @@ -1702,7 +1744,10 @@ fn boat_water_above(world: &World, content: &Content, b: Bounds, last_y: f64) ->
          for x in b.min[0].floor() as i32..b.max[0].ceil() as i32 {
              for z in b.min[2].floor() as i32..b.max[2].ceil() as i32 {

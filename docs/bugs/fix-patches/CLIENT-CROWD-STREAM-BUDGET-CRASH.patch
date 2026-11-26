@@ -66,6 +66,27 @@ index d824f8ba..188daa5e 100644
          if entity.type_name == "minecraft:experience_orb" {
              match append_experience_orb(
                  entity,
+@@ -1190,6 +1224,7 @@ pub fn append(
+             store.slots[slot].submitted_revision = Some(store.revision);
+         }
+     }
++    drop(ordered);
+     store.frame_entities = frame;
+     stats.vertices = out.vertices.len();
+     Ok(stats)
+diff --git a/src/render.rs b/src/render.rs
+index dabdea70..933a1878 100644
+--- a/src/render.rs
++++ b/src/render.rs
+@@ -29,7 +29,7 @@ mod design_tests;
+ mod first_person_tests;
+ mod material;
+ mod mdi;
+-mod mesh;
++pub(crate) mod mesh;
+ mod metrics;
+ mod outline;
+ mod packed;
 diff --git a/src/render/mesh.rs b/src/render/mesh.rs
 index b30afeee..d648900c 100644
 --- a/src/render/mesh.rs
@@ -108,16 +129,41 @@ index b30afeee..d648900c 100644
              || indices.iter().map(|i| i.len()).sum::<usize>() > MAX_TRANSPARENT_PRIMITIVES * 3
          {
              return Err("dynamic_or_ui_stream_budget_exceeded".into());
-diff --git a/src/render.rs b/src/render.rs
-index dabdea70..933a1878 100644
---- a/src/render.rs
-+++ b/src/render.rs
-@@ -29,7 +29,7 @@ mod design_tests;
- mod first_person_tests;
- mod material;
- mod mdi;
--mod mesh;
-+pub(crate) mod mesh;
- mod metrics;
- mod outline;
- mod packed;
+diff --git a/docs/ENTITY_PRESENTATION.md b/docs/ENTITY_PRESENTATION.md
+index 58eb2ed4..77a11349 100644
+--- a/docs/ENTITY_PRESENTATION.md
++++ b/docs/ENTITY_PRESENTATION.md
+@@ -134,3 +134,33 @@ Seek: `fixed_frames_and_direct_forward_seek_apply_identical_state`
+ The state lives only in client memory and is never written to disk. Reverting
+ the change is a full rollback. There is no runtime switch or environment
+ variable.
++
++## The dynamic-stream bound (crowd frames)
++
++The entity pass appends into one dynamic GPU stream, and that stream is bounded
++(`render::mesh::Stream::validate_size`: 32 MiB of vertices, 16 MiB of indices, and the
++transparent-primitive cap). A large crowd used to fill it and end the client with
++`client failed: dynamic_or_ui_stream_budget_exceeded`; a 2000-mob overhead frame is ~46 MB of
++36-byte vertices against the 32 MB cap (CLIENT-CROWD-STREAM-BUDGET-CRASH).
++
++- **The entity pass owns three quarters of each cap** (`ENTITY_VERTEX_BUDGET`,
++  `ENTITY_INDEX_BUDGET`; the index share is three quarters of the *effective* limit,
++  `min(cap bytes / 4, MAX_TRANSPARENT_PRIMITIVES * 3)`). The remaining quarter is the rest of the
++  scene: clouds and weather are appended before the entities, block entities, the outline and the
++  per-entity shadow quads after them.
++- **Past its share the pass stops submitting bodies** and counts them in
++  `PresentationStats::dropped_over_budget` (serialized, so a scene can assert it). A dropped body
++  keeps its received state and is drawn on a later frame when the stream has room; it is not
++  removed, ticked differently or hidden from observations. World-text markers
++  (`marker`/`interaction`/`text_display`) and GPU crowd-instanced bodies take no dynamic-stream
++  space and are never counted.
++- **Order: nearest first, when the frame has more than 256 candidates** (`frame_entities::Entry`
++  distance from the camera); smaller frames keep `Store::candidates` order and are never sorted.
++  Only the *body* pass is ordered: shadows and nameplates reuse the gathered frame.
++- **Flicker at the cut is expected**: the cut depends on how many bytes the earlier parts of the
++  frame (clouds, weather) already wrote, so the same body can be inside the share on one frame
++  and past it on the next. The boundary is not a stable set of entities.
++- **A dropped body's shadow** is still emitted by the shadow pass when the body is within 16
++  blocks (the shadow's own range), so a shadow without a body can appear at the cut; likewise a
++  dropped body's nameplate is drawn by the nameplate pass. The counter, not the visual, is the
++  evidence: a scene asserts `dropped_over_budget`, and a screenshot alone cannot prove the bound.
