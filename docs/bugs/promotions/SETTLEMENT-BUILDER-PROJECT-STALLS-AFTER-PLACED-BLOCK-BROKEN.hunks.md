@@ -4,7 +4,7 @@ The fix under test is `95dc2a9bd` (fix(settlements): requeue broken builder proj
 is the tree without it: `if !paused {` at the `recover` entry is the historical line, and every other
 hunk is a pure deletion of text the fix added.
 
-`patch:0cb7484f` (five hunks) is HEAD-adapted, not the historical pre-image: `recover`'s head now
+`patch:ad2a7bf7` (five hunks) is HEAD-adapted, not the historical pre-image: `recover`'s head now
 carries the upgrade lane's committed-cell scan, and `finish_project`'s tail was rewritten twice (the
 shared `certificate_bounds` helper replaced the refusal warnings, and the stale terminal-index comment
 is gone). The adaptation re-anchors the same removals on the current text; the delta against the

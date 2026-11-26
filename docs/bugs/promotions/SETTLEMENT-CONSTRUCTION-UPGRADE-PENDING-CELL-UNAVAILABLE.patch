@@ -1,8 +1,8 @@
 diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-index 5c68af835..c3af07162 100644
+index 5c68af835..7b6e20e6b 100644
 --- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
 +++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-@@ -497,6 +497,72 @@ pub(crate) fn recover(
+@@ -497,6 +497,74 @@ pub(crate) fn recover(
  /// Name of the final stage that re-places authored cells a foreign edit emptied.
  const REPAIR: &str = "repair";
  
@@ -41,9 +41,7 @@ index 5c68af835..c3af07162 100644
 +            cells.insert(cell.at, cell);
 +        }
 +    }
-+    cells.retain(|at, cell| {
-+        inside(&box_bounds, *at) && cell.state != state.registry.states.air
-+    });
++    cells.retain(|at, cell| inside(&box_bounds, *at) && cell.state != state.registry.states.air);
 +    cells
 +}
 +
@@ -60,7 +58,11 @@ index 5c68af835..c3af07162 100644
 +        .and_then(|id| crate::settlements::blueprints::get(&state.registry, id))?;
 +    let size = blueprint.footprint(crate::settlements::blueprints::Rotation::from_quarter_turns(0));
 +    let bounds = super::bounds(record.snapshot.origin, record.snapshot.reserved_footprint).ok()?;
-+    Some([bounds.min[0], bounds.max[1] - i32::from(size[1]) + 1, bounds.min[2]])
++    Some([
++        bounds.min[0],
++        bounds.max[1] - i32::from(size[1]) + 1,
++        bounds.min[2],
++    ])
 +}
 +
 +fn inside(bounds: &ScriptWorldBounds, at: [i32; 3]) -> bool {
@@ -75,7 +77,7 @@ index 5c68af835..c3af07162 100644
  /// Whether a manifest cell is free soil work: no material was ever charged, so
  /// the cell only rewrites the ground already there.
  fn free_soil_work(state: &TickState, cell: &Cell) -> bool {
-@@ -550,8 +616,10 @@ pub(super) fn soil_work_noop(state: &TickState, cell: &Cell, current: u32) -> bo
+@@ -550,8 +618,10 @@ pub(super) fn soil_work_noop(state: &TickState, cell: &Cell, current: u32) -> bo
  /// ordinary placement loop then re-places, paying the cell's material again;
  /// the structure leaves `Committed` for `Running`. A solid foreign block in an
  /// authored cell is not emptied and is never replaced.
@@ -88,7 +90,7 @@ index 5c68af835..c3af07162 100644
  pub(crate) fn reopen_emptied(
      state: &mut TickState,
      settlement: SettlementId,
-@@ -595,6 +663,25 @@ pub(crate) fn reopen_emptied(
+@@ -595,6 +665,25 @@ pub(crate) fn reopen_emptied(
              stale.push(cell.clone());
          }
      }

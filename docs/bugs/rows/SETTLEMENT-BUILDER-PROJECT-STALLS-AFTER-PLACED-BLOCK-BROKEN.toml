@@ -12,7 +12,7 @@ failing_first = "reported"
 # project must close — the `construction did not finish` panic naming the stalled project — which is
 # the row's symptom. Name the panic site so the classifier counts it as an assertion.
 proving_assertions = { "cargo:mc-core:settlements::construction::fencing_tests::a_placed_cell_broken_to_air_is_replaced_before_the_house_certifies" = "crates/mc-core/src/settlements/construction_fencing_tests.rs:387", "cargo:mc-core:settlements::construction::fencing_tests::a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_project" = "crates/mc-core/src/settlements/construction_fencing_tests.rs:387", "cargo:mc-core:settlements::construction::fencing_tests::a_second_break_during_the_repair_requeues_the_repair_stage" = "crates/mc-core/src/settlements/construction_fencing_tests.rs:387" }
-fix_commit = "patch:0cb7484f364896a0287ae662d4a48dd74690723edf152445e6e36b51010c4502"
+fix_commit = "patch:ad2a7bf70dadc142a17263dfbe9dd8cedbc124ebb99db814eea0859d98cb4d6b"
 # 95dc2a9bd is the fix under test (repair scan + reopen_emptied guard). The handoff
 # `recover` head this patch deletes around also carries 6b3e5a5b31 (the upgrade-cell
 # fix), which the control tree keeps, so the patch is HEAD-adapted, not the original

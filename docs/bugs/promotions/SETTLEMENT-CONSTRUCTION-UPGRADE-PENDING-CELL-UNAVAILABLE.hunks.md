@@ -5,7 +5,7 @@ all committed before the promoted head. The recorded pre-image is the lane base,
 whose `reopen_emptied` scans only the record's own cells — no inheritance at all.
 
 `docs/bugs/promotions/SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE.patch`
-(`patch:a1e024c4`) is `git diff 597352d5a7 <head> -- settlement_builds.rs blueprints.rs`. The net
+(`patch:96452fec`) is `git diff 597352d5a7 <head> -- settlement_builds.rs blueprints.rs`. The net
 `blueprints.rs` diff against that base is empty (pack 1 added `Blueprint::image`/`Blueprint::inherited`,
 pack 2 deleted them), so the patch is one file: `settlement_builds.rs`, where the whole `inherited`
 fold, the `blueprint_origin` derivation, the `inside` box predicate and the `reopen_emptied` loop that

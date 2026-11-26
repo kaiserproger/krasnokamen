@@ -8,7 +8,7 @@ status = "fixed"
 source = "D123CivGatesH house select, native windowed buildings-qa on release pin 1e0dda6ba2f1 (`.analysis/validation/20261124T204805-buildings-qa-klwqfvj5`, copy `receipts/D123/D123CivGates/house-select-20261124T204805.json`): House L1 built and certified, a survival client broke the placed corner `[138, 70, 7]` mid-project (`became_air: true`, pickup confirmed) and `broken_cell_replaced` PASSed with `at_certificate: minecraft:oak_log`; the funded L2 order was then admitted (`('House', 2)`, `L2_funded` PASS) and the server logged `settlement_construction_stalled settlement=2 blueprint=house origin=[131, 69, 7] stage=2 work=0 next=None cause=\"pending_cell_unavailable\" recovery=\"builder_released\"` at 20:59:04; no L2 certificate appeared before the run ended (2752 s, `buildings_house_L2_built` red)."
 regression = ["cargo:mc-core:settlements::construction::fencing_tests::an_upgrade_repairs_an_inherited_perimeter_cell_emptied_mid_build", "cargo:mc-core:settlements::construction::fencing_tests::an_upgrade_repairs_an_inherited_cell_in_the_species_the_house_was_built_with", "harness:buildings-qa:house.L2_upgrade"]
 failing_first = "reported"
-fix_commit = "patch:a1e024c47e55502bff1cb12f7346a57cd1188d5466e4d6b89e775ded2061bdcd"
+fix_commit = "patch:96452fec6054e37d9b5c1a381eac073fc03e7be3fe4efb7d6c6fa26ce98cecaa"
 # The control's red is `complete_authored`'s own assertion that the project must close (the
 # `construction did not finish` panic names the stalled project). Name the panic site so the
 # classifier counts it as this row's assertion, not an unnamed panic.
