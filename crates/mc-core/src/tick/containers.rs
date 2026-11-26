@@ -356,7 +356,7 @@ pub(crate) fn refresh_container_viewers(state: &mut TickState, position: BlockPo
         .open_containers
         .menu_viewers()
         .filter(|(_, open)| {
-            anchor_chunk_cold(state, *open) || container_cells(state, **open) == cells
+            anchor_chunk_cold(state, open) || container_cells(state, **open) == cells
         })
         .filter_map(|(viewer, _)| {
             state
