@@ -385,10 +385,7 @@ fn plain_drop_joins_a_journal_writer_holding_the_world_directory() {
     // directory. A joined drop cannot return before `release` (the owner is
     // parked on the exit hold), so this window can only fire on the defect;
     // it is a detection bound, not a timing prediction of the fixed path.
-    if dropped_rx
-        .recv_timeout(Duration::from_secs(2))
-        .is_ok()
-    {
+    if dropped_rx.recv_timeout(Duration::from_secs(2)).is_ok() {
         panic!(
             "the plain drop returned while the journal owner was still alive: a writer was \
              left in the world directory"
