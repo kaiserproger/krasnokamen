@@ -447,14 +447,20 @@ def _dolphin(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         return ((row["x"] - site_x) ** 2 + (row["z"] - site_z) ** 2) ** .5
     before = dist(fed_from)
 
-    def approached(_state: dict) -> bool:
+    # A bounded observation, not a raising wait: the pre-fix control must record a failed
+    # assertion here, never an unrunnable timeout.
+    after = before
+    for _ in range(60):
         row = _same_row(steps, did)
-        return row is not None and dist(row) < before - 6.0
-    steps.wait(approached, "fed_dolphin_swims_toward_the_located_structure", timeout_seconds=120)
-    after = dist(_same_row(steps, did) or dol)
+        if row is not None:
+            after = dist(row)
+            if after < before - 6.0:
+                break
+        steps.call("minecraft_wait_ticks", {"ticks": 20})
     _capture(steps, "dolphin-leading-to-structure")
     steps.report["dolphin_distance_to_structure"] = {"site": [site_x, site_z], "before": before, "after": after}
     steps.check("dolphin_moved_closer_to_located_structure", after < before - 4)
+    steps.check("fed_dolphin_swims_toward_the_located_structure", after < before - 6.0)
 
 
 def _goat_ram(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
