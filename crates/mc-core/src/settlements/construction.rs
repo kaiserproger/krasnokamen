@@ -1570,7 +1570,13 @@ fn site_project<'a>(
         };
     }
     let mut cursor = start % count;
-    let share = attempts / kinds.len().max(1) as u32;
+    let kinds_count = kinds.len().max(1) as u32;
+    // Every funded kind gets an equal share of the pass's lots, and the whole
+    // remainder goes to the first kinds instead of being dropped: the last kind
+    // in the order used to be the one that ran dry (HANDOFF-50, `mason` frozen
+    // at 2738 while the kinds before it advanced).
+    let share = attempts / kinds_count;
+    let mut leftover = attempts % kinds_count;
     let mut running = false;
     let mut advanced: Vec<&'a str> = Vec::with_capacity(kinds.len());
     let mut house_advanced = false;
@@ -1599,6 +1605,10 @@ fn site_project<'a>(
             );
         }
         let mut budget = share;
+        if leftover > 0 {
+            budget += 1;
+            leftover -= 1;
+        }
         // Any outcome below means this pass really walked the kind's sweep; the
         // flag is about the visit, not about what the walk found.
         if blueprint.kind == BuildingKind::House {

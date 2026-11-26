@@ -200,7 +200,7 @@ impl Cost {
 
 /// One blueprint sweep of the whole street cursor. Runtime-only scratch:
 /// best metadata, progress and nothing the world can be rebuilt from.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Sweep {
     frontages: u32,
     /// Identity of the ordered frontage input this sweep walked; a different
@@ -209,6 +209,15 @@ struct Sweep {
     start: u32,
     next: u32,
     best: Option<([i32; 3], u8, Cost)>,
+    /// A best lot carried across an invalidation, still to be re-proved against
+    /// the current world (HANDOFF-50). It is admitted only when the re-proof
+    /// returns exactly the cost the walk that found it recorded, so a stable
+    /// village keeps its cheapest-lot rule and a churning one no longer loses
+    /// what it found.
+    carried: Option<([i32; 3], u8, Cost)>,
+    /// How often this sweep was restarted by a street change or by its stored
+    /// best losing its cost. Log-only: it is the number the gates could not see.
+    restarts: u32,
 }
 
 /// Per-settlement live sweeps, keyed by blueprint id.
@@ -217,20 +226,45 @@ pub(crate) struct Sweeps {
     live: BTreeMap<String, Sweep>,
 }
 impl Sweeps {
-    /// Drop sweeps of a topology that no longer exists.
+    /// Drop sweeps of a topology that no longer exists. Before a stale sweep
+    /// goes, the best lot it had found is carried into the fresh sweep: the
+    /// world may still allow that lot, and re-proving it at the end of the new
+    /// walk costs one `check` (HANDOFF-50: a village that churns its streets
+    /// used to restart from zero and never finish, so its House was never sited).
     fn retain(&mut self, blueprint: &str, frontages: u32, topology: u64) {
+        let carried = self.live.iter().find_map(|(id, sweep)| {
+            // A walk that already carries a lot (it was itself restarted) hands
+            // that lot on: a second street change must not lose it.
+            sweep_stale(id, sweep, blueprint, frontages, topology)
+                .then(|| (id.clone(), sweep.best.or(sweep.carried), sweep.restarts))
+        });
         self.live
             .retain(|id, sweep| !sweep_stale(id, sweep, blueprint, frontages, topology));
+        if let Some((_, best, restarts)) = carried {
+            let sweep = self.live.entry(blueprint.to_owned()).or_default();
+            // The stale entry is gone, so this is the fresh walk of the new
+            // frontage list; a sweep that survived above never reaches here.
+            sweep.frontages = frontages;
+            sweep.topology = topology;
+            sweep.start = 0;
+            sweep.next = 0;
+            if sweep.carried.is_none() {
+                sweep.carried = best;
+            }
+            sweep.restarts = sweep.restarts.max(restarts.saturating_add(1));
+        }
     }
 
     /// Some unfinished sweep of these kinds already holds a legal candidate.
+    /// A carried lot counts: it is still to be re-proved, and the slot must not
+    /// be taken meanwhile (the walk is the cheapest-lot proof either way).
     /// A retained sweep of a kind this pass did not advance (its funding was
     /// withdrawn) must not hold the slot for other work.
     pub(super) fn holding<'a>(&self, kinds: impl IntoIterator<Item = &'a str>) -> bool {
         kinds.into_iter().any(|kind| {
             self.live
                 .get(kind)
-                .is_some_and(|sweep| sweep.best.is_some())
+                .is_some_and(|sweep| sweep.best.is_some() || sweep.carried.is_some())
         })
     }
 
@@ -244,7 +278,7 @@ impl Sweeps {
     /// its walk got, how many frontages it must cover, and whether it already
     /// holds a candidate. A settlement that never admits has to say whether its
     /// sweeps finish, restart on a street change, or finish without a lot.
-    pub(super) fn summary(&self) -> Vec<(String, u32, u32, bool)> {
+    pub(super) fn summary(&self) -> Vec<(String, u32, u32, bool, u32)> {
         self.live
             .iter()
             .map(|(id, sweep)| {
@@ -252,7 +286,8 @@ impl Sweeps {
                     id.clone(),
                     sweep.next,
                     sweep.frontages,
-                    sweep.best.is_some(),
+                    sweep.best.is_some() || sweep.carried.is_some(),
+                    sweep.restarts,
                 )
             })
             .collect()
@@ -423,8 +458,7 @@ pub(super) fn advance(
         frontages: count,
         topology,
         start,
-        next: 0,
-        best: None,
+        ..Sweep::default()
     });
     while sweep.next < sweep.frontages && *budget > 0 {
         let index = (sweep.start + sweep.next) % sweep.frontages;
@@ -484,31 +518,87 @@ pub(super) fn advance(
         let next = (sweep.start + sweep.next) % sweep.frontages;
         return Advance::Incomplete(next);
     }
-    let best = sweeps
-        .live
-        .remove(&blueprint.id)
-        .and_then(|sweep| sweep.best);
-    let Some((origin, rotation, stored)) = best else {
-        return Advance::Empty;
-    };
-    // The world may have moved since that candidate was ranked: re-check it
-    // now and restart this sweep when its cost changed. The pass's survey
-    // already describes this world, so a registered root is proved once.
-    let size = blueprint.footprint(Rotation::from_quarter_turns(rotation));
-    match check(
-        state,
-        record,
-        origin,
-        size,
-        record.founding.as_ref(),
-        survey,
-        Some(&floors[usize::from(rotation) % 4]),
-    ) {
-        Ok(cost) if cost == stored => Advance::Cheapest(origin, rotation),
-        // The world moved under the stored candidate: it is gone (the sweep was
-        // removed above), so this restart holds nothing.
-        Ok(_) | Err(_) => Advance::Incomplete(0),
+    let finished = sweeps.live.remove(&blueprint.id);
+    // A lot found before the streets changed is carried into this walk; it is
+    // proved once here, with the same `check` that ranks every other lot, so a
+    // churning village stops losing what it had already found (HANDOFF-50: the
+    // House sweep reached 4608 of 4619 frontages and was restarted to 2996).
+    let carried = finished.as_ref().and_then(|sweep| sweep.carried);
+    let restarts = finished.as_ref().map_or(0, |sweep| sweep.restarts);
+    if let Some((origin, rotation, stored)) = finished.as_ref().and_then(|sweep| sweep.best) {
+        // The world may have moved since that candidate was ranked: re-check it
+        // now. The pass's survey already describes this world, so a registered
+        // root is proved once.
+        let size = blueprint.footprint(Rotation::from_quarter_turns(rotation));
+        match check(
+            state,
+            record,
+            origin,
+            size,
+            record.founding.as_ref(),
+            survey,
+            Some(&floors[usize::from(rotation) % 4]),
+        ) {
+            // A stable village keeps its rule: the cheapest lot of a full sweep,
+            // unchanged, because its cost is the one the walk ranked.
+            Ok(cost) if cost == stored => return Advance::Cheapest(origin, rotation),
+            // The cost moved under the walk: the walk no longer describes one
+            // street, so nothing is admitted from it. The lot is kept as the
+            // carried candidate (with its fresh cost) instead of being thrown
+            // away, and the next walk re-proves it exactly.
+            Ok(cost) => {
+                sweeps.live.insert(
+                    blueprint.id.clone(),
+                    Sweep {
+                        frontages: count,
+                        topology,
+                        start,
+                        carried: Some((origin, rotation, cost)),
+                        restarts: restarts.saturating_add(1),
+                        ..Sweep::default()
+                    },
+                );
+                return Advance::Incomplete(0);
+            }
+            // The lot itself is gone; the carried one may still stand.
+            Err(_) => {}
+        }
     }
+    if let Some((origin, rotation, stored)) = carried {
+        let size = blueprint.footprint(Rotation::from_quarter_turns(rotation));
+        // Re-prove it exactly as the walk would: a lot whose cost moved under a
+        // street change is not the one the changed street would rank, so it is
+        // dropped and the fresh walk decides, exactly as a stable village does.
+        if let Ok(cost) = check(
+            state,
+            record,
+            origin,
+            size,
+            record.founding.as_ref(),
+            survey,
+            Some(&floors[usize::from(rotation) % 4]),
+        ) && cost == stored
+        {
+            return Advance::Cheapest(origin, rotation);
+        }
+    }
+    if restarts > 0 || finished.as_ref().is_some_and(|sweep| sweep.best.is_some()) {
+        // Nothing proved: keep the counter so the next artifact shows the churn.
+        sweeps.live.insert(
+            blueprint.id.clone(),
+            Sweep {
+                frontages: count,
+                topology,
+                start,
+                next: 0,
+                best: None,
+                carried: None,
+                restarts: restarts.saturating_add(1),
+            },
+        );
+        return Advance::Incomplete(0);
+    }
+    Advance::Empty
 }
 
 /// `property`: the cell is inside the working settlement's territory (owner
@@ -846,3 +936,97 @@ pub(super) fn check(
 #[cfg(test)]
 #[path = "construction_site_refusal_tests.rs"]
 mod tests;
+
+/// The invalidation carry is pure bookkeeping: a street change that drops a
+/// half-walked sweep must keep the best lot it had already found, or every
+/// restart throws away work the village paid for (HANDOFF-50: the House sweep
+/// reached 4608 of 4619 frontages and was restarted to 2996, so seed 24 never
+/// admitted a House).
+#[cfg(test)]
+mod sweep_carry_tests {
+    use super::*;
+
+    fn sweep(frontages: u32, topology: u64, next: u32, best: bool) -> Sweep {
+        Sweep {
+            frontages,
+            topology,
+            start: 0,
+            next,
+            best: best.then_some((
+                [3, 201, 4],
+                0,
+                Cost {
+                    cut: 1,
+                    ..Cost::default()
+                },
+            )),
+            ..Sweep::default()
+        }
+    }
+
+    #[test]
+    fn a_street_change_carries_the_best_lot_into_the_fresh_walk() {
+        let mut sweeps = Sweeps::default();
+        sweeps.live.insert("house".into(), sweep(120, 7, 55, true));
+        // The streets changed: same kind, new frontage list.
+        sweeps.retain("house", 130, 8);
+        let carried = sweeps.live.get("house").expect("the fresh sweep exists");
+        assert_eq!(carried.next, 0, "the walk restarts from the beginning");
+        assert_eq!(carried.frontages, 130);
+        assert_eq!(carried.topology, 8);
+        assert_eq!(
+            carried.carried,
+            Some((
+                [3, 201, 4],
+                0,
+                Cost {
+                    cut: 1,
+                    ..Cost::default()
+                }
+            )),
+            "the lot found before the change is kept for one re-proof"
+        );
+        assert_eq!(carried.restarts, 1, "the restart is counted");
+        assert!(carried.best.is_none(), "no candidate of the new walk yet");
+    }
+
+    #[test]
+    fn a_stable_village_keeps_its_sweep_and_its_restart_count() {
+        let mut sweeps = Sweeps::default();
+        sweeps.live.insert("house".into(), sweep(120, 7, 55, true));
+        sweeps.retain("house", 120, 7);
+        let kept = sweeps.live.get("house").expect("the sweep survives");
+        assert_eq!(kept.next, 55, "the walk is not restarted");
+        assert!(kept.best.is_some() && kept.carried.is_none());
+        assert_eq!(kept.restarts, 0);
+    }
+
+    #[test]
+    fn a_second_change_keeps_the_first_carried_lot_and_adds_to_the_count() {
+        let mut sweeps = Sweeps::default();
+        sweeps.live.insert("house".into(), sweep(120, 7, 55, true));
+        sweeps.retain("house", 130, 8);
+        // The new walk finds nothing before the streets change again.
+        sweeps.retain("house", 140, 9);
+        let twice = sweeps.live.get("house").expect("the sweep exists");
+        assert_eq!(twice.restarts, 2);
+        assert!(
+            twice.carried.is_some(),
+            "a second restart must not lose the first carried lot"
+        );
+        assert_eq!(twice.frontages, 140);
+    }
+
+    #[test]
+    fn the_refusal_log_names_the_restart_count() {
+        let mut sweeps = Sweeps::default();
+        sweeps.live.insert("house".into(), sweep(120, 7, 55, true));
+        sweeps.retain("house", 130, 8);
+        let summary = sweeps.summary();
+        assert_eq!(summary.len(), 1);
+        let (kind, next, frontages, holds, restarts) = &summary[0];
+        assert_eq!((kind.as_str(), *next, *frontages), ("house", 0, 130));
+        assert!(*holds, "the carried lot still counts as held");
+        assert_eq!(*restarts, 1);
+    }
+}

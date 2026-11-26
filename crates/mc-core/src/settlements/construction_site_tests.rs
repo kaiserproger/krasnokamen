@@ -1758,6 +1758,12 @@ fn probe_retained_village_site_supply() {
     let mut legal = Vec::new();
     let mut examined = 0u32;
     let mut survey = site_refusals::Survey::default();
+    // The per-frontage cost is what sizes the planner's per-pass site budget:
+    // a full sweep of a real village must finish in a handful of passes, so the
+    // fix needs this number rather than a guess (HANDOFF-50, D123CivH).
+    let timed = std::env::var_os("D123_CIV_TIME").is_some();
+    let total_frontages = fronts.len();
+    let started = std::time::Instant::now();
     for (front, (at, normal)) in fronts.into_iter().enumerate() {
         let Some(lot) = network.lot(blueprint, at, normal) else {
             continue;
@@ -1780,6 +1786,16 @@ fn probe_retained_village_site_supply() {
                 entry.1.get_or_insert(lot.origin);
             }
         }
+    }
+    if timed {
+        let elapsed = started.elapsed();
+        let per_frontage =
+            elapsed.as_nanos() / u128::from(u32::try_from(total_frontages).unwrap_or(1));
+        let per_examined = elapsed.as_nanos() / u128::from(examined.max(1));
+        println!(
+            "PROBE time frontages={total_frontages} examined={examined} total_ms={} ns_per_frontage={per_frontage} ns_per_lot={per_examined}",
+            elapsed.as_millis()
+        );
     }
     println!("PROBE examined={examined} legal={}", legal.len());
     for (reason, (count, example)) in &counts {
