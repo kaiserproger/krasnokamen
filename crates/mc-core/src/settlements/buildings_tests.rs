@@ -150,8 +150,10 @@ fn roofed_enclosed_house_with_real_bed_certifies() {
 fn the_house_certificate_boxes_match_the_footprints_they_inspect() {
     // Measured: the level-1 and level-2 certificate boxes are exactly the x/z footprint of the cells
     // each level composes (level 2: `[0,0]..[10,6]`), so the L2 certificate inspects the right box and
-    // the enclosure air column of the gate cannot come from a box mismatch. Level 3 is one block
-    // short in z — a blueprint data inconsistency, recorded here rather than silently tolerated.
+    // the enclosure air column of the gate cannot come from a box mismatch. Level 3's box stops one
+    // block before its 8th z row on purpose: that row is an open porch (one step, two `oak_stairs`,
+    // six open `oak_trapdoors`, inverted stairs with a `wall_torch`, and the eave beam above), not a
+    // wall, so it stays outside the enclosed hull the certificate checks.
     let state = test_state();
     let blueprint = crate::settlements::blueprints::get(&state.registry, "house")
         .expect("the house blueprint is registered")
@@ -188,7 +190,7 @@ fn the_house_certificate_boxes_match_the_footprints_they_inspect() {
             assert_eq!(
                 boxed,
                 ([min[0], min[1]], [max[0], max[1] - 1]),
-                "level 3's certificate box is one block short in z (blueprint data)"
+                "level 3's certificate box is the enclosed hull: its 8th z row is the open porch"
             );
         }
     }

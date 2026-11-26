@@ -497,42 +497,72 @@ pub(crate) fn recover(
 /// Name of the final stage that re-places authored cells a foreign edit emptied.
 const REPAIR: &str = "repair";
 
-/// The cells the executed build chain authored at this site, last write per
-/// position: a level record stores only its diff, so an upgrade's own image is
-/// the fold of every committed record (oldest first, a later level overriding
-/// an earlier one). `previous_committed` proves the same chain to the upgrade
-/// fence; here the whole cell is needed, because a plan writes the state,
-/// material and quantity it actually paid for — the raw blueprint image is oak
-/// and white regardless of the species and bed colour the village chose.
-/// Records are read as they stand committed now; a removed cell is folded to
-/// air and drops out.
-fn inherited(state: &TickState, settlement: SettlementId, structure: &Structure) -> Vec<Cell> {
-    let Some(blueprint) = structure
+/// The cells the executed build chain wrote at this site, last write per position, inside the
+/// record's own box. A level record stores only its diff, so an upgrade's own image is the fold of
+/// every committed record (oldest first, a later level overriding an earlier one); a position whose
+/// last write is air was removed and drops out. Only cells `validate` accepts are returned: the
+/// chain also holds the previous level's fill below this site's floor and its detour or retired
+/// cells, and such a stale cell inside the `repair` stage would make the ledger invalid at startup
+/// (a slope foundation's protruding fill is worked by the L1 builder, `minecraft:dirt` and so not
+/// free soil work; `plugin_structures::validate` requires every cell inside
+/// `bounds_of_structure(record)`). The wire cell is borrowed from the held ledger: the caller clones
+/// only the cells it queues.
+fn inherited<'a>(
+    state: &TickState,
+    ledger: &'a Ledger,
+    settlement: SettlementId,
+    record: &Structure,
+) -> BTreeMap<[i32; 3], &'a Cell> {
+    let mut cells = BTreeMap::new();
+    let Ok(box_bounds) = super::bounds_of_structure(record) else {
+        return cells;
+    };
+    let Some(origin) = blueprint_origin(state, record) else {
+        return cells;
+    };
+    let Some(blueprint) = record
         .snapshot
         .blueprint_id
         .strip_prefix("krasnokamen-settlements:")
     else {
-        return Vec::new();
+        return cells;
     };
-    let Ok(ledger) = ledger(state) else {
-        return Vec::new();
-    };
-    let mut cells: BTreeMap<[i32; 3], Cell> = BTreeMap::new();
-    for record in committed_chain(
-        state,
-        &ledger,
-        settlement,
-        blueprint,
-        structure.snapshot.origin,
-    ) {
+    for record in committed_chain(state, ledger, settlement, blueprint, origin) {
         for cell in record.cells.iter().flatten() {
-            cells.insert(cell.at, cell.clone());
+            cells.insert(cell.at, cell);
         }
     }
+    cells.retain(|at, cell| inside(&box_bounds, *at) && cell.state != state.registry.states.air);
     cells
-        .into_values()
-        .filter(|cell| cell.state != state.registry.states.air)
-        .collect()
+}
+
+/// The blueprint origin a committed record was planned on: `same_site` compares an origin against
+/// exactly this derivation (`bounds.min.x`, `bounds.max.y - height + 1`, `bounds.min.z` of the
+/// record's own site bounds), so the chain lookup must pass it rather than
+/// `snapshot.origin` (the raw site minimum). A level-1 foundation on a slope keeps its fill below
+/// the floor and an upgrade sites at the floor, so the two differ whenever the ground steps down.
+fn blueprint_origin(state: &TickState, record: &Structure) -> Option<[i32; 3]> {
+    let blueprint = record
+        .snapshot
+        .blueprint_id
+        .strip_prefix("krasnokamen-settlements:")
+        .and_then(|id| crate::settlements::blueprints::get(&state.registry, id))?;
+    let size = blueprint.footprint(crate::settlements::blueprints::Rotation::from_quarter_turns(0));
+    let bounds = super::bounds(record.snapshot.origin, record.snapshot.reserved_footprint).ok()?;
+    Some([
+        bounds.min[0],
+        bounds.max[1] - i32::from(size[1]) + 1,
+        bounds.min[2],
+    ])
+}
+
+fn inside(bounds: &ScriptWorldBounds, at: [i32; 3]) -> bool {
+    bounds.min[0] <= at[0]
+        && at[0] <= bounds.max[0]
+        && bounds.min[1] <= at[1]
+        && at[1] <= bounds.max[1]
+        && bounds.min[2] <= at[2]
+        && at[2] <= bounds.max[2]
 }
 
 /// Whether a manifest cell is free soil work: no material was ever charged, so
@@ -588,8 +618,10 @@ pub(super) fn soil_work_noop(state: &TickState, cell: &Cell, current: u32) -> bo
 /// ordinary placement loop then re-places, paying the cell's material again;
 /// the structure leaves `Committed` for `Running`. A solid foreign block in an
 /// authored cell is not emptied and is never replaced.
-/// One pass over the structure's cells at completion, never per tick. Returns
-/// whether cells were queued (the building must not be certified yet).
+/// The completion pass runs whenever a builder has no next cell while the
+/// certificate refuses, which is every stall tick, so the scan borrows the
+/// chain's cells and clones only the ones it queues. Returns whether cells were
+/// queued (the building must not be certified yet).
 pub(crate) fn reopen_emptied(
     state: &mut TickState,
     settlement: SettlementId,
@@ -636,13 +668,10 @@ pub(crate) fn reopen_emptied(
     // The level image's inherited shell counts as authored at completion too
     // (settlement_builds::inherited): a hole in a wall the previous level placed
     // still blocks this level's certificate. `seen` already holds every planned
-    // position, so the plan's own cells keep their material accounting.
-    for cell in inherited(state, settlement, record) {
-        if !seen.insert(cell.at)
-            || cell.state == target.registry.states.air
-            || free_soil_work(target, &cell)
-            || harvestable_crop(target, &cell)
-        {
+    // position, so the plan's own cells keep their material accounting. The fold is
+    // already box-filtered and air-final positions are gone.
+    for cell in inherited(state, &ledger, settlement, record).into_values() {
+        if !seen.insert(cell.at) || free_soil_work(target, cell) || harvestable_crop(target, cell) {
             continue;
         }
         let now = target
@@ -652,7 +681,7 @@ pub(crate) fn reopen_emptied(
         if identity(now) != identity(cell.state)
             && crate::settlements::construction::clearable(target, now)
         {
-            stale.push(cell);
+            stale.push(cell.clone());
         }
     }
     if stale.is_empty() {

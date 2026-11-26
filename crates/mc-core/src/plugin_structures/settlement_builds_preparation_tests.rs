@@ -854,3 +854,193 @@ fn a_pending_detour_holds_its_corridor_against_a_neighbour_lot() {
         "an unbuilt detour holds its whole corridor"
     );
 }
+
+fn counted(state: &TickState, name: &str) -> u32 {
+    state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse(name).unwrap())
+        .unwrap()
+}
+
+fn stock(state: &mut TickState, item: u32, count: i32) {
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    let mut left = count;
+    for slot in slots.iter_mut() {
+        if left == 0 {
+            break;
+        }
+        if !slot.is_empty() {
+            continue;
+        }
+        let put = left.min(64);
+        *slot = mc_data::ItemStack::new(item, put);
+        left -= put;
+    }
+    assert_eq!(left, 0, "chest space for {count} of item {item}");
+}
+
+/// A level-1 site on a slope: the ground under the house drops two blocks, so the plan fills a
+/// protruding cell below the floor (resource `minecraft:dirt`, so not free soil work). The level-2
+/// upgrade sites at the floor and its certificate box starts there, so that cell lies outside the
+/// box this record may write.
+fn slope_fixture() -> (TickState, SettlementId, crate::entities::EntitySlot) {
+    use crate::settlements::construction::tests::{fixture, fund, open_plan, start};
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
+    for x in 3..=9 {
+        for z in 3..=9 {
+            state.world.set_block(x, 200, z, air);
+            state.world.set_block(x, 199, z, air);
+            state.world.set_block(x, 198, z, stone);
+        }
+    }
+    state.world.fold_overlay();
+    start(&mut state, id, "house", 1, None);
+    fund(&mut state, "house", 1);
+    let dirt = counted(&state, "minecraft:dirt");
+    stock(&mut state, dirt, 128);
+    crate::settlements::construction::tests::complete(&mut state, id, slot);
+    (state, id, slot)
+}
+
+#[test]
+fn an_emptied_level_fill_below_the_upgrade_box_never_reaches_the_repair_stage() {
+    use crate::settlements::construction::tests::{attempt, fund, upgrade_started};
+    let (mut state, id, slot) = slope_fixture();
+    let air = state.registry.states.air;
+    let (fill, wall) = {
+        let ledger = ledger(&state).unwrap();
+        let chain = committed_chain(&state, &ledger, id, "house", [3, 200, 3]);
+        assert_eq!(chain.len(), 1, "one committed level-1 record");
+        let cells: Vec<&Cell> = chain[0].cells.iter().flatten().collect();
+        // The level-1 record's own site minimum sits on the fill, below the blueprint origin.
+        assert!(
+            chain[0].snapshot.origin[1] < 200,
+            "the level-1 site reaches the fill: {:?}",
+            chain[0].snapshot.origin
+        );
+        let fill = cells
+            .iter()
+            .find(|cell| cell.at[1] < 200 && cell.state != air)
+            .map(|cell| Cell {
+                at: cell.at,
+                state: cell.state,
+                resource: cell.resource.clone(),
+                quantity: cell.quantity,
+            })
+            .expect("level 1 fills the dug columns below the floor");
+        let wall = cells
+            .iter()
+            .find(|cell| cell.at[1] >= 201 && cell.state != air)
+            .map(|cell| Cell {
+                at: cell.at,
+                state: cell.state,
+                resource: cell.resource.clone(),
+                quantity: cell.quantity,
+            })
+            .expect("a placed level-1 wall cell");
+        (fill, wall)
+    };
+    let building = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    fund(&mut state, "house", 2);
+    upgrade_started(&mut state, id, building);
+    let project = state.settlements.get(id).unwrap().projects[0].clone();
+    assert_eq!(project.level, 2, "the upgrade is admitted");
+    let l2 = {
+        let ledger = ledger(&state).unwrap();
+        structure(&ledger, &owner(id), &project.structure)
+            .expect("the level-2 record")
+            .snapshot
+            .origin
+    };
+    assert!(
+        fill.at[1] < l2[1],
+        "the inherited fill {:?} lies below the level-2 site {l2:?}",
+        fill.at
+    );
+    // A player digs out the protruding fill and breaks one wall cell of level 1.
+    state
+        .world
+        .set_block(fill.at[0], fill.at[1], fill.at[2], air);
+    state
+        .world
+        .set_block(wall.at[0], wall.at[1], wall.at[2], air);
+    state.world.fold_overlay();
+    let logs = counted(&state, "minecraft:oak_log");
+    stock(&mut state, logs, 8);
+    let mut closed = false;
+    for _ in 0..8192 {
+        if state.settlements.get(id).unwrap().projects.is_empty() {
+            closed = true;
+            break;
+        }
+        attempt(&mut state, id, slot);
+    }
+    assert!(
+        closed,
+        "the level-2 upgrade closed; next={:?}",
+        state
+            .settlements
+            .get(id)
+            .and_then(|record| record.projects.first())
+            .map(|project| next_cell(&state, id, &project.structure))
+    );
+    assert_eq!(
+        state.settlements.get(id).unwrap().buildings[&building].level,
+        2
+    );
+    crate::plugin_structures::validate(&state)
+        .expect("the ledger stays valid: the repair stage holds no cell outside the level box");
+    assert_eq!(
+        state.world.block_at(wall.at[0], wall.at[1], wall.at[2]),
+        Some(wall.state),
+        "the in-box inherited wall cell is repaired"
+    );
+    assert_eq!(
+        state.world.block_at(fill.at[0], fill.at[1], fill.at[2]),
+        Some(air),
+        "the fill below the level box is never re-placed by the upgrade"
+    );
+}
+
+#[test]
+fn the_inherited_chain_reads_the_blueprint_origin_not_the_site_minimum() {
+    let (state, id, _) = slope_fixture();
+    let ledger = ledger(&state).unwrap();
+    let record = committed_chain(&state, &ledger, id, "house", [3, 200, 3])[0];
+    let derived = blueprint_origin(&state, record).expect("the blueprint resolves");
+    assert_eq!(
+        derived,
+        [3, 200, 3],
+        "the shown origin is the blueprint origin, the same derivation `same_site` compares"
+    );
+    assert_ne!(
+        record.snapshot.origin, derived,
+        "a slope foundation's raw site minimum is not the blueprint origin"
+    );
+    assert!(
+        !committed_chain(&state, &ledger, id, "house", record.snapshot.origin).is_empty()
+            || record.snapshot.origin != [3, 200, 3],
+        "the chain is keyed on the derived origin"
+    );
+    let cells = inherited(&state, &ledger, id, record);
+    assert!(
+        !cells.is_empty(),
+        "the fold sees the chain when the origin is derived, and nothing when it is the site minimum"
+    );
+    assert!(
+        cells
+            .values()
+            .all(|cell| cell.state != state.registry.states.air),
+        "a position whose last write is air is dropped"
+    );
+}

@@ -1,38 +1,40 @@
 {
   "id": "SETTLEMENT-BUILDER-PROJECT-STALLS-AFTER-PLACED-BLOCK-BROKEN",
   "verdict": "promoted",
-  "fix_commit": "patch:470330e23b56e79118490f81bd91190d6668c6a96fbeb8920e82e90f600abfd3",
-  "fix_commit_full": "patch:470330e23b56e79118490f81bd91190d6668c6a96fbeb8920e82e90f600abfd3",
-  "promoted_at": "2026-11-26T00:21:01+00:00",
-  "tree_head": "1f695d4b2529c2e59077c038dcfb7453d296846c",
+  "fix_commit": "patch:ad2a7bf70dadc142a17263dfbe9dd8cedbc124ebb99db814eea0859d98cb4d6b",
+  "fix_commit_full": "patch:ad2a7bf70dadc142a17263dfbe9dd8cedbc124ebb99db814eea0859d98cb4d6b",
+  "promoted_at": "2026-11-26T04:13:46+00:00",
+  "tree_head": "757cdd77b8ed9b19e28355aa8810b43c948cc0ab",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
+  "control_tree_sha256": "c7592e0475d78099935ec18f890f94abdf1f17515a0e8fd4beb0b3efd7f84f7a",
+  "control_tree_head": "757cdd77b8ed9b19e28355aa8810b43c948cc0ab",
   "control": "reversed_fix_hunks",
   "control_b": null,
-  "fix_patch_sha256": "470330e23b56e79118490f81bd91190d6668c6a96fbeb8920e82e90f600abfd3",
+  "fix_patch_sha256": "ad2a7bf70dadc142a17263dfbe9dd8cedbc124ebb99db814eea0859d98cb4d6b",
   "reversed_files": [
     "crates/mc-core/src/plugin_structures/settlement_builds.rs",
     "crates/mc-core/src/settlements/construction.rs"
   ],
   "kept_test_files": [],
   "negative_control": {
-    "cargo:mc-core:settlements::construction::fencing_tests::a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_project": {
-      "state": "red",
-      "detail": "FAIL",
-      "assertion": {
-        "file": "crates/mc-core/src/settlements/construction_fencing_tests.rs",
-        "line": 385,
-        "error": "panic",
-        "class": "unknown"
-      }
-    },
     "cargo:mc-core:settlements::construction::fencing_tests::a_second_break_during_the_repair_requeues_the_repair_stage": {
       "state": "red",
       "detail": "FAIL",
       "assertion": {
         "file": "crates/mc-core/src/settlements/construction_fencing_tests.rs",
-        "line": 385,
+        "line": 387,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "cargo:mc-core:settlements::construction::fencing_tests::a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_project": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/settlements/construction_fencing_tests.rs",
+        "line": 387,
         "error": "panic",
         "class": "unknown"
       }
@@ -42,23 +44,23 @@
       "detail": "FAIL",
       "assertion": {
         "file": "crates/mc-core/src/settlements/construction_fencing_tests.rs",
-        "line": 385,
+        "line": 387,
         "error": "panic",
         "class": "unknown"
       }
     },
     "harness:buildings-qa:house.broken_cell_replaced": {
       "state": "red",
-      "detail": "client receipt is 'failed', not passed; env BUILDINGS_QA_SELECT=house /usr/bin/python3 -m tools.harness run buildings-qa --client native --windowed --timeout-seconds 1800 exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261125T231226-ledger-promote-rujrikx1/regressions-client-2.log",
-      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261125T231226-ledger-promote-rujrikx1/client-artifacts/20261125T233017-buildings-qa-g4k1b6jf/result.json"
+      "detail": "client receipt is 'failed', not passed; env BUILDINGS_QA_SELECT=house /usr/bin/python3 -m tools.harness run buildings-qa --client native --windowed --timeout-seconds 1800 exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261126T031553-ledger-promote-xe4w_i85/regressions-client-2.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261126T031553-ledger-promote-xe4w_i85/client-artifacts/20261126T032147-buildings-qa-2pa1jr9w/result.json"
     }
   },
   "restored": {
-    "cargo:mc-core:settlements::construction::fencing_tests::a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_project": {
+    "cargo:mc-core:settlements::construction::fencing_tests::a_second_break_during_the_repair_requeues_the_repair_stage": {
       "state": "green",
       "detail": ""
     },
-    "cargo:mc-core:settlements::construction::fencing_tests::a_second_break_during_the_repair_requeues_the_repair_stage": {
+    "cargo:mc-core:settlements::construction::fencing_tests::a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_project": {
       "state": "green",
       "detail": ""
     },
@@ -69,19 +71,19 @@
     "harness:buildings-qa:house.broken_cell_replaced": {
       "state": "green",
       "detail": "",
-      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261125T231226-ledger-promote-rujrikx1/client-artifacts/20261126T000440-buildings-qa-8quq353d/result.json"
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261126T031553-ledger-promote-xe4w_i85/client-artifacts/20261126T035836-buildings-qa-gp_u3ynw/result.json"
     }
   },
   "client_receipt": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261125T175716-buildings-qa-s1_5wshf/result.json",
-    "tree_head": "1f695d4b2529c2e59077c038dcfb7453d296846c",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261126T011855-buildings-qa-6ifatwdo/result.json",
+    "tree_head": "757cdd77b8ed9b19e28355aa8810b43c948cc0ab",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "server_binary_sha256": "f5b3401755954961e2b6496624e577886db166064fee91d39a91e9ed3ea93260",
+    "server_binary_sha256": "9d5b7f05e66189951e8b77d943f82cb593829a43005eec697a62ca1083991256",
     "covers": [
       "harness:buildings-qa:house.broken_cell_replaced"
     ],
     "profile": "buildings-qa"
   },
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261125T231226-ledger-promote-rujrikx1"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261126T031553-ledger-promote-xe4w_i85"
 }

@@ -1,5 +1,5 @@
 diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
-index 8d5532e..2b8dd47 100644
+index 89f0894..7b6e20e 100644
 --- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
 +++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
 @@ -331,7 +331,8 @@ pub(crate) fn recover(
@@ -92,29 +92,21 @@ index 8d5532e..2b8dd47 100644
      record.snapshot.resource_plan_hash =
          inventories::resource_plan_hash(&resource_plan(&record.snapshot.stages));
      record.snapshot.remaining = remaining(&record);
-@@ -552,6 +619,7 @@ pub(crate) fn reopen_emptied(
-         if !seen.insert(cell.at)
-             || cell.state == target.registry.states.air
-             || free_soil_work(target, cell)
-+            || harvestable_crop(target, cell)
-         {
-             continue;
-         }
 diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
-index 2be55ea..10b35be 100644
+index 44cba8e..9e4af29 100644
 --- a/crates/mc-core/src/settlements/construction.rs
 +++ b/crates/mc-core/src/settlements/construction.rs
-@@ -2922,6 +2922,9 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
-     // Recovery that opens a repair keeps the project; recovery that finishes a
-     // terminal-index structure in place (SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE)
-     // leaves it completable, so only an uncommitted outcome refuses.
+@@ -2967,6 +2967,9 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+     // `recover` returns `Ok(false)` only when it did nothing; a repair it opens
+     // (or a terminal-index structure it finishes in place) keeps the project
+     // open for this pass instead of certifying it.
 +    if executor::recover(state, id, &project.structure) != Ok(false) {
 +        return false;
 +    }
      if !executor::status(state, id, &project.structure)
          .is_ok_and(|snapshot| snapshot.state == ScriptStructureState::Committed)
      {
-@@ -2949,6 +2952,17 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
+@@ -2994,6 +2997,17 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
          record.revision = record.revision.saturating_add(1);
          return true;
      }
