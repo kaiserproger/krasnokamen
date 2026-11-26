@@ -161,7 +161,7 @@ fn publish_selected(
 }
 
 /// Drive `PUBLICATIONS` publishes where every viewer plans every round.
-fn drive_all(viewers: &mut Vec<ViewerState>) -> Vec<Publish> {
+fn drive_all(viewers: &mut [ViewerState]) -> Vec<Publish> {
     let (mut store, slots) = pen_store();
     let mut out = output(pen_chunks(), vec![], ChangeSet::default());
     let mut rows = Vec::new();
@@ -794,6 +794,7 @@ fn a_skipped_publish_costs_one_rescan_without_the_chain_and_none_with_it() {
             VIEW_DISTANCE,
             &mut scratch,
             usize::MAX,
+            &TickPlanIndex::new(&out).spectators,
         );
         std::time::Instant::now()
             .duration_since(started)

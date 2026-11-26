@@ -35,9 +35,9 @@ const POI_SEARCH_RADIUS: i32 = 256;
 /// In-flight searches per player, and total queued jobs.
 const MAX_JOBS_PER_PLAYER: usize = 2;
 const MAX_QUEUED_JOBS: usize = 8;
-/// Capacity kept for interactive `/locate` commands; entity-owned searches
-/// never fill the whole queue.
-const COMMAND_QUEUE_RESERVE: usize = 2;
+/// Capacity kept back from the background lane (a player `/locate` and dolphin leads) so the
+/// other lane's opens always have their own worker and queue.
+const BACKGROUND_QUEUE_RESERVE: usize = 2;
 /// Every structure id vanilla 26.1.2 knows
 /// (`data/minecraft/worldgen/structure/*.json`): anything else is `invalid`,
 /// anything here but not generated is `not_found`.
@@ -642,12 +642,48 @@ fn is_bed_head(blocks: &BlockRegistry, state: BlockStateId) -> bool {
         .is_none_or(|(_, value)| value == "head")
 }
 
+/// Which worker a search runs on. Interactive opens (an exploration map in a container or a
+/// cartographer trade, an eye of ender) must not wait behind a player's `/locate` or a dolphin
+/// lead: a 100-ring structure search can take long enough to block an open that is queued after
+/// it on one FIFO worker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LocateLane {
+    /// A container or trade opening a map, and an eye of ender.
+    Interactive = 0,
+    /// A player `/locate` and a fed dolphin's treasure lead.
+    Background = 1,
+}
+
+impl LocateCompletion {
+    fn lane(&self) -> LocateLane {
+        match self {
+            Self::Callback { .. } | Self::Eye(_) => LocateLane::Interactive,
+            Self::Command(_) | Self::Dolphin(_) => LocateLane::Background,
+        }
+    }
+}
+
+/// One lane's job queue and the hook a test parks its worker in.
+#[derive(Default)]
+struct Lane {
+    jobs: Option<SyncSender<LocateJob>>,
+    /// Test-only: the gate this lane's worker enters before it searches.
+    #[cfg(test)]
+    gate: Option<LaneGate>,
+}
+
+/// A test's parking hook for one lane's worker; never set in production.
+type LaneGate = std::sync::Arc<dyn Fn() + Send + Sync>;
+
 /// Async job state owned by one dimension's [`TickState`][crate::tick::TickState].
 /// The worker thread spawns lazily on the first `/locate`; both channels stay
 /// `None` until then so idle worlds pay nothing.
 #[derive(Default)]
 pub struct LocateState {
-    jobs: Option<SyncSender<LocateJob>>,
+    /// One worker per lane: an interactive open never queues behind a `/locate` search.
+    lanes: [Lane; 2],
+    /// The completion channel shared by both lanes, created with the first worker.
+    done_tx: Option<Sender<LocateDone>>,
     done: Option<Receiver<LocateDone>>,
     in_flight: HashMap<ConnectionId, usize>,
     /// Entity-owned searches (a fed dolphin's treasure lookup).
@@ -736,20 +772,67 @@ impl LocateState {
         }
     }
 
-    /// The worker's job queue, spawning the owner on first use. A thread that
-    /// cannot start is a command failure, never a tick-thread panic: the
-    /// channels are dropped with this call, so the next `/locate` retries.
-    fn worker(&mut self) -> Result<&SyncSender<LocateJob>, std::io::Error> {
-        if self.jobs.is_none() {
-            let (job_tx, job_rx) = std::sync::mpsc::sync_channel::<LocateJob>(MAX_QUEUED_JOBS);
+    /// One lane's job queue, spawning that lane's worker on first use. A thread that cannot
+    /// start is a command failure, never a tick-thread panic: the channels are dropped with this
+    /// call, so the next search retries.
+    fn worker(&mut self, lane: LocateLane) -> Result<SyncSender<LocateJob>, std::io::Error> {
+        if self.done_tx.is_none() {
             let (done_tx, done_rx) = std::sync::mpsc::channel::<LocateDone>();
-            std::thread::Builder::new()
-                .name("locate".into())
-                .spawn(move || locate_worker(job_rx, done_tx))?;
-            self.jobs = Some(job_tx);
+            self.done_tx = Some(done_tx);
             self.done = Some(done_rx);
         }
-        Ok(self.jobs.as_ref().expect("locate worker just spawned"))
+        let slot = &mut self.lanes[lane as usize];
+        if slot.jobs.is_none() {
+            let capacity = match lane {
+                LocateLane::Interactive => MAX_QUEUED_JOBS,
+                LocateLane::Background => MAX_QUEUED_JOBS - BACKGROUND_QUEUE_RESERVE,
+            };
+            let (job_tx, job_rx) = std::sync::mpsc::sync_channel::<LocateJob>(capacity);
+            let done = self
+                .done_tx
+                .as_ref()
+                .expect("done channel just set")
+                .clone();
+            let name = match lane {
+                LocateLane::Interactive => "locate-open",
+                LocateLane::Background => "locate",
+            };
+            #[cfg(test)]
+            let gate = slot.gate.take();
+            std::thread::Builder::new()
+                .name(name.into())
+                .spawn(move || {
+                    #[cfg(test)]
+                    locate_worker_gated(job_rx, done, gate);
+                    #[cfg(not(test))]
+                    locate_worker(job_rx, done);
+                })?;
+            slot.jobs = Some(job_tx);
+        }
+        Ok(slot
+            .jobs
+            .as_ref()
+            .expect("lane worker just spawned")
+            .clone())
+    }
+}
+
+#[cfg(test)]
+impl LocateState {
+    /// Test seam: give one lane a pre-built job channel, so a test injects jobs (or a full lane)
+    /// without spawning that lane's worker.
+    fn install_test_lane(&mut self, lane: LocateLane, jobs: SyncSender<LocateJob>) {
+        self.lanes[lane as usize].jobs = Some(jobs);
+    }
+
+    /// Test seam: whether any lane has a job channel (the worker was started or injected).
+    fn has_job_lane(&self) -> bool {
+        self.lanes.iter().any(|lane| lane.jobs.is_some())
+    }
+
+    /// Test seam: park the background lane's worker in `gate` before each search.
+    fn arm_background_gate(&mut self, gate: LaneGate) {
+        self.lanes[LocateLane::Background as usize].gate = Some(gate);
     }
 }
 
@@ -791,8 +874,29 @@ struct LocateDone {
     elapsed_ms: u128,
 }
 
+#[cfg(not(test))]
 fn locate_worker(jobs: Receiver<LocateJob>, done: Sender<LocateDone>) {
+    run_locate_worker(jobs, done, None);
+}
+
+/// The two-lane worker with a test's parking hook: the gate runs before each search, so a test
+/// can hold the background lane while an interactive open is submitted behind it.
+#[cfg(test)]
+fn locate_worker_gated(
+    jobs: Receiver<LocateJob>,
+    done: Sender<LocateDone>,
+    gate: Option<LaneGate>,
+) {
+    run_locate_worker(jobs, done, gate.as_ref());
+}
+
+/// Shared worker loop. `gate` parks a test's worker before each search and is `None` in
+/// production, so both lanes run the same code whether a test holds one of them or not.
+fn run_locate_worker(jobs: Receiver<LocateJob>, done: Sender<LocateDone>, gate: Option<&LaneGate>) {
     for job in jobs {
+        if let Some(gate) = gate {
+            gate();
+        }
         let start = std::time::Instant::now();
         let mut error = None;
         let hit = match job.kind {
@@ -823,13 +927,15 @@ fn locate_worker(jobs: Receiver<LocateJob>, done: Sender<LocateDone>) {
             }
         };
         let elapsed_ms = start.elapsed().as_millis();
-        let result = LocateDone {
-            id: job.id,
-            hit,
-            error,
-            elapsed_ms,
-        };
-        if done.send(result).is_err() {
+        if done
+            .send(LocateDone {
+                id: job.id,
+                hit,
+                error,
+                elapsed_ms,
+            })
+            .is_err()
+        {
             return;
         }
     }
@@ -1287,15 +1393,10 @@ fn submit(
         }
         return None;
     }
-    // Dolphin searches reserve interactive capacity and never fill the queue
-    // before the metadata snapshot is built. Eye/map/locate callers keep the
-    // whole queue as before.
-    let dolphin = matches!(&completion, LocateCompletion::Dolphin(_));
-    let capacity = if dolphin {
-        MAX_QUEUED_JOBS - COMMAND_QUEUE_RESERVE
-    } else {
-        MAX_QUEUED_JOBS
-    };
+    // One worker per lane: an interactive open never queues behind a `/locate` search or a
+    // dolphin lead, so only the total work still needs a ceiling.
+    let lane = completion.lane();
+    let capacity = MAX_QUEUED_JOBS * 2 - BACKGROUND_QUEUE_RESERVE;
     if state.locate.queued >= capacity {
         if !quiet && let LocateOwner::Connection(connection) = owner {
             state.push_player(
@@ -1308,7 +1409,7 @@ fn submit(
         return None;
     }
     // Readiness before the expensive resident-chunk metadata snapshot.
-    if let Err(error) = state.locate.worker() {
+    if let Err(error) = state.locate.worker(lane) {
         tracing::error!(%error, "locate worker thread could not start");
         if !quiet && let LocateOwner::Connection(connection) = owner {
             state.push_player(
@@ -1335,7 +1436,7 @@ fn submit(
         min_y: geometry.min_y(),
         max_y: geometry.max_y() - 1,
     };
-    let worker = match state.locate.worker() {
+    let worker = match state.locate.worker(lane) {
         Ok(worker) => worker,
         Err(error) => {
             // A thread that cannot start is a command failure, not a tick panic.
@@ -1498,12 +1599,18 @@ fn deliver(state: &mut TickState, done: LocateDone) {
             if !matches || !live_fish {
                 return;
             }
-            let treasure = if done.error.is_some() {
-                // A read refusal is not "no structure": keep GotFish and retry.
-                DolphinTreasure::Failed {
+            let treasure = if let Some(error) = done.error.as_deref() {
+                // The same metadata read cannot improve by waiting: retrying re-captured every
+                // resident chunk on the tick side every 200 ticks (LOCATE-SHARED-FIFO). The lead
+                // stops like a `Missing` search, so the goal releases the fish instead of looping.
+                tracing::warn!(
+                    entity = dolphin.0,
+                    %error,
+                    "dolphin treasure lookup refused; the lead stops"
+                );
+                DolphinTreasure::Missing {
                     run,
                     dimension: pending.dimension,
-                    retry_at: state.tick.saturating_add(200),
                 }
             } else {
                 done.hit.map_or(
@@ -1650,7 +1757,8 @@ fn fail_worker(state: &mut TickState) {
     let pending = std::mem::take(&mut state.locate.pending);
     state.locate.queued = 0;
     // Reset channels before continuations: a callback may submit a new search.
-    state.locate.jobs = None;
+    state.locate.lanes = Default::default();
+    state.locate.done_tx = None;
     state.locate.done = None;
     for (run, pending) in pending {
         release(state, pending.owner);

@@ -860,20 +860,131 @@ fn merges_shared_tag(name: &str) -> bool {
         )
 }
 
+/// How long one JVM child (the bundle datagen, `javac`, an extractor) may run before the import
+/// kills it. A JVM that waits on a lock, on stdin or on a full disk otherwise blocks the command
+/// forever with no progress line and no error, and Ctrl-C leaves it running until it finishes on
+/// its own.
+const JVM_CHILD_TIMEOUT: Duration = Duration::from_secs(900);
+
+/// How often the bounded wait looks at the child. A JVM child is a long, blocking step, so a
+/// polling interval keeps the wait bounded without busy spinning.
+const JVM_POLL_INTERVAL: Duration = Duration::from_millis(20);
+
+/// A JVM child the import waits on with a deadline and kills when it is dropped.
+///
+/// `Command::output` has neither property: it waits forever and a dropped `Child` keeps running,
+/// so an interrupted or failed import strands a JVM. Both pipes are drained on their own threads
+/// while the wait polls, so a child that fills a pipe buffer cannot deadlock the wait.
+struct JvmChild {
+    child: std::process::Child,
+    label: String,
+}
+
+impl JvmChild {
+    /// Spawn `command` with captured stdout/stderr under `label` (the error's subject).
+    fn spawn(command: &mut Command, label: impl Into<String>) -> io::Result<Self> {
+        command
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        Ok(Self {
+            child: command.spawn()?,
+            label: label.into(),
+        })
+    }
+
+    /// Wait for the child for at most `limit`, draining both pipes.
+    ///
+    /// Past the limit the child is killed and the error names it: a bounded refusal, never a hang.
+    fn output(mut self, limit: Duration) -> Result<std::process::Output> {
+        let stdout = drain(self.child.stdout.take());
+        let stderr = drain(self.child.stderr.take());
+        let started = std::time::Instant::now();
+        loop {
+            match self.child.try_wait() {
+                Ok(Some(status)) => {
+                    return Ok(std::process::Output {
+                        status,
+                        stdout: collected(stdout),
+                        stderr: collected(stderr),
+                    });
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    let _ = self.child.kill();
+                    let _ = self.child.wait();
+                    return Err(error).with_context(|| format!("waiting for {}", self.label));
+                }
+            }
+            if started.elapsed() >= limit {
+                let _ = self.child.kill();
+                let _ = self.child.wait();
+                bail!(
+                    "{} did not finish within {} s and was killed (a JVM waiting on a lock, on \
+                     stdin or on a full disk must not block the import)",
+                    self.label,
+                    limit.as_secs(),
+                );
+            }
+            std::thread::sleep(JVM_POLL_INTERVAL);
+        }
+    }
+}
+
+impl Drop for JvmChild {
+    fn drop(&mut self) {
+        if matches!(self.child.try_wait(), Ok(None)) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+}
+
+/// Read one child pipe to EOF on its own thread; errors keep whatever arrived.
+fn drain<R: Read + Send + 'static>(pipe: Option<R>) -> Option<std::thread::JoinHandle<Vec<u8>>> {
+    pipe.map(|mut pipe| {
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            let _ = pipe.read_to_end(&mut bytes);
+            bytes
+        })
+    })
+}
+
+/// The bytes a drained pipe produced; a panicked reader thread yields what it had (nothing).
+fn collected(handle: Option<std::thread::JoinHandle<Vec<u8>>>) -> Vec<u8> {
+    handle
+        .and_then(|handle| handle.join().ok())
+        .unwrap_or_default()
+}
+
 fn run_datagen(java: &OsStr, jar: &Path, work: &Path, staging: &Path) -> Result<()> {
+    run_datagen_bounded(java, jar, work, staging, JVM_CHILD_TIMEOUT)
+}
+
+/// The datagen step with an explicit deadline (the test drives a stalled stand-in here).
+fn run_datagen_bounded(
+    java: &OsStr,
+    jar: &Path,
+    work: &Path,
+    staging: &Path,
+    limit: Duration,
+) -> Result<()> {
     let datagen = work.join("datagen");
     fs::create_dir_all(&datagen).with_context(|| format!("create {}", datagen.display()))?;
     tracing::info!("running the server bundle's own datagen for reports");
     report("running the server bundle's own datagen for reports");
-    let output = Command::new(java)
+    let mut command = Command::new(java);
+    command
         .arg("-DbundlerMainClass=net.minecraft.data.Main")
         .arg("-jar")
         .arg(jar)
         .arg("--server")
         .arg("--reports")
-        .current_dir(&datagen)
-        .output()
-        .with_context(|| java_prerequisite(java))?;
+        .current_dir(&datagen);
+    let output = JvmChild::spawn(&mut command, "the server bundle's datagen")
+        .with_context(|| java_prerequisite(java))?
+        .output(limit)?;
     ensure!(
         output.status.success(),
         "the server bundle's datagen failed with {}: {}",
@@ -920,7 +1031,8 @@ fn run_java_extractors(
         let source = sources.join(format!("{}.java", extractor.class_name));
         fs::write(&source, extractor.source)
             .with_context(|| format!("write {}", source.display()))?;
-        let compile = Command::new(javac)
+        let mut compile_command = Command::new(javac);
+        compile_command
             .arg("-d")
             .arg(&classes)
             .arg("-cp")
@@ -930,9 +1042,13 @@ fn run_java_extractors(
             // `logs/latest.log` in the working directory. Inheriting the
             // launcher's directory would rotate the operator's own log file out
             // from under the running process, so they get this scratch one.
-            .current_dir(&sources)
-            .output()
-            .with_context(|| java_prerequisite(javac))?;
+            .current_dir(&sources);
+        let compile = JvmChild::spawn(
+            &mut compile_command,
+            format!("compiling {}", extractor.class_name),
+        )
+        .with_context(|| java_prerequisite(javac))?
+        .output(JVM_CHILD_TIMEOUT)?;
         ensure!(
             compile.status.success(),
             "compiling {} failed with {}: {}",
@@ -945,14 +1061,16 @@ fn run_java_extractors(
             fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
         }
         let run_classpath = join_classpath(std::iter::once(&classes).chain(&bundle_entries))?;
-        let run = Command::new(java)
+        let mut run_command = Command::new(java);
+        run_command
             .arg("-cp")
             .arg(&run_classpath)
             .arg(extractor.class_name)
             .arg(&out)
-            .current_dir(&sources)
-            .output()
-            .with_context(|| java_prerequisite(java))?;
+            .current_dir(&sources);
+        let run = JvmChild::spawn(&mut run_command, extractor.class_name)
+            .with_context(|| java_prerequisite(java))?
+            .output(JVM_CHILD_TIMEOUT)?;
         ensure!(
             run.status.success(),
             "{} failed with {}: {}",

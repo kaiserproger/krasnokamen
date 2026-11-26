@@ -417,9 +417,14 @@ fn start_skips_a_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest() {
         &[],
     )
     .unwrap();
-    let (state, _, _) =
-        crate::core::recover_tick_state(&config, &Arc::new(base), &store, false, None, None)
-            .unwrap();
+    let recovered =
+        crate::core::recover_tick_state(&config, &Arc::new(base), &store, false, None, None);
+    assert!(
+        recovered.is_ok(),
+        "a new pack whose worldgen cannot be prepared is skipped and named, never a start refusal: {:?}",
+        recovered.as_ref().err()
+    );
+    let (state, _, _) = recovered.expect("recovered");
     assert_eq!(state.datapacks.selection().enabled, ["vanilla", "file/fn"]);
     let warnings = state.datapacks.packs().warnings(None).join("\n");
     assert!(

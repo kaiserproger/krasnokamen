@@ -1,0 +1,30 @@
+--- a/crates/mc-core/src/command_locate.rs
++++ b/crates/mc-core/src/command_locate.rs
+@@ -656,7 +656,10 @@
+ 
+ impl LocateCompletion {
+     fn lane(&self) -> LocateLane {
+-        LocateLane::Background
++        match self {
++            Self::Callback { .. } | Self::Eye(_) => LocateLane::Interactive,
++            Self::Command(_) | Self::Dolphin(_) => LocateLane::Background,
++        }
+     }
+ }
+ 
+@@ -1596,13 +1599,11 @@
+                 tracing::warn!(
+                     entity = dolphin.0,
+                     %error,
+-                    "dolphin treasure lookup refused; keep the fish and retry"
++                    "dolphin treasure lookup refused; the lead stops"
+                 );
+-                let _ = error;
+-                DolphinTreasure::Failed {
++                DolphinTreasure::Missing {
+                     run,
+                     dimension: pending.dimension,
+-                    retry_at: state.tick.saturating_add(200),
+                 }
+             } else {
+                 done.hit.map_or(

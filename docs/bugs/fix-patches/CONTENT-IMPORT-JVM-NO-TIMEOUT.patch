@@ -1,0 +1,44 @@
+--- a/crates/mc-edge/src/content_import.rs
++++ b/crates/mc-edge/src/content_import.rs
+@@ -982,9 +982,9 @@
+         .arg("--server")
+         .arg("--reports")
+         .current_dir(&datagen);
+-    let output = command
+-        .output()
+-        .with_context(|| java_prerequisite(java))?;
++    let output = JvmChild::spawn(&mut command, "the server bundle's datagen")
++        .with_context(|| java_prerequisite(java))?
++        .output(limit)?;
+     ensure!(
+         output.status.success(),
+         "the server bundle's datagen failed with {}: {}",
+@@ -1043,9 +1043,12 @@
+             // launcher's directory would rotate the operator's own log file out
+             // from under the running process, so they get this scratch one.
+             .current_dir(&sources);
+-        let compile = compile_command
+-            .output()
+-            .with_context(|| java_prerequisite(javac))?;
++        let compile = JvmChild::spawn(
++            &mut compile_command,
++            format!("compiling {}", extractor.class_name),
++        )
++        .with_context(|| java_prerequisite(javac))?
++        .output(JVM_CHILD_TIMEOUT)?;
+         ensure!(
+             compile.status.success(),
+             "compiling {} failed with {}: {}",
+@@ -1065,9 +1068,9 @@
+             .arg(extractor.class_name)
+             .arg(&out)
+             .current_dir(&sources);
+-        let run = run_command
+-            .output()
+-            .with_context(|| java_prerequisite(java))?;
++        let run = JvmChild::spawn(&mut run_command, extractor.class_name)
++            .with_context(|| java_prerequisite(java))?
++            .output(JVM_CHILD_TIMEOUT)?;
+         ensure!(
+             run.status.success(),
+             "{} failed with {}: {}",

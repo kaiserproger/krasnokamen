@@ -1,0 +1,22 @@
+--- a/crates/mc-core/src/datapacks.rs
++++ b/crates/mc-core/src/datapacks.rs
+@@ -810,14 +810,17 @@
+                 .map_err(|e| format!("{id}: {e}"))?;
+             // Worldgen this server cannot generate refuses the whole pack, naming
+             // every such entry (a bounded list) instead of loading a partial pack.
+-            let mut unsupported: Vec<String> = Vec::new();
++            let mut unsupported = Vec::new();
+             for (relative, bytes) in data {
+                 let add = || -> Result<(), String> {
+                     worldgen::validate_path(&relative)?;
+                     if worldgen::is_resource(&relative) {
+                         let expanded = match worldgen::validate_resource(&relative, &bytes) {
+                             Ok(expanded) => expanded,
+-                            Err(worldgen::ResourceError::Unsupported(entry)) => return Err(entry),
++                            Err(worldgen::ResourceError::Unsupported(entry)) => {
++                                unsupported.push(entry);
++                                return Ok(());
++                            }
+                             Err(worldgen::ResourceError::Invalid(error)) => return Err(error),
+                         };
+                         remaining = remaining

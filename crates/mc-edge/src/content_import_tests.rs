@@ -392,3 +392,113 @@ fn classpath_round_trips_through_the_platform_separator() {
     let separator = if cfg!(windows) { ";" } else { ":" };
     assert_eq!(joined.to_string_lossy().matches(separator).count(), 2);
 }
+
+/// A child that stands in for a JVM blocked on a lock: it writes one line, then sleeps far past
+/// any useful limit. `exec` makes the shell become the sleeper, so killing the child's pid kills
+/// the process the wait is actually about.
+#[cfg(unix)]
+fn stalled_child() -> super::JvmChild {
+    let mut command = std::process::Command::new("sh");
+    command.arg("-c").arg("echo started; exec sleep 60");
+    super::JvmChild::spawn(&mut command, "stalled child").expect("spawn the stand-in JVM")
+}
+
+#[cfg(unix)]
+fn alive(pid: u32) -> bool {
+    std::path::Path::new(&format!("/proc/{pid}")).exists()
+}
+
+#[cfg(unix)]
+#[test]
+fn a_stalled_jvm_child_is_killed_at_the_deadline() {
+    // CONTENT-IMPORT-JVM-NO-TIMEOUT: the row's symptom is a child that never returns. The wait must
+    // end at its own limit with the child killed, not block the import forever.
+    let child = stalled_child();
+    let pid = child.child.id();
+    let started = std::time::Instant::now();
+    let error = child
+        .output(std::time::Duration::from_millis(300))
+        .expect_err("a stalled child must not be waited on forever");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("did not finish within") && message.contains("stalled child"),
+        "the refusal names the child and its limit: {message}"
+    );
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(20),
+        "the wait was bounded by its own limit, not the child's 60 s"
+    );
+    assert!(!alive(pid), "the timed-out child was killed");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_dropped_jvm_child_is_killed() {
+    // Ctrl-C or an earlier error drops the guard: the JVM must not outlive the import.
+    let child = stalled_child();
+    let pid = child.child.id();
+    assert!(alive(pid), "the child runs before the drop");
+    drop(child);
+    assert!(!alive(pid), "dropping the guard kills the child");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_bounded_child_returns_its_output() {
+    // The bounded wait keeps `Command::output`'s contract: status and both pipes of a child that
+    // finishes in time, so the datagen/javac/extractor call sites still read their errors.
+    let mut command = std::process::Command::new("sh");
+    command.arg("-c").arg("echo out; echo err 1>&2; exit 3");
+    let output = super::JvmChild::spawn(&mut command, "quick child")
+        .expect("spawn")
+        .output(std::time::Duration::from_secs(30))
+        .expect("a child that finishes inside the limit returns");
+    assert_eq!(output.status.code(), Some(3));
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "out");
+    assert_eq!(String::from_utf8_lossy(&output.stderr).trim(), "err");
+}
+
+/// A `java` stand-in that never finishes: the row's stalled JVM (a lock, stdin, a full disk).
+#[cfg(unix)]
+fn stalled_java(dir: &Path) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let path = dir.join("stalled-java");
+    std::fs::write(&path, "#!/bin/sh\nexec sleep 30\n").unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    path
+}
+
+#[cfg(unix)]
+#[test]
+fn a_stalled_datagen_returns_a_bounded_error() {
+    // CONTENT-IMPORT-JVM-NO-TIMEOUT: `content import` waited on the bundle's datagen/javac/extractors
+    // with no deadline, so a stalled JVM blocked the command forever. The production path must
+    // return at its own limit; the pre-fix path never returns, which is this test's red.
+    let dir = tempfile::tempdir().unwrap();
+    let java = stalled_java(dir.path());
+    let jar = dir.path().join("bundle.jar");
+    let work = dir.path().join("work");
+    let staging = dir.path().join("staging");
+    std::fs::create_dir_all(&staging).unwrap();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let result = super::run_datagen_bounded(
+            java.as_os_str(),
+            &jar,
+            &work,
+            &staging,
+            std::time::Duration::from_millis(300),
+        );
+        let _ = sender.send(format!(
+            "{:#}",
+            result.expect_err("a stalled datagen cannot succeed")
+        ));
+    });
+    let message = receiver
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("the import path must return instead of waiting for the JVM");
+    assert!(
+        message.contains("did not finish within"),
+        "the refusal names the deadline: {message}"
+    );
+}

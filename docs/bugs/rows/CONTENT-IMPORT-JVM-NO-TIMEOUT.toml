@@ -2,9 +2,39 @@
 id = "CONTENT-IMPORT-JVM-NO-TIMEOUT"
 title = "`content import` waits on the bundle's datagen, javac and the Java extractors with no timeout and no kill on drop, so a stalled JVM blocks the command forever"
 area = "gameplay"
+repro = "command"
 severity = "minor"
 status = "open"
-source = "CS341 audit A 2026-11-17, receipts/CS341/REPORT-A.md G7, read from code and not reproduced: crates/mc-edge/src/content_import.rs:868-875 (bundle datagen via `-DbundlerMainClass`), :923-934 (javac of the in-tree extractors) and :948-954 (extractor run) call `Command::new(java|javac) ... .output()` with no timeout and no kill-on-drop. A JVM that waits on a lock, on stdin or on a full disk blocks `krasnokamen content import --version <version> --download` indefinitely with no progress line and no error, and Ctrl-C leaves the JVM running until it finishes on its own (it stops only because the terminal signals the whole process group). Repro: run content import against a bundle whose datagen stalls, or SIGSTOP the java child while :868-875 is running, and observe the command never returns and prints no diagnostic."
-repro = "command"
-regression = []
+source = """CS341 audit A 2026-11-17, receipts/CS341/REPORT-A.md G7, read from code and not reproduced:
+crates/mc-edge/src/content_import.rs:868-875 (bundle datagen via -DbundlerMainClass), :923-934 (javac
+of the in-tree extractors) and :948-954 (extractor run) called Command::new(java|javac) ... .output()
+with no timeout and no kill-on-drop. A JVM that waits on a lock, on stdin or on a full disk blocked
+`krasnokamen content import --version <version> --download` indefinitely with no progress line and no
+error, and Ctrl-C left the JVM running until it finished on its own.
+
+Fix now in tree: a `JvmChild` guard spawns each JVM with piped stdout/stderr, drains both on their
+own threads, polls `try_wait` at a bounded interval and kills the child past `JVM_CHILD_TIMEOUT`
+(900 s) with an error that names the step and the deadline; `Drop` kills a child the command abandons
+(Ctrl-C or an earlier error). The three call sites use it; `run_datagen` keeps a
+`run_datagen_bounded(..., limit)` seam the test drives with 300 ms. The registry capture
+(mc_vanilla::registry_capture) is a separate driver and unchanged."""
+regression = [
+  "cargo:mc-edge:content_import::tests::a_stalled_datagen_returns_a_bounded_error",
+  "cargo:mc-edge:content_import::tests::a_stalled_jvm_child_is_killed_at_the_deadline",
+  "cargo:mc-edge:content_import::tests::a_dropped_jvm_child_is_killed",
+  "cargo:mc-edge:content_import::tests::a_bounded_child_returns_its_output",
+]
+proving_refs = ["cargo:mc-edge:content_import::tests::a_stalled_datagen_returns_a_bounded_error"]
 failing_first = "not recorded"
+fix_commit = "patch:4a8354d565a5cff80c2480eb042c459ada5d915683e900b583a673a8f965f0f4"
+repro_check = """Green: mc-edge content_import 19/19 (artifact 20261126T130124-test-hynz143m). RED control:
+reverse-applying docs/bugs/fix-patches/CONTENT-IMPORT-JVM-NO-TIMEOUT.patch (the three call sites go
+back to the unbounded `Command::output()`, the guard stays) fails
+`a_stalled_datagen_returns_a_bounded_error` at its own assertion ("the import path must return instead
+of waiting for the JVM: Timeout", 10 s bound) in artifact 20261126T130442-test-3ydknzbr, with the
+other 18 content_import tests green on the control.
+
+Still missing for promotion (a `command` row): the original command rerun on the fixed build with its
+receipt in `source`, i.e. one real `krasnokamen content import --version <v> --download` whose datagen
+child is SIGSTOPped while the step runs, showing the bounded refusal instead of a hang. Not run here:
+it downloads a licensed bundle and writes the shared content caches the worktrees hard-link."""

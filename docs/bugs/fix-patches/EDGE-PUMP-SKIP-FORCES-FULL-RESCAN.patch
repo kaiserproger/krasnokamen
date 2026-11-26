@@ -1,0 +1,14 @@
+--- a/crates/mc-edge/src/server/pump.rs
++++ b/crates/mc-edge/src/server/pump.rs
+@@ -99,9 +99,11 @@ pub(super) async fn next_publication(
+                 server.dashboard.record_pump_stale_skipped(1);
+                 // The skipped output's deltas still reach the next publish: a
+                 // viewer whose base it is must not pay a full rescan.
++                history.record(&out);
+                 skip_publications(server, viewers, chunk_cache, 1);
+             }
+             Ok(out) => {
++                history.record(&out);
+                 return Some(out);
+             }
+             Err(broadcast::error::RecvError::Lagged(skipped)) => {

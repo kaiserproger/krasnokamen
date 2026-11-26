@@ -2,9 +2,40 @@
 id = "LOCATE-SHARED-FIFO-STARVES-MAPS-AND-DOLPHINS"
 title = "One FIFO locate worker serves /locate, exploration maps and dolphin treasure leads, so a queued command delays a chest or cartographer open and a failed dolphin lead re-captures a structure snapshot on the tick thread every 200 ticks"
 area = "gameplay"
+repro = "source"
 severity = "minor"
 status = "open"
-source = "D123Battle F7 (independent review of the dolphin located-treasure work, 2026-11-23): crates/mc-core/src/command_locate.rs runs every StructureLookupRequest through one worker channel pair (jobs/done) with one `pending` map; maps/loot.rs, maps/trades.rs and dolphin.rs all submit into it. The worker is FIFO: a slow StructureSnapshot::capture for a player `/locate` (radius up to 100 rings) delays a container or cartographer open queued behind it, and a dolphin lead whose search Failed keeps GotFish and retries after 200 ticks (dolphin.rs `DolphinTreasure::Failed`), each retry submitting a fresh capture. Captures run on the worker, not the tick thread; the retry itself is on the tick thread. Not reproduced as a failure: no client-visible or timing receipt exists yet, and the shared queue is inside the existing per-owner job budget (MAX_JOBS_PER_PLAYER, MAX_QUEUED_JOBS)."
-repro = "source"
-regression = []
-failing_first = "not recorded"
+source = """D123Battle F7 (independent review of the dolphin located-treasure work, 2026-11-23):
+crates/mc-core/src/command_locate.rs ran every StructureLookupRequest through one worker channel pair
+(jobs/done) with one `pending` map; maps/loot.rs, maps/trades.rs and dolphin.rs all submit into it.
+The worker was FIFO: a slow StructureSnapshot for a player `/locate` (radius up to 100 rings) delays a
+container or cartographer open queued behind it, and a dolphin lead whose search Failed kept GotFish
+and retried after 200 ticks (dolphin.rs `DolphinTreasure::Failed`), each retry submitting a fresh
+capture. Not reproduced as a failure: no client-visible or timing regression.
+
+Fix now in tree: LocateState holds two lanes, each with one worker and one bounded queue. Interactive
+opens (an exploration map in a container or a cartographer trade, an eye of ender) run on the
+interactive lane; a player /locate and a fed dolphin lead run on the background lane, whose queue
+keeps BACKGROUND_QUEUE_RESERVE slots back. A refusal on a dolphin lead now stops that lead
+(DolphinTreasure::Missing: the goal releases the fish) instead of keeping the fish and recapturing
+every resident chunk's structure starts on the tick side every 200 ticks; the same metadata read
+cannot improve by waiting. A worker-loss Failed retry stays (a fresh worker may exist)."""
+regression = [
+  "cargo:mc-core:command_locate::tests::an_open_does_not_wait_behind_a_parked_command_search",
+  "cargo:mc-core:command_locate::tests::a_full_background_lane_still_admits_an_interactive_open",
+  "cargo:mc-core:command_locate::tests::a_refused_dolphin_lookup_stops_the_lead_instead_of_recapturing",
+]
+proving_refs = [
+  "cargo:mc-core:command_locate::tests::an_open_does_not_wait_behind_a_parked_command_search",
+  "cargo:mc-core:command_locate::tests::a_full_background_lane_still_admits_an_interactive_open",
+  "cargo:mc-core:command_locate::tests::a_refused_dolphin_lookup_stops_the_lead_instead_of_recapturing",
+]
+failing_first = "seen"
+fix_commit = "patch:3fffac789def66386d1850ccf2107ae34503ed7b17548d5a8d74f7237095b5ef"
+repro_check = """Green: mc-core command_locate 31/31 (artifact 20261126T123820-test-u0q8f_10). RED control:
+reverse-applying docs/bugs/fix-patches/LOCATE-SHARED-FIFO-STARVES-MAPS-AND-DOLPHINS.patch (lane()
+collapses every completion onto the background lane; a refusal becomes Failed{retry_at: +200}) fails
+all three refs at their own assertions (artifact 20261126T125607-test-zrks6u33: "a refused lookup
+stops the lead", "an open queues on the interactive lane while the background lane is full", "the open
+completes while the command search is still parked in front of it"), with the other 28 command_locate
+tests green on the control."""

@@ -717,7 +717,7 @@ fn a_current_viewer_does_not_preempt_the_chain_for_a_stale_one() {
     let reference_rescans_before = reference.rescans;
 
     let mut cache = ChunkPacketCache::new();
-    let mut both = vec![current, stale];
+    let mut both = [current, stale];
     let packets = crate::fanout::publish_with_registries_chain(
         &three,
         both.iter_mut(),

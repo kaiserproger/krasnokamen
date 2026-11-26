@@ -5,8 +5,32 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "Split from DATAPACK-WORLDGEN-ZIP. Since the A10 baseline-custody work the experimental jigsaw inputs apply on restart and every other worldgen/dimension resource fails closed by name (docs/OPERATING.md Datapacks and command blocks, docs/COMPATIBILITY.md); general custom terrain remains the open gap. The new-pack skip half of the original report is DATAPACK-NEW-PACK-WORLDGEN-SKIP (open)."
-regression = ["cargo:mc-core:datapacks::worldgen::tests::unsupported_worldgen_refusal_names_every_entry_and_supported_packs_load", "harness:datapack-reload:native-datapack-reload"]
+source = """Split from DATAPACK-WORLDGEN-ZIP. Since the A10 baseline-custody work the experimental jigsaw inputs
+apply on restart and every other worldgen/dimension resource fails closed by name (docs/OPERATING.md
+Datapacks and command blocks, docs/COMPATIBILITY.md); general custom terrain remains the open gap. The
+new-pack skip half of the original report is DATAPACK-NEW-PACK-WORLDGEN-SKIP (open).
+
+Fix in tree: 1d8e57dd8 collects every `ResourceError::Unsupported(entry)` of a pack into one bounded
+list (first eight and a count) and refuses the pack once, instead of refusing on the first entry."""
+regression = [
+  "cargo:mc-core:datapacks::worldgen::tests::unsupported_worldgen_refusal_names_every_entry_and_supported_packs_load",
+  "harness:datapack-reload:native-datapack-reload",
+]
+proving_refs = ["cargo:mc-core:datapacks::worldgen::tests::unsupported_worldgen_refusal_names_every_entry_and_supported_packs_load"]
 failing_first = "reported"
-repro_check = "Promotion withdrawn (final review 10, B4): patch:d4c9b9eb is deleted. The real fix is 1d8e57dd8, which cannot be reversed whole on this tip (its PackSet::open/worldgen::open API is called by 251276077 at game_clock_upgrade.rs:276, a production call, so a whole reversal is E0425 and a compile failure is not a control; that exclusion is (b) in effect, not (c): a later commit's production code depends on it, so the control must compile). The withdrawn patch's a/-branch `Err(worldgen::ResourceError::Unsupported(_)) => return Ok(())` was a hand re-break and not the pre-image: before the fix the loop ran `worldgen::validate_resource(&relative, &bytes)?` on a Result<usize, String> (1d8e57dd8^ datapacks.rs:722-737) and refused the pack on the first unsupported entry. It also expressed the opposite outcome (ignore the entry and load the pack), so its red was a re-break's assertion. A faithful control is buildable: keep the fix's typed error and write `Err(worldgen::ResourceError::Unsupported(entry)) => return Err(entry)` (mechanically the pre-fix refusal, a named constructor that changes no behaviour), which makes datapacks_worldgen_tests.rs:453 red because the error then names only a.json and not worldgen/biome/b.json. Not re-promoted yet."
-fix_commit = "1d8e57dd8"
+fix_commit = "patch:5621b955baf863c302b5764744acad3a59f0fbd7883ddbee89fdbc752c302bb9"
+repro_check = """RED control (mechanically faithful): in crates/mc-core/src/datapacks.rs replace the collection
+           match with the pre-image refusal `Err(Unsupported(entry)) => return Err(entry)` (plus
+           `Err(Invalid(error)) => return Err(error)`); `let mut unsupported: Vec<String>` then needs its
+           type annotation (the one a/-side line, a type annotation). Artifact
+           20261126T131704-test-2kqpijbt: mc-core
+           datapacks::worldgen::tests::unsupported_worldgen_refusal_names_every_entry_and_supported_packs_load
+           panics at datapacks_worldgen_tests.rs:460 naming only `mod/dimension/a.json`, i.e. the first
+           entry — exactly the row's symptom. Green on the candidate: the same ref passes
+           (artifact 20261126T133248-test-8j4eyj7d).
+
+Promotion is not ready: the row's `harness:datapack-reload:native-datapack-reload` ref is a real-client
+gate (release pin + windowed native client), and a `repro = manual` row needs its receipt; neither was
+produced in this pass. The fix patch also has to be committed at
+docs/bugs/fix-patches/DATAPACK-WORLDGEN-OVERRIDES.patch before a patch-mode promote (1d8e57dd8 cannot
+be reversed whole: its PackSet::open/worldgen::open API is called by later production code)."""
