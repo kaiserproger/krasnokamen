@@ -102,6 +102,13 @@ impl SiteBudget {
         self.lots = SITE_SLICES * super::SITE_ATTEMPTS;
     }
 
+    /// Whole slices the tick can still hand out. An off-cadence step takes one
+    /// only while two are left, so the order turn and the replanting proofs
+    /// always keep their slice (review round 3 C5).
+    pub(crate) fn slices(&self) -> u32 {
+        self.lots / super::SITE_ATTEMPTS
+    }
+
     /// Settlement `id`'s free-lot hint for house blueprint `blueprint`, and
     /// the scan of the crowned walk of the crown whose minimum corner is
     /// `crown`, used at `tick`.

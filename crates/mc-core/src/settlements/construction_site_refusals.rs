@@ -222,6 +222,12 @@ struct Sweep {
 #[derive(Debug, Default)]
 pub(crate) struct Sweeps {
     live: BTreeMap<String, Sweep>,
+    /// The settlement's own admission pass ended with a kind's walk unfinished
+    /// and already holding a legal candidate: only such a settlement is stepped
+    /// off the four-tick admission clock, and only its site scan (review round 3
+    /// C3/C4). Runtime only, like the sweeps it describes: `Empty`, a restart
+    /// after a failed re-proof, and a pass that finds no candidate all clear it.
+    pub(super) stepping: bool,
     /// How often each kind's walk was dropped, by a street change or by its
     /// stored best losing its cost. Log-only, and kept OUTSIDE the sweep: a
     /// counter inside `Sweep` made `retain` create an entry (so the next walk
@@ -247,10 +253,11 @@ impl Sweeps {
         }
     }
 
-    /// Some walk of this settlement is unfinished: the planner steps it on
-    /// every tick instead of once per `PLAN_CADENCE` (review round 3, lever i).
-    pub(super) fn any_pending(&self) -> bool {
-        self.live.values().any(|sweep| sweep.next < sweep.frontages)
+    /// This kind's walk exists and still has frontages to examine.
+    pub(super) fn unfinished(&self, blueprint: &str) -> bool {
+        self.live
+            .get(blueprint)
+            .is_some_and(|sweep| sweep.next < sweep.frontages)
     }
 
     /// Some unfinished sweep of these kinds already holds a legal candidate.
@@ -428,6 +435,10 @@ pub(super) fn examined() {
 /// Examine up to `budget` further candidates of this blueprint's sweep. An
 /// incomplete sweep admits nothing; a completed one returns its cheapest lot
 /// and forgets its scratch. Equal costs go to the lot nearest the anchor.
+/// `park` keeps a proven winner's finished sweep instead of forgetting it: a
+/// caller that may not admit this tick (an off-cadence step) leaves the lot in
+/// the hold, and the next admission pass re-proves it rather than walking the
+/// street again.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn advance(
     state: &TickState,
@@ -440,6 +451,7 @@ pub(super) fn advance(
     start: u32,
     budget: &mut u32,
     report: &mut Report,
+    park: bool,
 ) -> Advance {
     let fronts = network.frontage();
     let count = u32::try_from(fronts.len()).unwrap_or(u32::MAX);
@@ -543,7 +555,7 @@ pub(super) fn advance(
         return Advance::Incomplete(next);
     }
     let finished = sweeps.live.remove(&blueprint.id);
-    let Some((origin, rotation, stored)) = finished.and_then(|sweep| sweep.best) else {
+    let Some((origin, rotation, stored)) = finished.as_ref().and_then(|sweep| sweep.best) else {
         return Advance::Empty;
     };
     // The world may have moved since that candidate was ranked: re-check it
@@ -559,7 +571,16 @@ pub(super) fn advance(
         survey,
         Some(&floors[usize::from(rotation) % 4]),
     ) {
-        Ok(cost) if cost == stored => Advance::Cheapest(origin, rotation),
+        Ok(cost) if cost == stored => {
+            if park {
+                // The caller may not admit this tick: keep the proven winner so
+                // its next admission pass re-proves it, not the whole street.
+                if let Some(sweep) = finished {
+                    sweeps.live.insert(blueprint.id.clone(), sweep);
+                }
+            }
+            Advance::Cheapest(origin, rotation)
+        }
         // The world moved under the stored candidate: it is gone (the sweep was
         // removed above), so this restart holds nothing. The count is log-only.
         Ok(_) | Err(_) => {

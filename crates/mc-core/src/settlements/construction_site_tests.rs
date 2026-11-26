@@ -1875,6 +1875,81 @@ fn probe_retained_village_site_supply() {
     let blueprint_name = std::env::var("D123_CIV_BLUEPRINT").unwrap_or_else(|_| "storage".into());
     let blueprint = blueprints::get(&state.registry, &blueprint_name)
         .unwrap_or_else(|| panic!("blueprint {blueprint_name:?} is not in the catalogue"));
+    if std::env::var_os("D123_CIV_STEP").is_some() {
+        // Review round 3 C6: one tick's site cost in release on this world.
+        // An off-cadence step is the pass prologue's storage images, one
+        // construction network and one 64-lot slice (`step_sites` takes one of
+        // the tick's two slices and runs one scan). The admission pass is the
+        // same prologue with two networks and two 64-lot slices. Eight samples;
+        // the median is the number to read.
+        let house = blueprints::get(&state.registry, "spanish_house")
+            .expect("spanish_house is in the catalogue");
+        let mut step_ms: Vec<f64> = Vec::new();
+        let mut pass_ms: Vec<f64> = Vec::new();
+        let mut network_ms: Vec<f64> = Vec::new();
+        let mut examined_step = 0u32;
+        let mut examined_pass = 0u32;
+        let scan = |state: &TickState, kind: &'static blueprints::Blueprint| {
+            let mut network = layout::Network::for_construction(state, &record);
+            let mut sweeps = site_refusals::Sweeps::default();
+            let mut survey = site_refusals::Survey::default();
+            let mut report = site_refusals::Report::default();
+            let mut budget = 64u32;
+            let floors: [std::collections::BTreeSet<[i32; 2]>; 4] = std::array::from_fn(|turns| {
+                site_refusals::floor_columns(kind, u8::try_from(turns).unwrap())
+            });
+            let _ = site_refusals::advance(
+                state,
+                &record,
+                &mut network,
+                kind,
+                &floors,
+                &mut survey,
+                &mut sweeps,
+                record.construction_cursor,
+                &mut budget,
+                &mut report,
+                true,
+            );
+            report.examined
+        };
+        for _ in 0..8 {
+            let started = std::time::Instant::now();
+            let images =
+                crate::plugin_structures::settlement_builds::source_images(&state, record.id);
+            examined_step = scan(&state, house);
+            step_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            std::hint::black_box(images.len());
+            let started = std::time::Instant::now();
+            let images =
+                crate::plugin_structures::settlement_builds::source_images(&state, record.id);
+            examined_pass = scan(&state, house) + scan(&state, blueprint);
+            pass_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            std::hint::black_box(images.len());
+        }
+        for _ in 0..8 {
+            let started = std::time::Instant::now();
+            let network = layout::Network::for_construction(&state, &record);
+            network_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            std::hint::black_box(network.frontage().len());
+        }
+        let median = |samples: &[f64]| {
+            let mut sorted = samples.to_vec();
+            sorted.sort_by(|a, b| a.partial_cmp(b).expect("finite"));
+            sorted[sorted.len() / 2]
+        };
+        let step_median = median(&step_ms);
+        let pass_median = median(&pass_ms);
+        let network_median = median(&network_ms);
+        println!(
+            "PROBE step house=spanish_house funded={blueprint_name} \
+             step_examined={examined_step} pass_examined={examined_pass} \
+             step_median_ms={step_median:.4} step_samples_ms={step_ms:?} \
+             pass_median_ms={pass_median:.4} pass_samples_ms={pass_ms:?} \
+             network_median_ms={network_median:.4}",
+        );
+        return;
+    }
     let mut network = layout::Network::for_construction(&state, &record);
     let fronts = network.frontage();
     println!("PROBE frontages={}", fronts.len());

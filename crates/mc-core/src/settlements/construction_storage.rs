@@ -150,6 +150,7 @@ pub(super) fn plan(
         budget.take(),
         images,
     );
+    sweeps.stepping = pass.waiting && pass.site.is_none();
     state.settlements.site_sweep.insert(id, sweeps);
     site_refusals::observe(state, id, &blueprint.id, pass.report);
     let record = state.settlements.get_mut(id).expect("planning storehouse");
