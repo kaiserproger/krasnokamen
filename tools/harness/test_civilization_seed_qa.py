@@ -1,11 +1,14 @@
 """Evidence scanning must not turn generated/natural geometry into stage proof."""
 import copy
+import math
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from .backends import civilization_seed_qa as qa
+from .backends import village_autonomy_qa as village
 
 
 class CivilizationEvidenceTests(unittest.TestCase):
@@ -878,3 +881,161 @@ class BabyCaptureRetryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RemoteHouseDoorTests(unittest.TestCase):
+    """HARNESS-CIV-GATE-HOUSE-DOOR-UNLOADED: final-pin run 20261126T092432 aborted on it."""
+
+    DOOR = {"block_id": "minecraft:oak_door", "x": 96, "y": 64, "z": -297,
+            "properties": {"half": "lower", "facing": "north", "open": "true"}}
+
+    def _probe(self, player, refusal_then_ok):
+        probe = Mock()
+        probe.observe.side_effect = lambda: {"player": dict(player)}
+        refused = {"count": 0}
+
+        door = (self.DOOR["x"], self.DOOR["y"], self.DOOR["z"])
+
+        def call(name, arguments):
+            if name == "minecraft_navigate_to_block" and (
+                    arguments["x"], arguments["y"], arguments["z"]) == door:
+                if refused["count"] == 0 and refusal_then_ok:
+                    refused["count"] += 1
+                    raise RuntimeError(
+                        'minecraft_navigate_to_block failed: {"code": "target chunk is not '
+                        'client-loaded: 96, 64, -297", "retryable": false, "stage": "automation"}')
+                return {"status": "ok"}
+            if name == "minecraft_navigate_to_block":
+                player.update(x=float(arguments["x"]), y=float(arguments["y"]),
+                              z=float(arguments["z"]))
+                return {"status": "ok"}
+            if name == "minecraft_wait_for_loaded_block":
+                return {"block_id": "minecraft:cobblestone"}
+            if name == "minecraft_read_block":
+                return self.DOOR
+            return {}
+        probe.call.side_effect = call
+        return probe
+
+    def test_a_remote_door_is_walked_in_a_loaded_hop_then_captured(self):
+        player = {"x": 132.2, "y": 77.0, "z": -215.5}
+        probe = self._probe(player, refusal_then_ok=True)
+        target = (96.5, 64.5, -297.5)
+        with patch.object(qa, "capture_target", return_value={"retained_path": "house.png"}) as capture:
+            shot = qa.capture_house(probe, "artifact", "house", target, [self.DOOR])
+        self.assertEqual(shot["retained_path"], "house.png")
+        hops = [call.args[1] for call in probe.call.call_args_list
+                if call.args[0] == "minecraft_wait_for_loaded_block"]
+        self.assertTrue(1 <= len(hops) <= qa.DOOR_HOP_LIMIT)
+        for hop in hops:
+            self.assertLessEqual(math.dist((hop["x"], hop["z"]), (96, -297)), 64)
+        walks = [call.args[1] for call in probe.call.call_args_list
+                 if call.args[0] == "minecraft_navigate_to_block"]
+        self.assertEqual((walks[0]["x"], walks[0]["z"]), (96, -297))
+        self.assertEqual((walks[1]["x"], walks[1]["z"]), (hops[0]["x"], hops[0]["z"]))
+        # the door walk after the hops, then the ordinary walk back outside
+        self.assertEqual((walks[-2]["x"], walks[-2]["z"]), (96, -297))
+        self.assertEqual((walks[-1]["x"], walks[-1]["z"]), (132, -216))
+        self.assertEqual(capture.call_args.args, (probe, "artifact", "house", target))
+
+    def test_a_door_the_hop_cannot_advance_towards_fails_with_a_named_error(self):
+        player = {"x": 132.2, "y": 77.0, "z": -215.5}
+        probe = self._probe(player, refusal_then_ok=True)
+        probe.call.side_effect = lambda name, arguments: (
+            (_ for _ in ()).throw(RuntimeError(
+                'minecraft_navigate_to_block failed: {"code": "target chunk is not '
+                'client-loaded: 96, 64, -297", "retryable": false, "stage": "automation"}'))
+            if name == "minecraft_navigate_to_block" else
+            {"block_id": "minecraft:cobblestone"} if name == "minecraft_wait_for_loaded_block" else {})
+        with patch.object(qa, "capture_target") as capture:
+            with self.assertRaisesRegex(RuntimeError, "hop 1 to .* was refused"):
+                qa.capture_house(probe, "artifact", "house", (96.5, 64.5, -297.5), [self.DOOR])
+        capture.assert_not_called()
+
+    def test_a_door_still_remote_after_the_hop_bound_fails_with_a_named_error(self):
+        player = {"x": 132.2, "y": 77.0, "z": -215.5}
+        probe = Mock()
+        probe.observe.side_effect = lambda: {"player": dict(player)}
+
+        def call(name, arguments):
+            if name == "minecraft_navigate_to_block" and arguments["x"] == 96:
+                raise RuntimeError('minecraft_navigate_to_block failed: {"code": "target chunk '
+                                   'is not client-loaded", "retryable": false}')
+            if name == "minecraft_navigate_to_block":
+                # progress toward the door, but never enough to make it local
+                player["z"] += 5.0
+                return {"status": "ok"}
+            if name == "minecraft_wait_for_loaded_block":
+                return {"block_id": "minecraft:cobblestone"}
+            return {}
+        probe.call.side_effect = call
+        with patch.object(qa, "DOOR_HOP_LIMIT", 2), patch.object(qa, "capture_target") as capture:
+            with self.assertRaisesRegex(RuntimeError, "after 2 hops"):
+                qa.capture_house(probe, "artifact", "house", (96.5, 64.5, -297.5), [self.DOOR])
+        capture.assert_not_called()
+
+
+class PlannerReadRecoveryTests(unittest.TestCase):
+    """HARNESS-CIV-GATE-PLANNER-READ-BLOCKED-BY-STATUS-DIALOG and -STORAGE-READ-TIMEOUT."""
+
+    DIALOG = "net.minecraft.client.gui.screens.dialog.MultiButtonDialogScreen"
+    CLEAR = {"screen": {"class": "none", "open": False}}
+
+    def _probe(self, screens):
+        probe = Mock()
+        probe.observe.side_effect = lambda: screens.pop(0) if screens else dict(self.CLEAR)
+        return probe
+
+    def _status(self, probe, stock):
+        with patch.object(village, "_project_status", return_value={"ui_nodes": []}), \
+                patch.object(village, "_project_progress", return_value=[]), \
+                patch.object(village, "_recent_chat", return_value=[]), \
+                patch.object(village, "_send", return_value=[]), \
+                patch.object(village, "_settlement_stock", side_effect=stock):
+            return village._planner_status(probe, {}, (98, 67, -155), lambda pos: {})
+
+    def test_a_status_dialog_over_the_view_is_closed_and_the_read_retried(self):
+        probe = self._probe([{"screen": {"class": self.DIALOG, "open": True}}, dict(self.CLEAR)])
+        status = self._status(probe, [
+            TimeoutError("storage read of block 98,67,-155 got no reply in 15.0s"),
+            {"minecraft:cobblestone": 50},
+        ])
+        self.assertNotIn("storage_error", status)
+        self.assertEqual(status["storage_now"], {"minecraft:cobblestone": 50})
+        self.assertIn(call("minecraft_close_screen", {}), probe.call.call_args_list)
+
+    def test_a_dialog_that_never_closes_names_itself_in_the_storage_error(self):
+        dialog = {"screen": {"class": self.DIALOG, "open": True}}
+        probe = Mock()
+        probe.observe.side_effect = lambda: dict(dialog)
+        with patch.object(village, "_settlement_stock", side_effect=TimeoutError("no reply")) as stock:
+            with patch.object(village, "_project_status", return_value={"ui_nodes": []}), \
+                    patch.object(village, "_project_progress", return_value=[]), \
+                    patch.object(village, "_recent_chat", return_value=[]), \
+                    patch.object(village, "_send", return_value=[]):
+                status = village._planner_status(probe, {}, (98, 67, -155), lambda pos: {})
+        self.assertEqual(stock.call_count, 2)
+        self.assertIn("screen stayed open", status["storage_error"])
+        self.assertIn(self.DIALOG, status["storage_error"])
+
+    def test_a_console_reply_embedded_in_a_perf_line_is_accepted(self):
+        payload = ('98, 67, -155 has the following block data: {Items: [{Slot: 0b, count: 50, '
+                   'id: "minecraft:cobblestone"}], id: "minecraft:barrel", x: 98, y: 67, z: -155}')
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "server.log"
+            log.write_bytes(b"")
+
+            class _Stdin:
+                def write(self, data):
+                    # The perf line has no trailing newline yet: the reply lands mid-line
+                    # exactly as run 20261126T101004 logged it (`... post=0.0398, 67, -155 has`).
+                    with log.open("ab") as stream:
+                        stream.write(b"perf: tick outer ms: tick=141292 pre=0.02 run=1.91 post=0.03")
+                        stream.write(payload.encode())
+
+                def flush(self):
+                    pass
+
+            server = SimpleNamespace(stdin=_Stdin())
+            totals = village._read_storage_container(server, log, (98, 67, -155), 2.0)
+        self.assertEqual(totals, {"minecraft:cobblestone": 50})

@@ -7,8 +7,12 @@ severity = "major"
 status = "open"
 source = "civilization-seed-qa artifact receipts/D123/D123Civ/gate50 (wt/D123Gate50/.analysis/validation/20261126T004810-civilization-seed-qa-i2qqx7sk, pin 5ef42b415ae1): at 2758 s the run stopped with `cannot establish planner or storage state`, and the payload it printed carries `project_ui` whose first entries are `dialog/title` label `Status` and `dialog/action/2` label `Close` - a modal dialog was in front when the planner read ran, so the read answered with the dialog instead of the screen. The same artifact holds 5560 planner lines and 32920 resident lines from the server side, and the milestone scan found mine certified, miner assigned, first cobblestone and 3 buildings completed, so the world was healthy: the harness stopped itself."
 failing_first = "reported"
-regression = []
+regression = [
+  "python:tools.harness.test_civilization_seed_qa:PlannerReadRecoveryTests.test_a_status_dialog_over_the_view_is_closed_and_the_read_retried",
+  "python:tools.harness.test_civilization_seed_qa:PlannerReadRecoveryTests.test_a_dialog_that_never_closes_names_itself_in_the_storage_error",
+]
 repro_check = [
+  "Final-pin run 20261126T101004 (receipts/D123/D123CivGates/FINAL-SERIES.md) repeated the stall with the same payload shape: `project_ui` carries `dialog/title` label `Status`; the failing key there was `storage_error` (see HARNESS-CIV-GATE-STORAGE-READ-TIMEOUT), so both reads are now retried once after the covering screen is closed, and a screen that survives the close is named in the error.",
   "Next gate run: when `cannot establish planner or storage state` fires, the error names whether a `dialog/*` element was on top and which id/label it was; a run that reaches the same point without a dialog must not report it.",
   "unittest: tools.harness.test_civilization_seed_qa gains a case where the planner snapshot contains a dialog and the harness dismisses it (Close) before retrying the read once, then reports the refusal only if the second read still fails.",
 ]
