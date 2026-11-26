@@ -21,7 +21,10 @@ the entity lane instead of the restored block tick.
 Assertions:
 * `saved_tick_moved_the_sand` - the block leaves its cell inside the tick budget
   the planted entry names, with no command writing near it (the row's symptom);
-* `sand_landed_on_its_support` - it lands one block down on the kept support.
+* `sand_landed_on_its_support` - it lands one block down on the kept support;
+  the scene waits for the client to report the sand in the landing cell before
+  reading it, because the fall is a falling-block entity for a few ticks after
+  the removing tick clears the source cell.
 The read of the sand in its cell right after the rejoin is recorded, not
 asserted: the tick is due after the rejoin, and a slower rejoin would only make
 the block fall earlier.
@@ -45,6 +48,9 @@ AIR = "minecraft:air"
 DELAY_TICKS = 600
 TICKS_PER_STEP = 20
 STEPS = 45
+# One block of vanilla fall takes about seven ticks, so this only bounds a
+# stuck client; the scenario budget still caps the wait.
+LANDING_TIMEOUT_SECONDS = 60.0
 
 
 def _block_id(steps: ProbeSteps, point: dict[str, int]) -> str:
@@ -117,12 +123,27 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         steps.call("minecraft_wait_ticks", {"ticks": TICKS_PER_STEP})
     steps.report["reads_after_reimport"] = reads
     steps.report["first_read_after_reimport"] = reads[0] if reads else None
+    # The due tick clears the source cell a few ticks before the falling block it
+    # spawns reaches the cell below, so a landing read taken in that instant sees
+    # air. Wait for the client to report the sand in the landing cell - a state
+    # wait bounded by the scenario budget, not a fixed sleep - and record a
+    # timed-out wait as the red assertion instead of aborting on the tool error.
+    landing_wait: dict[str, Any] | None = None
+    try:
+        landing_wait = steps.call("minecraft_wait_for_block_state", {
+            **gap, "block_id": SAND, "properties": {},
+            "timeout_seconds": min(LANDING_TIMEOUT_SECONDS, steps.remaining())})
+    except RuntimeError as error:
+        steps.report["landing_wait_error"] = str(error)
+    steps.report["landing_wait"] = landing_wait
     steps.report["landing"] = {**steps.call("minecraft_read_block", gap)}
     steps.report["support"] = {**steps.call("minecraft_read_block", support)}
     # The row's symptom: with the fix reversed the restored tick is never
     # activated, so the sand holds its cell for the whole budget.
     steps.check("saved_tick_moved_the_sand", reads[-1] != SAND)
-    steps.check("sand_landed_on_its_support", _block_id(steps, gap) == SAND)
+    steps.check("sand_landed_on_its_support",
+                (landing_wait or {}).get("status") == "matched"
+                and _block_id(steps, gap) == SAND)
     steps.check("landing_support_survived", _block_id(steps, support) == STONE)
     _echo(steps, "gravity_tick_landed_ordered")
 
