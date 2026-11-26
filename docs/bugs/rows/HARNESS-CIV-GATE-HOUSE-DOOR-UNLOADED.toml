@@ -1,0 +1,19 @@
+[[bug]]
+id = "HARNESS-CIV-GATE-HOUSE-DOOR-UNLOADED"
+title = "civilization-seed-qa's house milestone capture navigates to a received house door that is farther than the client's loaded radius, aborting the gate with 'target chunk is not client-loaded' before new_house can be recorded"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "civilization-seed-qa artifact wt/D123FinalPin/.analysis/validation/20261126T092432-civilization-seed-qa-74f53q9d (final pin 600bb4e32522, client pin ba1971d76215, seed 24, 2628.6 s): the settlement completed a House L1 at tick 103080 (server.log 3967739, building=4294967313) 80 blocks south of the bell; the harness scanned its faces from the bell with the two `minecraft_wait_for_loaded_block` retries (transcript steps 9241-9243 returned cobblestone at 93..96/-297), moved the observer back to the bell (step 9247), and then `capture_house` (tools/harness/backends/civilization_seed_qa.py:355) called `minecraft_navigate_to_block` on the door at 96,64,-297 from (132.2,77.0,-215.5) - 89.2 horizontal blocks, above the gate's own `view_distance = 4` (64 blocks) - and the client refused at src/minecraft/navigation.rs:233 with {code: target chunk is not client-loaded, retryable: false, stage: automation}. `capture_house` has no wait-for-loaded step before the door walk and handles only `unreachable` on the walk back, so the whole run aborted on the one capture that would have recorded new_house."
+failing_first = "reported"
+regression = [
+  "python:tools.harness.test_civilization_seed_qa:RemoteHouseDoorTests.test_a_remote_door_is_walked_in_a_loaded_hop_then_captured",
+  "python:tools.harness.test_civilization_seed_qa:RemoteHouseDoorTests.test_a_door_the_hop_cannot_advance_towards_fails_with_a_named_error",
+  "python:tools.harness.test_civilization_seed_qa:RemoteHouseDoorTests.test_a_door_still_remote_after_the_hop_bound_fails_with_a_named_error",
+]
+repro_check = [
+  "python3 -m unittest tools.harness.test_civilization_seed_qa.RemoteHouseDoorTests (green with the hops; red with the fix reverted: the first navigate_to_block after the face scan is the raw client refusal, and no wait_for_loaded_block is issued)",
+  "Next gate run: a completed house farther than the client's loaded radius is reached through named hops, and a door that cannot be made local reports `out of the client's loaded radius` with the hop count instead of aborting on the raw refusal.",
+]
+notes = "Same family as HARNESS-CIV-GATE-REMOTE-SCAN-UNLOADED (fix 354e288e6a moved the observer beside a remote building for the face scans) and HARNESS-CIV-GATE-LOCAL-SCAN-UNLOADED: the remaining hole is the house capture's own walk to the door, and `capture_target`'s walk back to the initial position (civilization_seed_qa.py:623) has the same unhandled code. Fix shape: before the door walk, if the door is farther than the client's render radius (or navigate refuses with this code), call minecraft_wait_for_loaded_block at the door and retry once, and otherwise move the creative observer beside the house the way capture_target does."

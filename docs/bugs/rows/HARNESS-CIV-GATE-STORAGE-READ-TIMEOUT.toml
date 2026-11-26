@@ -7,5 +7,7 @@ severity = "major"
 status = "open"
 source = "civilization-seed-qa artifact wt/D123Gate47/.analysis/validation/20261125T205606-civilization-seed-qa-zufri62p (pin de356989816d): at 2512 s `storage_error: filesystem event timeout for <artifact>/server.log` from village_autonomy_qa._read_storage_container (15 s wait on the `data get block x y z` reply). The artifact holds 86 successful `has the following block data` replies, no `That position is not loaded` / `not a block entity` line, and the server log ends with a clean SIGINT shutdown after the harness tore the run down - so neither which container nor why the reply was unseen can be read back from it. The console command is not echoed to the log and runtime's inotify parent-dir watch does see child writes on this ext4 mount (measured), so the trigger is still unknown."
 failing_first = "reported"
-regression = []
-repro_check = ["Next gate run: the TimeoutError now names the container position and the log tail read after it (diagnostic added on wt/D123CivStock); a cargo/source control is not available for a filesystem wait, so the proof is the next artifact's error text."]
+regression = [
+  "python:tools.harness.test_civilization_seed_qa:PlannerReadRecoveryTests.test_a_console_reply_embedded_in_a_perf_line_is_accepted",
+]
+repro_check = ["Final-pin run 20261126T101004 settled the mechanism: the reply was on disk but embedded in a perf line without a leading newline (`server.log:5436644 ... post=0.0398, 67, -155 has the following block data: {Items: [], ...}`), so the startswith-only matcher timed out after 15 s. The matcher now accepts the reply anywhere in a line and `_planner_status` retries both reads once after closing a covering screen.", "Next gate run: the TimeoutError now names the container position and the log tail read after it (diagnostic added on wt/D123CivStock); a cargo/source control is not available for a filesystem wait, so the proof is the next artifact's error text."]

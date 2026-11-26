@@ -340,6 +340,65 @@ def entity_census(probe: ProbeSteps, entity_type: str | None = None) -> dict[str
     raise AssertionError("unreachable")
 
 
+# A completed house can stand farther from the observer than the client's loaded
+# radius: on the final pin (run 20261126T092432) the door was at 96,64,-297, 89.2
+# blocks from the observer at 132.2,77.0,-215.5, against the gate's own
+# `view_distance = 4` (64 blocks). `minecraft_navigate_to_block` refuses a
+# destination chunk the client does not hold (src/minecraft/navigation.rs:233,
+# `retryable: false`), so the walk to a remote door goes in bounded hops that each
+# first ask for one loaded cell, and a walk that stops making progress fails
+# closed with a named error instead of aborting on the client's raw refusal.
+DOOR_HOP_BLOCKS = 40
+DOOR_HOP_LIMIT = 8
+DOOR_LOADED_TIMEOUT = 120.0
+
+
+def _walk_to_door(probe: ProbeSteps, door: dict[str, Any]) -> None:
+    """Walk to a received house door, hopping through loaded cells when it is remote."""
+    position = {axis: door[axis] for axis in ("x", "y", "z")}
+    try:
+        probe.call("minecraft_navigate_to_block", {**position, "timeout_seconds": 120.0})
+        return
+    except RuntimeError as error:
+        if "chunk is not client-loaded" not in str(error):
+            raise
+        refused = str(error)
+    for hop in range(1, DOOR_HOP_LIMIT + 1):
+        player = probe.observe()["player"]
+        dx, dz = position["x"] - player["x"], position["z"] - player["z"]
+        distance = math.hypot(dx, dz)
+        if distance <= 1.0:
+            break
+        step = min(DOOR_HOP_BLOCKS, distance - 1.0)
+        waypoint = (math.floor(player["x"] + dx / distance * step),
+                    math.floor(player["y"]),
+                    math.floor(player["z"] + dz / distance * step))
+        probe.call("minecraft_wait_for_loaded_block", {
+            "x": waypoint[0], "y": waypoint[1], "z": waypoint[2],
+            "timeout_seconds": DOOR_LOADED_TIMEOUT})
+        try:
+            probe.call("minecraft_navigate_to_block", {
+                "x": waypoint[0], "y": waypoint[1], "z": waypoint[2], "timeout_seconds": 120.0})
+        except RuntimeError as error:
+            raise RuntimeError(
+                f"house door {tuple(position[axis] for axis in ('x', 'y', 'z'))} is out of the "
+                f"client's loaded radius: hop {hop} to {waypoint} was refused ({error}); "
+                f"the direct walk was refused ({refused[:160]})") from None
+        moved = probe.observe()["player"]
+        if math.hypot(moved["x"] - player["x"], moved["z"] - player["z"]) < 1.0:
+            raise RuntimeError(
+                f"house door {tuple(position[axis] for axis in ('x', 'y', 'z'))} is out of the "
+                f"client's loaded radius: hop {hop} did not move the observer from "
+                f"({player['x']:.1f}, {player['z']:.1f}); the client refused the direct walk "
+                f"({refused[:160]})")
+    try:
+        probe.call("minecraft_navigate_to_block", {**position, "timeout_seconds": 120.0})
+    except RuntimeError as error:
+        raise RuntimeError(
+            f"house door {tuple(position[axis] for axis in ('x', 'y', 'z'))} is out of the "
+            f"client's loaded radius after {DOOR_HOP_LIMIT} hops: {error}") from None
+
+
 def capture_house(probe: ProbeSteps, artifact: Path, label: str,
                   target: tuple[float, float, float],
                   blocks: list[dict[str, Any]]) -> dict[str, Any]:
@@ -352,7 +411,7 @@ def capture_house(probe: ProbeSteps, artifact: Path, label: str,
     probe.call("minecraft_close_screen", {})
     initial = probe.observe()["player"]
     position = {axis: door[axis] for axis in ("x", "y", "z")}
-    probe.call("minecraft_navigate_to_block", {**position, "timeout_seconds": 120.0})
+    _walk_to_door(probe, door)
     current = probe.call("minecraft_read_block", position)
     if current.get("block_id") != door["block_id"]:
         raise RuntimeError("house entrance changed before ordinary use")
