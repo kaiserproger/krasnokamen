@@ -5,9 +5,10 @@ from .backends.native_player_input import one_drop, sent_drop_actions
 
 
 def observation(drop_item: int = 0, drop_stack: int = 0) -> dict:
-    return {"packets": {"counts": {"1": 4},
-                        "sent_actions": {"player_action": {"5": drop_item, "4": drop_stack},
-                                         "drop_item": drop_item, "drop_stack": drop_stack}}}
+    """`minecraft_observe`'s payload: the counters sit at its top level."""
+    return {"state_version": 1,
+            "sent_actions": {"player_action": {"5": drop_item, "4": drop_stack},
+                             "drop_item": drop_item, "drop_stack": drop_stack}}
 
 
 class SentDropActionsTests(unittest.TestCase):
@@ -18,13 +19,13 @@ class SentDropActionsTests(unittest.TestCase):
     def test_a_build_without_the_counters_is_unreadable_not_a_pass(self):
         # CLIENT-HELD-DROP-KEY-DOUBLE-DROP: an older client can only report clientbound packet
         # counts, so the verdict must refuse to guess.
-        for state in ({}, {"packets": {"counts": {"1": 4}}}, {"packets": None}):
-            with self.assertRaisesRegex(RuntimeError, "packets.sent_actions"):
+        for state in ({}, {"packets": {"counts": {"1": 4}}}, {"sent_actions": None}):
+            with self.assertRaisesRegex(RuntimeError, "sent_actions"):
                 sent_drop_actions(state)
 
     def test_non_integer_counters_are_refused(self):
         state = observation()
-        state["packets"]["sent_actions"]["drop_item"] = "1"
+        state["sent_actions"]["drop_item"] = "1"
         with self.assertRaisesRegex(RuntimeError, "drop_item/drop_stack"):
             sent_drop_actions(state)
 

@@ -13,20 +13,20 @@ from .probe_steps import ProbeSteps
 
 
 def sent_drop_actions(state: dict) -> dict[str, int]:
-    """The client's serverbound drop counters (`packets.sent_actions`), fail-closed.
+    """The client's serverbound drop counters (`minecraft_observe` → `sent_actions`), fail-closed.
 
     CLIENT-HELD-DROP-KEY-DOUBLE-DROP cannot be judged from the dropped item entity (it is
     picked up before a sample sees it) or from `packets.counts` (clientbound only), so the client
     publishes a monotonic count of the PLAYER_ACTION drops it actually wrote. A build without the
     counters is an unreadable verdict, never a pass.
     """
-    sent = (state.get("packets") or {}).get("sent_actions")
+    sent = state.get("sent_actions")
     if not isinstance(sent, dict):
-        raise RuntimeError("native-v2-input-menus needs packets.sent_actions in the observation: "
+        raise RuntimeError("native-v2-input-menus needs sent_actions in the observation: "
                            "this client build has no serverbound PLAYER_ACTION counters")
     values = {name: sent.get(name) for name in ("drop_item", "drop_stack")}
     if not all(isinstance(value, int) for value in values.values()):
-        raise RuntimeError(f"packets.sent_actions must carry integer drop_item/drop_stack: {sent!r}")
+        raise RuntimeError(f"sent_actions must carry integer drop_item/drop_stack: {sent!r}")
     return values
 
 
