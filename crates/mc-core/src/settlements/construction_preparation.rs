@@ -709,21 +709,28 @@ pub(super) fn upgrade_project(
             let level = building.level + 1;
             let (species, color) =
                 funded_variant(state, record.id, &blueprint.level(level)?.materials, images)?;
-            // Stock-only admission: nothing turns logs into planks for a
-            // construction bill on its own (`autocraft::order` is an owner
-            // action, and the only other producer is the builder's workshop,
-            // unusable while he is bound to this very site). A funded proof
-            // may therefore admit an upgrade the village can never supply: the
-            // adopted village held `oak_log` 140 with `oak_planks` 2 and kept
-            // `lumber_camp:2` bound at 2 work units from tick 5,420, starving
-            // Storage and House for 80,000 ticks. The whole bill must be in
-            // store; a later pass admits the upgrade once it is.
-            if !crate::settlements::construction_crafting::missing_base(
-                state,
-                &blueprint.level(level)?.materials,
-                images,
-            )
-            .is_empty()
+            // Stock-only admission policy (docs settlements/construction.md):
+            // the executor crafts bill items at haul (`reserve_wood` +
+            // `ensure_units`), so `funded_variant` alone admits an upgrade that
+            // is only *craftable* now; this rule instead skips an upgrade whose
+            // bill cannot be hauled from store as it stands, because such a
+            // site holds the planner (and the only builder) in the meantime -
+            // the adopted village kept `lumber_camp:2` bound at 2 work units
+            // from tick 5,420 with `oak_log` 140 and `oak_planks` 2, starving
+            // Storage and House. The consequence is documented: an upgrade
+            // whose bill contains crafted items waits until those items are in
+            // store (a later pass admits it).
+            // Checked on the CHOSEN bill, exactly what `begin` will build: the
+            // selected species and bed colour (`selected_bill`), netted of what
+            // other active projects are promised (`with_joint`, the rule
+            // `jointly_fundable` applies to a new site), so a birch or spruce
+            // village passes and a bill already promised away does not.
+            let bill =
+                super::selected_bill(state, record.id, &blueprint.level(level)?.materials, images)?;
+            let joint = super::joint_active_bill(state, record.id).unwrap_or_default();
+            let netted = super::with_joint(bill.into_owned(), &joint);
+            if !crate::settlements::construction_crafting::missing_base(state, &netted, images)
+                .is_empty()
             {
                 return None;
             }

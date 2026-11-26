@@ -168,12 +168,35 @@ pub(super) fn receiving_slots(state: &TickState, id: SettlementId) -> Option<usi
         .min()
 }
 
+/// Whether a level upgrade could be staffed without borrowing an extraction
+/// worker: the same candidates as `available_builders` with `may_borrow` off,
+/// which is the rule `assign_builder` applies to an upgrade
+/// (`construction_builders.rs` may_borrow). The admission gate must ask this
+/// before opening an upgrade, or a one-worker village opens one that stays
+/// unbound (`tried == 0`) and `plan_pass`'s unbound gate then blocks every
+/// later project for good.
+pub(super) fn upgrade_staffable(state: &TickState, id: SettlementId) -> bool {
+    let protected = protected_gatherer(state, id, false);
+    available_builders_with(state, id, false, protected)
+        .next()
+        .is_some()
+}
+
 fn available_builders(
     state: &TickState,
     id: SettlementId,
 ) -> impl Iterator<Item = EntitySlot> + '_ {
     let may_borrow = access::projects_of(&state.settlements, id).next().is_none();
     let protected = protected_gatherer(state, id, false);
+    available_builders_with(state, id, may_borrow, protected)
+}
+
+fn available_builders_with(
+    state: &TickState,
+    id: SettlementId,
+    may_borrow: bool,
+    protected: Option<Profession>,
+) -> impl Iterator<Item = EntitySlot> + '_ {
     residents(state, id).filter(move |&slot| {
         !storage_unreached(state, slot)
             && (free_native_builder(state, id, slot)
