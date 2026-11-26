@@ -2500,9 +2500,7 @@ fn stock_bill_and_reserve(
             .items
             .name_of(item)
             .and_then(|name| name.path().split_once('_'))
-            .and_then(|(_, rest)| {
-                mc_data::Identifier::parse(&format!("minecraft:{to}_{rest}")).ok()
-            })
+            .and_then(|(_, rest)| mc_data::Identifier::parse(format!("minecraft:{to}_{rest}")).ok())
             .and_then(|identifier| state.registry.items.id_of(&identifier))
             .unwrap_or(item),
     };
