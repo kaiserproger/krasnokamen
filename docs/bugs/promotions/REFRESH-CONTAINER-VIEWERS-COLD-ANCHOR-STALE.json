@@ -1,0 +1,42 @@
+{
+  "id": "REFRESH-CONTAINER-VIEWERS-COLD-ANCHOR-STALE",
+  "verdict": "promoted",
+  "fix_commit": "3f3ae4ad458a6ec64f3b6f06793dd113895d8c80",
+  "fix_commit_full": "3f3ae4ad458a6ec64f3b6f06793dd113895d8c80",
+  "promoted_at": "2026-11-25T19:56:00+00:00",
+  "tree_head": "0f053eda6494d2edd088ef1a78079264e9399b40",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "5d1cac1f5689154aa773c79f353ad4127c842727f8693b0376128a1d2a58e94d",
+  "control_tree_head": "0f053eda6494d2edd088ef1a78079264e9399b40",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/tick/containers.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/chests_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:chests::tests::external_custody_refresh_closes_a_menu_anchored_on_the_cold_half": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/chests_tests.rs",
+        "line": 878,
+        "error": "panic",
+        "class": "assertion"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-core:chests::tests::external_custody_refresh_closes_a_menu_anchored_on_the_cold_half": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123GameplayP/.analysis/validation/20261125T194002-ledger-promote-e3o2u3a9"
+}

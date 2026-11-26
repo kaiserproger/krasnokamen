@@ -1,0 +1,41 @@
+{
+  "id": "HOT-BACKUP-OFFLINE-STATUS-BEFORE-VERIFY",
+  "verdict": "promoted",
+  "fix_commit": "patch:ddc019bdf22ac21be427b0cb1a51bce575609f4801983cfc4ad34d231422dc21",
+  "fix_commit_full": "patch:ddc019bdf22ac21be427b0cb1a51bce575609f4801983cfc4ad34d231422dc21",
+  "promoted_at": "2026-11-25T19:29:05+00:00",
+  "tree_head": "f82b146f228b7b69a59ccaae30c2028e877ea3af",
+  "tree_dirty": true,
+  "tree_sha256": "479c634e2ad567fc67c5224758019024ff59fb29dbb53111214012c1a80d477b",
+  "control_tree": "head",
+  "control_tree_sha256": "c4670dac10a3019f13937e0a4b889cf55ab9aad8419f681014a41494d58beed7",
+  "control_tree_head": "f82b146f228b7b69a59ccaae30c2028e877ea3af",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "ddc019bdf22ac21be427b0cb1a51bce575609f4801983cfc4ad34d231422dc21",
+  "reversed_files": [
+    "crates/mc-edge/src/backup.rs",
+    "crates/mc-edge/src/operator_cli.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:backup::tests::backup_announces_complete_only_after_verification": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/backup_tests.rs",
+        "line": 1653,
+        "error": "panic",
+        "class": "assertion"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:backup::tests::backup_announces_complete_only_after_verification": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123GameplayP/.analysis/validation/20261125T191021-ledger-promote-g3pypqj1"
+}

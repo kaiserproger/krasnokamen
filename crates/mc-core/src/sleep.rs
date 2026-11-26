@@ -304,7 +304,10 @@ pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
 /// reassignment, dimension travel), not just [`wake`]. The tick calls it after
 /// `state.merge` and before the block phase, so an accepted write to a bed this
 /// tick (a break or a replace) wins over the mirror, and the mirror's own write
-/// still lands in this tick's block phase.
+/// still lands in this tick's block phase. A bed whose durable `occupied=true`
+/// no sleeper here owns (a property a mid-sleep checkpoint persisted across a
+/// restart) enters `occupied_beds` through [`seed_occupied_beds`] on every
+/// hydration pass, so this same pass clears it.
 pub(crate) fn mirror_occupied_beds(state: &mut TickState) {
     let dimension = state.dimension.name();
     let previous = std::mem::take(&mut state.occupied_beds);
@@ -345,6 +348,90 @@ pub(crate) fn mirror_occupied_beds(state: &mut TickState) {
         set_bed_occupied(state, *bed, true, &written);
     }
     state.occupied_beds = wanted;
+}
+
+/// Collect the head cell of every bed a hydration pass finds with
+/// `occupied=true`.
+///
+/// Sleepers and a resident's `sleeping` flag are runtime state, so a
+/// checkpoint written mid-sleep can outlive the process that owns the
+/// durable property (a crash or a stop before the next tick). Seeding
+/// [`TickState::occupied_beds`] with these cells lets the next
+/// [`mirror_occupied_beds`] pass clear the ones no sleeper wants, exactly as
+/// it clears a bed whose sleeper woke; a persisted sleeping resident keeps its
+/// bed because the mirror counts it as wanted.
+///
+/// The seed names the **head** cell for either half, because that is the key
+/// the mirror keeps ([`Sleeper::bed`] and a resident's `home`). Seeding both
+/// halves would put the foot in `previous` while `wanted` names only the head,
+/// so every hydration of a sleeping player's chunk would clear both halves and
+/// set them again (four block changes to clients and the WAL), and a bed
+/// straddling a chunk boundary could be double-counted. Hydration itself runs
+/// on every storage-revision bump (`ChunkWorld::bump_storage_revision`), not
+/// only when the chunk becomes resident, so this must agree with the mirror's
+/// keys exactly.
+pub(crate) fn seed_occupied_beds(
+    state: &TickState,
+    pos: mc_world::ChunkPos,
+    chunk: &mc_world::Chunk,
+    out: &mut Vec<BlockPos>,
+) {
+    let registry = &state.registry.blocks;
+    let mut matching: Vec<u32> = Vec::new();
+    for (index, section) in chunk.sections.iter().enumerate() {
+        matching.clear();
+        match section.palette() {
+            Some(palette) => matching.extend(
+                palette
+                    .iter()
+                    .filter(|state| is_occupied_bed(registry, state.0))
+                    .map(|state| state.0),
+            ),
+            None => {
+                let state = section.get(0, 0, 0).0;
+                if is_occupied_bed(registry, state) {
+                    matching.push(state);
+                }
+            }
+        }
+        if matching.is_empty() {
+            continue;
+        }
+        let base_y = chunk.geometry().min_y() + index as i32 * 16;
+        for y in 0..16u8 {
+            for z in 0..16u8 {
+                for x in 0..16u8 {
+                    let cell = section.get(x, y, z).0;
+                    if !matching.contains(&cell) {
+                        continue;
+                    }
+                    let at = BlockPos {
+                        x: pos.x * 16 + i32::from(x),
+                        y: base_y + i32::from(y),
+                        z: pos.z * 16 + i32::from(z),
+                    };
+                    // The mirror keys by the head. A lone half (its partner
+                    // missing) keeps its own cell, and `set_bed_occupied` then
+                    // writes that cell only.
+                    let head = crate::placement::other_half(&state.registry.blocks, at, cell)
+                        .map_or(at, |(_, head)| head);
+                    out.push(head);
+                }
+            }
+        }
+    }
+}
+
+fn is_occupied_bed(registry: &mc_world::BlockRegistry, state: u32) -> bool {
+    registry
+        .by_id(mc_world::BlockStateId(state))
+        .is_some_and(|block| {
+            block.block.id.path().ends_with("_bed")
+                && block
+                    .properties
+                    .iter()
+                    .any(|(name, value)| name == "occupied" && value == "true")
+        })
 }
 
 /// Write a bed's `occupied` property on both halves when it differs. A cell

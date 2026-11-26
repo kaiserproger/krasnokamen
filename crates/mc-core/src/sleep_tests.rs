@@ -1440,3 +1440,37 @@ fn a_world_with_nothing_asleep_writes_no_bed_state() {
     );
     assert!(!bed_occupied(&rig.state, rig.head), "the bed stays free");
 }
+
+/// A settled sleeper's bed is not rewritten on the next tick. Hydration runs on
+/// every storage-revision bump (a chunk's own bed write re-revisions it), so
+/// seeding both halves made `previous = {head, foot}` against
+/// `wanted = {head}`: the mirror cleared both halves and set them again, four
+/// block changes to clients and the WAL per tick. The derived set keys by the
+/// head cell (`Sleeper::bed`, a resident's `home`), so the seed must name it.
+#[test]
+fn a_sleepers_bed_is_not_rewritten_on_the_next_tick() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    rig.use_bed(1);
+    let (foot, head) = (rig.foot, rig.head);
+    assert!(bed_occupied(&rig.state, head), "the bed is taken");
+    let output = run_tick(&mut rig.state, &[]).0;
+    let bed_writes: Vec<_> = output
+        .changes
+        .blocks
+        .iter()
+        .filter(|change| change.position == foot || change.position == head)
+        .collect();
+    assert!(
+        bed_writes.is_empty(),
+        "a settled sleeper's bed is not rewritten: {bed_writes:?}"
+    );
+    assert!(
+        rig.state
+            .merge_block_writes
+            .iter()
+            .all(|(pos, _)| *pos != foot && *pos != head),
+        "no staged bed write: {:?}",
+        rig.state.merge_block_writes
+    );
+}

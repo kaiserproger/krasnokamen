@@ -1,0 +1,40 @@
+{
+  "id": "CORE-DROP-LEAVES-WORLD-DIR-WRITER",
+  "verdict": "promoted",
+  "fix_commit": "patch:ac21dca494074f48dbc8ef64828f6745734d9989b4cbafbfd253601bd6758bb6",
+  "fix_commit_full": "patch:ac21dca494074f48dbc8ef64828f6745734d9989b4cbafbfd253601bd6758bb6",
+  "promoted_at": "2026-11-26T00:56:53+00:00",
+  "tree_head": "6e34da8ed726852abaa8aea3db5da86c262a13f2",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "c325dcbb0f0e5f6d2574d1bfddbc6bd926c4c70c30a494772685337bd25d9ff0",
+  "control_tree_head": "6e34da8ed726852abaa8aea3db5da86c262a13f2",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "ac21dca494074f48dbc8ef64828f6745734d9989b4cbafbfd253601bd6758bb6",
+  "reversed_files": [
+    "crates/mc-core/src/core.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:core::core_drop_join_tests::plain_drop_joins_a_journal_writer_holding_the_world_directory": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/core/core_drop_join_tests.rs",
+        "line": 389,
+        "error": "panic",
+        "class": "unknown"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-core:core::core_drop_join_tests::plain_drop_joins_a_journal_writer_holding_the_world_directory": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123GameplayP/.analysis/validation/20261126T003535-ledger-promote-jkti484o"
+}
