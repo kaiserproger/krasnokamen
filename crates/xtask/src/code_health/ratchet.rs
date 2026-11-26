@@ -153,7 +153,12 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // refusal line's cursor/sweeps): 1164, measured by code-health on the merged tree.
         // The diagnostics are temporary - remove them (and these 4) once the House
         // milestone's missing-site mechanism is proven and fixed (HANDOFF-49/50).
-        ("settlements/construction.rs", 1_164),
+        // CivStock's site-selection fix (D123, 2026-11-26) adds 5 (the per-kind budget
+        // remainder hand-out in `site_project`, the dedicated tree-without-route
+        // refusal plumbing): 1169, measured by code-health 20261126T034810 on the
+        // merged tree. The next extraction candidate is `site_project`'s sweep
+        // hand-out, which belongs in `construction_site_refusals.rs`.
+        ("settlements/construction.rs", 1_169),
         // B3 (EdgeScale, 2026-11-18): the edge-visible unlocked-session mirror
         // is projected only when its inputs move, so `Connections` carries one
         // membership generation and advances it in `insert`,
