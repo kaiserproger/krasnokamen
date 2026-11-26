@@ -247,6 +247,12 @@ impl Sweeps {
         }
     }
 
+    /// Some walk of this settlement is unfinished: the planner steps it on
+    /// every tick instead of once per `PLAN_CADENCE` (review round 3, lever i).
+    pub(super) fn any_pending(&self) -> bool {
+        self.live.values().any(|sweep| sweep.next < sweep.frontages)
+    }
+
     /// Some unfinished sweep of these kinds already holds a legal candidate.
     /// A retained sweep of a kind this pass did not advance (its funding was
     /// withdrawn) must not hold the slot for other work.

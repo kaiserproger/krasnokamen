@@ -2783,7 +2783,21 @@ fn carry_debtor(state: &TickState, id: SettlementId, uuid: uuid::Uuid) -> bool {
 /// the tick's `budget` (`site_turn`). Construction has a separate four-tick
 /// admission clock, retaining the bounded round-robin settlement budget.
 fn planner_tick(state: &mut TickState, budget: &mut site_turn::SiteBudget) {
-    if !state.tick.is_multiple_of(4) {
+    // A funded site search that is mid-walk is stepped on EVERY tick, not once
+    // per PLAN_CADENCE and not only every fourth tick: the cheapest-lot walk is
+    // exact only over one street plan, and a village that builds while the walk
+    // runs changes the plan under it (gate 52: the House walk restarted ten
+    // times, twice at 4598 of 4619, and never admitted). The slice still comes
+    // from the same `SiteBudget` - two 64-lot slices per tick server-wide - so
+    // owner orders and replanting proofs keep theirs and a stepping walk costs
+    // at most one slice of the documented per-tick cap (HANDOFF-50 section 8:
+    // 1.3-5.8 ms release for 64 lots).
+    let sweeping = state
+        .settlements
+        .site_sweep
+        .values()
+        .any(super::construction::site_refusals::Sweeps::any_pending);
+    if !state.tick.is_multiple_of(4) && !sweeping {
         return;
     }
     let count = state.settlements.records().count();
@@ -2803,8 +2817,18 @@ fn planner_tick(state: &mut TickState, budget: &mut site_turn::SiteBudget) {
             })
             .map(|record| record.id)
     };
-    if state.tick.is_multiple_of(PLAN_CADENCE)
-        && let Some(id) = selected(state, state.tick / PLAN_CADENCE)
+    // `due`: the normal once-per-PLAN_CADENCE pass, or every tick while a walk
+    // is unfinished (see the head of this function).
+    let due = state.tick.is_multiple_of(PLAN_CADENCE) || sweeping;
+    if due
+        && let Some(id) = selected(
+            state,
+            if due && !state.tick.is_multiple_of(PLAN_CADENCE) {
+                state.tick
+            } else {
+                state.tick / PLAN_CADENCE
+            },
+        )
     {
         // Return duties are drained for every selected settlement, even one
         // whose projects are all cancelled or finished (D8 review R4-1).
