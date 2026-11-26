@@ -4,7 +4,7 @@ title = "Wall building missing"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1 (the wall blueprint landed in 177a1205 (2026-10-19), registered with the other blueprints. Fix patch docs/bugs/fix-patches/ISSUE-1-16.patch is its registration in settlements/blueprints.rs SOURCES; reversing it leaves no wall blueprint, so a wall cannot be ordered or built)"
 regression = ["harness:buildings-qa:wall.L1_built"]
 fix_commit = "patch:53ff4aa3198230a3045cd66ff2bc65701472193b206abe02c54cf1754aa7b8d1"
@@ -12,3 +12,4 @@ fix_commit = "patch:53ff4aa3198230a3045cd66ff2bc65701472193b206abe02c54cf1754aa7
 # and the full player contract unexercised). Refs stand; fix_commit moved to the HEAD patch
 # (patch:53ff4aa3, the same wall registration at SOURCES 25->26); re-promote after the breaker accepts.
 repro_check = "HEAD re-break promotions/ISSUE-1-16.patch reverses on the committed tree (git apply -R --check): SOURCES 25->26 plus the wall.json line, the same registration the stale fix patch carried at 9->10. Reversed, no wall blueprint exists. Real-client receipt is the integrated sweep."
+promotion = "docs/bugs/promotions/ISSUE-1-16.json"
