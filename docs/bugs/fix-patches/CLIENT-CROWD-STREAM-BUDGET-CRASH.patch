@@ -1,0 +1,169 @@
+diff --git a/src/entities/presentation.rs b/src/entities/presentation.rs
+index d824f8ba..188daa5e 100644
+--- a/src/entities/presentation.rs
++++ b/src/entities/presentation.rs
+@@ -17,6 +17,16 @@ use serde_json::Value;
+ use std::collections::{BTreeMap, BTreeSet};
+ 
+ const MAX_DYNAMIC_VERTICES: usize = 2_000_000;
++/// Frame size from which bodies are submitted nearest-first for the stream bound
++/// (`presentation::append`); below it the pass keeps `Store::candidates` order.
++const CROWD_ORDER_THRESHOLD: usize = 256;
++/// Whether the entity pass has filled its share of the dynamic stream
++/// (`render::mesh::ENTITY_VERTEX_BUDGET`).
++fn entity_draw_budget_full(out: &DynamicGeometry) -> bool {
++    out.vertices.len() >= crate::render::mesh::ENTITY_VERTEX_BUDGET
++        || out.indices.iter().map(Vec::len).sum::<usize>()
++            >= crate::render::mesh::ENTITY_INDEX_BUDGET
++}
+ #[derive(Debug)]
+ pub(crate) struct Binding {
+     pub rig: String,
+@@ -150,6 +160,10 @@ pub struct PresentationStats {
+     pub(crate) entity_material_ends: Option<[usize; EntityMaterial::COUNT]>,
+     pub lighting_pending: usize,
+     pub profile_textures_pending: usize,
++    /// Bodies the entity pass did not submit because the dynamic stream's entity share was full
++    /// (`render::mesh::ENTITY_VERTEX_BUDGET`); they stay for a later frame instead of the frame
++    /// failing with `dynamic_or_ui_stream_budget_exceeded`.
++    pub dropped_over_budget: usize,
+     /// Entities drawn by the GPU crowd renderer instead of dynamic geometry.
+     pub crowd: usize,
+     /// Crowd entities whose appearance was resolved again this frame (new stacks, changed
+@@ -902,7 +916,15 @@ pub fn append(
+             partial,
+         )
+     });
+-    for entry in frame.entries.iter().chain(local.as_ref()) {
++    // A frame big enough to reach the entity pass's stream share (`render::mesh`) submits its
++    // nearest bodies first, so the geometry the budget can hold is the geometry nearest the
++    // camera. Small frames keep `Store::candidates` order.
++    let mut ordered: Vec<&super::frame_entities::Entry> = frame.entries.iter().collect();
++    if ordered.len() > CROWD_ORDER_THRESHOLD {
++        ordered.sort_by(|a, b| a.distance_squared.total_cmp(&b.distance_squared));
++    }
++    ordered.extend(local.as_ref());
++    for entry in &ordered {
+         let slot = entry.slot;
+         let entity = &store.slots[slot];
+         let transform = match &entry.transform {
+@@ -931,6 +953,18 @@ pub fn append(
+         ) {
+             continue;
+         }
++        // One dynamic stream is a bounded GPU buffer (`render::mesh::validate_size`): a crowd
++        // of bodies used to fill it and end the client with
++        // `client failed: dynamic_or_ui_stream_budget_exceeded`. Past the entity pass's share the
++        // remaining bodies are counted and stay for a later frame. Bodies the GPU crowd renderer
++        // instances take no dynamic-stream space and are never dropped here.
++        let instanced = store.crowd.enabled
++            && store.local_render_slot != Some(slot)
++            && super::crowd::kind(&store.slots[slot].type_name).is_some();
++        if !instanced && entity_draw_budget_full(out) {
++            stats.dropped_over_budget += 1;
++            continue;
++        }
+         if entity.type_name == "minecraft:experience_orb" {
+             match append_experience_orb(
+                 entity,
+@@ -1190,6 +1224,7 @@ pub fn append(
+             store.slots[slot].submitted_revision = Some(store.revision);
+         }
+     }
++    drop(ordered);
+     store.frame_entities = frame;
+     stats.vertices = out.vertices.len();
+     Ok(stats)
+diff --git a/src/render.rs b/src/render.rs
+index dabdea70..933a1878 100644
+--- a/src/render.rs
++++ b/src/render.rs
+@@ -29,7 +29,7 @@ mod design_tests;
+ mod first_person_tests;
+ mod material;
+ mod mdi;
+-mod mesh;
++pub(crate) mod mesh;
+ mod metrics;
+ mod outline;
+ mod packed;
+diff --git a/src/render/mesh.rs b/src/render/mesh.rs
+index b30afeee..d648900c 100644
+--- a/src/render/mesh.rs
++++ b/src/render/mesh.rs
+@@ -6,6 +6,26 @@ use std::ops::Range;
+ const FACE_GROUPS_LAST: usize = FACE_GROUPS - 1;
+ pub(super) const VERTEX_BUDGET: u64 = 1024 * 1024 * 1024;
+ pub(super) const INDEX_BUDGET: u64 = 512 * 1024 * 1024;
++/// Caps of one dynamic/UI presentation stream (`Stream::validate_size`). A scene above them
++/// would need GPU buffers this client does not reserve, so the frame fails closed.
++pub(crate) const DYNAMIC_VERTEX_BUDGET_BYTES: u64 = 32 * 1024 * 1024;
++pub(crate) const DYNAMIC_INDEX_BUDGET_BYTES: u64 = 16 * 1024 * 1024;
++/// Share of a dynamic stream the entity pass may fill before it stops submitting bodies
++/// (`presentation::append`); the rest of the scene (clouds, weather, block entities, shadows)
++/// still has to fit the same caps.
++pub(crate) const ENTITY_VERTEX_BUDGET: usize =
++    (DYNAMIC_VERTEX_BUDGET_BYTES as usize / 4 * 3) / std::mem::size_of::<Vertex>();
++/// The entity pass's share of the *effective* index limit: three quarters of
++/// `min(cap bytes / 4, MAX_TRANSPARENT_PRIMITIVES * 3)`, the smaller of what `validate_size`
++/// enforces, so the share is 3/4 of a limit the scene can really reach.
++pub(crate) const ENTITY_INDEX_BUDGET: usize = {
++    let bytes = if DYNAMIC_INDEX_BUDGET_BYTES / 4 < MAX_TRANSPARENT_PRIMITIVES as u64 * 3 {
++        DYNAMIC_INDEX_BUDGET_BYTES / 4
++    } else {
++        MAX_TRANSPARENT_PRIMITIVES as u64 * 3
++    };
++    (bytes as usize) / 4 * 3
++};
+ // Match the terrain scheduler's capacity for a full 32-chunk view.
+ pub(super) const MAX_CHUNKS: usize = crate::terrain::MAX_SECTIONS;
+ pub(super) const MAX_TRANSPARENT_PRIMITIVES: usize = 1_048_576;
+@@ -416,8 +436,8 @@ impl<const N: usize> Stream<N> {
+         validate(vertices, indices, layers)?;
+         let vertex_bytes = std::mem::size_of_val(vertices) as u64;
+         let index_bytes = indices.iter().map(|i| i.len() as u64 * 4).sum::<u64>();
+-        if vertex_bytes > 32 * 1024 * 1024
+-            || index_bytes > 16 * 1024 * 1024
++        if vertex_bytes > DYNAMIC_VERTEX_BUDGET_BYTES
++            || index_bytes > DYNAMIC_INDEX_BUDGET_BYTES
+             || indices.iter().map(|i| i.len()).sum::<usize>() > MAX_TRANSPARENT_PRIMITIVES * 3
+         {
+             return Err("dynamic_or_ui_stream_budget_exceeded".into());
+diff --git a/docs/ENTITY_PRESENTATION.md b/docs/ENTITY_PRESENTATION.md
+index 58eb2ed4..77a11349 100644
+--- a/docs/ENTITY_PRESENTATION.md
++++ b/docs/ENTITY_PRESENTATION.md
+@@ -134,3 +134,33 @@ Seek: `fixed_frames_and_direct_forward_seek_apply_identical_state`
+ The state lives only in client memory and is never written to disk. Reverting
+ the change is a full rollback. There is no runtime switch or environment
+ variable.
++
++## The dynamic-stream bound (crowd frames)
++
++The entity pass appends into one dynamic GPU stream, and that stream is bounded
++(`render::mesh::Stream::validate_size`: 32 MiB of vertices, 16 MiB of indices, and the
++transparent-primitive cap). A large crowd used to fill it and end the client with
++`client failed: dynamic_or_ui_stream_budget_exceeded`; a 2000-mob overhead frame is ~46 MB of
++36-byte vertices against the 32 MB cap (CLIENT-CROWD-STREAM-BUDGET-CRASH).
++
++- **The entity pass owns three quarters of each cap** (`ENTITY_VERTEX_BUDGET`,
++  `ENTITY_INDEX_BUDGET`; the index share is three quarters of the *effective* limit,
++  `min(cap bytes / 4, MAX_TRANSPARENT_PRIMITIVES * 3)`). The remaining quarter is the rest of the
++  scene: clouds and weather are appended before the entities, block entities, the outline and the
++  per-entity shadow quads after them.
++- **Past its share the pass stops submitting bodies** and counts them in
++  `PresentationStats::dropped_over_budget` (serialized, so a scene can assert it). A dropped body
++  keeps its received state and is drawn on a later frame when the stream has room; it is not
++  removed, ticked differently or hidden from observations. World-text markers
++  (`marker`/`interaction`/`text_display`) and GPU crowd-instanced bodies take no dynamic-stream
++  space and are never counted.
++- **Order: nearest first, when the frame has more than 256 candidates** (`frame_entities::Entry`
++  distance from the camera); smaller frames keep `Store::candidates` order and are never sorted.
++  Only the *body* pass is ordered: shadows and nameplates reuse the gathered frame.
++- **Flicker at the cut is expected**: the cut depends on how many bytes the earlier parts of the
++  frame (clouds, weather) already wrote, so the same body can be inside the share on one frame
++  and past it on the next. The boundary is not a stable set of entities.
++- **A dropped body's shadow** is still emitted by the shadow pass when the body is within 16
++  blocks (the shadow's own range), so a shadow without a body can appear at the cut; likewise a
++  dropped body's nameplate is drawn by the nameplate pass. The counter, not the visual, is the
++  evidence: a scene asserts `dropped_over_budget`, and a screenshot alone cannot prove the bound.

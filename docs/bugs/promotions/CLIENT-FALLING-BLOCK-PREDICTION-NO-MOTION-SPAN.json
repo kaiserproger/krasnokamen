@@ -1,0 +1,44 @@
+{
+  "id": "CLIENT-FALLING-BLOCK-PREDICTION-NO-MOTION-SPAN",
+  "verdict": "promoted",
+  "fix_commit": "client-test:a73223df8b02afdfc3462b204c206103dc4b8d04",
+  "fix_commit_full": "a73223df8b02afdfc3462b204c206103dc4b8d04",
+  "promoted_at": "2026-11-26T18:05:44+00:00",
+  "tree_head": "5f50e8f68ce40346a98aafa17279e1c0529625ef",
+  "tree_dirty": true,
+  "tree_sha256": "10939910ea561ab27d2b1fdee92e55aeb792a249c6afca0b924a74a37153b75a",
+  "client_fix": true,
+  "control": "client_test_reversal",
+  "control_tree": "client_head",
+  "fix_patch_sha256": "3ea70871962a14a9e016ef52bf782311f49cea559c06f820ec61a6a5be2aa9bf",
+  "reversed_files": [
+    "src/entities/physical.rs"
+  ],
+  "kept_test_files": [
+    "src/entities/falling_tests.rs"
+  ],
+  "client_checkout": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123CC1692",
+    "head": "a73223df8b02afdfc3462b204c206103dc4b8d04",
+    "untracked": []
+  },
+  "negative_control": {
+    "client:krasnokamen-client:entities::falling_tests::falling_block_prediction_tracks_horizontal_query_padding_without_accumulating_spans": {
+      "state": "red",
+      "detail": "1 failed of 1",
+      "assertion": {
+        "file": "src/entities/falling_tests.rs",
+        "line": 186,
+        "error": "panic"
+      }
+    }
+  },
+  "restored": {
+    "client:krasnokamen-client:entities::falling_tests::falling_block_prediction_tracks_horizontal_query_padding_without_accumulating_spans": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PackClientCoreCore/.analysis/validation/20261126T180146-ledger-promote-ynvfs_q2"
+}

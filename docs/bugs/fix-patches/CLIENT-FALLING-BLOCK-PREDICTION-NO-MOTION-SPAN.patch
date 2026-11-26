@@ -1,0 +1,50 @@
+diff --git a/src/entities/physical.rs b/src/entities/physical.rs
+index 708a6011..de3ecdc0 100644
+--- a/src/entities/physical.rs
++++ b/src/entities/physical.rs
+@@ -1077,18 +1077,35 @@ impl Store {
+         // so a falling block rests on them instead of waiting for the chunk.
+         collision::gather(world, content, self, tick, swept, colliders)?;
+         let moved = collision::collide(body, colliders, velocity);
+-        let entity = self.get_mut(id).unwrap();
+-        entity.previous = entity.transform;
+-        for i in 0..3 {
+-            entity.transform.position[i] += moved[i];
+-            if moved[i] != velocity[i] {
+-                velocity[i] = 0.;
++        // The predicted fall is this entity's motion span, exactly as a packet move's
++        // interpolation is (`Store::move_entity`): a horizontally travelling block widens every
++        // spatial query by its step. The span written last is released before the new one, as
++        // `move_entity` does: a horizontal packet move before the first tick is still registered.
++        let (stale, span) = {
++            let entity = self.get_mut(id).unwrap();
++            entity.previous = entity.transform;
++            for i in 0..3 {
++                entity.transform.position[i] += moved[i];
++                if moved[i] != velocity[i] {
++                    velocity[i] = 0.;
++                }
+             }
++            entity.physical.falling_velocity = Some(velocity.map(|v| v * f64::from(0.98f32)));
++            entity.physical.lerp_progress = 0;
++            entity.physical.lerp_duration = 1;
++            entity.physical.lerp_phase = 0.;
++            let stale = std::mem::take(&mut entity.physical.lerp_span);
++            entity.physical.lerp_span = (entity.previous.position[0]
++                - entity.transform.position[0])
++                .abs()
++                .max((entity.previous.position[2] - entity.transform.position[2]).abs())
++                .ceil() as i64;
++            (stale, entity.physical.lerp_span)
++        };
++        self.remove_motion_span(stale);
++        if span != 0 {
++            *self.motion_spans.entry(span).or_default() += 1;
+         }
+-        entity.physical.falling_velocity = Some(velocity.map(|v| v * f64::from(0.98f32)));
+-        entity.physical.lerp_progress = 0;
+-        entity.physical.lerp_duration = 1;
+-        entity.physical.lerp_phase = 0.;
+         Ok(())
+     }
+     /// Marks the body in `slot` drawn by the frame at `tick`, with every body of its passenger

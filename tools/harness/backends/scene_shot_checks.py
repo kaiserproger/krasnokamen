@@ -1704,3 +1704,47 @@ def check_item_pose(probe: ProbeSteps, artifact: Path) -> None:
                                        "star_indices": star_layer.get("indices")}
     probe.check("statue_pose_widens_the_item_layer",
                 standing_span_x > 0.0 and star_span_x >= standing_span_x * 1.3)
+
+
+def check_crowd_stream(probe: ProbeSteps, artifact: Path) -> None:
+    """One overhead camera over a flat field of NoAI cows, 75 blocks below it.
+
+    Two client-surface rows share this fixture because both are read off the same frame:
+
+    - CLIENT-ENTITY-VIEW-SCALE-NEVER-APPLIED: the mobs sit past the un-scaled
+      `AABB.getSize * 64` entity reach (~57 blocks for a cow) but inside vanilla's
+      `Entity.setViewScale(clamp(effective render distance / 8, 1, 2.5) * entityDistanceScaling)`
+      reach at render distance 8 and Entity Distance 500% (64 * 7.5 = 480 blocks), so
+      `crowd_entities_rendered` separates a client that applies the option from one that leaves
+      `Store::view_scale` at 1.0 (eligible 0, submitted 0).
+    - CLIENT-CROWD-STREAM-BUDGET-CRASH: the same frame's bodies are more dynamic-stream geometry
+      than the entity pass may fill (`render::mesh::ENTITY_VERTEX_BUDGET`), so a client with the
+      bound keeps every body that fits, records the rest in
+      `PresentationStats::dropped_over_budget` and stays alive; without the bound the same crowd
+      either overflows `Stream::validate_size` (the reported crash) or, at this size, fills the
+      stream while reporting no dropped body at all (`crowd_stream_bounded` false).
+
+    Fixtures first: the `empty` frame is a frame whose crowd bodies are absent - the private world
+    keeps a couple of dozen bodies of its own, so the rule is that the scene's own scale cannot be
+    reached without the summons, not that the frame is literally empty. Together with
+    `gpu_completion` on both frames, a missing summon or a frame that never completed cannot read as
+    either symptom.
+    """
+    empty = json.loads((artifact / "screenshots/empty.json").read_text())
+    frame = json.loads((artifact / "screenshots/crowd.json").read_text())
+    empty_extraction = empty.get("entity_extraction") or {}
+    extraction = frame.get("entity_extraction") or {}
+    probe.report["crowd_empty_eligible"] = int(empty_extraction.get("eligible") or 0)
+    probe.report["crowd_eligible"] = int(extraction.get("eligible") or 0)
+    probe.report["crowd_submitted"] = int(extraction.get("submitted") or 0)
+    probe.report["crowd_dropped_over_budget"] = int(extraction.get("dropped_over_budget") or 0)
+    probe.report["crowd_vertices"] = int(extraction.get("vertices") or 0)
+    probe.report["crowd_gpu_completion"] = frame.get("gpu_completion")
+    # The private world carries a couple of dozen bodies of its own: the fixture is the scene's own
+    # scale, so a frame without the summons must stay far below it.
+    probe.check("crowd_empty_frame", probe.report["crowd_empty_eligible"] < 100)
+    probe.check("crowd_client_survived", frame.get("gpu_completion") is True)
+    # Both sides of the pair keep the same frame alive; only the option and the bound differ.
+    probe.check("crowd_entities_rendered",
+                probe.report["crowd_eligible"] >= 1000 and probe.report["crowd_submitted"] >= 1000)
+    probe.check("crowd_stream_bounded", probe.report["crowd_dropped_over_budget"] > 0)

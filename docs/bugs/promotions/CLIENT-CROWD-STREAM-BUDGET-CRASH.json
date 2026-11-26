@@ -1,0 +1,67 @@
+{
+  "id": "CLIENT-CROWD-STREAM-BUDGET-CRASH",
+  "verdict": "promoted",
+  "fix_commit": "client:bee3b7cc2a070abe10d2e5d426dbb9872bb1806b",
+  "fix_commit_full": "bee3b7cc2a070abe10d2e5d426dbb9872bb1806b",
+  "promoted_at": "2026-11-26T17:06:48+00:00",
+  "tree_head": "5f50e8f68ce40346a98aafa17279e1c0529625ef",
+  "tree_dirty": true,
+  "tree_sha256": "3336c9b6657c38ad5f9cabd0fc4029ab6d78edfe86c2aa3594c743c6b4b0eb0d",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackClientCoreCore/.analysis/validation/20261126T165818-native-crowd-stream-234ogpdk/result.json",
+    "client_head": "0ea6d25adb63d025607b4e2739f7c05d8ab71a22",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "red": [
+      "harness:scene-shot:native-crowd-stream"
+    ],
+    "states": {
+      "harness:scene-shot:native-crowd-stream": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackClientCoreCore/.analysis/validation/20261126T164417-native-crowd-stream-up76be0s/result.json",
+    "client_head": "d6102613bed069f567274d3f90369837af458d93",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "green": [
+      "harness:scene-shot:native-crowd-stream"
+    ],
+    "states": {
+      "harness:scene-shot:native-crowd-stream": "green"
+    },
+    "tree_head": "5f50e8f68ce40346a98aafa17279e1c0529625ef",
+    "tree_dirty": true,
+    "tree_sha256": "3336c9b6657c38ad5f9cabd0fc4029ab6d78edfe86c2aa3594c743c6b4b0eb0d"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackClientCoreCore/.analysis/validation/20261126T164417-native-crowd-stream-up76be0s/result.json",
+    "client_head": "d6102613bed069f567274d3f90369837af458d93",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "green": [
+      "harness:scene-shot:native-crowd-stream"
+    ],
+    "states": {
+      "harness:scene-shot:native-crowd-stream": "green"
+    },
+    "tree_head": "5f50e8f68ce40346a98aafa17279e1c0529625ef",
+    "tree_dirty": true,
+    "tree_sha256": "3336c9b6657c38ad5f9cabd0fc4029ab6d78edfe86c2aa3594c743c6b4b0eb0d"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "72026a55aed4c579ee19ed29020e9f46195b599b",
+    "paths": [
+      "src/entities/presentation.rs",
+      "src/render.rs",
+      "src/render/mesh.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::presentation::tests::entity_pass_bounds_a_crowd_to_the_dynamic_stream_share": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PackClientCoreCore/.analysis/validation/20261126T170529-ledger-promote-lwzkjc4y"
+}
