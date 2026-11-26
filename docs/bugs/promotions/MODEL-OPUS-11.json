@@ -3,49 +3,49 @@
   "verdict": "promoted",
   "fix_commit": "client:3bfbd7b6",
   "fix_commit_full": "3bfbd7b6902c8265f57be8ca3890359e691bfe87",
-  "promoted_at": "2026-11-25T13:55:37+00:00",
-  "tree_head": "bb352a3ada26ec0f46b58cc9abb91508ed3d0d21",
+  "promoted_at": "2026-11-26T12:28:35+00:00",
+  "tree_head": "aba1e0d57fae70a4e39a9b46b0fd7f942757102d",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "client_fix": true,
   "control_tree": "client",
   "control": "client_receipt_pair",
   "negative_control": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T134025-native-rig-parity-mjl3a0al/result.json",
-    "client_head": "e3678206dc82240442206f6d59b2ed3d1f80a643",
-    "server_binary_sha256": "c281301a7311a7dd28036a155a05a74d07e51f32673a1e03f241eff3725ba73a",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T122219-native-rig-allay-v1n7an4g/result.json",
+    "client_head": "bafbf78b400a583f972252c3f376e090c3f5b859",
+    "server_binary_sha256": "7adafec72093fcc9feb6ad5404ea5fee244e97557dfcacfea0ce4f6015000350",
     "red": [
-      "harness:scene-shot:native-rig-parity"
+      "harness:scene-shot:native-rig-allay"
     ],
     "states": {
-      "harness:scene-shot:native-rig-parity": "red"
+      "harness:scene-shot:native-rig-allay": "red"
     }
   },
   "restored": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T134133-native-rig-parity-mixztuw0/result.json",
-    "client_head": "3bfbd7b6902c8265f57be8ca3890359e691bfe87",
-    "server_binary_sha256": "c281301a7311a7dd28036a155a05a74d07e51f32673a1e03f241eff3725ba73a",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T122427-native-rig-allay-jioofe4h/result.json",
+    "client_head": "0eb3e0ea1eec0648144d521bf55bb5ba86d3fe4d",
+    "server_binary_sha256": "7adafec72093fcc9feb6ad5404ea5fee244e97557dfcacfea0ce4f6015000350",
     "green": [
-      "harness:scene-shot:native-rig-parity"
+      "harness:scene-shot:native-rig-allay"
     ],
     "states": {
-      "harness:scene-shot:native-rig-parity": "green"
+      "harness:scene-shot:native-rig-allay": "green"
     },
-    "tree_head": "bb352a3ada26ec0f46b58cc9abb91508ed3d0d21",
+    "tree_head": "aba1e0d57fae70a4e39a9b46b0fd7f942757102d",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "client_receipt": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T134133-native-rig-parity-mixztuw0/result.json",
-    "client_head": "3bfbd7b6902c8265f57be8ca3890359e691bfe87",
-    "server_binary_sha256": "c281301a7311a7dd28036a155a05a74d07e51f32673a1e03f241eff3725ba73a",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T122427-native-rig-allay-jioofe4h/result.json",
+    "client_head": "0eb3e0ea1eec0648144d521bf55bb5ba86d3fe4d",
+    "server_binary_sha256": "7adafec72093fcc9feb6ad5404ea5fee244e97557dfcacfea0ce4f6015000350",
     "green": [
-      "harness:scene-shot:native-rig-parity"
+      "harness:scene-shot:native-rig-allay"
     ],
     "states": {
-      "harness:scene-shot:native-rig-parity": "green"
+      "harness:scene-shot:native-rig-allay": "green"
     },
-    "tree_head": "bb352a3ada26ec0f46b58cc9abb91508ed3d0d21",
+    "tree_head": "aba1e0d57fae70a4e39a9b46b0fd7f942757102d",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
@@ -69,18 +69,10 @@
     ]
   },
   "candidate_refs": {
-    "client:krasnokamen-client:entities::asset_model_regression_tests::adult_horse_rig_has_vanilla_equine_proportions": {
-      "state": "green",
-      "detail": ""
-    },
-    "client:krasnokamen-client:entities::asset_model_regression_tests::rabbit_fox_panda_and_vex_shapes_match_the_vanilla_proportions": {
-      "state": "green",
-      "detail": ""
-    },
-    "client:krasnokamen-client:entities::equipment::tests::horse_overlay_joints_follow_authored_horse_pose": {
+    "client:krasnokamen-client:entities::presentation::tests::allay_wings_take_the_vanilla_setup_anim_pose": {
       "state": "green",
       "detail": ""
     }
   },
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123ClientModelK/.analysis/validation/20261125T134711-ledger-promote-zlmgtf7_"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T122732-ledger-promote-8wb8lfk0"
 }

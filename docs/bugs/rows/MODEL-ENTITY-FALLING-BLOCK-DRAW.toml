@@ -6,5 +6,8 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "split 2026-11-26 from MODEL-ENTITY-TNT-FALLING-LIGHTNING (receipts/D123/D123ClientModel/REVIEW-CODE-3-Opus.md: one scene proves one subject)"
-regression = []
+regression = ["harness:scene-shot:native-entity-falling-block"]
+proving_refs = ["harness:scene-shot:native-entity-falling-block"]
+proving_assertions = { "harness:scene-shot:native-entity-falling-block" = "falling_block_layer_present" }
+fix_commit = "client:9f8b91c8"
 repro_check = "The dispatch exists at HEAD: world_fx::append_block, reached from render_special::append's tnt | falling_block branch (client:e8fe40c2). Today the row is proven only by a unit test, world_fx_tests.rs:46 tnt_and_received_falling_block_emit_the_pack_model, which covers the emitted pack model and the received BlockState, not a real-client frame. No scene yet: tools/harness/entity_tnt_scene.json summons a primed TNT only. A sound promotion needs (a) a falling_block shot in a scene (NoGravity, authored BlockState via {BlockState:...}, one entity per frame, camera fixture unchanged), (b) the same two fixtures MODEL-ENTITY-TNT-FALLING-LIGHTNING now has: the entity reached the client (entity_extraction.eligible >= 1 and the operator dump lists minecraft:falling_block) and an empty frame with no block layer, then a six-quad (36-index) ItemCutout layer spanning 1.000 on every axis (one cube at scale 1; a falling block never swells or flashes), and (c) the committed control that deletes the tnt | falling_block dispatch, which is client:d2c556ed (the TNT row's control) with its restore client:9f8b91c8. The control, its 3+3 takes on a clean pin and the hunk map of e8fe40c2's block hunk stay to be recorded for THIS row."

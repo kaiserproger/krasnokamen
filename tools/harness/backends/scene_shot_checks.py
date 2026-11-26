@@ -1267,3 +1267,139 @@ def check_entity_tnt(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["visual_review_required"] = [
         "Inspect tnt.png: the layer geometry proves the block draw, not the TNT texture's texels."
     ]
+
+
+def _block_layers(candidate):
+    # A vanilla block model is one cube: six quads, six indices each. The unlit draw is
+    # `ItemCutout`; the entity's own opaque draw is `EntityCutout`. Both are the same 36-index cube.
+    return [layer for layer in candidate
+            if layer.get("material") in ("ItemCutout", "EntityCutout")
+            and int(layer.get("indices") or 0) == 36]
+
+
+def check_entity_falling_block(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-ENTITY-FALLING-BLOCK-DRAW: a falling block submits its received block in the entity pass.
+
+    `render_special::append` admits `minecraft:falling_block` next to the primed TNT and calls
+    `world_fx::append_block` with the entity's received `BlockState` (client:e8fe40c2), so the draw
+    is the block model of the authored state and nothing else: one cube, six quads, 36 indices,
+    spanning 1.000 blocks on every axis. The fixture is the same as the TNT row's: an `empty` frame
+    with no block layer, then the summoned entity's frame, plus `entity_extraction.eligible >= 1`
+    and the operator dump listing `minecraft:falling_block` so a refused summon cannot read as the
+    deleted dispatch. A falling block never swells or flashes (no fuse), so the material is the
+    stable unlit `ItemCutout` draw and the bounds are exact rather than measured.
+    """
+    shots = _qa._load_shots(probe, artifact, ("empty", "falling"))
+    ref, frame = shots["empty"][0], shots["falling"][0]
+    probe.check("falling_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+    ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    empty_layers = (ref.get("entity_extraction") or {}).get("entity_layer_geometry") or []
+    layers = (frame.get("entity_extraction") or {}).get("entity_layer_geometry") or []
+    blocks = _block_layers(layers)
+    probe.report["falling_empty_layers"] = empty_layers
+    probe.report["falling_layers"] = layers
+    probe.report["falling_block_materials"] = [layer.get("material") for layer in blocks]
+    probe.report["falling_block_quads"] = sum(int(layer.get("quads") or 0) for layer in blocks)
+    probe.check("empty_frame_has_no_falling_block", not _block_layers(empty_layers))
+    extraction = frame.get("entity_extraction") or {}
+    eligible = int(extraction.get("eligible") or 0)
+    dump = artifact / "falling-block-entities.json"
+    dumped = []
+    if dump.is_file():
+        dumped = (json.loads(dump.read_text()).get("entities") or [])
+    probe.report["falling_eligible"] = eligible
+    probe.report["falling_dump_entities"] = [entity.get("entity_type") for entity in dumped]
+    probe.check("falling_block_reached_client",
+                eligible >= 1 and any(entity.get("entity_type") == "minecraft:falling_block"
+                                      for entity in dumped))
+    probe.check("falling_block_layer_present", bool(blocks))
+    probe.check("falling_block_layer_is_one", len(blocks) == 1)
+    probe.check("falling_block_quads", probe.report["falling_block_quads"] == 6)
+    if not blocks:
+        probe.check("falling_block_span_is_one", False)
+        return
+    spans = [
+        max(float(layer["max"][axis]) for layer in blocks)
+        - min(float(layer["min"][axis]) for layer in blocks)
+        for axis in range(3)
+    ]
+    probe.report["falling_block_spans"] = [round(span, 3) for span in spans]
+    # One cube of the authored state at scale 1: no swell, no fuse, no partial.
+    probe.check("falling_block_span_is_one", all(abs(span - 1.0) <= 0.002 for span in spans))
+    probe.report["visual_review_required"] = [
+        "Inspect falling.png: the layer geometry proves the block draw, not the state's texels."
+    ]
+
+
+# `world_fx::append_lightning` draws 13 spine segments plus two 4-segment branches = 21 segments,
+# each one `bolt_segment` = an inner tube (radius 0.09) and an outer tube (radius 0.28), and a tube
+# is four quads of six indices: 21 * 2 * 24 = 1008 indices on `EntityMaterial::Lightning`.
+# The spine's last point is `position.y + 128`, so the layer's own height is the 128-block bolt.
+LIGHTNING_INDICES = 21 * 2 * 4 * 6
+
+
+def check_entity_lightning(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-ENTITY-LIGHTNING-DRAW: a lightning bolt submits its bolt tubes in the entity pass.
+
+    The bolt is visible for a few client ticks: `render_special/timeline.rs` starts
+    `lightning_life` at 2 and only draws while `lightning_life >= 0`
+    (`lightning_visible`), then re-flashes `lightning_flashes` (1..3) times with a random gap of up
+    to ten ticks. A single shot cannot be relied on, so the scene takes sixteen consecutive shots
+    after the summon and the check asserts that at least one of them carries the bolt's own
+    `Lightning` layer; the control deletes the `minecraft:lightning_bolt` dispatch, so none of them
+    can. The layer's own numbers are derived from `world_fx::append_lightning`: 1008 indices and a
+    128-block spine (`STEPS = 13`, `128. / STEPS` per step), with the outer tube's 0.28 radius as
+    the only slack on the end caps. The fixture comes first: the `empty` frame has no `Lightning`
+    layer, and the operator dump lists `minecraft:lightning_bolt`, so a failed summon or an
+    entity that never reached the client cannot read as the deleted dispatch.
+    """
+    names = tuple(["empty"] + [f"bolt-{index:02d}" for index in range(8)])
+    shots = _qa._load_shots(probe, artifact, names)
+    ref = shots["empty"][0]
+    probe.check("bolt_camera_unchanged", all(
+        all(abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], shots[name][0]["camera_position"]))
+        and abs(ref["yaw"] - shots[name][0]["yaw"]) < 0.01
+        and abs(ref["pitch"] - shots[name][0]["pitch"]) < 0.01
+        for name in names[1:])
+    )
+    empty_layers = (ref.get("entity_extraction") or {}).get("entity_layer_geometry") or []
+    probe.check("empty_frame_has_no_bolt", not any(layer.get("material") == "Lightning"
+                                                   for layer in empty_layers))
+    dump = artifact / "bolt-entities.json"
+    dumped = []
+    if dump.is_file():
+        dumped = (json.loads(dump.read_text()).get("entities") or [])
+    eligible = max(int((shots[name][0].get("entity_extraction") or {}).get("eligible") or 0)
+                   for name in names[1:])
+    probe.report["bolt_eligible"] = eligible
+    probe.report["bolt_dump_entities"] = [entity.get("entity_type") for entity in dumped]
+    probe.check("bolt_reached_client", eligible >= 1)
+    seen = {}
+    for name in names[1:]:
+        layers = (shots[name][0].get("entity_extraction") or {}).get("entity_layer_geometry") or []
+        bolts = [layer for layer in layers if layer.get("material") == "Lightning"]
+        seen[name] = {
+            "indices": sum(int(layer.get("indices") or 0) for layer in bolts),
+            "quads": sum(int(layer.get("quads") or 0) for layer in bolts),
+            "min": [min(float(layer["min"][axis]) for layer in bolts) for axis in range(3)] if bolts else None,
+            "max": [max(float(layer["max"][axis]) for layer in bolts) for axis in range(3)] if bolts else None,
+        }
+    probe.report["bolt_layers_by_shot"] = seen
+    drawn = {name: entry for name, entry in seen.items() if entry["indices"]}
+    probe.check("lightning_layer_present", bool(drawn))
+    if not drawn:
+        probe.check("lightning_layer_indices", False)
+        probe.check("lightning_layer_is_the_bolt_spine", False)
+        return
+    probe.check("lightning_layer_indices",
+                all(entry["indices"] == LIGHTNING_INDICES for entry in drawn.values()))
+    heights = [entry["max"][1] - entry["min"][1] for entry in drawn.values()]
+    probe.report["bolt_heights"] = [round(height, 3) for height in heights]
+    # The spine runs from the entity's own feet position up 128 blocks, and the tubes' 0.28
+    # radius adds at most that much at either cap.
+    probe.check("lightning_layer_is_the_bolt_spine",
+                all(abs(height - 128.0) <= 0.6 for height in heights))
+    probe.report["visual_review_required"] = [
+        "Inspect one drawn bolt-*.png: the layer geometry proves the tubes, not the bolt's texels."
+    ]

@@ -27,7 +27,8 @@ from .scene_shot_checks import (
     check_263_entity_rigs, check_decorated_pot, check_dynamic_context, check_elytra, check_entity_visuals,
     check_element_emission, check_gait_spider, check_held_tool_rest, check_item_bars, check_pig_saddle,
     check_placed_head, check_player_head, check_player_head_registry, check_shade_override,
-    check_entity_fire, check_entity_tnt, check_rig_allay, check_rig_guardian, check_rig_parity, check_shelf_clock, check_shield_gui, check_structure_box,
+    check_entity_fire, check_entity_tnt, check_entity_falling_block, check_entity_lightning,
+    check_rig_allay, check_rig_guardian, check_rig_parity, check_shelf_clock, check_shield_gui, check_structure_box,
     check_toasts,
     check_use_pose,
     check_worn_head,
@@ -58,6 +59,8 @@ NAMED_FIXTURES = {
     "native-rig-allay": "rig_allay_scene.json",
     "native-entity-fire": "entity_fire_scene.json",
     "native-entity-tnt": "entity_tnt_scene.json",
+    "native-entity-falling-block": "entity_falling_block_scene.json",
+    "native-entity-lightning": "entity_lightning_scene.json",
     "native-shade-override": "shade_override_scene.json",
     "native-decorated-pot": "decorated_pot_scene.json",
     "native-pig-saddle": "pig_saddle_scene.json",
@@ -378,6 +381,10 @@ def run(
                 check_entity_fire(probe, artifact)
             elif ctx.scenario_id == "native-entity-tnt":
                 check_entity_tnt(probe, artifact)
+            elif ctx.scenario_id == "native-entity-falling-block":
+                check_entity_falling_block(probe, artifact)
+            elif ctx.scenario_id == "native-entity-lightning":
+                check_entity_lightning(probe, artifact)
             elif ctx.scenario_id == "native-shade-override":
                 check_shade_override(probe, artifact)
             elif ctx.scenario_id == "native-decorated-pot":

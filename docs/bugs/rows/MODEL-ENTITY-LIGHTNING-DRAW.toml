@@ -6,5 +6,8 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "split 2026-11-26 from MODEL-ENTITY-TNT-FALLING-LIGHTNING (receipts/D123/D123ClientModel/REVIEW-CODE-3-Opus.md: one scene proves one subject)"
-regression = []
+regression = ["harness:scene-shot:native-entity-lightning"]
+proving_refs = ["harness:scene-shot:native-entity-lightning"]
+proving_assertions = { "harness:scene-shot:native-entity-lightning" = "lightning_layer_present" }
+fix_commit = "client:9f8b91c8"
 repro_check = "The dispatch exists at HEAD: world_fx::append_bolt, reached from render_special::append's minecraft:lightning_bolt branch (client:e8fe40c2). Today the row is proven only by unit tests, world_fx_tests.rs:177 lightning_dispatch_emits_seeded_geometry_without_light_or_pack_textures and lightning_is_absent_between_sky_flashes, not a real-client frame. No scene: entity_tnt_scene.json has no bolt. A sound promotion needs (a) a lightning shot that captures the bolt inside its lifetime (a summoned minecraft:lightning_bolt exists for a few ticks, so the scene must shoot immediately after the summon and the fixture must confirm the entity reached the client), (b) the bolt's own layer material/count/bounds derived from the client's append_bolt (tube radius 0.28 and 0.018, `EntityMaterial::Lightning`, two tubes) on the frame's entity_layer_geometry, and (c) the committed control that deletes the lightning_bolt dispatch, which is client:d2c556ed (the TNT row's control) with its restore client:9f8b91c8. The control, its 3+3 takes on a clean pin and the hunk map of e8fe40c2's bolt hunk stay to be recorded for THIS row."
