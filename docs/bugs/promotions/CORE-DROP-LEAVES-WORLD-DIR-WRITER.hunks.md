@@ -48,12 +48,12 @@ bounded 2 s window firing is the defect, and the child fails with
 the plain drop returned while the journal owner was still alive: a writer was left in the world directory
 ```
 
-at `crates/mc-core/src/core/core_drop_join_tests.rs:392` (named on the row in
+at `crates/mc-core/src/core/core_drop_join_tests.rs:389` (named on the row in
 `proving_assertions`; the ledger classifies the explicit panic as `unknown`
 unless named). The parent re-exec then fails at its
 `assert!(child.status.success(), …)` at `:359`. Reversed (no `Drop`), the drop
 detaches the owners and the test reds exactly there
-(`.analysis/validation/20261125T232421-ledger-promote-z8n4oo47/ledger-1-run.log:573,587-588`).
+(`.analysis/validation/20261126T003535-ledger-promote-jkti484o/ledger-1-run.log:573,587-588`). An earlier promotion on the same patch red at `:392`; it ran before the `style:` commit collapsed the detection `if` to one line, and this receipt supersedes it.
 On the candidate the test passes in 3.5 s
 (`.analysis/validation/20261125T205602-test-y1qfp8ae`) and green in the restore.
 
