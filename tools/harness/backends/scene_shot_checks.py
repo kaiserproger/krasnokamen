@@ -1473,7 +1473,11 @@ def check_baby_armor(probe: ProbeSteps, artifact: Path) -> None:
     probe.check("baby_armor_reached_client",
                 int(extraction.get("eligible") or 0) >= 1
                 and any(entity.get("entity_type") == "minecraft:zombie" for entity in dumped))
-    probe.check("baby_armor_single_entity", extraction.get("submitted") == 1)
+    # An armoured humanoid is several submissions (body plus each armour shell), so the fixture is
+    # "at least one unit, one entity in the dump" rather than the single-mob scenes' `== 1`.
+    submitted = extraction.get("submitted")
+    probe.report["baby_armor_submitted"] = submitted
+    probe.check("baby_armor_submitted", isinstance(submitted, int) and submitted >= 1)
     probe.check("baby_armor_rig_rendered", not extraction.get("unrendered"))
     layer = armour(layers)
     probe.check("armour_layer_present", layer is not None)
