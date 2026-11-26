@@ -207,17 +207,24 @@ pub(super) fn assign_builder(state: &mut TickState, id: SettlementId) -> bool {
     let Some(target) = unbound_project(&state.settlements, id) else {
         return false;
     };
-    // Extraction workers are lent to construction one at a time and only while
-    // the settlement holds a single project; from two projects on, gathering
-    // keeps its workers and parallel sites recruit ordinary residents (D8).
-    let may_borrow = access::projects_of(&state.settlements, id).count() == 1;
-    // The wake reason belongs to the project being bound, not to whichever
-    // project happens to be first (D8 review R3-8).
-    let ordered = state
+    let project = state
         .settlements
         .get(id)
-        .and_then(|record| access::project_for_structure(record, &target))
-        .is_some_and(|project| project.ordered);
+        .and_then(|record| access::project_for_structure(record, &target));
+    // The wake reason belongs to the project being bound, not to whichever
+    // project happens to be first (D8 review R3-8).
+    let ordered = project.is_some_and(|project| project.ordered);
+    // Extraction workers are lent to construction one at a time and only while
+    // the settlement holds a single new building; from two projects on,
+    // gathering keeps its workers and parallel sites recruit ordinary
+    // residents (D8). A level upgrade is never staffed that way: the only
+    // lumberjack may not build the lumber camp whose planks he would have
+    // produced, or the site waits for materials nobody else can make (the
+    // adopted village: `lumber_camp:2` bound at 0% for 20,000 ticks, no
+    // Storage ever, and the unbound `mason:2` behind it refused every
+    // admission).
+    let may_borrow = project.is_none_or(|project| project.building.is_none())
+        && access::projects_of(&state.settlements, id).count() == 1;
     let protected = protected_gatherer(state, id, ordered);
     // A native Builder already on the settlement takes the first unbound
     // project directly; no recruitment and no profession change. It must still
