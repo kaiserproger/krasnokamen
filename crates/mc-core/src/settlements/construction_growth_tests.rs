@@ -2625,7 +2625,6 @@ fn a_birch_village_admits_its_upgrade() {
 #[test]
 fn logs_only_do_not_admit_an_upgrade() {
     let (mut state, id) = upgrade_fixture("mason");
-    let record = state.settlements.get(id).unwrap();
     let blueprint = blueprints::get(&state.registry, "mason").unwrap();
     let materials = &blueprint.level(2).unwrap().materials;
     let log = state
