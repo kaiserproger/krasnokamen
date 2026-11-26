@@ -2435,3 +2435,60 @@ fn an_ordinary_revisit_of_the_priority_house_owns_the_hold() {
         assert!(!project.ordered, "the autonomous planner admitted it");
     }
 }
+
+/// An upgrade never spends the stock the priority House is waiting on. Final
+/// civ series runs 2-3 (receipts/D123/D123CivGates/FINAL-SERIES.md) upgraded two
+/// mason workshops to L3 and completed Storage L1 while the House lane waited
+/// at `oak_planks 4/106` for the whole run, so the House never funded.
+#[test]
+fn the_house_reserve_keeps_an_upgrade_from_spending_its_stock() {
+    let (mut state, id, builder) = fixture();
+    terrain_tests::wide_plan(&mut state);
+    terrain_tests::restore_stock(&mut state);
+    open_plan(&mut state);
+    // No roofed bed at all: the village is short, so the House lane is waiting.
+    fund(&mut state, "mason", 1);
+    start(&mut state, id, "mason", 1, None);
+    complete(&mut state, id, builder);
+    // The bed count is the POI scan's; drive its canonical bounded refresh.
+    let mut cache = std::mem::take(&mut state.villager_pois);
+    cache.refresh_poi_revisions(&state);
+    state.villager_pois = cache;
+    for _ in 0..64 {
+        if state.villager_pois.pending_chunks.is_empty() {
+            break;
+        }
+        let mut cache = std::mem::take(&mut state.villager_pois);
+        cache.refresh(&state);
+        state.villager_pois = cache;
+    }
+    // The mason's own L2 bill is in store; the House's bill is not.
+    stock_buildings(&mut state, &[("mason", 2)]);
+    let record = state.settlements.get(id).unwrap();
+    let images = executor::source_images(&state, id);
+    assert!(
+        !house_reserve_bill(&state, record, &images).is_empty(),
+        "a village short of roofed beds reserves its House bill"
+    );
+    assert!(
+        preparation::upgrade_project(&state, record, &images).is_none(),
+        "the mason upgrade would starve the House lane"
+    );
+    // The policy math: the upgrade's proof now carries the House's own bill, so
+    // stock that funds the mason alone no longer funds the upgrade. That proof
+    // is what refuses the upgrade above (revert the reserve wiring in
+    // `upgrade_project` and the refusal disappears).
+    let mason = blueprints::get(&state.registry, "mason")
+        .unwrap()
+        .level(2)
+        .unwrap()
+        .materials
+        .clone();
+    let images = executor::source_images(&state, id);
+    let record = state.settlements.get(id).unwrap();
+    let netted = with_joint(mason, &house_reserve_bill(&state, record, &images));
+    assert!(
+        !super::super::construction_crafting::missing_base(&state, &netted, &images).is_empty(),
+        "the mason bill alone must not cover the House reserve"
+    );
+}

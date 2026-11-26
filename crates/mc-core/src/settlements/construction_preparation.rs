@@ -728,6 +728,11 @@ pub(super) fn upgrade_project(
             let bill =
                 super::selected_bill(state, record.id, &blueprint.level(level)?.materials, images)?;
             let joint = super::joint_active_bill(state, record.id).unwrap_or_default();
+            // The priority House's own bill is reserved while the village is
+            // short of roofed beds: an upgrade never spends the stock the
+            // House lane is waiting on (runs 2-3 of the final civ series).
+            let reserved = super::house_reserve_bill(state, record, images);
+            let joint = super::with_joint(joint, &reserved);
             let netted = super::with_joint(bill.into_owned(), &joint);
             if !crate::settlements::construction_crafting::missing_base(state, &netted, images)
                 .is_empty()

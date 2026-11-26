@@ -1,0 +1,12 @@
+[[bug]]
+id = "SETTLEMENT-UPGRADE-HAUL-STALLS-WITH-LOGS-IN-STORE"
+title = "An upgrade project stood at 2 work units with 140 logs and 2 planks in store, and A's mason:2 for 23k ticks"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "D123 review round 4 (receipts/D123/D123Civ/HANDOFF-53.md §9/§11): the adopted-village closure test bound `lumber_camp:2` at 2 work units from tick 5,420 with `oak_log` 140 and `oak_planks` 2 in store while Storage and House waited; on the A control the mason:2 project stood for 23,000 ticks. The executor DOES craft bill items at haul (`settlement_builds.rs` `reserve_wood` + `ensure_units`), so an upgrade bill containing crafted planks should be satisfiable from logs."
+failing_first = "reported"
+cause = "Not established. Candidates in the haul/`ensure_units` path for an UPGRADE bill: (a) the reservation is computed from the built level's materials rather than the upgrade level's bill, (b) other_active_bill double-counts the project's own reservation, (c) a crafted-plank surplus is not counted because the recipe proof sees only the dry store, (d) the upgrade's clear/placement fence parks the haul cell and nobody re-plans the slice. A deterministic headless probe that binds an upgrade with logs in store and steps the executor is the next step; the stock-only admission policy (see SETTLEMENT-HOUSE-BILL-STALLS-BELOW-COBBLESTONE-DEMAND fix) now skips exactly this case, so the stall can no longer hold the planner - the underlying haul question stays open."
+regression = []
+repro_check = ["Not reproduced under a cargo control yet. Proof shape: a settlement with a completed lumber camp, 140 oak logs and 2 planks in one chest, and an admitted lumber_camp level-2 upgrade; assert the executor places a plank cell within N ticks (today the project's placed count stays at 2). Also compare against a new-building bill with the same materials to show the upgrade path is the difference."]
