@@ -2,11 +2,11 @@
 id = "SETTLEMENT-UNBOUND-PROJECT-BLOCKS-PLANNER"
 title = "An autonomous project that no builder can ever take blocks the settlement's admission gate forever"
 area = "gameplay"
-repro = "client"
+repro = "cargo"
 severity = "major"
 status = "open"
-source = "D123 review rounds 2-4 (`construction.rs`: `unbound_project(..).is_some()` in `plan_pass` and `storage::plan`). A one-worker village admitted an upgrade that `assign_builder` cannot staff without borrowing its only gatherer (`may_borrow = false` for upgrades, `construction_builders.rs`), so the project stayed unbound with `tried == 0`; the gate then refused every later admission, and nothing withdrew it: `withdraw_opened_site` fires only in the opening pass of a project that already has a builder."
+source = "D123 review rounds 2-4 (`construction.rs`: `unbound_project(..).is_some()` in `plan_pass` and `storage::plan`). A one-worker village admitted an upgrade that `assign_builder` cannot staff without borrowing its only gatherer (`may_borrow = false` for upgrades, `construction_builders.rs`), so the project stayed unbound with `tried == 0`; the gate then refused every later admission, and nothing withdrew it: `withdraw_opened_site` fires only in the opening pass of a project that already has a builder. Cause (measured): An unbound project has no age bound: `unbound_project` reports it forever, and the only release is a later stall-release pass that assumes the project was assigned. Round 4's B1 fix (`builders::upgrade_staffable` before `preparation::upgrade_project`) closes the one-worker admission that created the state; the residual case is a project whose builder is lost after assignment (death, profession change) and whose site placed nothing."
 failing_first = "reported"
-cause = "An unbound project has no age bound: `unbound_project` reports it forever, and the only release is a later stall-release pass that assumes the project was assigned. Round 4's B1 fix (`builders::upgrade_staffable` before `preparation::upgrade_project`) closes the one-worker admission that created the state; the residual case is a project whose builder is lost after assignment (death, profession change) and whose site placed nothing."
+
 regression = []
 repro_check = ["Proof shape: a settlement with one builder and one staffed gatherer, an autonomous upgrade admitted before the B1 gate (or a project unbound by removing its builder), then N planner passes; assert the settlement admits an unrelated funded project after a bounded unbound age. Today the gate refuses it forever."]
