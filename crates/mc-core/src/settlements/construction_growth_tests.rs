@@ -76,10 +76,12 @@ pub(super) fn stock_buildings(state: &mut TickState, levels: &[(&str, u8)]) {
 /// The round-3 cadence proof, on the four-tick admission clock: only a
 /// settlement whose own admission pass left an unfinished walk holding a legal
 /// lot is stepped off that clock, one site slice a tick, so the walk still
-/// finishes inside a quiet window between street changes while construction
-/// keeps admitting one cell every four ticks and the tick keeps a slice for the
-/// order turn. At the bare cadence (one pass per 20 ticks) the same scripted
-/// village restarts its walk at every change and never admits.
+/// finishes inside a quiet window between street changes and the tick keeps a
+/// slice for the order turn (a change clears the flag until the next admission
+/// pass, so the change lands 35 ticks into every 40). At the bare cadence (one
+/// pass per 20 ticks) the same scripted village restarts its walk at every
+/// change and never admits. The four-tick admission clock itself is asserted by
+/// `only_a_holding_settlement_steps_and_construction_keeps_its_four_tick_clock`.
 #[test]
 fn a_holding_walk_steps_off_the_admission_clock_and_finishes_between_changes() {
     let (mut state, id, builder) = fixture();
@@ -436,6 +438,24 @@ fn the_stepping_flag_is_armed_and_cleared_by_its_own_passes() {
     );
     state.tick = 1;
     super::planner_tick(&mut state, &mut site_turn::SiteBudget::default());
+    // The restarted walk still holds a legal lot while the flag is clear, so
+    // `scan.waiting` is true: the only thing that can have cleared the flag is
+    // the restart rule this asserts (review round 3 T1).
+    let summary = |state: &TickState| {
+        state
+            .settlements
+            .site_sweep
+            .get(&id)
+            .map(site_refusals::Sweeps::summary)
+            .unwrap_or_default()
+    };
+    assert!(
+        summary(&state)
+            .iter()
+            .any(|(_, next, frontages, holds, _)| *holds && next < frontages),
+        "the step restarted a walk that still holds a lot: {:?}",
+        summary(&state)
+    );
     assert!(
         !armed(&state),
         "a step that restarted a walk clears the flag"
@@ -447,17 +467,35 @@ fn the_stepping_flag_is_armed_and_cleared_by_its_own_passes() {
         &mut site_turn::SiteBudget::default()
     ));
     assert!(armed(&state), "the next pass re-arms the restarted walk");
-    // N2 (owner order): the order's own scan really scans and never arms.
+    // N2 (owner order): the order's own scan really scans, opens no project,
+    // leaves the farm walk unfinished and holding, and never arms the flag - so
+    // the removed arming line (`stepping = pass.waiting && pass.site.is_none()`)
+    // would have armed it (review round 3 T2).
     set_flag(&mut state, false);
     site_refusals::EXAMINED.with(|count| count.set(0));
-    let _ = super::start_build(&mut state, id, "farm", 64);
+    let scan = super::start_build(&mut state, id, "farm", 64);
+    assert!(
+        scan.is_err(),
+        "a 64-lot order scan cannot finish this village's walk: {scan:?}"
+    );
     assert!(examined() > 0, "the order's scan examined lots");
+    assert!(
+        state.settlements.get(id).unwrap().projects.is_empty(),
+        "the order scan opened no project"
+    );
+    assert!(
+        summary(&state)
+            .iter()
+            .any(|(kind, next, frontages, holds, _)| kind == "farm"
+                && *holds
+                && *next < *frontages),
+        "the order scan left the farm walk unfinished and holding: {:?}",
+        summary(&state)
+    );
     assert!(!armed(&state), "an owner order's scan never arms the step");
     // N1: a pass that cannot reach the scan (the builder gate, with an active
     // project) clears an armed flag instead of leaving it standing.
-    if state.settlements.get(id).unwrap().projects.is_empty() {
-        start(&mut state, id, "spanish_house", 1, None);
-    }
+    start(&mut state, id, "spanish_house", 1, None);
     set_flag(&mut state, true);
     assert!(!plan_pass(
         &mut state,

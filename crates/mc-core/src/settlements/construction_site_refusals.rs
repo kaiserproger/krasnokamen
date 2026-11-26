@@ -225,8 +225,10 @@ pub(crate) struct Sweeps {
     /// The settlement's own admission pass ended with a kind's walk unfinished
     /// and already holding a legal candidate: only such a settlement is stepped
     /// off the four-tick admission clock, and only its site scan (review round 3
-    /// C3/C4). Runtime only, like the sweeps it describes: `Empty`, a restart
-    /// after a failed re-proof, and a pass that finds no candidate all clear it.
+    /// C3/C4). Runtime only, like the sweeps it describes. Cleared by a pass that
+    /// finds no candidate, by `Empty`, by a restart after a failed re-proof, and
+    /// by a step whose scan restarted a walk on a street change (the next
+    /// admission pass arms it again, review round 2 N3).
     pub(super) stepping: bool,
     /// How often each kind's walk was dropped, by a street change or by its
     /// stored best losing its cost. Log-only, and kept OUTSIDE the sweep: a
