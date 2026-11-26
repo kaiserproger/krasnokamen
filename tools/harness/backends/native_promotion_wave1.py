@@ -382,13 +382,14 @@ def _locate_line(steps: ProbeSteps, structure: str) -> str:
         if start is None:
             return False
         return any((" is at " in line and "[") or "Could not find" in line
-                   for line in lines[:start])
+                   or "There is no structure" in line for line in lines[:start])
 
     state = steps.wait(answered, f"locate_{structure}", timeout_seconds=300)
     lines = [str(line) for line in state["recent_chat"]]
     start = next(i for i, line in enumerate(lines) if marker in line)
     return next(line for line in lines[:start]
-                if (" is at " in line and "[") or "Could not find" in line)
+                if (" is at " in line and "[") or "Could not find" in line
+                or "There is no structure" in line)
 
 
 def _dolphin(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
@@ -400,10 +401,10 @@ def _dolphin(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # `findNearestMapStructure(#minecraft:dolphin_located, pos, 50, false)` - an ocean ruin or
     # shipwreck, never a player-placed chest. Ask the server for the real site and build the
     # channel beside it, so the scene proves the lead to an actual structure.
-    reply = _locate_line(steps, "minecraft:dolphin_located")
+    reply = _locate_line(steps, "#minecraft:dolphin_located")
     steps.report["dolphin_locate_reply"] = reply
     found = re.search(r"\[(-?\d+), ?(~|-?\d+), ?(-?\d+)\]", reply)
-    if "Could not find" in reply or found is None:
+    if "Could not find" in reply or "There is no structure" in reply or found is None:
         raise RuntimeError(f"no dolphin_located structure to lead to: {reply}")
     site_x, site_z = int(found.group(1)), int(found.group(3))
     surface = 62  # sea level in this world; ocean_located structures sit below it
