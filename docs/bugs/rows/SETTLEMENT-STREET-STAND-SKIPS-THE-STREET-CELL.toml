@@ -8,4 +8,9 @@ status = "open"
 source = "D123Civ lane, found while fixing the civilization gate's street phase: `layout::stand` searched a stand only at the street line's own anchor-band height, so a cell below the band returned no stand and the road/meadow project stalled (fix 3ae4c84ca8 searches around the cell and at the cell's level). Product fix landed without a row; filed on 2026-11-24 (review D123Civ6 note d) so a real-client receipt can close it."
 regression = ["harness:civilization-seed-qa:all", "cargo:mc-core:villager::building::body_safety_tests::a_street_cell_below_the_anchor_band_still_has_a_stand"]
 failing_first = "reported"
-repro_check = "identity note: this fix spans several commits; before any promotion it needs a patch:<sha256> identity over their non-test hunks plus a hunks.md (README: a regression test may not be only later than the fix)."
+# Identity closed 2026-11-26: the fix is the single commit 3ae4c84ca (its own message records the test
+# red with only this hunk reverted: `left None, right Some([7, 192, 7])`); its non-test hunk is committed
+# below and reverses on the candidate (`git apply -R --check` rc=0). No test hunk is involved - the
+# registered test lives in villager/building/body_safety_tests.rs, outside this file.
+fix_commit = "patch:8552ab13ee936215e98d1b406a59adc67ebc137820b3515eb751a510f993ac65"
+repro_check = "Fix identity: docs/bugs/fix-patches/SETTLEMENT-STREET-STAND-SKIPS-THE-STREET-CELL.patch (3ae4c84ca's non-test hunks, `layout::stand`), which reverses on 4d118a41..36a1e35 (`git apply -R --check` rc=0). Missing proof is only the graphical one: the row's registered gate ref `harness:civilization-seed-qa:all` has never passed (receipts/D123/D123CivGates/FINAL-SERIES.md: three final-pin runs, new_house and births false), and that gate is the only profile whose street phase exercises `layout::stand` through a real client."
