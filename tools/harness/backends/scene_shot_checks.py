@@ -1431,18 +1431,26 @@ def check_baby_armor(probe: ProbeSteps, artifact: Path) -> None:
 
     `HumanoidModel.createBabyArmorMeshSet(BABY_INNER, BABY_OUTER, PartPose.ZERO)` gives the baby
     armour shells their own cube sizes; the pre-image hand-fitted them 1.3-1.75x oversized. The
-    armour layer is a separate material from the body, so one baby zombie in a diamond helmet and chestplate (the head shell sets the depth, the chestplate adds the arm caps that widen the control) makes
-    the armour layer's own bbox readable from `entity_extraction.entity_layer_geometry` (CM-4).
+    armour layer is a separate material from the body, so one baby drowned in a diamond helmet and
+    chestplate (the head shell sets the depth, the chestplate adds the arm caps that widen the
+    control) makes the armour layer's own bbox readable from
+    `entity_extraction.entity_layer_geometry` (CM-4).
+
+    The entity is a **baby drowned**, not a baby zombie: `crowd::KINDS` routes zombies (and husks,
+    skeletons, ...) through the GPU crowd renderer, which reports `crowd: 1`, `submitted: 0` and no
+    layer geometry at all, so a zombie cannot witness this fix on any scene. A drowned stays on the
+    CPU path (`crowd: 0` is asserted below), and `da704d9b` gives it the same jar `armor_baby_*`
+    shells (`armor_baby_drowned_head/chest/legs/feet`).
 
     The absolute span scales with the kind's baby scale, which the frame does not report, so the
-    assertion is the scale-free ratio `depth / width`: derived with the client's own bone convention
-    (parent pivots accumulated, cube origin relative to the bone pivot) the shells' spans are
-    8.8 x 16.9 x 8.6 px on the fixed tree and 9.0 x 16.75 x 7.5 on the control (`da704d9b`
-    reverted), i.e. **0.977 vs 0.833** - a 17 % separation that no scale, only the shell geometry,
-    moves. The scene summons with `Rotation:[0f,0f]` so the entity's own yaw cannot swap x and z.
+    assertion is the scale-free ratio `depth / width`: measured on the pair's own pinned clients
+    before the ledger pair, the armour layer spans 9.02 x 12.86 x 9.66 px (ratio 1.071) on the fixed
+    tree and 16.38 x 16.13 x 10.50 px (ratio 0.641) on the control (`da704d9b` reverted) - a 67 %
+    separation that no scale, only the shell geometry, moves. The scene summons with
+    `Rotation:[0f,0f]` so the entity's own yaw cannot swap x and z.
 
     Fixtures first: the `empty` frame carries no armour layer, the `baby-armor-entities` dump lists
-    `minecraft:zombie`, and the framed entity is one and rendered, so a missing summon or a leaked
+    `minecraft:drowned`, and the framed entity is one and rendered, so a missing summon or a leaked
     entity cannot read as the row's symptom. The armour material is picked as the largest `Armor*`
     slice (glint/translucent sub-layers are smaller), and its name is reported.
     """
@@ -1469,10 +1477,14 @@ def check_baby_armor(probe: ProbeSteps, artifact: Path) -> None:
     if dump.is_file():
         dumped = (json.loads(dump.read_text()).get("entities") or [])
     probe.report["baby_armor_eligible"] = int(extraction.get("eligible") or 0)
+    probe.report["baby_armor_crowd"] = int(extraction.get("crowd") or 0)
     probe.report["baby_armor_dump_entities"] = [entity.get("entity_type") for entity in dumped]
     probe.check("baby_armor_reached_client",
                 int(extraction.get("eligible") or 0) >= 1
-                and any(entity.get("entity_type") == "minecraft:zombie" for entity in dumped))
+                and any(entity.get("entity_type") == "minecraft:drowned" for entity in dumped))
+    # A crowd-kind mob (zombie/husk/skeleton/...) reports no layer geometry at all, so the fixture
+    # must stay on the CPU path for the armour layer to exist.
+    probe.check("baby_armor_cpu_path", int(extraction.get("crowd") or 0) == 0)
     # An armoured humanoid is several submissions (body plus each armour shell), so the fixture is
     # "at least one unit, one entity in the dump" rather than the single-mob scenes' `== 1`.
     submitted = extraction.get("submitted")
@@ -1490,9 +1502,99 @@ def check_baby_armor(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["baby_armor_spans"] = spans
     ratio = round(spans[2] / spans[0], 4) if spans[0] else None
     probe.report["baby_armor_z_over_x"] = ratio
-    # Derived before the pair (both sides, from the rig JSONs): fixed 8.6/8.8 = 0.977, control
-    # 7.5/9.0 = 0.833. The window keeps the fixed shells and excludes the hand-fitted ones.
-    probe.check("armour_z_over_x_in_range", ratio is not None and 0.95 <= ratio <= 1.00)
+    # Measured before the ledger pair on the pair's own pinned clients: fixed 9.66/9.02 = 1.071,
+    # control 10.50/16.38 = 0.641. The window keeps the jar shells and excludes the hand-fitted
+    # ones; both ends sit 0.14 away from the measured halves.
+    probe.check("armour_z_over_x_in_range", ratio is not None and 1.00 <= ratio <= 1.15)
     probe.report["visual_review_required"] = [
         "Inspect baby-armor.png: the ratio proves the shells' depth, not the shoulder texels."
     ]
+
+
+def _rig_body_layer(extraction: dict):
+    """The largest `EntityCutout` slice of a frame: one CPU-path mob's own texture layer."""
+    slices = [layer for layer in extraction.get("entity_layer_geometry") or []
+              if str(layer.get("material") or "") == "EntityCutout"
+              and int(layer.get("indices") or 0) > 0]
+    return max(slices, key=lambda layer: int(layer.get("indices") or 0)) if slices else None
+
+
+def _check_cpu_rig_layer(probe: ProbeSteps, artifact: Path, shot: str, entity_type: str,
+                         dump_name: str, indices: int, quads: int) -> None:
+    """One CPU-path mob's rig submits exactly its authored cube layer, and its fixtures hold.
+
+    Shared body of the mob-rig scenes: the `empty` frame carries no `EntityCutout` slice, the
+    entity dump lists exactly `entity_type`, the frame reports the entity eligible and submitted
+    and on the CPU path (`crowd == 0`; a `crowd::KINDS` mob would report `submitted: 0` and no
+    layers at all), and the largest `EntityCutout` slice is the rig's single texture layer with
+    `indices`/`quads`. The four quads per cube and the nested bones are the client mesher's own
+    rule (six quads per cube, explicit `faces` are UV selection only), so the numbers are derived
+    by walking every bone of the rig JSON on both sides of the pair.
+    """
+    shots = _qa._load_shots(probe, artifact, ("empty", shot))
+    ref, frame = shots["empty"][0], shots[shot][0]
+    probe.check("rig_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+    ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    empty_layers = (ref.get("entity_extraction") or {}).get("entity_layer_geometry") or []
+    extraction = frame.get("entity_extraction") or {}
+    probe.report["rig_empty_layers"] = empty_layers
+    probe.report["rig_layers"] = extraction.get("entity_layer_geometry") or []
+    probe.check("empty_frame_has_no_rig_layer", _rig_body_layer({"entity_layer_geometry": empty_layers}) is None)
+    dump = artifact / f"{dump_name}.json"
+    dumped = []
+    if dump.is_file():
+        dumped = (json.loads(dump.read_text()).get("entities") or [])
+    probe.report["rig_eligible"] = int(extraction.get("eligible") or 0)
+    probe.report["rig_submitted"] = extraction.get("submitted")
+    probe.report["rig_crowd"] = int(extraction.get("crowd") or 0)
+    probe.report["rig_dump_entities"] = [entity.get("entity_type") for entity in dumped]
+    probe.check("rig_reached_client",
+                int(extraction.get("eligible") or 0) >= 1
+                and any(entity.get("entity_type") == entity_type for entity in dumped))
+    probe.check("rig_cpu_path", int(extraction.get("crowd") or 0) == 0)
+    probe.check("rig_submitted", isinstance(extraction.get("submitted"), int)
+                and int(extraction.get("submitted") or 0) >= 1)
+    probe.check("rig_rendered", not extraction.get("unrendered"))
+    layer = _rig_body_layer(extraction)
+    probe.check("rig_layer_present", layer is not None)
+    if layer is None:
+        probe.check("rig_layer_indices", False)
+        return
+    spans = [round(float(layer["max"][axis]) - float(layer["min"][axis]), 4) for axis in range(3)]
+    probe.report["rig_layer_indices"] = int(layer.get("indices") or 0)
+    probe.report["rig_layer_quads"] = int(layer.get("quads") or 0)
+    probe.report["rig_layer_spans"] = spans
+    # Derived from the rig JSONs on both sides: the pre-image rig's cubelist is the control's
+    # number (six quads per cube, nested bones included), the fixed rig's the candidate's.
+    probe.check("rig_layer_indices",
+                int(layer.get("indices") or 0) == indices and int(layer.get("quads") or 0) == quads)
+
+
+def check_entity_bogged(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-N8: one bogged submits the 26.3 rig's own cube layer.
+
+    `b40b8d63` rewrites 15 mob rigs to the vanilla 26.3 mirror flags and cube lists; for the bogged
+    that is 36 quads (216 indices) in the pre-image against 78 quads (468 indices) with the fix -
+    every bone's cube count changes, so the frame's own `EntityCutout` index total separates the
+    two clients without pixels. A bogged is not a `crowd::KINDS` member, so it stays on the CPU
+    path and reports its layers (a crowd mob reports `submitted: 0`).
+    """
+    _check_cpu_rig_layer(probe, artifact, "bogged", "minecraft:bogged", "bogged-entities", 468, 78)
+
+
+def check_entity_stray(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-N10: one stray submits the 26.3 rig's own cube layer with the hat cube.
+
+    `6d4540e3` rewrites cow/mooshroom/glow-squid/skeleton/stray to the vanilla 26.3 mirror flags and
+    offsets; the cow horn mirror and the glow-squid tentacle yaw are texture/UV effects with no
+    count or bounds change, but the skeleton/stray hat cube adds six quads: 36 quads (216 indices)
+    in the pre-image against 42 quads (252 indices) with the fix. The frame's own `EntityCutout`
+    index total separates the two clients without pixels; the mirror-only parts stay unit-covered.
+
+    The mob is a **stray**, not a skeleton: `minecraft:skeleton` is a `crowd::KINDS` member, so the
+    GPU crowd renderer draws it (`crowd: 1`, `submitted: 0`, no layer geometry - measured on this
+    scene before the switch), and no frame can read its rig. `minecraft:stray` is not in KINDS and
+    carries the same `stray.json` the fix rewrote, so the layers are reported.
+    """
+    _check_cpu_rig_layer(probe, artifact, "stray", "minecraft:stray", "stray-entities", 252, 42)

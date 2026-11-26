@@ -67,7 +67,7 @@
       "shot": "empty"
     },
     {
-      "cmd": "summon minecraft:zombie 1000.5 160 1003.5 {IsBaby:1b,NoAI:1b,Invulnerable:1b,equipment:{head:{id:'minecraft:diamond_helmet'},chest:{id:'minecraft:diamond_chestplate'}}}"
+      "cmd": "summon minecraft:drowned 1000.5 160 1003.5 {IsBaby:1b,NoAI:1b,Invulnerable:1b,equipment:{head:{id:'minecraft:diamond_helmet'},chest:{id:'minecraft:diamond_chestplate'}}}"
     },
     {
       "wait_ticks": 40
@@ -79,7 +79,7 @@
       "require_entities": {
         "name": "baby-armor-entities",
         "types": [
-          "minecraft:zombie"
+          "minecraft:drowned"
         ],
         "args": {
           "radius": 16,
@@ -88,7 +88,7 @@
       }
     },
     {
-      "cmd": "kill @e[type=minecraft:zombie,distance=..16]"
+      "cmd": "kill @e[type=minecraft:drowned,distance=..16]"
     },
     {
       "cmd": "kill @e[type=minecraft:item,distance=..16]"

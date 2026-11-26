@@ -1,0 +1,86 @@
+{
+  "id": "MODEL-OPUS-N1",
+  "verdict": "promoted",
+  "fix_commit": "client:da704d9b",
+  "fix_commit_full": "da704d9b7af518391d9e17e3bb7647ff178a7876",
+  "promoted_at": "2026-11-26T13:56:22+00:00",
+  "tree_head": "ba80d723c91849ea40c3a9b5f55bdfb5fd615368",
+  "tree_dirty": true,
+  "tree_sha256": "e629b798da6975fbf2a590106b8705d5bc2fd50ee593f2987733bac0644c9778",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T135539-native-baby-armor-5sefyjuk/result.json",
+    "client_head": "25a210cbe094c086542dfc3f2d0b54d0ec60c697",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "red": [
+      "harness:scene-shot:native-baby-armor"
+    ],
+    "states": {
+      "harness:scene-shot:native-baby-armor": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T135600-native-baby-armor-z2h0k_s7/result.json",
+    "client_head": "ba1971d76215a305929c8cadc60ddb21282a6799",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "green": [
+      "harness:scene-shot:native-baby-armor"
+    ],
+    "states": {
+      "harness:scene-shot:native-baby-armor": "green"
+    },
+    "tree_head": "ba80d723c91849ea40c3a9b5f55bdfb5fd615368",
+    "tree_dirty": true,
+    "tree_sha256": "e629b798da6975fbf2a590106b8705d5bc2fd50ee593f2987733bac0644c9778"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T135600-native-baby-armor-z2h0k_s7/result.json",
+    "client_head": "ba1971d76215a305929c8cadc60ddb21282a6799",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "green": [
+      "harness:scene-shot:native-baby-armor"
+    ],
+    "states": {
+      "harness:scene-shot:native-baby-armor": "green"
+    },
+    "tree_head": "ba80d723c91849ea40c3a9b5f55bdfb5fd615368",
+    "tree_dirty": true,
+    "tree_sha256": "e629b798da6975fbf2a590106b8705d5bc2fd50ee593f2987733bac0644c9778"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "9249e5693d517ea08ccea9e7ef5be18c9dd5bf10",
+    "paths": [
+      "assets/krasnokamen/models/entity/armor_baby_drowned_chest.json",
+      "assets/krasnokamen/models/entity/armor_baby_drowned_feet.json",
+      "assets/krasnokamen/models/entity/armor_baby_drowned_head.json",
+      "assets/krasnokamen/models/entity/armor_baby_drowned_legs.json",
+      "assets/krasnokamen/models/entity/armor_baby_piglin_chest.json",
+      "assets/krasnokamen/models/entity/armor_baby_piglin_feet.json",
+      "assets/krasnokamen/models/entity/armor_baby_piglin_head.json",
+      "assets/krasnokamen/models/entity/armor_baby_piglin_legs.json",
+      "assets/krasnokamen/models/entity/armor_baby_zombie_chest.json",
+      "assets/krasnokamen/models/entity/armor_baby_zombie_feet.json",
+      "assets/krasnokamen/models/entity/armor_baby_zombie_head.json",
+      "assets/krasnokamen/models/entity/armor_baby_zombie_legs.json",
+      "assets/krasnokamen/models/entity/armor_baby_zombie_villager_chest.json",
+      "assets/krasnokamen/models/entity/armor_baby_zombie_villager_feet.json",
+      "assets/krasnokamen/models/entity/armor_baby_zombie_villager_head.json",
+      "assets/krasnokamen/models/entity/armor_baby_zombie_villager_legs.json",
+      "assets/krasnokamen/models/entity/armor_baby_zombified_piglin_chest.json",
+      "assets/krasnokamen/models/entity/armor_baby_zombified_piglin_feet.json",
+      "assets/krasnokamen/models/entity/armor_baby_zombified_piglin_head.json",
+      "assets/krasnokamen/models/entity/armor_baby_zombified_piglin_legs.json",
+      "assets/krasnokamen/models/entity/drowned_baby.json",
+      "assets/krasnokamen/models/entity/drowned_outer_baby.json",
+      "assets/krasnokamen/models/entity/husk_baby.json",
+      "assets/krasnokamen/models/entity/piglin_baby.json",
+      "assets/krasnokamen/models/entity/zombie_baby.json",
+      "assets/krasnokamen/models/entity/zombie_villager_baby.json",
+      "assets/krasnokamen/models/entity/zombified_piglin_baby.json"
+    ]
+  },
+  "candidate_refs": {},
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T135622-ledger-promote-gn1ytgxq"
+}

@@ -67,19 +67,19 @@
       "shot": "empty"
     },
     {
-      "cmd": "summon minecraft:skeleton 1000.5 160 1003.5 {NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
+      "cmd": "summon minecraft:stray 1000.5 160 1003.5 {NoAI:1b,Invulnerable:1b,Rotation:[0f,0f]}"
     },
     {
       "wait_ticks": 40
     },
     {
-      "shot": "skeleton"
+      "shot": "stray"
     },
     {
       "require_entities": {
-        "name": "skeleton-entities",
+        "name": "stray-entities",
         "types": [
-          "minecraft:skeleton"
+          "minecraft:stray"
         ],
         "args": {
           "radius": 16,
@@ -88,7 +88,7 @@
       }
     },
     {
-      "cmd": "kill @e[type=minecraft:skeleton,distance=..16]"
+      "cmd": "kill @e[type=minecraft:stray,distance=..16]"
     },
     {
       "cmd": "kill @e[type=minecraft:item,distance=..16]"

@@ -6,6 +6,8 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:156"
-regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::cow_horn_cube_and_humanoid_hat_follow_the_26_3_layers"]
-repro_check = "round 7 (client:6d4540e3, test 23a158e9): the ref is red with the fix reverted - receipts/XHarnessGates/client-r7-revert-red.log (24 passed, 1 failed) - and the row text overstated the deltas: only the cow/mooshroom horn mirror and the skeleton/stray hat cube differed from 26.3. candidate: area=client, real-client check required"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::cow_horn_cube_and_humanoid_hat_follow_the_26_3_layers", "harness:scene-shot:native-entity-stray"]
+repro_check = "round 7 (client:6d4540e3, test 23a158e9): the ref is red with the fix reverted - receipts/XHarnessGates/client-r7-revert-red.log (24 passed, 1 failed) - and the row text overstated the deltas: only the cow/mooshroom horn mirror and the skeleton/stray hat cube differed from 26.3. candidate: area=client, real-client check required D123PackPairs3 (2026-11-26): the separable part is the skeleton/stray hat cube (36 -> 42 quads, 216 -> 252 indices, six quads per cube including nested bones). A skeleton is a crowd::KINDS member, so the GPU crowd renderer draws it (measured: crowd 1, submitted 0, no entity_layer_geometry on both sides) and no frame can read its rig; the pair therefore uses a stray, which is not in KINDS and carries the same stray.json the fix rewrote. The cow/mooshroom horn is a mirror flag (UV only) and the glow-squid delta is a 1/16-px pivot rounding plus a 0.02 px body inflate - neither changes counts, and the body inflate is below any stable frame tolerance; both stay unit-covered by the registered ref."
 fix_commit = "client:6d4540e3"
+proving_refs = ["harness:scene-shot:native-entity-stray"]
+proving_assertions = { "harness:scene-shot:native-entity-stray" = "rig_layer_indices" }
