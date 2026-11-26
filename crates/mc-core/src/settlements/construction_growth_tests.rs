@@ -505,6 +505,56 @@ fn the_stepping_flag_is_armed_and_cleared_by_its_own_passes() {
     assert!(!armed(&state), "a pass that cannot scan clears the flag");
 }
 
+/// The work-budget pin (CIV-ADOPTED-CLOSURE-ROOT-TICK-COST): a step off the
+/// admission clock reuses the funded verdict the settlement's own admission
+/// pass proved, so a held walk's stepped ticks add no funding proof and no
+/// recipe scan; the next admission pass re-proves and overwrites it.
+#[test]
+fn stepped_ticks_add_no_funding_proofs() {
+    let (mut state, id, _builder) = fixture();
+    terrain_tests::wide_plan(&mut state);
+    terrain_tests::restore_stock(&mut state);
+    let armed = |state: &TickState| {
+        state
+            .settlements
+            .site_sweep
+            .get(&id)
+            .is_some_and(|sweeps| sweeps.stepping)
+    };
+    // The kinds the walk must hold a lot for (the flag test's own seeding).
+    stock_buildings(
+        &mut state,
+        &[("spanish_house", 1), ("farm", 1), ("mason", 1)],
+    );
+    // The admission pass proves the kinds' bills and leaves a holding walk.
+    assert!(!plan_pass(
+        &mut state,
+        id,
+        &mut site_turn::SiteBudget::default()
+    ));
+    assert!(armed(&state), "the admission pass arms the step");
+    // Count only the off-clock steps: ticks 1, 2, 3, 5, 6, 7 are not on the
+    // four-tick construction clock and never on the 20-tick admission clock.
+    crate::settlements::construction_crafting::reset_scan_stats();
+    site_refusals::EXAMINED.with(|count| count.set(0));
+    for tick in [1u64, 2, 3, 5, 6, 7] {
+        state.tick = tick;
+        super::planner_tick(&mut state, &mut site_turn::SiteBudget::default());
+    }
+    assert!(
+        site_refusals::EXAMINED.with(std::cell::Cell::get) > 0,
+        "the steps really examined lots"
+    );
+    assert!(armed(&state), "the walk still holds, so it keeps stepping");
+    let work = crate::settlements::construction_crafting::scan_stats();
+    assert_eq!(
+        (work.funding_calls, work.memo_hits, work.recipes_scanned),
+        (0, 0, 0),
+        "a stepped tick runs no funding proof at all (a memo hit is still a proof \
+         attempt): {work:?}"
+    );
+}
+
 #[test]
 fn an_autonomous_house_selected_first_keeps_its_slot_before_a_later_cultural_order() {
     let (mut state, id) = housing_fixture(false);

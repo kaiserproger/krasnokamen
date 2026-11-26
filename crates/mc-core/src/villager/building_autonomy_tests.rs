@@ -731,7 +731,12 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
         // index, dependency admission or the funding memo exceeds it.
         // Cause not established: +4% candidate scans after Prep integration
         // (1,770,358 vs <=1,700,000 on 1a598ebf1, 2026-11-18).
-        // Closure tick 48,105 / 19,942 proofs; the old ceiling stopped at
+        // Measured closure table (D123, 2026-11-26):
+        //   off-clock step disabled (pre-cadence): 47,189 / 17,085 / 1,825,275
+        //   cadence on, no stock-only upgrade policy: never closes, budget
+        //     stops at 1.9M (tick 38,461; 41,561 after the no-borrow rule)
+        //   cadence on, stock-only upgrade policy: 26,573 / 12,276 / 542,572
+        // The old ceiling stopped at
         // tick 44,541. Unchanged-placement credits are ruled out: disabling
         // them gives identical counts. The 1.9M ceiling is a cut-time allowance,
         // not an explanation; the 30,000-proof ceiling stays unchanged.

@@ -1684,7 +1684,18 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     // A funded new building may have no legal lot. Existing houses must still
     // be able to gain beds through their reserved upgrade footprint.
     let record = state.settlements.get(id).expect("planned settlement");
-    if let Some((project, species, color)) = preparation::upgrade_project(state, record, &images)
+    // Upgrade admission policy (docs settlements/construction.md): an upgrade
+    // opens only from an idle planner (`projects_of(..).next().is_none()`), only
+    // when its whole chosen bill is already in store - netted of what other
+    // active projects are promised (`upgrade_project`, stock-only) - and only
+    // when a builder could take it **without borrowing an extraction worker**
+    // (`upgrade_staffable`, the same rule `assign_builder` applies to an
+    // upgrade). Otherwise a one-worker village opens an upgrade that stays
+    // unbound for good and the gate above refuses everything (review B1).
+    if access::projects_of(&state.settlements, id).next().is_none()
+        && builders::upgrade_staffable(state, id)
+        && let Some((project, species, color)) =
+            preparation::upgrade_project(state, record, &images)
         && begin(state, project, &species, color)
     {
         return true;
