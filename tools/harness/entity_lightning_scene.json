@@ -1,0 +1,202 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "cmd": "weather clear"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        -20
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 995 159 995 1005 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 995 160 995 1005 165 1010 minecraft:air"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        -20
+      ]
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "empty"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:lightning_bolt,distance=..32]"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "shot": "bolt-00"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:lightning_bolt,distance=..32]"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "shot": "bolt-01"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:lightning_bolt,distance=..32]"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "shot": "bolt-02"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:lightning_bolt,distance=..32]"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "shot": "bolt-03"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:lightning_bolt,distance=..32]"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "shot": "bolt-04"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:lightning_bolt,distance=..32]"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "shot": "bolt-05"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:lightning_bolt,distance=..32]"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "shot": "bolt-06"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:lightning_bolt,distance=..32]"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "shot": "bolt-07"
+    },
+    {
+      "list_entities": {
+        "name": "bolt-entities",
+        "args": {
+          "radius": 32,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:lightning_bolt,distance=..32]"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:item,distance=..16]"
+    }
+  ]
+}

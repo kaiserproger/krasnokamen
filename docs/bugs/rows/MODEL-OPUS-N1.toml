@@ -4,6 +4,10 @@ title = "Baby chestplates have see-through shoulders. This affects every family 
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:90"
-regression = []
+regression = ["harness:scene-shot:native-baby-armor"]
+proving_refs = ["harness:scene-shot:native-baby-armor"]
+proving_assertions = { "harness:scene-shot:native-baby-armor" = "armour_z_over_x_in_range" }
+fix_commit = "client:da704d9b"
+promotion = "docs/bugs/promotions/MODEL-OPUS-N1.json"

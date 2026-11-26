@@ -6,7 +6,9 @@ severity = "major"
 status = "open"
 source = "ClientQ04 production material-selection coverage observed selection/minecraft:wither_skull/adult/default return variant material not yet received/resolved despite an authored wither_skull rig. The actual production selector takes the empty family default texture and has no wither-skull material branch. This is source-fixture evidence, not a claimed runtime crash. Client tests: entities::solaris_models::tests::entity_selection_coverage_wither_skull_material_tracks_received_dangerous_flag."
 repro = "source"
-regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::entity_selection_coverage_wither_skull_material_tracks_received_dangerous_flag"]
+regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::entity_selection_coverage_wither_skull_material_tracks_received_dangerous_flag", "harness:scene-shot:native-wither-skull"]
 failing_first = "reported"
-fix_commit = "client:f4bd26d4"
-repro_check = "candidate: real revert (the DATA_DANGEROUS material branch removed) reds the ref on the selected texture (wither vs wither_invulnerable), receipts/XClientBlocks/10-negative-control.log; area=client, real-client check required"
+fix_commit = "client:b9094755"
+repro_check = "candidate: real revert (the DATA_DANGEROUS material branch removed) reds the ref on the selected texture (wither vs wither_invulnerable), receipts/XClientBlocks/10-negative-control.log; area=client, real-client check required D123PackPairs3 (2026-11-26): proved on trees that carry the per-entity selection report. The real fix predates the client rename, so the pair is a committed reversal at the tip: field commit 8eda5627, control client:a9d2aba4 (the pre-image has no wither-skull branch), re-landing client:b9094755 = fix_commit; hunk map docs/bugs/promotions/CLIENT-WITHER-SKULL-MATERIAL-SELECTION.hunks.md. Scene native-wither-skull asserts entity_extraction.entities names entity/wither/wither.png for a normal skull; the pre-image resolves no texture at all (the row's own error)."
+proving_refs = ["harness:scene-shot:native-wither-skull"]
+proving_assertions = { "harness:scene-shot:native-wither-skull" = "wither_skull_texture_selected" }

@@ -1,4 +1,4 @@
-# MODEL-OPUS-11 — hunk map for the pair, and why the row stays open
+# MODEL-OPUS-11 — hunk map for the promoted pair
 
 Promotion receipt: `promotions/MODEL-OPUS-11.json` (written by `ledger promote`; stale until the
 redesign below lands).
@@ -54,8 +54,12 @@ reach; that half is pinned by the client unit test.
 Why the fix side is `0eb3e0ea1e` and not the tip: `ledger promote`'s client rule demands the two
 pinned client heads differ by exactly the fix commit's non-test patch, and no single commit spans
 the rig re-land and the pose. Pairing `bafbf78b40` with `0eb3e0ea1e` is therefore exactly
-`client:3bfbd7b6`'s patch (patch id `6cf9f2be…`), and the pose commit is covered by the row's
-`client:` unit ref, which the promote runs on the candidate client tree.
+`client:3bfbd7b6`'s patch — the ledger's own `patch-id --verbatim` over the non-test hunks reads
+`0622414eba9c283339a746290872e89a6bbebdc3` for `3bfbd7b6`, for `0eb3e0ea1e` and for the
+`bafbf78b40..0eb3e0ea1e` delta (`promote.json: client_control_delta.fix_patch_id`; an earlier draft
+printed `6cf9f2be…` from a whole-commit `--stable` id, which is a different measurement) — and the
+pose commit is covered by the row's `client:` unit ref, which the promote runs on the candidate
+client tree.
 
 Non-test hunks carried: the fourteen rig JSONs (the same patch that `client:3bfbd7b6` carries) plus
 the `procedural_part` hunk of `715a7110af` (the allay arm and its `walk_pos` parameter, threaded from
@@ -64,9 +68,21 @@ fire test's own) are test hunks and are not part of the non-test patch. `fix_com
 multi-commit value: the promote run prints the exact `patch:<sha256>` (or `client:<sha>`) to record,
 and that value goes into the row.
 
-Scene: `native-rig-allay` (`tools/harness/rig_allay_scene.json`), one stationary allay, fixture
-checks first, assertion `allay_wing_span_within_wings` = 0.68..1.03, derived before the run from the
-dump plus the flap sweep (posed 0.7014..1.0135, invented 1.122, rest 0.6937).
+## Promoted 2026-11-26 (this lane)
+
+`ledger promote MODEL-OPUS-11` on the lane's core tree at `aba1e0d57fae` (clean fingerprint
+`e3b0c442…`) with the tree's own server pin `pins/aba1e0d57fae-server-…`:
+
+| side | client pin | receipt | result |
+|---|---|---|---|
+| control | `bafbf78b400a` | `20261126T122219-native-rig-allay-v1n7an4g` | `failed` at `allay_wing_span_within_wings`, measured span **1.116** |
+| restore | `0eb3e0ea1eec` | `20261126T122427-native-rig-allay-jioofe4h` | `passed`, span **0.693** (inside 0.68..1.03) |
+
+Promotion artifact `20261126T122732-ledger-promote-8wb8lfk0`; the receipt records
+`fix_commit client:3bfbd7b6`, the delta above and the 14 rig paths. The 0.693 span is the client's
+rest pose: the envelope separates the invented rig (1.116) from the vanilla rig, it does not witness
+the pose, which the client unit ref pins — exactly as the row states.
 
 Rabbit/fox/panda/vex moved to MODEL-OPUS-11-RABBIT-FOX-PANDA-VEX and the horse family to
 MODEL-OPUS-11-HORSES; both are open and unit-covered only.
+

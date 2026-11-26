@@ -1,0 +1,87 @@
+{
+  "id": "MODEL-OPUS-N8",
+  "verdict": "promoted",
+  "fix_commit": "client:b40b8d63",
+  "fix_commit_full": "b40b8d63ded5e8e7611c27945423f8b9158d9585",
+  "promoted_at": "2026-11-26T14:06:22+00:00",
+  "tree_head": "ba80d723c91849ea40c3a9b5f55bdfb5fd615368",
+  "tree_dirty": true,
+  "tree_sha256": "e629b798da6975fbf2a590106b8705d5bc2fd50ee593f2987733bac0644c9778",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T135624-native-entity-bogged-w4qetve1/result.json",
+    "client_head": "285dd467935f4b36cb0e67e7b4e606f07719cd24",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "red": [
+      "harness:scene-shot:native-entity-bogged"
+    ],
+    "states": {
+      "harness:scene-shot:native-entity-bogged": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T140009-native-entity-bogged-0bc896vw/result.json",
+    "client_head": "ba1971d76215a305929c8cadc60ddb21282a6799",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "green": [
+      "harness:scene-shot:native-entity-bogged"
+    ],
+    "states": {
+      "harness:scene-shot:native-entity-bogged": "green"
+    },
+    "tree_head": "ba80d723c91849ea40c3a9b5f55bdfb5fd615368",
+    "tree_dirty": true,
+    "tree_sha256": "e629b798da6975fbf2a590106b8705d5bc2fd50ee593f2987733bac0644c9778"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T140009-native-entity-bogged-0bc896vw/result.json",
+    "client_head": "ba1971d76215a305929c8cadc60ddb21282a6799",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "green": [
+      "harness:scene-shot:native-entity-bogged"
+    ],
+    "states": {
+      "harness:scene-shot:native-entity-bogged": "green"
+    },
+    "tree_head": "ba80d723c91849ea40c3a9b5f55bdfb5fd615368",
+    "tree_dirty": true,
+    "tree_sha256": "e629b798da6975fbf2a590106b8705d5bc2fd50ee593f2987733bac0644c9778"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "3b32cc38f6a2850e57df5c307072f44bd8dbdc33",
+    "paths": [
+      "assets/krasnokamen/models/entity/armor_stand.json",
+      "assets/krasnokamen/models/entity/bogged.json",
+      "assets/krasnokamen/models/entity/cat.json",
+      "assets/krasnokamen/models/entity/chicken.json",
+      "assets/krasnokamen/models/entity/cow_baby.json",
+      "assets/krasnokamen/models/entity/creeper.json",
+      "assets/krasnokamen/models/entity/horse_baby.json",
+      "assets/krasnokamen/models/entity/mooshroom_baby.json",
+      "assets/krasnokamen/models/entity/ocelot.json",
+      "assets/krasnokamen/models/entity/parrot.json",
+      "assets/krasnokamen/models/entity/skeleton_horse_baby.json",
+      "assets/krasnokamen/models/entity/wither_skeleton.json",
+      "assets/krasnokamen/models/entity/wolf.json",
+      "assets/krasnokamen/models/entity/wolf_baby.json",
+      "assets/krasnokamen/models/entity/zombie_horse_baby.json"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::asset_model_regression_tests::left_side_mirror_flags_follow_the_26_3_layers": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::asset_model_regression_tests::species_layer_scales_preserve_the_feet_and_distinguish_related_mobs": {
+      "state": "green",
+      "detail": ""
+    },
+    "client:krasnokamen-client:entities::presentation::tests::received_pet_sitting_flag_poses_and_restores_adult_and_baby_rigs": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T140326-ledger-promote-3kyif2sy"
+}

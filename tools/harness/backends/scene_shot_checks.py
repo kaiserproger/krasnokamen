@@ -1267,3 +1267,373 @@ def check_entity_tnt(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["visual_review_required"] = [
         "Inspect tnt.png: the layer geometry proves the block draw, not the TNT texture's texels."
     ]
+
+
+def _block_layers(candidate):
+    # A vanilla block model is one cube: six quads, six indices each. The unlit draw is
+    # `ItemCutout`; the entity's own opaque draw is `EntityCutout`. Both are the same 36-index cube.
+    return [layer for layer in candidate
+            if layer.get("material") in ("ItemCutout", "EntityCutout")
+            and int(layer.get("indices") or 0) == 36]
+
+
+def check_entity_falling_block(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-ENTITY-FALLING-BLOCK-DRAW: a falling block submits its received block in the entity pass.
+
+    `render_special::append` admits `minecraft:falling_block` next to the primed TNT and calls
+    `world_fx::append_block` with the entity's received `BlockState` (client:e8fe40c2), so the draw
+    is the block model of that state and nothing else: one cube, six quads, 36 indices, spanning
+    1.000 blocks on every axis. The fixture is a *naturally* falling block, the same one
+    `native-falling-block-prediction` proves reaches the client: a sand block on a stone ledge, the
+    ledge removed, `/tick rate 2` so one tick is half a second and the entity stays in the air for
+    minutes. A `/summon minecraft:falling_block ... {NoGravity:1b}` was tried first and was gone
+    within twenty ticks (measured 2026-11-26: `entity_extraction.eligible 0`, empty operator dump),
+    so the scene does not depend on a summoned body's landing rule.
+
+    The fixtures come first: the `empty` frame carries no 36-index block layer, the
+    `falling-block-entities` operator dump (a `require_entities` step) lists
+    `minecraft:falling_block`, and `entity_extraction.eligible >= 1` in the drawn frame. Three
+    consecutive frames are taken and any one of them may carry the layer; a block that stops being
+    drawn between ticks must not read as the deleted dispatch. A falling block never swells or
+    flashes (no fuse), so the material is the stable unlit draw and the bounds are exact.
+    """
+    names = ("empty", "falling", "falling-01", "falling-02")
+    shots = _qa._load_shots(probe, artifact, names)
+    ref = shots["empty"][0]
+    probe.check("falling_camera_unchanged", all(
+        all(abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], shots[name][0]["camera_position"]))
+        and abs(ref["yaw"] - shots[name][0]["yaw"]) < 0.01
+        and abs(ref["pitch"] - shots[name][0]["pitch"]) < 0.01
+        for name in names[1:])
+    )
+    empty_layers = (ref.get("entity_extraction") or {}).get("entity_layer_geometry") or []
+    probe.report["falling_empty_layers"] = empty_layers
+    probe.check("empty_frame_has_no_falling_block", not _block_layers(empty_layers))
+    dump = artifact / "falling-block-entities.json"
+    dumped = []
+    if dump.is_file():
+        dumped = (json.loads(dump.read_text()).get("entities") or [])
+    probe.report["falling_dump_entities"] = [entity.get("entity_type") for entity in dumped]
+    probe.check("falling_block_dump_lists_the_entity",
+                any(entity.get("entity_type") == "minecraft:falling_block" for entity in dumped))
+    seen = {}
+    eligible = 0
+    for name in names[1:]:
+        extraction = shots[name][0].get("entity_extraction") or {}
+        eligible = max(eligible, int(extraction.get("eligible") or 0))
+        blocks = _block_layers(extraction.get("entity_layer_geometry") or [])
+        seen[name] = {
+            "materials": [layer.get("material") for layer in blocks],
+            "blocks": len(blocks),
+            "quads": sum(int(layer.get("quads") or 0) for layer in blocks),
+            "spans": [round(max(float(layer["max"][axis]) for layer in blocks)
+                            - min(float(layer["min"][axis]) for layer in blocks), 3)
+                      for axis in range(3)] if blocks else None,
+        }
+    probe.report["falling_eligible"] = eligible
+    probe.report["falling_shots"] = seen
+    probe.check("falling_block_reached_client", eligible >= 1)
+    drawn = {name: entry for name, entry in seen.items() if entry["blocks"]}
+    probe.check("falling_block_layer_present", bool(drawn))
+    if not drawn:
+        probe.check("falling_block_layer_is_one", False)
+        probe.check("falling_block_quads", False)
+        probe.check("falling_block_span_is_one", False)
+        return
+    probe.check("falling_block_layer_is_one", all(entry["blocks"] == 1 for entry in drawn.values()))
+    probe.check("falling_block_quads", all(entry["quads"] == 6 for entry in drawn.values()))
+    # One cube of the state at scale 1: no swell, no fuse, no partial.
+    probe.check("falling_block_span_is_one",
+                all(all(abs(span - 1.0) <= 0.002 for span in entry["spans"])
+                    for entry in drawn.values()))
+    probe.report["visual_review_required"] = [
+        "Inspect falling.png: the layer geometry proves the block draw, not the state's texels."
+    ]
+
+
+# `world_fx::append_lightning` draws 13 spine segments plus two 4-segment branches = 21 segments,
+# each one `bolt_segment` = an inner tube (radius 0.09) and an outer tube (radius 0.28), and a tube
+# is four quads of six indices: 21 * 2 * 24 = 1008 indices on `EntityMaterial::Lightning`.
+# The spine's last point is `position.y + 128`, so the layer's own height is the 128-block bolt.
+LIGHTNING_INDICES = 21 * 2 * 4 * 6
+
+
+def check_entity_lightning(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-ENTITY-LIGHTNING-DRAW: a lightning bolt submits its bolt tubes in the entity pass.
+
+    The bolt is visible for a few client ticks: `render_special/timeline.rs` starts
+    `lightning_life` at 2 and only draws while `lightning_life >= 0`
+    (`lightning_visible`), then re-flashes `lightning_flashes` (1..3) times with a random gap of up
+    to ten ticks. A single shot cannot be relied on: the client creates the bolt with
+    `lightning_life = 2` and only draws while it is `>= 0`, so the scene summons the bolt eight
+    times (killing the previous one first) and takes one shot one tick after each summon, and the
+    check asserts that at least one of them carries the bolt's own `Lightning` layer; the control
+    deletes the `minecraft:lightning_bolt` dispatch, so none of them can. The layer's own numbers
+    are derived from `world_fx::append_lightning`: 1008 indices and a
+    128-block spine (`STEPS = 13`, `128. / STEPS` per step), with the outer tube's 0.28 radius as
+    the only slack on the end caps. The fixture comes first: the `empty` frame has no `Lightning`
+    layer, and the operator dump lists `minecraft:lightning_bolt`, so a failed summon or an
+    entity that never reached the client cannot read as the deleted dispatch.
+    """
+    names = tuple(["empty"] + [f"bolt-{index:02d}" for index in range(8)])
+    shots = _qa._load_shots(probe, artifact, names)
+    ref = shots["empty"][0]
+    probe.check("bolt_camera_unchanged", all(
+        all(abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], shots[name][0]["camera_position"]))
+        and abs(ref["yaw"] - shots[name][0]["yaw"]) < 0.01
+        and abs(ref["pitch"] - shots[name][0]["pitch"]) < 0.01
+        for name in names[1:])
+    )
+    empty_layers = (ref.get("entity_extraction") or {}).get("entity_layer_geometry") or []
+    probe.check("empty_frame_has_no_bolt", not any(layer.get("material") == "Lightning"
+                                                   for layer in empty_layers))
+    dump = artifact / "bolt-entities.json"
+    dumped = []
+    if dump.is_file():
+        dumped = (json.loads(dump.read_text()).get("entities") or [])
+    eligible = max(int((shots[name][0].get("entity_extraction") or {}).get("eligible") or 0)
+                   for name in names[1:])
+    probe.report["bolt_eligible"] = eligible
+    probe.report["bolt_dump_entities"] = [entity.get("entity_type") for entity in dumped]
+    probe.check("bolt_reached_client", eligible >= 1)
+    seen = {}
+    for name in names[1:]:
+        layers = (shots[name][0].get("entity_extraction") or {}).get("entity_layer_geometry") or []
+        bolts = [layer for layer in layers if layer.get("material") == "Lightning"]
+        seen[name] = {
+            "indices": sum(int(layer.get("indices") or 0) for layer in bolts),
+            "quads": sum(int(layer.get("quads") or 0) for layer in bolts),
+            "min": [min(float(layer["min"][axis]) for layer in bolts) for axis in range(3)] if bolts else None,
+            "max": [max(float(layer["max"][axis]) for layer in bolts) for axis in range(3)] if bolts else None,
+        }
+    probe.report["bolt_layers_by_shot"] = seen
+    drawn = {name: entry for name, entry in seen.items() if entry["indices"]}
+    probe.check("lightning_layer_present", bool(drawn))
+    if not drawn:
+        probe.check("lightning_layer_indices", False)
+        probe.check("lightning_layer_is_the_bolt_spine", False)
+        return
+    probe.check("lightning_layer_indices",
+                all(entry["indices"] == LIGHTNING_INDICES for entry in drawn.values()))
+    heights = [entry["max"][1] - entry["min"][1] for entry in drawn.values()]
+    probe.report["bolt_heights"] = [round(height, 3) for height in heights]
+    # The spine runs from the entity's own feet position up 128 blocks, and the tubes' 0.28
+    # radius adds at most that much at either cap.
+    probe.check("lightning_layer_is_the_bolt_spine",
+                all(abs(height - 128.0) <= 0.6 for height in heights))
+    probe.report["visual_review_required"] = [
+        "Inspect one drawn bolt-*.png: the layer geometry proves the tubes, not the bolt's texels."
+    ]
+
+
+def check_baby_armor(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-N1: a baby humanoid's armour shells carry the jar's own depths.
+
+    `HumanoidModel.createBabyArmorMeshSet(BABY_INNER, BABY_OUTER, PartPose.ZERO)` gives the baby
+    armour shells their own cube sizes; the pre-image hand-fitted them 1.3-1.75x oversized. The
+    armour layer is a separate material from the body, so one baby drowned in a diamond helmet and
+    chestplate (the head shell sets the depth, the chestplate adds the arm caps that widen the
+    control) makes the armour layer's own bbox readable from
+    `entity_extraction.entity_layer_geometry` (CM-4).
+
+    The entity is a **baby drowned**, not a baby zombie: `crowd::KINDS` routes zombies (and husks,
+    skeletons, ...) through the GPU crowd renderer, which reports `crowd: 1`, `submitted: 0` and no
+    layer geometry at all, so a zombie cannot witness this fix on any scene. A drowned stays on the
+    CPU path (`crowd: 0` is asserted below), and `da704d9b` gives it the same jar `armor_baby_*`
+    shells (`armor_baby_drowned_head/chest/legs/feet`).
+
+    The absolute span scales with the kind's baby scale, which the frame does not report, so the
+    assertion is the scale-free ratio `depth / width`: measured on the pair's own pinned clients
+    before the ledger pair, the armour layer spans 9.02 x 12.86 x 9.66 px (ratio 1.071) on the fixed
+    tree and 16.38 x 16.13 x 10.50 px (ratio 0.641) on the control (`da704d9b` reverted) - a 67 %
+    separation that no scale, only the shell geometry, moves. The scene summons with
+    `Rotation:[0f,0f]` so the entity's own yaw cannot swap x and z.
+
+    Fixtures first: the `empty` frame carries no armour layer, the `baby-armor-entities` dump lists
+    `minecraft:drowned`, and the framed entity is one and rendered, so a missing summon or a leaked
+    entity cannot read as the row's symptom. The armour material is picked as the largest `Armor*`
+    slice (glint/translucent sub-layers are smaller), and its name is reported.
+    """
+    shots = _qa._load_shots(probe, artifact, ("empty", "baby-armor"))
+    ref, frame = shots["empty"][0], shots["baby-armor"][0]
+    probe.check("baby_armor_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+    ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+
+    def armour(candidate):
+        slices = [layer for layer in candidate
+                  if str(layer.get("material") or "").startswith("Armor")
+                  and int(layer.get("indices") or 0) > 0]
+        return max(slices, key=lambda layer: int(layer.get("indices") or 0)) if slices else None
+
+    empty_layers = (ref.get("entity_extraction") or {}).get("entity_layer_geometry") or []
+    extraction = frame.get("entity_extraction") or {}
+    layers = extraction.get("entity_layer_geometry") or []
+    probe.report["baby_armor_empty_layers"] = empty_layers
+    probe.report["baby_armor_layers"] = layers
+    probe.check("empty_frame_has_no_armour", armour(empty_layers) is None)
+    dump = artifact / "baby-armor-entities.json"
+    dumped = []
+    if dump.is_file():
+        dumped = (json.loads(dump.read_text()).get("entities") or [])
+    probe.report["baby_armor_eligible"] = int(extraction.get("eligible") or 0)
+    probe.report["baby_armor_crowd"] = int(extraction.get("crowd") or 0)
+    probe.report["baby_armor_dump_entities"] = [entity.get("entity_type") for entity in dumped]
+    probe.check("baby_armor_reached_client",
+                int(extraction.get("eligible") or 0) >= 1
+                and any(entity.get("entity_type") == "minecraft:drowned" for entity in dumped))
+    # A crowd-kind mob (zombie/husk/skeleton/...) reports no layer geometry at all, so the fixture
+    # must stay on the CPU path for the armour layer to exist.
+    probe.check("baby_armor_cpu_path", int(extraction.get("crowd") or 0) == 0)
+    # An armoured humanoid is several submissions (body plus each armour shell), so the fixture is
+    # "at least one unit, one entity in the dump" rather than the single-mob scenes' `== 1`.
+    submitted = extraction.get("submitted")
+    probe.report["baby_armor_submitted"] = submitted
+    probe.check("baby_armor_submitted", isinstance(submitted, int) and submitted >= 1)
+    probe.check("baby_armor_rig_rendered", not extraction.get("unrendered"))
+    layer = armour(layers)
+    probe.check("armour_layer_present", layer is not None)
+    if layer is None:
+        probe.check("armour_z_over_x_in_range", False)
+        return
+    spans = [round(float(layer["max"][axis]) - float(layer["min"][axis]), 4) for axis in range(3)]
+    probe.report["baby_armor_material"] = layer.get("material")
+    probe.report["baby_armor_indices"] = int(layer.get("indices") or 0)
+    probe.report["baby_armor_spans"] = spans
+    ratio = round(spans[2] / spans[0], 4) if spans[0] else None
+    probe.report["baby_armor_z_over_x"] = ratio
+    # Measured before the ledger pair on the pair's own pinned clients: fixed 9.66/9.02 = 1.071,
+    # control 10.50/16.38 = 0.641. The window keeps the jar shells and excludes the hand-fitted
+    # ones; both ends sit 0.14 away from the measured halves.
+    probe.check("armour_z_over_x_in_range", ratio is not None and 1.00 <= ratio <= 1.15)
+    probe.report["visual_review_required"] = [
+        "Inspect baby-armor.png: the ratio proves the shells' depth, not the shoulder texels."
+    ]
+
+
+def _rig_body_layer(extraction: dict):
+    """The largest `EntityCutout` slice of a frame: one CPU-path mob's own texture layer."""
+    slices = [layer for layer in extraction.get("entity_layer_geometry") or []
+              if str(layer.get("material") or "") == "EntityCutout"
+              and int(layer.get("indices") or 0) > 0]
+    return max(slices, key=lambda layer: int(layer.get("indices") or 0)) if slices else None
+
+
+def _check_cpu_rig_layer(probe: ProbeSteps, artifact: Path, shot: str, entity_type: str,
+                         dump_name: str, indices: int, quads: int) -> None:
+    """One CPU-path mob's rig submits exactly its authored cube layer, and its fixtures hold.
+
+    Shared body of the mob-rig scenes: the `empty` frame carries no `EntityCutout` slice, the
+    entity dump lists exactly `entity_type`, the frame reports the entity eligible and submitted
+    and on the CPU path (`crowd == 0`; a `crowd::KINDS` mob would report `submitted: 0` and no
+    layers at all), and the largest `EntityCutout` slice is the rig's single texture layer with
+    `indices`/`quads`. The four quads per cube and the nested bones are the client mesher's own
+    rule (six quads per cube, explicit `faces` are UV selection only), so the numbers are derived
+    by walking every bone of the rig JSON on both sides of the pair.
+    """
+    shots = _qa._load_shots(probe, artifact, ("empty", shot))
+    ref, frame = shots["empty"][0], shots[shot][0]
+    probe.check("rig_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+    ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    empty_layers = (ref.get("entity_extraction") or {}).get("entity_layer_geometry") or []
+    extraction = frame.get("entity_extraction") or {}
+    probe.report["rig_empty_layers"] = empty_layers
+    probe.report["rig_layers"] = extraction.get("entity_layer_geometry") or []
+    probe.check("empty_frame_has_no_rig_layer", _rig_body_layer({"entity_layer_geometry": empty_layers}) is None)
+    dump = artifact / f"{dump_name}.json"
+    dumped = []
+    if dump.is_file():
+        dumped = (json.loads(dump.read_text()).get("entities") or [])
+    probe.report["rig_eligible"] = int(extraction.get("eligible") or 0)
+    probe.report["rig_submitted"] = extraction.get("submitted")
+    probe.report["rig_crowd"] = int(extraction.get("crowd") or 0)
+    probe.report["rig_dump_entities"] = [entity.get("entity_type") for entity in dumped]
+    probe.check("rig_reached_client",
+                int(extraction.get("eligible") or 0) >= 1
+                and any(entity.get("entity_type") == entity_type for entity in dumped))
+    probe.check("rig_cpu_path", int(extraction.get("crowd") or 0) == 0)
+    probe.check("rig_submitted", isinstance(extraction.get("submitted"), int)
+                and int(extraction.get("submitted") or 0) >= 1)
+    probe.check("rig_rendered", not extraction.get("unrendered"))
+    layer = _rig_body_layer(extraction)
+    probe.check("rig_layer_present", layer is not None)
+    if layer is None:
+        probe.check("rig_layer_indices", False)
+        return
+    spans = [round(float(layer["max"][axis]) - float(layer["min"][axis]), 4) for axis in range(3)]
+    probe.report["rig_layer_indices"] = int(layer.get("indices") or 0)
+    probe.report["rig_layer_quads"] = int(layer.get("quads") or 0)
+    probe.report["rig_layer_spans"] = spans
+    # Derived from the rig JSONs on both sides: the pre-image rig's cubelist is the control's
+    # number (six quads per cube, nested bones included), the fixed rig's the candidate's.
+    probe.check("rig_layer_indices",
+                int(layer.get("indices") or 0) == indices and int(layer.get("quads") or 0) == quads)
+
+
+def check_entity_bogged(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-N8: one bogged submits the 26.3 rig's own cube layer.
+
+    `b40b8d63` rewrites 15 mob rigs to the vanilla 26.3 mirror flags and cube lists; for the bogged
+    that is 36 quads (216 indices) in the pre-image against 78 quads (468 indices) with the fix -
+    every bone's cube count changes, so the frame's own `EntityCutout` index total separates the
+    two clients without pixels. A bogged is not a `crowd::KINDS` member, so it stays on the CPU
+    path and reports its layers (a crowd mob reports `submitted: 0`).
+    """
+    _check_cpu_rig_layer(probe, artifact, "bogged", "minecraft:bogged", "bogged-entities", 468, 78)
+
+
+def check_entity_stray(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-N10: one stray submits the 26.3 rig's own cube layer with the hat cube.
+
+    `6d4540e3` rewrites cow/mooshroom/glow-squid/skeleton/stray to the vanilla 26.3 mirror flags and
+    offsets; the cow horn mirror and the glow-squid tentacle yaw are texture/UV effects with no
+    count or bounds change, but the skeleton/stray hat cube adds six quads: 36 quads (216 indices)
+    in the pre-image against 42 quads (252 indices) with the fix. The frame's own `EntityCutout`
+    index total separates the two clients without pixels; the mirror-only parts stay unit-covered.
+
+    The mob is a **stray**, not a skeleton: `minecraft:skeleton` is a `crowd::KINDS` member, so the
+    GPU crowd renderer draws it (`crowd: 1`, `submitted: 0`, no layer geometry - measured on this
+    scene before the switch), and no frame can read its rig. `minecraft:stray` is not in KINDS and
+    carries the same `stray.json` the fix rewrote, so the layers are reported.
+    """
+    _check_cpu_rig_layer(probe, artifact, "stray", "minecraft:stray", "stray-entities", 252, 42)
+
+
+def check_wither_skull_selection(probe: ProbeSteps, artifact: Path) -> None:
+    """CLIENT-WITHER-SKULL-MATERIAL-SELECTION: the frame reports the texture the skull selected.
+
+    `f4bd26d4` added the wither-skull material branch to `presentation::material` (the pre-image
+    falls through to the empty family default, so the binding cannot resolve at all and the
+    entity lands in `unrendered` with the row's own error). The per-entity selection report
+    `entity_extraction.entities` names the texture a binding chose, which is what this row is
+    about; a normal (not `DATA_DANGEROUS`) skull must select `entity/wither/wither.png`.
+    """
+    shots = _qa._load_shots(probe, artifact, ("empty", "wither-skull"))
+    ref, frame = shots["empty"][0], shots["wither-skull"][0]
+    probe.check("wither_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+    ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    empty_records = (ref.get("entity_extraction") or {}).get("entities") or []
+    extraction = frame.get("entity_extraction") or {}
+    records = extraction.get("entities") or []
+    probe.report["wither_empty_records"] = empty_records
+    probe.report["wither_records"] = records
+    probe.report["wither_unrendered"] = extraction.get("unrendered")
+    probe.check("empty_frame_has_no_entity_record", not empty_records)
+    dump = artifact / "wither-skull-entities.json"
+    dumped = []
+    if dump.is_file():
+        dumped = (json.loads(dump.read_text()).get("entities") or [])
+    probe.report["wither_dump_entities"] = [entity.get("entity_type") for entity in dumped]
+    probe.check("wither_skull_reached_client",
+                int(extraction.get("eligible") or 0) >= 1
+                and any(entity.get("entity_type") == "minecraft:wither_skull" for entity in dumped))
+    record = next((entry for entry in records
+                   if entry.get("entity_type") == "minecraft:wither_skull"), None)
+    probe.report["wither_record"] = record
+    texture = str((record or {}).get("texture") or "")
+    probe.check("wither_skull_texture_selected",
+                record is not None
+                and texture.endswith("entity/wither/wither.png")
+                and int(record.get("texture_layer") or 0) > 0)

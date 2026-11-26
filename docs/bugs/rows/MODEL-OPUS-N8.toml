@@ -4,8 +4,11 @@ title = "Left/right mirror flags are inconsistent."
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:143"
-regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::left_side_mirror_flags_follow_the_26_3_layers", "client:krasnokamen-client:entities::asset_model_regression_tests::species_layer_scales_preserve_the_feet_and_distinguish_related_mobs", "client:krasnokamen-client:entities::presentation::tests::received_pet_sitting_flag_poses_and_restores_adult_and_baby_rigs"]
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::left_side_mirror_flags_follow_the_26_3_layers", "client:krasnokamen-client:entities::asset_model_regression_tests::species_layer_scales_preserve_the_feet_and_distinguish_related_mobs", "client:krasnokamen-client:entities::presentation::tests::received_pet_sitting_flag_poses_and_restores_adult_and_baby_rigs", "harness:scene-shot:native-entity-bogged"]
 repro_check = "round 8 (client:b40b8d63): 19 rigs now carry the exact 26.3 mirror flags and the ref is red with the fix reverted - receipts/XHarnessGates/client-r8-revert-red.log (25 passed, 1 failed). candidate: area=client, real-client check required"
 fix_commit = "client:b40b8d63"
+proving_refs = ["harness:scene-shot:native-entity-bogged"]
+proving_assertions = { "harness:scene-shot:native-entity-bogged" = "rig_layer_indices" }
+promotion = "docs/bugs/promotions/MODEL-OPUS-N8.json"

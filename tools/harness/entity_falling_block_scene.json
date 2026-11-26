@@ -1,0 +1,118 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "cmd": "weather clear"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        -35
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 995 159 995 1005 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 995 160 995 1005 172 1010 minecraft:air"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        -35
+      ]
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "empty"
+    },
+    {
+      "cmd": "setblock 1000 165 1003 minecraft:stone"
+    },
+    {
+      "cmd": "setblock 1000 166 1003 minecraft:sand"
+    },
+    {
+      "cmd": "tick rate 2"
+    },
+    {
+      "cmd": "setblock 1000 165 1003 minecraft:air"
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "require_entities": {
+        "name": "falling-block-entities",
+        "types": [
+          "minecraft:falling_block"
+        ],
+        "args": {
+          "radius": 32,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "shot": "falling"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "shot": "falling-01"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "shot": "falling-02"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:falling_block,distance=..32]"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:item,distance=..16]"
+    },
+    {
+      "cmd": "tick rate 20"
+    }
+  ]
+}
