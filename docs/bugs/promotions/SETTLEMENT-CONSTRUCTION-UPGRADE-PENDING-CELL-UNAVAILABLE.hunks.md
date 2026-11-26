@@ -26,6 +26,7 @@ the chain is keyed on the **blueprint origin** (`bounds.min.x`, `bounds.max.y - 
 `bounds.min.z`) rather than `snapshot.origin`, because a slope foundation's site minimum is its fill
 bottom and `same_site` compares the blueprint origin.
 
+`git apply -R --check` is clean on the promoted tree (`tree_head` 757cdd77b8).
 Candidate refs: the two `construction_fencing_tests` regressions (the inherited perimeter cell with the
 ledger charge, and the species case) plus `harness:buildings-qa:house.L2_upgrade`. The control gate
 reds at `buildings_house_L2_built` (the level-2 certificate never appears), the candidate gate

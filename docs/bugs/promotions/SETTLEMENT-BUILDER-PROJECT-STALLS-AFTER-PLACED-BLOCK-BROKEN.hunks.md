@@ -40,7 +40,7 @@ the original seven-hunk patch. The differences:
   (`truncate` before re-pushing) is bookkeeping for a case the control never reaches once hunks 1-3
   remove the scan; it stays.
 
-`git apply -R --check` is clean on the promoted head. The reversed tree's three cargo refs red at
+`git apply -R --check` is clean on the promoted tree (`tree_head` 757cdd77b8). The reversed tree's three cargo refs red at
 `complete_authored`'s `construction did not finish` (`construction_fencing_tests.rs:387`, the line the
 row names in `proving_assertions`) and its house gate reds `house.broken_cell_replaced` — the L1
 stage's injected break is never re-placed, the flow records
