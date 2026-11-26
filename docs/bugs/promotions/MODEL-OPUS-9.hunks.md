@@ -6,12 +6,14 @@ Scene: `native-pufferfish` (`tools/harness/pufferfish_scene.json`), proving asse
 
 | half | client commit | content |
 |---|---|---|
-| control | `client:431e69ca` (`wt/D123PP3Opus9Ctl`) | the base commit with `35df28a0`'s eight production files reverted (`git revert 35df28a0`), the fix's test file kept so the pair diff is exactly the non-test patch |
-| restore (= `fix_commit`) | `client:cdb7d514` (`wt/D123PP3Opus9`) | `ba1971d7` + the selection field `8eda5627` + the UV-digest commit `a5bd1f5e`; the fix itself is `35df28a0`, present in the base |
+| control | `client:53b58c66` (`wt/D123PP3Opus9Ctl2`) | the two pufferfish lookups at their `35df28a0` pre-image, byte-identical (`git show 35df28a0^:<path>`); unchanged since that commit |
+| restore (= `fix_commit`) | `client:bb33b3f1` (`wt/D123PP3Opus9`) | the same two lookups re-landed at the tip on top of the report fields (`cdb7d514` = `ba1971d7` + `8eda5627` + `a5bd1f5e`) |
 
-The base tree `cdb7d514` exists only to carry the two report fields the pair is read
-through; it adds no behaviour of its own (the field reports what the renderer already
-submitted, and the digest is computed from the submitted layer's vertices).
+`53b58c66` is the parent commit of `bb33b3f1` on the same branch, so the pair diff is
+exactly the re-landing's two-file patch, which is byte-for-byte `35df28a0`'s hunks on
+those two paths. The boat hulls and the `boat_root` anchor of `35df28a0` live in the
+base tree on both halves (their presentation.rs hunk no longer reverses at the tip, so
+they cannot be part of the pair) and the row's `repro_check` records them.
 
 ## Hunk map of `35df28a0`
 
