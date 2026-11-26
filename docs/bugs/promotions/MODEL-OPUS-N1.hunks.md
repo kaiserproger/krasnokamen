@@ -16,11 +16,24 @@ of the patch.
 
 ## What the scene proves
 
-The armour layer is its own material (`Armor*`), so one baby zombie in a diamond helmet and chestplate (the head shell sets the depth, the chestplate adds the arm caps that widen the control) makes the
-shells' bbox readable from `entity_extraction.entity_layer_geometry` (CM-4). The absolute span scales
-with the kind's baby scale, which the frame does not report, so the assertion is the scale-free
-`depth / width`: with the client's bone convention (parent pivots accumulated, cube origin relative
-to the bone pivot) the shells measure 8.8 x 16.9 x 8.6 px on the fixed tree (**0.977**) and
-9.0 x 16.75 x 7.5 on the control (**0.833**). The summon uses `Rotation:[0f,0f]` so the entity's yaw
-cannot swap x and z, and the fixtures (empty frame without an armour layer, operator dump listing
-`minecraft:zombie`, one rendered entity) come first.
+The armour layer is its own material (`Armor*`), so one baby drowned in a diamond helmet and
+chestplate (the head shell sets the depth, the chestplate adds the arm caps that widen the control)
+makes the shells' bbox readable from `entity_extraction.entity_layer_geometry` (CM-4). The absolute
+span scales with the kind's baby scale, which the frame does not report, so the assertion is the
+scale-free `depth / width`: **measured on the pair's own pinned clients** the armour layer spans
+9.02 x 12.86 x 9.66 px on the fixed tree (**1.067**, receipt
+`20261126T135600-native-baby-armor-z2h0k_s7`) and 16.38 x 16.13 x 10.50 px on the control
+(**0.640**, receipt `20261126T135539-native-baby-armor-5sefyjuk`); the window is 1.00..1.15. The
+summon uses `Rotation:[0f,0f]` so the entity's yaw cannot swap x and z, and the fixtures (empty
+frame without an armour layer, operator dump listing `minecraft:drowned`, one rendered entity) come
+first.
+
+**The mob must be a drowned, not the zombie the first version used.** `minecraft:zombie` is a
+`crowd::KINDS` member: the GPU crowd renderer draws it, so the frame reports `crowd: 1`,
+`submitted: 0` and no layer geometry at all on both sides (measured,
+`20261126T134546-native-baby-armor-snehvdur`), and the armour layer can never be read. A baby
+drowned stays on the CPU path (`baby_armor_cpu_path` asserts `crowd == 0`) and wears the same
+`armor_baby_drowned_*` shells `da704d9b` rewrote.
+
+The same class of fixture error hit MODEL-OPUS-N10: a `minecraft:skeleton` is in `crowd::KINDS` too,
+so its scene now uses a `minecraft:stray` (not in KINDS, same `stray.json`).
