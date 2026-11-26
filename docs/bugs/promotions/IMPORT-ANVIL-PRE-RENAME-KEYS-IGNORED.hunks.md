@@ -63,4 +63,7 @@ exactly the pre-fix tree (nothing else in `import.rs` names `Owner`).
 
 The first promotion (`patch:00479158…`, artifact `20261125T220349-ledger-promote-fso_8gx6`) carried only
 the six calls and left the `lib.rs` field/receipt blocks labelled (b), which was false. It is superseded
-by this patch (`patch:166abc98…`) and a fresh promote; its receipt stays as evidence of the same red.
+by this patch (`patch:166abc98…`) and the fresh promote
+`20261125T235247-ledger-promote-7cz22_1e` (control `head` at `dbf090c189`, control tree `e2e87206…`,
+reversed files `import.rs`/`lib.rs`/`native_checkpoint.rs`, red `pre_rename_tests.rs:418` class
+`assertion`, restore green). The old receipt stays as evidence of the same red.

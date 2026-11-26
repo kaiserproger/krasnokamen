@@ -1,21 +1,22 @@
 {
   "id": "IMPORT-ANVIL-PRE-RENAME-KEYS-IGNORED",
   "verdict": "promoted",
-  "fix_commit": "patch:004791584d3fe3ad556dce4cb22b04fc26c386985eeae8bab677be1dac4bec8c",
-  "fix_commit_full": "patch:004791584d3fe3ad556dce4cb22b04fc26c386985eeae8bab677be1dac4bec8c",
-  "promoted_at": "2026-11-25T23:17:55+00:00",
-  "tree_head": "c6bb021dea7ecfc7a9a3a95b50d56b283e8e29b8",
+  "fix_commit": "patch:166abc985f125c08563046ecfd960b13acb1ebd0b3e0d19bf3319a637ab6b852",
+  "fix_commit_full": "patch:166abc985f125c08563046ecfd960b13acb1ebd0b3e0d19bf3319a637ab6b852",
+  "promoted_at": "2026-11-26T00:42:03+00:00",
+  "tree_head": "dbf090c189041211ae1cd023dbde67360ae6f0c8",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
-  "control_tree_sha256": "a0a8caf97310423a8d286d9131139ab54a7ab57ce8727cd9fa4f6ea708c9b715",
-  "control_tree_head": "c6bb021dea7ecfc7a9a3a95b50d56b283e8e29b8",
+  "control_tree_sha256": "e2e87206cacc94f122d9746774a351aeff2ee2a052114ec7b9462135cabeeb5e",
+  "control_tree_head": "dbf090c189041211ae1cd023dbde67360ae6f0c8",
   "control": "reversed_fix_hunks",
   "control_b": null,
-  "fix_patch_sha256": "004791584d3fe3ad556dce4cb22b04fc26c386985eeae8bab677be1dac4bec8c",
+  "fix_patch_sha256": "166abc985f125c08563046ecfd960b13acb1ebd0b3e0d19bf3319a637ab6b852",
   "reversed_files": [
+    "crates/mc-core/src/native_checkpoint.rs",
     "crates/mc-world-conversion/src/import.rs",
-    "crates/mc-core/src/native_checkpoint.rs"
+    "crates/mc-world-conversion/src/lib.rs"
   ],
   "kept_test_files": [],
   "negative_control": {
@@ -37,5 +38,5 @@
     }
   },
   "client_receipt": null,
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123KeptApiP/.analysis/validation/20261125T220349-ledger-promote-fso_8gx6"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123KeptApiP/.analysis/validation/20261125T235247-ledger-promote-7cz22_1e"
 }
