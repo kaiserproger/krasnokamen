@@ -1058,6 +1058,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the frame's own largest `EntityCutout` slice (`entity_extraction.entity_layer_geometry`, CM-4) is the rig's single texture layer with 252 indices and 42 quads (`rig_layer_indices`), the vanilla 26.3 hat cube `6d4540e3` authors, against the pre-image's 216 and 36; the `empty` frame carries no such layer and the `stray-entities` dump lists `minecraft:stray`",
         limits="the hat cube's addition only; the cow/mooshroom horn mirror and the glow-squid tentacle yaw are UV/offset effects with no count or bounds change and stay unit-covered (`cow_horn_cube_and_humanoid_hat_follow_the_26_3_layers`), and the pair is recorded in docs/bugs/promotions/MODEL-OPUS-N10.hunks.md",
     ),
+    "native-wither-skull": _entry(
+        id="native-wither-skull", summary="A wither skull's binding reports the texture its state selected",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-wither-skull", requires=("xvfb",),
+        sources=("tools/harness/wither_skull_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, one NoAI `minecraft:wither_skull` at a fixed pad and camera, HUD default",
+        proves="the captured frame's per-entity selection report (`entity_extraction.entities`) names the texture the skull's binding chose: `entity/wither/wither.png` for a normal skull (`wither_skull_texture_selected`); the pre-image has no wither-skull material branch, so the binding cannot resolve and the entity is `unrendered` with no record at all - the row's own symptom. The `empty` frame carries no record and the `wither-skull-entities` dump lists `minecraft:wither_skull`",
+        limits="the selected texture name only; the `DATA_DANGEROUS` branch's invulnerable texture needs a skull the server marks dangerous, which no scene fixture can set yet, so it stays unit-covered (`entity_selection_coverage_wither_skull_material_tracks_received_dangerous_flag`)",
+    ),
     "native-rig-guardian": _entry(
         id="native-rig-guardian", summary="The guardian and baby bee submit exactly the vanilla layer's cubes",
         owner="core:harness", evidence="graphical", profile="scene-shot",

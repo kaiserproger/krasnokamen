@@ -1598,3 +1598,42 @@ def check_entity_stray(probe: ProbeSteps, artifact: Path) -> None:
     carries the same `stray.json` the fix rewrote, so the layers are reported.
     """
     _check_cpu_rig_layer(probe, artifact, "stray", "minecraft:stray", "stray-entities", 252, 42)
+
+
+def check_wither_skull_selection(probe: ProbeSteps, artifact: Path) -> None:
+    """CLIENT-WITHER-SKULL-MATERIAL-SELECTION: the frame reports the texture the skull selected.
+
+    `f4bd26d4` added the wither-skull material branch to `presentation::material` (the pre-image
+    falls through to the empty family default, so the binding cannot resolve at all and the
+    entity lands in `unrendered` with the row's own error). The per-entity selection report
+    `entity_extraction.entities` names the texture a binding chose, which is what this row is
+    about; a normal (not `DATA_DANGEROUS`) skull must select `entity/wither/wither.png`.
+    """
+    shots = _qa._load_shots(probe, artifact, ("empty", "wither-skull"))
+    ref, frame = shots["empty"][0], shots["wither-skull"][0]
+    probe.check("wither_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+    ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    empty_records = (ref.get("entity_extraction") or {}).get("entities") or []
+    extraction = frame.get("entity_extraction") or {}
+    records = extraction.get("entities") or []
+    probe.report["wither_empty_records"] = empty_records
+    probe.report["wither_records"] = records
+    probe.report["wither_unrendered"] = extraction.get("unrendered")
+    probe.check("empty_frame_has_no_entity_record", not empty_records)
+    dump = artifact / "wither-skull-entities.json"
+    dumped = []
+    if dump.is_file():
+        dumped = (json.loads(dump.read_text()).get("entities") or [])
+    probe.report["wither_dump_entities"] = [entity.get("entity_type") for entity in dumped]
+    probe.check("wither_skull_reached_client",
+                int(extraction.get("eligible") or 0) >= 1
+                and any(entity.get("entity_type") == "minecraft:wither_skull" for entity in dumped))
+    record = next((entry for entry in records
+                   if entry.get("entity_type") == "minecraft:wither_skull"), None)
+    probe.report["wither_record"] = record
+    texture = str((record or {}).get("texture") or "")
+    probe.check("wither_skull_texture_selected",
+                record is not None
+                and texture.endswith("entity/wither/wither.png")
+                and int(record.get("texture_layer") or 0) > 0)
