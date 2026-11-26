@@ -1034,43 +1034,54 @@ pub(crate) fn take_last_tree_stage() -> Option<&'static str> {
     LAST_TREE_STAGE.with(|slot| slot.replace(None))
 }
 
-/// A lot the plan cannot prepare because its own trees have no walking route:
-/// `cells` refuses it, so the sweep must refuse it too or the same cheapest lot
-/// wins every walk and is dropped in `materialize` (HANDOFF-51: seed-24 House
-/// lot `[246,69,-176]`, `check` passed, the plan said `no_route_with_trees`).
-/// Cheap for the common case: a lot without a tree answers immediately.
-pub(crate) fn lot_trees_without_route(
+/// Whether the lot holds a tree (or a planted crown overlaps it): the condition
+/// `cells` refuses on when there is no walking route. ONE function, called by
+/// `cells` itself and by the site search, so the two cannot drift apart (the
+/// per-column scan starts at `surface + 1` through the same `surface_y_for_lot`,
+/// which is where a fill-gap sapling sits) - HANDOFF-51, review round 2 R2.
+/// `None` is `cells`' own `lot_surface` failure.
+pub(crate) fn lot_has_tree(
     state: &TickState,
     project: &super::construction::Project,
     size: [u8; 3],
-) -> bool {
-    let Some(record) = state.settlements.get(project.settlement) else {
-        return false;
-    };
-    let Some(bounds) = lot_bounds(state, project) else {
-        return false;
-    };
-    let mut has_tree = planted_crown_overlaps(state, bounds);
-    if !has_tree {
-        'lot: for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
-            for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
-                for y in project.origin[1] + 1..project.origin[1] + i32::from(size[1]) {
-                    if state
-                        .world
-                        .physics_block_at(x, y, z)
-                        .is_some_and(|block| tree_or_sapling(state, block))
-                    {
-                        has_tree = true;
-                        break 'lot;
-                    }
-                }
-            }
+    clearance: &mut Clearance,
+) -> Option<bool> {
+    let bounds = lot_bounds(state, project)?;
+    let mut lot_has_tree = planted_crown_overlaps(state, bounds);
+    for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
+        for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
+            let y = super::construction::surface_y_for_lot(
+                state,
+                project.origin[1],
+                x,
+                z,
+                Some(bounds),
+                clearance,
+            )?;
+            lot_has_tree |= (y + 1..project.origin[1] + i32::from(size[1])).any(|above| {
+                state
+                    .world
+                    .physics_block_at(x, above, z)
+                    .is_some_and(|block| tree_or_sapling(state, block))
+            });
         }
     }
-    has_tree
-        && super::layout::Network::for_construction(state, record)
-            .construction_access(project)
-            .is_none()
+    Some(lot_has_tree)
+}
+
+/// The site search's version of the plan's tree refusal: the lot holds a tree
+/// and has no walking route, so `cells` cannot prepare it. `network` is the
+/// pass's own `Network` - never a fresh one, a full BFS per tree lot is what the
+/// tick fence cannot pay for (review round 2 R1). Cheap for a treeless lot.
+pub(crate) fn lot_trees_without_route(
+    state: &TickState,
+    network: &super::layout::Network<'_>,
+    project: &super::construction::Project,
+    size: [u8; 3],
+    clearance: &mut Clearance,
+) -> bool {
+    matches!(lot_has_tree(state, project, size, clearance), Some(true))
+        && network.construction_access(project).is_none()
 }
 
 /// Clear the lot and its walking corridor in physical work order. Only tree
@@ -1086,8 +1097,20 @@ pub(crate) fn cells(
     let bounds = lot_bounds(state, project)?;
     // Proofs are scan-wide; the selected whole trees are candidate-local.
     clearance.needed.clear();
+    // The tree condition is ONE function shared with the site search: a copy
+    // here would drift (fill-gap saplings, the `surface+1` start) and the sweep
+    // would keep ranking a lot this plan refuses (HANDOFF-51, round 2 R2).
+    let lot_has_tree = match lot_has_tree(state, project, size, clearance) {
+        Some(tree) => tree,
+        None => {
+            #[cfg(test)]
+            {
+                LAST_TREE_STAGE.with(|slot| slot.set(Some("lot_surface")));
+            }
+            return None;
+        }
+    };
     let mut lot = Vec::new();
-    let mut lot_has_tree = false;
     for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
         for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
             let Some(y) = super::construction::surface_y_for_lot(
@@ -1104,12 +1127,6 @@ pub(crate) fn cells(
                 }
                 return None;
             };
-            lot_has_tree |= (y + 1..project.origin[1] + i32::from(size[1])).any(|above| {
-                state
-                    .world
-                    .physics_block_at(x, above, z)
-                    .is_some_and(|block| tree_or_sapling(state, block))
-            });
             lot.push([x, y, z]);
         }
     }

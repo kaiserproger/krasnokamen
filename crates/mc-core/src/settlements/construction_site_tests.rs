@@ -1848,7 +1848,18 @@ fn probe_retained_village_site_supply() {
                 "PROBE plan origin={origin:?} rotation={rotation} blueprint={} check={:?} trees_without_route={} planned={:?}",
                 parts[4],
                 checked.is_ok(),
-                super::super::forestry::lot_trees_without_route(&state, &project, size),
+                {
+                    let record = state.settlements.get(id).unwrap();
+                    let network = layout::Network::for_construction(&state, record);
+                    let mut clearance = crate::settlements::forestry::Clearance::prepared();
+                    super::super::forestry::lot_trees_without_route(
+                        &state,
+                        &network,
+                        &project,
+                        size,
+                        &mut clearance,
+                    )
+                },
                 planned
                     .as_ref()
                     .map(|(bounds, cells)| (bounds.min, cells.len()))
@@ -1900,6 +1911,72 @@ fn probe_retained_village_site_supply() {
                 entry.1.get_or_insert(lot.origin);
             }
         }
+    }
+    if std::env::var_os("D123_CIV_PLAN_COST").is_some() {
+        // The structural option: a candidate becomes `best` only if the real
+        // plan accepts it, run only on best improvements. Measure how many
+        // improvements a real sweep has and what each plan costs.
+        let blueprint = blueprints::get(&state.registry, &blueprint_name).expect("blueprint");
+        let fronts = layout::Network::for_construction(&state, &record).frontage();
+        let mut network = layout::Network::for_construction(&state, &record);
+        let mut best: Option<(u32, i64, [i32; 3], u8)> = None;
+        let mut improvements = 0u32;
+        let mut plan_ms = 0u128;
+        let mut plans_ok = 0u32;
+        for (at, normal) in fronts {
+            let Some(lot) = network.lot(blueprint, at, normal) else {
+                continue;
+            };
+            let size = blueprint.footprint(blueprints::Rotation::from_quarter_turns(lot.rotation));
+            let mut survey = site_refusals::Survey::default();
+            let Ok(cost) = site_refusals::check(
+                &state,
+                &record,
+                lot.origin,
+                size,
+                record.founding.as_ref(),
+                &mut survey,
+                Some(&site_refusals::floor_columns(blueprint, lot.rotation)),
+            ) else {
+                continue;
+            };
+            let key = (
+                cost.total(),
+                (0..3)
+                    .map(|axis| {
+                        (i64::from(lot.origin[axis]) - i64::from(record.anchor[axis])).pow(2)
+                    })
+                    .sum::<i64>(),
+                lot.origin,
+                lot.rotation,
+            );
+            if best.is_none_or(|known| key < known) {
+                best = Some(key);
+                improvements += 1;
+                let project = super::Project {
+                    settlement: id,
+                    blueprint: blueprint.id.clone(),
+                    level: 1,
+                    origin: lot.origin,
+                    rotation: lot.rotation,
+                    building: None,
+                    structure: String::new(),
+                    ordered: false,
+                    builder: None,
+                    order_seq: None,
+                };
+                let before = std::time::Instant::now();
+                let mut clearance = crate::settlements::forestry::Clearance::prepared();
+                let planned =
+                    super::preparation::planned_cells(&state, &project, "oak", &mut clearance);
+                plan_ms += before.elapsed().as_millis();
+                plans_ok += u32::from(planned.is_ok());
+            }
+        }
+        println!(
+            "PROBE plan_cost blueprint={blueprint_name} frontages={} improvements={improvements} plans_ok={plans_ok} plan_ms_total={plan_ms}",
+            total_frontages
+        );
     }
     if timed {
         let elapsed = started.elapsed();

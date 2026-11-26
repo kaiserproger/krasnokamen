@@ -36,8 +36,14 @@ pub(super) enum Reason {
     /// The upgrade's placement cell holds neither air nor the previous build's
     /// own last committed block: the world there is someone else's.
     PreviousBuildDiverged,
+    /// The lot's own trees have no walking route (`forestry::cells`: a tree on
+    /// the lot and `construction_access` returns none), so the plan cannot
+    /// prepare it. Its own reason, not `NoPathDetour`: that one is the owner's
+    /// relayout bridge (OWNER_DECISIONS.md:199-202) and the histogram has to
+    /// name what actually refused (HANDOFF-51, review round 2 R4).
+    LotTreesWithoutRoute,
 }
-const REASONS: [Reason; 26] = [
+const REASONS: [Reason; 27] = [
     Reason::NoFrontage,
     Reason::LotGeometry,
     Reason::OutpostClaim,
@@ -64,6 +70,7 @@ const REASONS: [Reason; 26] = [
     Reason::MaterialBill,
     Reason::StorageFull,
     Reason::PreviousBuildDiverged,
+    Reason::LotTreesWithoutRoute,
 ];
 
 #[derive(Default)]
@@ -209,15 +216,19 @@ struct Sweep {
     start: u32,
     next: u32,
     best: Option<([i32; 3], u8, Cost)>,
-    /// How often this sweep was dropped by a street change. Log-only: it never
-    /// changes what a walk returns, it is the number the gates could not see.
-    restarts: u32,
 }
 
 /// Per-settlement live sweeps, keyed by blueprint id.
 #[derive(Debug, Default)]
 pub(crate) struct Sweeps {
     live: BTreeMap<String, Sweep>,
+    /// How often each kind's walk was dropped, by a street change or by its
+    /// stored best losing its cost. Log-only, and kept OUTSIDE the sweep: a
+    /// counter inside `Sweep` made `retain` create an entry (so the next walk
+    /// started at frontage 0 instead of the cursor, and the persisted
+    /// `construction_cursor` moved) and made completion re-insert a sweep
+    /// instead of removing it (HANDOFF-51, review round 2 R3).
+    restarts: BTreeMap<String, u32>,
 }
 impl Sweeps {
     /// Drop sweeps of a topology that no longer exists, counting the restart so
@@ -225,18 +236,14 @@ impl Sweeps {
     /// walk. The count never changes what a walk returns: a stale sweep is gone
     /// exactly as before, and the next pass starts a fresh one.
     fn retain(&mut self, blueprint: &str, frontages: u32, topology: u64) {
-        let restarts = self
+        let dropped = self
             .live
             .iter()
-            .find(|(id, sweep)| sweep_stale(id, sweep, blueprint, frontages, topology))
-            .map(|(_, sweep)| sweep.restarts);
+            .any(|(id, sweep)| sweep_stale(id, sweep, blueprint, frontages, topology));
         self.live
             .retain(|id, sweep| !sweep_stale(id, sweep, blueprint, frontages, topology));
-        if let Some(restarts) = restarts {
-            let sweep = self.live.entry(blueprint.to_owned()).or_default();
-            sweep.frontages = frontages;
-            sweep.topology = topology;
-            sweep.restarts = restarts.saturating_add(1);
+        if dropped {
+            *self.restarts.entry(blueprint.to_owned()).or_default() += 1;
         }
     }
 
@@ -270,7 +277,7 @@ impl Sweeps {
                     sweep.next,
                     sweep.frontages,
                     sweep.best.is_some(),
-                    sweep.restarts,
+                    self.restarts.get(id).copied().unwrap_or(0),
                 )
             })
             .collect()
@@ -473,13 +480,16 @@ pub(super) fn advance(
             Some(&floors[usize::from(rotation) % 4]),
         ) {
             Err(reason) => report.reject(reason, lot.origin),
-            // `check` cannot model the tree plan, and `cells` refuses a lot whose
-            // own trees have no walking route: agree here, so the lot never wins
-            // the cheapest ranking and cannot be re-found every walk
-            // (HANDOFF-51: seed-24 House lot [246,69,-176]).
+            // `check` cannot model the tree plan, and `forestry::cells` refuses a
+            // lot whose own trees have no walking route or whose tree work it
+            // cannot prove: agree here, with the pass's own network and the very
+            // predicate `cells` runs, so the lot never wins the cheapest ranking
+            // and cannot be re-found every walk (HANDOFF-51: seed-24 House lot
+            // [246,69,-176]).
             Ok(_)
                 if super::super::forestry::lot_trees_without_route(
                     state,
+                    network,
                     &super::Project {
                         settlement: record.id,
                         blueprint: blueprint.id.clone(),
@@ -493,9 +503,10 @@ pub(super) fn advance(
                         order_seq: None,
                     },
                     size,
+                    &mut survey.clearance,
                 ) =>
             {
-                report.reject(Reason::NoPathDetour, lot.origin);
+                report.reject(Reason::LotTreesWithoutRoute, lot.origin);
             }
             Ok(cost) => {
                 // Ties go to the lot nearest the settlement's anchor, then to
@@ -526,7 +537,6 @@ pub(super) fn advance(
         return Advance::Incomplete(next);
     }
     let finished = sweeps.live.remove(&blueprint.id);
-    let restarts = finished.as_ref().map_or(0, |sweep| sweep.restarts);
     let Some((origin, rotation, stored)) = finished.and_then(|sweep| sweep.best) else {
         return Advance::Empty;
     };
@@ -547,16 +557,7 @@ pub(super) fn advance(
         // The world moved under the stored candidate: it is gone (the sweep was
         // removed above), so this restart holds nothing. The count is log-only.
         Ok(_) | Err(_) => {
-            sweeps.live.insert(
-                blueprint.id.clone(),
-                Sweep {
-                    frontages: count,
-                    topology,
-                    start,
-                    restarts: restarts.saturating_add(1),
-                    ..Sweep::default()
-                },
-            );
+            *sweeps.restarts.entry(blueprint.id.clone()).or_default() += 1;
             Advance::Incomplete(0)
         }
     }
@@ -916,7 +917,6 @@ mod sweep_restart_tests {
                     ..Cost::default()
                 },
             )),
-            ..Sweep::default()
         }
     }
 
@@ -926,29 +926,22 @@ mod sweep_restart_tests {
         sweeps.live.insert("house".into(), sweep(120, 7, 55, true));
         // The streets changed: same kind, new frontage list.
         sweeps.retain("house", 130, 8);
-        let fresh = sweeps
-            .live
-            .get("house")
-            .expect("the next walk is a fresh entry");
-        assert_eq!(fresh.next, 0, "the walk restarts from the beginning");
-        assert_eq!(fresh.frontages, 130);
-        assert_eq!(fresh.topology, 8);
         assert!(
-            fresh.best.is_none(),
-            "the old walk's lot is not carried: the ranking is a full-walk proof"
+            !sweeps.live.contains_key("house"),
+            "the stale walk is dropped, and the counter does not keep it alive"
         );
-        assert_eq!(fresh.restarts, 1, "the restart is counted for the log");
+        assert_eq!(sweeps.restarts.get("house").copied(), Some(1));
     }
 
     #[test]
-    fn a_stable_village_keeps_its_sweep_and_its_restart_count() {
+    fn a_stable_village_keeps_its_sweep_and_counts_no_restart() {
         let mut sweeps = Sweeps::default();
         sweeps.live.insert("house".into(), sweep(120, 7, 55, true));
         sweeps.retain("house", 120, 7);
         let kept = sweeps.live.get("house").expect("the sweep survives");
         assert_eq!(kept.next, 55, "the walk is not restarted");
         assert!(kept.best.is_some());
-        assert_eq!(kept.restarts, 0);
+        assert!(!sweeps.restarts.contains_key("house"));
     }
 
     #[test]
@@ -956,6 +949,8 @@ mod sweep_restart_tests {
         let mut sweeps = Sweeps::default();
         sweeps.live.insert("house".into(), sweep(120, 7, 55, true));
         sweeps.retain("house", 130, 8);
+        // The next pass starts a fresh walk, as before the counter existed.
+        sweeps.live.insert("house".into(), sweep(130, 8, 0, false));
         let summary = sweeps.summary();
         assert_eq!(summary.len(), 1);
         let (kind, next, frontages, holds, restarts) = &summary[0];
