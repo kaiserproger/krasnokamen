@@ -1,5 +1,5 @@
 diff --git a/src/entities/presentation.rs b/src/entities/presentation.rs
-index d824f8ba..a6e50dc8 100644
+index d824f8ba..188daa5e 100644
 --- a/src/entities/presentation.rs
 +++ b/src/entities/presentation.rs
 @@ -17,6 +17,16 @@ use serde_json::Value;
@@ -47,10 +47,10 @@ index d824f8ba..a6e50dc8 100644
          let slot = entry.slot;
          let entity = &store.slots[slot];
          let transform = match &entry.transform {
-@@ -924,6 +946,18 @@ pub fn append(
-         store.mark_shown(slot, tick, &models, content)?;
-         let entity = &store.slots[slot];
-         stats.eligible += 1;
+@@ -931,6 +953,18 @@ pub fn append(
+         ) {
+             continue;
+         }
 +        // One dynamic stream is a bounded GPU buffer (`render::mesh::validate_size`): a crowd
 +        // of bodies used to fill it and end the client with
 +        // `client failed: dynamic_or_ui_stream_budget_exceeded`. Past the entity pass's share the
@@ -63,14 +63,14 @@ index d824f8ba..a6e50dc8 100644
 +            stats.dropped_over_budget += 1;
 +            continue;
 +        }
-         // Text displays are world text drawn by the nameplate pass.
-         if matches!(
-             entity.type_name.as_str(),
+         if entity.type_name == "minecraft:experience_orb" {
+             match append_experience_orb(
+                 entity,
 diff --git a/src/render/mesh.rs b/src/render/mesh.rs
-index b30afeee..988927c4 100644
+index b30afeee..d648900c 100644
 --- a/src/render/mesh.rs
 +++ b/src/render/mesh.rs
-@@ -6,6 +6,16 @@ use std::ops::Range;
+@@ -6,6 +6,26 @@ use std::ops::Range;
  const FACE_GROUPS_LAST: usize = FACE_GROUPS - 1;
  pub(super) const VERTEX_BUDGET: u64 = 1024 * 1024 * 1024;
  pub(super) const INDEX_BUDGET: u64 = 512 * 1024 * 1024;
@@ -83,11 +83,21 @@ index b30afeee..988927c4 100644
 +/// still has to fit the same caps.
 +pub(crate) const ENTITY_VERTEX_BUDGET: usize =
 +    (DYNAMIC_VERTEX_BUDGET_BYTES as usize / 4 * 3) / std::mem::size_of::<Vertex>();
-+pub(crate) const ENTITY_INDEX_BUDGET: usize = DYNAMIC_INDEX_BUDGET_BYTES as usize / 4 * 3 / 4;
++/// The entity pass's share of the *effective* index limit: three quarters of
++/// `min(cap bytes / 4, MAX_TRANSPARENT_PRIMITIVES * 3)`, the smaller of what `validate_size`
++/// enforces, so the share is 3/4 of a limit the scene can really reach.
++pub(crate) const ENTITY_INDEX_BUDGET: usize = {
++    let bytes = if DYNAMIC_INDEX_BUDGET_BYTES / 4 < MAX_TRANSPARENT_PRIMITIVES as u64 * 3 {
++        DYNAMIC_INDEX_BUDGET_BYTES / 4
++    } else {
++        MAX_TRANSPARENT_PRIMITIVES as u64 * 3
++    };
++    (bytes as usize) / 4 * 3
++};
  // Match the terrain scheduler's capacity for a full 32-chunk view.
  pub(super) const MAX_CHUNKS: usize = crate::terrain::MAX_SECTIONS;
  pub(super) const MAX_TRANSPARENT_PRIMITIVES: usize = 1_048_576;
-@@ -416,8 +426,8 @@ impl<const N: usize> Stream<N> {
+@@ -416,8 +436,8 @@ impl<const N: usize> Stream<N> {
          validate(vertices, indices, layers)?;
          let vertex_bytes = std::mem::size_of_val(vertices) as u64;
          let index_bytes = indices.iter().map(|i| i.len() as u64 * 4).sum::<u64>();
