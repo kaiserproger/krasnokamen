@@ -4,10 +4,11 @@ title = "Holding the drop (Q) key across a tick sent two drop packets (press-edg
 area = "client"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "A Q press was dispatched twice: the press edge (src/session/actions.rs) inserted 'drop'/'pick' into the session key set and src/player/interaction.rs also dispatched the same action from the held-key tick edge, so a key held across a tick boundary sent two drop packets for one press."
 regression = ["client:krasnokamen-client:session::actions::item_key_tests::one_drop_press_sends_one_drop_and_a_held_key_does_not_repeat", "client:krasnokamen-client:session::actions::item_key_tests::one_pick_press_sends_one_pick_item", "client:krasnokamen-client:session::actions::item_key_tests::repeated_key_down_events_are_extra_clicks", "harness:entities:native-v2-input-menus"]
 fix_commit = "client:e1080bb6"
 repro_check = "FIXED-UNPROMOTED. Pair client:8f0c025e -> client:e1080bb6 (patch-id cd571889 equals 405ff485's production hunks), both clients pinned (pins/e1080bb6695b, pins/8f0c025eb4b8). Four world-level Q routes produced no item entity on the fixed client while the fixture was green: XTest key-down held (20261124T235624, 235818), the same with the pointer warped into the window (20261125T000402), and the client's own minecraft_press_inputs hold true/false (20261125T001236). The packet-count route is closed too: src/session/observation.rs:377 reports packet_counts from src/session/replay.rs:240, which counts CLIENTBOUND packets only, so it cannot see the two serverbound PLAYER_ACTION drops. EXACT remaining proof: a server-side count of accepted drop actions for one press (the fix's own unit test counts them on a stub listener, and a unit test cannot close this client row), exposed to the harness in a scene: one drop action pre-fix sends two, after the fix one."
 proving_refs = ["harness:entities:native-v2-input-menus"]
 proving_assertions = { "harness:entities:native-v2-input-menus" = "held_drop_once" }
+promotion = "docs/bugs/promotions/CLIENT-HELD-DROP-KEY-DOUBLE-DROP.json"
