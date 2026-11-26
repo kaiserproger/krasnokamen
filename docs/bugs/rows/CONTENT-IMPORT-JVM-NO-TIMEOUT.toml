@@ -12,11 +12,14 @@ with no timeout and no kill-on-drop. A JVM that waits on a lock, on stdin or on 
 `krasnokamen content import --version <version> --download` indefinitely with no progress line and no
 error, and Ctrl-C left the JVM running until it finished on its own.
 
-Fix now in tree: a `JvmChild` guard spawns each JVM with piped stdout/stderr, drains both on their
-own threads, polls `try_wait` at a bounded interval and kills the child past `JVM_CHILD_TIMEOUT`
-(900 s) with an error that names the step and the deadline; `Drop` kills a child the command abandons
-(Ctrl-C or an earlier error). The three call sites use it; `run_datagen` keeps a
-`run_datagen_bounded(..., limit)` seam the test drives with 300 ms. The registry capture
+Fix now in tree (async, event-driven): `run_jvm_child` spawns the child through `tokio::process`
+with `kill_on_drop(true)` and null stdin, drains both pipes into shared buffers from their own tasks,
+and waits under `tokio::time::timeout(limit, child.wait())`; past the limit it kills and reaps the
+child and bails naming the step, the limit and the stderr tail. After the child ends the pipe
+readers get a bounded 5 s grace, so a wrapper `java` whose descendant inherited the pipe cannot hold
+the import either (the orphan case the review named). `run_datagen`, `run_datagen_bounded` and
+`run_java_extractors` are async; their callers in `derive_into` and `derive_profile` await them; the
+seam `run_datagen_bounded(..., limit)` stays for the test. The registry capture
 (mc_vanilla::registry_capture) is a separate driver and unchanged."""
 regression = [
   "cargo:mc-edge:content_import::tests::a_stalled_datagen_returns_a_bounded_error",
@@ -26,12 +29,12 @@ regression = [
 ]
 proving_refs = ["cargo:mc-edge:content_import::tests::a_stalled_datagen_returns_a_bounded_error"]
 failing_first = "not recorded"
-fix_commit = "patch:4a8354d565a5cff80c2480eb042c459ada5d915683e900b583a673a8f965f0f4"
-repro_check = """Green: mc-edge content_import 19/19 (artifact 20261126T130124-test-hynz143m). RED control:
+fix_commit = "patch:a701ef4e63c7d17c22ddc1cbb79f93d75eb7691e178caa28833dfb5a08060bff"
+repro_check = """Green: mc-edge content_import 19/19 (artifact 20261126T143720-test-vcv9gezz). RED control:
 reverse-applying docs/bugs/fix-patches/CONTENT-IMPORT-JVM-NO-TIMEOUT.patch (the three call sites go
-back to the unbounded `Command::output()`, the guard stays) fails
+back to the unbounded `command.output().await`, the helper stays) fails
 `a_stalled_datagen_returns_a_bounded_error` at its own assertion ("the import path must return instead
-of waiting for the JVM: Timeout", 10 s bound) in artifact 20261126T130442-test-3ydknzbr, with the
+of waiting for the JVM: Elapsed(())", 10 s bound) in artifact 20261126T144026-test-rp218e_n, with the
 other 18 content_import tests green on the control.
 
 Still missing for promotion (a `command` row): the original command rerun on the fixed build with its

@@ -5,9 +5,9 @@ area = "gameplay"
 repro = "source"
 severity = "major"
 status = "open"
-source = """Perf1M R3k-6 leg c-p250k-kill-r3k6 (receipts/Perf1M/LAPTOP-R3k-6-REPORT.md, receipts/Perf1M/LAPTOP-RESULTS-D41/c-p250k-kill-r3k6/run/server.log): at tick 73449 (26 viewers, delta tick 1, a join within 0.5 s) rescans go 3 -> 26 and entities_scanned 2 853 -> 25 041; from then 944 of 948 publishes are full rescans (rescans == viewers, ~1000 entities and ~1000 moves per viewer per publish, plan_us x87-141) with tick delta median 7, up to 19. Before the step the same global rescans happened 36 times, each within 0.5 s of a join, and each recovered within 1-4 publishes while a rescan was cheaper than the tick.
+source = """Perf1M R3k-6 leg c-p250k-kill-r3k6 (receipts/Perf1M/LAPTOP-R3k-6-REPORT.md, receipts/Perf1M/LAPTOP-RESULTS-D41/c-p250k-kill-r3k6/run/server.log): at tick 73449 (26 viewers, delta tick 1, a join within 0.5 s) rescans go 3 -> 26 and entities_scanned 2 853 -> 25 041; from then 944 of 948 publishes are full rescans with tick delta median 7, up to 19. Before the step the same global rescans happened 36 times, each within 0.5 s of a join, and each recovered within 1-4 publishes while a rescan was cheaper than the tick.
 
-Mechanism (code reading). fanout.rs builds one TickPlanIndex per dimension and sets entity_base only when some viewer's previous revision equals the new snapshot's base_revision; entity_interest.rs treats a missing base as non-contiguous and runs entity_candidates::collect, a full walk of the viewer's (2*vd+1)^2 loaded chunks, per viewer per publish. A join rebuilds the core's entity view set, which is what makes the base stop matching. Once a rescan costs more than a tick (0.78 s at 26 viewers x ~1000 entities vs a 50 ms tick) the pump's own 1.6 s publish budget cannot catch up, it skips, and every later snapshot's base is again unmatched: 944/948 publishes stayed full rescans for the rest of that leg.
+Mechanism (code reading). fanout.rs builds one TickPlanIndex per dimension and sets entity_base only when some viewer's previous revision equals the new snapshot's base_revision; entity_interest.rs treats a missing base as non-contiguous and runs entity_candidates::collect, a full walk of the viewer's (2*vd+1)^2 loaded chunks, per viewer per publish. A join rebuilds the core's entity view set, which is what makes the base stop matching. Once a rescan costs more than a tick (0.78 s at 26 viewers x ~1000 entities vs a 50 ms tick) the pump's own 1.6 s publish budget cannot catch up, it skips, and every later snapshot's base is again unmatched.
 
 Fix now in tree (ported from perf1m-r3k5, nine commits a02a366a5..2d4f3a620): the pump records every output it drains or stale-skips in a per-dimension PublicationHistory bounded by the tick broadcast capacity, and the fan-out bridges the base most viewers hold by unioning the chain's changed ids into one net delta (TickPlanIndex::with_chain); a viewer the chain cannot reach keeps the full rescan, counted as rescans_gap (a broadcast Lagged cut it) or rescans_no_history. A dimension travel forgets the interest so no pre-travel base survives. The per-publish counters are mc_edge::server::plan=debug (rescans, entities_scanned, move tallies)."""
 regression = [
@@ -20,4 +20,21 @@ regression = [
 proving_refs = ["cargo:mc-edge:server::pump_chain_tests::a_stale_skipped_drain_keeps_the_viewer_contiguous"]
 failing_first = "seen"
 fix_commit = "patch:8f0537e31f60ed331f791a04e3b3ddd809fd47b5517b55a73f16b8a27bf5daf4"
-repro_check = ["Green on the candidate (pen_scenario_tests 9/9, artifact 20261126T124302-test-4lzgyftj; pump_chain_tests 2/2, artifact 20261126T124628-test-5uo_jm6e). RED control: reverse-applying docs/bugs/fix-patches/EDGE-PUMP-SKIP-FORCES-FULL-RESCAN.patch (only the two `history.record(&out)` lines) makes cargo:mc-edge:server::pump_chain_tests::a_stale_skipped_drain_keeps_the_viewer_contiguous fail at its own assertion (`a stale-skipped publish must not rescan the viewer`, pump_chain_tests.rs:182) in artifact 20261126T125006-test-716rwh94; the other four registered refs stay green on the control (pen 9/9 in 20261126T125302-test-bgaasvl3, the Lagged fallback test green), so the one proving ref is the pump-level one. Ported from perf1m-r3k5 (nine commits, oldest a02a366a5, newest 2d4f3a620) onto this candidate. The fix patch is docs/bugs/fix-patches/EDGE-PUMP-SKIP-FORCES-FULL-RESCAN.patch (sha256 8f0537e3) and its hunk map is beside it; the control reverses only the two `history.record(&out)` lines it carries, which leaves the chain unfed so every publish pays entity_candidates::collect for every viewer. Four negative controls were seen red on the source branch (no history record, bridge forced to None, changed_between keeping only the last step, and deleting EntityInterest::forget)."]
+repro_check = """Green on the candidate: pen_scenario_tests 9/9 (artifact 20261126T124302-test-4lzgyftj) and
+pump_chain_tests 2/2 (20261126T124628-test-5uo_jm6e), re-green after the fmt/clippy round
+(20261126T134234-test-c7jeqliv fanout 8/8, 20261126T134520-test-e33og1p1 pen 9/9). RED control:
+reverse-applying docs/bugs/fix-patches/EDGE-PUMP-SKIP-FORCES-FULL-RESCAN.patch (only the two
+`history.record(&out)` lines) fails cargo:mc-edge:server::pump_chain_tests::a_stale_skipped_drain_keeps_the_viewer_contiguous
+at its own assertion ("a stale-skipped publish must not rescan the viewer", pump_chain_tests.rs:182) in
+artifact 20261126T125006-test-716rwh94. The other four registered refs stay GREEN on the control (pen
+9/9 in 20261126T125302-test-bgaasvl3, the Lagged fallback green) because the pen tests feed
+`history.record` themselves and test the bridge rather than the pump; that is why the pump-level ref
+is the single proving one.
+
+NOT DONE — release A/B: the R3k-6 recovery (26+ viewers, a real coalesced publish) is not measured;
+RELEASE-AB-BRIEF says "A/B not admitted, not running" and the pins are ready. The row must not claim
+R3k-6 recovery: the evidence is the ported chain plus the pen/pump refs, and the A/B stays in the perf
+queue (Opus review 2026-11-26, part 1 note 5).
+
+Ported from perf1m-r3k5 onto this candidate; the hunk map beside the patch lists every other
+production hunk and its omission class (all (b), API the kept tests call)."""

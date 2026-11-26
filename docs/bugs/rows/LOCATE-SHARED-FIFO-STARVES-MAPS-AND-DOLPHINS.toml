@@ -19,7 +19,14 @@ interactive lane; a player /locate and a fed dolphin lead run on the background 
 keeps BACKGROUND_QUEUE_RESERVE slots back. A refusal on a dolphin lead now stops that lead
 (DolphinTreasure::Missing: the goal releases the fish) instead of keeping the fish and recapturing
 every resident chunk's structure starts on the tick side every 200 ticks; the same metadata read
-cannot improve by waiting. A worker-loss Failed retry stays (a fresh worker may exist)."""
+cannot improve by waiting. A worker-loss Failed retry stays (a fresh worker may exist).
+
+No Sender outlives the workers any more (review R1, 2026-11-26): each lane owns its own completion
+receiver, so a lane whose worker dies leaves a disconnected receiver the tick notices. `fail_lane`
+then completes only that lane's pending jobs as a lost-worker refusal (a map/loot callback releases
+its plan, a `/locate` command answers unavailable, a dolphin lead becomes Failed with its retry
+window) and resets only that lane, so the next search spawns a fresh worker while the other lane
+keeps running."""
 regression = [
   "cargo:mc-core:command_locate::tests::an_open_does_not_wait_behind_a_parked_command_search",
   "cargo:mc-core:command_locate::tests::a_full_background_lane_still_admits_an_interactive_open",
@@ -38,4 +45,10 @@ collapses every completion onto the background lane; a refusal becomes Failed{re
 all three refs at their own assertions (artifact 20261126T125607-test-zrks6u33: "a refused lookup
 stops the lead", "an open queues on the interactive lane while the background lane is full", "the open
 completes while the command search is still parked in front of it"), with the other 28 command_locate
-tests green on the control."""
+tests green on the control.
+
+Worker-loss path: `worker_loss_releases_a_map_loot_callback_so_the_container_opens_again` and
+`a_lost_worker_terminates_dolphin_and_command_jobs` now drive the real `worker()` with a panicking
+search (the lane gate panics), and both assert the pending jobs are completed and the lane restarts
+(a second submit is served by a fresh worker). 31/31 `command_locate` tests green in
+20261126T141442-test-eugfen1s; 17/17 dolphin tests in 20261126T144342-test-ramxq0zl."""

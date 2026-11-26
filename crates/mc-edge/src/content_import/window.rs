@@ -70,7 +70,7 @@ pub(super) async fn derive_profile(
     let bundle = unpack_bundle(&jar, &work)?;
     copy_data_subset(&bundle.inner_jar, staging)?;
     copy_client_tag_subset(&bundle.inner_jar, staging)?;
-    run_datagen(&java, &jar, &work, staging)?;
+    run_datagen(&java, &jar, &work, staging).await?;
     let captured = capture_registry_payloads(&java, &jar, &work, staging).await?;
     fs::remove_dir_all(&work)?;
     crate::translation::validate_endpoint(staging, &request.version)?;

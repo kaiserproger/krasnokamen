@@ -647,7 +647,7 @@ fn is_bed_head(blocks: &BlockRegistry, state: BlockStateId) -> bool {
 /// lead: a 100-ring structure search can take long enough to block an open that is queued after
 /// it on one FIFO worker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum LocateLane {
+pub(crate) enum LocateLane {
     /// A container or trade opening a map, and an eye of ender.
     Interactive = 0,
     /// A player `/locate` and a fed dolphin's treasure lead.
@@ -663,10 +663,16 @@ impl LocateCompletion {
     }
 }
 
-/// One lane's job queue and the hook a test parks its worker in.
+/// Both lanes, in index order (`Lane` slots are `lane as usize`).
+const LANES: [LocateLane; 2] = [LocateLane::Interactive, LocateLane::Background];
+
+/// One lane's job queue, its completion receiver and the hook a test parks its worker in.
 #[derive(Default)]
 struct Lane {
     jobs: Option<SyncSender<LocateJob>>,
+    /// This lane's completions. No `Sender` outlives the worker: a worker that panics drops it,
+    /// so the tick sees `Disconnected` here and [`fail_lane`] completes that lane's jobs.
+    done: Option<Receiver<LocateDone>>,
     /// Test-only: the gate this lane's worker enters before it searches.
     #[cfg(test)]
     gate: Option<LaneGate>,
@@ -680,11 +686,9 @@ type LaneGate = std::sync::Arc<dyn Fn() + Send + Sync>;
 /// `None` until then so idle worlds pay nothing.
 #[derive(Default)]
 pub struct LocateState {
-    /// One worker per lane: an interactive open never queues behind a `/locate` search.
+    /// One worker per lane, each with its own job queue and completion channel: an interactive
+    /// open never queues behind a `/locate` search, and a dead worker is noticed per lane.
     lanes: [Lane; 2],
-    /// The completion channel shared by both lanes, created with the first worker.
-    done_tx: Option<Sender<LocateDone>>,
-    done: Option<Receiver<LocateDone>>,
     in_flight: HashMap<ConnectionId, usize>,
     /// Entity-owned searches (a fed dolphin's treasure lookup).
     entity_in_flight: HashMap<EntityId, usize>,
@@ -776,11 +780,6 @@ impl LocateState {
     /// start is a command failure, never a tick-thread panic: the channels are dropped with this
     /// call, so the next search retries.
     fn worker(&mut self, lane: LocateLane) -> Result<SyncSender<LocateJob>, std::io::Error> {
-        if self.done_tx.is_none() {
-            let (done_tx, done_rx) = std::sync::mpsc::channel::<LocateDone>();
-            self.done_tx = Some(done_tx);
-            self.done = Some(done_rx);
-        }
         let slot = &mut self.lanes[lane as usize];
         if slot.jobs.is_none() {
             let capacity = match lane {
@@ -788,11 +787,10 @@ impl LocateState {
                 LocateLane::Background => MAX_QUEUED_JOBS - BACKGROUND_QUEUE_RESERVE,
             };
             let (job_tx, job_rx) = std::sync::mpsc::sync_channel::<LocateJob>(capacity);
-            let done = self
-                .done_tx
-                .as_ref()
-                .expect("done channel just set")
-                .clone();
+            // The completion sender is moved into the worker alone. Keeping a copy in the state
+            // would keep the receiver connected after a worker panic, and the tick would never
+            // learn that the lane's jobs can no longer be answered (see [`fail_lane`]).
+            let (done_tx, done_rx) = std::sync::mpsc::channel::<LocateDone>();
             let name = match lane {
                 LocateLane::Interactive => "locate-open",
                 LocateLane::Background => "locate",
@@ -803,11 +801,12 @@ impl LocateState {
                 .name(name.into())
                 .spawn(move || {
                     #[cfg(test)]
-                    locate_worker_gated(job_rx, done, gate);
+                    locate_worker_gated(job_rx, done_tx, gate);
                     #[cfg(not(test))]
-                    locate_worker(job_rx, done);
+                    locate_worker(job_rx, done_tx);
                 })?;
             slot.jobs = Some(job_tx);
+            slot.done = Some(done_rx);
         }
         Ok(slot
             .jobs
@@ -819,10 +818,17 @@ impl LocateState {
 
 #[cfg(test)]
 impl LocateState {
-    /// Test seam: give one lane a pre-built job channel, so a test injects jobs (or a full lane)
-    /// without spawning that lane's worker.
-    fn install_test_lane(&mut self, lane: LocateLane, jobs: SyncSender<LocateJob>) {
-        self.lanes[lane as usize].jobs = Some(jobs);
+    /// Test seam: give one lane a pre-built job channel and completion receiver, so a test
+    /// injects jobs and answers without spawning that lane's worker.
+    fn install_test_lane(
+        &mut self,
+        lane: LocateLane,
+        jobs: SyncSender<LocateJob>,
+        done: Receiver<LocateDone>,
+    ) {
+        let slot = &mut self.lanes[lane as usize];
+        slot.jobs = Some(jobs);
+        slot.done = Some(done);
     }
 
     /// Test seam: whether any lane has a job channel (the worker was started or injected).
@@ -833,6 +839,11 @@ impl LocateState {
     /// Test seam: park the background lane's worker in `gate` before each search.
     fn arm_background_gate(&mut self, gate: LaneGate) {
         self.lanes[LocateLane::Background as usize].gate = Some(gate);
+    }
+
+    /// Test seam: park the interactive lane's worker in `gate` before each search.
+    fn arm_interactive_gate(&mut self, gate: LaneGate) {
+        self.lanes[LocateLane::Interactive as usize].gate = Some(gate);
     }
 }
 
@@ -868,9 +879,12 @@ enum LocateKind {
 struct LocateDone {
     id: u64,
     hit: Option<LocateHit>,
-    /// A metadata/read refusal is not "no structure": dolphin goals keep their
-    /// fish and retry, commands answer unavailable instead of not_found.
+    /// A metadata/read refusal is not "no structure": commands answer unavailable instead of
+    /// not_found, and a refused dolphin lead stops (the same read cannot improve by waiting).
     error: Option<String>,
+    /// The lane's worker died before it answered, so a fresh worker may serve the job: a
+    /// dolphin lead keeps its fish and retries instead of stopping.
+    worker_lost: bool,
     elapsed_ms: u128,
 }
 
@@ -932,6 +946,7 @@ fn run_locate_worker(jobs: Receiver<LocateJob>, done: Sender<LocateDone>, gate: 
                 id: job.id,
                 hit,
                 error,
+                worker_lost: false,
                 elapsed_ms,
             })
             .is_err()
@@ -1499,8 +1514,12 @@ fn submit(
 /// waits for the worker's message instead of racing its thread for CPU. The
 /// tick's own [`drain`] stays non-blocking; this only runs under `cfg(test)`.
 #[cfg(test)]
-pub(crate) fn await_queued_search(state: &mut TickState, timeout: std::time::Duration) -> bool {
-    let received = match state.locate.done.as_ref() {
+pub(crate) fn await_queued_search(
+    state: &mut TickState,
+    lane: LocateLane,
+    timeout: std::time::Duration,
+) -> bool {
+    let received = match state.locate.lanes[lane as usize].done.as_ref() {
         Some(done) => done.recv_timeout(timeout),
         None => return false,
     };
@@ -1509,7 +1528,11 @@ pub(crate) fn await_queued_search(state: &mut TickState, timeout: std::time::Dur
             deliver(state, result);
             true
         }
-        Err(_) => false,
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+            fail_lane(state, lane);
+            true
+        }
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => false,
     }
 }
 
@@ -1517,14 +1540,17 @@ pub(crate) fn await_queued_search(state: &mut TickState, timeout: std::time::Dur
 /// state. Every accepted job has a terminal outcome, including channel loss.
 pub(crate) fn drain(state: &mut TickState) {
     let mut ready: Vec<LocateDone> = Vec::new();
-    let mut disconnected = false;
-    if let Some(done) = state.locate.done.as_ref() {
+    let mut lost: Vec<LocateLane> = Vec::new();
+    for lane in LANES {
+        let Some(done) = state.locate.lanes[lane as usize].done.as_ref() else {
+            continue;
+        };
         loop {
             match done.try_recv() {
                 Ok(result) => ready.push(result),
                 Err(std::sync::mpsc::TryRecvError::Empty) => break,
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    disconnected = true;
+                    lost.push(lane);
                     break;
                 }
             }
@@ -1533,8 +1559,8 @@ pub(crate) fn drain(state: &mut TickState) {
     for done in ready {
         deliver(state, done);
     }
-    if disconnected {
-        fail_worker(state);
+    for lane in lost {
+        fail_lane(state, lane);
     }
     // Retire empty in-flight entries so a quiet map stays small.
     state.locate.in_flight.retain(|_, count| *count > 0);
@@ -1599,7 +1625,15 @@ fn deliver(state: &mut TickState, done: LocateDone) {
             if !matches || !live_fish {
                 return;
             }
-            let treasure = if let Some(error) = done.error.as_deref() {
+            let treasure = if done.worker_lost {
+                // The lane's worker died before answering; a fresh worker can serve the lead, so
+                // keep the fish and retry once the window passes.
+                DolphinTreasure::Failed {
+                    run,
+                    dimension: pending.dimension,
+                    retry_at: state.tick.saturating_add(200),
+                }
+            } else if let Some(error) = done.error.as_deref() {
                 // The same metadata read cannot improve by waiting: retrying re-captured every
                 // resident chunk on the tick side every 200 ticks (LOCATE-SHARED-FIFO). The lead
                 // stops like a `Missing` search, so the goal releases the fish instead of looping.
@@ -1751,60 +1785,31 @@ pub(crate) fn take_pending_callback_release(
     }
 }
 
-/// The worker thread or its channels are gone: every accepted but undelivered
-/// job gets a terminal refusal, and the next submit spawns a fresh worker.
-fn fail_worker(state: &mut TickState) {
-    let pending = std::mem::take(&mut state.locate.pending);
-    state.locate.queued = 0;
-    // Reset channels before continuations: a callback may submit a new search.
-    state.locate.lanes = Default::default();
-    state.locate.done_tx = None;
-    state.locate.done = None;
-    for (run, pending) in pending {
-        release(state, pending.owner);
-        match pending.completion {
-            LocateCompletion::Command(_) => {
-                if let LocateOwner::Connection(connection) = pending.owner
-                    && (connection == crate::command_console::CONNECTION
-                        || state.connections.all_connections().any(|c| c == connection))
-                {
-                    state.push_player(
-                        connection,
-                        PlayerChange::Chat {
-                            message: "Locate is unavailable right now".into(),
-                        },
-                    );
-                }
-            }
-            LocateCompletion::Callback { on_failure, .. } => {
-                // Infrastructure loss must not wedge the container: release the
-                // pending loot/trade plan so the next open plans a new search.
-                tracing::warn!("locate worker lost: pending map/loot plan released");
-                if let Some(release) = on_failure {
-                    release(state);
-                }
-            }
-            LocateCompletion::Dolphin(dolphin) => {
-                let matches = state.locate.dolphin.get(&dolphin).is_some_and(|treasure| {
-                    matches!(
-                        treasure,
-                        DolphinTreasure::Pending { run: pending_run, dimension }
-                            if *pending_run == run && *dimension == pending.dimension
-                    )
-                });
-                if matches {
-                    state.locate.dolphin.insert(
-                        dolphin,
-                        DolphinTreasure::Failed {
-                            run,
-                            dimension: pending.dimension,
-                            retry_at: state.tick.saturating_add(200),
-                        },
-                    );
-                }
-            }
-            LocateCompletion::Eye(_) => {}
-        }
+/// One lane's worker is gone (it panicked or its thread ended): only that lane's accepted but
+/// undelivered jobs get a terminal refusal, and only that lane's channels are dropped, so the
+/// next search on it spawns a fresh worker while the other lane keeps running.
+fn fail_lane(state: &mut TickState, lane: LocateLane) {
+    let runs: Vec<u64> = state
+        .locate
+        .pending
+        .iter()
+        .filter(|(_, pending)| pending.completion.lane() == lane)
+        .map(|(run, _)| *run)
+        .collect();
+    // Reset the dead lane before the continuations: a callback may submit a new search, and that
+    // search belongs to a fresh worker.
+    state.locate.lanes[lane as usize] = Lane::default();
+    for run in runs {
+        deliver(
+            state,
+            LocateDone {
+                id: run,
+                hit: None,
+                error: Some("locate worker lost".into()),
+                worker_lost: true,
+                elapsed_ms: 0,
+            },
+        );
     }
 }
 

@@ -53,8 +53,13 @@ No hunk is omitted as (c): every original production line exists at the candidat
 
 ## Negative control
 
-Reverse-applying this patch on the candidate removes the two `history.record` calls only. The
-registered refs then run on a tree that compiles and where the chain is present but never fed, so
-each viewer pays the full `entity_candidates::collect` scan on every publish: the pen-scenario and
-pump-chain refs assert that count (`plan::plan_tests::pen_scenario_tests::*`,
-`server::pump_chain_tests::*`) and go red there, not on a missing symbol.
+Reverse-applying this patch on the candidate removes the two `history.record` calls only. The tree
+still compiles and the chain is present but never fed, so each viewer pays the full
+`entity_candidates::collect` scan on every publish.
+
+What goes red is exactly one ref: `server::pump_chain_tests::a_stale_skipped_drain_keeps_the_viewer_contiguous`
+drives the real `next_publication` and fails at its own assertion (`a stale-skipped publish must not
+rescan the viewer`, pump_chain_tests.rs:182). The three `plan::plan_tests::pen_scenario_tests::*`
+refs stay GREEN on the control because they call `history.record(&out)` themselves and hand the
+chain to the index directly — they test the bridge, not the pump's feeding of it. That is why the row
+names that pump-level ref as its single proving ref and lists the pen refs as non-proving.

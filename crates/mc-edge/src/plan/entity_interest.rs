@@ -172,7 +172,11 @@ impl EntityInterest {
                 index.entity_changes_for(&viewer.loaded_chunks, |delta| {
                     self.delta(snapshot, viewer, distance, delta, spectators);
                 });
-                // The player's own image need not belong to a held chunk.
+                // The player's own image need not belong to a held chunk. This checks only the
+                // last step of the chain (`changed()`), not the union the bridge covers; that is
+                // wire-safe because the viewer's own SetEntityData is sent on every plan through
+                // the appearance-stale path (`entities.rs`), and the own id is skipped in the
+                // delta loop above. It is therefore not "exactly a rescan of the base".
                 if !viewer
                     .loaded_chunks
                     .contains_key(&entity_chunk(viewer.position))
