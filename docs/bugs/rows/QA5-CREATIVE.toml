@@ -4,9 +4,12 @@ title = "Creative carried stack is not drawn while it sits on the menu cursor."
 area = "client"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-CREATIVE; the routing half is tracked as QA5-CREATIVE-ROUTING, the hovered-Q half as QA5-CREATIVE-HOVERED-Q"
 regression = ["harness:entities:native-v2-input-menus", "client:krasnokamen-client:ui::state::drag_tests::shift_with_carried_stack_dispatches_on_release"]
-proving_assertions = { "harness:entities:native-v2-input-menus" = "creative_held_cursor_pixels" }
+proving_refs = ["harness:entities:native-v2-input-menus"]
+proving_assertions = { "harness:entities:native-v2-input-menus" = "survival_held_cursor_pixels" }
+fix_commit = "client:180082a6783cc5eed23058235ed4ff0302ac8f57"
+repro_check = "The carried-stack drawing is one render() block for BOTH Menu and Creative screens (AbstractContainerScreen.renderFloatingItem parity), so the committed reversal pair e5957bd7 -> 180082a6 deletes and re-lands exactly that block; the pinned pre-fix client reds native-v2-input-menus at survival_held_cursor_pixels (the probe's first leg through that block: the pointer crop over the carried stack never changes) and the pinned fixed client passes all 244 assertions, including creative_held_cursor_pixels. A creative-only first-leg red would need the probe to run the creative leg before the survival leg; the shared block and the same reversal are what the pair proves, and the creative leg is the same call under Screen::Creative."
 failing_first = "not recorded"
-repro_check = "SPLIT 2026-11-24 (review): this row now carries only the carried-stack drawing. The native-v2-input-menus probe stops at the first failed assertion (creative_short_click_exact_pickup), so the later creative_short_pickup / creative_held_cursor_pixels checks were never evaluated against a control; only the client unit ref covers the dispatch. The routed packet swap and the hovered-Q behaviour live in the two rows named in source."
+promotion = "docs/bugs/promotions/QA5-CREATIVE.json"

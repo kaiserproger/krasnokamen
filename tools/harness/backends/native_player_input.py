@@ -346,30 +346,36 @@ def camera(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     # previous tick. Probe first: record the drawn and the received x.
     steps.fixture(f"summon minecraft:zombie {x + 4.5} {y} {z + 4.5} {{PersistenceRequired:1b}}")
 
-    def witness(state: dict) -> dict | None:
-        return next((row for row in state["entities"]["entities"]
-                     if row.get("type") == "minecraft:zombie"), None)
-
-    summoned = steps.wait(witness, "frozen_witness_summoned")
+    # `minecraft_observe` publishes no entity list (it carries player/screen state only), so the
+    # summoned row comes from the entity tool, which is the same received census.
+    summoned = steps.call("minecraft_wait_for_visible_entity", {
+        "entity_type": "minecraft:zombie", "radius": 8, "timeout_seconds": steps.remaining()})
+    steps.check("frozen_witness_summoned", summoned.get("matched") is True)
     steps.fixture("tick step 3")
     steps.call("minecraft_wait_ticks", {"ticks": 5})
     _shot(steps, "frozen-witness-stepped")
     state = steps.observe()
     drawn = next((row for row in (state.get("gait_capture") or [])
-                  if row.get("entity_uuid") == summoned["uuid"]), None)
-    received = witness(state) or {}
+                  if row.get("entity_uuid") == summoned["entity_uuid"]), None)
+    received = steps.call("minecraft_list_entities", {
+        "radius": 8, "limit": 128}).get("entities") or []
+    received = next((row for row in received if row.get("entity_uuid") == summoned["entity_uuid"]), {})
     steps.report["frozen_witness"] = {
-        "uuid": summoned["uuid"],
+        "uuid": summoned["entity_uuid"],
         "drawn": (drawn or {}).get("position"),
-        "received": received.get("position"),
+        "received": {key: received.get(key) for key in ("x", "y", "z")},
         "server_frozen": state.get("minecraft", {}).get("server_frozen"),
     }
     steps.fixture("kill @e[type=minecraft:zombie]")
     shown = _shot(steps, "hud-shown")
-    steps.call("minecraft_press_inputs", {"keys": ["key.keyboard.f1"], "ticks": 1})
+    # TEST-NATIVE-F1: the automation seam must accept the supported physical key. Recorded as an
+    # assertion because a refused key aborts the tool call before any HUD check can observe it.
+    steps.call_checked("minecraft_press_inputs", {"keys": ["key.keyboard.f1"], "ticks": 1},
+                       "f1_automation_key_accepted")
     hidden = _shot(steps, "hud-hidden")
     steps.check("f1_hides_hud_setting", steps.observe()["client_settings"]["hide_hud"] is True)
-    steps.call("minecraft_press_inputs", {"keys": ["key.keyboard.f1"], "ticks": 1})
+    steps.call_checked("minecraft_press_inputs", {"keys": ["key.keyboard.f1"], "ticks": 1},
+                       "f1_automation_key_accepted")
     restored = _shot(steps, "hud-restored")
     steps.check("f1_restores_hud_setting", steps.observe()["client_settings"]["hide_hud"] is False)
     with Image.open(shown["retained_path"]) as a, Image.open(hidden["retained_path"]) as b, Image.open(restored["retained_path"]) as d:

@@ -11,6 +11,6 @@ regression = [
   "python:tools.harness.test_java_launcher:ModdedLauncherTest.test_build_root_uses_owner_targets_or_portable_local_directory",
   "harness:loader-live:loader-fabric-mixed-version-build",
 ]
-repro_check = "ScreensVoiceStart/build-red.log fails without build-dir isolation. Real run 20261115T011838 still lost 26.3 classes with distinct outputs but shared Gradle executionHistory and Loom launch.cfg. project-cache-red.log fails before adding --project-cache-dir; project-cache-green.log covers endpoint-private history and outputs, plus owner targets and portable fallback. Existing outputs are not removed."
+repro_check = "The build-dir isolation patch (94ce2516, tools/harness/runtime.py: --project-cache-dir and write_gradle_init) reverses cleanly on the candidate head, and both python refs pass there (receipts/D123PackHarnessRows/unittest-harness.log). The registered graphical ref harness:loader-live:loader-fabric-mixed-version-build is runnable (Loader checkout + gradlew, loader-gradle-home with caches/fabric-loom/{26.1.2,26.3}/minecraft-client.jar, private audio wrapper, release server pin). Promotion needs the candidate gate run (two Gradle builds: Fabric 26.3 live, then Fabric/SVC 26.1.2) plus the same gate on a reverted-tree control pin (a python-only fix cites the same server binary for the control tree through KRSNOKAMEN_LEDGER_ROOT). The control red is the row's original class-loss race; it is not deterministic per run."
 fix_commit = "patch:94ce251608e4cb8d332ed8543764c21edc0614d9106b7574db7ff2d6e2cefab2"
 failing_first = "reported"

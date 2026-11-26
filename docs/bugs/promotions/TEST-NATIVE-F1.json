@@ -1,0 +1,65 @@
+{
+  "id": "TEST-NATIVE-F1",
+  "verdict": "promoted",
+  "fix_commit": "client:7119fd2d1c8ac6c4be78e0084da85b92702c6f36",
+  "fix_commit_full": "7119fd2d1c8ac6c4be78e0084da85b92702c6f36",
+  "promoted_at": "2026-11-26T17:05:57+00:00",
+  "tree_head": "97dbc4b787a9ea87b7da858ac5f6d023bee868bd",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackHarnessRowsCore/.analysis/validation/20261126T165640-native-v2-input-camera-h36d2_u5/result.json",
+    "client_head": "48c08522505f82678c173673c0fbb55d27ce110f",
+    "server_binary_sha256": "4646f6d616898fe855e68299260594b7fe9f02ddb5c178d6350bc581df9d9392",
+    "red": [
+      "harness:entities:native-v2-input-camera"
+    ],
+    "states": {
+      "harness:entities:native-v2-input-camera": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackHarnessRowsCore/.analysis/validation/20261126T170014-native-v2-input-camera-wehtgiqn/result.json",
+    "client_head": "7119fd2d1c8ac6c4be78e0084da85b92702c6f36",
+    "server_binary_sha256": "4646f6d616898fe855e68299260594b7fe9f02ddb5c178d6350bc581df9d9392",
+    "green": [
+      "harness:entities:native-v2-input-camera"
+    ],
+    "states": {
+      "harness:entities:native-v2-input-camera": "green"
+    },
+    "tree_head": "97dbc4b787a9ea87b7da858ac5f6d023bee868bd",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackHarnessRowsCore/.analysis/validation/20261126T170014-native-v2-input-camera-wehtgiqn/result.json",
+    "client_head": "7119fd2d1c8ac6c4be78e0084da85b92702c6f36",
+    "server_binary_sha256": "4646f6d616898fe855e68299260594b7fe9f02ddb5c178d6350bc581df9d9392",
+    "green": [
+      "harness:entities:native-v2-input-camera"
+    ],
+    "states": {
+      "harness:entities:native-v2-input-camera": "green"
+    },
+    "tree_head": "97dbc4b787a9ea87b7da858ac5f6d023bee868bd",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "6f762268b503e59a4e903a2bfc3d39ec460705cf",
+    "paths": [
+      "src/session/actions.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:session::mining_start_tests::f1_key_toggles_hide_hud_through_the_ordinary_key_path": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PackHarnessRowsCore/.analysis/validation/20261126T170423-ledger-promote-9mots6za"
+}
