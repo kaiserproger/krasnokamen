@@ -1,0 +1,42 @@
+[[bug]]
+id = "ENTITY-NAME-TAG-STYLED-COMPONENT-LOSES-STYLE"
+title = "A name tag whose custom name is a styled text component gives the entity the plain text only: the entity is persisted as a literal string, and breaking the entity writes that literal back over the item's component, so colour/bold/italic are lost silently"
+area = "gameplay"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = """The item keeps the tag's full component (`minecraft:custom_name` as a text component) and the
+typed field `ItemStack::custom_name` keeps only its text projection (mc-data item_nbt.rs
+`custom_name_component`, line 226: `Tag::String` only). Use-on-entity applies that projection verbatim
+(crates/mc-core/src/leash.rs:51) and the entity is persisted as a literal string
+(core/capture.rs `entity_appearance_fields`), so the entity has no place to keep the style: nothing
+reports the loss, and the named entity renders unstyled text.
+
+The reverse direction loses the item's component the same way. mc-core/src/leash.rs:51 and
+armor_stand.rs:418-429 write an entity's plain name back into the dropped item's typed field, and
+copper_golem.rs:639-643 does the same for the statue item, so an item that carried a styled
+`minecraft:custom_name` loses its style when the block/entity is broken and the item re-created.
+
+The defect is a missing representation, not a wrong branch: the appearance model holds
+`custom_name: Option<String>`, the checkpoint writes `CustomName` as `Tag::String`, and the item
+reader accepts only a string component, so no path can carry a styled name end to end. Fixing it is
+the same persistence change as ENTITY-STYLED-CUSTOM-NAME-REFUSED (an `Option<Name>` with untagged
+string-or-struct serde, journal `EntityAppearanceDelta` in journal.rs:2169/2197/2285 plus
+journal_budget, the item<->entity writers, the mc-protocol decoder entity.rs:1262); see that row for
+the reviewed slice. This row records the two additional silent-loss paths and their reproducers.
+
+Design review (receipts/D123PackCoreCode/REVIEW-ENTITY-STYLED-DESIGN-Opus.md, 2026-11-26): verdict
+`amend`, GO-before-2026-12-01 REJECTED for ENTITY-STYLED-CUSTOM-NAME-REFUSED (persistence-format
+change for a row not visible in survival); that refusal covers this row too, and the clear refusal
+stays as the owner-list entry."""
+regression = []
+repro_check = """Known-red reproducer (ignored so the gate stays green):
+cargo:mc-core:a_styled_name_tag_keeps_its_style_on_the_named_entity
+(crates/mc-core/src/leash_tests.rs). Run it with
+`cargo test -p mc-core --lib -- --ignored a_styled_name_tag_keeps_its_style_on_the_named_entity`.
+It names a cow with a name tag and then requires the persisted checkpoint row's `CustomName` to be a
+text component; it fails today at that assertion because the row is written as `Tag::String`
+
+RED evidence on the candidate tree: recorded in PROGRESS.md (an `#[ignore]`d test run with `-- --ignored`).
+No registered gate ref: a failing test cannot be one, and a green version of the test would pass
+without the fix."""
