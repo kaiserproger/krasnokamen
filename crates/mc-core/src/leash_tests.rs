@@ -166,3 +166,33 @@ fn shared_fence_index_reuses_one_knot_and_removes_it_after_last_detach() {
     tick(&mut state, &mut changes);
     assert!(changes.entities_removed.is_empty());
 }
+
+/// ENTITY-NAME-TAG-STYLED-COMPONENT-LOSES-STYLE: the tag's typed projection carries only the text,
+/// and the named entity is persisted as a literal string, so whatever style the tag had is gone.
+/// This test states the contract the row asks for (a component on the entity); ignored for now.
+#[test]
+#[ignore = "ENTITY-NAME-TAG-STYLED-COMPONENT-LOSES-STYLE: run with -- --ignored"]
+fn a_styled_name_tag_keeps_its_style_on_the_named_entity() {
+    let (mut state, actor, pos) = fixture();
+    let cow = spawn(&mut state, "cow", pos);
+    hold(&mut state, actor, "name_tag", 2);
+    state.players.get_mut(&actor).unwrap().inventory.slots[0].custom_name = Some("Bessie".into());
+    run_tick(&mut state, &[use_entity(cow)]);
+    let row = state.entities.row(slot(&state, cow));
+    assert_eq!(row.appearance.custom_name.as_deref(), Some("Bessie"));
+    let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+    let native = chunks
+        .values()
+        .flat_map(|chunk| &chunk.entities)
+        .find(|entity| entity.uuid == row.uuid)
+        .expect("checkpoint row");
+    let (_, name) = native
+        .extra_fields
+        .iter()
+        .find(|(key, _)| key == "CustomName")
+        .expect("CustomName persisted");
+    assert!(
+        matches!(name, mc_nbt::Tag::Compound(_)),
+        "the entity keeps a text component, not a literal string: {name:?}"
+    );
+}

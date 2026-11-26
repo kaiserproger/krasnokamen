@@ -11,3 +11,28 @@ fn capture_rejects_dead_rows_outside_the_dying_clock() {
     assert!(!state.entities.is_dying(cow));
     let _ = entity_data_record(&state, slot);
 }
+
+/// ANVIL-IMPORT-STYLED-CUSTOM-NAME-SILENTLY-DROPPED: a vanilla entity whose `CustomName` is a text
+/// component loses the whole name, because the reader accepts only `Tag::String`. Ignored so the
+/// gate stays green; run with `-- --ignored`.
+#[test]
+#[ignore = "ANVIL-IMPORT-STYLED-CUSTOM-NAME-SILENTLY-DROPPED: run with -- --ignored"]
+fn an_imported_styled_custom_name_is_not_dropped() {
+    let record = mc_data::entity_nbt::VanillaEntity {
+        id: "minecraft:cow".into(),
+        extra_fields: vec![(
+            "CustomName".into(),
+            mc_nbt::Tag::Compound(vec![
+                ("text".into(), mc_nbt::Tag::String("Bessie".into())),
+                ("color".into(), mc_nbt::Tag::String("red".into())),
+            ]),
+        )],
+        ..Default::default()
+    };
+    let image = appearance_from_vanilla_entity(&record);
+    assert_eq!(
+        image.custom_name.as_deref(),
+        Some("Bessie"),
+        "a compound CustomName must be read, not dropped"
+    );
+}

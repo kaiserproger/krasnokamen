@@ -767,3 +767,281 @@ fn a_current_viewer_does_not_preempt_the_chain_for_a_stale_one() {
         "the current viewer keeps its tracked set"
     );
 }
+
+/// The chain covers several bases at once; the fan-out must bridge the one most viewers hold, so
+/// the majority stays incremental and only the minority pays a rescan — with nobody holding the
+/// published snapshot's direct predecessor (a `direct` viewer would preempt the choice).
+#[test]
+fn the_bridge_picks_the_base_most_viewers_hold() {
+    use crate::plan::{ChunkPacketCache, PublicationHistory, ViewerState};
+    use mc_core::boundary::EntityId;
+    use mc_core::entities::{ColdFields, EntityKind, EntityStore};
+
+    let (biomes, blocks, items, block_entity_types) = registries_fixture();
+    let registries = PlanRegistries {
+        biomes: &biomes,
+        blocks: &blocks,
+        items: &items,
+        block_entity_types: &block_entity_types,
+    };
+    let type_id = mc_data::entity_types::entity_type_contract_26_1_2_by_name("minecraft:cow")
+        .expect("cow contract")
+        .protocol_id;
+    let cold = |pos: [f64; 3]| ColdFields {
+        pos,
+        vel: [0.0; 3],
+        yaw: 0.0,
+        pitch: 0.0,
+        ground: true,
+        health: 20.0,
+        breed_cooldown: 0,
+        pickup_delay: 0,
+        item: None,
+        appearance: Arc::new(mc_core::boundary::EntityAppearance::default()),
+        movement: mc_core::blueprint::MovementClass::Walker,
+        half_width: 0.45,
+        height: 1.4,
+        speed: 0.1,
+        attack_damage: 1.0,
+        sight_range: 16.0,
+        attack_reach: 1.0,
+    };
+    let mut store = EntityStore::default();
+    let cow = store.spawn(
+        EntityId(2_000),
+        uuid::Uuid::from_u128(2_000),
+        EntityKind::Mob { type_id },
+        cold([8.0, 64.0, 8.0]),
+    );
+    let output = |tick: u64, entities| TickOutput {
+        tick,
+        snapshot: Arc::new(WorldSnapshot {
+            tick,
+            day_time: 0,
+            chunks: Default::default(),
+            day_time_rate: 1.0,
+            entities,
+            ..Default::default()
+        }),
+        changes: Arc::new(ChangeSet::default()),
+        times: Default::default(),
+    };
+    let mut history = PublicationHistory::new(8);
+    let mut steps = Vec::new();
+    for tick in 1..=4u64 {
+        store.set_pos(cow, [8.0 + tick as f64, 64.0, 8.0]);
+        let out = output(tick, store.views());
+        history.record(&out);
+        steps.push(out);
+    }
+    let (one, two, four) = (&steps[0], &steps[1], &steps[3]);
+    assert_ne!(
+        two.snapshot.entities.revision(),
+        four.snapshot.entities.base_revision(),
+        "nobody can hold the direct predecessor"
+    );
+
+    let viewer = |connection: u64| {
+        let mut viewer = ViewerState::new(
+            ConnectionId(connection),
+            EntityId(9_000 + connection as i32),
+            [8.0, 64.0, 8.0],
+        );
+        viewer.dimension = mc_core::dimensions::Dimension::Overworld;
+        viewer.loaded_chunks.insert((0, 0), 0);
+        viewer
+    };
+    let plan = |out: &TickOutput,
+                viewer: &mut ViewerState,
+                cache: &mut ChunkPacketCache,
+                history: Option<&PublicationHistory>| {
+        crate::fanout::publish_with_registries_chain(
+            out,
+            std::iter::once(&mut *viewer),
+            0,
+            &registries,
+            cache,
+            history,
+        )
+    };
+    // Two viewers on the first step's revision, one on the second's.
+    let mut first = viewer(1);
+    plan(one, &mut first, &mut ChunkPacketCache::new(), None);
+    let mut second = viewer(2);
+    plan(one, &mut second, &mut ChunkPacketCache::new(), None);
+    let mut third = viewer(3);
+    plan(two, &mut third, &mut ChunkPacketCache::new(), None);
+    assert_eq!(
+        first.previous_entities().unwrap().revision(),
+        one.snapshot.entities.revision()
+    );
+    assert_eq!(
+        second.previous_entities().unwrap().revision(),
+        one.snapshot.entities.revision()
+    );
+    assert_eq!(
+        third.previous_entities().unwrap().revision(),
+        two.snapshot.entities.revision()
+    );
+    let (r1, r2, r3) = (first.rescans, second.rescans, third.rescans);
+
+    let mut cache = ChunkPacketCache::new();
+    let mut all = [first, second, third];
+    for viewer in all.iter_mut() {
+        plan(four, viewer, &mut cache, Some(&history));
+    }
+    assert_eq!(
+        all[0].rescans, r1,
+        "the majority base is bridged: no rescan"
+    );
+    assert_eq!(
+        all[1].rescans, r2,
+        "the majority base is bridged: no rescan"
+    );
+    // The minority is not asserted here: the index also treats a viewer whose own base is one
+    // step behind the published one as contiguous (its delta is the last step), so only a viewer
+    // the chain cannot reach rescans — `plan::pen_scenario_tests::a_base_evicted_from_the_chain_*`
+    // and `server::pump_chain_tests::a_lagged_publication_keeps_the_full_rescan_fallback` pin that.
+    assert!(
+        all[2].rescans >= r3,
+        "the minority base keeps its accounting: {} -> {}",
+        r3,
+        all[2].rescans
+    );
+}
+
+/// A non-root dimension's entity chain is bridged through the fan-out exactly like the root's: a
+/// skipped step only in the Nether must not make a Nether viewer rescan the whole square.
+#[test]
+fn a_non_root_dimension_bridges_through_the_chain() {
+    use crate::plan::{ChunkPacketCache, PublicationHistory, ViewerState};
+    use mc_core::boundary::EntityId;
+    use mc_core::dimensions::Dimension;
+    use mc_core::entities::{ColdFields, EntityKind, EntityStore};
+
+    let (biomes, blocks, items, block_entity_types) = registries_fixture();
+    let registries = PlanRegistries {
+        biomes: &biomes,
+        blocks: &blocks,
+        items: &items,
+        block_entity_types: &block_entity_types,
+    };
+    let type_id = mc_data::entity_types::entity_type_contract_26_1_2_by_name("minecraft:cow")
+        .expect("cow contract")
+        .protocol_id;
+    let cold = |pos: [f64; 3]| ColdFields {
+        pos,
+        vel: [0.0; 3],
+        yaw: 0.0,
+        pitch: 0.0,
+        ground: true,
+        health: 20.0,
+        breed_cooldown: 0,
+        pickup_delay: 0,
+        item: None,
+        appearance: Arc::new(mc_core::boundary::EntityAppearance::default()),
+        movement: mc_core::blueprint::MovementClass::Walker,
+        half_width: 0.45,
+        height: 1.4,
+        speed: 0.1,
+        attack_damage: 1.0,
+        sight_range: 16.0,
+        attack_reach: 1.0,
+    };
+    let projection = |tick: u64, dimension: Dimension, entities| TickOutput {
+        tick,
+        snapshot: Arc::new(WorldSnapshot {
+            tick,
+            day_time: 0,
+            chunks: Default::default(),
+            day_time_rate: 1.0,
+            dimension,
+            entities,
+            ..Default::default()
+        }),
+        changes: Arc::new(ChangeSet::default()),
+        times: Default::default(),
+    };
+
+    let mut nether = EntityStore::default();
+    let cow = nether.spawn(
+        EntityId(3_000),
+        uuid::Uuid::from_u128(3_000),
+        EntityKind::Mob { type_id },
+        cold([8.0, 40.0, 8.0]),
+    );
+    let mut history = PublicationHistory::new(8);
+    let mut nether_steps = Vec::new();
+    for tick in 1..=3u64 {
+        nether.set_pos(cow, [8.0 + tick as f64, 40.0, 8.0]);
+        let out = projection(tick, Dimension::Nether, nether.views());
+        history.record(&out);
+        nether_steps.push(out);
+    }
+    let n1 = &nether_steps[0];
+    let n3_entities = nether_steps[2].snapshot.entities.clone();
+    assert_ne!(n1.snapshot.entities.revision(), n3_entities.revision());
+
+    let mut overworld = EntityStore::default();
+    overworld.spawn(
+        EntityId(4_000),
+        uuid::Uuid::from_u128(4_000),
+        EntityKind::Mob { type_id },
+        cold([8.0, 64.0, 8.0]),
+    );
+    // The root publish carries the Nether projection; the Nether's steps 1..3 are its chain.
+    let mut dimensions = std::collections::BTreeMap::new();
+    dimensions.insert(
+        Dimension::Nether,
+        projection(3, Dimension::Nether, n3_entities.clone()),
+    );
+    let root = TickOutput {
+        tick: 3,
+        snapshot: Arc::new(WorldSnapshot {
+            tick: 3,
+            day_time: 0,
+            chunks: Default::default(),
+            day_time_rate: 1.0,
+            entities: overworld.views(),
+            dimensions,
+            ..Default::default()
+        }),
+        changes: Arc::new(ChangeSet::default()),
+        times: Default::default(),
+    };
+
+    let mut viewer = ViewerState::new(ConnectionId(1), EntityId(9_001), [8.0, 40.0, 8.0]);
+    viewer.dimension = Dimension::Nether;
+    viewer.loaded_chunks.insert((0, 0), 0);
+    // Hold the Nether's first revision: only the chain can keep it contiguous.
+    let _ = crate::fanout::publish_with_registries_chain(
+        n1,
+        std::iter::once(&mut viewer),
+        0,
+        &registries,
+        &mut ChunkPacketCache::new(),
+        None,
+    );
+    assert_eq!(
+        viewer.previous_entities().unwrap().revision(),
+        n1.snapshot.entities.revision()
+    );
+    let before = viewer.rescans;
+    let _ = crate::fanout::publish_with_registries_chain(
+        &root,
+        std::iter::once(&mut viewer),
+        0,
+        &registries,
+        &mut ChunkPacketCache::new(),
+        Some(&history),
+    );
+    assert_eq!(
+        viewer.rescans, before,
+        "a Nether viewer covered by the Nether chain must not rescan"
+    );
+    assert_eq!(
+        viewer.previous_entities().unwrap().revision(),
+        n3_entities.revision(),
+        "the viewer ends on the published Nether revision"
+    );
+}

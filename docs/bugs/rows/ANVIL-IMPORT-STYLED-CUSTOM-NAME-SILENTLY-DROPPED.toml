@@ -1,0 +1,30 @@
+[[bug]]
+id = "ANVIL-IMPORT-STYLED-CUSTOM-NAME-SILENTLY-DROPPED"
+title = "Importing a vanilla Anvil entity drops a styled CustomName entirely: the reader accepts only Tag::String, and the import path that re-emits the entity (replay.rs:535) strips CustomName, so the name vanishes without a report"
+area = "gameplay"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = """A vanilla Anvil entity stores `CustomName` as a text component (compound) whenever the name is
+styled; it stores a plain `Tag::String` only for a bare name. The importer reads the field as a string
+only (crates/mc-core/src/core/capture.rs:118, `appearance_from_vanilla_entity` ->
+`custom_name` from `Tag::String`), so a compound CustomName becomes `None` and the name is dropped
+silently. The re-emit path then removes the field it cannot represent (core/replay.rs:535 excludes
+`CustomName` from the kept fields), so the imported region no longer carries the name at all: no
+diagnostic, no count, nothing in the import report.
+
+The defect is the same missing representation as ENTITY-STYLED-CUSTOM-NAME-REFUSED (an `Option<Name>`
+with untagged string-or-struct serde); this row records the import path's silent loss with its own
+reproducer.
+
+Design review (receipts/D123PackCoreCode/REVIEW-ENTITY-STYLED-DESIGN-Opus.md, 2026-11-26): verdict
+`amend`, GO-before-2026-12-01 REJECTED; the refusal stands as the owner-list entry."""
+regression = []
+repro_check = """Known-red reproducer (ignored so the gate stays green):
+cargo:mc-core:an_imported_styled_custom_name_is_not_dropped
+(crates/mc-core/src/core/capture_tests.rs). Run it with
+`cargo test -p mc-core --lib -- --ignored an_imported_styled_custom_name_is_not_dropped`.
+It builds a `VanillaEntity` whose `CustomName` is a compound component and requires the imported
+appearance to keep the name text; it fails today because the reader only accepts `Tag::String`.
+RED evidence on the candidate tree: recorded in PROGRESS.md (an `#[ignore]`d test run with
+`-- --ignored`). No registered gate ref: a failing test cannot be one."""

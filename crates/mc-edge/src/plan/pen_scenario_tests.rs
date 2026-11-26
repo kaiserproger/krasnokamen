@@ -869,3 +869,115 @@ fn a_skipped_publish_costs_one_rescan_without_the_chain_and_none_with_it() {
     assert!(without.2 > 0, "the rescan walks the square: {without:?}");
     assert!(links >= 3, "every drained step is recorded: {links}");
 }
+
+/// One store step that changes only an appearance (a renamed resident), with no moves: the
+/// bridge must treat an appearance-only delta like a rescan of the same base.
+fn rename_step(
+    store: &mut EntityStore,
+    slot: mc_core::entities::EntitySlot,
+    name: &str,
+    out: &mut TickOutput,
+) {
+    let mut appearance = (*store.row(slot).appearance).clone();
+    appearance.custom_name = Some(name.to_owned());
+    store.row_mut(slot).appearance = Arc::new(appearance);
+    let snapshot = Arc::get_mut(&mut out.snapshot).expect("sole snapshot owner");
+    snapshot.tick += 1;
+    snapshot.entities = store.views();
+}
+
+/// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN, appearance case: a skipped window whose only change is an
+/// entity's appearance (a custom name here) must reach a bridged viewer exactly as a full rescan of
+/// the same base delivers it — the name frame included, once, and nothing else.
+#[test]
+fn an_appearance_only_skipped_step_reaches_a_bridged_viewer() {
+    let (mut store, slots) = pen_store();
+    let mut out = output(pen_chunks(), vec![], ChangeSet::default());
+    let mut history = crate::plan::PublicationHistory::new(8);
+
+    advance(&mut store, &slots, &mut out, 0);
+    history.record(&out);
+    // The delivered base both viewers hold.
+    let mut bridged = [pen_viewer(1, [32.0, 64.0, 32.0])];
+    let mut reference = [pen_viewer(2, [32.0, 64.0, 32.0])];
+    let (first, _) = with_plan_debug(|| publish_now_packets(&out, &mut bridged[0], &history));
+    let (base_frames, _) =
+        with_plan_debug(|| publish_now_packets(&out, &mut reference[0], &history));
+    assert_eq!(wire(&first), wire(&base_frames), "both viewers start equal");
+
+    // A step nobody plans (the pump coalesced over it) that only renames one resident.
+    let named = slots[7];
+    rename_step(&mut store, named, "Penny", &mut out);
+    history.record(&out);
+    let renamed_frames = {
+        // The bridged viewer's frames for the skipped step (planned against the chain).
+        let (packets, _) = with_plan_debug(|| publish_now_packets(&out, &mut bridged[0], &history));
+        wire(&packets)
+    };
+    // The reference viewer holds the same base and is forced to rescan (its previous is not the
+    // published snapshot's direct predecessor, so `with_previous` cannot go incremental).
+    let rescanned_frames = {
+        // No previous views at all: the index has no base, so this plan is a full rescan of the
+        // published snapshot against the viewer's own tracked state.
+        let index = TickPlanIndex::with_previous(&out, None).with_reveals(&out, None);
+        assert!(
+            index.entity_base.is_none(),
+            "the oracle really walks the whole square"
+        );
+        let (packets, _, _) = plan_packets(&out, &mut reference[0], &index);
+        wire(&packets)
+    };
+    assert_eq!(
+        renamed_frames, rescanned_frames,
+        "an appearance-only skipped step must deliver what a rescan of the same base delivers"
+    );
+    let names = renamed_frames
+        .iter()
+        .filter(|(id, _)| *id == mc_protocol::packets::play::ClientboundSetEntityData::ID)
+        .count();
+    assert!(names >= 1, "the renamed row's metadata frame is sent");
+}
+
+/// EDGE-PUMP-SKIP-FORCES-FULL-RESCAN, eviction case: the chain is bounded by the broadcast window,
+/// so a viewer whose base fell out of it keeps the full rescan and says why (`no_history`), never a
+/// silent bridge over steps the pump no longer holds.
+#[test]
+fn a_base_evicted_from_the_chain_rescans_with_the_no_history_reason() {
+    let (mut store, slots) = pen_store();
+    let mut out = output(pen_chunks(), vec![], ChangeSet::default());
+    // A two-step bound: the third recorded step pushes the first one out.
+    let mut history = crate::plan::PublicationHistory::new(2);
+    let mut viewer = pen_viewer(1, [32.0, 64.0, 32.0]);
+
+    advance(&mut store, &slots, &mut out, 0);
+    history.record(&out);
+    let (_, _) = with_plan_debug(|| publish_now_packets(&out, &mut viewer, &history));
+    let evicted_base = viewer.previous_entities().cloned().expect("delivered base");
+
+    // Three more steps the pump drained but nobody planned: the window (2) forgets the first.
+    for round in 1..=3 {
+        advance(&mut store, &slots, &mut out, round);
+        history.record(&out);
+    }
+    assert!(
+        history
+            .chain(out.snapshot.dimension)
+            .steps(evicted_base.revision(), out.snapshot.entities.revision())
+            .is_none(),
+        "the base has been evicted from the bounded chain"
+    );
+    let rescans_before = viewer.rescans;
+    let no_history_before = viewer.rescans_no_history;
+    let mut one = vec![viewer];
+    let _ = with_plan_debug(|| publish_now(&out, &mut one, &history, &[0]));
+    let viewer = one.remove(0);
+    assert!(
+        viewer.rescans > rescans_before,
+        "an evicted base pays the full rescan"
+    );
+    assert_eq!(
+        viewer.rescans_no_history,
+        no_history_before + 1,
+        "the rescan names its reason: no history"
+    );
+}
