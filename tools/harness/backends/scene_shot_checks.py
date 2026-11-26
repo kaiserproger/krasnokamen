@@ -1431,7 +1431,7 @@ def check_baby_armor(probe: ProbeSteps, artifact: Path) -> None:
 
     `HumanoidModel.createBabyArmorMeshSet(BABY_INNER, BABY_OUTER, PartPose.ZERO)` gives the baby
     armour shells their own cube sizes; the pre-image hand-fitted them 1.3-1.75x oversized. The
-    armour layer is a separate material from the body, so one baby zombie in a full diamond set makes
+    armour layer is a separate material from the body, so one baby zombie in a diamond helmet and chestplate (the head shell sets the depth, the chestplate adds the arm caps that widen the control) makes
     the armour layer's own bbox readable from `entity_extraction.entity_layer_geometry` (CM-4).
 
     The absolute span scales with the kind's baby scale, which the frame does not report, so the
