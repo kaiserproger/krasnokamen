@@ -719,9 +719,9 @@ SCENARIOS: dict[str, Scenario] = {
         requires=("xvfb",),
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
                  "tools/harness/backends/client_probes.py"),
-        fixture="dolphin in a 13-long water channel, chest 16 blocks away, fed a real raw cod",
-        proves="after being fed a raw cod the dolphin's distance to the chest shrinks well past the starting distance",
-        limits="server approximates vanilla treasure structures with the nearest container within 48 blocks",
+        fixture="a fed dolphin in a water channel beside the nearest real #minecraft:dolphin_located structure (`/locate structure` at run start), no player chest anywhere",
+        proves="after being fed a raw cod the dolphin's horizontal distance to the located ocean ruin or shipwreck shrinks by more than 6 blocks, i.e. the goal steers to a real structure site and never to a placed container",
+        limits="one natural structure site per world seed; the channel is built at sea level beside it, so the descent to the site's own depth is not measured",
     ),
     "native-v2-goat-ram": _entry(
         id="native-v2-goat-ram", summary="A natural goat rams a nearby stationary armor stand",
