@@ -366,10 +366,14 @@ def camera(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     }
     steps.fixture("kill @e[type=minecraft:zombie]")
     shown = _shot(steps, "hud-shown")
-    steps.call("minecraft_press_inputs", {"keys": ["key.keyboard.f1"], "ticks": 1})
+    # TEST-NATIVE-F1: the automation seam must accept the supported physical key. Recorded as an
+    # assertion because a refused key aborts the tool call before any HUD check can observe it.
+    steps.call_checked("minecraft_press_inputs", {"keys": ["key.keyboard.f1"], "ticks": 1},
+                       "f1_automation_key_accepted")
     hidden = _shot(steps, "hud-hidden")
     steps.check("f1_hides_hud_setting", steps.observe()["client_settings"]["hide_hud"] is True)
-    steps.call("minecraft_press_inputs", {"keys": ["key.keyboard.f1"], "ticks": 1})
+    steps.call_checked("minecraft_press_inputs", {"keys": ["key.keyboard.f1"], "ticks": 1},
+                       "f1_automation_key_accepted")
     restored = _shot(steps, "hud-restored")
     steps.check("f1_restores_hud_setting", steps.observe()["client_settings"]["hide_hud"] is False)
     with Image.open(shown["retained_path"]) as a, Image.open(hidden["retained_path"]) as b, Image.open(restored["retained_path"]) as d:

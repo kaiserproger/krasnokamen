@@ -60,5 +60,38 @@ class ProbeStepsWaitTests(unittest.TestCase):
             self.steps(client).wait(lambda s: s["ready"], "ready")
 
 
+class RefusingPressClient:
+    """Accepts the observation tool; refuses one key press the way the pre-fix client did."""
+
+    def __init__(self, refused: str | None) -> None:
+        self.refused = refused
+
+    def call_tool(self, name: str, arguments: dict) -> dict:
+        if name == "minecraft_press_inputs" and self.refused is not None:
+            raise RuntimeError(f'minecraft_press_inputs failed: "unsupported ordinary key {self.refused}"')
+        return {"ok": True}
+
+
+class ProbeStepsCallCheckedTests(unittest.TestCase):
+    """TEST-NATIVE-F1: a refused automation key is an assertion, not an unlabelled abort."""
+
+    def steps(self, client: RefusingPressClient) -> ProbeSteps:
+        return ProbeSteps(client, Path(tempfile.mkdtemp()), 5.0, "native-v2-input-camera")
+
+    def test_accepted_call_records_the_assertion_true(self) -> None:
+        steps = self.steps(RefusingPressClient(None))
+        steps.call_checked("minecraft_press_inputs", {"keys": ["key.keyboard.f1"]}, "f1_automation_key_accepted")
+        self.assertTrue(steps.report["assertions"]["f1_automation_key_accepted"])
+
+    def test_refused_call_records_the_assertion_false_and_names_it(self) -> None:
+        steps = self.steps(RefusingPressClient("key.keyboard.f1"))
+        with self.assertRaisesRegex(RuntimeError,
+                                    "native-v2-input-camera assertion failed: f1_automation_key_accepted"):
+            steps.call_checked("minecraft_press_inputs", {"keys": ["key.keyboard.f1"]},
+                               "f1_automation_key_accepted")
+        self.assertFalse(steps.report["assertions"]["f1_automation_key_accepted"])
+        self.assertIn("unsupported ordinary key key.keyboard.f1", steps.transcript[-1].get("error", ""))
+
+
 if __name__ == "__main__":
     unittest.main()

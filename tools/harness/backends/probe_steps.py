@@ -55,6 +55,23 @@ class ProbeSteps:
             entry["error"] = str(error)
             raise
 
+    def call_checked(self, name: str, arguments: dict[str, Any], label: str) -> dict[str, Any]:
+        """A call whose acceptance is itself evidence: a tool error records `label` false.
+
+        A probe that only calls `call()` aborts on a refused tool argument without an assertion
+        entry, so a row whose symptom is the refusal (TEST-NATIVE-F1: automation rejects
+        `key.keyboard.f1`) could never be observed red in a control. The raised error keeps the
+        `assertion failed: <label>` form the ledger reads, with the tool's own message appended.
+        """
+        try:
+            result = self.call(name, arguments)
+        except Exception as error:
+            self.report["assertions"][label] = False
+            with runtime.phase("assertion"):
+                raise RuntimeError(f"{self.report['id']} assertion failed: {label}: {error}") from error
+        self.report["assertions"][label] = True
+        return result
+
     def observe(self, *, wait_for_play: bool = False, outside_play: bool = False) -> dict[str, Any]:
         """`outside_play` returns the state the client reports while it shows no playable world
         (the player below the world's block range); such a state has no player row."""
