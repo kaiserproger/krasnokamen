@@ -1948,9 +1948,68 @@ fn probe_retained_village_site_supply() {
              pass_median_ms={pass_median:.4} pass_samples_ms={pass_ms:?} \
              network_median_ms={network_median:.4}",
         );
-        // The real path for comparison: arm the village's own flag, simulate
-        // its chunk, and time `step_sites` itself, which also runs
-        // `funded_kinds` and the funding proofs the modelled shapes omit.
+        // The real path for comparison: stock the village's first container with
+        // the funded kind's bill (the recovered checkpoint's bank is empty, so
+        // nothing is funded and `step_sites` would examine nothing), arm the
+        // village's own flag, simulate its chunk, and time `step_sites` itself,
+        // which also runs `funded_kinds` and its funding proofs.
+        if let Some(&container) = super::sources(&state, record.id).first()
+            && let Some(entity) =
+                state
+                    .block_entities
+                    .get_mut(&(container[0], container[1], container[2]))
+            && let Some(level) = blueprint.level(1)
+        {
+            entity.slots.fill(mc_data::ItemStack::EMPTY);
+            let mut index = 0;
+            for &(item, mut count) in &level.materials {
+                while count > 0 && index < entity.slots.len() {
+                    let portion = count.min(64);
+                    entity.slots[index] = mc_data::ItemStack::new(item, portion as i32);
+                    index += 1;
+                    count -= portion;
+                }
+            }
+        }
+        let mut funded_ms: Vec<f64> = Vec::new();
+        let mut funded_count = 0usize;
+        for _ in 0..8 {
+            let images =
+                crate::plugin_structures::settlement_builds::source_images(&state, record.id);
+            let started = std::time::Instant::now();
+            let (kinds, count) = super::funded_kinds(&state, &record, record.id, &images);
+            funded_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            funded_count = count;
+            std::hint::black_box(kinds);
+        }
+        println!(
+            "PROBE step funded_kinds={funded_count} funded_median_ms={:.4} funded_samples_ms={funded_ms:?}",
+            median(&funded_ms),
+        );
+        // One kind's funding proof (`funded_variant`) is the unit `funded_kinds`
+        // pays per candidate kind: time it on the stocked bank.
+        let mut proof_ms: Vec<f64> = Vec::new();
+        let mut proof_ok = false;
+        if let Some(level) = blueprint.level(1) {
+            for _ in 0..8 {
+                let images =
+                    crate::plugin_structures::settlement_builds::source_images(&state, record.id);
+                let started = std::time::Instant::now();
+                let variant = super::storage::funded_variant(
+                    &state,
+                    &record,
+                    blueprint,
+                    &level.materials,
+                    &images,
+                );
+                proof_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+                proof_ok = variant.is_some();
+            }
+        }
+        println!(
+            "PROBE step proof_kind={blueprint_name} proof_funded={proof_ok} proof_median_ms={:.4} proof_samples_ms={proof_ms:?}",
+            median(&proof_ms),
+        );
         let chunk = crate::boundary::ChunkPos {
             x: record.anchor[0].div_euclid(16),
             z: record.anchor[2].div_euclid(16),
