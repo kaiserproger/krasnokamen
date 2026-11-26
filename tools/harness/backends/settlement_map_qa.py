@@ -1137,9 +1137,7 @@ def _program_unknown_script(probe: ProbeSteps, artifact: Path, _steps: list[dict
     cards: list[str] = []
     ticks = 0
     while True:
-        page = _project_page(probe)
-        cards = [str(row.get("name")) for row in (page.get("container") or {}).get("slots", [])
-                 if row.get("name")]
+        cards = _project_cards(probe)
         probe.call("minecraft_close_screen", {})
         if any(re.search(rf"{re.escape(name)} L\d+", card) for card in cards) or any(
                 unknown.lower() in card.lower() for card in cards):
