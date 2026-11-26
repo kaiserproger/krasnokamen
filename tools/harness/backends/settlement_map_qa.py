@@ -1193,11 +1193,14 @@ def _program_unknown_script(probe: ProbeSteps, artifact: Path, _steps: list[dict
             break
     (artifact / "program-unknown-cards.txt").write_text("\n".join(seen))
     text = "\n".join(seen)
-    probe.report["program_unknown"] = {"cards": seen}
+    card = next((line for line in seen if re.search(rf"{re.escape(name)} L\d+", line)), None)
+    probe.report["program_unknown"] = {"cards": seen, "card": card}
+    # The raw blueprint id `furnace` (lowercase) is the failure backstop: the display name is
+    # `Furnace`, so only a case-sensitive match separates the two.
     probe.check("program_unknown_label",
-                re.search(rf"{re.escape(name)} L\d+", text) is not None
+                card is not None
                 and unknown.lower() not in text.lower()
-                and re.search(r"furnace L\d+", text, re.IGNORECASE) is None)
+                and re.search(r"\bfurnace L\d+", text) is None)
     return []
 
 
