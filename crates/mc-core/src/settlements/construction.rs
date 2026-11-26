@@ -1571,10 +1571,11 @@ fn site_project<'a>(
     }
     let mut cursor = start % count;
     let kinds_count = kinds.len().max(1) as u32;
-    // Every funded kind gets an equal share of the pass's lots, and the whole
-    // remainder goes to the first kinds instead of being dropped: the last kind
-    // in the order used to be the one that ran dry (HANDOFF-50, `mason` frozen
-    // at 2738 while the kinds before it advanced).
+    // Every funded kind gets an equal share of the pass's lots, and the
+    // remainder (at most `kinds - 1` lots) now goes to the first kinds instead
+    // of being dropped. This is the only thing the hand-out changes: a kind was
+    // never starved by the kinds before it (each one already had its own share;
+    // a sweep standing still in the gate log was simply not funded that pass).
     let share = attempts / kinds_count;
     let mut leftover = attempts % kinds_count;
     let mut running = false;
@@ -1858,7 +1859,8 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
                 if pass.site.is_none() {
                     // Log-only diagnosis (HANDOFF-49): a settlement that never admits
                     // has to say whether its sweeps finish, restart on a street change,
-                    // or finish without a lot. `sweeps` is (kind, next, frontages, best).
+                    // or finish without a lot. `sweeps` is
+                    // (kind, next, frontages, holds a lot, restarts).
                     tracing::debug!(
                         target: "settlements::construction",
                         settlement = id.0,

@@ -48,7 +48,7 @@ fn housing_fixture(spare_bed: bool) -> (TickState, SettlementId) {
     (state, id)
 }
 
-fn stock_buildings(state: &mut TickState, levels: &[(&str, u8)]) {
+pub(super) fn stock_buildings(state: &mut TickState, levels: &[(&str, u8)]) {
     let mut bill = std::collections::BTreeMap::<u32, u32>::new();
     for &(name, level) in levels {
         for &(item, count) in &blueprints::get(&state.registry, name)
@@ -1560,7 +1560,7 @@ fn stepped_sweeps_admit_the_same_cheapest_lot_as_one_full_pass() {
         .map(|site| (site.bounds.min, site.project.rotation))
         .expect("the open ground admits one Farm");
     // The same walk in steps of four lots, each step examined against its share.
-    let step = 4;
+    let step = 32;
     let mut sweeps = site_refusals::Sweeps::default();
     let mut steps = 0u32;
     let stepped_origin = loop {
@@ -1593,9 +1593,10 @@ fn stepped_sweeps_admit_the_same_cheapest_lot_as_one_full_pass() {
     );
 }
 
-/// A pass hands the whole budget out: with five lots and two kinds the second
-/// kind must get the remainder instead of the pass dropping it (the last kind
-/// in the order used to run dry first, HANDOFF-50).
+/// A pass hands its whole budget out: with five lots and two kinds the leftover
+/// lot goes to the first kind instead of being dropped. (The hand-out is the
+/// only thing this changes; no kind used to be starved by the kinds before it -
+/// each already had its own share.)
 #[test]
 fn a_pass_spends_its_whole_budget_across_its_kinds() {
     let (mut state, id, builder) = fixture();

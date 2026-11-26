@@ -232,6 +232,57 @@ pub(super) fn pin_lot(state: &mut TickState, id: SettlementId, blueprint_name: &
 /// away, and 21 earlier orders were refused. Two free lots exist; the order
 /// scans the loaded plan once and takes one of them: as both cost nothing, the
 /// one the stable tie key ranks first.
+/// Agreement guard for the site search: a lot the sweep hands on must be one
+/// the plan can actually prepare. `check` cannot model the tree plan, so a lot
+/// whose own trees have no walking route used to win the cheapest ranking and be
+/// dropped in `materialize` every walk (HANDOFF-51: seed-24 House lot
+/// `[246,69,-176]`, `check` true, plan `no_route_with_trees`). The sweep now
+/// refuses that lot itself; this guard fails if any admitted lot is one the
+/// plan refuses.
+#[test]
+fn every_lot_the_sweep_admits_can_be_planned() {
+    let (mut state, id, builder) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "spanish_house", 1);
+    start(&mut state, id, "spanish_house", 1, None);
+    super::tests::complete(&mut state, id, builder);
+    super::growth_tests::stock_buildings(
+        &mut state,
+        &[("spanish_house", 1), ("farm", 1), ("storage", 1)],
+    );
+    let record = state.settlements.get(id).unwrap().clone();
+    let images = executor::source_images(&state, id);
+    let mut checked = 0;
+    for name in ["spanish_house", "farm", "storage"] {
+        let blueprint = blueprints::get(&state.registry, name).unwrap();
+        let Some(site) = site_project(
+            &state,
+            &record,
+            std::iter::once(blueprint),
+            &mut site_refusals::Sweeps::default(),
+            0,
+            u32::MAX,
+            &images,
+        )
+        .site
+        else {
+            // A kind the plan refuses everywhere simply admits nothing.
+            continue;
+        };
+        checked += 1;
+        let mut clearance = super::super::forestry::Clearance::prepared();
+        let planned =
+            super::preparation::planned_cells(&state, &site.project, "oak", &mut clearance);
+        assert!(
+            planned.is_ok(),
+            "the sweep admitted a {name} lot at {:?} the plan refuses ({:?})",
+            site.bounds.min,
+            planned.err().map(|_| super::preparation::take_last_stage())
+        );
+    }
+    assert!(checked > 0, "the open plan must admit at least one kind");
+}
+
 #[test]
 fn owner_order_takes_the_cheapest_free_lot() {
     let (mut state, id, _) = fixture();
@@ -1745,6 +1796,69 @@ fn probe_retained_village_site_supply() {
                 None,
             );
             println!("PROBE site origin={origin:?} size={size:?} -> {outcome:?}");
+        }
+    }
+    // R1 diagnosis (HANDOFF-51): a lot the sweep ranks can be refused later by
+    // `planned_cells`, which `check` does not model. Plan one authored lot
+    // directly: D123_CIV_PLAN="x,y,z,rotation,blueprint,species".
+    if let Ok(spec) = std::env::var("D123_CIV_PLAN") {
+        let parts: Vec<&str> = spec.split(',').map(str::trim).collect();
+        if parts.len() == 6 {
+            let origin = [
+                parts[0].parse().expect("x"),
+                parts[1].parse().expect("y"),
+                parts[2].parse().expect("z"),
+            ];
+            let rotation: u8 = parts[3].parse().expect("rotation");
+            let project = super::Project {
+                settlement: id,
+                blueprint: parts[4].to_owned(),
+                level: 1,
+                origin,
+                rotation,
+                building: None,
+                structure: String::new(),
+                ordered: false,
+                builder: None,
+                order_seq: None,
+            };
+            let mut survey = site_refusals::Survey::default();
+            let size = blueprints::get(&state.registry, parts[4])
+                .map(|blueprint| {
+                    blueprint.footprint(blueprints::Rotation::from_quarter_turns(rotation))
+                })
+                .expect("blueprint");
+            let checked = site_refusals::check(
+                &state,
+                &record,
+                origin,
+                size,
+                record.founding.as_ref(),
+                &mut survey,
+                Some(&site_refusals::floor_columns(
+                    blueprints::get(&state.registry, parts[4]).expect("blueprint"),
+                    rotation,
+                )),
+            );
+            super::preparation::take_last_stage();
+            let mut clearance = crate::settlements::forestry::Clearance::prepared();
+            let planned =
+                super::preparation::planned_cells(&state, &project, parts[5], &mut clearance);
+            println!(
+                "PROBE plan origin={origin:?} rotation={rotation} blueprint={} check={:?} trees_without_route={} planned={:?}",
+                parts[4],
+                checked.is_ok(),
+                super::super::forestry::lot_trees_without_route(&state, &project, size),
+                planned
+                    .as_ref()
+                    .map(|(bounds, cells)| (bounds.min, cells.len()))
+                    .map_err(|_| {
+                        (
+                            super::preparation::take_last_stage(),
+                            super::super::forestry::take_last_tree_stage(),
+                        )
+                    }),
+            );
         }
     }
     let blueprint_name = std::env::var("D123_CIV_BLUEPRINT").unwrap_or_else(|_| "storage".into());

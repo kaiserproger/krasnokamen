@@ -1020,6 +1020,59 @@ pub(crate) struct Preparation {
     pub(crate) corridor: Option<mc_script::ScriptWorldBounds>,
 }
 
+// Why the last `cells` call refused, for tests that run without a tracing
+// subscriber (HANDOFF-51: a lot the sweep ranks must say which tree condition
+// refuses it, or the gate sees the same lot refused forever).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static LAST_TREE_STAGE: std::cell::Cell<Option<&'static str>> =
+        const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_last_tree_stage() -> Option<&'static str> {
+    LAST_TREE_STAGE.with(|slot| slot.replace(None))
+}
+
+/// A lot the plan cannot prepare because its own trees have no walking route:
+/// `cells` refuses it, so the sweep must refuse it too or the same cheapest lot
+/// wins every walk and is dropped in `materialize` (HANDOFF-51: seed-24 House
+/// lot `[246,69,-176]`, `check` passed, the plan said `no_route_with_trees`).
+/// Cheap for the common case: a lot without a tree answers immediately.
+pub(crate) fn lot_trees_without_route(
+    state: &TickState,
+    project: &super::construction::Project,
+    size: [u8; 3],
+) -> bool {
+    let Some(record) = state.settlements.get(project.settlement) else {
+        return false;
+    };
+    let Some(bounds) = lot_bounds(state, project) else {
+        return false;
+    };
+    let mut has_tree = planted_crown_overlaps(state, bounds);
+    if !has_tree {
+        'lot: for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
+            for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
+                for y in project.origin[1] + 1..project.origin[1] + i32::from(size[1]) {
+                    if state
+                        .world
+                        .physics_block_at(x, y, z)
+                        .is_some_and(|block| tree_or_sapling(state, block))
+                    {
+                        has_tree = true;
+                        break 'lot;
+                    }
+                }
+            }
+        }
+    }
+    has_tree
+        && super::layout::Network::for_construction(state, record)
+            .construction_access(project)
+            .is_none()
+}
+
 /// Clear the lot and its walking corridor in physical work order. Only tree
 /// blocks are added here; unrelated terrain keeps the planner's old refusals.
 pub(crate) fn cells(
@@ -1037,14 +1090,20 @@ pub(crate) fn cells(
     let mut lot_has_tree = false;
     for x in project.origin[0]..project.origin[0] + i32::from(size[0]) {
         for z in project.origin[2]..project.origin[2] + i32::from(size[2]) {
-            let y = super::construction::surface_y_for_lot(
+            let Some(y) = super::construction::surface_y_for_lot(
                 state,
                 project.origin[1],
                 x,
                 z,
                 Some(bounds),
                 clearance,
-            )?;
+            ) else {
+                #[cfg(test)]
+                {
+                    LAST_TREE_STAGE.with(|slot| slot.set(Some("lot_surface")));
+                }
+                return None;
+            };
             lot_has_tree |= (y + 1..project.origin[1] + i32::from(size[1])).any(|above| {
                 state
                     .world
@@ -1064,7 +1123,13 @@ pub(crate) fn cells(
                 corridor: None,
             });
         }
-        None => return None,
+        None => {
+            #[cfg(test)]
+            {
+                LAST_TREE_STAGE.with(|slot| slot.set(Some("no_route_with_trees")));
+            }
+            return None;
+        }
     };
     for &[x, y, z] in &columns {
         let on_lot = [0, 2]
@@ -1079,6 +1144,10 @@ pub(crate) fn cells(
                 mc_script::ScriptWorldBounds::new([x, y, z], [x, y + 2, z]).ok()?,
             )
         {
+            #[cfg(test)]
+            {
+                LAST_TREE_STAGE.with(|slot| slot.set(Some("corridor_planted_crown")));
+            }
             return None;
         }
     }
@@ -1129,6 +1198,10 @@ pub(crate) fn cells(
             if !clearance.clearable(state, [x, y, z], Some(lot)) {
                 // A protected crown above the actual work volume stays there.
                 if y <= floor + 2 || (on_lot && y < project.origin[1] + i32::from(size[1])) {
+                    #[cfg(test)]
+                    {
+                        LAST_TREE_STAGE.with(|slot| slot.set(Some("protected_crown")));
+                    }
                     return None;
                 }
                 continue;
@@ -1144,6 +1217,10 @@ pub(crate) fn cells(
                     .by_id(BlockStateId(block))
                     .is_some_and(|definition| definition.block.id.path().ends_with("_sapling"))
             {
+                #[cfg(test)]
+                {
+                    LAST_TREE_STAGE.with(|slot| slot.set(Some("whole_tree_unproven")));
+                }
                 return None;
             }
             cells.push(PlannedCell {
