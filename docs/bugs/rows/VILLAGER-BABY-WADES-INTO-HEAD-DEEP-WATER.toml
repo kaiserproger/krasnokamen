@@ -9,3 +9,11 @@ source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T230749-civi
 failing_first = "reported"
 regression = ["cargo:mc-core:settlements::allocator::tests::routes_wade_through_foot_deep_water_but_never_deeper_or_lava"]
 fix_commit = "615ca404"
+# 2026-11-26 (D123PackReceipts): no real-client ref exists for this symptom. Every profile verdict
+# table in tools/harness was searched for a baby route assertion - none names one; the only pond
+# scene (`scene-shot:native-village-idle-stroll`) drops two adult villagers into a 4-deep pond and
+# asserts they float at the surface, which is swim behaviour, not the allocator's ford decision, so
+# it cannot flip with 615ca404. A discriminating fixture must make a BOUND baby walk a route across
+# head-deep water (meeting point beyond a 2-deep pond) and assert the baby's cell; building and
+# validating it is a new settlement fixture, and the routing code it exercises is
+# `crates/mc-core/src/settlements/**` (D123CivSite's scope).

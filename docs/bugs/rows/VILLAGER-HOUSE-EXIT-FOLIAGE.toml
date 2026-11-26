@@ -10,3 +10,9 @@ regression = ["cargo:mc-worldgen:terrain::village_seed_tests::seed100_village_do
 failing_first = "reported"
 fix_commit = "patch:6d225aa51498dbf4aebf199d2b77e0fb5a5d78a121536afd85e394ebf835692a"
 repro_check = "DEMOTED 2026-11-24 (Main, advisor): the scene-shot graphical ref does not discriminate - on the all-three-patches-reversed control tree (pin 95cccb7d, 20261124T001924-native-village-exit-foliage-l532xho0) the client still reads air at 124,72..73,-276 and the adjacent trunk, because a freshly generated seed-24 world never overhangs this entrance, so reversing the only worldgen guard changes nothing at runtime; the ref is unregistered and docs/bugs/promotions/VILLAGER-HOUSE-EXIT-FOLIAGE.json stays on record as evidence. A real-client control needs a seed or fixture whose generated crown really overhangs a door headroom."
+# 2026-11-26 (D123PackReceipts): `docs/bugs/promotions/VILLAGER-HOUSE-EXIT-FOLIAGE.patch`'s non-test
+# hunks hash exactly to the recorded `patch:6d225aa5…` and reverse on the candidate (`git apply -R
+# --check` rc=0); its hunks.md is present. The remaining gap is the discriminator the demoted
+# repro_check names: a seed whose PRE-FIX worldgen really overhangs a door headroom. Finding it needs
+# a worldgen scan on the reversed tree (the fix refuses the whole tree, so the overhang is absent from
+# any world generated with the fix), and then a scene parameterised to that seed/door.

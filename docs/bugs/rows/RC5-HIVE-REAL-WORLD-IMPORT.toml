@@ -9,3 +9,9 @@ repro = "manual"
 regression = []
 failing_first = "not recorded"
 repro_check = "Import an actual RC5 world whose player carries a bee hive or bee nest item (inventory, equipment, cursor and crafting grid), place the item and release the bee; the occupants must survive. Needs a real RC5 save; no unit test closes it."
+# 2026-11-26 (D123PackReceipts): no pin exists at the RC5 core tag `7edb728fd` and none at the RC5
+# client tag `17d73c3741` (searched every `pins/*/manifest.json`), and the row registers no check at
+# all. Proving it means: pin-release both tags, create the world with the RC5 server and the RC5
+# client, put a hive in custody (inventory, equipment, cursor and crafting grid), stop, restart on
+# the candidate and assert the occupants survive - plus a registered ref. Both builds and the
+# authoring session are outside this lane's remaining budget.
