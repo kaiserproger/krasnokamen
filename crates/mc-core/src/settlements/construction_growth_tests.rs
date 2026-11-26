@@ -201,7 +201,7 @@ fn only_a_holding_settlement_steps_and_construction_keeps_its_four_tick_clock() 
     let funded: Vec<&'static blueprints::Blueprint> = {
         let record = state.settlements.get(id).unwrap();
         let images = executor::source_images(&state, id);
-        let (kinds, count) = super::funded_kinds(&state, record, id, &images);
+        let (kinds, count) = super::site_refusals::funded_kinds(&state, record, id, &images);
         let funded: Vec<_> = kinds.into_iter().take(count).flatten().collect();
         assert!(
             !funded.is_empty(),
