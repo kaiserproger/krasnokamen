@@ -709,6 +709,24 @@ pub(super) fn upgrade_project(
             let level = building.level + 1;
             let (species, color) =
                 funded_variant(state, record.id, &blueprint.level(level)?.materials, images)?;
+            // Stock-only admission: nothing turns logs into planks for a
+            // construction bill on its own (`autocraft::order` is an owner
+            // action, and the only other producer is the builder's workshop,
+            // unusable while he is bound to this very site). A funded proof
+            // may therefore admit an upgrade the village can never supply: the
+            // adopted village held `oak_log` 140 with `oak_planks` 2 and kept
+            // `lumber_camp:2` bound at 2 work units from tick 5,420, starving
+            // Storage and House for 80,000 ticks. The whole bill must be in
+            // store; a later pass admits the upgrade once it is.
+            if !crate::settlements::construction_crafting::missing_base(
+                state,
+                &blueprint.level(level)?.materials,
+                images,
+            )
+            .is_empty()
+            {
+                return None;
+            }
             let species = species.to_owned();
             Some((
                 Project {
