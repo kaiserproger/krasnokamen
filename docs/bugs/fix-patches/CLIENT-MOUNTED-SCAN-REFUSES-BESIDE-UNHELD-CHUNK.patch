@@ -1,0 +1,220 @@
+diff --git a/src/player/vehicle.rs b/src/player/vehicle.rs
+index 484a3c84..c2d67a04 100644
+--- a/src/player/vehicle.rs
++++ b/src/player/vehicle.rs
+@@ -4,6 +4,13 @@ use super::*;
+ use crate::entities::{Metadata, Seat};
+ use crate::protocol::packet_ids::play::serverbound as sb;
+ 
++/// A cell of an unheld chunk is solid on the server (`mc-core` `TickSampler`: "Missing chunk
++/// blocks movement"), so every mounted scan resolves it like the foot scans do
++/// (`collision::gather`): one full solid cube, never fluid, never a block identity with an
++/// inside effect. `BlockBehaviour.Properties` defaults of a solid block stand in for the state:
++/// friction 0.6 and speed factor 1.0.
++const UNHELD_FRICTION: f32 = 0.6;
++
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+ enum Kind {
+     Boat,
+@@ -725,9 +732,16 @@ impl Player {
+                     (bounds.min[1] - 0.5000001).floor() as i32,
+                     v.position[2].floor() as i32,
+                 ];
+-                let below_state = world.block(below).ok_or("unloaded_mount_collision")?;
+-                let friction = content.info(below_state)?.friction;
+-                let block_speed = content.info(below_state)?.speed_factor;
++                let below_state = world.block(below);
++                let (friction, block_speed, block_jump) = match below_state {
++                    Some(state) => {
++                        let info = content.info(state)?;
++                        (info.friction, info.speed_factor, info.jump_factor)
++                    }
++                    // Solid on the server (`mc-core` "Missing chunk blocks movement"): vanilla's
++                    // default solid properties stand in for the state.
++                    None => (UNHELD_FRICTION, 1., 1.),
++                };
+                 let mut speed = movement_speed;
+                 let mut travel = [
+                     movement[0] * 0.5,
+@@ -1015,13 +1029,14 @@ impl Player {
+                 }
+                 if kind == Kind::Strider && fluid.1 > 0. {
+                     let p = v.position.map(|d| d.floor() as i32);
+-                    let above = world
+-                        .block([p[0], p[1] + 1, p[2]])
+-                        .ok_or("unloaded_mount_fluid")?;
+-                    let above_lava = content
+-                        .info(above)?
+-                        .fluid
+-                        .is_some_and(|f| f.kind == FluidKind::Lava);
++                    // An unheld cell above is solid and holds no lava.
++                    let above_lava = match world.block([p[0], p[1] + 1, p[2]]) {
++                        Some(above) => content
++                            .info(above)?
++                            .fluid
++                            .is_some_and(|f| f.kind == FluidKind::Lava),
++                        None => false,
++                    };
+                     if v.position[1] > f64::from(p[1]) + 0.5 - 1e-5 && !above_lava {
+                         v.grounded = true;
+                     } else {
+@@ -1139,7 +1154,10 @@ impl Player {
+             for z in b.min[2].floor() as i32..b.max[2].ceil() as i32 {
+                 for y in b.max[1].floor() as i32..top.ceil() as i32 {
+                     let p = [x, y, z];
+-                    let s = world.block(p).ok_or("unloaded_boat_water")?;
++                    // A cell of an unheld chunk is solid and holds no fluid.
++                    let Some(s) = world.block(p) else {
++                        continue;
++                    };
+                     if let Some(f) = content
+                         .info(s)?
+                         .fluid
+@@ -1163,7 +1181,10 @@ impl Player {
+             for z in b.min[2].floor() as i32..b.max[2].ceil() as i32 {
+                 for y in b.min[1].floor() as i32..(b.min[1] + 0.001).ceil() as i32 {
+                     let p = [x, y, z];
+-                    let s = world.block(p).ok_or("unloaded_boat_water")?;
++                    // A cell of an unheld chunk is solid and holds no fluid.
++                    let Some(s) = world.block(p) else {
++                        continue;
++                    };
+                     if let Some(f) = content
+                         .info(s)?
+                         .fluid
+@@ -1199,7 +1220,19 @@ impl Player {
+                         continue;
+                     }
+                     let p = [x, y, z];
+-                    let s = world.block(p).ok_or("unloaded_boat_ground")?;
++                    // A cell of an unheld chunk is one solid cube on the server, and its
++                    // default solid properties (friction 0.6) are the contact it forms.
++                    let Some(s) = world.block(p) else {
++                        let cube = Bounds {
++                            min: p.map(f64::from),
++                            max: p.map(|v| f64::from(v) + 1.),
++                        };
++                        if ground.intersects(cube) {
++                            total += UNHELD_FRICTION;
++                            count += 1;
++                        }
++                        continue;
++                    };
+                     if content.name(s) == Some("minecraft:lily_pad") {
+                         continue;
+                     }
+@@ -1533,24 +1566,26 @@ fn inside_mount(
+             }
+             Some("minecraft:powder_snow")
+                 if (kind == Kind::Boat
+-                    || content.name(
+-                        world
+-                            .block(v.position.map(|value| value.floor() as i32))
+-                            .ok_or("unloaded_mount_inside_block")?,
+-                    ) == Some("minecraft:powder_snow")) =>
++                    || world
++                        .block(v.position.map(|value| value.floor() as i32))
++                        .and_then(|state| content.name(state))
++                        == Some("minecraft:powder_snow")) =>
+             {
+                 v.stuck_multiplier = [f64::from(0.9f32), 1.5, f64::from(0.9f32)];
+                 v.fall_distance = 0.;
+             }
+             Some("minecraft:bubble_column") if visit.affects_motion => {
+-                let above = world
+-                    .block([x, y + 1, z])
+-                    .ok_or("unloaded_mount_inside_block")?;
+-                let surface = content.info(above)?.fluid.is_none()
+-                    && content
+-                        .collision_boxes(above)
+-                        .ok_or("unknown_collision_shape")?
+-                        .is_empty();
++                // An unheld cell above is solid, so it is no fluid surface.
++                let surface = match world.block([x, y + 1, z]) {
++                    Some(above) => {
++                        content.info(above)?.fluid.is_none()
++                            && content
++                                .collision_boxes(above)
++                                .ok_or("unknown_collision_shape")?
++                                .is_empty()
++                    }
++                    None => false,
++                };
+                 if !(surface && kind == Kind::Boat) {
+                     let drag = content
+                         .state_properties(state)
+@@ -1638,16 +1673,22 @@ fn finish_move(
+         v.fall_distance -= moved[1];
+     }
+     let p = v.position.map(|value| value.floor() as i32);
+-    let underfoot = world
+-        .block([p[0], (v.position[1] - 0.2).floor() as i32, p[2]])
+-        .ok_or("unloaded_mount_collision")?;
+-    let name = content.name(underfoot).ok_or("unknown_mount_block")?;
++    // A cell of an unheld chunk is solid on the server: it is no slime block, bed, water or
++    // bubble column, so the mount keeps moving on vanilla's default solid properties.
++    let underfoot = world.block([p[0], (v.position[1] - 0.2).floor() as i32, p[2]]);
++    let name = match underfoot {
++        Some(state) => Some(content.name(state).ok_or("unknown_mount_block")?),
++        None => None,
++    };
++    let beds = match underfoot {
++        Some(state) => content.block_has_tag(state, "minecraft:beds")?,
++        None => false,
++    };
+     if wanted[1] != moved[1] {
+         v.velocity[1] = if v.velocity[1] < 0.
+-            && (name == "minecraft:slime_block"
+-                || content.block_has_tag(underfoot, "minecraft:beds")?)
++            && (name == Some("minecraft:slime_block") || beds)
+         {
+-            let bounce = if name == "minecraft:slime_block" {
++            let bounce = if name == Some("minecraft:slime_block") {
+                 1.
+             } else {
+                 f64::from(0.66f32)
+@@ -1702,7 +1744,10 @@ fn boat_water_above(world: &World, content: &Content, b: Bounds, last_y: f64) ->
+         for x in b.min[0].floor() as i32..b.max[0].ceil() as i32 {
+             for z in b.min[2].floor() as i32..b.max[2].ceil() as i32 {
+                 let p = [x, y, z];
+-                let s = world.block(p).ok_or("unloaded_boat_water")?;
++                // A cell of an unheld chunk is solid and holds no fluid.
++                let Some(s) = world.block(p) else {
++                    continue;
++                };
+                 if let Some(f) = content
+                     .info(s)?
+                     .fluid
+@@ -1759,20 +1804,25 @@ fn append_lava_colliders(
+         for x in area.min[0].floor() as i32..area.max[0].ceil() as i32 {
+             for z in area.min[2].floor() as i32..area.max[2].ceil() as i32 {
+                 let p = [x, y, z];
+-                let s = world.block(p).ok_or("unloaded_mount_fluid")?;
++                // A cell of an unheld chunk is solid and holds no lava.
++                let Some(s) = world.block(p) else {
++                    continue;
++                };
+                 if content
+                     .info(s)?
+                     .fluid
+                     .is_some_and(|fluid| fluid.kind == FluidKind::Lava)
+                 {
+-                    let above = world.block([x, y + 1, z]).ok_or("unloaded_mount_fluid")?;
+-                    let top = f64::from(y) + 0.5;
+-                    if b.min[1] > top - 1e-5
+-                        && !content
++                    // No lava above an unheld cell: nothing is cut a half block short by it.
++                    let above_lava = match world.block([x, y + 1, z]) {
++                        Some(above) => content
+                             .info(above)?
+                             .fluid
+-                            .is_some_and(|fluid| fluid.kind == FluidKind::Lava)
+-                    {
++                            .is_some_and(|fluid| fluid.kind == FluidKind::Lava),
++                        None => false,
++                    };
++                    let top = f64::from(y) + 0.5;
++                    if b.min[1] > top - 1e-5 && !above_lava {
+                         out.push(Bounds {
+                             min: [f64::from(x), f64::from(y), f64::from(z)],
+                             max: [f64::from(x + 1), top, f64::from(z + 1)],

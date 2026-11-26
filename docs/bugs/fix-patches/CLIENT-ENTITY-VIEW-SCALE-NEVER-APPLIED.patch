@@ -1,0 +1,102 @@
+diff --git a/src/session.rs b/src/session.rs
+index 9cc57d7a..39a8b983 100644
+--- a/src/session.rs
++++ b/src/session.rs
+@@ -574,6 +574,17 @@ impl Session {
+     pub fn fov_deg(&self) -> f32 {
+         self.fov_deg
+     }
++    /// Vanilla `LevelExtractor.extractVisibleEntities`:
++    /// `Entity.setViewScale(clamp(effective render distance / 8, 1, 2.5) * entityDistanceScaling)`
++    /// for the frames that follow. Without it the store keeps its default 1.0 and every entity
++    /// draw gate is the plain `AABB.getSize * 64` reach (CLIENT-ENTITY-VIEW-SCALE-NEVER-APPLIED).
++    fn sync_entity_view_scale(&mut self) {
++        self.entities
++            .set_view_scale(crate::entities::view_range::view_scale(
++                self.effective_render_distance(),
++                self.entity_distance_scaling,
++            ));
++    }
+     pub fn mouse_sensitivity(&self) -> f32 {
+         self.mouse_sensitivity
+     }
+@@ -709,6 +720,7 @@ impl Session {
+         self.scene = Scene::default();
+         self.scene.render_distance = self.render_distance;
+         self.server_view_distance = None;
++        self.sync_entity_view_scale();
+         if let (Some(mut ui), Some(content)) = (previous_ui, previous_content) {
+             ui.clear_session();
+             ui.release_all();
+diff --git a/src/session/actions.rs b/src/session/actions.rs
+index 062da991..a7c8a0f6 100644
+--- a/src/session/actions.rs
++++ b/src/session/actions.rs
+@@ -841,6 +841,11 @@ impl Session {
+                 self.scene.render_distance = self.render_distance;
+                 self.push_render_distance();
+             }
++            "entity_distance_scaling" => {
++                self.entity_distance_scaling = clean
++                    .as_f64()
++                    .ok_or("client setting entity_distance_scaling lost its number")?;
++            }
+             "language" => {
+                 let language = clean
+                     .as_str()
+@@ -899,6 +904,7 @@ impl Session {
+             }
+             _ => {}
+         }
++        self.sync_entity_view_scale();
+         if let Some(ui) = &mut self.ui {
+             ui.apply_setting(key, clean.clone())?;
+         }
+@@ -1115,6 +1121,7 @@ impl Session {
+             );
+         self.far.set_distance(distance);
+         self.client_defaults.saved = settings;
++        self.sync_entity_view_scale();
+         self.camera();
+     }
+     pub(super) fn consume_player_effects(&mut self) -> Result<()> {
+diff --git a/src/session/packets.rs b/src/session/packets.rs
+index b4546203..c6d21d18 100644
+--- a/src/session/packets.rs
++++ b/src/session/packets.rs
+@@ -682,6 +682,7 @@ impl Session {
+                 }
+                 r.var()?;
+                 self.server_view_distance = u32::try_from(r.var()?).ok();
++                self.sync_entity_view_scale();
+                 r.var()?;
+                 r.bool()?;
+                 r.bool()?;
+@@ -709,6 +710,7 @@ impl Session {
+             cb::SET_CHUNK_CACHE_RADIUS => {
+                 self.server_view_distance = u32::try_from(r.var()?).ok();
+                 r.done()?;
++                self.sync_entity_view_scale();
+             }
+             cb::RESPAWN => {
+                 self.spawn_info(r)?;
+diff --git a/src/session/replay.rs b/src/session/replay.rs
+index 4d4c2dd5..570ffc32 100644
+--- a/src/session/replay.rs
++++ b/src/session/replay.rs
+@@ -133,6 +133,7 @@ impl Session {
+             self.world.set_view_distance(distance);
+             self.scene.render_distance = distance;
+         }
++        self.sync_entity_view_scale();
+         Ok(())
+     }
+     /// Vanilla «Entity Distance» of a replay render (`--entity-distance`), not persisted.
+@@ -147,6 +148,7 @@ impl Session {
+             ));
+         }
+         self.entity_distance_scaling = scaling;
++        self.sync_entity_view_scale();
+         Ok(())
+     }
+     pub(crate) fn replay_seek_phase(&mut self, phase: Option<SeekPhase>) -> Result<()> {
