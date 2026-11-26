@@ -9,7 +9,7 @@ source = "receipts/BreakVillageParity/FINDINGS.md (Noticed, not filed): every be
 regression = ["cargo:mc-core:sleep::tests::a_sleeping_player_marks_the_bed_occupied_and_a_wake_clears_it", "cargo:mc-core:sleep::tests::a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it", "harness:scene-shot:native-bed-occupied-state",
   "harness:scene-shot:native-village-occupied-bed"]
 failing_first = "not recorded"
-fix_commit = "patch:fb6d7c78c3ad229b655fddb7960cb96e47224e53c7e3a24c960eec760c079361"
+fix_commit = "patch:5d2050fc2179ab32972e8bdafd9b66ecc0d329aee164ccb5ebb5f9821cad86d0"
 # Both regressions red through the multi-line `assert!(bed_occupied(..), "…")` macro, whose panic
 # location is the macro's own first line, so the control's red is named here (README class (c)).
 proving_assertions = { "cargo:mc-core:sleep::tests::a_sleeping_player_marks_the_bed_occupied_and_a_wake_clears_it" = "crates/mc-core/src/sleep_tests.rs:1300", "cargo:mc-core:sleep::tests::a_sleeping_resident_marks_the_bed_occupied_and_any_wake_clears_it" = "crates/mc-core/src/sleep_tests.rs:1321" }

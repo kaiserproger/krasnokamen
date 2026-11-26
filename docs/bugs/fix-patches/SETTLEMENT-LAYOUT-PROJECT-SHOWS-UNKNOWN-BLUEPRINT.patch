@@ -1,0 +1,13 @@
+diff --git a/crates/mc-core/src/settlements/ui_text.rs b/crates/mc-core/src/settlements/ui_text.rs
+--- a/crates/mc-core/src/settlements/ui_text.rs
++++ b/crates/mc-core/src/settlements/ui_text.rs
+@@ -794,6 +794,9 @@ pub(crate) fn blueprint(lang: Lang, id: &str) -> &'static str {
+         "spanish_plaza" => ("Spanish plaza", "Испанская площадь"),
+         "spanish_fortress" => ("Spanish fortress", "Испанская крепость"),
+         "spanish_wall" => ("Spanish wall", "Испанская стена"),
++        "perimeter" => ("Wall section", "Секция стены"),
++        "perimeter_gate" => ("Gate", "Ворота"),
++        "well" => ("Well", "Колодец"),
+         "furnace" => ("Furnace", "Печь"),
+         "road" => ("Road", "Дорога"),
+         "lamp" => ("Street lamp", "Фонарь"),

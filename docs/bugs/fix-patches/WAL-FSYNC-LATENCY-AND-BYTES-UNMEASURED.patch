@@ -1,0 +1,90 @@
+diff --git a/crates/mc-core/src/journal.rs b/crates/mc-core/src/journal.rs
+index caf4e4d7f..d7639973e 100644
+--- a/crates/mc-core/src/journal.rs
++++ b/crates/mc-core/src/journal.rs
+@@ -955,8 +955,13 @@ impl JournalWriter {
+                 .map_err(|err| CoreError::Storage(err.to_string()))?;
+             #[cfg(test)]
+             wal_stage("written");
++            let fsync_start = std::time::Instant::now();
+             file.sync_all()
+                 .map_err(|err| CoreError::Storage(err.to_string()))?;
++            record_fsync(fsync_start.elapsed());
++            WAL_FILE_FSYNCS.fetch_add(1, Ordering::Relaxed);
++            WAL_APPEND_BYTES.fetch_add(frame.len() as u64, Ordering::Relaxed);
++            WAL_BATCH_BYTES_LAST.store(frame.len() as u64, Ordering::Relaxed);
+             #[cfg(test)]
+             wal_stage("synced");
+         }
+@@ -993,7 +998,10 @@ impl JournalWriter {
+             }
+             *skip -= 1;
+         }
++        let fsync_start = std::time::Instant::now();
+         fsync_dir(&self.dir).map_err(|err| CoreError::Storage(err.to_string()))?;
++        record_fsync(fsync_start.elapsed());
++        WAL_DIR_FSYNCS.fetch_add(1, Ordering::Relaxed);
+         #[cfg(test)]
+         self.bind_pending_frames()?;
+         self.pending_fsync = 0;
+diff --git a/tools/coreperf/profiles.py b/tools/coreperf/profiles.py
+index a60a64ab2..449e88b10 100644
+--- a/tools/coreperf/profiles.py
++++ b/tools/coreperf/profiles.py
+@@ -1669,6 +1669,48 @@ def client_tick_arrival(bots: dict[str, Any]) -> dict[str, Any]:
+             "scope": "client-observed clock-heartbeat arrival at the bots; period = interval / game-time delta"}
+ 
+ 
++def journal_rollup(rows: list[dict[str, Any]], start: int, end: int,
++                   tick_starts: list[int]) -> dict[str, Any]:
++    """WAL fsync service time, fsync count and bytes in the window, from `/stats.journal`.
++
++    The counters are process-cumulative, so the receipt states the window delta and the bytes per
++    source tick (WAL-FSYNC-LATENCY-AND-BYTES-UNMEASURED). A server that reports no write counters
++    yields a named `unavailable`, never a silent absence."""
++    window = [row for row in rows if start <= row["captured_unix_ns"] < end]
++    stats = [row["stats"].get("journal") for row in window if isinstance(row.get("stats"), dict)]
++    stats = [stat for stat in stats if isinstance(stat, dict)]
++    if len(stats) < 2:
++        return {"status": "unavailable", "reason": "fewer than two /stats samples inside the window"}
++    first, last = stats[0], stats[-1]
++    ticks = sum(1 for at in tick_starts
++                if window[0]["captured_unix_ns"] <= at < window[-1]["captured_unix_ns"])
++    counters = ("append_bytes_total", "file_fsyncs_total", "dir_fsyncs_total", "fsync_nanos_total")
++    if any(not isinstance(last.get(name), int) or not isinstance(first.get(name), int)
++           for name in counters):
++        return {"status": "unavailable", "reason": "server /stats carried no WAL write counters"}
++    append_bytes = last["append_bytes_total"] - first["append_bytes_total"]
++    fsyncs = last["file_fsyncs_total"] - first["file_fsyncs_total"]
++    dir_fsyncs = last["dir_fsyncs_total"] - first["dir_fsyncs_total"]
++    nanos = last["fsync_nanos_total"] - first["fsync_nanos_total"]
++    # `fsync_nanos_total` times file AND directory fsyncs, so the mean divides by both counts; a
++    # file-only divisor inflated it by (file + dir) / file, i.e. by every journal flush.
++    service_time = fsyncs + dir_fsyncs
++    result: dict[str, Any] = {
++        "append_bytes": append_bytes,
++        "file_fsyncs": fsyncs,
++        "dir_fsyncs": dir_fsyncs,
++        "fsync_ms_mean": round(nanos / 1e6 / service_time, 4) if service_time else None,
++        # `fetch_max` since process start, never reset per window: a warm-up stall is not this
++        # window's worst fsync, so the field says which scope it has.
++        "fsync_ms_max_since_start": round(last.get("fsync_nanos_max", 0) / 1e6, 4),
++        "batch_bytes_last": last.get("batch_bytes_last"),
++        "scope": "process-cumulative journal counters from /stats; counts and mean over the "
++                 "measured window, the max over the whole process lifetime"}
++    if ticks:
++        result["append_bytes_per_tick"] = round(append_bytes / ticks, 1)
++    return result
++
++
+ def error_rollup(rows: list[dict[str, Any]], start: int, end: int) -> dict[str, Any]:
+     """Per-window error rollup: socket drops, short/stalled writes and refused inputs.
+ 
+@@ -1718,6 +1760,7 @@ def summarize(samples: list[dict[str, Any]], processes: list[dict[str, Any]],
+             "population_observed": {"first": rows[0]["stats"]["entities"], "last": rows[-1]["stats"]["entities"]},
+             "resident_chunks_observed": {"first": rows[0]["stats"]["chunks"], "last": rows[-1]["stats"]["chunks"]},
+             "threads": thread_summary(processes, start, end, all_tick_starts),
++            "journal": journal_rollup(processes, start, end, all_tick_starts),
+             "errors": error_rollup(processes, start, end)}
+ 
+ 
