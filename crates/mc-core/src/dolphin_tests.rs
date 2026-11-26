@@ -335,6 +335,7 @@ fn fed_dolphin_locates_the_structure_through_its_normal_goal_tick() {
                 assert!(
                     crate::command_locate::await_queued_search(
                         &mut state,
+                        crate::command_locate::LocateLane::Background,
                         std::time::Duration::from_secs(30)
                     ),
                     "the locate worker must answer the dolphin search"
@@ -595,6 +596,7 @@ fn a_player_chest_without_a_located_structure_is_not_a_treasure_lead() {
                 assert!(
                     crate::command_locate::await_queued_search(
                         &mut state,
+                        crate::command_locate::LocateLane::Background,
                         std::time::Duration::from_secs(30)
                     ),
                     "the locate worker must answer the dolphin search"

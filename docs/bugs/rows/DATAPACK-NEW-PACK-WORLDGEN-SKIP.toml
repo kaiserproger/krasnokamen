@@ -5,7 +5,29 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "Split from DATAPACK-WORLDGEN-OVERRIDES (final review 10, B4): the original report also claimed that a new pack holding unsupported worldgen is skipped and named. That half was never proven: in the withdrawn control the start-skip assertion stayed green and the real-client ref was unrunnable (docs/bugs/promotions/DATAPACK-WORLDGEN-OVERRIDES.json, negative_control: start_skips_A_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest green; harness ref unrunnable). The behaviour is 1d8e57dd8's PackSet::open trial and the worldgen input validation at datapacks_worldgen.rs:983-990, plus the replay-baseline fence; a new pack joins only when content installs, worldgen inputs prepare and validate, and the fence accepts its identity."
+source = """Split from DATAPACK-WORLDGEN-OVERRIDES (final review 10, B4): the original report also claimed that a
+new pack holding unsupported worldgen is skipped and named. That half was never proven: in the withdrawn
+control the start-skip assertion stayed green and the real-client ref was unrunnable
+(docs/bugs/promotions/DATAPACK-WORLDGEN-OVERRIDES.json, negative_control:
+start_skips_A_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest green; harness ref unrunnable). The
+behaviour is 1d8e57dd8's PackSet::open caller trial plus the worldgen input validation at
+datapacks_worldgen.rs:983-990 and the replay-baseline fence; a new pack joins only when content installs,
+worldgen inputs prepare and validate, and the fence accepts its identity."""
 regression = ["cargo:mc-core:datapacks::worldgen::tests::start_skips_a_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest"]
-failing_first = "not recorded"
-repro_check = "Open: no faithful control. The behaviour is new in 1d8e57dd8 (the caller-trial `PackSet::open` signature and `datapacks_worldgen::open` are introduced by it), so its pre-image has no equivalent to reverse, and a whole reversal is E0425 at game_clock_upgrade.rs:276. A control needs a re-break that keeps the API and restores only the pre-fix outcome (a new pack whose worldgen cannot prepare refuses the start), then a real-client or start-path red; not attempted. The ref is green on this tree."
+proving_refs = ["cargo:mc-core:datapacks::worldgen::tests::start_skips_a_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest"]
+failing_first = "reported"
+fix_commit = "patch:362ed1a0da0d4686e5846e9b4824f49a49a8d7aeceaf28509a9eec6e68fea023"
+repro_check = """RED control (keeps the API): in crates/mc-core/src/datapacks.rs the caller trial's
+`Err(error) => skipped.push(...)` becomes `Err(error) => return Err(error)`, so a new pack the world
+cannot open with refuses the start — the pre-fix outcome, with `PackSet::open`'s signature untouched (a
+whole reversal of 1d8e57dd8 is E0425 at game_clock_upgrade.rs:276). The registered test now asserts the
+recovery with a message instead of unwrapping it. Artifact 20261126T132012-test-h800hvvo: the unwrap
+version panicked with `Worldgen("Datapack worldgen requires the vanilla gameplay cache")` — the start
+refusal — and the strengthened assertion reports the same refusal at datapacks_worldgen_tests.rs:424.
+Green on the candidate: artifact recorded in HANDOFF (the same ref on the restored tree).
+
+Promotion is not ready: the row is `repro = manual` and the ledger requires a graphical harness ref plus
+a client receipt for such rows, while this is a server-start path with no scene ref. That is a
+proof-shape decision (the POL-2 / MECH-13 family: a start-path row whose symptom no client scene can
+show), and the fix patch has to be committed at
+docs/bugs/fix-patches/DATAPACK-NEW-PACK-WORLDGEN-SKIP.patch for a patch-mode promote."""

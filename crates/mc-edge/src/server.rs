@@ -2075,6 +2075,10 @@ mod core_halt_tests;
 mod pump_join_lag_tests;
 
 #[cfg(test)]
+#[path = "server/pump_chain_tests.rs"]
+mod pump_chain_tests;
+
+#[cfg(test)]
 #[path = "server_view_distance_tests.rs"]
 mod view_distance_tests;
 

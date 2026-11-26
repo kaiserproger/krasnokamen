@@ -76,7 +76,7 @@ use entity_motion::{
 };
 use scratch::{PlanScratch, ViewWindow};
 use seats::{clear_seats, plan_seats};
-pub(crate) use tick_index::TickPlanIndex;
+pub(crate) use tick_index::{PublicationHistory, TickPlanIndex};
 use tick_index::{entity_chunk, event_subject};
 pub(crate) use viewer::TrackedEntity;
 pub use viewer::ViewerState;

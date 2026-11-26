@@ -47,6 +47,9 @@ mod entity_type_flags_tests;
 #[path = "plan/entity_interest_tests.rs"]
 mod entity_interest_tests;
 
+#[path = "plan/pen_scenario_tests.rs"]
+mod pen_scenario_tests;
+
 #[path = "plan/books_frames_tests.rs"]
 mod books_frames_tests;
 

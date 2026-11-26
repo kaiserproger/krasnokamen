@@ -32,6 +32,13 @@ pub(super) struct EntityInterest {
 }
 
 impl EntityInterest {
+    /// Forget the delivered base and the seeded view, for a client that built
+    /// a new level (dimension travel): its entity interest is reconciled from
+    /// scratch, never bridged from a base the new level never delivered.
+    pub(super) fn forget(&mut self) {
+        *self = Self::default();
+    }
+
     pub(super) fn previous(&self) -> Option<&mc_core::boundary::EntityViews> {
         self.previous.as_ref()
     }
@@ -76,7 +83,26 @@ impl EntityInterest {
                     == entity_chunk(viewer.position)
         });
         if !contiguous || !window_same || !held_same {
+            // Name why a continuous publication was not available: history a
+            // `Lagged` dropped, or history the pump's chain no longer held.
+            if !contiguous
+                && window_same
+                && held_same
+                && let Some(revision) = revision
+            {
+                if index
+                    .chain_info()
+                    .lost_through
+                    .is_some_and(|lost| revision <= lost)
+                {
+                    viewer.rescans_gap += 1;
+                } else {
+                    viewer.rescans_no_history += 1;
+                }
+            }
             entity_candidates::collect(snapshot, viewer, distance, scratch, credit, spectators);
+            viewer.rescans += 1;
+            viewer.entities_scanned += scratch.visible.len() as u64;
             self.ranges.clear();
             self.ranges.extend(scratch.tracking_ranges.iter().copied());
             self.visible.clear();
@@ -146,7 +172,11 @@ impl EntityInterest {
                 index.entity_changes_for(&viewer.loaded_chunks, |delta| {
                     self.delta(snapshot, viewer, distance, delta, spectators);
                 });
-                // The player's own image need not belong to a held chunk.
+                // The player's own image need not belong to a held chunk. This checks only the
+                // last step of the chain (`changed()`), not the union the bridge covers; that is
+                // wire-safe because the viewer's own SetEntityData is sent on every plan through
+                // the appearance-stale path (`entities.rs`), and the own id is skipped in the
+                // delta loop above. It is therefore not "exactly a rescan of the base".
                 if !viewer
                     .loaded_chunks
                     .contains_key(&entity_chunk(viewer.position))

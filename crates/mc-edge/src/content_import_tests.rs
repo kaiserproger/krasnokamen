@@ -392,3 +392,166 @@ fn classpath_round_trips_through_the_platform_separator() {
     let separator = if cfg!(windows) { ";" } else { ":" };
     assert_eq!(joined.to_string_lossy().matches(separator).count(), 2);
 }
+
+/// A child that stands in for a JVM blocked on a lock: it writes one line, then sleeps far past
+/// any useful limit. `exec` makes the shell become the sleeper, so killing the child's pid kills
+/// the process the wait is actually about.
+#[cfg(unix)]
+/// A child that stands in for a JVM blocked on a lock: the shell keeps the marker script in its
+/// own cmdline (no `exec`), so a `/proc` scan can tell whether it is still running.
+#[cfg(unix)]
+fn stalled_script(dir: &Path, marker: &str) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let script = dir.join(marker);
+    std::fs::write(&script, "#!/bin/sh\nsleep 60\n").unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    script
+}
+
+#[cfg(unix)]
+fn alive(pid: u32) -> bool {
+    std::path::Path::new(&format!("/proc/{pid}")).exists()
+}
+
+/// Whether any process still carries `marker` in its cmdline (the stalled stand-in).
+#[cfg(unix)]
+fn running(marker: &str) -> bool {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let Ok(bytes) = std::fs::read(entry.path().join("cmdline")) else {
+            return false;
+        };
+        bytes
+            .split(|byte| *byte == 0)
+            .any(|arg| std::str::from_utf8(arg).is_ok_and(|arg| arg.ends_with(marker)))
+    })
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_stalled_jvm_child_is_killed_at_the_deadline() {
+    // CONTENT-IMPORT-JVM-NO-TIMEOUT: the row's symptom is a child that never returns. The wait must
+    // end at its own limit, and the child must not survive it.
+    let dir = tempfile::tempdir().unwrap();
+    let marker = format!("stalled-jvm-{}", std::process::id());
+    let script = stalled_script(dir.path(), &marker);
+    let mut command = tokio::process::Command::new("sh");
+    command.arg(&script);
+    let started = std::time::Instant::now();
+    let error = super::run_jvm_child(
+        &mut command,
+        "stalled child",
+        std::time::Duration::from_millis(300),
+    )
+    .await
+    .expect_err("a stalled child must not be waited on forever");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("did not finish within") && message.contains("stalled child"),
+        "the refusal names the child and its limit: {message}"
+    );
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(20),
+        "the wait was bounded by its own limit, not the child's 60 s"
+    );
+    assert!(!running(&marker), "the timed-out child was killed");
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_dropped_jvm_child_is_killed() {
+    // Ctrl-C or an earlier error drops the command: `kill_on_drop` must not leave the JVM running.
+    let dir = tempfile::tempdir().unwrap();
+    let marker = format!("dropped-jvm-{}", std::process::id());
+    let script = stalled_script(dir.path(), &marker);
+    let mut command = tokio::process::Command::new("sh");
+    command
+        .arg(&script)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+    let child = command.spawn().expect("spawn the stand-in JVM");
+    let pid = child.id().expect("the child has a pid");
+    assert!(alive(pid), "the child runs before the drop");
+    drop(child);
+    // The kill is issued by the runtime's orphan queue: wait for the pid to go, bounded.
+    for _ in 0..100 {
+        if !alive(pid) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert!(!alive(pid), "dropping the child kills it");
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_bounded_child_returns_its_output() {
+    // The bounded wait keeps `Command::output`'s contract: status and both pipes of a child that
+    // finishes in time, so the datagen/javac/extractor call sites still read their errors.
+    let mut command = tokio::process::Command::new("sh");
+    command.arg("-c").arg("echo out; echo err 1>&2; exit 3");
+    let output = super::run_jvm_child(
+        &mut command,
+        "quick child",
+        std::time::Duration::from_secs(30),
+    )
+    .await
+    .expect("a child that finishes inside the limit returns");
+    assert_eq!(output.status.code(), Some(3));
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "out");
+    assert_eq!(String::from_utf8_lossy(&output.stderr).trim(), "err");
+}
+
+/// A `java` stand-in that never finishes: the row's stalled JVM (a lock, stdin, a full disk).
+#[cfg(unix)]
+fn stalled_java(dir: &Path) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let path = dir.join("stalled-java");
+    std::fs::write(&path, "#!/bin/sh\nexec sleep 30\n").unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    path
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_stalled_datagen_returns_a_bounded_error() {
+    // CONTENT-IMPORT-JVM-NO-TIMEOUT: `content import` waited on the bundle's datagen/javac/extractors
+    // with no deadline, so a stalled JVM blocked the command forever. The production path must
+    // return at its own limit; the pre-fix path never returns, which is this test's red.
+    let dir = tempfile::tempdir().unwrap();
+    let java = stalled_java(dir.path());
+    let jar = dir.path().join("bundle.jar");
+    let work = dir.path().join("work");
+    let staging = dir.path().join("staging");
+    std::fs::create_dir_all(&staging).unwrap();
+    // The import runs as its own task: the pre-fix path never returns, and the assertion below is
+    // this test's red (a hang never counts as one).
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let java = java.clone();
+    tokio::spawn(async move {
+        let result = super::run_datagen_bounded(
+            java.as_os_str(),
+            &jar,
+            &work,
+            &staging,
+            std::time::Duration::from_millis(300),
+        )
+        .await;
+        let _ = sender.send(format!(
+            "{:#}",
+            result.expect_err("a stalled datagen cannot succeed")
+        ));
+    });
+    let message = tokio::time::timeout(std::time::Duration::from_secs(10), receiver)
+        .await
+        .expect("the import path must return instead of waiting for the JVM")
+        .expect("the task reports the refusal");
+    assert!(
+        message.contains("did not finish within"),
+        "the refusal names the deadline: {message}"
+    );
+}

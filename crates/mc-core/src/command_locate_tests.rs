@@ -818,26 +818,24 @@ fn dolphin_located_tag_is_ocean_ruins_and_shipwrecks_only() {
 }
 
 #[test]
-fn dolphin_requests_reserve_command_queue_capacity_before_the_snapshot() {
+fn a_full_background_lane_still_admits_an_interactive_open() {
+    // LOCATE-SHARED-FIFO: one FIFO worker let a player `/locate` sit in front of a container or
+    // cartographer open. The opens have their own lane and worker, so a full background lane
+    // (here a zero-capacity channel: every `try_send` is `Full`) cannot refuse one.
     let (mut state, connection) = locate_fixture();
-    let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
-    let (_done_tx, done_rx) = std::sync::mpsc::channel();
-    state.locate.jobs = Some(jobs_tx);
-    state.locate.done = Some(done_rx);
-    let dolphin = crate::boundary::EntityId(4242);
-    state.locate.queued = super::MAX_QUEUED_JOBS - super::COMMAND_QUEUE_RESERVE;
-    assert!(!super::request_dolphin_treasure(
-        &mut state,
-        dolphin,
-        [8.5, 200.0, 8.5]
-    ));
-    assert!(!state.locate.dolphin.contains_key(&dolphin));
-    assert_eq!(
-        state.locate.queued,
-        super::MAX_QUEUED_JOBS - super::COMMAND_QUEUE_RESERVE,
-        "a refused entity request must not build or queue a snapshot"
+    let (background_tx, _background_rx) = std::sync::mpsc::sync_channel(0);
+    let (_background_done_tx, background_done_rx) = std::sync::mpsc::channel();
+    state.locate.install_test_lane(
+        super::LocateLane::Background,
+        background_tx,
+        background_done_rx,
     );
-    // The reserved capacity is still available to an interactive command.
+    let (open_tx, open_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
+    let (_open_done_tx, open_done_rx) = std::sync::mpsc::channel();
+    state
+        .locate
+        .install_test_lane(super::LocateLane::Interactive, open_tx, open_done_rx);
+    // A player's `/locate` is a background search: the full lane refuses it, never queues behind.
     assert!(
         super::submit(
             &mut state,
@@ -852,9 +850,106 @@ fn dolphin_requests_reserve_command_queue_capacity_before_the_snapshot() {
                 referenced: Default::default(),
             },
         )
-        .is_some()
+        .is_none()
     );
-    assert_eq!(state.locate.queued, super::MAX_QUEUED_JOBS - 1);
+    // The same state admits the interactive open on its own lane.
+    assert!(
+        super::submit(
+            &mut state,
+            super::LocateOwner::Connection(connection),
+            super::LocateKind::Structure,
+            (0, 64, 0),
+            vec![id("minecraft:on_treasure_maps")],
+            super::LocateCompletion::Callback {
+                reply: Box::new(|_, _| {}),
+                on_failure: None,
+            },
+            super::StructureSearchOptions {
+                radius_rings: 2,
+                skip_referenced: false,
+                referenced: Default::default(),
+            },
+        )
+        .is_some(),
+        "an open queues on the interactive lane while the background lane is full"
+    );
+    assert!(open_rx.try_recv().is_ok(), "the open took the lane slot");
+}
+
+#[test]
+fn an_open_does_not_wait_behind_a_parked_command_search() {
+    // The starvation test: a `/locate` search already running on the background worker must not
+    // hold a cartographer/container open. The gate parks the background worker inside its first
+    // search; the open is submitted behind it and must still complete.
+    let (mut state, connection) = locate_fixture();
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+    let release_rx = std::sync::Mutex::new(release_rx);
+    state.locate.arm_background_gate(Arc::new(move || {
+        let _ = entered_tx.send(());
+        let _ = release_rx.lock().expect("release lock").recv();
+    }));
+    assert!(
+        super::submit(
+            &mut state,
+            super::LocateOwner::Connection(connection),
+            super::LocateKind::Structure,
+            (0, 64, 0),
+            vec![id("minecraft:shipwreck")],
+            super::LocateCompletion::Command("shipwreck".into()),
+            super::StructureSearchOptions {
+                radius_rings: 2,
+                skip_referenced: false,
+                referenced: Default::default(),
+            },
+        )
+        .is_some(),
+        "the command search queues"
+    );
+    entered_rx
+        .recv_timeout(std::time::Duration::from_secs(30))
+        .expect("the background worker reaches its search and parks there");
+    let (opened_tx, opened_rx) = std::sync::mpsc::channel();
+    assert!(
+        super::submit(
+            &mut state,
+            super::LocateOwner::Connection(connection),
+            super::LocateKind::Structure,
+            (0, 64, 0),
+            vec![id("minecraft:on_treasure_maps")],
+            super::LocateCompletion::Callback {
+                reply: Box::new(move |_, _| {
+                    let _ = opened_tx.send(());
+                }),
+                on_failure: None,
+            },
+            super::StructureSearchOptions {
+                radius_rings: 2,
+                skip_referenced: false,
+                referenced: Default::default(),
+            },
+        )
+        .is_some(),
+        "the open queues on the interactive lane"
+    );
+    // The interactive lane's worker answers while the background worker stays parked.
+    let mut completed = false;
+    for _ in 0..2 {
+        if super::await_queued_search(
+            &mut state,
+            super::LocateLane::Interactive,
+            std::time::Duration::from_secs(30),
+        ) && opened_rx.try_recv().is_ok()
+        {
+            completed = true;
+            break;
+        }
+    }
+    let _ = release_tx.send(());
+    assert!(
+        completed,
+        "the open completes while the command search is still parked in front of it"
+    );
 }
 
 #[test]
@@ -862,8 +957,9 @@ fn a_late_completion_does_not_replace_a_newer_dolphin_run() {
     let (mut state, _) = locate_fixture();
     let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
     let (done_tx, done_rx) = std::sync::mpsc::channel();
-    state.locate.jobs = Some(jobs_tx);
-    state.locate.done = Some(done_rx);
+    state
+        .locate
+        .install_test_lane(super::LocateLane::Background, jobs_tx, done_rx);
     let type_id = state
         .registry
         .entity_types
@@ -899,6 +995,7 @@ fn a_late_completion_does_not_replace_a_newer_dolphin_run() {
                 found_id: id("minecraft:shipwreck"),
                 distance: 1,
             }),
+            worker_lost: false,
             error: None,
             elapsed_ms: 0,
         })
@@ -915,28 +1012,28 @@ fn a_late_completion_does_not_replace_a_newer_dolphin_run() {
 
 #[test]
 fn worker_loss_releases_a_map_loot_callback_so_the_container_opens_again() {
-    // The pending loot plan lives in `maps.pending_loot` until the callback's
-    // `completed` removes it. Dropping the continuation left it registered
-    // forever: every later `before_open` returned waiting=true and the container
-    // never opened again. The failure continuation must release it.
+    // The pending loot plan lives in `maps.pending_loot` until the callback's `completed`
+    // removes it, so a worker that dies must release it — and its lane must come back for the
+    // next open instead of answering "unavailable" forever. The real interactive worker is
+    // driven here and dies on its first search (the row's worker-loss symptom).
     let (mut state, connection) = locate_fixture();
-    let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
-    let (done_tx, done_rx) = std::sync::mpsc::channel();
-    state.locate.jobs = Some(jobs_tx);
-    state.locate.done = Some(done_rx);
     let released = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let reply_called = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let release_flag = Arc::clone(&released);
     let reply_flag = Arc::clone(&reply_called);
-    state.locate.queued = 1;
-    state.locate.pending.insert(
-        1,
-        super::PendingLocate {
-            owner: super::LocateOwner::Connection(connection),
-            kind: super::LocateKind::Structure,
-            origin: (0, 64, 0),
-            dimension: state.dimension,
-            completion: super::LocateCompletion::Callback {
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    state.locate.arm_interactive_gate(Arc::new(move || {
+        let _ = entered_tx.send(());
+        panic!("locate worker lost");
+    }));
+    assert!(
+        super::submit(
+            &mut state,
+            super::LocateOwner::Connection(connection),
+            super::LocateKind::Structure,
+            (0, 64, 0),
+            vec![id("minecraft:on_treasure_maps")],
+            super::LocateCompletion::Callback {
                 reply: Box::new(move |_, _| {
                     reply_flag.store(true, std::sync::atomic::Ordering::SeqCst);
                 }),
@@ -944,10 +1041,26 @@ fn worker_loss_releases_a_map_loot_callback_so_the_container_opens_again() {
                     release_flag.store(true, std::sync::atomic::Ordering::SeqCst);
                 })),
             },
-        },
+            super::StructureSearchOptions {
+                radius_rings: 2,
+                skip_referenced: false,
+                referenced: Default::default(),
+            },
+        )
+        .is_some(),
+        "the open queues on the interactive lane"
     );
-    drop(done_tx);
-    super::drain(&mut state);
+    entered_rx
+        .recv_timeout(std::time::Duration::from_secs(30))
+        .expect("the worker reaches its search and dies there");
+    assert!(
+        super::await_queued_search(
+            &mut state,
+            super::LocateLane::Interactive,
+            std::time::Duration::from_secs(30)
+        ),
+        "the dead lane is noticed by the tick"
+    );
     assert!(
         released.load(std::sync::atomic::Ordering::SeqCst),
         "worker loss must release the pending loot/trade plan"
@@ -957,7 +1070,47 @@ fn worker_loss_releases_a_map_loot_callback_so_the_container_opens_again() {
         "the success reply must not consume an unopened container"
     );
     assert!(state.locate.pending.is_empty());
-    assert!(state.locate.jobs.is_none() && state.locate.done.is_none());
+    assert!(
+        !state.locate.has_job_lane(),
+        "the lost lane resets so a fresh worker spawns"
+    );
+    // A fresh worker serves the next open on the same lane.
+    let served = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let served_flag = Arc::clone(&served);
+    assert!(
+        super::submit(
+            &mut state,
+            super::LocateOwner::Connection(connection),
+            super::LocateKind::Structure,
+            (0, 64, 0),
+            vec![id("minecraft:on_treasure_maps")],
+            super::LocateCompletion::Callback {
+                reply: Box::new(move |_, _| {
+                    served_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                }),
+                on_failure: None,
+            },
+            super::StructureSearchOptions {
+                radius_rings: 2,
+                skip_referenced: false,
+                referenced: Default::default(),
+            },
+        )
+        .is_some(),
+        "a restarted lane accepts the next open"
+    );
+    assert!(
+        super::await_queued_search(
+            &mut state,
+            super::LocateLane::Interactive,
+            std::time::Duration::from_secs(30)
+        ),
+        "the restarted worker answers"
+    );
+    assert!(
+        served.load(std::sync::atomic::Ordering::SeqCst),
+        "the restarted lane delivers a real open"
+    );
 }
 
 /// A queued container search whose success reply and failure release each flip
@@ -994,8 +1147,9 @@ fn a_metadata_error_releases_a_map_loot_callback_so_the_container_opens_again() 
     let (mut state, connection) = locate_fixture();
     let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
     let (done_tx, done_rx) = std::sync::mpsc::channel();
-    state.locate.jobs = Some(jobs_tx);
-    state.locate.done = Some(done_rx);
+    state
+        .locate
+        .install_test_lane(super::LocateLane::Interactive, jobs_tx, done_rx);
     let released = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let replied = Arc::new(std::sync::atomic::AtomicBool::new(false));
     state.locate.queued = 1;
@@ -1012,6 +1166,7 @@ fn a_metadata_error_releases_a_map_loot_callback_so_the_container_opens_again() 
         .send(super::LocateDone {
             id: 1,
             hit: None,
+            worker_lost: false,
             error: Some("structure metadata unreadable".into()),
             elapsed_ms: 0,
         })
@@ -1037,8 +1192,9 @@ fn a_wrong_dimension_reply_releases_a_map_loot_callback_so_the_container_opens_a
     let (mut state, connection) = locate_fixture();
     let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
     let (done_tx, done_rx) = std::sync::mpsc::channel();
-    state.locate.jobs = Some(jobs_tx);
-    state.locate.done = Some(done_rx);
+    state
+        .locate
+        .install_test_lane(super::LocateLane::Interactive, jobs_tx, done_rx);
     let released = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let replied = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let elsewhere = if state.dimension == crate::dimensions::Dimension::Nether {
@@ -1060,6 +1216,7 @@ fn a_wrong_dimension_reply_releases_a_map_loot_callback_so_the_container_opens_a
         .send(super::LocateDone {
             id: 1,
             hit: None,
+            worker_lost: false,
             error: None,
             elapsed_ms: 0,
         })
@@ -1079,48 +1236,67 @@ fn a_wrong_dimension_reply_releases_a_map_loot_callback_so_the_container_opens_a
 
 #[test]
 fn a_lost_worker_terminates_dolphin_and_command_jobs() {
+    // A fed dolphin's lead and a player `/locate` share the background lane. Its worker dies:
+    // the lead keeps the fish with a bounded retry (`Failed`, a fresh worker may serve it) and
+    // the command answers unavailable, so neither hangs in `pending`.
     let (mut state, connection) = locate_fixture();
-    let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
-    let (done_tx, done_rx) = std::sync::mpsc::channel();
-    state.locate.jobs = Some(jobs_tx);
-    state.locate.done = Some(done_rx);
-    let dolphin = crate::boundary::EntityId(88);
-    let dimension = state.dimension;
-    state.locate.next_job = 3;
-    state.locate.queued = 2;
-    state.locate.entity_in_flight.insert(dolphin, 1);
-    state.locate.in_flight.insert(connection, 1);
-    state.locate.dolphin.insert(
+    let type_id = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:dolphin").unwrap())
+        .unwrap();
+    let dolphin = state.spawn_mob(type_id, [8.5, 80.0, 8.5], 10.0);
+    let slot = state.entities.slot_of(dolphin).unwrap();
+    state.entities.row_mut(slot).entity_life.dolphin =
+        Some(crate::dolphin::DolphinState { got_fish: true });
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    state.locate.arm_background_gate(Arc::new(move || {
+        let _ = entered_tx.send(());
+        panic!("locate worker lost");
+    }));
+    assert!(super::request_dolphin_treasure(
+        &mut state,
         dolphin,
-        super::DolphinTreasure::Pending { run: 1, dimension },
+        [8.5, 80.0, 8.5]
+    ));
+    let run = match state.locate.dolphin.get(&dolphin) {
+        Some(super::DolphinTreasure::Pending { run, .. }) => *run,
+        other => panic!("the lead is pending: {other:?}"),
+    };
+    assert!(
+        super::submit(
+            &mut state,
+            super::LocateOwner::Connection(connection),
+            super::LocateKind::Structure,
+            (0, 64, 0),
+            vec![id("minecraft:shipwreck")],
+            super::LocateCompletion::Command("shipwreck".into()),
+            super::StructureSearchOptions {
+                radius_rings: 2,
+                skip_referenced: false,
+                referenced: Default::default(),
+            },
+        )
+        .is_some(),
+        "the command queues behind the lead on the background lane"
     );
-    state.locate.pending.insert(
-        1,
-        super::PendingLocate {
-            owner: super::LocateOwner::Entity(dolphin),
-            kind: super::LocateKind::Structure,
-            origin: (0, 64, 0),
-            dimension,
-            completion: super::LocateCompletion::Dolphin(dolphin),
-        },
+    entered_rx
+        .recv_timeout(std::time::Duration::from_secs(30))
+        .expect("the background worker reaches its search and dies there");
+    assert!(
+        super::await_queued_search(
+            &mut state,
+            super::LocateLane::Background,
+            std::time::Duration::from_secs(30)
+        ),
+        "the dead lane is noticed by the tick"
     );
-    state.locate.pending.insert(
-        2,
-        super::PendingLocate {
-            owner: super::LocateOwner::Connection(connection),
-            kind: super::LocateKind::Structure,
-            origin: (0, 64, 0),
-            dimension,
-            completion: super::LocateCompletion::Command("shipwreck".into()),
-        },
-    );
-    drop(done_tx);
-    super::drain(&mut state);
+    let dimension = state.dimension;
     assert!(
         matches!(
             state.locate.dolphin.get(&dolphin),
-            Some(super::DolphinTreasure::Failed { run: 1, dimension: failed_dimension, retry_at })
-                if *failed_dimension == dimension && *retry_at > state.tick
+            Some(super::DolphinTreasure::Failed { run: failed_run, dimension: failed_dimension, retry_at })
+                if *failed_run == run && *failed_dimension == dimension && *retry_at > state.tick
         ),
         "worker loss is Failed, not Missing: {:?}",
         state.locate.dolphin.get(&dolphin)
@@ -1130,7 +1306,12 @@ fn a_lost_worker_terminates_dolphin_and_command_jobs() {
             matches!(event, PlayerChange::Chat { message } if message.contains("unavailable"))
         })
     }));
+    assert!(state.locate.pending.is_empty());
     assert_eq!(state.locate.queued, 0);
+    assert!(
+        !state.locate.has_job_lane(),
+        "the lost lane resets so a fresh worker spawns"
+    );
 }
 
 #[test]
@@ -1138,7 +1319,10 @@ fn structure_lookup_callback_runs_on_drain_even_after_requester_disconnects() {
     let (mut state, _) = locate_fixture();
     let connection = ConnectionId(999);
     let (tx, rx) = std::sync::mpsc::channel();
-    state.locate.done = Some(rx);
+    let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
+    state
+        .locate
+        .install_test_lane(super::LocateLane::Interactive, jobs_tx, rx);
     state.locate.in_flight.insert(connection, 1);
     state.locate.queued = 1;
     let run = state.locate.next_job;
@@ -1174,6 +1358,7 @@ fn structure_lookup_callback_runs_on_drain_even_after_requester_disconnects() {
             found_id: id("minecraft:buried_treasure"),
             distance: 175,
         }),
+        worker_lost: false,
         error: None,
         elapsed_ms: 0,
     })
@@ -1224,5 +1409,63 @@ fn structure_lookup_refuses_unknown_tags_radius_and_busy_connections_without_cha
         request("minecraft:on_treasure_maps", 50)
     ));
     assert!(state.outbox.is_empty());
-    assert!(state.locate.jobs.is_none());
+    assert!(!state.locate.has_job_lane());
+}
+
+#[test]
+fn a_refused_dolphin_lookup_stops_the_lead_instead_of_recapturing() {
+    // LOCATE-SHARED-FIFO: a `Failed` lead kept the fish and retried after 200 ticks, and each
+    // retry captured every resident chunk's structure starts again on the tick side. The same
+    // metadata read cannot improve by waiting, so the refusal stops the lead like `Missing`
+    // (the goal clears the fish) instead of looping on the shared queue.
+    let (mut state, _) = locate_fixture();
+    let (jobs_tx, _jobs_rx) = std::sync::mpsc::sync_channel(super::MAX_QUEUED_JOBS);
+    let (done_tx, done_rx) = std::sync::mpsc::channel();
+    state
+        .locate
+        .install_test_lane(super::LocateLane::Background, jobs_tx, done_rx);
+    let type_id = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:dolphin").unwrap())
+        .unwrap();
+    let dolphin = state.spawn_mob(type_id, [8.5, 80.0, 8.5], 10.0);
+    let slot = state.entities.slot_of(dolphin).unwrap();
+    state.entities.row_mut(slot).entity_life.dolphin =
+        Some(crate::dolphin::DolphinState { got_fish: true });
+    let dimension = state.dimension;
+    state.locate.queued = 1;
+    state.locate.entity_in_flight.insert(dolphin, 1);
+    state.locate.dolphin.insert(
+        dolphin,
+        super::DolphinTreasure::Pending { run: 7, dimension },
+    );
+    state.locate.pending.insert(
+        7,
+        super::PendingLocate {
+            owner: super::LocateOwner::Entity(dolphin),
+            kind: super::LocateKind::Structure,
+            origin: (0, 64, 0),
+            dimension,
+            completion: super::LocateCompletion::Dolphin(dolphin),
+        },
+    );
+    done_tx
+        .send(super::LocateDone {
+            id: 7,
+            hit: None,
+            worker_lost: false,
+            error: Some("structure metadata unreadable".into()),
+            elapsed_ms: 0,
+        })
+        .unwrap();
+    super::drain(&mut state);
+    assert!(
+        matches!(
+            state.locate.dolphin.get(&dolphin),
+            Some(super::DolphinTreasure::Missing { run: 7, .. })
+        ),
+        "a refused lookup stops the lead: {:?}",
+        state.locate.dolphin.get(&dolphin)
+    );
 }

@@ -1,0 +1,13 @@
+--- a/crates/mc-core/src/datapacks.rs
++++ b/crates/mc-core/src/datapacks.rs
+@@ -721,7 +721,9 @@
+                     accepted = candidate;
+                     admitted = Some(state);
+                 }
+-                Err(error) => return Err(error),
++                Err(error) => skipped.push(format!(
++                    "Skipping new datapack {id}, it is not enabled: {error}"
++                )),
+             }
+         }
+         let admitted = match admitted {

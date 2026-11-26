@@ -64,7 +64,7 @@ pub(crate) fn team_name(faction: u16) -> String {
 /// once per publish in the shared change loop
 /// ([`crate::plan::TickPlanIndex::with_previous`]) and read by every viewer
 /// whose memberships were reconciled at `base`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct FactionDelta {
     base: u64,
     /// `(faction, uuid)` of the rows that entered a nonzero faction,

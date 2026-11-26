@@ -120,6 +120,28 @@ pub fn publish_with_registries<'a>(
     registries: &PlanRegistries<'_>,
     chunk_cache: &mut crate::plan::ChunkPacketCache,
 ) -> Vec<AddressedPacket> {
+    publish_with_registries_chain(
+        output,
+        viewers,
+        view_distance,
+        registries,
+        chunk_cache,
+        None,
+    )
+}
+
+/// [`publish_with_registries`] with the pump's coalesced publication history:
+/// a viewer whose publish was skipped stays contiguous through `chain` instead
+/// of paying a full rescan, and history the chain cannot reach still rescans
+/// with the reason recorded.
+pub(crate) fn publish_with_registries_chain<'a>(
+    output: &TickOutput,
+    viewers: impl Iterator<Item = &'a mut ViewerState> + Send,
+    view_distance: i32,
+    registries: &PlanRegistries<'_>,
+    chunk_cache: &mut crate::plan::ChunkPacketCache,
+    history: Option<&crate::plan::PublicationHistory>,
+) -> Vec<AddressedPacket> {
     let probe = crate::plan::item_probe::enabled().then(std::time::Instant::now);
     chunk_cache.retain_resident(output);
     chunk_cache.deltas.begin();
@@ -143,23 +165,57 @@ pub fn publish_with_registries<'a>(
         .map(|projection| {
             let dimension = projection.snapshot.dimension;
             let entities = &projection.snapshot.entities;
-            let previous = viewers
+            // A viewer that already holds a direct predecessor of this
+            // snapshot gives the cheapest index, so it wins. Otherwise a
+            // viewer that already holds the published revision is a `same`
+            // viewer and needs no delta at all: it must not preempt the chain
+            // for the viewers that are behind, so it is only the fallback when
+            // nobody is behind.
+            let mut direct = None;
+            let mut current = None;
+            let mut behind = false;
+            for viewer in viewers
                 .iter()
                 .filter(|viewer| viewer.dimension == dimension)
-                .filter_map(|viewer| viewer.previous_entities())
-                .find(|previous| previous.revision() == entities.base_revision())
-                .or_else(|| {
+            {
+                let Some(previous) = viewer.previous_entities() else {
+                    continue;
+                };
+                if previous.revision() == entities.base_revision() {
+                    direct.get_or_insert(previous);
+                } else if previous.revision() == entities.revision() {
+                    current.get_or_insert(previous);
+                } else {
+                    behind = true;
+                }
+            }
+            let mut index = TickPlanIndex::with_previous(projection, direct.or(current));
+            let chain = history.map(|history| history.chain(dimension));
+            if direct.is_none()
+                && behind
+                && let Some(chain) = chain
+            {
+                // The chain keeps the viewers whose publish the pump skipped
+                // contiguous: bridge the base most of them hold, and let the
+                // rest rescan with a named reason.
+                let bridge = TickPlanIndex::bridge(
+                    chain,
+                    entities.revision(),
                     viewers
                         .iter()
                         .filter(|viewer| viewer.dimension == dimension)
-                        .filter_map(|viewer| viewer.previous_entities())
-                        .find(|previous| previous.revision() == entities.revision())
-                });
+                        .filter_map(|viewer| viewer.previous_entities()),
+                );
+                if let Some((base, _, changed)) = bridge {
+                    index = TickPlanIndex::with_chain(projection, base, &changed);
+                }
+            }
             (
                 dimension,
-                TickPlanIndex::with_previous(projection, previous)
+                index
                     .with_reveals(projection, cache.anti_xray())
-                    .with_chunk_delta(chunk_deltas.get(&dimension).cloned().flatten()),
+                    .with_chunk_delta(chunk_deltas.get(&dimension).cloned().flatten())
+                    .with_chain_info(chain.map(|chain| chain.info()).unwrap_or_default()),
             )
         })
         .collect();
@@ -172,7 +228,28 @@ pub fn publish_with_registries<'a>(
         .any(|viewer| viewer.recorder)
         .then(|| crate::recorder::tick_marker_frame(output.tick, output.times.wall_start_unix_ns));
     let marker_bytes = marker.as_ref().map_or(0, bytes::Bytes::len);
-    let plan_start = probe.map(|_| std::time::Instant::now());
+    // Counters for the plan debug line: a rescan is per-viewer O(chunk square), so its
+    // per-publish delta says whether a fanout step comes from rescans or from move volume.
+    // The guard must name the target the line is emitted on: a bare `enabled!(DEBUG)` asks the
+    // default target (this module, mc_edge::fanout), which a `mc_edge::server::plan=debug` filter
+    // leaves off, and the line would never be written.
+    let plan_debug = tracing::enabled!(target: "mc_edge::server::plan", tracing::Level::DEBUG);
+    let rescans_before = if plan_debug {
+        viewers.iter().map(|viewer| viewer.rescans).sum::<u64>()
+    } else {
+        0
+    };
+    let scanned_before = if plan_debug {
+        viewers
+            .iter()
+            .map(|viewer| viewer.entities_scanned)
+            .sum::<u64>()
+    } else {
+        0
+    };
+    // Independent of the item probe: plan_us must be measured whenever the line is going to
+    // be written, and MC_CORE_PHASE_LOG is never set on a measured leg.
+    let plan_clock = plan_debug.then(std::time::Instant::now);
     let mut planned: Vec<(ConnectionId, Vec<PlannedPacket>)> = Vec::with_capacity(viewers.len());
     let mut marked: Vec<ConnectionId> = Vec::new();
     for (connection, packets, reserved) in viewers
@@ -205,6 +282,43 @@ pub fn publish_with_registries<'a>(
             marked.push(connection);
         }
         planned.push((connection, packets));
+    }
+    if plan_debug {
+        let packets: usize = planned.iter().map(|(_, packets)| packets.len()).sum();
+        let chunk_packets: usize = planned
+            .iter()
+            .flat_map(|(_, packets)| packets.iter())
+            .filter(|packet| packet.chunk.is_some())
+            .count();
+        let viewers_unplanned = planned
+            .iter()
+            .filter(|(_, packets)| packets.is_empty())
+            .count();
+        let (hit, miss) = indices.values().fold((0u64, 0u64), |(hit, miss), index| {
+            let (h, m) = index.move_tallies();
+            (hit + h, miss + m)
+        });
+        tracing::debug!(
+            target: "mc_edge::server::plan",
+            tick = output.tick,
+            viewers = viewers.len(),
+            viewers_unplanned,
+            packets,
+            chunk_packets,
+            plan_ns = plan_clock.map_or(0, |start| start.elapsed().as_nanos() as u64),
+            plan_us = plan_clock.map_or(0, |start| start.elapsed().as_micros() as u64),
+            rescans = viewers.iter().map(|viewer| viewer.rescans).sum::<u64>() - rescans_before,
+            entities_scanned = viewers.iter().map(|viewer| viewer.entities_scanned).sum::<u64>()
+                - scanned_before,
+            rescan_gap = viewers.iter().map(|viewer| viewer.rescans_gap).sum::<u64>(),
+            rescan_no_history = viewers
+                .iter()
+                .map(|viewer| viewer.rescans_no_history)
+                .sum::<u64>(),
+            move_hits = hit,
+            move_misses = miss,
+            "pump plan"
+        );
     }
     let fill_start = probe.map(|_| std::time::Instant::now());
     let failed = crate::plan::fill_chunk_packets(output, &mut planned, registries, chunk_cache);
@@ -246,8 +360,8 @@ pub fn publish_with_registries<'a>(
             viewer.world_frame_unsent();
         }
     }
-    if let (Some(start), Some(index_start), Some(plan_start), Some(fill_start), Some(fill_time)) =
-        (probe, index_start, plan_start, fill_start, fill_time)
+    if let (Some(start), Some(index_start), Some(plan_clock), Some(fill_start), Some(fill_time)) =
+        (probe, index_start, plan_clock, fill_start, fill_time)
     {
         let total_time = start.elapsed();
         let (packets, bytes) = planned
@@ -272,8 +386,8 @@ pub fn publish_with_registries<'a>(
             viewers.len(),
             crate::plan::item_probe::take_line(),
             index_start.duration_since(start).as_secs_f64() * 1000.0,
-            plan_start.duration_since(index_start).as_secs_f64() * 1000.0,
-            fill_start.duration_since(plan_start).as_secs_f64() * 1000.0,
+            plan_clock.duration_since(index_start).as_secs_f64() * 1000.0,
+            fill_start.duration_since(plan_clock).as_secs_f64() * 1000.0,
             fill_time.as_secs_f64() * 1000.0,
             total_time.as_secs_f64() * 1000.0,
             (start.elapsed() - total_time).as_secs_f64() * 1000.0,

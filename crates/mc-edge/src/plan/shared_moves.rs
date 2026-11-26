@@ -60,20 +60,48 @@ pub(super) struct SharedMove {
     pub(super) next: MoveBaseline,
 }
 
+/// One move shard: its map plus, when counting is on, that shard's hit/miss tallies. The
+/// tallies sit under the lock the lookup already takes, so counting adds no atomic and no extra
+/// contended cache line — a viewer's rayon thread never waits on a shared counter.
+#[derive(Debug, Default)]
+struct Shard {
+    frames: FxHashMap<MoveKey, Option<SharedMove>>,
+    hits: u64,
+    misses: u64,
+    counting: bool,
+}
+
 /// Thread-safe move/head frame cache for one snapshot publication.
 /// Share `&self` across rayon viewers; drop with the snapshot.
 #[derive(Debug)]
 pub(super) struct SharedMoves {
-    moves: [Mutex<FxHashMap<MoveKey, Option<SharedMove>>>; SHARDS],
+    moves: [Mutex<Shard>; SHARDS],
     heads: [Mutex<FxHashMap<i32, (i32, bytes::Bytes)>>; SHARDS],
+}
+
+impl SharedMoves {
+    /// A cache that counts its hits and misses. The pump asks for this once per publish from
+    /// `mc_edge::server::plan`'s DEBUG state, so a server with that line off pays nothing.
+    pub(crate) fn counting() -> Self {
+        Self::with_tallies(true)
+    }
+
+    fn with_tallies(counting: bool) -> Self {
+        Self {
+            moves: std::array::from_fn(|_| {
+                Mutex::new(Shard {
+                    counting,
+                    ..Shard::default()
+                })
+            }),
+            heads: std::array::from_fn(|_| Mutex::new(FxHashMap::default())),
+        }
+    }
 }
 
 impl Default for SharedMoves {
     fn default() -> Self {
-        Self {
-            moves: std::array::from_fn(|_| Mutex::new(FxHashMap::default())),
-            heads: std::array::from_fn(|_| Mutex::new(FxHashMap::default())),
-        }
+        Self::with_tallies(false)
     }
 }
 
@@ -90,20 +118,37 @@ impl SharedMoves {
         let key = MoveKey::new(entity.id, baseline);
         let shard = &self.moves[(key.id as usize) & (SHARDS - 1)];
         let mut guard = shard.lock();
-        guard
-            .entry(key)
-            .or_insert_with(|| {
-                entity_movement(entity, baseline).map(|(packet, next)| {
-                    let (id, data) = match packet {
-                        MovePacket::Pos(packet) => frame(&packet),
-                        MovePacket::Rot(packet) => frame(&packet),
-                        MovePacket::PosRot(packet) => frame(&packet),
-                        MovePacket::Sync(packet) => frame(&packet),
-                    };
-                    SharedMove { id, data, next }
-                })
+        let counting = guard.counting;
+        if let Some(cached) = guard.frames.get(&key).cloned() {
+            if counting {
+                guard.hits += 1;
+            }
+            return cached;
+        }
+        if counting {
+            guard.misses += 1;
+        }
+        let value = entity_movement(entity, baseline).map(|(packet, next)| {
+            let (id, data) = match packet {
+                MovePacket::Pos(packet) => frame(&packet),
+                MovePacket::Rot(packet) => frame(&packet),
+                MovePacket::PosRot(packet) => frame(&packet),
+                MovePacket::Sync(packet) => frame(&packet),
+            };
+            SharedMove { id, data, next }
+        });
+        guard.frames.insert(key, value.clone());
+        value
+    }
+
+    /// (hit, miss) move-frame tallies since this snapshot's cache was created.
+    pub(crate) fn move_tallies(&self) -> (u64, u64) {
+        self.moves
+            .iter()
+            .fold((0u64, 0u64), |(hits, misses), shard| {
+                let guard = shard.lock();
+                (hits + guard.hits, misses + guard.misses)
             })
-            .clone()
     }
 
     /// Shared `RotateHead` frame for `entity`'s current head yaw, keyed by

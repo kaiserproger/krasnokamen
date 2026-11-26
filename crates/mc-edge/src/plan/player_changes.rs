@@ -994,6 +994,10 @@ fn plan_respawn(respawn: &Respawn, viewer: &mut ViewerState, out: &mut Vec<Plann
         viewer.chunk_sync = None;
         viewer.chunk_repairs.clear();
         viewer.untrack_all();
+        // The new level holds none of the old view: a later publish must not
+        // treat the pre-travel base as delivered (entity_interest seeds a
+        // retained view that the travel cleared).
+        viewer.entity_interest.forget();
         viewer.seats.clear();
         viewer.entity_tick = None;
         viewer.pending_blocks.clear();

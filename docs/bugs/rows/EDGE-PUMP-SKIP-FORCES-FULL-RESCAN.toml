@@ -1,11 +1,40 @@
 [[bug]]
 id = "EDGE-PUMP-SKIP-FORCES-FULL-RESCAN"
-title = "When the tick pump falls behind, repeated full entity rescans stall viewer updates and admission"
+title = "A skipped or rebuilt tick output leaves the plan index without a contiguous entity base, so `entity_interest::prepare` rescans every viewer's whole chunk square on every later publish; once one rescan outlasts a tick the pump skips again; that did not recover for the rest of the R3k-6 leg under that load"
 area = "gameplay"
+repro = "source"
 severity = "major"
 status = "open"
-source = "Perf1M R3k-6 leg c: tick 73449 at 26 viewers rose from 3 to 26 full rescans; in the sustained regime 944 of the next 948 publishes rescanned for every viewer, with median tick delta 7. At the bounded stop only 65/248 had been admitted. In mc-edge, losing a contiguous delivered entity base can force a full per-viewer scan. The recorded timing is diagnostic, not a matched comparison. The isolated candidate 2d4f3a620abe is not integrated; do not close on its focused tests alone."
-repro = "source"
-regression = []
-failing_first = "reported"
-repro_check = ["Open: the per-viewer rescan redesign (carry the last delivered base per viewer, rebuild candidates only for the chunks whose revision moved) plus a candidate-scan counter test; the old isolated candidate 2d4f3a620 was never integrated and must be re-derived on current main. No code written this wave; design note in PROGRESS.md."]
+source = """Perf1M R3k-6 leg c-p250k-kill-r3k6 (receipts/Perf1M/LAPTOP-R3k-6-REPORT.md, receipts/Perf1M/LAPTOP-RESULTS-D41/c-p250k-kill-r3k6/run/server.log): at tick 73449 (26 viewers, delta tick 1, a join within 0.5 s) rescans go 3 -> 26 and entities_scanned 2 853 -> 25 041; from then 944 of 948 publishes are full rescans with tick delta median 7, up to 19. Before the step the same global rescans happened 36 times, each within 0.5 s of a join, and each recovered within 1-4 publishes while a rescan was cheaper than the tick.
+
+Mechanism (code reading). fanout.rs builds one TickPlanIndex per dimension and sets entity_base only when some viewer's previous revision equals the new snapshot's base_revision; entity_interest.rs treats a missing base as non-contiguous and runs entity_candidates::collect, a full walk of the viewer's (2*vd+1)^2 loaded chunks, per viewer per publish. A join rebuilds the core's entity view set, which is what makes the base stop matching. Once a rescan costs more than a tick (0.78 s at 26 viewers x ~1000 entities vs a 50 ms tick) the pump's own 1.6 s publish budget cannot catch up, it skips, and every later snapshot's base is again unmatched.
+
+Fix now in tree (ported from perf1m-r3k5, nine commits a02a366a5..2d4f3a620): the pump records every output it drains or stale-skips in a per-dimension PublicationHistory bounded by the tick broadcast capacity, and the fan-out bridges the base most viewers hold by unioning the chain's changed ids into one net delta (TickPlanIndex::with_chain); a viewer the chain cannot reach keeps the full rescan, counted as rescans_gap (a broadcast Lagged cut it) or rescans_no_history. A dimension travel forgets the interest so no pre-travel base survives. The per-publish counters are mc_edge::server::plan=debug (rescans, entities_scanned, move tallies)."""
+regression = [
+  "cargo:mc-edge:plan::plan_tests::pen_scenario_tests::an_index_given_the_chain_must_not_rescan_after_a_skip",
+  "cargo:mc-edge:plan::plan_tests::pen_scenario_tests::a_skipped_window_delivers_what_a_full_rescan_delivers",
+  "cargo:mc-edge:plan::plan_tests::pen_scenario_tests::a_skipped_publish_costs_one_rescan_without_the_chain_and_none_with_it",
+  "cargo:mc-edge:server::pump_chain_tests::a_stale_skipped_drain_keeps_the_viewer_contiguous",
+  "cargo:mc-edge:server::pump_chain_tests::a_lagged_publication_keeps_the_full_rescan_fallback",
+]
+proving_refs = ["cargo:mc-edge:server::pump_chain_tests::a_stale_skipped_drain_keeps_the_viewer_contiguous"]
+failing_first = "seen"
+fix_commit = "patch:8f0537e31f60ed331f791a04e3b3ddd809fd47b5517b55a73f16b8a27bf5daf4"
+repro_check = """Green on the candidate: pen_scenario_tests 9/9 (artifact 20261126T124302-test-4lzgyftj) and
+pump_chain_tests 2/2 (20261126T124628-test-5uo_jm6e), re-green after the fmt/clippy round
+(20261126T134234-test-c7jeqliv fanout 8/8, 20261126T134520-test-e33og1p1 pen 9/9). RED control:
+reverse-applying docs/bugs/fix-patches/EDGE-PUMP-SKIP-FORCES-FULL-RESCAN.patch (only the two
+`history.record(&out)` lines) fails cargo:mc-edge:server::pump_chain_tests::a_stale_skipped_drain_keeps_the_viewer_contiguous
+at its own assertion ("a stale-skipped publish must not rescan the viewer", pump_chain_tests.rs:182) in
+artifact 20261126T125006-test-716rwh94. The other four registered refs stay GREEN on the control (pen
+9/9 in 20261126T125302-test-bgaasvl3, the Lagged fallback green) because the pen tests feed
+`history.record` themselves and test the bridge rather than the pump; that is why the pump-level ref
+is the single proving one.
+
+NOT DONE — release A/B: the R3k-6 recovery (26+ viewers, a real coalesced publish) is not measured;
+RELEASE-AB-BRIEF says "A/B not admitted, not running" and the pins are ready. The row must not claim
+R3k-6 recovery: the evidence is the ported chain plus the pen/pump refs, and the A/B stays in the perf
+queue (Opus review 2026-11-26, part 1 note 5).
+
+Ported from perf1m-r3k5 onto this candidate; the hunk map beside the patch lists every other
+production hunk and its omission class (all (b), API the kept tests call)."""
