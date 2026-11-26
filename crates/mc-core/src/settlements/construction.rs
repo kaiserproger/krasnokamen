@@ -2964,9 +2964,9 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
     };
     // Certification is not a substitute for matching the placed blueprint:
     // the executor may have reached its last cell after a player broke one.
-    // Recovery that opens a repair keeps the project; recovery that finishes a
-    // terminal-index structure in place (SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE)
-    // leaves it completable, so only an uncommitted outcome refuses.
+    // `recover` returns `Ok(false)` only when it did nothing; a repair it opens
+    // (or a terminal-index structure it finishes in place) keeps the project
+    // open for this pass instead of certifying it.
     if executor::recover(state, id, &project.structure) != Ok(false) {
         return false;
     }

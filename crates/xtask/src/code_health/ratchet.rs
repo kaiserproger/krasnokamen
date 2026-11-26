@@ -132,27 +132,28 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // and the ordinary-revisit merge): 1142. The next extraction candidate
         // is `site_project` itself, which belongs beside the sweeps it drives
         // in `construction_site_refusals.rs`.
-        // SETTLEMENT-BUILDER-PROJECT-STALLS / F12 gatherer guard (D123, 2026-11-25): a
-        // staffed gatherer holds back the street work only; the fortification site
-        // is tried first and the `gathering` early return now guards the streets
-        // alone: 1144. The ordering is pinned by the row's control patch (its `+`
-        // comment lines), so the arm cannot shrink without re-generating it.
-        // The house-upgrade lane (D123, 2026-11-25) adds 16: `finish_project`'s
-        // named refusals (`cause=`, `missing=`) and the pure `certificate_missing`
-        // query the stall watcher reads on the certificate tail (1142 -> 1158).
-        // That tail is not cold: the watcher calls it every stall window of a
-        // committed-but-uncertified project, and the gate's own stall logged it
-        // per tick - which is why the refusal path warns nothing and names its
-        // cause and missing requirement once, at `finish_project`. Measured 1158
-        // on the D123UpgradeCell tree (code-health 20261125T170814). The
-        // certificate/refusal tail is the next extraction candidate: it belongs
-        // in a `construction_certificate` module beside `buildings.rs`.
+        // ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL / F12 gatherer guard (D123, 2026-11-25):
+        // a staffed gatherer holds back the street work only; the fortification site is
+        // tried first and the `gathering` early return now guards the streets alone: 1144.
+        // The ordering is pinned by that row's control patch (its `+` comment lines), so the
+        // arm cannot shrink without re-generating it.
+        // The house-upgrade lane (D123, 2026-11-25) adds 16: the shared certificate geometry
+        // (`certificate_bounds`, read by the completion pass and by the pure
+        // `certificate_missing`) and the repair-stage accounting on the certificate tail
+        // (1142 -> 1158). The refusal itself writes nothing: `watch_project` names its cause
+        // and the missing requirement once per stall shift (`construction.rs:2364-2374`), which
+        // is where `missing=` comes from, and the completion pass runs on every stall tick -
+        // that is why it warns nothing. Measured 1158 on the D123UpgradeCell tree
+        // (code-health 20261125T170814). The certificate/refusal tail is the next extraction
+        // candidate: it belongs in a `construction_certificate` module beside `buildings.rs`.
         // Merged tree (Main, D123 integration): F12's +2 above and the upgrade lane's +16
-        // stack (1142 + 2 + 16 = 1160, code-health 20261126T003152 passed at 1160).
-        // CivStock's log-only diagnostics add 4 (`priority house scan` declines, the
-        // refusal line's cursor/sweeps): 1164, measured by code-health on the merged tree.
-        // The diagnostics are temporary - remove them (and these 4) once the House
-        // milestone's missing-site mechanism is proven and fixed (HANDOFF-49/50).
+        // stack (1142 + 2 + 16 = 1160; code-health 20261126T003152 passed at 1160 before
+        // CivStock). CivStock's log-only diagnostics add 4 (`priority house scan` declines,
+        // the refusal line's cursor/sweeps): 1164, measured 1164 on the integrated
+        // D123UpgradeCell tree by code-health 20261126T010359-code-health-cfpx8354 (which
+        // passed against this ceiling). The diagnostics are temporary - remove them (and
+        // these 4) once the House milestone's missing-site mechanism is proven and fixed
+        // (HANDOFF-49/50).
         ("settlements/construction.rs", 1_164),
         // B3 (EdgeScale, 2026-11-18): the edge-visible unlocked-session mirror
         // is projected only when its inputs move, so `Connections` carries one

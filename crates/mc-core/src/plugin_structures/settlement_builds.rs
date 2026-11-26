@@ -532,9 +532,7 @@ fn inherited<'a>(
             cells.insert(cell.at, cell);
         }
     }
-    cells.retain(|at, cell| {
-        inside(&box_bounds, *at) && cell.state != state.registry.states.air
-    });
+    cells.retain(|at, cell| inside(&box_bounds, *at) && cell.state != state.registry.states.air);
     cells
 }
 
@@ -551,7 +549,11 @@ fn blueprint_origin(state: &TickState, record: &Structure) -> Option<[i32; 3]> {
         .and_then(|id| crate::settlements::blueprints::get(&state.registry, id))?;
     let size = blueprint.footprint(crate::settlements::blueprints::Rotation::from_quarter_turns(0));
     let bounds = super::bounds(record.snapshot.origin, record.snapshot.reserved_footprint).ok()?;
-    Some([bounds.min[0], bounds.max[1] - i32::from(size[1]) + 1, bounds.min[2]])
+    Some([
+        bounds.min[0],
+        bounds.max[1] - i32::from(size[1]) + 1,
+        bounds.min[2],
+    ])
 }
 
 fn inside(bounds: &ScriptWorldBounds, at: [i32; 3]) -> bool {

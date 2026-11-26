@@ -943,7 +943,14 @@ fn an_emptied_level_fill_below_the_upgrade_box_never_reaches_the_repair_stage() 
             .expect("a placed level-1 wall cell");
         (fill, wall)
     };
-    let building = *state.settlements.get(id).unwrap().buildings.keys().next().unwrap();
+    let building = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
     fund(&mut state, "house", 2);
     upgrade_started(&mut state, id, building);
     let project = state.settlements.get(id).unwrap().projects[0].clone();
@@ -961,8 +968,12 @@ fn an_emptied_level_fill_below_the_upgrade_box_never_reaches_the_repair_stage() 
         fill.at
     );
     // A player digs out the protruding fill and breaks one wall cell of level 1.
-    state.world.set_block(fill.at[0], fill.at[1], fill.at[2], air);
-    state.world.set_block(wall.at[0], wall.at[1], wall.at[2], air);
+    state
+        .world
+        .set_block(fill.at[0], fill.at[1], fill.at[2], air);
+    state
+        .world
+        .set_block(wall.at[0], wall.at[1], wall.at[2], air);
     state.world.fold_overlay();
     let logs = counted(&state, "minecraft:oak_log");
     stock(&mut state, logs, 8);
@@ -983,7 +994,10 @@ fn an_emptied_level_fill_below_the_upgrade_box_never_reaches_the_repair_stage() 
             .and_then(|record| record.projects.first())
             .map(|project| next_cell(&state, id, &project.structure))
     );
-    assert_eq!(state.settlements.get(id).unwrap().buildings[&building].level, 2);
+    assert_eq!(
+        state.settlements.get(id).unwrap().buildings[&building].level,
+        2
+    );
     crate::plugin_structures::validate(&state)
         .expect("the ledger stays valid: the repair stage holds no cell outside the level box");
     assert_eq!(
@@ -1024,7 +1038,9 @@ fn the_inherited_chain_reads_the_blueprint_origin_not_the_site_minimum() {
         "the fold sees the chain when the origin is derived, and nothing when it is the site minimum"
     );
     assert!(
-        cells.values().all(|cell| cell.state != state.registry.states.air),
+        cells
+            .values()
+            .all(|cell| cell.state != state.registry.states.air),
         "a position whose last write is air is dropped"
     );
 }
