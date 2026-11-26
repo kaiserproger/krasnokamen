@@ -67,7 +67,7 @@
       "shot": "empty"
     },
     {
-      "cmd": "summon minecraft:wither_skull 1000.5 160.5 1003.5 {NoAI:1b,Invulnerable:1b}"
+      "cmd": "summon minecraft:wither_skull 1000.5 161 1003.5"
     },
     {
       "wait_ticks": 40

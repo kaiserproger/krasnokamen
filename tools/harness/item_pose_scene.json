@@ -1,0 +1,130 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule doMobLoot false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "cmd": "weather clear"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 995 159 995 1005 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 995 160 995 1005 166 1010 minecraft:air"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        10
+      ]
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "empty"
+    },
+    {
+      "cmd": "summon minecraft:item 1000.5 160.75 1003.5 {Item:{id:'minecraft:copper_golem_statue',count:1,components:{'minecraft:block_state':{copper_golem_pose:'standing'}}},Age:-32768s}"
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        10
+      ]
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "shot": "statue-standing"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:item,distance=..16]"
+    },
+    {
+      "cmd": "summon minecraft:item 1000.5 160.75 1003.5 {Item:{id:'minecraft:copper_golem_statue',count:1,components:{'minecraft:block_state':{copper_golem_pose:'star'}}},Age:-32768s}"
+    },
+    {
+      "wait_ticks": 40
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        10
+      ]
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "shot": "statue-star"
+    },
+    {
+      "require_entities": {
+        "name": "item-pose-entities",
+        "types": [
+          "minecraft:item"
+        ],
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:item,distance=..16]"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "id": "MODEL-OPUS-9",
+  "verdict": "promoted",
+  "fix_commit": "client:bb33b3f1",
+  "fix_commit_full": "bb33b3f1fddf687946d59d8d221b06314c41ae59",
+  "promoted_at": "2026-11-26T15:52:17+00:00",
+  "tree_head": "bd692bde656a9a562dabf92c1c3c32ca974631d9",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T155136-native-pufferfish-0yy3af7l/result.json",
+    "client_head": "53b58c66659176889bb243dd842c2afc47a5ad1d",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "red": [
+      "harness:scene-shot:native-pufferfish"
+    ],
+    "states": {
+      "harness:scene-shot:native-pufferfish": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T155158-native-pufferfish-enr6eivo/result.json",
+    "client_head": "bb33b3f1fddf687946d59d8d221b06314c41ae59",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "green": [
+      "harness:scene-shot:native-pufferfish"
+    ],
+    "states": {
+      "harness:scene-shot:native-pufferfish": "green"
+    },
+    "tree_head": "bd692bde656a9a562dabf92c1c3c32ca974631d9",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T155158-native-pufferfish-enr6eivo/result.json",
+    "client_head": "bb33b3f1fddf687946d59d8d221b06314c41ae59",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "green": [
+      "harness:scene-shot:native-pufferfish"
+    ],
+    "states": {
+      "harness:scene-shot:native-pufferfish": "green"
+    },
+    "tree_head": "bd692bde656a9a562dabf92c1c3c32ca974631d9",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "84e17dac892e83a1908dd0506bfe50915c4ce90c",
+    "paths": [
+      "assets/krasnokamen/models/entity/pufferfish_medium.json",
+      "assets/krasnokamen/models/entity/pufferfish_small.json"
+    ]
+  },
+  "candidate_refs": {},
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T155217-ledger-promote-j7_7y8zp"
+}

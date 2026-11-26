@@ -1,0 +1,60 @@
+{
+  "id": "MODEL-ITEM-POSE",
+  "verdict": "promoted",
+  "fix_commit": "client:2668619b",
+  "fix_commit_full": "2668619b1faed303468e74562547ea3699a08cff",
+  "promoted_at": "2026-11-26T15:42:02+00:00",
+  "tree_head": "c1e5ffb6efaff22d9b8270a7ddf86a40159207a6",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T154025-native-item-pose-hp1g7l3v/result.json",
+    "client_head": "c11d48b74a5b7053832dbc49b54841596b1ce14e",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "red": [
+      "harness:scene-shot:native-item-pose"
+    ],
+    "states": {
+      "harness:scene-shot:native-item-pose": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T154058-native-item-pose-aa1znv4f/result.json",
+    "client_head": "2668619b1faed303468e74562547ea3699a08cff",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "green": [
+      "harness:scene-shot:native-item-pose"
+    ],
+    "states": {
+      "harness:scene-shot:native-item-pose": "green"
+    },
+    "tree_head": "c1e5ffb6efaff22d9b8270a7ddf86a40159207a6",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T154058-native-item-pose-aa1znv4f/result.json",
+    "client_head": "2668619b1faed303468e74562547ea3699a08cff",
+    "server_binary_sha256": "9c4d24785bdcc972f7758d39e947d56f1806383dcbc9971f65a659a1d1ddd25c",
+    "green": [
+      "harness:scene-shot:native-item-pose"
+    ],
+    "states": {
+      "harness:scene-shot:native-item-pose": "green"
+    },
+    "tree_head": "c1e5ffb6efaff22d9b8270a7ddf86a40159207a6",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "3b34ecea93f9aa6f7c378880ad299c59b3c8c911",
+    "paths": [
+      "src/entities/presentation.rs"
+    ]
+  },
+  "candidate_refs": {},
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T154201-ledger-promote-v1516_lv"
+}

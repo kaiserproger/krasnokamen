@@ -1637,3 +1637,70 @@ def check_wither_skull_selection(probe: ProbeSteps, artifact: Path) -> None:
                 record is not None
                 and texture.endswith("entity/wither/wither.png")
                 and int(record.get("texture_layer") or 0) > 0)
+
+
+def check_pufferfish_uv(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-9: the pufferfish layer samples the vanilla UV window.
+
+    `35df28a0` rewrote the 26.3 pufferfish lookups; the pre-fix lookups sample a
+    warped window while the indices stay the same, so the quantized UV digest of
+    the one submitted `EntityCutout` layer is what the frame reports.
+    """
+    shots = _qa._load_shots(probe, artifact, ("empty", "pufferfish"))
+    ref, frame = shots["empty"][0], shots["pufferfish"][0]
+    extraction = frame.get("entity_extraction") or {}
+    records = extraction.get("entities") or []
+    probe.report["pufferfish_records"] = records
+    probe.report["pufferfish_unrendered"] = extraction.get("unrendered")
+    record = next((entry for entry in records
+                   if entry.get("entity_type") == "minecraft:pufferfish"), None)
+    layers = extraction.get("entity_layer_geometry") or []
+    probe.report["pufferfish_layers"] = layers
+    layer = max((entry for entry in layers if entry.get("material") == "EntityCutout"),
+                key=lambda entry: int(entry.get("indices") or 0), default=None)
+    probe.check("pufferfish_empty_frame", not ((ref.get("entity_extraction") or {}).get("entities") or []))
+    probe.check("pufferfish_record", record is not None)
+    probe.check("pufferfish_texture",
+                str((record or {}).get("texture") or "").endswith("pufferfish.png"))
+    probe.check("pufferfish_layer_uv_digest",
+                layer is not None and layer.get("uv_digest") == 6516760699778354735)
+
+
+def check_item_pose(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-ITEM-POSE: a statue item's layer follows the item's own pose.
+
+    Two dropped statue items, one per shot, render through the item path (the
+    per-entity selection report stays empty for items; the captured layer geometry
+    is what this row reports). The fix selects the statue's pose layer and stands
+    the dropped statue at its feet; the pre-fix client has neither, so both shots
+    are the standing rig under the item root's rotation only. Measured on the pair:
+    the star pose widens the single `ItemCutout` layer's x-span to 1.60x the
+    standing frame, while the pre-fix client's two frames differ by 3% (0.97x).
+    """
+    shots = _qa._load_shots(probe, artifact, ("empty", "statue-standing", "statue-star"))
+    standing = shots["statue-standing"][0]
+    star = shots["statue-star"][0]
+
+    def layer_of(shot: dict[str, Any]) -> dict[str, Any] | None:
+        extraction = shot.get("entity_extraction") or {}
+        probe.report.setdefault("item_pose_frames", {})[shot.get("shot") or ""] = {
+            "records": extraction.get("entities"),
+            "unrendered": extraction.get("unrendered"),
+            "layers": extraction.get("entity_layer_geometry"),
+        }
+        candidates = [entry for entry in (extraction.get("entity_layer_geometry") or [])
+                      if entry.get("material") == "ItemCutout"]
+        return max(candidates, key=lambda entry: int(entry.get("indices") or 0), default=None)
+
+    standing_layer = layer_of(standing)
+    star_layer = layer_of(star)
+    probe.check("statue_layers_present", standing_layer is not None and star_layer is not None)
+    if standing_layer is None or star_layer is None:
+        return
+    standing_span_x = float(standing_layer["max"][0]) - float(standing_layer["min"][0])
+    star_span_x = float(star_layer["max"][0]) - float(star_layer["min"][0])
+    probe.report["item_pose_spans"] = {"standing_x": standing_span_x, "star_x": star_span_x,
+                                       "standing_indices": standing_layer.get("indices"),
+                                       "star_indices": star_layer.get("indices")}
+    probe.check("statue_pose_widens_the_item_layer",
+                standing_span_x > 0.0 and star_span_x >= standing_span_x * 1.3)
