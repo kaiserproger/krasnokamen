@@ -4,8 +4,11 @@ title = "Automation press_inputs key.keyboard.f1 rejects a supported physical wi
 area = "harness"
 repro = "cargo"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-F1"
 regression = ["harness:entities:native-v2-input-camera", "client:krasnokamen-client:session::mining_start_tests::f1_key_toggles_hide_hud_through_the_ordinary_key_path"]
-fix_commit = "client:e0f9d563"
-repro_check = "real-hunk control receipts/XClientControl/negctl/negctl-real-C-f1.log: reversing e0f9d563's two actions.rs hunks (hide_hud arm, normalize_key f1) reproduces the reported symptom 'unsupported ordinary key key.keyboard.f1'; area=harness, repro=cargo, so the evidence is complete. The ref runs in the client checkout (client:<crate>:<test>) and becomes runnable after Main merges wt/XClientControl"
+proving_refs = ["harness:entities:native-v2-input-camera"]
+proving_assertions = { "harness:entities:native-v2-input-camera" = "f1_automation_key_accepted" }
+fix_commit = "client:7119fd2d1c8ac6c4be78e0084da85b92702c6f36"
+repro_check = "real-hunk control receipts/XClientControl/negctl/negctl-real-C-f1.log: reversing e0f9d563's two actions.rs hunks (hide_hud arm, normalize_key f1) reproduces the reported symptom 'unsupported ordinary key key.keyboard.f1'. Because the real fix predates the client rename (e0f9d563, 2026-10-30, is a bulk commit), the control is the committed reversal pair 48c08522 -> 7119fd2d: 48c08522 deletes exactly those two production hunks and 7119fd2d re-lands them, and the pair's diff is exactly the fix's non-test hunks (docs/bugs/promotions/TEST-NATIVE-F1.hunks.md). The pinned pre-fix client reds native-v2-input-camera at f1_automation_key_accepted (the scene now records a refused automation key as an assertion); the pinned fixed client passes the same scene, and the client unit ref is green in the client checkout."
+promotion = "docs/bugs/promotions/TEST-NATIVE-F1.json"

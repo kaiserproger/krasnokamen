@@ -1,0 +1,75 @@
+{
+  "id": "HARNESS-AUDIBLE-SINK-IGNORED",
+  "verdict": "promoted",
+  "fix_commit": "patch:dd0f8b7a8b5dc3fcdfa132e410c86325373fd4e4ef1ce44191a8dc4810dd8fe4",
+  "fix_commit_full": "patch:dd0f8b7a8b5dc3fcdfa132e410c86325373fd4e4ef1ce44191a8dc4810dd8fe4",
+  "promoted_at": "2026-11-26T18:16:13+00:00",
+  "tree_head": "97dbc4b787a9ea87b7da858ac5f6d023bee868bd",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "8761c84b749251515cbbbd6f5a5f7707f84c1d12a902307584b51f133a681703",
+  "control_tree_head": "97dbc4b787a9ea87b7da858ac5f6d023bee868bd",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "dd0f8b7a8b5dc3fcdfa132e410c86325373fd4e4ef1ce44191a8dc4810dd8fe4",
+  "reversed_files": [
+    "tools/harness/runtime.py"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "harness:screens-voice-qa:fabric_loader_plays_screen_audio": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run screens-voice-qa --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123PackHarnessRowsCore/.analysis/validation/20261126T180838-ledger-promote-x_971mdp/regressions-client-0.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123PackHarnessRowsCore/.analysis/validation/20261126T180838-ledger-promote-x_971mdp/client-artifacts/20261126T180841-screens-voice-qa-hzcp2sbp/result.json"
+    },
+    "python:tools.harness.test_private_audio:PrivateAudioTest.test_audible_java_refuses_a_sink_outside_verified_graph": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_audible_client_uses_only_verified_named_private_sink": {
+      "state": "red",
+      "detail": "test assertion failed",
+      "assertion": {
+        "file": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/tools/harness/test_runtime_profiles.py",
+        "line": 309,
+        "error": "AssertionError"
+      }
+    },
+    "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_audible_client_without_private_graph_is_refused_before_spawn": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "harness:screens-voice-qa:fabric_loader_plays_screen_audio": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123PackHarnessRowsCore/.analysis/validation/20261126T180838-ledger-promote-x_971mdp/client-artifacts/20261126T181241-screens-voice-qa-ecnn5e9q/result.json"
+    },
+    "python:tools.harness.test_private_audio:PrivateAudioTest.test_audible_java_refuses_a_sink_outside_verified_graph": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_audible_client_uses_only_verified_named_private_sink": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_audible_client_without_private_graph_is_refused_before_spawn": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackHarnessRowsCore/.analysis/validation/20261126T173809-screens-voice-qa-fu2q437p/result.json",
+    "tree_head": "97dbc4b787a9ea87b7da858ac5f6d023bee868bd",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "4646f6d616898fe855e68299260594b7fe9f02ddb5c178d6350bc581df9d9392",
+    "covers": [
+      "harness:screens-voice-qa:fabric_loader_plays_screen_audio"
+    ],
+    "profile": "screens-voice-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PackHarnessRowsCore/.analysis/validation/20261126T180838-ledger-promote-x_971mdp"
+}

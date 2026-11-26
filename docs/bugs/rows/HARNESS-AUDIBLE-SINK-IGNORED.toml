@@ -3,7 +3,7 @@ id = "HARNESS-AUDIBLE-SINK-IGNORED"
 title = "Java launch ignores its explicit private sound sink and forces No Output"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "ScreensVoiceStart real gate 20261115T011032: FabricViewer reaches Play but OpenAL reports No Output rather than fabric_viewer_out because runtime.start_client ignores sound_sink. The independent fix patch restores null audio and muted options; the private-audio helper remains for retained API tests but is unused by the reversed live path."
 repro = "client"
 regression = [
@@ -12,6 +12,11 @@ regression = [
   "python:tools.harness.test_private_audio:PrivateAudioTest.test_audible_java_refuses_a_sink_outside_verified_graph",
   "harness:screens-voice-qa:fabric_loader_plays_screen_audio",
 ]
-repro_check = "ScreensVoiceStart/audible-red.log restores only unconditional null audio and muted options: null != pulse. audible-build-final-green.log passes with default-null isolation unchanged and verified private-graph-only audible mode."
+proving_refs = [
+  "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_audible_client_uses_only_verified_named_private_sink",
+  "harness:screens-voice-qa:fabric_loader_plays_screen_audio",
+]
+repro_check = "ScreensVoiceStart/audible-red.log restores only unconditional null audio and muted options: null != pulse. audible-build-final-green.log passes with default-null isolation unchanged and verified private-graph-only audible mode. The committed fix patch is now the launch-options hunk only (docs/bugs/promotions/HARNESS-AUDIBLE-SINK-IGNORED.hunks.md): the private-audio branch hunk is omitted for reason (b) because the kept tests call require_java_private_audio, so reversing it leaves their refs unrunnable instead of red. The carried hunk is now the split mixed hunk: only the `soundCategory_master` expression is reversed (the real pre-image line), while the `soundDevice` write survives as the a/-side line the kept `require_java_private_audio` needs - without it the launch assertion that FabricViewer OpenAL opened the null device instead of its own sink fires before any verdict. Control measured on the candidate head with that split reversed: test_audible_client_uses_only_verified_named_private_sink fails at its own assertion ('soundDevice:viewer' not found; receipts/D123PackHarnessRows/control-audible-options-python.log) while the two retained-API refs stay green, and the screens-voice-qa Fabric viewer leg must lose fabric_loader_plays_screen_audio."
 failing_first = "reported"
-fix_commit = "patch:7c7db0298e641977e1e031b306582697fcaa361cc5661be902a4627f37e1df4b"
+fix_commit = "patch:dd0f8b7a8b5dc3fcdfa132e410c86325373fd4e4ef1ce44191a8dc4810dd8fe4"
+promotion = "docs/bugs/promotions/HARNESS-AUDIBLE-SINK-IGNORED.json"

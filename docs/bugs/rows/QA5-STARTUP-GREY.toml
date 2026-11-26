@@ -8,4 +8,4 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-STARTUP-GREY"
 regression = []
 fix_commit = "client:9102bbd4"
-repro_check = "candidate: the fix keeps the window hidden (wayland ignores set_visible and maps on the first buffer) and presents one frame in `resumed` before set_visible, but window-mapping timing has no unit seam; the 25-60 s grey period must be measured on a real window (stage 3), including the Windows/macOS launchers"
+repro_check = "The fix (client:9102bbd4) keeps the window hidden and presents one frame in `resumed` before set_visible, but window-mapping timing has no unit seam and the client publishes no first-frame/mapping timestamp: a native run's observation carries no startup timing (`details` has launch_status/initialized only), so the 25-60 s grey period cannot be measured from a receipt. Measuring it needs a client instrumentation commit (log the window map time and the first presented frame time), a pinned pair with that instrumentation (fix / pre-fix), and a windowed run measuring the gap; the row is not closable without it."
