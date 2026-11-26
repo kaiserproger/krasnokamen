@@ -1286,8 +1286,11 @@ def check_crowd_stream(probe: ProbeSteps, artifact: Path) -> None:
       either overflows `Stream::validate_size` (the reported crash) or, at this size, fills the
       stream while reporting no dropped body at all (`crowd_stream_bounded` false).
 
-    Fixtures first: the `empty` frame draws no mob and reports `gpu_completion`, so a missing
-    summon or a frame that never completed cannot read as either symptom.
+    Fixtures first: the `empty` frame is a frame whose crowd bodies are absent - the private world
+    keeps a couple of dozen bodies of its own, so the rule is that the scene's own scale cannot be
+    reached without the summons, not that the frame is literally empty. Together with
+    `gpu_completion` on both frames, a missing summon or a frame that never completed cannot read as
+    either symptom.
     """
     empty = json.loads((artifact / "screenshots/empty.json").read_text())
     frame = json.loads((artifact / "screenshots/crowd.json").read_text())
@@ -1299,7 +1302,9 @@ def check_crowd_stream(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["crowd_dropped_over_budget"] = int(extraction.get("dropped_over_budget") or 0)
     probe.report["crowd_vertices"] = int(extraction.get("vertices") or 0)
     probe.report["crowd_gpu_completion"] = frame.get("gpu_completion")
-    probe.check("crowd_empty_frame", empty_extraction.get("eligible") in (0, None))
+    # The private world carries a couple of dozen bodies of its own: the fixture is the scene's own
+    # scale, so a frame without the summons must stay far below it.
+    probe.check("crowd_empty_frame", probe.report["crowd_empty_eligible"] < 100)
     probe.check("crowd_client_survived", frame.get("gpu_completion") is True)
     # Both sides of the pair keep the same frame alive; only the option and the bound differ.
     probe.check("crowd_entities_rendered",

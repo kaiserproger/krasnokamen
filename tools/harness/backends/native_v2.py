@@ -1090,6 +1090,12 @@ def _corrupt_chunk_near_camera(steps: ProbeSteps, origin: tuple[int, int, int]) 
     run_near_camera(steps, origin)
 
 
+def _mount_beside_refused_column(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from .native_mount_refused_column import run
+
+    run(steps, origin)
+
+
 def _promotion_banner(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     from .native_promotion_items import banner_placement
 
@@ -1359,6 +1365,7 @@ RUNNERS = {
     "native-v2-command-persist": _command_persist,
     "native-v2-corrupt-block-entities": _corrupt_block_entities,
     "native-v2-corrupt-chunk-near-camera": _corrupt_chunk_near_camera,
+    "native-v2-mount-beside-refused-column": _mount_beside_refused_column,
     "native-v2-craft-drag": _craft_drag,
     "native-v2-craft-drag-paced": _craft_drag_paced,
     "native-v2-shift-double-click": _shift_double_click,

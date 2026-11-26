@@ -599,7 +599,8 @@ seed = 81
                                            "native-v2-ledger-gravity-tick",
                                            "native-v2-ledger-freeze-export",
                                            "native-v2-corrupt-block-entities",
-                                           "native-v2-corrupt-chunk-near-camera")
+                                           "native-v2-corrupt-chunk-near-camera",
+                                           "native-v2-mount-beside-refused-column")
                     # BREAK_DL_ATTACK=hold* glue (not for merge): restart to read the store after the race.
                     or (ctx.scenario_id == "native-v2-duplicate-login"
                         and os.environ.get("BREAK_DL_ATTACK", "").startswith("hold"))):
@@ -627,7 +628,8 @@ seed = 81
                                             "native-v2-ledger-gravity-tick",
                                             "native-v2-ledger-freeze-export")
                             or (ctx.scenario_id in ("native-v2-corrupt-block-entities",
-                                                    "native-v2-corrupt-chunk-near-camera")
+                                                    "native-v2-corrupt-chunk-near-camera",
+                                                    "native-v2-mount-beside-refused-column")
                                 and getattr(mcp, "corrupt_fixture", None))):
                         from .native_promotion_custody import convert_world
 
