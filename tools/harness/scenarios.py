@@ -986,6 +986,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="checks the received entity metadata and the framed shots for the 26.3 visual layout",
         limits="one fixture and one camera per shot; the visual review of each frame stays with the operator",
     ),
+    "native-crowd-stream": _entry(
+        id="native-crowd-stream", summary="A 1400-mob overhead crowd renders under Entity Distance 500% and stays inside the dynamic stream",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-crowd-stream", requires=("xvfb",),
+        sources=("tools/harness/crowd_stream_scene.json", "tools/harness/backends/scene_shot_checks.py"),
+        fixture="private native client, 1400 NoAI cows on a 0.75-block grid at y=100 with a spectator camera 75 blocks above them, render distance 8, graphics preset low, Entity Distance 500%",
+        proves="entity culling honours `Entity.setViewScale` (`crowd_entities_rendered`: 1400 mobs past the un-scaled AABB.getSize * 64 reach are eligible and submitted) and the entity pass stops at its share of the dynamic stream (`crowd_stream_bounded`: `entity_extraction.dropped_over_budget` above 0) with the frame completed (`crowd_client_survived`)",
+        limits="one overhead camera and one crowd size; which bodies fall past the share is the pass's choice, and the pre-fix crash itself is the pinned hz-compare receipt on the row, not this scene",
+    ),
     "native-item-bars": _entry(
         id="native-item-bars", summary="Item durability bars and item counts render on the hotbar",
         owner="core:harness", evidence="graphical", profile="scene-shot",

@@ -1267,3 +1267,41 @@ def check_entity_tnt(probe: ProbeSteps, artifact: Path) -> None:
     probe.report["visual_review_required"] = [
         "Inspect tnt.png: the layer geometry proves the block draw, not the TNT texture's texels."
     ]
+
+def check_crowd_stream(probe: ProbeSteps, artifact: Path) -> None:
+    """One overhead camera over a flat field of NoAI cows, 75 blocks below it.
+
+    Two client-surface rows share this fixture because both are read off the same frame:
+
+    - CLIENT-ENTITY-VIEW-SCALE-NEVER-APPLIED: the mobs sit past the un-scaled
+      `AABB.getSize * 64` entity reach (~57 blocks for a cow) but inside vanilla's
+      `Entity.setViewScale(clamp(effective render distance / 8, 1, 2.5) * entityDistanceScaling)`
+      reach at render distance 8 and Entity Distance 500% (64 * 7.5 = 480 blocks), so
+      `crowd_entities_rendered` separates a client that applies the option from one that leaves
+      `Store::view_scale` at 1.0 (eligible 0, submitted 0).
+    - CLIENT-CROWD-STREAM-BUDGET-CRASH: the same frame's bodies are more dynamic-stream geometry
+      than the entity pass may fill (`render::mesh::ENTITY_VERTEX_BUDGET`), so a client with the
+      bound keeps every body that fits, records the rest in
+      `PresentationStats::dropped_over_budget` and stays alive; without the bound the same crowd
+      either overflows `Stream::validate_size` (the reported crash) or, at this size, fills the
+      stream while reporting no dropped body at all (`crowd_stream_bounded` false).
+
+    Fixtures first: the `empty` frame draws no mob and reports `gpu_completion`, so a missing
+    summon or a frame that never completed cannot read as either symptom.
+    """
+    empty = json.loads((artifact / "screenshots/empty.json").read_text())
+    frame = json.loads((artifact / "screenshots/crowd.json").read_text())
+    empty_extraction = empty.get("entity_extraction") or {}
+    extraction = frame.get("entity_extraction") or {}
+    probe.report["crowd_empty_eligible"] = int(empty_extraction.get("eligible") or 0)
+    probe.report["crowd_eligible"] = int(extraction.get("eligible") or 0)
+    probe.report["crowd_submitted"] = int(extraction.get("submitted") or 0)
+    probe.report["crowd_dropped_over_budget"] = int(extraction.get("dropped_over_budget") or 0)
+    probe.report["crowd_vertices"] = int(extraction.get("vertices") or 0)
+    probe.report["crowd_gpu_completion"] = frame.get("gpu_completion")
+    probe.check("crowd_empty_frame", empty_extraction.get("eligible") in (0, None))
+    probe.check("crowd_client_survived", frame.get("gpu_completion") is True)
+    # Both sides of the pair keep the same frame alive; only the option and the bound differ.
+    probe.check("crowd_entities_rendered",
+                probe.report["crowd_eligible"] >= 1000 and probe.report["crowd_submitted"] >= 1000)
+    probe.check("crowd_stream_bounded", probe.report["crowd_dropped_over_budget"] > 0)

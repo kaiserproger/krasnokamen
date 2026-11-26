@@ -24,7 +24,8 @@ from .gameplay import prepare_operator_fixture
 from .probe_steps import ProbeSteps
 from . import scene_shot as _qa
 from .scene_shot_checks import (
-    check_263_entity_rigs, check_decorated_pot, check_dynamic_context, check_elytra, check_entity_visuals,
+    check_263_entity_rigs, check_crowd_stream, check_decorated_pot, check_dynamic_context, check_elytra,
+    check_entity_visuals,
     check_element_emission, check_gait_spider, check_held_tool_rest, check_item_bars, check_pig_saddle,
     check_placed_head, check_player_head, check_player_head_registry, check_shade_override,
     check_entity_fire, check_entity_tnt, check_rig_allay, check_rig_guardian, check_rig_parity, check_shelf_clock, check_shield_gui, check_structure_box,
@@ -47,6 +48,7 @@ from .scene_shot_steps import validate_steps
 NAMED_FIXTURES = {
     "java-matrix-system-chat": "java_matrix_system_chat_scene.json",
     "native-263-entity-rigs": "entity_263_rigs_scene.json",
+    "native-crowd-stream": "crowd_stream_scene.json",
     "native-shelf-clock": "shelf_clock_scene.json",
     "native-entity-visuals": "entity_visuals_scene.json",
     "native-elytra": "elytra_scene.json",
@@ -170,7 +172,8 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
     if type(client_latency_ms) is not int or not 0 <= client_latency_ms <= 5000:
         raise ValueError("client_latency_ms must be an integer in 0..5000")
     settings = scenario.get("client_settings", {})
-    if not isinstance(settings, dict) or set(settings) - {"graphics_preset", "render_distance", "fov", "gui_scale", "language", "screen_size"}:
+    if not isinstance(settings, dict) or set(settings) - {"graphics_preset", "render_distance", "fov", "gui_scale",
+                                                          "language", "screen_size", "entity_distance_scaling"}:
         raise ValueError("unsupported client settings")
     if {"gui_scale", "screen_size"} & settings.keys() and ctx.client != "java":
         raise ValueError("gui_scale and screen_size are Java-only scene settings")
@@ -188,6 +191,14 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         settings["graphics_preset"] = preset.lower()
     if "render_distance" in settings and (type(settings["render_distance"]) is not int or not 2 <= settings["render_distance"] <= 32):
         raise ValueError("render_distance must be in 2..32")
+    if "entity_distance_scaling" in settings:
+        # Vanilla Options.entityDistanceScaling: slider stops 2..=20 mapped by i / 4.0.
+        scaling = settings["entity_distance_scaling"]
+        if type(scaling) not in (int, float) or not 0.5 <= scaling <= 5.0:
+            raise ValueError("entity_distance_scaling must be in 0.5..5.0")
+        if ctx.client == "java":
+            raise ValueError("entity_distance_scaling is a native-client setting")
+        settings["entity_distance_scaling"] = float(scaling)
     validate_steps(scenario["steps"], ctx.client)
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 600.0
     if not 0 < timeout <= 3600:
@@ -352,6 +363,8 @@ def run(
             if ctx.scenario_id == "java-matrix-system-chat":
                 from .java_system_chat import check
                 check(probe, artifact)
+            elif ctx.scenario_id == "native-crowd-stream":
+                check_crowd_stream(probe, artifact)
             elif ctx.scenario_id == "native-263-entity-rigs":
                 check_263_entity_rigs(probe, artifact)
             elif ctx.scenario_id == "native-shelf-clock":
