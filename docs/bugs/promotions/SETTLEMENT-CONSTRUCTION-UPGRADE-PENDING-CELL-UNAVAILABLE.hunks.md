@@ -5,16 +5,18 @@ all committed before the promoted head. The recorded pre-image is the lane base,
 whose `reopen_emptied` scans only the record's own cells — no inheritance at all.
 
 `docs/bugs/promotions/SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE.patch`
-(`patch:96452fec`) is `git diff 597352d5a7 <head> -- settlement_builds.rs blueprints.rs`. The net
+(`patch:35c376cb`) is `git diff 597352d5a7 <head> -- settlement_builds.rs blueprints.rs`. The net
 `blueprints.rs` diff against that base is empty (pack 1 added `Blueprint::image`/`Blueprint::inherited`,
-pack 2 deleted them), so the patch is one file: `settlement_builds.rs`, where the whole `inherited`
-fold, the `blueprint_origin` derivation, the `inside` box predicate and the `reopen_emptied` loop that
-consumes them are added. Reversing it restores `597352d5a7`'s text.
+pack 2 deleted them), so the patch is one file: `settlement_builds.rs`, where the `reopen_emptied` loop that consumes the
+fold is added. The helpers themselves (`inherited`, `blueprint_origin`, `inside`) stay in the control
+as a kept helper (class (b), the same convention as the builder row): the row's two `preparation_tests`
+regressions call them, so deleting them would make the control's own test build fail and every cargo
+ref `unrunnable`. Removing the loop is what removes the behaviour - the inherited cell is never queued
+and the certificate never closes.
 
 | hunk | site | pre-fix state |
 |---|---|---|
-| 1, 2 (kept) | `settlement_builds.rs`: `fn inherited`, `fn blueprint_origin`, `fn inside`, the helmet doc on `reopen_emptied` | absent (`597352d5a7` text: the scan reads `record.cells` only) |
-| 3 (kept) | `reopen_emptied`: the inherited-cell loop | absent |
+| 1 (kept) | `settlement_builds.rs`: the inherited-cell loop in `reopen_emptied` | absent (`597352d5a7` text: the scan reads `record.cells` only) |
 
 What the fold does, and why each part is guarded: the chain of committed records of the same site is
 folded last-write-per-position, only cells **inside the record's own box** survive (a level-1 slope

@@ -1,72 +1,74 @@
 {
   "id": "SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE",
   "verdict": "promoted",
-  "fix_commit": "patch:27b05b91a78ca5d7a4695428102bb3a043ee07cef35e788172ed5c739410d3ea",
-  "fix_commit_full": "patch:27b05b91a78ca5d7a4695428102bb3a043ee07cef35e788172ed5c739410d3ea",
-  "promoted_at": "2026-11-25T23:10:06+00:00",
-  "tree_head": "1f695d4b2529c2e59077c038dcfb7453d296846c",
+  "fix_commit": "patch:35c376cbeb0e0ec2a11ed1114c8ed7cf0aec0af4dedd9b25726da641914c94d0",
+  "fix_commit_full": "patch:35c376cbeb0e0ec2a11ed1114c8ed7cf0aec0af4dedd9b25726da641914c94d0",
+  "promoted_at": "2026-11-26T03:15:39+00:00",
+  "tree_head": "757cdd77b8ed9b19e28355aa8810b43c948cc0ab",
   "tree_dirty": false,
   "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "control_tree": "head",
+  "control_tree_sha256": "65f0e8027f159c02ece87016b42aedf05039e5a0c7fc7c267c0f7b111ae2ba28",
+  "control_tree_head": "757cdd77b8ed9b19e28355aa8810b43c948cc0ab",
   "control": "reversed_fix_hunks",
   "control_b": null,
-  "fix_patch_sha256": "27b05b91a78ca5d7a4695428102bb3a043ee07cef35e788172ed5c739410d3ea",
+  "fix_patch_sha256": "35c376cbeb0e0ec2a11ed1114c8ed7cf0aec0af4dedd9b25726da641914c94d0",
   "reversed_files": [
     "crates/mc-core/src/plugin_structures/settlement_builds.rs"
   ],
   "kept_test_files": [],
   "negative_control": {
-    "cargo:mc-core:settlements::construction::fencing_tests::an_upgrade_repairs_an_inherited_cell_in_the_species_the_house_was_built_with": {
-      "state": "red",
-      "detail": "FAIL",
-      "assertion": {
-        "file": "crates/mc-core/src/settlements/construction_fencing_tests.rs",
-        "line": 385,
-        "error": "panic",
-        "class": "unknown"
-      }
-    },
     "cargo:mc-core:settlements::construction::fencing_tests::an_upgrade_repairs_an_inherited_perimeter_cell_emptied_mid_build": {
       "state": "red",
       "detail": "FAIL",
       "assertion": {
         "file": "crates/mc-core/src/settlements/construction_fencing_tests.rs",
-        "line": 385,
+        "line": 387,
+        "error": "panic",
+        "class": "unknown"
+      }
+    },
+    "cargo:mc-core:settlements::construction::fencing_tests::an_upgrade_repairs_an_inherited_cell_in_the_species_the_house_was_built_with": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/settlements/construction_fencing_tests.rs",
+        "line": 387,
         "error": "panic",
         "class": "unknown"
       }
     },
     "harness:buildings-qa:house.L2_upgrade": {
       "state": "red",
-      "detail": "client receipt is 'failed', not passed; env BUILDINGS_QA_SELECT=house /usr/bin/python3 -m tools.harness run buildings-qa --client native --windowed --timeout-seconds 1800 exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261125T215419-ledger-promote-2wk4_07d/regressions-client-2.log",
-      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261125T215419-ledger-promote-2wk4_07d/client-artifacts/20261125T221938-buildings-qa-wea9_skm/result.json"
+      "detail": "client receipt is 'failed', not passed; env BUILDINGS_QA_SELECT=house /usr/bin/python3 -m tools.harness run buildings-qa --client native --windowed --timeout-seconds 1800 exited 1; see /run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261126T022007-ledger-promote-3zvj61t6/regressions-client-2.log",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261126T022007-ledger-promote-3zvj61t6/client-artifacts/20261126T022550-buildings-qa-oo68hr7j/result.json"
     }
   },
   "restored": {
-    "cargo:mc-core:settlements::construction::fencing_tests::an_upgrade_repairs_an_inherited_cell_in_the_species_the_house_was_built_with": {
+    "cargo:mc-core:settlements::construction::fencing_tests::an_upgrade_repairs_an_inherited_perimeter_cell_emptied_mid_build": {
       "state": "green",
       "detail": ""
     },
-    "cargo:mc-core:settlements::construction::fencing_tests::an_upgrade_repairs_an_inherited_perimeter_cell_emptied_mid_build": {
+    "cargo:mc-core:settlements::construction::fencing_tests::an_upgrade_repairs_an_inherited_cell_in_the_species_the_house_was_built_with": {
       "state": "green",
       "detail": ""
     },
     "harness:buildings-qa:house.L2_upgrade": {
       "state": "green",
       "detail": "",
-      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261125T215419-ledger-promote-2wk4_07d/client-artifacts/20261125T225405-buildings-qa-wtfswytw/result.json"
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261126T022007-ledger-promote-3zvj61t6/client-artifacts/20261126T030108-buildings-qa-34oxadxp/result.json"
     }
   },
   "client_receipt": {
-    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261125T175716-buildings-qa-s1_5wshf/result.json",
-    "tree_head": "1f695d4b2529c2e59077c038dcfb7453d296846c",
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261126T011855-buildings-qa-6ifatwdo/result.json",
+    "tree_head": "757cdd77b8ed9b19e28355aa8810b43c948cc0ab",
     "tree_dirty": false,
     "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "server_binary_sha256": "f5b3401755954961e2b6496624e577886db166064fee91d39a91e9ed3ea93260",
+    "server_binary_sha256": "9d5b7f05e66189951e8b77d943f82cb593829a43005eec697a62ca1083991256",
     "covers": [
       "harness:buildings-qa:house.L2_upgrade"
     ],
     "profile": "buildings-qa"
   },
-  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261125T215419-ledger-promote-2wk4_07d"
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123UpgradeCell/.analysis/validation/20261126T022007-ledger-promote-3zvj61t6"
 }
