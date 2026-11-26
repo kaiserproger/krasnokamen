@@ -36,7 +36,7 @@
         160,
         1000.5,
         0,
-        0
+        -35
       ]
     },
     {
@@ -46,7 +46,7 @@
       "cmd": "fill 995 159 995 1005 159 1010 minecraft:stone"
     },
     {
-      "cmd": "fill 995 160 995 1005 165 1010 minecraft:air"
+      "cmd": "fill 995 160 995 1005 172 1010 minecraft:air"
     },
     {
       "tp": [
@@ -54,7 +54,7 @@
         160,
         1000.5,
         0,
-        0
+        -35
       ]
     },
     {
@@ -64,28 +64,55 @@
       "shot": "empty"
     },
     {
-      "cmd": "summon minecraft:falling_block 1000.5 161 1003.5 {BlockState:{Name:\"minecraft:stone\"},NoGravity:1b}"
+      "cmd": "setblock 1000 165 1003 minecraft:stone"
     },
     {
-      "wait_ticks": 20
+      "cmd": "setblock 1000 166 1003 minecraft:sand"
     },
     {
-      "shot": "falling"
+      "cmd": "tick rate 2"
     },
     {
-      "list_entities": {
+      "cmd": "setblock 1000 165 1003 minecraft:air"
+    },
+    {
+      "wait_ticks": 3
+    },
+    {
+      "require_entities": {
         "name": "falling-block-entities",
+        "types": [
+          "minecraft:falling_block"
+        ],
         "args": {
-          "radius": 16,
+          "radius": 32,
           "limit": 64
         }
       }
     },
     {
-      "cmd": "kill @e[type=minecraft:falling_block,distance=..16]"
+      "shot": "falling"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "shot": "falling-01"
+    },
+    {
+      "wait_ticks": 1
+    },
+    {
+      "shot": "falling-02"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:falling_block,distance=..32]"
     },
     {
       "cmd": "kill @e[type=minecraft:item,distance=..16]"
+    },
+    {
+      "cmd": "tick rate 20"
     }
   ]
 }

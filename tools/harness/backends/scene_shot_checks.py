@@ -1282,51 +1282,70 @@ def check_entity_falling_block(probe: ProbeSteps, artifact: Path) -> None:
 
     `render_special::append` admits `minecraft:falling_block` next to the primed TNT and calls
     `world_fx::append_block` with the entity's received `BlockState` (client:e8fe40c2), so the draw
-    is the block model of the authored state and nothing else: one cube, six quads, 36 indices,
-    spanning 1.000 blocks on every axis. The fixture is the same as the TNT row's: an `empty` frame
-    with no block layer, then the summoned entity's frame, plus `entity_extraction.eligible >= 1`
-    and the operator dump listing `minecraft:falling_block` so a refused summon cannot read as the
-    deleted dispatch. A falling block never swells or flashes (no fuse), so the material is the
-    stable unlit `ItemCutout` draw and the bounds are exact rather than measured.
+    is the block model of that state and nothing else: one cube, six quads, 36 indices, spanning
+    1.000 blocks on every axis. The fixture is a *naturally* falling block, the same one
+    `native-falling-block-prediction` proves reaches the client: a sand block on a stone ledge, the
+    ledge removed, `/tick rate 2` so one tick is half a second and the entity stays in the air for
+    minutes. A `/summon minecraft:falling_block ... {NoGravity:1b}` was tried first and was gone
+    within twenty ticks (measured 2026-11-26: `entity_extraction.eligible 0`, empty operator dump),
+    so the scene does not depend on a summoned body's landing rule.
+
+    The fixtures come first: the `empty` frame carries no 36-index block layer, the
+    `falling-block-entities` operator dump (a `require_entities` step) lists
+    `minecraft:falling_block`, and `entity_extraction.eligible >= 1` in the drawn frame. Three
+    consecutive frames are taken and any one of them may carry the layer; a block that stops being
+    drawn between ticks must not read as the deleted dispatch. A falling block never swells or
+    flashes (no fuse), so the material is the stable unlit draw and the bounds are exact.
     """
-    shots = _qa._load_shots(probe, artifact, ("empty", "falling"))
-    ref, frame = shots["empty"][0], shots["falling"][0]
+    names = ("empty", "falling", "falling-01", "falling-02")
+    shots = _qa._load_shots(probe, artifact, names)
+    ref = shots["empty"][0]
     probe.check("falling_camera_unchanged", all(
-        abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
-    ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+        all(abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], shots[name][0]["camera_position"]))
+        and abs(ref["yaw"] - shots[name][0]["yaw"]) < 0.01
+        and abs(ref["pitch"] - shots[name][0]["pitch"]) < 0.01
+        for name in names[1:])
+    )
     empty_layers = (ref.get("entity_extraction") or {}).get("entity_layer_geometry") or []
-    layers = (frame.get("entity_extraction") or {}).get("entity_layer_geometry") or []
-    blocks = _block_layers(layers)
     probe.report["falling_empty_layers"] = empty_layers
-    probe.report["falling_layers"] = layers
-    probe.report["falling_block_materials"] = [layer.get("material") for layer in blocks]
-    probe.report["falling_block_quads"] = sum(int(layer.get("quads") or 0) for layer in blocks)
     probe.check("empty_frame_has_no_falling_block", not _block_layers(empty_layers))
-    extraction = frame.get("entity_extraction") or {}
-    eligible = int(extraction.get("eligible") or 0)
     dump = artifact / "falling-block-entities.json"
     dumped = []
     if dump.is_file():
         dumped = (json.loads(dump.read_text()).get("entities") or [])
-    probe.report["falling_eligible"] = eligible
     probe.report["falling_dump_entities"] = [entity.get("entity_type") for entity in dumped]
-    probe.check("falling_block_reached_client",
-                eligible >= 1 and any(entity.get("entity_type") == "minecraft:falling_block"
-                                      for entity in dumped))
-    probe.check("falling_block_layer_present", bool(blocks))
-    probe.check("falling_block_layer_is_one", len(blocks) == 1)
-    probe.check("falling_block_quads", probe.report["falling_block_quads"] == 6)
-    if not blocks:
+    probe.check("falling_block_dump_lists_the_entity",
+                any(entity.get("entity_type") == "minecraft:falling_block" for entity in dumped))
+    seen = {}
+    eligible = 0
+    for name in names[1:]:
+        extraction = shots[name][0].get("entity_extraction") or {}
+        eligible = max(eligible, int(extraction.get("eligible") or 0))
+        blocks = _block_layers(extraction.get("entity_layer_geometry") or [])
+        seen[name] = {
+            "materials": [layer.get("material") for layer in blocks],
+            "blocks": len(blocks),
+            "quads": sum(int(layer.get("quads") or 0) for layer in blocks),
+            "spans": [round(max(float(layer["max"][axis]) for layer in blocks)
+                            - min(float(layer["min"][axis]) for layer in blocks), 3)
+                      for axis in range(3)] if blocks else None,
+        }
+    probe.report["falling_eligible"] = eligible
+    probe.report["falling_shots"] = seen
+    probe.check("falling_block_reached_client", eligible >= 1)
+    drawn = {name: entry for name, entry in seen.items() if entry["blocks"]}
+    probe.check("falling_block_layer_present", bool(drawn))
+    if not drawn:
+        probe.check("falling_block_layer_is_one", False)
+        probe.check("falling_block_quads", False)
         probe.check("falling_block_span_is_one", False)
         return
-    spans = [
-        max(float(layer["max"][axis]) for layer in blocks)
-        - min(float(layer["min"][axis]) for layer in blocks)
-        for axis in range(3)
-    ]
-    probe.report["falling_block_spans"] = [round(span, 3) for span in spans]
-    # One cube of the authored state at scale 1: no swell, no fuse, no partial.
-    probe.check("falling_block_span_is_one", all(abs(span - 1.0) <= 0.002 for span in spans))
+    probe.check("falling_block_layer_is_one", all(entry["blocks"] == 1 for entry in drawn.values()))
+    probe.check("falling_block_quads", all(entry["quads"] == 6 for entry in drawn.values()))
+    # One cube of the state at scale 1: no swell, no fuse, no partial.
+    probe.check("falling_block_span_is_one",
+                all(all(abs(span - 1.0) <= 0.002 for span in entry["spans"])
+                    for entry in drawn.values()))
     probe.report["visual_review_required"] = [
         "Inspect falling.png: the layer geometry proves the block draw, not the state's texels."
     ]
