@@ -1,0 +1,65 @@
+{
+  "id": "CLIENT-WITHER-SKULL-MATERIAL-SELECTION",
+  "verdict": "promoted",
+  "fix_commit": "client:b9094755",
+  "fix_commit_full": "b9094755a9d7d4940ed2dbc7f57b1ad6ce727748",
+  "promoted_at": "2026-11-26T15:04:21+00:00",
+  "tree_head": "a83d8a5bd3a4d54cb18da5c354b38cd287cf1956",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "client_fix": true,
+  "control_tree": "client",
+  "control": "client_receipt_pair",
+  "negative_control": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T150023-native-wither-skull-8zoy0qnb/result.json",
+    "client_head": "a9d2aba4b0787ec6634b8f243c6f02dcdf1c185e",
+    "server_binary_sha256": "7adafec72093fcc9feb6ad5404ea5fee244e97557dfcacfea0ce4f6015000350",
+    "red": [
+      "harness:scene-shot:native-wither-skull"
+    ],
+    "states": {
+      "harness:scene-shot:native-wither-skull": "red"
+    }
+  },
+  "restored": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T150154-native-wither-skull-j2ocqng2/result.json",
+    "client_head": "b9094755a9d7d4940ed2dbc7f57b1ad6ce727748",
+    "server_binary_sha256": "7adafec72093fcc9feb6ad5404ea5fee244e97557dfcacfea0ce4f6015000350",
+    "green": [
+      "harness:scene-shot:native-wither-skull"
+    ],
+    "states": {
+      "harness:scene-shot:native-wither-skull": "green"
+    },
+    "tree_head": "a83d8a5bd3a4d54cb18da5c354b38cd287cf1956",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T150154-native-wither-skull-j2ocqng2/result.json",
+    "client_head": "b9094755a9d7d4940ed2dbc7f57b1ad6ce727748",
+    "server_binary_sha256": "7adafec72093fcc9feb6ad5404ea5fee244e97557dfcacfea0ce4f6015000350",
+    "green": [
+      "harness:scene-shot:native-wither-skull"
+    ],
+    "states": {
+      "harness:scene-shot:native-wither-skull": "green"
+    },
+    "tree_head": "a83d8a5bd3a4d54cb18da5c354b38cd287cf1956",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "client_control_delta": {
+    "fix_patch_id": "a708064192121719847c738520c062a47758b829",
+    "paths": [
+      "src/entities/presentation.rs"
+    ]
+  },
+  "candidate_refs": {
+    "client:krasnokamen-client:entities::krasnokamen_models::tests::entity_selection_coverage_wither_skull_material_tracks_received_dangerous_flag": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PackPairsCore/.analysis/validation/20261126T150308-ledger-promote-u_swl8z7"
+}
