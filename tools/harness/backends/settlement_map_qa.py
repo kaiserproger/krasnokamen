@@ -1105,6 +1105,49 @@ def _project_cards(probe: ProbeSteps) -> list[str]:
     return names(state)
 
 
+def _program_fixture(probe: ProbeSteps) -> list[int]:
+    """A settlement whose planner can raise the one-cell furnace project and nothing else.
+
+    `_setup` cannot serve here: the House L1 it builds places a furnace block, and
+    `construction_furnace::plan` refuses a settlement that owns a furnace. This fixture founds a
+    bare settlement, certifies one physical storage chest and stocks only what the furnace plan
+    needs (eight cobblestone fund the item, raw iron is the smeltable iron, a lava bucket is fuel);
+    an unfunded House order supplies the iron demand (its bed bill asks for wool, so shears, so
+    two iron). Street work cannot be funded from that stock, and `plan_pass` tries the furnace
+    before the street plans anyway."""
+    from .buildings_qa import _chunked_fills
+
+    probe.report["setup_not_asserted"] = [
+        "creative-only private pad preparation, then survival before settlement/player actions",
+        "founded owned settlement and one certified physical storage chest",
+        "the stock is the furnace plan's own prerequisites, not a crafted or earned inventory",
+    ]
+    for command in ("gamemode creative @s", "gamerule advance_time false",
+                    "gamerule spawn_mobs false", "time set 6000", "weather clear", "clear @s"):
+        probe.fixture(command)
+    me = probe.observe(wait_for_play=True)["player"]
+    x, z = (math.floor(float(me[axis])) for axis in ("x", "z"))
+    y = math.floor(float(me["y"]))
+    for command in _chunked_fills(x - 24, y - 2, z - 24, x + 24, y - 2, z + 24, "minecraft:dirt"):
+        probe.fixture(command)
+    for command in _chunked_fills(x - 24, y - 1, z - 24, x + 24, y - 1, z + 24, "minecraft:grass_block"):
+        probe.fixture(command)
+    for command in _chunked_fills(x - 24, y, z - 24, x + 24, y + 8, z + 24, "minecraft:air"):
+        probe.fixture(command)
+    probe.fixture(f"tp @s {x + .5} {y} {z + .5}")
+    probe.wait(lambda state: all(state.get("player", {}).get(axis) == expected
+                                for axis, expected in (("x", x + .5), ("y", y), ("z", z + .5))),
+               "fixture_founder_at_anchor", timeout_seconds=30)
+    probe.fixture("gamemode survival @s")
+    _command(probe, "settlement create projqa 16", "Founded projqa")
+    chest = [x + 4, y, z + 4]
+    probe.fixture(f"setblock {chest[0]} {chest[1]} {chest[2]} minecraft:chest")
+    _command(probe, f"settlement building certify storage {chest[0] - 1} {chest[1] - 1} {chest[2] - 1} "
+                    f"{chest[0] + 1} {chest[1] + 2} {chest[2] + 1}", "Certified storage #")
+    probe.report["fixture"] = {"anchor": [x, y, z], "funding_chest": chest}
+    return chest
+
+
 def _program_unknown_script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
                             args: argparse.Namespace) -> list[str]:
     """`--scenario program-unknown` (SETTLEMENT-PROJECT-BLUEPRINT-WITHOUT-NAME).
@@ -1123,8 +1166,7 @@ def _program_unknown_script(probe: ProbeSteps, artifact: Path, _steps: list[dict
     ru = args.language == "ru_ru"
     unknown = "Неизвестный чертёж" if ru else "Unknown blueprint"
     name = "Печь" if ru else "Furnace"
-    _setup(probe)
-    chest = probe.report["fixture"]["funding_chest"]
+    chest = _program_fixture(probe)
     # The planner's own prerequisites, in real storage: eight cobblestone fund the furnace item,
     # raw iron is the smeltable iron the missing furnace would smelt, and a lava bucket is furnace
     # fuel that cannot fund the street work (lamp fences need planks, its torch coal/charcoal), so
