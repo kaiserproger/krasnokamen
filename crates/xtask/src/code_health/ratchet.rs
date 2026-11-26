@@ -147,9 +147,13 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // on the D123UpgradeCell tree (code-health 20261125T170814). The
         // certificate/refusal tail is the next extraction candidate: it belongs
         // in a `construction_certificate` module beside `buildings.rs`.
-        // Merged tree (Main, D123 integration): F12's +2 above and this lane's +16 stack
-        // (1142 + 2 + 16); re-measured by code-health on the merged tree.
-        ("settlements/construction.rs", 1_160),
+        // Merged tree (Main, D123 integration): F12's +2 above and the upgrade lane's +16
+        // stack (1142 + 2 + 16 = 1160, code-health 20261126T003152 passed at 1160).
+        // CivStock's log-only diagnostics add 4 (`priority house scan` declines, the
+        // refusal line's cursor/sweeps): 1164, measured by code-health on the merged tree.
+        // The diagnostics are temporary - remove them (and these 4) once the House
+        // milestone's missing-site mechanism is proven and fixed (HANDOFF-49/50).
+        ("settlements/construction.rs", 1_164),
         // B3 (EdgeScale, 2026-11-18): the edge-visible unlocked-session mirror
         // is projected only when its inputs move, so `Connections` carries one
         // membership generation and advances it in `insert`,

@@ -1,0 +1,90 @@
+{
+  "id": "TIME-REPLAY-FROZEN-ENTITY-AGE",
+  "verdict": "promoted",
+  "fix_commit": "patch:10737a21fd122133cfbec5fdb5395dfef16ee37bf72c84389fee07f1c88008af",
+  "fix_commit_full": "patch:10737a21fd122133cfbec5fdb5395dfef16ee37bf72c84389fee07f1c88008af",
+  "promoted_at": "2026-11-25T21:07:47+00:00",
+  "tree_head": "ab79af5687a67cfe58e790759c3b1f11a003af06",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "2d94915a79d5f94727cb0b6d0afa890bd1e3c2dda5f663480e80138c3aa9e40b",
+  "control_tree_head": "ab79af5687a67cfe58e790759c3b1f11a003af06",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "10737a21fd122133cfbec5fdb5395dfef16ee37bf72c84389fee07f1c88008af",
+  "reversed_files": [
+    "crates/mc-core/src/journal/replay.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:core::entity_state_persistence_tests::game_clock_tests::game_clock_mid_hold_checkpoint_bridges_fresh_memories_not_stale_or_expired_ones": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/entity_state_game_clock_tests.rs",
+        "line": 309,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:core::entity_state_persistence_tests::game_clock_tests::frozen_game_clock_keeps_resident_item_age_equal_to_live_through_wal_replay": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/entity_state_game_clock_tests.rs",
+        "line": 47,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::game_clock_tests::native_frozen_item_clock_survives_checkpoint_tail_recovery_and_frozen_open": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/native_game_clock_drill_tests.rs",
+        "line": 39,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:tick_control::tests::game_clock_held_restore_preserves_capture_before_first_tick_and_restart_modes": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::game_clock_tests::native_game_clock_overworld_only_transition_controls_nether_and_end_items": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/native_game_clock_drill_tests.rs",
+        "line": 149,
+        "error": "panic",
+        "class": "assertion"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-core:core::entity_state_persistence_tests::game_clock_tests::game_clock_mid_hold_checkpoint_bridges_fresh_memories_not_stale_or_expired_ones": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::entity_state_persistence_tests::game_clock_tests::frozen_game_clock_keeps_resident_item_age_equal_to_live_through_wal_replay": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::game_clock_tests::native_frozen_item_clock_survives_checkpoint_tail_recovery_and_frozen_open": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:tick_control::tests::game_clock_held_restore_preserves_capture_before_first_tick_and_restart_modes": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:core::native_checkpoint_crash_tests::persistence_drills::game_clock_tests::native_game_clock_overworld_only_transition_controls_nether_and_end_items": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123KeptApiP/.analysis/validation/20261125T202736-ledger-promote-20chdygl"
+}
