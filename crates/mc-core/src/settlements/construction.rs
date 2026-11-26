@@ -2411,6 +2411,24 @@ fn watch_project(state: &mut TickState, id: SettlementId, project: &Project) -> 
     let next = executor::next_cell(state, id, &project.structure)
         .ok()
         .flatten();
+    if next.is_none()
+        && executor::status(state, id, &project.structure).is_ok_and(|status| {
+            status.state == ScriptStructureState::Committed
+                && status.current_stage_index as usize >= status.stages.len()
+        })
+        && let Some(missing) = certificate_missing(state, project)
+    {
+        // Pure query only: naming the missing requirement must not disturb the settlement (calling
+        // `finish_project` here certified the L1 house and broke the L2 admission, 20261125T080841).
+        tracing::warn!(
+            settlement = id.0,
+            blueprint = %project.blueprint,
+            level = project.level,
+            cause = "certificate_incomplete",
+            missing = %missing,
+            "watch_project: committed structure cannot certify"
+        );
+    }
     let lot = super::forestry::lot_bounds(state, project);
     let protected = snapshot
         .stages
@@ -2894,7 +2912,51 @@ fn release_builder(
 }
 
 /// Finishes the project that owns `structure`. A handle that names no active
-/// project of this settlement finishes nothing (S1b: several projects).
+/// Why the certificate would refuse this project, without touching any state.
+///
+/// `finish_project` mutates before it refuses (`owe_carry`, `buildings::certify` certifies the
+/// building), so calling it speculatively from a watcher disturbs the settlement. This mirrors the
+/// certificate side only: bounds, blueprint level and the missing building requirements, rendered as
+/// `description: found/required`.
+pub(crate) fn certificate_missing(state: &TickState, project: &Project) -> Option<String> {
+    let (blueprint, bounds) = match certificate_bounds(state, project) {
+        Ok(found) => found,
+        Err(reason) => return Some(reason),
+    };
+    buildings::inspect(state, blueprint.kind, 1, bounds)
+        .err()
+        .map(|error| error.to_string())
+}
+
+/// The certificate's blueprint and box for `project`, or why there is none. Shared by the refusal
+/// path (`finish_project`) and the pure watcher query (`certificate_missing`) so one geometry is
+/// computed in one place.
+fn certificate_bounds(
+    state: &TickState,
+    project: &Project,
+) -> Result<(&'static blueprints::Blueprint, ScriptWorldBounds), String> {
+    let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {
+        return Err(format!("unknown blueprint {}", project.blueprint));
+    };
+    let Some(level) = blueprint.level(project.level) else {
+        return Err(format!(
+            "no level {} for {} ({} level(s))",
+            project.level,
+            project.blueprint,
+            blueprint.levels.len()
+        ));
+    };
+    Ok((
+        blueprint,
+        level
+            .rotated(Rotation::from_quarter_turns(project.rotation))
+            .bounds(project.origin),
+    ))
+}
+
+/// The completion pass of one project: a committed structure whose cell a foreign edit emptied
+/// gets the repair stage, a whole certificate certifies the building, and a hole refuses with its
+/// named cause and the missing requirement (once per pass; the watcher's own query is pure).
 pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure: &str) -> bool {
     let Some(project) = state
         .settlements
@@ -2902,16 +2964,31 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
         .and_then(|record| access::project_for_structure(record, structure))
         .cloned()
     else {
+        tracing::warn!(
+            settlement = id.0,
+            structure,
+            cause = "no_project",
+            "finish_project: no project for the structure"
+        );
         return false;
     };
     // Certification is not a substitute for matching the placed blueprint:
     // the executor may have reached its last cell after a player broke one.
+    // Recovery that opens a repair keeps the project; recovery that finishes a
+    // terminal-index structure in place (SETTLEMENT-CONSTRUCTION-UPGRADE-PENDING-CELL-UNAVAILABLE)
+    // leaves it completable, so only an uncommitted outcome refuses.
     if executor::recover(state, id, &project.structure) != Ok(false) {
         return false;
     }
     if !executor::status(state, id, &project.structure)
         .is_ok_and(|snapshot| snapshot.state == ScriptStructureState::Committed)
     {
+        tracing::warn!(
+            settlement = id.0,
+            structure = %project.structure,
+            cause = "not_committed",
+            "finish_project: the structure is not committed"
+        );
         return false;
     }
     // Every cell is placed: project stock the bound builder still carries is a
@@ -2933,17 +3010,17 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
     // A placed cell that a foreign edit emptied is queued for re-placement and
     // the project stays open; the hole would otherwise block the certificate.
     if executor::reopen_emptied(state, id, &project.structure) != Ok(false) {
+        tracing::warn!(
+            settlement = id.0,
+            structure = %project.structure,
+            cause = "reopen_emptied",
+            "finish_project: a placed cell was reopened"
+        );
         return false;
     }
-    let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {
+    let Ok((blueprint, bounds)) = certificate_bounds(state, &project) else {
         return false;
     };
-    let Some(level) = blueprint.level(project.level) else {
-        return false;
-    };
-    let bounds = level
-        .rotated(Rotation::from_quarter_turns(project.rotation))
-        .bounds(project.origin);
     if state
         .settlements
         .get(id)
@@ -2964,6 +3041,8 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
             "settlement_outpost_completed");
         return true;
     }
+    // A refusal is not logged here: `watch_project` names the same requirement once per shift
+    // (`certificate_incomplete`), and this path runs on every builder tick that has no cell.
     let Ok(building) = buildings::certify(state, id, blueprint.kind, bounds) else {
         return false;
     };
@@ -2971,9 +3050,26 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId, structure:
         .building
         .is_some_and(|expected| expected != building)
     {
+        tracing::warn!(
+            settlement = id.0,
+            structure = %project.structure,
+            cause = "building_mismatch",
+            "finish_project: the certificate is another building"
+        );
         return false;
     }
-    if project.level > 1 && buildings::upgrade(state, building).is_err() {
+    if project.level > 1
+        && let Err(error) = buildings::upgrade(state, building)
+    {
+        tracing::warn!(
+            settlement = id.0,
+            blueprint = %project.blueprint,
+            level = project.level,
+            building = building.0,
+            cause = "upgrade_failed",
+            missing = %error,
+            "finish_project: the level upgrade did not certify"
+        );
         return false;
     }
     let record = state.settlements.get_mut(id).expect("certified settlement");

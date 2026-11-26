@@ -147,6 +147,178 @@ fn roofed_enclosed_house_with_real_bed_certifies() {
 }
 
 #[test]
+fn the_house_certificate_boxes_match_the_footprints_they_inspect() {
+    // Measured: the level-1 and level-2 certificate boxes are exactly the x/z footprint of the cells
+    // each level composes (level 2: `[0,0]..[10,6]`), so the L2 certificate inspects the right box and
+    // the enclosure air column of the gate cannot come from a box mismatch. Level 3 is one block
+    // short in z — a blueprint data inconsistency, recorded here rather than silently tolerated.
+    let state = test_state();
+    let blueprint = crate::settlements::blueprints::get(&state.registry, "house")
+        .expect("the house blueprint is registered")
+        .clone();
+    let origin = [0, 0, 0];
+    for (index, level) in blueprint.levels.iter().enumerate() {
+        let rotated =
+            level.rotated(crate::settlements::blueprints::Rotation::from_quarter_turns(0));
+        let bounds = rotated.bounds(origin);
+        let (mut min, mut max) = ([i32::MAX; 2], [i32::MIN; 2]);
+        for layer in &blueprint.levels[..=index] {
+            let layer =
+                layer.rotated(crate::settlements::blueprints::Rotation::from_quarter_turns(0));
+            for (at, _) in &layer.blocks {
+                for (slot, axis) in [(0usize, 0usize), (1, 2)] {
+                    let v = origin[axis] + i32::from(at[axis]);
+                    min[slot] = min[slot].min(v);
+                    max[slot] = max[slot].max(v);
+                }
+            }
+        }
+        let boxed = (
+            [bounds.min[0], bounds.min[2]],
+            [bounds.max[0], bounds.max[2]],
+        );
+        if index < 2 {
+            assert_eq!(
+                boxed,
+                (min, max),
+                "level {} certificate box must cover the footprint it inspects",
+                index + 1
+            );
+        } else {
+            assert_eq!(
+                boxed,
+                ([min[0], min[1]], [max[0], max[1] - 1]),
+                "level 3's certificate box is one block short in z (blueprint data)"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_house_upgrade_composition_covers_the_level_two_perimeter() {
+    // Design intent (`blueprints.rs:112`): a level's `blocks` are the diff vs the previous level,
+    // "whole level for L1". So a finished level-2 house is L1 cells + L2 diff, and the level-2
+    // certificate over the level-2 bounds is correct only if that composition covers the perimeter.
+    let state = test_state();
+    let blueprint = crate::settlements::blueprints::get(&state.registry, "house")
+        .expect("the house blueprint is registered")
+        .clone();
+    let level = &blueprint.levels[1];
+    let size = [
+        i32::from(level.size[0]),
+        i32::from(level.size[1]),
+        i32::from(level.size[2]),
+    ];
+    let mut covered = std::collections::BTreeSet::new();
+    for layer in &blueprint.levels[..2] {
+        for (at, _) in &layer.blocks {
+            covered.insert((i32::from(at[0]), i32::from(at[2])));
+        }
+    }
+    let mut missing = Vec::new();
+    for x in 0..size[0] {
+        for z in 0..size[2] {
+            let edge = x == 0 || z == 0 || x == size[0] - 1 || z == size[2] - 1;
+            if edge && !covered.contains(&(x, z)) {
+                missing.push([x, z]);
+            }
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "L1 + L2 diff must cover the level-2 perimeter; missing {missing:?}"
+    );
+}
+
+#[test]
+fn every_house_level_builds_the_perimeter_its_certificate_inspects() {
+    // The L2 refusal reads `enclosure: 0/1` with air on the certificate perimeter
+    // (`[54, 74..=77, 11]`, 20261125T093116). This asserts what would make that impossible: each
+    // level's plan covers the whole perimeter column of its own bounds.
+    let state = test_state();
+    let blueprint = crate::settlements::blueprints::get(&state.registry, "house")
+        .expect("the house blueprint is registered")
+        .clone();
+    assert!(!blueprint.levels.is_empty(), "the house has levels");
+    for (index, level) in blueprint.levels.iter().enumerate() {
+        let size = [
+            i32::from(level.size[0]),
+            i32::from(level.size[1]),
+            i32::from(level.size[2]),
+        ];
+        let mut covered = std::collections::BTreeSet::new();
+        for (at, _) in &level.blocks {
+            covered.insert((i32::from(at[0]), i32::from(at[2])));
+        }
+        let mut missing = Vec::new();
+        for x in 0..size[0] {
+            for z in 0..size[2] {
+                let edge = x == 0 || z == 0 || x == size[0] - 1 || z == size[2] - 1;
+                if edge && !covered.contains(&(x, z)) {
+                    missing.push([x, z]);
+                }
+            }
+        }
+        if index + 1 == 1 {
+            assert!(
+                missing.is_empty(),
+                "level 1 must build its own perimeter: {missing:?}"
+            );
+        } else {
+            // Level 2 is an *incremental* plan: it only lists the blocks it changes, so its own
+            // `size` perimeter is not covered by its cells. A certificate over the level-2 bounds
+            // therefore has to read the union of the structure's cells (L1 + L2), not the level-2
+            // plan alone — the L2 refusal (`enclosure: 0/1`, air at [54, 74..=77, 11],
+            // 20261125T093116) is exactly a perimeter column this plan does not own.
+            assert!(
+                !missing.is_empty(),
+                "level 2 is expected to be incremental; if this ever fails the plan became full \
+                 and the upgrade certificate can read its own bounds"
+            );
+        }
+    }
+}
+
+#[test]
+fn roofed_enclosed_house_with_an_open_door_certifies() {
+    // The House L2 select of 20261125T090331 refused with `enclosure: 0/1` while the house was
+    // otherwise complete: an open door has no collision box, so a resident walking through it made
+    // the whole perimeter read "not enclosed" and the upgrade could never certify.
+    let mut state = test_state();
+    let id = town(&mut state);
+    let stone = state.registry.states.stone;
+    for x in 3..=7 {
+        for z in 3..=7 {
+            state.world.set_block(x, 204, z, stone);
+            if x == 3 || x == 7 || z == 3 || z == 7 {
+                for y in 201..204 {
+                    state.world.set_block(x, y, z, stone);
+                }
+            }
+        }
+    }
+    let door = block(
+        &state,
+        "minecraft:oak_door",
+        &[("half", "lower"), ("open", "true")],
+    );
+    let upper = block(
+        &state,
+        "minecraft:oak_door",
+        &[("half", "upper"), ("open", "true")],
+    );
+    state.world.set_block(3, 201, 5, door);
+    state.world.set_block(3, 202, 5, upper);
+    crate::settlements::allocator::tests::bed(&mut state, 5, 5);
+    state.world.fold_overlay();
+    let result = certify(&mut state, id, BuildingKind::House, bounds());
+    assert!(
+        result.is_ok(),
+        "an open door still encloses the house: {result:?}"
+    );
+}
+
+#[test]
 fn ordinary_sleep_bed_certifies_without_breeding_headroom() {
     let mut state = test_state();
     let id = town(&mut state);

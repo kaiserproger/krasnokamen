@@ -333,7 +333,21 @@ pub(crate) fn assess(
                     floor &= solid;
                 }
                 if edge && y > bounds.min[1] && y < bounds.max[1] {
-                    enclosure &= solid;
+                    if solid {
+                        enclosure &= true;
+                    } else {
+                        // Name the cell that breaks the enclosure: the L2 refusal reads
+                        // `enclosure: 0/1` with every other requirement met and no way to tell which
+                        // block it means (20261125T090331).
+                        tracing::warn!(
+                            cause = "enclosure_cell",
+                            at = ?[x, y, z],
+                            block = name,
+                            kind = ?kind,
+                            "assess: perimeter cell is not solid"
+                        );
+                        enclosure = false;
+                    }
                 }
                 if (if dims[0] >= dims[2] {
                     z == bounds.min[2]

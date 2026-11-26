@@ -130,15 +130,23 @@ class BarracksFunctionTest(unittest.TestCase):
 
 
 class ProjectMenuTest(unittest.TestCase):
-    def test_order_uses_container_icon_then_real_confirmation(self):
+    def test_order_uses_the_construction_catalogue_then_real_confirmation(self):
+        # D63: `settlement menu projects` opens the catalogue under the Construction title; the
+        # retired page was titled Projects, so the old wait never matched (20261124T183657).
         probe, sub = mock.Mock(), {}
-        probe.wait.return_value = {"screen": {"title": "Projects"}}
         with mock.patch.object(buildings_qa, "_send") as send, \
-                mock.patch.object(buildings_qa, "_menu_click_named") as click, \
+                mock.patch.object(buildings_qa, "_click_row") as click, \
                 mock.patch.object(buildings_qa, "_confirm_project") as confirm:
             buildings_qa._order_via_dialog(probe, sub, "buildings_house", "house", 1, "town")
         send.assert_called_once_with(probe, "settlement menu projects")
-        click.assert_called_once_with(probe, "Projects", "House L1")
+        predicate = click.call_args.args[1]
+        self.assertTrue(predicate({"screen": {"class": buildings_qa.CONTAINER_CLASS,
+                                              "title": "Construction"},
+                                   "container": {"slots": [{"slot": 0, "name": "House L1"}]}}))
+        self.assertFalse(predicate({"screen": {"class": buildings_qa.CONTAINER_CLASS,
+                                               "title": "Projects"},
+                                    "container": {"slots": [{"slot": 0, "name": "House L1"}]}}))
+        self.assertEqual(click.call_args.args[2:], ("House L1", "projects_menu_open"))
         confirm.assert_called_once_with(probe, "Order: House")
 
     def test_upgrade_selects_exact_building_and_confirms_its_level(self):
@@ -403,6 +411,34 @@ class OrderEchoRetryTest(unittest.TestCase):
         self.assertFalse(result)
         active.assert_called_once()
 
+    def test_an_unfunded_queued_order_restocks_before_the_next_attempt(self):
+        """The village planner can take the deposit for its own build; the queued order becomes
+        ready once storage can pay it, so the harness must restock instead of re-ordering."""
+        probe, sub = FakeProbe(), {}
+        dialog_calls = []
+
+        def dialog():
+            dialog_calls.append(1)
+            if len(dialog_calls) == 1:
+                sub["L3_dialog_upgrade"] = (
+                    "Order accepted: Gate L3. | Missing:\nOak Planks \u00d760 | "
+                    "Put missing materials in Storage; follow progress in Construction.")
+            else:
+                sub["L3_dialog_upgrade"] = "Order accepted: Gate L3. | Pending #2: Gate L3 \u00b7 ready"
+
+        refunded = []
+        with mock.patch.object(buildings_qa, "_project_active_quiet",
+                               side_effect=[False, True]), \
+                mock.patch.object(buildings_qa, "_current_certificate", return_value=None):
+            result = buildings_qa._order_echo_retry(
+                probe, sub, "buildings_gate", "gate", 3, "settlement build upgrade 7", True,
+                SimpleNamespace(windowed=True), dialog_fn=dialog, upgrade_bid=7,
+                refund=lambda: refunded.append(len(refunded)))
+        self.assertTrue(result)
+        self.assertEqual(len(refunded), 1)
+        self.assertEqual(sub["L3_order_refund1"], "queue was unfunded; stock re-deposited")
+        self.assertNotIn("L3_order_refund2", sub)
+
 
 class AdmissionTest(unittest.TestCase):
     def test_a_refused_order_is_fine_when_the_planner_already_certified_the_level(self):
@@ -415,17 +451,19 @@ class AdmissionTest(unittest.TestCase):
 
 
 class ForeignBlockTest(unittest.TestCase):
-    def test_the_project_origin_is_the_map_icon_lore(self):
+    def test_the_map_button_is_not_the_origin_source(self):
+        # The map icon at slot 14 is a plain dialog button (`text(Key::Map)` with no lore), so a
+        # page whose only candidate is that button yields no origin; the project card's lore is the
+        # source (ProjectOriginTest).
         class Probe(FakeProbe):
             def call(self, name, arguments=None):
                 if name == "minecraft_read_item_components":
                     return {"components": {"minecraft:lore": [{"text": "122 69 -5"}]}}
                 return super().call(name, arguments)
 
-        page = {"container": {"slots": [{"slot": buildings_qa.PROJECT_MAP_SLOT}]}}
+        page = {"container": {"slots": [{"slot": buildings_qa.PROJECT_MAP_SLOT,
+                                         "name": "Map"}]}}
         with mock.patch.object(buildings_qa, "_project_page", return_value=page):
-            self.assertEqual(buildings_qa._project_origin(Probe()), (122, 69, -5))
-        with mock.patch.object(buildings_qa, "_project_page", return_value={"container": {"slots": []}}):
             self.assertIsNone(buildings_qa._project_origin(Probe()))
 
     def test_the_corner_posts_follow_the_rotation_of_the_placement_frame(self):
@@ -472,7 +510,7 @@ class SequentialFlowTest(unittest.TestCase):
             return 7, certs[level]
 
         def order(_probe, sub, tag, _bp, level, cmd, use_dialog, ctx, dialog_fn=None,
-                  upgrade_bid=None):
+                  upgrade_bid=None, refund=None):
             events.append(("order", level, use_dialog))
             stages.append(("order", level))
             if order_echo is not None:
@@ -624,6 +662,152 @@ class SequentialFlowTest(unittest.TestCase):
                 self.run_flow("gate", 3, order_admitted=True, cert_after_order=False)
         self.assertEqual(send.call_args.args[1], "settlement build gate")
         self.assertIs(probe.report["assertions"]["buildings_gate_L1_order_available"], False)
+
+
+class OrderDialogTest(unittest.TestCase):
+    """The player's order goes through the D63 Construction catalogue.
+
+    `settlement menu projects` opens the blueprint catalogue under the Construction title and
+    names its rows `<label> L1`; the retired chest page was titled `Projects`, so the old wait
+    timed out on every attempt and no order was issued
+    (`20261124T183657-buildings-qa-6odkzjcy`, `buildings_house_L1_project`)."""
+
+    @staticmethod
+    def _page(title, names):
+        return {"screen": {"class": buildings_qa.CONTAINER_CLASS, "title": title},
+                "container": {"slot_count": 90,
+                              "slots": [{"slot": i, "name": name} for i, name in enumerate(names)]}}
+
+    def _order(self, page):
+        calls = []
+
+        class Probe:
+            deadline = 1e12
+
+            def wait(self, predicate, label, timeout_seconds=None):
+                if predicate(page):
+                    return page
+                raise TimeoutError(f"buildings-qa timed out waiting for {label}")
+
+            def call(self, name, arguments=None):
+                calls.append((name, arguments or {}))
+                return {}
+
+            def remaining(self):
+                return 30.0
+
+        from tools.harness.backends import buildings_qa_project as project
+        sub = {}
+        with mock.patch.object(buildings_qa, "_send", return_value={}), \
+                mock.patch.object(project, "_confirm_project", return_value="Order: House") as confirm:
+            project._order_via_dialog(Probe(), sub, "buildings_house", "house", 1, "qa")
+        return calls, confirm, sub
+
+    def test_the_house_row_is_clicked_on_the_construction_catalogue(self):
+        page = self._page("Construction", ["Farm L1", "House L1"])
+        self.assertTrue(buildings_qa_project_catalogue(page))
+        calls, confirm, sub = self._order(page)
+        self.assertIn(("minecraft_click_container_slot",
+                       {"slot": 1, "button": "primary", "timeout_seconds": 30.0}), calls)
+        confirm.assert_called_once_with(mock.ANY, "Order: House")
+        self.assertEqual(sub["L1_dialog_order"], "Order: House")
+
+    def test_the_retired_projects_title_is_not_required_and_fails(self):
+        page = self._page("Projects", ["House L1"])
+        self.assertFalse(buildings_qa_project_catalogue(page))
+        with self.assertRaisesRegex(TimeoutError, "projects_menu_open"):
+            self._order(page)
+
+    def test_the_result_dialog_is_the_answer_not_the_review_it_came_from(self):
+        review = {"screen": {"class": "net.minecraft.client.gui.screens.dialog.MultiButtonDialogScreen",
+                             "title": "Order: House"},
+                  "ui_nodes": [{"id": "dialog/body/0", "label": "Request policy"}]}
+        accepted = {"screen": {"class": "net.minecraft.client.gui.screens.dialog.MultiButtonDialogScreen",
+                               "title": "Construction"},
+                    "ui_nodes": [{"id": "dialog/body/0", "label": "Started House construction."}]}
+        predicate = buildings_qa_project_order_result("Order: House")
+        self.assertFalse(predicate(review))
+        self.assertTrue(predicate(accepted))
+        self.assertFalse(predicate({"screen": {"class": buildings_qa.CONTAINER_CLASS,
+                                               "title": "Construction"},
+                                    "ui_nodes": [{"id": "dialog/body/0", "label": "x"}]}))
+
+
+class ProjectOriginTest(unittest.TestCase):
+    """The origin is the project card's bare coordinate lore line, not the map button."""
+
+    class Probe:
+        def __init__(self, lore):
+            self.lore = lore
+            self.calls = []
+
+        def call(self, name, arguments=None):
+            self.calls.append((name, arguments or {}))
+            if name == "minecraft_read_item_components":
+                return {"components": {"minecraft:lore": self.lore}}
+            return {}
+
+    def test_the_origin_is_the_project_cards_bare_coordinate_line(self):
+        page = {"container": {"slots": [{"slot": 0, "name": "House L1 · Building"},
+                                        {"slot": 14, "name": "Map"}]}}
+        probe = self.Probe(["0/249", "118 69 -11", "Builder: Builder"])
+        with mock.patch.object(buildings_qa, "_project_page", return_value=page):
+            self.assertEqual(buildings_qa._project_origin(probe), (118, 69, -11))
+        components = [args for name, args in probe.calls
+                      if name == "minecraft_read_item_components"]
+        self.assertEqual(components, [{"source": "container", "slot": 0}])
+
+    def test_a_page_without_a_project_card_has_no_origin(self):
+        page = {"container": {"slots": [{"slot": 10, "name": "Active projects: 0/8"},
+                                        {"slot": 14, "name": "Map"}]}}
+        probe = self.Probe([])
+        with mock.patch.object(buildings_qa, "_project_page", return_value=page):
+            self.assertIsNone(buildings_qa._project_origin(probe))
+        self.assertEqual([name for name, _ in probe.calls
+                          if name == "minecraft_read_item_components"], [])
+
+
+class PendingOrderTest(unittest.TestCase):
+    """A queued order (`Pending #<n>: … · <reason>`) matches the card shape but is not an active
+    project: reading it as one kept the certificate wait busy for 40 minutes while the fence stood
+    (20261124T195112-buildings-qa-i3lpcv6x)."""
+
+    def test_a_pending_book_is_not_an_active_card(self):
+        from tools.harness.backends import buildings_qa_project as project
+        self.assertFalse(project._active_card(
+            "Pending #1: Farm L1 · not enough: minecraft:cobblestone x40"))
+        self.assertTrue(project._active_card("House L1 · Building"))
+        self.assertFalse(project._active_card("Active projects: 1/8"))
+
+    def test_the_view_skips_pending_books(self):
+        only_pending = {"container": {"slots": [
+            {"slot": 18, "name": "Pending #1: Farm L1 · not enough: minecraft:cobblestone x40"}]}}
+        with_both = {"container": {"slots": [
+            {"slot": 18, "name": "Pending #2: Farm L1 · not enough: minecraft:cobblestone x40"},
+            {"slot": 0, "name": "House L1 · Building"}]}}
+        probe = mock.Mock()
+        with mock.patch.object(buildings_qa, "_project_page", return_value=only_pending):
+            self.assertIsNone(buildings_qa._project_view(probe))
+        with mock.patch.object(buildings_qa, "_project_page", return_value=only_pending):
+            self.assertTrue(buildings_qa._pending_fence(probe, "farm"))
+        no_fence = {"container": {"slots": [
+            {"slot": 18, "name": "Pending #1: Mason's workshop L1 · not enough: x"}]}}
+        with mock.patch.object(buildings_qa, "_project_page", return_value=no_fence):
+            self.assertFalse(buildings_qa._pending_fence(probe, "farm"))
+        with mock.patch.object(buildings_qa, "_project_page", return_value=with_both):
+            self.assertEqual(buildings_qa._project_view(probe), ("House", 1, True))
+        with mock.patch.object(buildings_qa, "_project_page", return_value=with_both):
+            self.assertTrue(buildings_qa._pending_fence(probe, "farm"))
+
+
+def buildings_qa_project_catalogue(state):
+    from tools.harness.backends import buildings_qa_project as project
+    return project._catalogue_page(state)
+
+
+def buildings_qa_project_order_result(label):
+    from tools.harness.backends import buildings_qa_project as project
+    return project._order_result(label)
 
 
 if __name__ == "__main__":
