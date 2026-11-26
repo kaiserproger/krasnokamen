@@ -9,8 +9,10 @@ The scenario summons a chested donkey that already carries three diamonds and on
 the authored slots, then opens the donkey's own cargo menu with the client (sneak + use,
 the same input `native-v2-ledger-donkey-cargo` uses) and asserts the received menu: 53
 slots, three diamonds in the first cargo slot, one apple in the last cargo column's slot.
-The verdicts are assertions on the menu the server sent, so a refusal (the pre-fix
-behaviour) fails them instead of timing out.
+The verdicts are assertions on the menu the server sent. The pre-fix server refuses the
+`Items`/`ChestedHorse` fields, so the summoned mount never appears: the wait for it is
+`call_checked`, which records `summoned_cargo_mount_appears` false and fails in the
+`<scenario> assertion failed: <name>` form instead of an unlabelled timeout.
 
 Control: the fix is `ee71ee684`; its non-test hunks (the `supports` predicate and the
 `prepare` mount-cargo block) reverse on that commit and the summon then refuses the field.
@@ -38,8 +40,11 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
         '{Tame:1b,NoAI:1b,ChestedHorse:1b,'
         'Items:[{Slot:0b,id:"minecraft:diamond",count:3},'
         '{Slot:14b,id:"minecraft:apple",count:1}]}')
-    donkey = steps.call("minecraft_wait_for_visible_entity", {
-        "entity_type": DONKEY, "radius": 12, "timeout_seconds": steps.remaining()})
+    # The refused summon is the row's symptom, so its wait is the scenario's own assertion:
+    # a bare `call` would abort on the refusal without an assertion entry (probe_steps.py).
+    donkey = steps.call_checked("minecraft_wait_for_visible_entity", {
+        "entity_type": DONKEY, "radius": 12, "timeout_seconds": steps.remaining()},
+        "summoned_cargo_mount_appears")
     identity = {key: donkey[key] for key in ("entity_id", "entity_uuid", "entity_type")}
     steps.report["donkey"] = identity
     steps.call("minecraft_approach_entity", {

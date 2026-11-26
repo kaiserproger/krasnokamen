@@ -371,6 +371,23 @@ def _concurrent_chest(ctx):
         _close(player)
 
 
+def _asserted_progress(ctx, actor, predicate, *, name, description):
+    """A legal action that never lands is this scenario's assertion, not a setup timeout.
+
+    The reverse control reorders the player-action ordinals, so the server refuses the break and
+    the received-state wait expires. A bare `TimeoutError` ("<description>; frames=...") leaves
+    the named-scenario receipt unrunnable: the ledger counts a named scenario red only on
+    `<id> assertion failed: <name>` (`ledger._scenario_assertion_failed`). Only a caller that
+    knows the wait is the scenario's own symptom opts in, so other scenarios keep their messages.
+    """
+    try:
+        return actor.wait_until(predicate, description=description)
+    except TimeoutError as error:
+        ident = (getattr(ctx, 'row', None) or {}).get('id', 'matrix')
+        with runtime.phase('assertion'):
+            raise AssertionError(f'{ident} assertion failed: {name} ({error})') from error
+
+
 def _action(ctx, step):
     actor = ctx.clients[step['actor']]
     verb, count = step['verb'], step['count']
@@ -409,8 +426,10 @@ def _action(ctx, step):
             actor.wait_until(lambda: actor.read_block_state(position)['block_id'] == 'minecraft:dirt',
                              description='received declared block source')
             _mine(actor, position)
-            actor.wait_until(lambda: actor.read_block_state(position)['block_id'] != 'minecraft:dirt',
-                             description='legal break made progress')
+            _asserted_progress(ctx, actor,
+                               lambda: actor.read_block_state(position)['block_id'] != 'minecraft:dirt',
+                               name='legal_break_made_progress',
+                               description='legal break made progress')
             actor.teleport_to(position[0] + .5, 80, position[2] + .5)
             actor.wait_ticks(2)
     elif verb in {'click', 'drag', 'container'}:

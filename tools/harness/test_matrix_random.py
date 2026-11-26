@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 import zlib
 
-from . import wal_frame
+from . import ledger, wal_frame
 from .quirk_parity import player
 from .matrix_api import MissingCapability
 
@@ -272,12 +272,10 @@ class RandomMatrixTests(unittest.TestCase):
             _fixture_item_stock([{'type': 'minecraft:item', 'position': [33, 80, 34]}])
 
 
-    def test_published_reads_a_format_two_batch_and_refuses_a_format_one_frame(self):
-        # `_published` is the random matrix's WAL witness: it must bind to the writer's format 2 and
-        # refuse a v1 frame by name (review wave2-8 m4).
-        import zlib
-
-        from .backends.wal_forge import BATCH_MAGIC, BATCH_VERSION, HEADER
+    def test_published_reads_a_format_three_batch_and_refuses_a_format_one_frame(self):
+        # `_published` is the random matrix's WAL witness: it must bind to the writer's format and
+        # refuse a v1 frame by name (review wave2-8 m4). The frame layout lives in `wal_frame`;
+        # `wal_forge` no longer exports it.
         from .matrix_domains.random import _published
 
         with tempfile.TemporaryDirectory() as directory:
@@ -286,14 +284,14 @@ class RandomMatrixTests(unittest.TestCase):
             journal.mkdir(parents=True)
             (journal / ".fence").write_bytes(b"")
             payload = b'{"Player": {}}\n'
-            good = HEADER.pack(BATCH_MAGIC, BATCH_VERSION, bytes(range(16)), bytes(range(8)),
-                               7, 7, len(payload), zlib.crc32(payload)) + payload
-            (journal / "batch-00000000000000000007-00000000000000000007.bin").write_bytes(good)
+            identity = (bytes(range(16)), bytes(range(8)), bytes(range(8, 16)))
+            (journal / wal_frame.batch_name(7, 7)).write_bytes(
+                wal_frame.encode(7, 7, payload, identity))
             ctx = SimpleNamespace(server=SimpleNamespace(world_dir=world))
             self.assertEqual(_published(ctx, 7)["high"], 7)
-            (journal / "batch-00000000000000000008-00000000000000000008.bin").write_bytes(
-                struct.pack("<IIQQII", BATCH_MAGIC, 1, 8, 8, 0, 0))
-            with self.assertRaisesRegex(AssertionError, "format 2 only"):
+            (journal / wal_frame.batch_name(8, 8)).write_bytes(
+                struct.pack("<IIQQII", wal_frame.MAGIC, 1, 8, 8, 0, 0))
+            with self.assertRaisesRegex(AssertionError, "format 1"):
                 _published(ctx, 8)
 
     def test_recovery_rejects_lost_published_transfer_and_craft_equivalent_substitution(self):
@@ -380,6 +378,59 @@ class RandomMatrixTests(unittest.TestCase):
                 struct.pack('<IIQQII', wal_frame.MAGIC, 1, 10, 10, 3, zlib.crc32(b'{}\n')) + b'{}\n')
             with self.assertRaisesRegex(AssertionError, 'format 1'):
                 _published(ctx, 10)
+
+
+class LegalBreakProgressTests(unittest.TestCase):
+    """SCENARIO-RANDOM-BREAK-NO-PROGRESS: a refused legal break is this scenario's own red.
+
+    On the reverse control the reordered player-action pair never removes the block, so the
+    received-state wait expires. It must be a named scenario assertion, not a bare timeout the
+    ledger has to call unrunnable (`ledger._scenario_assertion_failed`).
+    """
+
+    def context(self, actor):
+        return SimpleNamespace(
+            clients=[actor], row={'id': 'random:4'},
+            state={'touched': [], 'sources': {'earth': 0}, 'source_events': []},
+            server=SimpleNamespace(command=lambda command: None))
+
+    def break_action(self, actor):
+        with patch('tools.harness.matrix_domains.random._mine'), \
+             patch('tools.harness.matrix_domains.random._close'):
+            _action(self.context(actor), {'actor': 0, 'verb': 'break', 'count': 2, 'target': 0})
+
+    def test_refused_legal_break_fails_as_the_named_scenario_assertion(self):
+        def wait_until(predicate, *, description, timeout_seconds=30.0):
+            if description == 'legal break made progress':
+                raise TimeoutError("legal break made progress; frames={'0x08': 3}")
+            return self.assertTrue(predicate())
+
+        # `old` is not dirt, so the retained-source branch is skipped; the declared source then
+        # arrives and the break itself never lands.
+        reads = iter(['minecraft:air'])
+        actor = SimpleNamespace(teleport_to=lambda *pos: None,
+                                read_block_state=lambda pos: {
+                                    'block_id': next(reads, 'minecraft:dirt')},
+                                wait_until=wait_until, wait_ticks=lambda count: None)
+        with self.assertRaisesRegex(AssertionError,
+                                    'random:4 assertion failed: legal_break_made_progress') as raised:
+            self.break_action(actor)
+        self.assertIsInstance(raised.exception.__cause__, TimeoutError)
+        self.assertEqual(raised.exception.failure_phase, 'assertion')
+        # The receipt form the ledger accepts as the scenario's red, not as unrunnable.
+        receipt = {'status': 'failed', 'error': f'AssertionError: {raised.exception}',
+                   'details': {'named_scenario': {'id': 'protocol-random-break-seed-4'}}}
+        self.assertEqual(ledger._scenario_assertion_failed(receipt, 'protocol-random-break-seed-4'),
+                         'legal_break_made_progress')
+
+    def test_legal_break_progress_stays_green_when_the_block_breaks(self):
+        # One read for `old`, one for the declared source, one for the break's progress.
+        reads = iter(['minecraft:air', 'minecraft:dirt', 'minecraft:air'])
+        actor = SimpleNamespace(teleport_to=lambda *pos: None,
+                                read_block_state=lambda pos: {'block_id': next(reads)},
+                                wait_until=lambda predicate, **kwargs: self.assertTrue(predicate()),
+                                wait_ticks=lambda count: None)
+        self.break_action(actor)
 
 
 if __name__ == '__main__':

@@ -61,14 +61,16 @@ class ProbeSteps:
         A probe that only calls `call()` aborts on a refused tool argument without an assertion
         entry, so a row whose symptom is the refusal (TEST-NATIVE-F1: automation rejects
         `key.keyboard.f1`) could never be observed red in a control. The raised error keeps the
-        `assertion failed: <label>` form the ledger reads, with the tool's own message appended.
+        `assertion failed: <label>` form the ledger reads, with the tool's own message appended
+        after the label: the ledger takes the first non-space token as the name, so a colon
+        directly after it would become part of the name.
         """
         try:
             result = self.call(name, arguments)
         except Exception as error:
             self.report["assertions"][label] = False
             with runtime.phase("assertion"):
-                raise RuntimeError(f"{self.report['id']} assertion failed: {label}: {error}") from error
+                raise RuntimeError(f"{self.report['id']} assertion failed: {label} ({error})") from error
         self.report["assertions"][label] = True
         return result
 
