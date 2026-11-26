@@ -1364,10 +1364,12 @@ def check_entity_lightning(probe: ProbeSteps, artifact: Path) -> None:
     The bolt is visible for a few client ticks: `render_special/timeline.rs` starts
     `lightning_life` at 2 and only draws while `lightning_life >= 0`
     (`lightning_visible`), then re-flashes `lightning_flashes` (1..3) times with a random gap of up
-    to ten ticks. A single shot cannot be relied on, so the scene takes sixteen consecutive shots
-    after the summon and the check asserts that at least one of them carries the bolt's own
-    `Lightning` layer; the control deletes the `minecraft:lightning_bolt` dispatch, so none of them
-    can. The layer's own numbers are derived from `world_fx::append_lightning`: 1008 indices and a
+    to ten ticks. A single shot cannot be relied on: the client creates the bolt with
+    `lightning_life = 2` and only draws while it is `>= 0`, so the scene summons the bolt eight
+    times (killing the previous one first) and takes one shot one tick after each summon, and the
+    check asserts that at least one of them carries the bolt's own `Lightning` layer; the control
+    deletes the `minecraft:lightning_bolt` dispatch, so none of them can. The layer's own numbers
+    are derived from `world_fx::append_lightning`: 1008 indices and a
     128-block spine (`STEPS = 13`, `128. / STEPS` per step), with the outer tube's 0.28 radius as
     the only slack on the end caps. The fixture comes first: the `empty` frame has no `Lightning`
     layer, and the operator dump lists `minecraft:lightning_bolt`, so a failed summon or an

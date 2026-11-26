@@ -73,6 +73,9 @@
       "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
     },
     {
+      "wait_ticks": 1
+    },
+    {
       "shot": "bolt-00"
     },
     {
@@ -83,6 +86,9 @@
     },
     {
       "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
+    },
+    {
+      "wait_ticks": 1
     },
     {
       "shot": "bolt-01"
@@ -97,6 +103,9 @@
       "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
     },
     {
+      "wait_ticks": 1
+    },
+    {
       "shot": "bolt-02"
     },
     {
@@ -107,6 +116,9 @@
     },
     {
       "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
+    },
+    {
+      "wait_ticks": 1
     },
     {
       "shot": "bolt-03"
@@ -121,6 +133,9 @@
       "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
     },
     {
+      "wait_ticks": 1
+    },
+    {
       "shot": "bolt-04"
     },
     {
@@ -131,6 +146,9 @@
     },
     {
       "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
+    },
+    {
+      "wait_ticks": 1
     },
     {
       "shot": "bolt-05"
@@ -145,6 +163,9 @@
       "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
     },
     {
+      "wait_ticks": 1
+    },
+    {
       "shot": "bolt-06"
     },
     {
@@ -155,6 +176,9 @@
     },
     {
       "cmd": "summon minecraft:lightning_bolt 1000.5 160 1010.5"
+    },
+    {
+      "wait_ticks": 1
     },
     {
       "shot": "bolt-07"
