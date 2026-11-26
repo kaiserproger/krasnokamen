@@ -1126,29 +1126,32 @@ def _program_unknown_script(probe: ProbeSteps, artifact: Path, _steps: list[dict
     _setup(probe)
     chest = probe.report["fixture"]["funding_chest"]
     # The planner's own prerequisites, in real storage: eight cobblestone fund the furnace item,
-    # raw iron is the smeltable iron the missing furnace would smelt, coal is the fuel.
-    for slot, (item, count) in enumerate((("cobblestone", 16), ("raw_iron", 8), ("coal", 16))):
+    # raw iron is the smeltable iron the missing furnace would smelt, and a lava bucket is furnace
+    # fuel that cannot fund the street work (lamp fences need planks, its torch coal/charcoal), so
+    # the furnace plan is the only one that can succeed. Run 20261126T163510 raised a street lamp
+    # instead while coal was in storage.
+    for slot, (item, count) in enumerate((("cobblestone", 16), ("raw_iron", 8), ("lava_bucket", 1))):
         probe.fixture(f"item replace block {chest[0]} {chest[1]} {chest[2]} container.{slot} "
                       f"with minecraft:{item} {count}")
     # An unfunded House order is the iron demand (its bed bill asks for wool, so shears, so iron)
-    # while contributing no project of its own; the furnace project is the only one the planner
-    # can fund.
+    # while contributing no project of its own.
     probe.fixture("settlement build house")
-    cards: list[str] = []
+    seen: list[str] = []
     ticks = 0
     while True:
         cards = _project_cards(probe)
         probe.call("minecraft_close_screen", {})
+        seen += [card for card in cards if card not in seen]
         if any(re.search(rf"{re.escape(name)} L\d+", card) for card in cards) or any(
                 unknown.lower() in card.lower() for card in cards):
             break
-        probe.call("minecraft_wait_ticks", {"ticks": 40})
-        ticks += 40
-        if ticks > 2400:
+        probe.call("minecraft_wait_ticks", {"ticks": 10})
+        ticks += 10
+        if ticks > 6000:
             break
-    (artifact / "program-unknown-cards.txt").write_text("\n".join(cards))
-    text = "\n".join(cards)
-    probe.report["program_unknown"] = {"cards": cards}
+    (artifact / "program-unknown-cards.txt").write_text("\n".join(seen))
+    text = "\n".join(seen)
+    probe.report["program_unknown"] = {"cards": seen}
     probe.check("program_unknown_label",
                 re.search(rf"{re.escape(name)} L\d+", text) is not None
                 and unknown.lower() not in text.lower()
