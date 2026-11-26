@@ -67,7 +67,7 @@
       "shot": "empty"
     },
     {
-      "cmd": "summon minecraft:zombie 1000.5 160 1003.5 {Age:-24000,NoAI:1b,Invulnerable:1b,equipment:{head:{id:\"minecraft:diamond_helmet\"},chest:{id:\"minecraft:diamond_chestplate\"}}}"
+      "cmd": "summon minecraft:zombie 1000.5 160 1003.5 {Age:-24000,NoAI:1b,Invulnerable:1b,equipment:{head:{id:'minecraft:diamond_helmet'},chest:{id:'minecraft:diamond_chestplate'}}}"
     },
     {
       "wait_ticks": 40
