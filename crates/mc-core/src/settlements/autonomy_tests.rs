@@ -2393,27 +2393,29 @@ fn review_generated_village_adoption_respects_an_active_expedition_claim() {
     crate::settlements::persistence::finish_recovery(&mut state).unwrap();
 }
 
-/// The rotation must not starve the tick-numbered gates: every pending
-/// village takes its turn on a `tick % 20 == 0` tick, whatever the queue
-/// length (eight pending villages with a fixed batch of four alternated
-/// [0..3] / [4..7] forever, so villages 4..7 never saw `prove_natural`).
+/// The village gate clock must not starve the 20-tick gates: every pending
+/// village takes them, whatever the queue length, while the queue keeps
+/// stepping only a fixed batch a tick. Eight pending villages with a fixed
+/// batch of four used to alternate [0..3] / [4..7], so villages 4..7 never saw
+/// `tick % 20 == 0` (SETTLEMENT-AUTONOMY-VILLAGE-ROTATION-STARVES-TICK-GATES).
 #[test]
-fn every_pending_village_turns_on_a_gate_tick() {
+fn every_pending_village_takes_its_gate_clock_turn() {
     for pending in 1..=16usize {
-        let mut queue: std::collections::VecDeque<usize> = (0..pending).collect();
-        let mut turned_on_gate = vec![false; pending];
+        let mut queue: std::collections::VecDeque<(usize, u64)> =
+            (0..pending).map(|village| (village, 0)).collect();
+        let mut gated = vec![false; pending];
         for tick in 0..400u64 {
-            for _ in 0..super::passes_per_tick(queue.len(), tick) {
-                let village = queue.pop_front().expect("counted village");
-                if tick.is_multiple_of(20) {
-                    turned_on_gate[village] = true;
+            for _ in 0..super::VILLAGES_PER_TICK.min(queue.len()) {
+                let (village, mut next_gate) = queue.pop_front().expect("counted village");
+                if super::gate_due(&mut next_gate, tick) {
+                    gated[village] = true;
                 }
-                queue.push_back(village);
+                queue.push_back((village, next_gate));
             }
         }
         assert!(
-            turned_on_gate.iter().all(|turned| *turned),
-            "queue of {pending} pending villages starves some village's gate tick"
+            gated.iter().all(|seen| *seen),
+            "queue of {pending} pending villages starves some village's 20-tick gate"
         );
     }
 }
