@@ -260,6 +260,13 @@ impl Sweeps {
             .is_some_and(|sweep| sweep.next < sweep.frontages)
     }
 
+    /// How often walks were restarted in total (log-only counters): a scan that
+    /// leaves this higher dropped a walk (a street change) or lost a stored
+    /// best, so the next step must not keep stepping it (review round 2 N3).
+    pub(super) fn restarts_total(&self) -> u32 {
+        self.restarts.values().copied().sum()
+    }
+
     /// Some unfinished sweep of these kinds already holds a legal candidate.
     /// A retained sweep of a kind this pass did not advance (its funding was
     /// withdrawn) must not hold the slot for other work.
@@ -437,8 +444,8 @@ pub(super) fn examined() {
 /// and forgets its scratch. Equal costs go to the lot nearest the anchor.
 /// `park` keeps a proven winner's finished sweep instead of forgetting it: a
 /// caller that may not admit this tick (an off-cadence step) leaves the lot in
-/// the hold, and the next admission pass re-proves it rather than walking the
-/// street again.
+/// the hold, and the settlement's next admission pass re-proves it rather than
+/// walking the street again.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn advance(
     state: &TickState,

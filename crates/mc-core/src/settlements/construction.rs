@@ -904,9 +904,11 @@ fn start_build(
             &images,
         )
     };
-    // An owner order's own admission never leaves the settlement stepping: the
-    // flag belongs to the planner pass that reported the unfinished walk.
-    sweeps.stepping = pass.waiting && pass.site.is_none();
+    // An owner order's own scan never arms the stepping flag (review round 2
+    // N2): `step_sites` repeats only the autonomous scan, and this very state
+    // (a pending order, a storehouse wait) is what blocks that scan, so arming
+    // here would step a walk the settlement cannot admit from. The settlement's
+    // own planner pass owns the flag.
     state.settlements.site_sweep.insert(id, sweeps);
     let SitePass {
         site,
@@ -1537,8 +1539,9 @@ struct SitePass {
     /// funded scan (certificate levels); the later visit owns its final state.
     house_advanced: bool,
     /// A walk finished in a pass that may not admit (an off-cadence step): its
-    /// proven winner is parked in the sweep and waits for the admission clock,
-    /// so the settlement stops stepping until that pass reports again.
+    /// proven winner is parked in the sweep and waits for the settlement's next
+    /// `PLAN_CADENCE` admission pass (up to 20 x settlements ticks), so the
+    /// settlement stops stepping until that pass reports again.
     complete: bool,
 }
 
@@ -1681,7 +1684,7 @@ fn scan_site_kinds<'a>(
             site_refusals::Advance::Cheapest(origin, rotation) => {
                 // A step that may not admit leaves nothing to materialize: the
                 // completed walk is parked in its sweep (see `advance`) and
-                // waits for the four-tick admission pass.
+                // waits for the settlement's next `PLAN_CADENCE` admission pass.
                 let site = slice
                     .admit
                     .then(|| {
@@ -1741,7 +1744,7 @@ struct SiteScan {
     /// A kind this scan advanced is unfinished and already holds a legal lot.
     waiting: bool,
     /// A walk finished in a step that may not admit; its lot is parked in the
-    /// sweep and waits for the four-tick admission pass.
+    /// sweep and waits for the settlement's next `PLAN_CADENCE` admission pass.
     complete: bool,
 }
 
@@ -1892,10 +1895,11 @@ fn scan_sites(
 /// scan, ONE slice for the whole tick, and never an admission, a construction
 /// cell or a duty. The slice taken is one of the tick's two, so the order turn
 /// and the replanting proofs keep one; the lowest settlement id with a holding
-/// walk steps first and the next follows once that walk finishes.
+/// walk steps first, and the next follows once that walk finishes or a street
+/// change restarts it (a restart clears the flag until the next admission pass).
 /// `drain_carry_duties`, the gatherer staffing and the builder assignment stay
 /// on `PLAN_CADENCE`; `villager::building::tick` stays on the four-tick clock,
-/// so construction's pace is unchanged (review round 3 C1/C2/C5).
+/// so construction's pace is unchanged (review round 3 C1/C2/C5, round 2 N3).
 fn step_sites(state: &mut TickState, budget: &mut site_turn::SiteBudget) {
     let stepping: Vec<SettlementId> = state
         .settlements
@@ -1921,15 +1925,21 @@ fn step_sites(state: &mut TickState, budget: &mut site_turn::SiteBudget) {
         let slice = budget.take();
         let images = executor::source_images(state, id);
         let mut sweeps = state.settlements.site_sweep.remove(&id).unwrap_or_default();
+        let restarts = sweeps.restarts_total();
         let scan = {
             let record = state.settlements.get(id).expect("stepped settlement");
             scan_sites(state, id, record, &images, &mut sweeps, budget, Some(slice))
         };
-        // A finished walk waits for the admission clock. An unfinished walk
-        // that still holds a lot keeps stepping; one that holds nothing clears
-        // the flag, so a village whose walk finds no legal lot returns to the
-        // normal cadence instead of paying a scan every tick (C4).
-        sweeps.stepping = scan.waiting && !scan.complete;
+        // A finished walk waits for the settlement's next admission pass. An
+        // unfinished walk that still holds a lot keeps stepping; one that holds
+        // nothing clears the flag, so a village whose walk finds no legal lot
+        // returns to the normal cadence instead of paying a scan every tick
+        // (C4). A step whose scan restarted a walk (a street change dropped it,
+        // or its stored best lost its cost) clears it too: the new walk starts
+        // holding nothing and the next admission pass re-arms it, so continuous
+        // churn cannot become steady-state stepping, and the lowest settlement
+        // id cannot keep the tick to itself (review round 2 N3).
+        sweeps.stepping = scan.waiting && !scan.complete && sweeps.restarts_total() == restarts;
         state.settlements.site_sweep.insert(id, sweeps);
     }
 }
@@ -1995,6 +2005,14 @@ fn plan(state: &mut TickState, id: SettlementId) {
 /// The settlement's planner pass; its site slices come from `budget`. True
 /// when it opened an autonomous project past the builder gate.
 fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::SiteBudget) -> bool {
+    // The settlement's own admission pass owns its stepping flag, and every
+    // early return below (a head order, the storehouse, the founding handover,
+    // the builder gate, no residents) must leave it cleared: a pass that cannot
+    // scan must not leave a walk stepped off the clock (review round 2 N1). The
+    // end of the scan sets it again when the pass leaves a holding walk.
+    if let Some(sweeps) = state.settlements.site_sweep.get_mut(&id) {
+        sweeps.stepping = false;
+    }
     // Pending orders permit an existing expedition's handover or cancellation,
     // never admission or construction of another outpost.
     if state
@@ -2040,13 +2058,6 @@ fn plan_pass(state: &mut TickState, id: SettlementId, budget: &mut site_turn::Si
     // of the entire planner: another resident can build a funded later kind.
     let gathering = gatherer_demand(state, record, &images)
         .is_some_and(|profession| has_staffed_gatherer(state, id, profession));
-    // The settlement's own admission pass owns its stepping flag: it is set
-    // again at the end of the scan, and any earlier return here (a head order,
-    // the storehouse, a founding handover, the builder gate) leaves it cleared,
-    // so a village that cannot scan off the clock is not stepped off it.
-    if let Some(sweeps) = state.settlements.site_sweep.get_mut(&id) {
-        sweeps.stepping = false;
-    }
     // Housing gets its own bounded scan. If it has no site, ordinary funded
     // candidates still get their shared scan in this same planning pass. Both
     // read and extend the same runtime-only sweep scratch.

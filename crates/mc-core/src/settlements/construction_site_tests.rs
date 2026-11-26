@@ -1948,6 +1948,41 @@ fn probe_retained_village_site_supply() {
              pass_median_ms={pass_median:.4} pass_samples_ms={pass_ms:?} \
              network_median_ms={network_median:.4}",
         );
+        // The real path for comparison: arm the village's own flag, simulate
+        // its chunk, and time `step_sites` itself, which also runs
+        // `funded_kinds` and the funding proofs the modelled shapes omit.
+        let chunk = crate::boundary::ChunkPos {
+            x: record.anchor[0].div_euclid(16),
+            z: record.anchor[2].div_euclid(16),
+        };
+        state
+            .tickets
+            .insert("d123-civ-step-probe".into(), (chunk, 8));
+        state.refresh_active_chunks(state.tick);
+        if !state.world.is_active(chunk.x, chunk.z) {
+            println!("PROBE step real=unavailable:chunk-not-active chunk={chunk:?}");
+            return;
+        }
+        let mut real_ms: Vec<f64> = Vec::new();
+        let mut real_examined = 0u32;
+        for _ in 0..8 {
+            state
+                .settlements
+                .site_sweep
+                .entry(record.id)
+                .or_default()
+                .stepping = true;
+            site_refusals::EXAMINED.with(|count| count.set(0));
+            let mut budget = super::site_turn::SiteBudget::default();
+            let started = std::time::Instant::now();
+            super::step_sites(&mut state, &mut budget);
+            real_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            real_examined = site_refusals::EXAMINED.with(std::cell::Cell::get);
+        }
+        println!(
+            "PROBE step real_examined={real_examined} real_median_ms={:.4} real_samples_ms={real_ms:?}",
+            median(&real_ms),
+        );
         return;
     }
     let mut network = layout::Network::for_construction(&state, &record);

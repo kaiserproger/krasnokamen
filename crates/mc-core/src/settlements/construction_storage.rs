@@ -150,7 +150,9 @@ pub(super) fn plan(
         budget.take(),
         images,
     );
-    sweeps.stepping = pass.waiting && pass.site.is_none();
+    // A storehouse plan never arms the stepping flag (review round 2 N2):
+    // `step_sites` repeats only the autonomous scan, and a storehouse wait is
+    // one of the states that blocks it.
     state.settlements.site_sweep.insert(id, sweeps);
     site_refusals::observe(state, id, &blueprint.id, pass.report);
     let record = state.settlements.get_mut(id).expect("planning storehouse");

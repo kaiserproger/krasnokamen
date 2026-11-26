@@ -90,9 +90,10 @@ fn a_holding_walk_steps_off_the_admission_clock_and_finishes_between_changes() {
     super::tests::complete(&mut state, id, builder);
     super::growth_tests::stock_buildings(&mut state, &[("spanish_house", 1), ("farm", 1)]);
     let anchor = state.settlements.get(id).unwrap().anchor;
-    // The village's own work changes the walk's frontage list five ticks into
-    // every twenty: never on a planner pass, so each quiet window is one second
-    // of stepping slices.
+    // The village's own work changes the walk's frontage list 35 ticks into
+    // every 40: a change clears the flag until that settlement's next 20-tick
+    // admission pass (review round 2 N3), so the quiet window has to outlast
+    // one walk (~10 stepping slices) without landing on an admission pass.
     let roads: Vec<[i32; 2]> = (-14..=14)
         .flat_map(|x| (-14..=14).map(move |z| [x, z]))
         .filter(|[x, z]| matches!(layout::cell(anchor, *x, *z), layout::Cell::Road))
@@ -103,7 +104,7 @@ fn a_holding_walk_steps_off_the_admission_clock_and_finishes_between_changes() {
     let mut admitted = None;
     for tick in 1..=200u64 {
         state.tick = tick;
-        if tick % 20 == 5 {
+        if tick % 40 == 35 {
             let [x, z] = roads[next_road % roads.len()];
             next_road += 1;
             for y in 190..=202 {
@@ -126,11 +127,12 @@ fn a_holding_walk_steps_off_the_admission_clock_and_finishes_between_changes() {
             break;
         }
     }
-    // At the bare cadence (one pass per 20 ticks) this is `None`: every street
-    // change restarts the walk before it can finish (verified by reverting only
-    // the `planner_tick` gate: the test fails with "got None").
+    // Control (recorded, review round 2 N5): with the off-clock step removed
+    // (`planner_tick`'s off-cadence branch returning at once) this fails with
+    // "got None" - at the bare cadence the street changes restart the walk
+    // before it can finish.
     assert!(
-        admitted.is_some_and(|tick| tick <= 60),
+        admitted.is_some_and(|tick| tick <= 80),
         "the walk must finish inside a quiet window between street changes, got {admitted:?}"
     );
 }
@@ -142,6 +144,11 @@ fn a_holding_walk_steps_off_the_admission_clock_and_finishes_between_changes() {
 /// never stepped, even though their chunks are simulated; construction still
 /// admits at most once per four ticks, and every stepping tick leaves a whole
 /// site slice for the order turn.
+///
+/// Control (recorded, review round 2 N5): with the pre-review every-tick
+/// construction admission restored (an off-clock `building::tick` for every
+/// settlement holding a project) this fails at tick 9 with "tick 9 admitted
+/// construction off the clock" (1 call instead of 0).
 #[test]
 fn only_a_holding_settlement_steps_and_construction_keeps_its_four_tick_clock() {
     let (mut state, id, _builder) = fixture();
@@ -360,6 +367,104 @@ fn only_a_holding_settlement_steps_and_construction_keeps_its_four_tick_clock() 
         admissions, 1,
         "construction admitted {admissions} times in twelve ticks"
     );
+}
+
+/// The stepping flag is armed and cleared only by the passes that own it
+/// (review round 2 N1-N3), through those real paths rather than by hand:
+/// the settlement's own admission pass arms it, a step that restarted a walk
+/// clears it, an owner order's scan and a storehouse wait never arm it, and a
+/// pass that cannot scan (the builder gate) clears an armed one.
+#[test]
+fn the_stepping_flag_is_armed_and_cleared_by_its_own_passes() {
+    let (mut state, id, _builder) = fixture();
+    terrain_tests::wide_plan(&mut state);
+    terrain_tests::restore_stock(&mut state);
+    let armed = |state: &TickState| {
+        state
+            .settlements
+            .site_sweep
+            .get(&id)
+            .is_some_and(|sweeps| sweeps.stepping)
+    };
+    let examined = || site_refusals::EXAMINED.with(std::cell::Cell::get);
+    let set_flag = |state: &mut TickState, value: bool| {
+        state.settlements.site_sweep.entry(id).or_default().stepping = value;
+    };
+    // N2 (storehouse): `storage::plan` shares the order's rule and never arms
+    // the flag. Reaching its scan needs a full bank behind a standing store
+    // (an empty new store makes `needed` false), so the rule is not driven
+    // here; the order turn below covers the same no-arming rule on the path
+    // that runs every tick.
+    // The settlement's own admission pass arms it when it leaves an unfinished
+    // walk that already holds a legal lot.
+    stock_buildings(
+        &mut state,
+        &[("spanish_house", 1), ("farm", 1), ("mason", 1)],
+    );
+    assert!(!plan_pass(
+        &mut state,
+        id,
+        &mut site_turn::SiteBudget::default()
+    ));
+    assert!(armed(&state), "an unfinished holding walk arms the step");
+    // N3: a street change restarts the walk inside the step, which clears it.
+    // The change blocks a street column the walk really uses (near the far end
+    // of the frontage list), and the test proves it shortened the frontage list
+    // before asserting the flag.
+    let frontages = |state: &TickState| {
+        let record = state.settlements.get(id).unwrap();
+        layout::Network::for_construction(state, record)
+            .frontage()
+            .len()
+    };
+    let before = frontages(&state);
+    let cut = {
+        let record = state.settlements.get(id).unwrap();
+        let fronts = layout::Network::for_construction(&state, record).frontage();
+        fronts[fronts.len().saturating_sub(3)].0
+    };
+    for y in cut[1] - 2..=cut[1] + 2 {
+        state
+            .world
+            .set_block(cut[0], y, cut[2], state.registry.states.stone);
+    }
+    state.world.fold_overlay();
+    let after = frontages(&state);
+    assert!(
+        after < before,
+        "blocking the street column {cut:?} must shorten the walk ({before} -> {after})"
+    );
+    state.tick = 1;
+    super::planner_tick(&mut state, &mut site_turn::SiteBudget::default());
+    assert!(
+        !armed(&state),
+        "a step that restarted a walk clears the flag"
+    );
+    // The next admission pass re-arms the restarted walk once it holds a lot.
+    assert!(!plan_pass(
+        &mut state,
+        id,
+        &mut site_turn::SiteBudget::default()
+    ));
+    assert!(armed(&state), "the next pass re-arms the restarted walk");
+    // N2 (owner order): the order's own scan really scans and never arms.
+    set_flag(&mut state, false);
+    site_refusals::EXAMINED.with(|count| count.set(0));
+    let _ = super::start_build(&mut state, id, "farm", 64);
+    assert!(examined() > 0, "the order's scan examined lots");
+    assert!(!armed(&state), "an owner order's scan never arms the step");
+    // N1: a pass that cannot reach the scan (the builder gate, with an active
+    // project) clears an armed flag instead of leaving it standing.
+    if state.settlements.get(id).unwrap().projects.is_empty() {
+        start(&mut state, id, "spanish_house", 1, None);
+    }
+    set_flag(&mut state, true);
+    assert!(!plan_pass(
+        &mut state,
+        id,
+        &mut site_turn::SiteBudget::default()
+    ));
+    assert!(!armed(&state), "a pass that cannot scan clears the flag");
 }
 
 #[test]
