@@ -65,6 +65,29 @@ class PreflightTests(unittest.TestCase):
                 self.assertFalse(xdg.exists())
                 self.assertEqual(os.environ['XDG_DATA_HOME'], '/original')
 
+    def test_windowed_launch_passes_the_content_root(self):
+        # client_data_root links a content root for headless runs only, so a windowed launch
+        # must name the complete root itself: without --data-dir the client derives
+        # facts/block_collision_shapes_26_3.bin from the operator's XDG data root and exits 1
+        # before MCP readiness (2026-11-26 menus/sand/map gates on a complete template).
+        from .backends import native_client
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'template'
+            data = root / 'data' / 'vanilla'
+            data.mkdir(parents=True)
+            (root / 'facts').mkdir()
+            (root / 'resources' / 'assets').mkdir(parents=True)
+            windowed = profiles.ProfileContext(Path(tmp) / 'windowed', client='native', windowed=True)
+            with mock.patch.dict(os.environ, {'KRASNOKAMEN_CLIENT_DATA_DIR': str(data)}, clear=True):
+                argv = native_client.play_arguments(windowed, Path('/bin/client'), '127.0.0.1:25565',
+                                                    'Harness', Path(tmp) / 'run', Path(tmp) / 'art')
+            self.assertEqual(argv[argv.index('--data-dir') + 1], str(root.resolve()))
+            headless = profiles.ProfileContext(Path(tmp) / 'headless', client='native')
+            with mock.patch.dict(os.environ, {'KRASNOKAMEN_CLIENT_DATA_DIR': str(data)}, clear=True):
+                argv = native_client.play_arguments(headless, Path('/bin/client'), '127.0.0.1:25565',
+                                                    'Harness', Path(tmp) / 'run', Path(tmp) / 'art')
+            self.assertNotIn('--data-dir', argv)
+
     def test_explicit_nested_phase_is_preserved_in_receipt(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(cli, 'ARTIFACT_ROOT', Path(tmp)):
             def run(ctx):

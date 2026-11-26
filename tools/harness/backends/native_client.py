@@ -209,6 +209,61 @@ def launch_environment(
     return env
 
 
+def data_root_arguments(windowed: bool) -> list[str]:
+    """`--data-dir` for a windowed run: the client's own root for the content it derives.
+
+    preflight.client_data_root links a private content root only for headless runs, so a
+    windowed client derives every INPUTS entry without a KRASNOKAMEN_CLIENT_* override
+    (`facts/block_collision_shapes_26_3.bin` and the rest) from the operator's XDG data
+    root and dies in descriptor phase on a partial install (2026-11-26: menus, sand and
+    map gates on a complete tree). The harness knows the complete root from
+    KRASNOKAMEN_CLIENT_DATA_DIR; the four content variables it requires stay
+    authoritative because the client fills only the unset ones.
+    """
+    if not windowed or not os.environ.get("KRASNOKAMEN_CLIENT_DATA_DIR"):
+        return []
+    from .. import preflight
+
+    return ["--data-dir", str(preflight.client_template())]
+
+
+def play_arguments(
+    ctx: ProfileContext,
+    binary: Path,
+    server_addr: str | None,
+    username: str | None,
+    runtime_dir: Path,
+    artifact_dir: Path,
+) -> list[str]:
+    """The client argv for one launch; the single place every launch shape is built (and tested).
+
+    Title-mode launch (server_addr/username both None): omit --server / --username so the
+    client starts on the Title screen with prefill. Mixed (one set, one None) is a caller
+    bug — fail loudly.
+    """
+    if (server_addr is None) != (username is None):
+        raise ValueError("title-mode launch requires both server_addr and username unset")
+    argv = [
+        str(binary),
+        "play",
+        "--profile", "offline-test",
+        *([] if server_addr is None else ["--server", server_addr]),
+        *([] if username is None else ["--username", username]),
+        "--automation",
+        "--mcp-http", "127.0.0.1:0",
+        "--windowed" if ctx.windowed else "--headless",
+        *data_root_arguments(ctx.windowed),
+        "--runtime-dir", str(runtime_dir),
+        "--artifact-dir", str(artifact_dir),
+    ]
+    if ctx.scenario_id in {"native-v2-shift-double-click", "native-v2-shift-components",
+                           "native-v2-shift-chest-correction"}:
+        # A 320x240 GUI remains legible at scale 1 while minimizing
+        # llvmpipe latency for the sub-250ms correction gesture.
+        argv.extend(["--width", "320", "--height", "240"])
+    return argv
+
+
 @runtime.in_phase("client_start")
 def start(
     ctx: ProfileContext,
@@ -298,28 +353,7 @@ def start(
                 "settings_sha256": hashlib.file_digest(settings_path.open("rb"), "sha256").hexdigest(),
             }
         )
-        # Title-mode launch (server_addr/username both None): omit --server /
-        # --username so the client starts on the Title screen with prefill.
-        # Mixed (one set, one None) is a caller bug — fail loudly.
-        if (server_addr is None) != (username is None):
-            raise ValueError("title-mode launch requires both server_addr and username unset")
-        argv = [
-            str(binary),
-            "play",
-            "--profile", "offline-test",
-            *([] if server_addr is None else ["--server", server_addr]),
-            *([] if username is None else ["--username", username]),
-            "--automation",
-            "--mcp-http", "127.0.0.1:0",
-            "--windowed" if ctx.windowed else "--headless",
-            "--runtime-dir", str(runtime_dir),
-            "--artifact-dir", str(artifact_dir),
-        ]
-        if ctx.scenario_id in {"native-v2-shift-double-click", "native-v2-shift-components",
-                               "native-v2-shift-chest-correction"}:
-            # A 320x240 GUI remains legible at scale 1 while minimizing
-            # llvmpipe latency for the sub-250ms correction gesture.
-            argv.extend(["--width", "320", "--height", "240"])
+        argv = play_arguments(ctx, binary, server_addr, username, runtime_dir, artifact_dir)
         # Subscribe before Popen so even immediate descriptor publication cannot
         # race the watch. A pidfd is attached as soon as the child exists.
         selector, notify_fd, _ = runtime._require_event_fds(None, runtime_dir)
