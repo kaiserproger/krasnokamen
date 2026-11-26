@@ -1977,7 +1977,8 @@ fn probe_retained_village_site_supply() {
             let images =
                 crate::plugin_structures::settlement_builds::source_images(&state, record.id);
             let started = std::time::Instant::now();
-            let (kinds, count) = super::funded_kinds(&state, &record, record.id, &images);
+            let (kinds, count) =
+                super::site_refusals::funded_kinds(&state, &record, record.id, &images);
             funded_ms.push(started.elapsed().as_secs_f64() * 1000.0);
             funded_count = count;
             std::hint::black_box(kinds);
