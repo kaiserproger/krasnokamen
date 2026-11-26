@@ -1,0 +1,11 @@
+[[bug]]
+id = "SETTLEMENT-HOUSE-LEVEL3-CERT-BOX-ONE-SHORT"
+title = "The house level-3 certificate box is one block short in z, so the enclosure check inspects a box narrower than the level's cells"
+area = "gameplay"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "D123UpgradeCell"
+regression = ["cargo:mc-core:settlements::buildings::tests::the_house_certificate_boxes_match_the_footprints_they_inspect"]
+failing_first = "reported"
+repro_check = "Measured and re-classified as NOT a defect by the Opus review of 2f9d54521 (2026-11-25): the certificate box is the enclosed hull by construction, not the level's full extent. `house.json` level 3 is 11x9x8 with cert [11,5,7] (identical to level 2), and its 8th z row is an open porch: continuous awning at y=4, only posts/wall_torch/scattered planks at y=1..3. The height is likewise shorter (cert 5 against 9 layers), which the same premise would call a second gap. The gate certified level 3 as built (`house.L3_upgrade` and `house.L3_blockmatch` PASS, 20261125T135334). The pinned test `the_house_certificate_boxes_match_the_footprints_they_inspect` documented the difference and stays as a blueprint-data guard; the row needs an owner decision to close as not-a-defect, not a code or data change."

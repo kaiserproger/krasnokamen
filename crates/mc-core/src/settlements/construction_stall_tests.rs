@@ -764,3 +764,57 @@ fn an_order_nobody_was_bound_to_keeps_its_site_through_stall_windows() {
         ScriptStructureState::Cancelled
     );
 }
+
+/// Diagnostic harness for the House L2 stall: the watcher over a committed terminal record reports
+/// what the certificate is missing, once per shift, from the pure query (`certificate_missing`).
+/// `finish_project` itself no longer logs on every builder tick. `missing = <description>: found/required`.
+#[test]
+fn a_committed_house_upgrade_reports_its_missing_certificate_requirement() {
+    let (mut state, id, builder) = fixture();
+    let bounds = ScriptWorldBounds::new([4, 201, 4], [14, 209, 14]).unwrap();
+    let block = super::super::allocator::tests::block(&state, "minecraft:dirt", &[]);
+    let handle = executor::prepare(
+        &mut state,
+        id,
+        "spanish_house".into(),
+        bounds,
+        bounds,
+        vec![executor::PlannedCell {
+            portion: executor::PortionKind::Build,
+            at: [10, 202, 10],
+            state: block,
+            resource: None,
+            quantity: 0,
+        }],
+    )
+    .unwrap();
+    state.settlements.get_mut(id).unwrap().projects = vec![Project {
+        settlement: id,
+        blueprint: "spanish_house".into(),
+        level: 2,
+        origin: [4, 201, 4],
+        rotation: 0,
+        building: None,
+        structure: handle.clone(),
+        ordered: true,
+        builder: Some((state.entities.row(builder).uuid, None)),
+        order_seq: None,
+    }];
+    state.world.set_block(10, 202, 10, block);
+    let uuid = state.entities.row(builder).uuid;
+    executor::advance(&mut state, id, &handle, uuid).unwrap();
+    // The refusal is named by the watcher's pure query, not by a per-tick warn in the finish path.
+    let warnings = Warnings::default();
+    tracing::subscriber::with_default(warnings.clone(), || {
+        // The watcher reports once per stall shift (3000 ticks of no progress).
+        for _ in 0..=450 {
+            state.tick += 20;
+            super::release_stalled_builder(&mut state, id);
+        }
+    });
+    let text = warnings.0.lock().unwrap().join("\n");
+    assert!(
+        text.contains("cause=\"certificate_incomplete\"") && text.contains("missing="),
+        "the refusal names its missing requirements: {text}"
+    );
+}

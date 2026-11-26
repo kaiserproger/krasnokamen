@@ -12,7 +12,7 @@ from typing import Any
 
 from .probe_steps import ProbeSteps
 from . import buildings_qa as _qa
-from .buildings_qa_consts import CONTAINER_CLASS, LEVELS, PROJECT_MAP_SLOT
+from .buildings_qa_consts import CONTAINER_CLASS, LEVELS
 
 
 def _state_base(text: str) -> str:
@@ -213,17 +213,24 @@ def _building_bounds(probe: ProbeSteps, kind_label: str, level: int,
 
 
 def _project_origin(probe: ProbeSteps) -> tuple[int, int, int] | None:
-    """Origin of the active project, or None: the Construction page's map icon (slot 14) carries
-    it as the lore line `<x> <y> <z>` (ui_menus.rs project_screen, ui.rs corner_text)."""
+    """Origin of the active project, or None.
+
+    Each admitted project's card (slots 0..) carries `project_text` as its lore: `<done>/<total>`,
+    then the bare `<x> <y> <z>` origin (`corner_text(project.origin)`), then `Builder: <name>`.
+    The map icon at slot 14 is a plain dialog button with no lore, so the old read of slot
+    `PROJECT_MAP_SLOT` never found an origin and the house break check could not inject its cell
+    (20261124T190527-buildings-qa-v0sx6swc, `buildings_house_broken_cell_injected`)."""
     page = _qa._project_page(probe)
     try:
-        if not any(row.get("slot") == PROJECT_MAP_SLOT for row in page["container"]["slots"]):
+        card = next((row for row in page["container"]["slots"]
+                     if _qa._active_card(str(row.get("name") or ""))), None)
+        if card is None:
             return None
-        lore = probe.call("minecraft_read_item_components",
-                          {"source": "container", "slot": PROJECT_MAP_SLOT})["components"].get("minecraft:lore", [])
+        components = probe.call("minecraft_read_item_components",
+                                {"source": "container", "slot": int(card["slot"])})["components"]
     finally:
         probe.call("minecraft_close_screen", {})
-    for line in lore:
+    for line in components.get("minecraft:lore") or []:
         match = re.fullmatch(r"\s*(-?\d+) (-?\d+) (-?\d+)\s*", _text_plain(line))
         if match:
             return (int(match.group(1)), int(match.group(2)), int(match.group(3)))

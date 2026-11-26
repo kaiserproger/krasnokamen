@@ -137,7 +137,19 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
         // is tried first and the `gathering` early return now guards the streets
         // alone: 1144. The ordering is pinned by the row's control patch (its `+`
         // comment lines), so the arm cannot shrink without re-generating it.
-        ("settlements/construction.rs", 1_144),
+        // The house-upgrade lane (D123, 2026-11-25) adds 16: `finish_project`'s
+        // named refusals (`cause=`, `missing=`) and the pure `certificate_missing`
+        // query the stall watcher reads on the certificate tail (1142 -> 1158).
+        // That tail is not cold: the watcher calls it every stall window of a
+        // committed-but-uncertified project, and the gate's own stall logged it
+        // per tick - which is why the refusal path warns nothing and names its
+        // cause and missing requirement once, at `finish_project`. Measured 1158
+        // on the D123UpgradeCell tree (code-health 20261125T170814). The
+        // certificate/refusal tail is the next extraction candidate: it belongs
+        // in a `construction_certificate` module beside `buildings.rs`.
+        // Merged tree (Main, D123 integration): F12's +2 above and this lane's +16 stack
+        // (1142 + 2 + 16); re-measured by code-health on the merged tree.
+        ("settlements/construction.rs", 1_160),
         // B3 (EdgeScale, 2026-11-18): the edge-visible unlocked-session mirror
         // is projected only when its inputs move, so `Connections` carries one
         // membership generation and advances it in `insert`,

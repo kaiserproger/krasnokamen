@@ -143,8 +143,10 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             command = f"settlement build {bp}" if level == 1 else f"settlement build upgrade {bid}"
             dialog = (lambda: _order_via_dialog(probe, sub, tag, bp, level, sname)) if level == 1 else \
                 (lambda: _upgrade_via_dialog(probe, sub, tag, bp, bid, level, sname))
-            admitted = _qa._order_echo_retry(probe, sub, tag, bp, level, command, use_dialog, ctx,
-                                         dialog_fn=dialog, upgrade_bid=bid)
+            admitted = _qa._order_echo_retry(
+                probe, sub, tag, bp, level, command, use_dialog, ctx, dialog_fn=dialog,
+                upgrade_bid=bid,
+                refund=lambda: _qa._fund_level(probe, sub, bp, level, tuple(shell)))
             if level == 1:
                 refusal = _order_refusal(sub, 1)
                 if refusal is not None:
@@ -177,6 +179,11 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             origin = _qa._wait_certified_origin_here(probe, sub, tag, bp, level, ctx, artifact)
             if origin is None:
                 if bp == "house" and level == 1:
+                    # A house whose injected break is never re-placed never certifies: the repair
+                    # outcome is a product verdict on this path too, and `probe.check` below raises
+                    # immediately, so it must be recorded first (a negative control reads it).
+                    _verdict(sub, "broken_cell_replaced", "FAIL",
+                             "the injected break was not re-placed; the L1 certificate never appeared")
                     probe.check(f"{tag}_L1_broken_cell_repaired", False)
                 probe.check(f"{tag}_L{level}_built", False)
                 _verdict(sub, f"L{level}_upgrade", "FAIL",
