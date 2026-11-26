@@ -73,6 +73,55 @@ pub(super) fn stock_buildings(state: &mut TickState, levels: &[(&str, u8)]) {
     }
 }
 
+/// The round-3 cadence proof: while a walk is unfinished the planner steps it
+/// every tick, so a village that rewrites its streets during the walk still
+/// admits. At the old cadence (one pass per 20 ticks) the same scripted village
+/// restarts its walk at every change and never admits.
+#[test]
+fn a_walk_stepped_every_tick_finishes_before_the_streets_change() {
+    let (mut state, id, builder) = fixture();
+    terrain_tests::wide_plan(&mut state);
+    terrain_tests::restore_stock(&mut state);
+    fund(&mut state, "spanish_house", 1);
+    start(&mut state, id, "spanish_house", 1, None);
+    super::tests::complete(&mut state, id, builder);
+    super::growth_tests::stock_buildings(&mut state, &[("spanish_house", 1), ("farm", 1)]);
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    // The village's own work changes the walk's frontage list every ten ticks.
+    let roads: Vec<[i32; 2]> = (-14..=14)
+        .flat_map(|x| (-14..=14).map(move |z| [x, z]))
+        .filter(|[x, z]| matches!(layout::cell(anchor, *x, *z), layout::Cell::Road))
+        .map(|[x, z]| [anchor[0] + x, anchor[2] + z])
+        .collect();
+    assert!(roads.len() > 8, "the plan has roads to change");
+    let mut next_road = 0;
+    let mut admitted = None;
+    for tick in 1..=400u64 {
+        state.tick = tick;
+        if tick % 10 == 0 {
+            let [x, z] = roads[next_road % roads.len()];
+            next_road += 1;
+            for y in 190..=202 {
+                state.world.set_block(x, y, z, state.registry.states.stone);
+            }
+            state.world.fold_overlay();
+        }
+        let mut budget = site_turn::SiteBudget::default();
+        super::planner_tick(&mut state, &mut budget);
+        if !state.settlements.get(id).unwrap().projects.is_empty() {
+            admitted = Some(tick);
+            break;
+        }
+    }
+    // At the old cadence (one pass per 20 ticks) this is `None`: every street
+    // change restarts the walk before it can finish (verified by reverting only
+    // the `planner_tick` gate: the test fails with "got None").
+    assert!(
+        admitted.is_some_and(|tick| tick <= 60),
+        "the walk must finish inside the ten-tick window between street changes, got {admitted:?}"
+    );
+}
+
 #[test]
 fn an_autonomous_house_selected_first_keeps_its_slot_before_a_later_cultural_order() {
     let (mut state, id) = housing_fixture(false);
