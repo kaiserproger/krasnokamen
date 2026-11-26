@@ -18,7 +18,7 @@ regression = [
 ]
 proving_refs = ["cargo:mc-core:datapacks::worldgen::tests::unsupported_worldgen_refusal_names_every_entry_and_supported_packs_load"]
 failing_first = "reported"
-fix_commit = "patch:5621b955baf863c302b5764744acad3a59f0fbd7883ddbee89fdbc752c302bb9"
+fix_commit = "patch:05d3c72bf147c5be1c901d7c01aa9145caba07dad26d7579a5b253e09b0c858a"
 repro_check = """RED control (mechanically faithful): in crates/mc-core/src/datapacks.rs replace the collection
            match with the pre-image refusal `Err(Unsupported(entry)) => return Err(entry)` (plus
            `Err(Invalid(error)) => return Err(error)`); `let mut unsupported: Vec<String>` then needs its
