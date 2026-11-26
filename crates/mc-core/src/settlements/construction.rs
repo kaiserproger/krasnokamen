@@ -1077,6 +1077,66 @@ pub(super) fn needed_kinds(
 
 /// Read the allocator's existing physical index, never certificate levels.
 /// Wait for its bounded scans rather than treating an unknown bed as absent.
+/// Roofed physical beds inside the settlement, counted up to one more than
+/// the residents (only the comparison matters). `None` while the POI cache is
+/// not ready: a pass plans nothing on bed data it does not have.
+fn roofed_beds(state: &TickState, record: &SettlementRecord) -> Option<usize> {
+    let cache = &state.villager_pois;
+    if !cache.poi_initialized || !cache.pending_chunks.is_empty() {
+        return None;
+    }
+    let residents = state.settlements.member_count(record.id);
+    Some(
+        cache
+            .chunks
+            .values()
+            .flat_map(|chunk| &chunk.pois)
+            .filter(|poi| {
+                poi.kind == super::allocator::PoiKind::Home
+                    && record.contains([poi.pos.x, poi.pos.y, poi.pos.z])
+                    && super::allocator::bed_pair(&state.world, &state.registry, poi.pos).is_some()
+                    && super::allocator::roofed(&state.world, &state.registry, poi.pos)
+            })
+            .take(residents.saturating_add(1))
+            .count(),
+    )
+}
+
+/// The bill the priority House will need while the village is short of roofed
+/// beds. Stock promised here is never spent on an upgrade: runs 2-3 of the
+/// final civ series upgraded two mason workshops to L3 and completed Storage
+/// L1 while the House lane waited at `oak_planks 4/106` for a whole run, so
+/// the House never became funded (receipts/D123/D123CivGates/FINAL-SERIES.md).
+/// The House lane itself funds this bill (`priority_house`); an active House
+/// project is the spender, not a reservation.
+pub(super) fn house_reserve_bill(
+    state: &TickState,
+    record: &SettlementRecord,
+    images: &[super::inventory::Image],
+) -> Vec<(u32, u32)> {
+    if state.settlements.member_count(record.id) == 0 {
+        return Vec::new();
+    }
+    let Some(beds) = roofed_beds(state, record) else {
+        return Vec::new();
+    };
+    if beds > state.settlements.member_count(record.id) {
+        return Vec::new();
+    }
+    let Some(blueprint) = catalog(state, record).find(|bp| bp.kind == BuildingKind::House) else {
+        return Vec::new();
+    };
+    if access::projects(record).any(|project| project.blueprint == blueprint.id) {
+        return Vec::new();
+    }
+    let Some(level) = blueprint.level(1) else {
+        return Vec::new();
+    };
+    selected_bill(state, record.id, &level.materials, images)
+        .map(std::borrow::Cow::into_owned)
+        .unwrap_or_default()
+}
+
 fn priority_house(
     state: &TickState,
     record: &SettlementRecord,
@@ -1085,8 +1145,8 @@ fn priority_house(
     if state.settlements.member_count(record.id) == 0 {
         return None;
     }
-    let cache = &state.villager_pois;
-    if !cache.poi_initialized || !cache.pending_chunks.is_empty() {
+    let Some(beds) = roofed_beds(state, record) else {
+        let cache = &state.villager_pois;
         tracing::debug!(
             target: "settlements::construction",
             settlement = record.id.0,
@@ -1095,20 +1155,8 @@ fn priority_house(
             "priority house scan skipped: poi cache not ready"
         );
         return None;
-    }
+    };
     let residents = state.settlements.member_count(record.id);
-    let beds = cache
-        .chunks
-        .values()
-        .flat_map(|chunk| &chunk.pois)
-        .filter(|poi| {
-            poi.kind == super::allocator::PoiKind::Home
-                && record.contains([poi.pos.x, poi.pos.y, poi.pos.z])
-                && super::allocator::bed_pair(&state.world, &state.registry, poi.pos).is_some()
-                && super::allocator::roofed(&state.world, &state.registry, poi.pos)
-        })
-        .take(residents.saturating_add(1))
-        .count();
     if beds > residents {
         tracing::debug!(
             target: "settlements::construction",

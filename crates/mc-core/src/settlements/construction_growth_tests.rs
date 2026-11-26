@@ -2435,3 +2435,243 @@ fn an_ordinary_revisit_of_the_priority_house_owns_the_hold() {
         assert!(!project.ordered, "the autonomous planner admitted it");
     }
 }
+
+/// A settlement whose planner must see a real upgrade: a built mason L1, the
+/// POI bed cache ready, and a chest the test fills itself.
+fn upgrade_fixture(build: &str) -> (TickState, SettlementId) {
+    let (mut state, id, builder) = fixture();
+    terrain_tests::wide_plan(&mut state);
+    terrain_tests::restore_stock(&mut state);
+    open_plan(&mut state);
+    fund(&mut state, build, 1);
+    start(&mut state, id, build, 1, None);
+    complete(&mut state, id, builder);
+    // The bed count is the POI scan's; drive its canonical bounded refresh.
+    let mut cache = std::mem::take(&mut state.villager_pois);
+    cache.refresh_poi_revisions(&state);
+    state.villager_pois = cache;
+    for _ in 0..64 {
+        if state.villager_pois.pending_chunks.is_empty() {
+            break;
+        }
+        let mut cache = std::mem::take(&mut state.villager_pois);
+        cache.refresh(&state);
+        state.villager_pois = cache;
+    }
+    (state, id)
+}
+
+/// Stock the chosen `name` level bill item-wise: every item the upgrade needs,
+/// plus the House reserve's count for items the two bills share. Items that
+/// exist only in the House bill (its bed) are never stocked - the property the
+/// per-item rule exists for.
+fn stock_bill_and_reserve(
+    state: &mut TickState,
+    id: SettlementId,
+    name: &str,
+    level: u8,
+    rename: Option<&str>,
+    headroom: bool,
+) -> Vec<(u32, u32)> {
+    let record = state.settlements.get(id).unwrap();
+    let images = executor::source_images(state, id);
+    let reserved = house_reserve_bill(state, record, &images);
+    let blueprint = blueprints::get(&state.registry, name).unwrap();
+    let bill = selected_bill(
+        state,
+        id,
+        &blueprint.level(level).unwrap().materials,
+        &images,
+    )
+    .unwrap()
+    .into_owned();
+    let mut amounts: std::collections::BTreeMap<u32, u32> = std::collections::BTreeMap::new();
+    for (item, count) in bill.iter().copied() {
+        *amounts.entry(item).or_default() += count;
+    }
+    if headroom {
+        for (item, count) in reserved.iter().copied() {
+            if let Some(needed) = amounts.get_mut(&item) {
+                *needed = needed.saturating_add(count);
+            }
+        }
+    }
+    let renamed = |item: u32| match rename {
+        None => item,
+        Some(to) => state
+            .registry
+            .items
+            .name_of(item)
+            .and_then(|name| name.path().split_once('_'))
+            .and_then(|(_, rest)| mc_data::Identifier::parse(format!("minecraft:{to}_{rest}")).ok())
+            .and_then(|identifier| state.registry.items.id_of(&identifier))
+            .unwrap_or(item),
+    };
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    slots.fill(mc_data::ItemStack::EMPTY);
+    let mut index = 0;
+    for (item, mut count) in amounts {
+        let item = renamed(item);
+        while count != 0 && index < slots.len() {
+            let portion = count.min(64);
+            slots[index] = mc_data::ItemStack::new(item, portion as i32);
+            index += 1;
+            count -= portion;
+        }
+    }
+    bill.into_iter().collect()
+}
+
+/// The House reserve is netted per item of the upgrade's own bill: a shortage
+/// of items only the House bill carries (its bed, never stocked autonomously)
+/// must not refuse an upgrade that never asks for them.
+#[test]
+fn the_house_reserve_is_netted_per_item_of_the_upgrade_bill() {
+    let (mut state, id) = upgrade_fixture("mason");
+    let record = state.settlements.get(id).unwrap();
+    let images = executor::source_images(&state, id);
+    let reserved = house_reserve_bill(&state, record, &images);
+    assert!(
+        !reserved.is_empty(),
+        "a village short of roofed beds reserves"
+    );
+    let bed = reserved.iter().find(|(item, _)| {
+        state
+            .registry
+            .items
+            .name_of(*item)
+            .is_some_and(|name| name.path().ends_with("_bed"))
+    });
+    assert!(bed.is_some(), "the House bill carries a bed");
+    // Stock the shared items with the reserve's headroom; the bed stays absent.
+    stock_bill_and_reserve(&mut state, id, "mason", 2, None, true);
+    let record = state.settlements.get(id).unwrap();
+    let images = executor::source_images(&state, id);
+    let admitted = preparation::upgrade_project(&state, record, &images)
+        .expect("shared stock covers the upgrade and its share of the reserve");
+    assert_eq!(admitted.0.blueprint, "mason");
+    assert_eq!(admitted.0.level, 2);
+}
+
+/// An upgrade OF a house adds beds and is the documented fallback when no new
+/// House has a legal lot, so the House reserve never applies to it. The test
+/// only discriminates if the reserved bill really shares an item with the
+/// house's own bill: the shared item then carries the reservation in the
+/// whole-bill form (control: with the exemption off the upgrade is refused).
+#[test]
+fn a_house_upgrade_is_not_reserved_against_itself() {
+    let (mut state, id) = upgrade_fixture("spanish_house");
+    // Exactly the chosen L2 bill: no reserve headroom at all.
+    let _ = stock_bill_and_reserve(&mut state, id, "spanish_house", 2, None, false);
+    let record = state.settlements.get(id).unwrap();
+    let images = executor::source_images(&state, id);
+    let reserved = house_reserve_bill(&state, record, &images);
+    assert!(!reserved.is_empty(), "the village is short of roofed beds");
+    let blueprint = blueprints::get(&state.registry, "spanish_house").unwrap();
+    let own = selected_bill(&state, id, &blueprint.level(2).unwrap().materials, &images)
+        .expect("the chosen L2 bill");
+    let shared = own
+        .iter()
+        .filter(|(item, _)| reserved.iter().any(|(known, _)| known == item))
+        .count();
+    assert!(
+        shared != 0,
+        "the reserve must share an item with the house bill, or this test cannot discriminate"
+    );
+    let admitted = preparation::upgrade_project(&state, record, &images)
+        .expect("a house upgrade is exempt from the House reserve");
+    assert_eq!(admitted.0.blueprint, "spanish_house");
+    assert_eq!(admitted.0.level, 2);
+}
+
+/// The reserve still bites on the items the upgrade and the House share: with
+/// exactly the upgrade's bill in store the upgrade waits for the House share.
+#[test]
+fn the_house_reserve_refuses_an_upgrade_on_its_shared_items() {
+    let (mut state, id) = upgrade_fixture("mason");
+    let record = state.settlements.get(id).unwrap();
+    let images = executor::source_images(&state, id);
+    assert!(
+        !house_reserve_bill(&state, record, &images).is_empty(),
+        "a village short of roofed beds reserves"
+    );
+    stock_buildings(&mut state, &[("mason", 2)]);
+    let record = state.settlements.get(id).unwrap();
+    let images = executor::source_images(&state, id);
+    assert!(
+        preparation::upgrade_project(&state, record, &images).is_none(),
+        "the mason upgrade would starve the House lane"
+    );
+}
+
+/// The stock-only rule is checked on the CHOSEN bill, so a village that stocked
+/// birch variants passes on its own species.
+#[test]
+fn a_birch_village_admits_its_upgrade() {
+    let (mut state, id) = upgrade_fixture("mason");
+    stock_bill_and_reserve(&mut state, id, "mason", 2, Some("birch"), true);
+    let record = state.settlements.get(id).unwrap();
+    let images = executor::source_images(&state, id);
+    let admitted = preparation::upgrade_project(&state, record, &images)
+        .expect("the chosen birch bill is in store");
+    assert_eq!(admitted.1, "birch");
+}
+
+/// Logs alone do not admit an upgrade: the bill's planks, stairs, slabs, doors
+/// and fences are craftable at haul, but the stock-only rule waits until they
+/// are in store. Every non-wood item is stocked literally, so funding itself
+/// passes and only the stock rule refuses. Control: with the stock check
+/// removed the same upgrade is admitted (observed in the row-2 reproducer).
+#[test]
+fn logs_only_do_not_admit_an_upgrade() {
+    let (mut state, id) = upgrade_fixture("mason");
+    let blueprint = blueprints::get(&state.registry, "mason").unwrap();
+    let materials = &blueprint.level(2).unwrap().materials;
+    let log = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
+        .unwrap();
+    let wood_craftable = |name: &str| {
+        ["planks", "stairs", "slab", "door", "fence", "trapdoor"]
+            .iter()
+            .any(|kind| name.ends_with(kind))
+    };
+    let mut literal: Vec<(u32, u32)> = Vec::new();
+    for &(item, count) in materials {
+        let name = state
+            .registry
+            .items
+            .name_of(item)
+            .map(|name| name.path().to_owned())
+            .unwrap_or_default();
+        if !wood_craftable(&name) {
+            literal.push((item, count));
+        }
+    }
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    slots.fill(mc_data::ItemStack::EMPTY);
+    let mut index = 0;
+    for (item, mut count) in literal {
+        while count != 0 && index < slots.len() {
+            let portion = count.min(64);
+            slots[index] = mc_data::ItemStack::new(item, portion as i32);
+            index += 1;
+            count -= portion;
+        }
+    }
+    while index < 20 {
+        slots[index] = mc_data::ItemStack::new(log, 64);
+        index += 1;
+    }
+    let record = state.settlements.get(id).unwrap();
+    let images = executor::source_images(&state, id);
+    assert!(
+        funded_variant(&state, record.id, materials, &images).is_some(),
+        "logs fund the wooden part, so funding itself passes"
+    );
+    assert!(
+        preparation::upgrade_project(&state, record, &images).is_none(),
+        "logs alone are craftable but not stocked"
+    );
+}
