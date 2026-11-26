@@ -1,3 +1,4 @@
+diff --git a/crates/mc-edge/src/content_import.rs b/crates/mc-edge/src/content_import.rs
 --- a/crates/mc-edge/src/content_import.rs
 +++ b/crates/mc-edge/src/content_import.rs
 @@ -977,8 +977,7 @@

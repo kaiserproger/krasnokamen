@@ -16,7 +16,7 @@ worldgen inputs prepare and validate, and the fence accepts its identity."""
 regression = ["cargo:mc-core:datapacks::worldgen::tests::start_skips_a_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest"]
 proving_refs = ["cargo:mc-core:datapacks::worldgen::tests::start_skips_a_new_worldgen_pack_it_cannot_prepare_and_loads_the_rest"]
 failing_first = "reported"
-fix_commit = "patch:362ed1a0da0d4686e5846e9b4824f49a49a8d7aeceaf28509a9eec6e68fea023"
+fix_commit = "patch:7cbe9205537a5db15a7239da475c757211071d08c1c50173a76fa8847613b51b"
 repro_check = """RED control (keeps the API): in crates/mc-core/src/datapacks.rs the caller trial's
 `Err(error) => skipped.push(...)` becomes `Err(error) => return Err(error)`, so a new pack the world
 cannot open with refuses the start — the pre-fix outcome, with `PackSet::open`'s signature untouched (a

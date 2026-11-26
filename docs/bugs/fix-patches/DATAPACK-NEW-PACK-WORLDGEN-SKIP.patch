@@ -1,3 +1,4 @@
+diff --git a/crates/mc-core/src/datapacks.rs b/crates/mc-core/src/datapacks.rs
 --- a/crates/mc-core/src/datapacks.rs
 +++ b/crates/mc-core/src/datapacks.rs
 @@ -721,7 +721,9 @@

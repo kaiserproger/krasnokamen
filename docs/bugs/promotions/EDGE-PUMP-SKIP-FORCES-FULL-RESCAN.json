@@ -1,0 +1,72 @@
+{
+  "id": "EDGE-PUMP-SKIP-FORCES-FULL-RESCAN",
+  "verdict": "promoted",
+  "fix_commit": "patch:20fbfbd95d0e63c47be91c2c551b8c3f05aa596e4ff7cb4a86c70cb99c66f0e4",
+  "fix_commit_full": "patch:20fbfbd95d0e63c47be91c2c551b8c3f05aa596e4ff7cb4a86c70cb99c66f0e4",
+  "promoted_at": "2026-11-26T19:32:17+00:00",
+  "tree_head": "e65e1cdecab235dd43efbc1b066455ba777fb59c",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "685fcc78e69ede09dd62678dc6b02ace2de7d489ebfcaa26141ffaad3d45a167",
+  "control_tree_head": "e65e1cdecab235dd43efbc1b066455ba777fb59c",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "20fbfbd95d0e63c47be91c2c551b8c3f05aa596e4ff7cb4a86c70cb99c66f0e4",
+  "reversed_files": [
+    "crates/mc-edge/src/server/pump.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:server::pump_chain_tests::a_stale_skipped_drain_keeps_the_viewer_contiguous": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-edge/src/server/pump_chain_tests.rs",
+        "line": 182,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-edge:server::pump_chain_tests::a_lagged_publication_keeps_the_full_rescan_fallback": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:plan::plan_tests::pen_scenario_tests::an_index_given_the_chain_must_not_rescan_after_a_skip": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:plan::plan_tests::pen_scenario_tests::a_skipped_window_delivers_what_a_full_rescan_delivers": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:plan::plan_tests::pen_scenario_tests::a_skipped_publish_costs_one_rescan_without_the_chain_and_none_with_it": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:server::pump_chain_tests::a_stale_skipped_drain_keeps_the_viewer_contiguous": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::pump_chain_tests::a_lagged_publication_keeps_the_full_rescan_fallback": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:plan::plan_tests::pen_scenario_tests::an_index_given_the_chain_must_not_rescan_after_a_skip": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:plan::plan_tests::pen_scenario_tests::a_skipped_window_delivers_what_a_full_rescan_delivers": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:plan::plan_tests::pen_scenario_tests::a_skipped_publish_costs_one_rescan_without_the_chain_and_none_with_it": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PatchPromote/.analysis/validation/20261126T191638-ledger-promote-z98g5r85"
+}

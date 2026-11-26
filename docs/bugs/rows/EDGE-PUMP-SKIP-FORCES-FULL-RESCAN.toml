@@ -4,7 +4,7 @@ title = "A skipped or rebuilt tick output leaves the plan index without a contig
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = """Perf1M R3k-6 leg c-p250k-kill-r3k6 (receipts/Perf1M/LAPTOP-R3k-6-REPORT.md, receipts/Perf1M/LAPTOP-RESULTS-D41/c-p250k-kill-r3k6/run/server.log): at tick 73449 (26 viewers, delta tick 1, a join within 0.5 s) rescans go 3 -> 26 and entities_scanned 2 853 -> 25 041; from then 944 of 948 publishes are full rescans with tick delta median 7, up to 19. Before the step the same global rescans happened 36 times, each within 0.5 s of a join, and each recovered within 1-4 publishes while a rescan was cheaper than the tick.
 
 Mechanism (code reading). fanout.rs builds one TickPlanIndex per dimension and sets entity_base only when some viewer's previous revision equals the new snapshot's base_revision; entity_interest.rs treats a missing base as non-contiguous and runs entity_candidates::collect, a full walk of the viewer's (2*vd+1)^2 loaded chunks, per viewer per publish. A join rebuilds the core's entity view set, which is what makes the base stop matching. Once a rescan costs more than a tick (0.78 s at 26 viewers x ~1000 entities vs a 50 ms tick) the pump's own 1.6 s publish budget cannot catch up, it skips, and every later snapshot's base is again unmatched.
@@ -18,8 +18,8 @@ regression = [
   "cargo:mc-edge:server::pump_chain_tests::a_lagged_publication_keeps_the_full_rescan_fallback",
 ]
 proving_refs = ["cargo:mc-edge:server::pump_chain_tests::a_stale_skipped_drain_keeps_the_viewer_contiguous"]
-failing_first = "seen"
-fix_commit = "patch:8f0537e31f60ed331f791a04e3b3ddd809fd47b5517b55a73f16b8a27bf5daf4"
+failing_first = "reported"
+fix_commit = "patch:20fbfbd95d0e63c47be91c2c551b8c3f05aa596e4ff7cb4a86c70cb99c66f0e4"
 repro_check = """Green on the candidate: pen_scenario_tests 9/9 (artifact 20261126T124302-test-4lzgyftj) and
 pump_chain_tests 2/2 (20261126T124628-test-5uo_jm6e), re-green after the fmt/clippy round
 (20261126T134234-test-c7jeqliv fanout 8/8, 20261126T134520-test-e33og1p1 pen 9/9). RED control:
@@ -38,3 +38,4 @@ queue (Opus review 2026-11-26, part 1 note 5).
 
 Ported from perf1m-r3k5 onto this candidate; the hunk map beside the patch lists every other
 production hunk and its omission class (all (b), API the kept tests call)."""
+promotion = "docs/bugs/promotions/EDGE-PUMP-SKIP-FORCES-FULL-RESCAN.json"

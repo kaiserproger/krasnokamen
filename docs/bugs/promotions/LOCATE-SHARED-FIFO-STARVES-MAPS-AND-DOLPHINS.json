@@ -1,0 +1,68 @@
+{
+  "id": "LOCATE-SHARED-FIFO-STARVES-MAPS-AND-DOLPHINS",
+  "verdict": "promoted",
+  "fix_commit": "patch:3a6ee42600100f9dd11debf3a0419192ac4ab8e5f17137562a7f62051b36a907",
+  "fix_commit_full": "patch:3a6ee42600100f9dd11debf3a0419192ac4ab8e5f17137562a7f62051b36a907",
+  "promoted_at": "2026-11-26T20:03:27+00:00",
+  "tree_head": "e65e1cdecab235dd43efbc1b066455ba777fb59c",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "control_tree_sha256": "ded39ff64267d53ee64ebf8138b8f03f74b0ed3e96472db255abba5b4da6533a",
+  "control_tree_head": "e65e1cdecab235dd43efbc1b066455ba777fb59c",
+  "control": "reversed_fix_hunks",
+  "control_b": null,
+  "fix_patch_sha256": "3a6ee42600100f9dd11debf3a0419192ac4ab8e5f17137562a7f62051b36a907",
+  "reversed_files": [
+    "crates/mc-core/src/command_locate.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:command_locate::tests::an_open_does_not_wait_behind_a_parked_command_search": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/command_locate_tests.rs",
+        "line": 949,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:command_locate::tests::a_full_background_lane_still_admits_an_interactive_open": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/command_locate_tests.rs",
+        "line": 856,
+        "error": "panic",
+        "class": "assertion"
+      }
+    },
+    "cargo:mc-core:command_locate::tests::a_refused_dolphin_lookup_stops_the_lead_instead_of_recapturing": {
+      "state": "red",
+      "detail": "FAIL",
+      "assertion": {
+        "file": "crates/mc-core/src/command_locate_tests.rs",
+        "line": 1463,
+        "error": "panic",
+        "class": "assertion"
+      }
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_locate::tests::an_open_does_not_wait_behind_a_parked_command_search": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_locate::tests::a_full_background_lane_still_admits_an_interactive_open": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_locate::tests::a_refused_dolphin_lookup_stops_the_lead_instead_of_recapturing": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/D123PatchPromote/.analysis/validation/20261126T194846-ledger-promote-zfancw6d"
+}

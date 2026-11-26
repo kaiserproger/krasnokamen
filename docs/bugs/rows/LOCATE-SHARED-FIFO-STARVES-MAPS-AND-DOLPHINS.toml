@@ -4,7 +4,7 @@ title = "One FIFO locate worker serves /locate, exploration maps and dolphin tre
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = """D123Battle F7 (independent review of the dolphin located-treasure work, 2026-11-23):
 crates/mc-core/src/command_locate.rs ran every StructureLookupRequest through one worker channel pair
 (jobs/done) with one `pending` map; maps/loot.rs, maps/trades.rs and dolphin.rs all submit into it.
@@ -37,8 +37,8 @@ proving_refs = [
   "cargo:mc-core:command_locate::tests::a_full_background_lane_still_admits_an_interactive_open",
   "cargo:mc-core:command_locate::tests::a_refused_dolphin_lookup_stops_the_lead_instead_of_recapturing",
 ]
-failing_first = "seen"
-fix_commit = "patch:3fffac789def66386d1850ccf2107ae34503ed7b17548d5a8d74f7237095b5ef"
+failing_first = "reported"
+fix_commit = "patch:3a6ee42600100f9dd11debf3a0419192ac4ab8e5f17137562a7f62051b36a907"
 repro_check = """Green: mc-core command_locate 31/31 (artifact 20261126T123820-test-u0q8f_10). RED control:
 reverse-applying docs/bugs/fix-patches/LOCATE-SHARED-FIFO-STARVES-MAPS-AND-DOLPHINS.patch (lane()
 collapses every completion onto the background lane; a refusal becomes Failed{retry_at: +200}) fails
@@ -52,3 +52,4 @@ Worker-loss path: `worker_loss_releases_a_map_loot_callback_so_the_container_ope
 search (the lane gate panics), and both assert the pending jobs are completed and the lane restarts
 (a second submit is served by a fresh worker). 31/31 `command_locate` tests green in
 20261126T141442-test-eugfen1s; 17/17 dolphin tests in 20261126T144342-test-ramxq0zl."""
+promotion = "docs/bugs/promotions/LOCATE-SHARED-FIFO-STARVES-MAPS-AND-DOLPHINS.json"

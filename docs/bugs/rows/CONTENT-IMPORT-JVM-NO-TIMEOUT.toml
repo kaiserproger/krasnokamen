@@ -28,8 +28,9 @@ regression = [
   "cargo:mc-edge:content_import::tests::a_bounded_child_returns_its_output",
 ]
 proving_refs = ["cargo:mc-edge:content_import::tests::a_stalled_datagen_returns_a_bounded_error"]
+proving_assertions = { "cargo:mc-edge:content_import::tests::a_stalled_datagen_returns_a_bounded_error" = "crates/mc-edge/src/content_import_tests.rs:551" }
 failing_first = "not recorded"
-fix_commit = "patch:a701ef4e63c7d17c22ddc1cbb79f93d75eb7691e178caa28833dfb5a08060bff"
+fix_commit = "patch:3a8e252a227f42a396d6a694c6539ca098fa1bb8dab1fa6a87d8dc39c9a81ead"
 repro_check = """Green: mc-edge content_import 19/19 (artifact 20261126T143720-test-vcv9gezz). RED control:
 reverse-applying docs/bugs/fix-patches/CONTENT-IMPORT-JVM-NO-TIMEOUT.patch (the three call sites go
 back to the unbounded `command.output().await`, the helper stays) fails
