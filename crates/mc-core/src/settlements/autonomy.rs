@@ -172,7 +172,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             }
         }
     }
-    let passes = queue.villages.len().min(VILLAGES_PER_TICK);
+    let passes = passes_per_tick(queue.villages.len(), state.tick);
     let mut binds = 0;
     for _ in 0..passes {
         let mut pending = queue.villages.pop_front().expect("counted village");
@@ -181,6 +181,21 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         }
     }
     state.autonomy_queue = queue;
+}
+
+/// Villages stepped this tick. The queue rotates by `pop_front`/`push_back`,
+/// so a fixed batch of four correlates a village's turn with the tick's parity:
+/// with eight pending villages the queue alternates [0..3] / [4..7] forever and
+/// villages 4..7 never see the `tick % 20 == 0` gates (`prove_natural`, the
+/// zone probe) that are written against the tick number, not the turn
+/// (SETTLEMENT-AUTONOMY-VILLAGE-ROTATION-STARVES-TICK-GATES). Every pending
+/// village therefore takes its turn on a gate tick.
+fn passes_per_tick(pending: usize, tick: u64) -> usize {
+    if tick.is_multiple_of(20) {
+        pending
+    } else {
+        pending.min(VILLAGES_PER_TICK)
+    }
 }
 
 fn belongs_to_site(site: &GeneratedVillageSite, marker: &GeneratedEntityMarker) -> bool {

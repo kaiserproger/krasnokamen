@@ -2392,3 +2392,28 @@ fn review_generated_village_adoption_respects_an_active_expedition_claim() {
     assert_eq!(state.settlement_sequence, sequence);
     crate::settlements::persistence::finish_recovery(&mut state).unwrap();
 }
+
+/// The rotation must not starve the tick-numbered gates: every pending
+/// village takes its turn on a `tick % 20 == 0` tick, whatever the queue
+/// length (eight pending villages with a fixed batch of four alternated
+/// [0..3] / [4..7] forever, so villages 4..7 never saw `prove_natural`).
+#[test]
+fn every_pending_village_turns_on_a_gate_tick() {
+    for pending in 1..=16usize {
+        let mut queue: std::collections::VecDeque<usize> = (0..pending).collect();
+        let mut turned_on_gate = vec![false; pending];
+        for tick in 0..400u64 {
+            for _ in 0..super::passes_per_tick(queue.len(), tick) {
+                let village = queue.pop_front().expect("counted village");
+                if tick.is_multiple_of(20) {
+                    turned_on_gate[village] = true;
+                }
+                queue.push_back(village);
+            }
+        }
+        assert!(
+            turned_on_gate.iter().all(|turned| *turned),
+            "queue of {pending} pending villages starves some village's gate tick"
+        );
+    }
+}
