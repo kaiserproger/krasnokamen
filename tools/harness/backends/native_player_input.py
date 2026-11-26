@@ -12,6 +12,29 @@ from .native_v2 import _echo
 from .probe_steps import ProbeSteps
 
 
+def sent_drop_actions(state: dict) -> dict[str, int]:
+    """The client's serverbound drop counters (`minecraft_observe` -> `sent_actions`), fail-closed.
+
+    CLIENT-HELD-DROP-KEY-DOUBLE-DROP cannot be judged from `packets.counts` (clientbound only), so
+    the client publishes a monotonic count of the PLAYER_ACTION drops it handed to the network
+    writer. A build without the counters is an unreadable verdict, never a pass.
+    """
+    sent = state.get("sent_actions")
+    if not isinstance(sent, dict):
+        raise RuntimeError("native-v2-input-menus needs sent_actions in the observation: "
+                           "this client build has no serverbound PLAYER_ACTION counters")
+    values = {name: sent.get(name) for name in ("drop_item", "drop_stack")}
+    if not all(isinstance(value, int) for value in values.values()):
+        raise RuntimeError(f"sent_actions must carry integer drop_item/drop_stack: {sent!r}")
+    return values
+
+
+def one_drop(before: dict[str, int], after: dict[str, int]) -> bool:
+    """One physical press: exactly one item dropped, and no whole-stack drop."""
+    return (after["drop_item"] - before["drop_item"] == 1
+            and after["drop_stack"] == before["drop_stack"])
+
+
 def _input(steps: ProbeSteps, *, key: int | None = None, button: int | None = None,
            point: tuple[int, int] | None = None, control: bool = False) -> None:
     pointer = Pointer(steps.client.p4_window)
@@ -263,30 +286,38 @@ def menus(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture("tick unfreeze")
     steps.fixture("gamemode survival")
     # CLIENT-HELD-DROP-KEY-DOUBLE-DROP: vanilla dispatches the drop key once per press, so a
-    # physical Q held across client ticks must leave exactly one item on the ground. Seed and check
-    # through the paths the menu legs already prove (seed_main + number-key exchange + observe_menu),
-    # then count the item entities the unfrozen server really spawns.
-    def ground_items(_: dict) -> int:
-        rows = steps.call("minecraft_list_entities", {"radius": 24.0, "limit": 128})["entities"]
-        return sum(1 for row in rows if row.get("entity_type") == "minecraft:item")
-
+    # physical Q held across client ticks writes exactly one PLAYER_ACTION drop and takes one item
+    # out of the selected stack. The fixture is seeded through the paths the menu legs already
+    # prove, but the *selection* is the ordinary one: the number key inside the menu only moves the
+    # stack into hotbar 0 (vanilla swaps the hovered slot with the hotbar), so the hotbar slot is
+    # selected afterwards by a physical `1` with the screen closed, and the precondition is read
+    # exactly as the base gate read it: `source=selected`.
     steps.fixture("clear @s")
     steps.fixture("kill @e[type=minecraft:item]")
-    steps.wait(lambda _: ground_items(None) == 0, "held_drop_ground_clear", timeout_seconds=90)
     _seed_main(steps, "minecraft:diamond", 5, 9)
     state = _open_inventory(steps, False)
     _input(steps, key=ord("1"), point=center(state, 9))
     swapped = observe_menu(steps, "held_drop_fixture")
-    steps.check("held_q_fixture_selected", holds(swapped["slots"][36], "minecraft:diamond", 5))
+    steps.check("held_q_fixture_swapped", holds(swapped["slots"][36], "minecraft:diamond", 5))
     steps.call("minecraft_close_screen")
-    steps.call("minecraft_wait_ticks", {"ticks": 5})
+    _input(steps, key=ord("1"))
+    steps.call("minecraft_wait_ticks", {"ticks": 2})
+    fixture = steps.call("minecraft_read_item_components", {"source": "selected"})
+    steps.report["held_q_fixture"] = {"item_id": fixture.get("item_id"),
+                                      "count": fixture.get("count")}
+    steps.check("held_q_fixture_selected",
+                fixture.get("item_id") == "minecraft:diamond" and fixture.get("count") == 5)
+    before = sent_drop_actions(steps.observe())
     steps.report["held_q_hold_ticks"] = 3
     _hold_key(steps, ord("q"), 3)
-    steps.wait(lambda _: ground_items(None) >= 1, "held_drop_landed", timeout_seconds=90)
-    steps.call("minecraft_wait_ticks", {"ticks": 10})
-    landed = ground_items(None)
-    steps.report["held_q_items_after"] = landed
-    steps.check("held_drop_once", landed == 1)
+    steps.call("minecraft_wait_ticks", {"ticks": 4})
+    after = sent_drop_actions(steps.observe())
+    steps.report["held_q_drop_actions"] = {"before": before, "after": after}
+    steps.check("held_drop_once", one_drop(before, after))
+    remaining = steps.call("minecraft_read_item_components", {"source": "selected"})
+    steps.report["held_q_selected_after"] = {"item_id": remaining.get("item_id"),
+                                             "count": remaining.get("count")}
+    steps.check("held_drop_leaves_the_hand", remaining.get("count") == 4)
 
 
 def camera(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
