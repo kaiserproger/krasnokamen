@@ -111,13 +111,6 @@ fn set(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>, pos: BlockPos, 
     writes.retain(|(cell, _)| *cell != pos);
     writes.push((pos, block));
 }
-pub(crate) fn concrete(blocks: &BlockRegistry, block: u32) -> Option<u32> {
-    let entry = blocks.by_id(BlockStateId(block))?;
-    let color = entry.block.id.path().strip_suffix("_concrete_powder")?;
-    blocks
-        .block(&Identifier::parse(format!("minecraft:{color}_concrete")).ok()?)
-        .map(|block| block.default.0)
-}
 
 /// Sources are scanned bottom-up so a stack becomes distinct retained entities.
 pub(crate) fn start(
@@ -391,7 +384,7 @@ pub(crate) fn run(
                 drop(state, pos, falling.block_state, spawned);
             } else if !shatter {
                 let block = if falling.touched_water {
-                    concrete(&state.registry.blocks, falling.block_state)
+                    mc_placement::concrete(&state.registry.blocks, falling.block_state)
                         .unwrap_or(falling.block_state)
                 } else {
                     falling.block_state

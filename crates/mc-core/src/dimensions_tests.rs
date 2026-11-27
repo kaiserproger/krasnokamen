@@ -1552,7 +1552,7 @@ fn wrong_dimension_beds_and_anchors_explode_without_source_loot() {
         state.world.set_block(8, 150, 8, source);
         let other = if name == "red_bed" {
             let (other, _) =
-                crate::placement::other_half(&state.registry.blocks, position, source).unwrap();
+                mc_placement::other_half(&state.registry.blocks, position, source).unwrap();
             state.world.set_block(other.x, other.y, other.z, source);
             Some(other)
         } else {

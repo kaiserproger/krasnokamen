@@ -381,7 +381,7 @@ pub(crate) fn container_cells(
     if !container_name(block.block.id.as_str()) {
         return Err(Failure::NotFound);
     }
-    let cells = crate::chests::storage_cells(&state.registry.blocks, pos, &|p| {
+    let cells = mc_placement::chests::storage_cells(&state.registry.blocks, pos, &|p| {
         state.world.block_at(p.x, p.y, p.z)
     });
     for cell in &cells {
@@ -399,7 +399,7 @@ pub(crate) fn container_cells(
 // inventory queries, it must not interpret unavailable custody as free stock.
 fn custody_partner(state: &TickState, pos: BlockPos) -> Option<BlockPos> {
     if let Some((_, partner)) =
-        crate::chests::storage_partner(&state.registry.blocks, pos, &|cell| {
+        mc_placement::chests::storage_partner(&state.registry.blocks, pos, &|cell| {
             state.world.block_at(cell.x, cell.y, cell.z)
         })
     {
@@ -419,7 +419,7 @@ fn custody_partner(state: &TickState, pos: BlockPos) -> Option<BlockPos> {
             .map(|(_, value)| value.as_str())
     };
     let facing =
-        crate::placement::Face::from_name(property("facing")?).filter(|face| face.horizontal())?;
+        mc_placement::Face::from_name(property("facing")?).filter(|face| face.horizontal())?;
     let direction = match property("type")? {
         "left" => facing.clockwise(),
         "right" => facing.counter_clockwise(),

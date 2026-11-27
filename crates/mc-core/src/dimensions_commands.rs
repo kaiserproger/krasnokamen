@@ -172,7 +172,7 @@ pub(crate) fn commit(world: &mut TickState, changes: &mut ChangeSet) {
         let mut writes = std::mem::take(&mut world.merge_block_writes);
         let mut spawned = Vec::new();
         crate::tick::pop_unsupported(world, &mut writes, &mut spawned);
-        if crate::placement::shape_updates(&world.registry.blocks, &mut writes, &|pos| {
+        if mc_placement::shape_updates(&world.registry.blocks, &mut writes, &|pos| {
             world.world.block_at(pos.x, pos.y, pos.z)
         })
         .is_some()

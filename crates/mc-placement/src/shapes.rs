@@ -153,7 +153,7 @@ fn connected_state(
 /// Index only batches larger than one placement, retaining last-write reads,
 /// first-write replacement and first-seen neighbor order. All updates remain
 /// staged until every required read succeeds; callers need no defensive clone.
-pub(crate) fn shape_updates(
+pub fn shape_updates(
     blocks: &BlockRegistry,
     writes: &mut Vec<(BlockPos, u32)>,
     block_at: &dyn Fn(BlockPos) -> Option<u32>,
@@ -259,12 +259,12 @@ pub(crate) fn shape_updates(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry::CoreRegistry;
+    use crate::tests::TestRegistry;
     use std::cell::Cell;
 
     #[test]
     fn indexed_batch_matches_small_placement_after_image() {
-        let registry = CoreRegistry::load(None).expect("registry");
+        let registry = TestRegistry::load();
         let blocks = &registry.blocks;
         let stair = blocks
             .block(&mc_data::Identifier::parse("oak_stairs").unwrap())
@@ -307,7 +307,7 @@ mod tests {
 
     #[test]
     fn indexed_batch_reads_each_distinct_neighbor_once() {
-        let registry = CoreRegistry::load(None).expect("registry");
+        let registry = TestRegistry::load();
         let stone = registry.states.stone;
         let mut writes: Vec<_> = (0..16)
             .flat_map(|x| (0..16).map(move |z| (BlockPos { x, y: 1, z }, stone)))
@@ -329,7 +329,7 @@ mod tests {
 
     #[test]
     fn missing_required_neighbor_leaves_writes_untouched() {
-        let registry = CoreRegistry::load(None).expect("registry");
+        let registry = TestRegistry::load();
         let blocks = &registry.blocks;
         let stair = blocks
             .block(&mc_data::Identifier::parse("oak_stairs").unwrap())

@@ -10,6 +10,7 @@ use crate::tick::{BlockEntityState, run_tick};
 use crate::world::ChunkWorld;
 use mc_data::ItemStack;
 use mc_nbt::Tag;
+use mc_placement::copper::name;
 use std::sync::{Arc, LazyLock};
 
 const A: BlockPos = BlockPos { x: 1, y: 201, z: 1 };
@@ -346,7 +347,7 @@ fn copper_single_and_mixed_double_use_native_menus_and_comparator() {
         "right",
         vec![stack("iron_ingot", 5)],
     );
-    let cells = crate::chests::storage_cells(&state.registry.blocks, A, &|p| {
+    let cells = mc_placement::chests::storage_cells(&state.registry.blocks, A, &|p| {
         state.world.block_at(p.x, p.y, p.z)
     });
     assert_eq!(cells.len(), 2);

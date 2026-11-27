@@ -20,9 +20,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::boundary::{BlockPos, ChunkPos, Hand};
 use crate::config::CoreError;
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
-use crate::placement::Face;
 use crate::tick::TickState;
 use mc_domain::EntityId;
+use mc_placement::Face;
 
 /// What a block state means to farming.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,7 +85,9 @@ fn kind_of(path: &str) -> Kind {
         | "pumpkin_stem" | "sweet_berry_bush" | "cocoa" | "kelp" | "cave_vines"
         | "weeping_vines" | "twisting_vines" | "vine" | "brown_mushroom" | "red_mushroom"
         | "chorus_flower" | "pitcher_crop" => Kind::Plant,
-        _ if crate::copper::family(path).is_some_and(|(_, age, waxed)| age < 3 && !waxed) => {
+        _ if mc_placement::copper::family(path)
+            .is_some_and(|(_, age, waxed)| age < 3 && !waxed) =>
+        {
             Kind::Copper
         }
         "pointed_dripstone" | "budding_amethyst" => Kind::Mineral,
@@ -663,7 +665,7 @@ pub fn run(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>, spawned: &m
                 }
                 vec![(
                     at,
-                    crate::placement::break_state(
+                    mc_placement::break_state(
                         &state.registry.blocks,
                         was,
                         air,

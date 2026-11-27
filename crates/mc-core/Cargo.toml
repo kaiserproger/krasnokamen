@@ -22,6 +22,7 @@ mc-script = { path = "../mc-script" }
 mc-loader = { path = "../mc-loader" }
 mc-plugin-host = { path = "../mc-plugin-host" }
 mc-melee-range = { path = "../mc-melee-range" }
+mc-placement = { path = "../mc-placement" }
 mc-light = { path = "../mc-light" }
 uuid = { workspace = true, features = ["v4"] }
 tokio.workspace = true

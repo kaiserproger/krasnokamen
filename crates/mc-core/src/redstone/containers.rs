@@ -112,7 +112,7 @@ fn kind(state: &TickState, pos: BlockPos) -> Option<&str> {
 
 fn size(name: &str) -> Option<usize> {
     match name {
-        _ if crate::copper::chest(name) => Some(27),
+        _ if mc_placement::copper::chest(name) => Some(27),
         "chest" | "trapped_chest" | "barrel" => Some(27),
         name if crate::shulker::is_block(name) => Some(27),
         "hopper" | "brewing_stand" => Some(5),
@@ -127,7 +127,8 @@ fn size(name: &str) -> Option<usize> {
 pub(super) fn has_analog_output(name: &str) -> bool {
     size(name).is_some()
         || crate::special_storage::owns(name)
-        || crate::copper::family(name).is_some_and(|(family, _, _)| family == "copper_golem_statue")
+        || mc_placement::copper::family(name)
+            .is_some_and(|(family, _, _)| family == "copper_golem_statue")
 }
 
 fn automated(name: &str) -> bool {
@@ -451,7 +452,7 @@ pub(crate) fn checkpoint(state: &mut TickState) {
 }
 
 fn cells(state: &TickState, pos: BlockPos) -> Vec<BlockPos> {
-    crate::chests::storage_cells(&state.registry.blocks, pos, &|cell| {
+    mc_placement::chests::storage_cells(&state.registry.blocks, pos, &|cell| {
         state.world.block_at(cell.x, cell.y, cell.z)
     })
 }
@@ -471,7 +472,7 @@ pub(super) fn signal(state: &TickState, pos: BlockPos) -> u8 {
         .world
         .block_at(pos.x, pos.y, pos.z)
         .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
-        && crate::copper::family(block.block.id.path())
+        && mc_placement::copper::family(block.block.id.path())
             .is_some_and(|(family, _, _)| family == "copper_golem_statue")
     {
         return block

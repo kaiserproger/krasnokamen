@@ -35,7 +35,7 @@ enum CorrectionTarget {
 /// support, protection and custody are checked again at native merge.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum PlanningPose {
-    Placement(crate::placement::Click),
+    Placement(mc_placement::Click),
     Ray { eye: [f64; 3] },
 }
 
@@ -818,7 +818,7 @@ pub(crate) fn resync(state: &mut TickState, request: &BuildResync) {
         CorrectionTarget::Block { position, face } => {
             positions.push(position);
             if let Some(face) = face {
-                let step = crate::placement::Face::from_code(face).offset();
+                let step = mc_placement::Face::from_code(face).offset();
                 positions.push(BlockPos {
                     x: position.x.saturating_add(step[0]),
                     y: position.y.saturating_add(step[1]),
@@ -840,8 +840,7 @@ pub(crate) fn resync(state: &mut TickState, request: &BuildResync) {
     for index in 0..initial {
         let pos = positions[index];
         if let Some(current) = state.world.block_at(pos.x, pos.y, pos.z)
-            && let Some((other, _)) =
-                crate::placement::other_half(&state.registry.blocks, pos, current)
+            && let Some((other, _)) = mc_placement::other_half(&state.registry.blocks, pos, current)
             && !positions.contains(&other)
         {
             positions.push(other);

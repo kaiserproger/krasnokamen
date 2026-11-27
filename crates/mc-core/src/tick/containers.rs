@@ -100,7 +100,7 @@ pub(super) fn animate_openers(state: &mut TickState) {
             continue;
         }
         if let Some((_, partner)) =
-            crate::chests::storage_partner(&state.registry.blocks, pos, &|p| {
+            mc_placement::chests::storage_partner(&state.registry.blocks, pos, &|p| {
                 state.world.block_at(p.x, p.y, p.z)
             })
         {
@@ -128,7 +128,7 @@ pub(super) fn animate_openers(state: &mut TickState) {
         let Some((_, block, block_state)) = animated_block(state, pos) else {
             continue;
         };
-        let partner = crate::chests::storage_partner(&state.registry.blocks, pos, &|p| {
+        let partner = mc_placement::chests::storage_partner(&state.registry.blocks, pos, &|p| {
             state.world.block_at(p.x, p.y, p.z)
         })
         .map(|(_, p)| (p.x, p.y, p.z));
@@ -187,7 +187,7 @@ pub(super) fn container_cells(state: &TickState, pos: (i32, i32, i32)) -> Vec<(i
         y: pos.1,
         z: pos.2,
     };
-    crate::chests::storage_cells(&state.registry.blocks, at, &|cell: BlockPos| {
+    mc_placement::chests::storage_cells(&state.registry.blocks, at, &|cell: BlockPos| {
         state.world.block_at(cell.x, cell.y, cell.z)
     })
     .into_iter()
@@ -461,7 +461,7 @@ pub(super) fn container_kind_for_state(
     if let Some(menu) = stations::craft_menu_for_block(id) {
         return Some(menu);
     }
-    if crate::copper::chest(block_state.block.id.path()) {
+    if mc_placement::copper::chest(block_state.block.id.path()) {
         return Some((
             crate::inventory::MenuKind::Chest { rows: 3 },
             "Copper Chest".into(),

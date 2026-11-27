@@ -107,7 +107,7 @@ pub(crate) fn use_on(
     entity: EntityId,
     hand: Hand,
     pos: BlockPos,
-    face: crate::placement::Face,
+    face: mc_placement::Face,
     held: &ItemStack,
 ) -> Option<Intent> {
     let mut intent = plan_use_on(state, entity, hand, pos, face, held)?;
@@ -120,7 +120,7 @@ pub(crate) fn plan_use_on(
     entity: EntityId,
     hand: Hand,
     pos: BlockPos,
-    face: crate::placement::Face,
+    face: mc_placement::Face,
     held: &ItemStack,
 ) -> Option<Intent> {
     let item = |name: &str| {

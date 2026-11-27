@@ -264,7 +264,7 @@ fn lever_hand_toggle_propagates_to_iron_trapdoor() {
     let mut s = state();
     let lever = place(&mut s, 0, 200, 0, "lever", &[("powered", "false")]);
     let door = place(&mut s, 1, 200, 0, "iron_trapdoor", &[]);
-    let cells = crate::placement::use_block(&s.registry.blocks, lever, 0.0, &|p| {
+    let cells = mc_placement::use_block(&s.registry.blocks, lever, 0.0, &|p| {
         s.world.block_at(p.x, p.y, p.z)
     })
     .unwrap();
@@ -484,7 +484,7 @@ fn lamp_turns_off_after_four_ticks() {
 fn button_press_releases_and_note_tuning_wraps() {
     let mut s = state();
     let button = place(&mut s, 4, 200, 4, "stone_button", &[("powered", "false")]);
-    let cells = crate::placement::use_block(&s.registry.blocks, button, 0.0, &|p| {
+    let cells = mc_placement::use_block(&s.registry.blocks, button, 0.0, &|p| {
         s.world.block_at(p.x, p.y, p.z)
     })
     .unwrap();
@@ -497,7 +497,7 @@ fn button_press_releases_and_note_tuning_wraps() {
     advance(&mut s, 1);
     assert_eq!(value(&s, button, "powered"), "false");
     let note = place(&mut s, 6, 200, 6, "note_block", &[("note", "24")]);
-    let cells = crate::placement::use_block(&s.registry.blocks, note, 0.0, &|p| {
+    let cells = mc_placement::use_block(&s.registry.blocks, note, 0.0, &|p| {
         s.world.block_at(p.x, p.y, p.z)
     })
     .unwrap();

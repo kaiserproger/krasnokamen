@@ -200,7 +200,7 @@ pub(crate) fn opened(state: &mut TickState, entity: EntityId, block: mc_world::B
         "brewing_stand" => CustomStat::InteractWithBrewingStand,
         "crafting_table" => CustomStat::InteractWithCraftingTable,
         _ if crate::shulker::is_block(name) => CustomStat::OpenShulkerBox,
-        _ if crate::copper::chest(name) => CustomStat::OpenChest,
+        _ if mc_placement::copper::chest(name) => CustomStat::OpenChest,
         _ => return,
     };
     if let Some(player) = state.players.get_mut(&entity) {

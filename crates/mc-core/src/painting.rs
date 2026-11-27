@@ -106,7 +106,7 @@ fn fits(
     variant: &Variant,
     except: Option<EntityId>,
 ) -> bool {
-    let step = crate::placement::Face::from_code(face).offset();
+    let step = mc_placement::Face::from_code(face).offset();
     for cell in cells(pos, face, variant) {
         let Some(front) = state.world.block_at(cell.x, cell.y, cell.z) else {
             return false;
@@ -172,7 +172,7 @@ pub(crate) fn use_on(
     {
         return true;
     }
-    let step = crate::placement::Face::from_code(face).offset();
+    let step = mc_placement::Face::from_code(face).offset();
     let pos = BlockPos {
         x: clicked.x + step[0],
         y: clicked.y,
@@ -338,7 +338,7 @@ pub(crate) fn blocks_changed(
             };
             let pos = anchor(state, slot);
             let face = state.entities.row(slot).appearance.spawn_data as u8;
-            let step = crate::placement::Face::from_code(face).offset();
+            let step = mc_placement::Face::from_code(face).offset();
             writes.iter().any(|(changed, _)| {
                 cells(pos, face, variant).any(|cell| {
                     cell == *changed

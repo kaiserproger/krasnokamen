@@ -338,7 +338,7 @@ pub(in crate::tick) fn use_item_on(
         entity,
         *hand,
         *position,
-        crate::placement::Face::from_code(*face),
+        mc_placement::Face::from_code(*face),
         changes,
     ) {
         return;
@@ -349,7 +349,7 @@ pub(in crate::tick) fn use_item_on(
         entity,
         *hand,
         *position,
-        crate::placement::Face::from_code(*face),
+        mc_placement::Face::from_code(*face),
         &held,
     ) {
         intents.push(intent);
@@ -361,7 +361,7 @@ pub(in crate::tick) fn use_item_on(
         entity,
         *hand,
         *position,
-        crate::placement::Face::from_code(*face),
+        mc_placement::Face::from_code(*face),
         &held,
     ) {
         intents.push(intent);
@@ -384,7 +384,7 @@ pub(in crate::tick) fn use_item_on(
         entity,
         *hand,
         *position,
-        crate::placement::Face::from_code(*face),
+        mc_placement::Face::from_code(*face),
         &held,
     ) {
         intents.push(intent);
@@ -400,7 +400,7 @@ pub(in crate::tick) fn use_item_on(
         entity,
         *hand,
         *position,
-        crate::placement::Face::from_code(*face),
+        mc_placement::Face::from_code(*face),
         *cursor,
     ) {
         return;
@@ -429,7 +429,7 @@ fn use_interactive_block(
         return false;
     };
     let Some(cells) =
-        crate::placement::use_block(&state.registry.blocks, position, yaw, &|pos: BlockPos| {
+        mc_placement::use_block(&state.registry.blocks, position, yaw, &|pos: BlockPos| {
             state.world.block_at(pos.x, pos.y, pos.z)
         })
     else {

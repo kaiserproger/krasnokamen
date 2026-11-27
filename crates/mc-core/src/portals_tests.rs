@@ -307,7 +307,7 @@ fn ignition_items_debit_only_once_and_fire_lights_frame() {
             id,
             Hand::Main,
             shape.cell(0, -1),
-            crate::placement::Face::Up,
+            mc_placement::Face::Up,
             &mut ChangeSet::default()
         ));
         assert!(named(&state, shape.bottom, "nether_portal"));

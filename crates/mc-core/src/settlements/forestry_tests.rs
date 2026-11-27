@@ -1286,13 +1286,13 @@ fn player_leaf_placement_is_persistent_and_protected_without_history() {
     state
         .world
         .set_block(at[0], at[1], at[2], state.registry.states.air);
-    let click = crate::placement::Click {
+    let click = mc_placement::Click {
         clicked: crate::boundary::BlockPos {
             x: root[0],
             y: root[1] + 3,
             z: root[2],
         },
-        face: crate::placement::Face::Up,
+        face: mc_placement::Face::Up,
         cursor: [0.5, 1.0, 0.5],
         yaw: 0.0,
         pitch: 0.0,
@@ -1301,7 +1301,7 @@ fn player_leaf_placement_is_persistent_and_protected_without_history() {
     let placed = {
         let read = |pos: crate::boundary::BlockPos| state.world.block_at(pos.x, pos.y, pos.z);
         let replaceable = |block| block == state.registry.states.air;
-        let reads = crate::placement::Reads {
+        let reads = mc_placement::Reads {
             block_at: &read,
             replaceable: &replaceable,
             water_source: state.registry.states.water,
@@ -1311,7 +1311,7 @@ fn player_leaf_placement_is_persistent_and_protected_without_history() {
             .blocks
             .block(&mc_data::Identifier::parse("minecraft:birch_leaves").unwrap())
             .unwrap();
-        crate::placement::place(&state.registry.blocks, block, &click, &reads).unwrap()
+        mc_placement::place(&state.registry.blocks, block, &click, &reads).unwrap()
     };
     assert_eq!(placed.len(), 1);
     for (pos, leaf) in placed {

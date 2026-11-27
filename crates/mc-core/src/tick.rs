@@ -1,5 +1,5 @@
 //! Tick driver: inputs -> entity phase -> merge -> block phase ->
-//! commit -> publish, at 20 TPS (ADR 0013 "Tick").
+//! commit -> publish, at 20 TPS (ADR 0013 "Tick and merge").
 //!
 //! The entity phase runs in parallel by data over scoped threads sized once
 //! from the machine (no work stealing across phase boundaries, no locks on

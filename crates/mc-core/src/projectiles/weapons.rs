@@ -299,7 +299,7 @@ pub(crate) fn use_rocket_on_block(
     actor: EntityId,
     hand: Hand,
     position: crate::boundary::BlockPos,
-    face: crate::placement::Face,
+    face: mc_placement::Face,
     cursor: [f32; 3],
 ) -> bool {
     let Some(slot) = held_slot(state, actor, hand) else {

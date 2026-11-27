@@ -1116,7 +1116,7 @@ pub(super) fn debit(
                 return false;
             };
             !modified(*position)
-                && !crate::chests::storage_partner(
+                && !mc_placement::chests::storage_partner(
                     &state.registry.blocks,
                     crate::boundary::BlockPos {
                         x: position[0],

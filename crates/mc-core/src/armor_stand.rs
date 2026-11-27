@@ -94,7 +94,7 @@ pub(crate) fn use_on(
     let target = if crate::tick::replaceable(state, clicked_state) {
         clicked
     } else {
-        let offset = crate::placement::Face::from_code(face).offset();
+        let offset = mc_placement::Face::from_code(face).offset();
         BlockPos {
             x: clicked.x + offset[0],
             y: clicked.y + offset[1],

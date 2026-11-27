@@ -6,9 +6,7 @@
 
 use mc_data::Identifier;
 use mc_physics::mth;
-use mc_world::{Block, BlockRegistry, BlockStateId};
-
-use crate::boundary::BlockPos;
+use mc_world::{Block, BlockPos, BlockRegistry, BlockStateId};
 
 /// Horizontal directions in vanilla `Direction.from2DDataValue` order.
 const HORIZONTAL: [Face; 4] = [Face::South, Face::West, Face::North, Face::East];
@@ -71,7 +69,7 @@ impl Face {
         }
     }
 
-    pub(crate) fn clockwise(self) -> Self {
+    pub fn clockwise(self) -> Self {
         match self {
             Self::North => Self::East,
             Self::East => Self::South,
@@ -81,11 +79,11 @@ impl Face {
         }
     }
 
-    pub(crate) fn counter_clockwise(self) -> Self {
+    pub fn counter_clockwise(self) -> Self {
         self.clockwise().opposite()
     }
 
-    pub(crate) fn from_name(name: &str) -> Option<Self> {
+    pub fn from_name(name: &str) -> Option<Self> {
         Some(match name {
             "down" => Self::Down,
             "up" => Self::Up,
@@ -97,7 +95,7 @@ impl Face {
         })
     }
 
-    pub(crate) fn horizontal(self) -> bool {
+    pub fn horizontal(self) -> bool {
         !matches!(self, Self::Down | Self::Up)
     }
 
@@ -451,7 +449,7 @@ pub fn place(
     // A chest beside a single chest of its kind joins it into a double.
     let mut partner = None;
     if has("facing") && allows("type", "left") {
-        let joined = crate::chests::placement(
+        let joined = chests::placement(
             blocks,
             &block.id,
             target,
@@ -490,7 +488,7 @@ pub fn place(
     }
     let mut state = blocks.by_name_and_props(&block.id, &props)?.0;
     if let Some((pos, partner_state)) = partner
-        && let Some((joined, other)) = crate::copper::joined(blocks, state, partner_state)
+        && let Some((joined, other)) = copper::joined(blocks, state, partner_state)
     {
         state = joined;
         partner = Some((pos, other));
@@ -498,7 +496,7 @@ pub fn place(
     if hanging_supported(blocks, target, state, reads.block_at) == Some(false) {
         return None;
     }
-    if let Some(hardened) = crate::falling::concrete(blocks, state) {
+    if let Some(hardened) = concrete(blocks, state) {
         let water = |id| {
             blocks
                 .by_id(BlockStateId(id))
@@ -770,7 +768,7 @@ fn step(pos: BlockPos, face: Face) -> BlockPos {
 }
 
 /// A waterlogged block leaves its source behind when broken.
-pub(crate) fn break_state(blocks: &BlockRegistry, state: u32, air: u32, water: u32) -> u32 {
+pub fn break_state(blocks: &BlockRegistry, state: u32, air: u32, water: u32) -> u32 {
     blocks
         .by_id(BlockStateId(state))
         .filter(|state| {
@@ -784,7 +782,7 @@ pub(crate) fn break_state(blocks: &BlockRegistry, state: u32, air: u32, water: u
 
 /// Pair identity includes complementary parts and reciprocal coordinates;
 /// same-name adjacent malformed doors/beds never destroy one another.
-pub(crate) fn paired(
+pub fn paired(
     blocks: &BlockRegistry,
     pos: BlockPos,
     state: u32,
@@ -812,12 +810,22 @@ pub(crate) fn paired(
         && other_half(blocks, pos, state).is_some_and(|(next, _)| next == other)
 }
 
-#[path = "placement_shapes.rs"]
+/// Concrete powder hardens into the matching concrete when it touches water.
+pub fn concrete(blocks: &BlockRegistry, block: u32) -> Option<u32> {
+    let entry = blocks.by_id(BlockStateId(block))?;
+    let color = entry.block.id.path().strip_suffix("_concrete_powder")?;
+    blocks
+        .block(&Identifier::parse(format!("minecraft:{color}_concrete")).ok()?)
+        .map(|block| block.default.0)
+}
+
+pub mod chests;
+pub mod copper;
 mod shapes;
-pub(crate) use shapes::shape_updates;
+pub use shapes::shape_updates;
 
 /// Whether a neighbor update affects one of the block's support cells.
-pub(crate) fn support_changed(
+pub fn support_changed(
     blocks: &BlockRegistry,
     tags: &mc_data::tags::TagsData,
     pos: BlockPos,
@@ -896,7 +904,7 @@ fn hanging_supported(
     )
 }
 
-pub(crate) fn supported(
+pub fn supported(
     blocks: &BlockRegistry,
     tags: &mc_data::tags::TagsData,
     pos: BlockPos,
@@ -1061,7 +1069,7 @@ fn wall_variant<'a>(blocks: &'a BlockRegistry, id: &Identifier) -> Option<&'a Bl
 
 /// Inverse of [`wall_variant`]: `oak_wall_hanging_sign` -> `oak_hanging_sign`,
 /// `wall_torch` -> `torch`; `None` for a block without a wall token.
-pub(crate) fn standing_name(path: &str) -> Option<String> {
+pub fn standing_name(path: &str) -> Option<String> {
     path.contains("wall_")
         .then(|| path.replacen("wall_", "", 1))
 }

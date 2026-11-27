@@ -160,8 +160,7 @@ pub(crate) fn use_bed(
         return false;
     }
     // Either half sleeps in the head cell.
-    let Some((other, head)) =
-        crate::placement::other_half(&state.registry.blocks, clicked, current)
+    let Some((other, head)) = mc_placement::other_half(&state.registry.blocks, clicked, current)
     else {
         return false;
     };
@@ -415,7 +414,7 @@ pub(crate) fn seed_occupied_beds(
                     // The mirror keys by the head. A lone half (its partner
                     // missing) keeps its own cell, and `set_bed_occupied` then
                     // writes that cell only.
-                    let head = crate::placement::other_half(&state.registry.blocks, at, cell)
+                    let head = mc_placement::other_half(&state.registry.blocks, at, cell)
                         .map_or(at, |(_, head)| head);
                     out.push(head);
                 }
@@ -451,7 +450,7 @@ fn set_bed_occupied(
         return;
     };
     // Vanilla `BedBlock.updateShape` copies `OCCUPIED` to the connected half.
-    let other = crate::placement::other_half(&state.registry.blocks, head, current)
+    let other = mc_placement::other_half(&state.registry.blocks, head, current)
         .map_or(head, |(other, _)| other);
     if written.contains(&head) || written.contains(&other) {
         return;
@@ -646,7 +645,7 @@ fn stand_up_clear(state: &TickState, [x, y, z]: [f64; 3]) -> bool {
 /// bounded to 36 cells and ordered toward the player's saved facing.
 fn bed_exit(state: &TickState, head: BlockPos, yaw: f32) -> Option<[f64; 3]> {
     let current = state.world.block_at(head.x, head.y, head.z)?;
-    let foot = crate::placement::other_half(&state.registry.blocks, head, current)
+    let foot = mc_placement::other_half(&state.registry.blocks, head, current)
         .map_or(head, |(other, _)| other);
     let offsets = [
         [1, 0],

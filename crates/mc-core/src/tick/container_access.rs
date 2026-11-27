@@ -9,7 +9,7 @@ pub(super) fn can_open(state: &TickState, pos: BlockPos) -> bool {
         return false;
     };
     match block.block.id.path() {
-        name if matches!(name, "chest" | "trapped_chest") || crate::copper::chest(name) => {
+        name if matches!(name, "chest" | "trapped_chest") || mc_placement::copper::chest(name) => {
             super::container_cells(state, (pos.x, pos.y, pos.z))
                 .into_iter()
                 .all(|(x, y, z)| {

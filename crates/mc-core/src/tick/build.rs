@@ -60,13 +60,13 @@ pub(crate) fn pop_unsupported(
             if current == air {
                 continue;
             }
-            if !crate::placement::support_changed(
+            if !mc_placement::support_changed(
                 &state.registry.blocks,
                 &state.registry.tags,
                 pos,
                 current,
                 changed,
-            ) || crate::placement::supported(
+            ) || mc_placement::supported(
                 &state.registry.blocks,
                 &state.registry.tags,
                 pos,
@@ -76,16 +76,9 @@ pub(crate) fn pop_unsupported(
                 continue;
             }
             let mut gone = vec![pos];
-            if let Some((other, _)) =
-                crate::placement::other_half(&state.registry.blocks, pos, current)
+            if let Some((other, _)) = mc_placement::other_half(&state.registry.blocks, pos, current)
                 && let Some(other_state) = state.world.block_at(other.x, other.y, other.z)
-                && crate::placement::paired(
-                    &state.registry.blocks,
-                    pos,
-                    current,
-                    other,
-                    other_state,
-                )
+                && mc_placement::paired(&state.registry.blocks, pos, current, other, other_state)
             {
                 gone.push(other);
             }
@@ -97,7 +90,7 @@ pub(crate) fn pop_unsupported(
                     .world
                     .block_at(cell.x, cell.y, cell.z)
                     .unwrap_or(current);
-                let new = crate::placement::break_state(
+                let new = mc_placement::break_state(
                     &state.registry.blocks,
                     old,
                     air,
@@ -229,7 +222,7 @@ pub(super) fn plan_break(
     let mut block_expect = vec![(position, current)];
     let mut block_write = vec![(
         position,
-        crate::placement::break_state(
+        mc_placement::break_state(
             &state.registry.blocks,
             current,
             air,
@@ -273,9 +266,9 @@ pub(super) fn plan_break(
     }
     let mut broken = position;
     if let Some((other, primary)) =
-        crate::placement::other_half(&state.registry.blocks, position, current)
+        mc_placement::other_half(&state.registry.blocks, position, current)
         && let Some(other_state) = state.world.block_at(other.x, other.y, other.z)
-        && crate::placement::paired(
+        && mc_placement::paired(
             &state.registry.blocks,
             position,
             current,
@@ -286,7 +279,7 @@ pub(super) fn plan_break(
         block_expect.push((other, other_state));
         block_write.push((
             other,
-            crate::placement::break_state(
+            mc_placement::break_state(
                 &state.registry.blocks,
                 other_state,
                 air,
@@ -295,7 +288,7 @@ pub(super) fn plan_break(
         ));
         broken = primary;
     }
-    if let Some((other, other_state, single)) = crate::chests::break_partner(
+    if let Some((other, other_state, single)) = mc_placement::chests::break_partner(
         &state.registry.blocks,
         position,
         current,
@@ -335,12 +328,12 @@ pub(crate) fn placement_click(
     position: BlockPos,
     face: u8,
     cursor: [f32; 3],
-) -> Option<crate::placement::Click> {
+) -> Option<mc_placement::Click> {
     let slot = state.entities.slot_of(entity)?;
     let [yaw, pitch, _] = state.entities.rot(slot);
-    Some(crate::placement::Click {
+    Some(mc_placement::Click {
         clicked: position,
-        face: crate::placement::Face::from_code(face),
+        face: mc_placement::Face::from_code(face),
         cursor,
         yaw,
         pitch,
@@ -353,7 +346,7 @@ pub(super) fn plan_placement_click(
     entity: EntityId,
     hand: Hand,
     held: &mc_data::ItemStack,
-    click: crate::placement::Click,
+    click: mc_placement::Click,
 ) -> Option<Intent> {
     let item_block = block_for_item(state, held)?;
     // A reserved carrier block is only ever placed by its own custom item.
@@ -381,15 +374,15 @@ pub(super) fn plan_placement_click(
         Some(current)
     };
     let can_replace = |current: u32| replaceable(state, current);
-    let reads = crate::placement::Reads {
+    let reads = mc_placement::Reads {
         block_at: &block_at,
         replaceable: &can_replace,
         water_source: state.registry.states.water,
     };
-    let cells = crate::placement::place(&state.registry.blocks, item_block, &click, &reads)?;
+    let cells = mc_placement::place(&state.registry.blocks, item_block, &click, &reads)?;
     if !crate::farming::can_plant(state, cells[0].1, cells[0].0)
         || !crate::farming::can_stand(state, cells[0].1, cells[0].0)
-        || !crate::placement::supported(
+        || !mc_placement::supported(
             &state.registry.blocks,
             &state.registry.tags,
             cells[0].0,
@@ -468,7 +461,7 @@ pub(crate) fn client_build_refused(
             if crate::plugin_player::public_use_override(state, entity, *position) {
                 return !within_block_reach(state, entity, *position);
             }
-            let step = crate::placement::Face::from_code(*face).offset();
+            let step = mc_placement::Face::from_code(*face).offset();
             let adjacent = BlockPos {
                 x: position.x.saturating_add(step[0]),
                 y: position.y.saturating_add(step[1]),
@@ -514,8 +507,9 @@ pub(super) fn use_intercepts_build(
             | "chiseled_bookshelf"
     ) || (path.ends_with("_bed")
         && (!state.dimension.beds_work()
-            || crate::placement::other_half(&state.registry.blocks, pos, current).is_some()))
-        || crate::copper::family(path).is_some_and(|(family, _, _)| family == "copper_golem_statue")
+            || mc_placement::other_half(&state.registry.blocks, pos, current).is_some()))
+        || mc_placement::copper::family(path)
+            .is_some_and(|(family, _, _)| family == "copper_golem_statue")
 }
 
 pub(crate) fn plan_client_build(
@@ -629,12 +623,9 @@ pub(crate) fn plan_client_build_at(
             }
             let slot = state.entities.slot_of(entity)?;
             let [yaw, _, _] = state.entities.rot(slot);
-            if crate::placement::use_block(
-                &state.registry.blocks,
-                *position,
-                yaw,
-                &|pos: BlockPos| state.world.block_at(pos.x, pos.y, pos.z),
-            )
+            if mc_placement::use_block(&state.registry.blocks, *position, yaw, &|pos: BlockPos| {
+                state.world.block_at(pos.x, pos.y, pos.z)
+            })
             .is_some()
             {
                 return None;
@@ -649,7 +640,7 @@ pub(crate) fn plan_client_build_at(
                     entity,
                     *hand,
                     *position,
-                    crate::placement::Face::from_code(*face),
+                    mc_placement::Face::from_code(*face),
                     held,
                     planning_tick,
                 );
@@ -663,7 +654,7 @@ pub(crate) fn plan_client_build_at(
                     entity,
                     *hand,
                     *position,
-                    crate::placement::Face::from_code(*face),
+                    mc_placement::Face::from_code(*face),
                     held,
                 );
             }

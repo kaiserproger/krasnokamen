@@ -446,7 +446,7 @@ pub(crate) fn neighbor_updates(
                 if !state.pop_block_loot(at, id, spawned) {
                     continue;
                 }
-                let replacement = crate::placement::break_state(
+                let replacement = mc_placement::break_state(
                     &state.registry.blocks,
                     id,
                     state.registry.states.air,

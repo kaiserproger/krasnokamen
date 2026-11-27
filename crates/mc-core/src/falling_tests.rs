@@ -2,6 +2,7 @@ use super::*;
 use crate::boundary::{ConnectionId, PlayerInput};
 use crate::tick::{TickState, run_tick};
 use crate::world::ChunkWorld;
+use mc_placement::concrete;
 fn setup() -> (TickState, BlockPos) {
     let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
     let registry = Arc::new(CoreRegistry::load(Some(&dir)).unwrap());

@@ -368,7 +368,7 @@ fn tick_cell(
         for step in [[0, -1, 0], SIDES[0], SIDES[1], SIDES[2], SIDES[3]] {
             let cell = offset(pos, step);
             if let Some(block) = state.world.block_at(cell.x, cell.y, cell.z)
-                && let Some(hardened) = crate::falling::concrete(&state.registry.blocks, block)
+                && let Some(hardened) = mc_placement::concrete(&state.registry.blocks, block)
             {
                 set(state, writes, cell, hardened);
             }

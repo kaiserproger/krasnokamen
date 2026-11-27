@@ -4,14 +4,14 @@
 //! single chest again. Pure: the caller reads the world through closures.
 
 use mc_data::Identifier;
-use mc_world::{BlockRegistry, BlockStateId};
+use mc_world::{BlockPos, BlockRegistry, BlockStateId};
 
-use crate::boundary::BlockPos;
-use crate::placement::{Click, Face};
+use super::copper::compatible_chests;
+use super::{Click, Face};
 
 /// Vanilla `ChestType`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ChestType {
+pub enum ChestType {
     Single,
     Left,
     Right,
@@ -104,7 +104,7 @@ pub(crate) fn placement(
     let candidate = |toward: Face| {
         let state = block_at(step(target, toward))?;
         let (id, facing, kind) = parts(blocks, state)?;
-        (crate::copper::compatible_chests(id, block) && kind == ChestType::Single).then_some(facing)
+        (compatible_chests(id, block) && kind == ChestType::Single).then_some(facing)
     };
     let mut facing = default_facing;
     let mut kind = ChestType::Single;
@@ -146,7 +146,7 @@ pub(crate) fn placement(
 /// Storage cells of the chest at `pos`, in menu order: a double chest's right
 /// half first (vanilla `DoubleBlockCombiner`), then its left half. A single
 /// chest, a half whose partner is gone, and every other block is just `pos`.
-pub(crate) fn storage_cells(
+pub fn storage_cells(
     blocks: &BlockRegistry,
     pos: BlockPos,
     block_at: &dyn Fn(BlockPos) -> Option<u32>,
@@ -159,7 +159,7 @@ pub(crate) fn storage_cells(
 }
 
 /// Resolve paired custody without allocating a menu's slot-cell vector.
-pub(crate) fn storage_partner(
+pub fn storage_partner(
     blocks: &BlockRegistry,
     pos: BlockPos,
     block_at: &dyn Fn(BlockPos) -> Option<u32>,
@@ -172,7 +172,7 @@ pub(crate) fn storage_partner(
     let paired = block_at(other)
         .and_then(|state| parts(blocks, state))
         .is_some_and(|(other_id, other_facing, other_kind)| {
-            crate::copper::compatible_chests(other_id, id)
+            compatible_chests(other_id, id)
                 && other_facing == facing
                 && other_kind == kind.opposite()
         });
@@ -181,7 +181,7 @@ pub(crate) fn storage_partner(
 
 /// Breaking the chest at `pos` (state `state`): the partner cell and its
 /// reverted single state, when `pos` is half of a double chest.
-pub(crate) fn break_partner(
+pub fn break_partner(
     blocks: &BlockRegistry,
     pos: BlockPos,
     state: u32,
@@ -198,7 +198,3 @@ pub(crate) fn break_partner(
         retyped(blocks, other_state, ChestType::Single)?,
     ))
 }
-
-#[cfg(test)]
-#[path = "chests_tests.rs"]
-mod tests;

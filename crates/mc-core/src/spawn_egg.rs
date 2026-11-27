@@ -211,7 +211,7 @@ pub(crate) fn use_on(
     let target = if shapes.is_empty() {
         clicked
     } else {
-        let [dx, dy, dz] = crate::placement::Face::from_code(face).offset();
+        let [dx, dy, dz] = mc_placement::Face::from_code(face).offset();
         BlockPos {
             x: clicked.x + dx,
             y: clicked.y + dy,
