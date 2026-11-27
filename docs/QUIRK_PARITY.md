@@ -154,14 +154,19 @@ closes. Never make Krasnokamen stricter than vanilla to remove a difference.
 ```
 
 Both servers execute the same console command strings. Vanilla: a void superflat
-world, `tick freeze`, `forceload` of every box, `tick sprint N` per phase, then
+world, `tick freeze`, `forceload` of every box, exactly N ticks per phase, then
 `save-all flush` and the saved Anvil files are decoded
-(`tools/harness/quirk_parity/anvil.py`: blocks, entities, container items). A
-restart phase stops vanilla with `stop` (every loaded chunk saved) and reopens the
-same world; vanilla does not persist `tick freeze`, so restart scenarios must
-have settled before the restart. Krasnokamen: the same commands through the
-console command path, `run_tick` per tick, the same snapshot format. A command
-Krasnokamen rejects but vanilla accepts is a failure.
+(`tools/harness/quirk_parity/anvil.py`: blocks, entities, container items). From a
+frozen world `tick sprint N` runs N + 1 ticks (the sprint check reads the frozen
+tick's stale state and does not count the first unfrozen tick), so the driver
+sends `tick sprint N-1`, or `tick step 1` for one tick, and fails unless
+`time query gametime` advanced by exactly N. A restart phase stops vanilla with
+`stop` (every loaded chunk saved) and reopens the same world; vanilla does not
+persist `tick freeze`, so restart scenarios must have settled before the restart.
+Krasnokamen: the same commands through the console command path, `run_tick` per
+tick, the same snapshot format. A command Krasnokamen rejects but vanilla accepts
+is a failure; fill a container through `setblock` SNBT unless the scenario tests
+commands that follow `setblock` in the same tick (`container-command-same-tick`).
 
 `rate.direction: "drop"` measures a metric that shrinks (consumption/harvest) as
 baseline minus end value. Metric kinds: `container_items` (all hoppers, chests,

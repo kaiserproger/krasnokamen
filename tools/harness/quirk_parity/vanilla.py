@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
 import shutil
 import socket
 import subprocess
@@ -240,8 +241,9 @@ class VanillaOracle:
 
     def game_time(self) -> int:
         for line in self.run("time query gametime"):
-            if line.startswith("The game time is "):
-                return int(line.removeprefix("The game time is ").split()[0])
+            found = re.search(r"The game time is (\d+) tick", line)
+            if found:
+                return int(found.group(1))
         raise VanillaError(f"`time query gametime` printed no game time; see {self.log_path}")
 
     def sprint(self, ticks: int) -> None:
