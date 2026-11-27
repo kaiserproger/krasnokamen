@@ -1,18 +1,3 @@
 {
- "_doc": "Known differences from recorded vanilla, per case: the exact mismatch ids (docs/QUIRK_PARITY.md) and why. Listed mismatches report as known-divergence; any other mismatch fails, and so does a listed one that stopped occurring. Fix the implementation, never the recording or a tolerance.",
- "tnt-duper-found-bud": {
-  "reason": "TNT duplication is not reproducible in Krasnokamen: pistons move blocks at once (no moving_piston block, no 2-tick travel), so the vanilla window in which a BUD TNT is pushed while its old cell is still updated does not exist. In 'armed' vanilla still holds the BUD TNT block in cells 0-2 while Krasnokamen has already primed it (26.3 replay .analysis/validation/20261127T103141-quirk-parity-zkit5o6g). Architectural (piston movement model), not a small fix.",
-  "mismatches": [
-   "1fd02b8dfb42",
-   "cc2acfad0095",
-   "987ce7f4fc15"
-  ]
- },
- "tnt-bud-push-destroy-list": {
-  "reason": "The TNT outcome agrees (moved, not primed; entity counts equal), but in 'fired' vanilla leaves a non-waterlogged dead_tube_coral_fan in the destroy-list cells 1 and 5 and Krasnokamen a waterlogged one: flow and waterlogging order around the instant piston push (26.3 replay .analysis/validation/20261127T103141-quirk-parity-zkit5o6g; same piston movement model as tnt-duper-found-bud).",
-  "mismatches": [
-   "6917acbf213b",
-   "abd4b0c5bc9d"
-  ]
- }
+ "_doc": "Known differences from recorded vanilla, per case: reason and exact rows [path, vanilla, Krasnokamen]. Every unlisted or stale row fails. Group ids are for reporting only."
 }

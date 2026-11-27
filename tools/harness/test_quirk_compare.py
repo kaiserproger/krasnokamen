@@ -239,7 +239,7 @@ class FuzzVerdictShapeTests(unittest.TestCase):
         krasnokamen = {"phases": [{"name": "setup", "snapshot": snapshot(1)},
                                   {"name": "repower", "snapshot": snapshot(1)}]}
         entry: dict = {"id": "fuzz-shape", "status": "pass"}
-        verdict = qmain.fuzz_verdict(fuzz_scenario, vanilla, krasnokamen, entry, [])
+        verdict = qmain.fuzz_verdict(fuzz_scenario, [vanilla], krasnokamen, entry, [])
         self.assertEqual(verdict["status"], "fail")
         self.assertIn("comparison shape differs", " ".join(verdict["reasons"]))
         self.assertEqual(verdict["diff_cells"], {})
@@ -252,7 +252,7 @@ class FuzzVerdictShapeTests(unittest.TestCase):
                               {"name": "repower", "snapshot": snapshot(1), "trace": [cell()]}]}
         krasnokamen = {"phases": [{"name": "setup", "snapshot": snapshot(1)},
                                   {"name": "repower", "snapshot": snapshot(1)}]}
-        verdict = qmain.fuzz_verdict(fuzz_scenario, vanilla, krasnokamen, {"status": "pass"}, [])
+        verdict = qmain.fuzz_verdict(fuzz_scenario, [vanilla], krasnokamen, {"status": "pass"}, [])
         self.assertEqual(verdict["status"], "fail")
         self.assertIn("trace missing from Krasnokamen phase receipt", " ".join(verdict["reasons"]))
         self.assertEqual(verdict["diff_cells"], {})
@@ -265,7 +265,7 @@ class FuzzVerdictShapeTests(unittest.TestCase):
                               {"name": "repower", "snapshot": snapshot(1)}]}
         krasnokamen = {"phases": [{"name": "setup", "snapshot": snapshot(1)},
                                   {"name": "repower", "snapshot": snapshot(1)}]}
-        verdict = qmain.fuzz_verdict(fuzz_scenario, vanilla, krasnokamen, {"status": "pass"}, [])
+        verdict = qmain.fuzz_verdict(fuzz_scenario, [vanilla], krasnokamen, {"status": "pass"}, [])
         self.assertEqual(verdict["status"], "fail")
         self.assertIn("trace missing from both phase receipts", " ".join(verdict["reasons"]))
         self.assertEqual(verdict["diff_cells"], {})
@@ -277,7 +277,7 @@ class FuzzVerdictShapeTests(unittest.TestCase):
         vanilla = {"phases": [{"name": "setup", "snapshot": snapshot(1)}]}
         krasnokamen = {"phases": [{"name": "setup", "snapshot": snapshot(1)},
                                   {"name": "ghost", "snapshot": snapshot(1)}]}
-        verdict = qmain.fuzz_verdict(fuzz_scenario, vanilla, krasnokamen, {"status": "pass"}, [])
+        verdict = qmain.fuzz_verdict(fuzz_scenario, [vanilla], krasnokamen, {"status": "pass"}, [])
         self.assertEqual(verdict["status"], "fail")
         self.assertIn("phase not present in vanilla receipt", " ".join(verdict["reasons"]))
         self.assertEqual(verdict["diff_cells"], {})
@@ -423,7 +423,7 @@ class FarmOracleTests(unittest.TestCase):
         self.assertEqual(result["status"], "fail")
         self.assertIn("minecraft:chicken", result["vanilla_selfcheck_failures"][variants[1]["id"]][0])
         # The same population check refuses the recording itself.
-        problems, _ = qmain.recording_problems(variants[1], bad[variants[1]["id"]])
+        problems = qmain.recording_problems(variants[1], bad[variants[1]["id"]])
         self.assertTrue(any("recording 2" in problem and "minecraft:chicken" in problem for problem in problems))
 
 
