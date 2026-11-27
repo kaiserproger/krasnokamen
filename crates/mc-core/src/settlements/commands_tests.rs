@@ -1,13 +1,15 @@
 //! Native `/settlement` parse tests: every S1 subcommand shape and refusal.
-use crate::settlements::commands::{DEFAULT_RADIUS, SettlementCommand, parse};
+use crate::settlements::commands::{SettlementCommand, parse};
 
 #[test]
 fn create_defaults_to_registry_radius_and_bounds_checks() {
+    // The default radius is player-facing and documented: 48 blocks
+    // (docs/SETTLEMENTS_GUIDE.md, docs/settlements/menus.md).
     assert_eq!(
         parse(&["create", "town"]).unwrap(),
         SettlementCommand::Create {
             name: "town".into(),
-            radius: DEFAULT_RADIUS,
+            radius: 48,
         }
     );
     assert_eq!(
