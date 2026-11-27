@@ -1,9 +1,8 @@
 # Actual runtime map
 
-Status: current server after ADR 0014 Phase 5. The model is
+The current server's threads and boundaries. The model is
 [ADR 0013](../decisions/0013-core-model-v2.md); the summary is
-[ARCHITECTURE.md](../ARCHITECTURE.md). Historical extraction paths are not
-current runtime entrypoints.
+[ARCHITECTURE.md](../ARCHITECTURE.md).
 
 ## Entry points
 
@@ -16,8 +15,11 @@ crates/mc-edge/src/bin/krasnokamen.rs
   serve_with_console: listener + optional stdin command admission
 ```
 
-Offline commands (`content import|verify`, `backup`, `restore`,
-`world import-anvil|export-anvil`) finish without starting normal serving.
+Offline commands (`content import|verify`, `backup`, `restore`, and the `world`
+family: `import-anvil`, `export-anvil`, `census`, `crash-census`,
+`custody-census`, `probe`, `upgrade-worldgen`, `upgrade-game-clock`,
+`pregenerate`, `prune`, `compact`) finish without starting normal serving
+([operating](../OPERATING.md)).
 `--no-console` disables stdin commands; it is not a TUI/plain-input switch.
 Normal serving, console `stop` and SIGINT/SIGTERM share native shutdown and
 final checkpoint behavior. Tracing goes to stderr; console feedback to stdout.
@@ -38,7 +40,7 @@ are disconnected with the vanilla illegal-characters reason.
 | Component execution | `mc-plugin-host` worker | serial bounded guest callbacks outside the tick; `mc-script` owns DTO/admission |
 | Loader wire | `mc-loader` | manifest/artifact/ACK/sound codecs, no gameplay state |
 | Vanilla capture/tooling | `mc-vanilla` | content import and shared harness client/process helpers |
-| Run/process/receipt lifecycle | `tools/harness` | v2-only server launch; one owned artifact directory and fail-closed receipt |
+| Run/process/receipt lifecycle | `tools/harness` | server launch; one owned artifact directory and fail-closed receipt |
 
 World fanout may skip to the newest immutable snapshot and reconcile the
 viewer's held world state. Each viewer's world credit is its world queue's
@@ -116,12 +118,9 @@ registration is ordered wholly before or after a publication without another
 count writer. Entity ids stay stable through dimension travel; the observer
 resolves the recipient across current worlds after travel commits.
 
-Durable plugin events have their own bounded queue, and one slow guest callback
-stalls every plugin's delivery. The core therefore refuses new plugin commands
-and drops plugin-menu clicks while a quarter of the queue capacity is waiting;
-the world halts fail closed only when events that admission cannot refuse
-(graves, guest command results) pass the full capacity, and the halt log counts
-the backlog by event kind.
+Durable plugin events have their own bounded queue; its admission refusals and
+fail-closed halt are described in
+[callback limits and backlog](../plugins/OPERATIONS.md#callback-limits-and-backlog).
 
 Input-ordered chat proves native input handling, not geometry delivery: reliable
 traffic can overtake the world queue. The operator-only
