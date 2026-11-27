@@ -1,9 +1,11 @@
 # Krasnokamen core architecture
 
-Krasnokamen serves Minecraft Java **26.3** (protocol 777); 26.1.2 clients
-(protocol 775) connect through the retained legacy cache and edge translation.
-`krasnokamen` is the `mc-edge` binary over native `mc-core`; the v1 server is
-retired. [ADR 0013](decisions/0013-core-model-v2.md) governs the core model.
+Krasnokamen serves every Minecraft Java release from 26.1.2 through 26.3
+(protocols 775–777). The core speaks 26.3; an older session runs through the
+edge's adjacent translation chain over the endpoint caches `content import`
+installs ([ADR 0015](decisions/0015-multiversion-protocol-translation.md)).
+`krasnokamen` is the `mc-edge` binary over native `mc-core`;
+[ADR 0013](decisions/0013-core-model-v2.md) governs the core model.
 
 ## Composition
 

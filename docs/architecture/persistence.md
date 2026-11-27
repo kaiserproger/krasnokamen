@@ -6,57 +6,6 @@ world and plugin domains. Anvil is offline import/export, never serving
 fallback or dual-write. See [ADR 0013](../decisions/0013-core-model-v2.md) and
 [operations](../OPERATING.md).
 
-### CoreUnload byte oracle
-
-`tools/dev/bytecheck.sh BASE_TREE SLICE_TREE --out ABSOLUTE_RECEIPT_DIR`
-compares the D65 deterministic fixture at matching ticks:
-
-| Artifact | Comparison |
-|---|---|
-| Checkpoint | tick-1 native rows: version, capture tick, SHA-256, base64 payload |
-| WAL | complete raw single-tick frames at ticks 2–3 |
-| Recovery | live and offline `recover_offline → encode_checkpoint` at tick 3; fresh **base-world** copies, no tick thread |
-| Export/censuses | every complete output file byte-for-byte (compression, headers, padding included), custody and crash censuses |
-
-Requires local `data/vanilla`. Both captures use byte-verified copies of one
-closed prepared store, preserving the WAL-v2 UUID without ignoring bytes.
-`seed.json`/producer `input.json` record every seed file's size/SHA; absent or
-changed immutable seed refuses cache reuse. Build receipts pin each producer
-before discarding its private Cargo target, so only one scratch target is needed.
-
-First run base/base in separate processes. Scratch controls reuse
-`--base-run RECEIPT/base`; recorded base HEAD/source fingerprint must still match.
-`--control X1|X2|X3` means respectively: swap `SettlementRecord.owner_name/anchor`,
-swap `VillagerState.mining_progress/lumber_progress`, or swap only their NBT pushes.
-X2 also changes `Transit.Record.members`' embedded villager in checkpoint/live
-transit rows and Entity/Transit WAL. Classifier requires a complete 64-byte WAL-v3
-header (length at offset 56), but compares the **whole frame**.
-Red requires all producers to finish and the exact expected row/WAL/export
-difference; compile/recovery/missing-artifact errors are not red controls.
-Ordinary comparison refuses any byte difference; verdict records each artifact.
-
-Real-image gate:
-`python3 tools/dev/bytecheck_real.py BASE_TREE SLICE_TREE RETAINED_RUN --out ABSOLUTE_RECEIPT_DIR`.
-Stopped input contains `world/`, `plugins/`, `server.toml`; `--world PATH` selects
-a certified alternative world subdirectory, copying only that world/plugins/config.
-Hash every source file, verify snapshot, repair redb using base pin's normal
-`NativeStore::open/drop` **on the copy only**, record post-repair hashes and refuse
-changes outside `native/state.redb`. Freeze repaired input read-only; operations
-get fresh writable copies. Never open original as DB; recheck its hashes afterward.
-
-Each tree's fingerprinted public-API probe compares all encoded global/player/
-entity rows, complete exports, custody/crash censuses and ordinary census after
-frozen startup/shutdown. Ordinary-census projection drops source paths/backing-file
-CRCs only, retaining checkpoint tick/counts and the complete receipt.
-Require settlements and a tail advancing checkpoint; `tail-records.json` states
-actual domains, including replayed climate/game-clock state. A frozen image
-does not imply active settlement/transit WAL; synthetic fixture provides that coverage.
-Build manifests separately hash ignored vanilla path/content; an old pin's
-current data hash is an observation, never retroactive build provenance.
-`--base-run PREVIOUS_RECEIPT` verifies/reuses frozen input, base fingerprint,
-pin/artifacts. `--census-refusal EXACT_ERROR` proves matching canonical refusal,
-not successful ordinary census.
-
 ## WAL
 
 `crates/mc-core/src/journal.rs` writes `batch-<lo>-<hi>.bin` containing whole
@@ -302,8 +251,8 @@ Older binaries also refuse new metadata (missing their required fields).
 [Operator reset boundary](../OPERATING.md#changing-the-binary).
 
 Work receipts are returned, not stored: next sequence = stored watermark+1.
-Only `watermark <= snapshot.revision` is checked; per-receipt sequence/identity/
-revision/stage/work/material validations and length equality no longer exist.
+Only `watermark <= snapshot.revision` is checked; there is no per-receipt
+sequence, identity, revision, stage, work, material or length validation.
 Wrong watermarks inside the bound are undetected; repair/replanning means watermark
 is not current-stage work sum.
 
@@ -1093,3 +1042,57 @@ lease handle; no unlock/copy/relock interval exists. Windows directory
 durability uses the platform directory-sync helper; conversion syncs only its
 output staging files, opened with write access but without creation or
 truncation ([FlushFileBuffers requires GENERIC_WRITE](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers)).
+
+## CoreUnload byte oracle
+
+A refactor that must not change persisted bytes (the D65 CoreUnload slices) is
+proved with the byte oracle below.
+
+`tools/dev/bytecheck.sh BASE_TREE SLICE_TREE --out ABSOLUTE_RECEIPT_DIR`
+compares the D65 deterministic fixture at matching ticks:
+
+| Artifact | Comparison |
+|---|---|
+| Checkpoint | tick-1 native rows: version, capture tick, SHA-256, base64 payload |
+| WAL | complete raw single-tick frames at ticks 2–3 |
+| Recovery | live and offline `recover_offline → encode_checkpoint` at tick 3; fresh **base-world** copies, no tick thread |
+| Export/censuses | every complete output file byte-for-byte (compression, headers, padding included), custody and crash censuses |
+
+Requires local `data/vanilla`. Both captures use byte-verified copies of one
+closed prepared store, preserving the WAL-v2 UUID without ignoring bytes.
+`seed.json`/producer `input.json` record every seed file's size/SHA; absent or
+changed immutable seed refuses cache reuse. Build receipts pin each producer
+before discarding its private Cargo target, so only one scratch target is needed.
+
+First run base/base in separate processes. Scratch controls reuse
+`--base-run RECEIPT/base`; recorded base HEAD/source fingerprint must still match.
+`--control X1|X2|X3` means respectively: swap `SettlementRecord.owner_name/anchor`,
+swap `VillagerState.mining_progress/lumber_progress`, or swap only their NBT pushes.
+X2 also changes `Transit.Record.members`' embedded villager in checkpoint/live
+transit rows and Entity/Transit WAL. Classifier requires a complete 64-byte WAL-v3
+header (length at offset 56), but compares the **whole frame**.
+Red requires all producers to finish and the exact expected row/WAL/export
+difference; compile/recovery/missing-artifact errors are not red controls.
+Ordinary comparison refuses any byte difference; verdict records each artifact.
+
+Real-image gate:
+`python3 tools/dev/bytecheck_real.py BASE_TREE SLICE_TREE RETAINED_RUN --out ABSOLUTE_RECEIPT_DIR`.
+Stopped input contains `world/`, `plugins/`, `server.toml`; `--world PATH` selects
+a certified alternative world subdirectory, copying only that world/plugins/config.
+Hash every source file, verify snapshot, repair redb using base pin's normal
+`NativeStore::open/drop` **on the copy only**, record post-repair hashes and refuse
+changes outside `native/state.redb`. Freeze repaired input read-only; operations
+get fresh writable copies. Never open original as DB; recheck its hashes afterward.
+
+Each tree's fingerprinted public-API probe compares all encoded global/player/
+entity rows, complete exports, custody/crash censuses and ordinary census after
+frozen startup/shutdown. Ordinary-census projection drops source paths/backing-file
+CRCs only, retaining checkpoint tick/counts and the complete receipt.
+Require settlements and a tail advancing checkpoint; `tail-records.json` states
+actual domains, including replayed climate/game-clock state. A frozen image
+does not imply active settlement/transit WAL; synthetic fixture provides that coverage.
+Build manifests separately hash ignored vanilla path/content; an old pin's
+current data hash is an observation, never retroactive build provenance.
+`--base-run PREVIOUS_RECEIPT` verifies/reuses frozen input, base fingerprint,
+pin/artifacts. `--census-refusal EXACT_ERROR` proves matching canonical refusal,
+not successful ordinary census.
